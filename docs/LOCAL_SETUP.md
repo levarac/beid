@@ -272,6 +272,44 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
+### iOS beta（iOS 26等）での実機ビルドエラー
+
+iOS beta を使用している場合、Debug ビルドで以下のエラーが発生することがあります：
+
+```
+error: Unable to flip between RX and RW memory protection on pages
+```
+
+これは Dart VM の JIT コンパイルと iOS beta のメモリ保護機能の互換性問題です。
+
+**解決策**: Release モードでビルド・インストールします。
+
+```bash
+# 1. デバイスIDを確認
+xcrun devicectl list devices
+
+# 2. Release ビルド
+flutter build ios --release
+
+# 3. デバイスにインストール
+xcrun devicectl device install app --device <DEVICE_UUID> build/ios/iphoneos/Runner.app
+
+# 4. アプリを起動
+xcrun devicectl device process launch --device <DEVICE_UUID> <BUNDLE_ID>
+```
+
+**例**:
+```bash
+# デバイスUUID: F56194BF-C20F-53BB-8E84-6304147BCA22
+# Bundle ID: icloud.gajumaru4444.beid
+
+flutter build ios --release
+xcrun devicectl device install app --device F56194BF-C20F-53BB-8E84-6304147BCA22 build/ios/iphoneos/Runner.app
+xcrun devicectl device process launch --device F56194BF-C20F-53BB-8E84-6304147BCA22 icloud.gajumaru4444.beid
+```
+
+**注意**: Release モードでは Hot Reload は使用できません。コード変更後は再ビルド・再インストールが必要です。
+
 ## 開発時のコマンド
 
 ```bash
