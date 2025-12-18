@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:permission_handler/permission_handler.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -74,25 +76,34 @@ class PermissionService extends _$PermissionService {
   }
 
   Future<void> _checkPermissions() async {
-    final bluetoothScan = await Permission.bluetoothScan.status;
-    final bluetoothAdvertise = await Permission.bluetoothAdvertise.status;
-    final bluetoothConnect = await Permission.bluetoothConnect.status;
     final location = await Permission.locationWhenInUse.status;
 
-    // Bluetoothの全パーミッションが許可されているか確認
-    final bluetoothGranted = bluetoothScan.isGranted &&
-        bluetoothAdvertise.isGranted &&
-        bluetoothConnect.isGranted;
+    BlePermissionStatus bluetoothStatus;
 
-    final bluetoothPermanentlyDenied = bluetoothScan.isPermanentlyDenied ||
-        bluetoothAdvertise.isPermanentlyDenied ||
-        bluetoothConnect.isPermanentlyDenied;
+    if (Platform.isIOS) {
+      // iOS: Permission.bluetooth を使用
+      final bluetooth = await Permission.bluetooth.status;
+      bluetoothStatus = _mapStatus(bluetooth);
+    } else {
+      // Android 12+: 個別のBluetoothパーミッションを使用
+      final bluetoothScan = await Permission.bluetoothScan.status;
+      final bluetoothAdvertise = await Permission.bluetoothAdvertise.status;
+      final bluetoothConnect = await Permission.bluetoothConnect.status;
 
-    final bluetoothStatus = bluetoothPermanentlyDenied
-        ? BlePermissionStatus.permanentlyDenied
-        : bluetoothGranted
-            ? BlePermissionStatus.granted
-            : BlePermissionStatus.denied;
+      final bluetoothGranted = bluetoothScan.isGranted &&
+          bluetoothAdvertise.isGranted &&
+          bluetoothConnect.isGranted;
+
+      final bluetoothPermanentlyDenied = bluetoothScan.isPermanentlyDenied ||
+          bluetoothAdvertise.isPermanentlyDenied ||
+          bluetoothConnect.isPermanentlyDenied;
+
+      bluetoothStatus = bluetoothPermanentlyDenied
+          ? BlePermissionStatus.permanentlyDenied
+          : bluetoothGranted
+              ? BlePermissionStatus.granted
+              : BlePermissionStatus.denied;
+    }
 
     state = state.copyWith(
       bluetoothStatus: bluetoothStatus,
@@ -103,28 +114,35 @@ class PermissionService extends _$PermissionService {
   /// BLE関連のパーミッションをリクエストする
   Future<Result<void, AppError>> requestBlePermissions() async {
     try {
-      // Bluetoothパーミッションをリクエスト
-      final bluetoothResults = await [
-        Permission.bluetoothScan,
-        Permission.bluetoothAdvertise,
-        Permission.bluetoothConnect,
-      ].request();
+      BlePermissionStatus bluetoothStatus;
 
-      // 位置情報パーミッションをリクエスト（Android 11以前で必要）
+      if (Platform.isIOS) {
+        // iOS: Permission.bluetooth を使用
+        final bluetoothResult = await Permission.bluetooth.request();
+        bluetoothStatus = _mapStatus(bluetoothResult);
+      } else {
+        // Android 12+: 個別のBluetoothパーミッションをリクエスト
+        final bluetoothResults = await [
+          Permission.bluetoothScan,
+          Permission.bluetoothAdvertise,
+          Permission.bluetoothConnect,
+        ].request();
+
+        final bluetoothGranted =
+            bluetoothResults.values.every((status) => status.isGranted);
+
+        final bluetoothPermanentlyDenied =
+            bluetoothResults.values.any((status) => status.isPermanentlyDenied);
+
+        bluetoothStatus = bluetoothPermanentlyDenied
+            ? BlePermissionStatus.permanentlyDenied
+            : bluetoothGranted
+                ? BlePermissionStatus.granted
+                : BlePermissionStatus.denied;
+      }
+
+      // 位置情報パーミッションをリクエスト（BLEスキャンに必要）
       final locationResult = await Permission.locationWhenInUse.request();
-
-      // 結果を確認
-      final bluetoothGranted =
-          bluetoothResults.values.every((status) => status.isGranted);
-
-      final bluetoothPermanentlyDenied =
-          bluetoothResults.values.any((status) => status.isPermanentlyDenied);
-
-      final bluetoothStatus = bluetoothPermanentlyDenied
-          ? BlePermissionStatus.permanentlyDenied
-          : bluetoothGranted
-              ? BlePermissionStatus.granted
-              : BlePermissionStatus.denied;
 
       state = state.copyWith(
         bluetoothStatus: bluetoothStatus,
@@ -156,7 +174,7 @@ class PermissionService extends _$PermissionService {
   }
 
   /// 設定画面を開く
-  Future<bool> openAppSettings() async {
+  Future<bool> openSettings() async {
     return await openAppSettings();
   }
 
