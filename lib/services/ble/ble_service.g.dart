@@ -6,26 +6,26 @@ part of 'ble_service.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$bleLibraryHash() => r'f7c9cba0d183550feffa6789dd44a0c14ea8bf10';
+String _$barnardClientHash() => r'6f104db4f1118bf8e1e2b93796857212cb2274c8';
 
-/// BLEライブラリプロバイダー
+/// BarnardClient プロバイダー
 ///
-/// Copied from [bleLibrary].
-@ProviderFor(bleLibrary)
-final bleLibraryProvider = AutoDisposeProvider<BleLibraryInterface>.internal(
-  bleLibrary,
-  name: r'bleLibraryProvider',
+/// Copied from [barnardClient].
+@ProviderFor(barnardClient)
+final barnardClientProvider = AutoDisposeProvider<BarnardClient>.internal(
+  barnardClient,
+  name: r'barnardClientProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$bleLibraryHash,
+      : _$barnardClientHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef BleLibraryRef = AutoDisposeProviderRef<BleLibraryInterface>;
-String _$bleServiceHash() => r'd97d55e80783ed17a055421f274b7f8e68d8108e';
+typedef BarnardClientRef = AutoDisposeProviderRef<BarnardClient>;
+String _$bleServiceHash() => r'f6d825290d4a08cc195d4ca242420df0009e5b3e';
 
 /// BLEサービスプロバイダー
 ///

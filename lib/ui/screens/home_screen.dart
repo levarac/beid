@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../services/ble/ble_library_interface.dart';
 import '../../services/ble/ble_service.dart';
 import '../../services/permission/permission_service.dart';
 import '../../services/wallet/wallet_service.dart';
@@ -56,7 +55,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // センシングをトグル
     final bleService = ref.read(bleServiceProvider.notifier);
-    final result = await bleService.toggleSensing(walletState.walletAddress!);
+    final result = await bleService.toggleSensing();
     result.fold(
       onSuccess: (_) {},
       onFailure: (error) => _showSnackBar(error.message),

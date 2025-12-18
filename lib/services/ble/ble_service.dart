@@ -1,12 +1,11 @@
 import 'dart:async';
 
+import 'package:barnard/barnard.dart';
+import 'package:barnard/mock_barnard.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/core.dart';
-import 'ble_library_interface.dart';
-import 'ble_library_mock.dart';
-import 'ble_uuid_generator.dart';
 
 part 'ble_service.g.dart';
 
@@ -28,51 +27,73 @@ enum SensingState {
 /// 検知されたユーザー情報
 class DetectedUser {
   const DetectedUser({
-    required this.uuid,
+    required this.displayId,
     required this.rssi,
     required this.lastSeen,
+    this.rssiSummary,
   });
 
-  final String uuid;
+  /// 表示用ID（rpidから生成された短いID）
+  final String displayId;
+
+  /// 受信信号強度（dBm）
   final int rssi;
+
+  /// 最終検知時刻
   final DateTime lastSeen;
 
+  /// RSSI統計情報
+  final RssiSummary? rssiSummary;
+
   DetectedUser copyWith({
-    String? uuid,
+    String? displayId,
     int? rssi,
     DateTime? lastSeen,
+    RssiSummary? rssiSummary,
   }) {
     return DetectedUser(
-      uuid: uuid ?? this.uuid,
+      displayId: displayId ?? this.displayId,
       rssi: rssi ?? this.rssi,
       lastSeen: lastSeen ?? this.lastSeen,
+      rssiSummary: rssiSummary ?? this.rssiSummary,
     );
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is DetectedUser && other.uuid == uuid;
+    return other is DetectedUser && other.displayId == displayId;
   }
 
   @override
-  int get hashCode => uuid.hashCode;
+  int get hashCode => displayId.hashCode;
+}
+
+/// BLE状態（アプリ内で使用）
+enum BleState {
+  unknown,
+  poweredOff,
+  poweredOn,
+  unsupported,
+  unauthorized,
 }
 
 /// BLEサービスの状態
 class BleServiceState {
   const BleServiceState({
     this.sensingState = SensingState.stopped,
-    this.bleState = BleState.unknown,
+    this.bleState = BleState.poweredOn, // MockではpoweredOnとして扱う
     this.detectedUsers = const {},
-    this.myUuid,
+    this.isScanning = false,
+    this.isAdvertising = false,
     this.error,
   });
 
   final SensingState sensingState;
   final BleState bleState;
   final Set<DetectedUser> detectedUsers;
-  final String? myUuid;
+  final bool isScanning;
+  final bool isAdvertising;
   final AppError? error;
 
   bool get isSensing => sensingState == SensingState.sensing;
@@ -83,46 +104,48 @@ class BleServiceState {
     SensingState? sensingState,
     BleState? bleState,
     Set<DetectedUser>? detectedUsers,
-    String? myUuid,
+    bool? isScanning,
+    bool? isAdvertising,
     AppError? error,
   }) {
     return BleServiceState(
       sensingState: sensingState ?? this.sensingState,
       bleState: bleState ?? this.bleState,
       detectedUsers: detectedUsers ?? this.detectedUsers,
-      myUuid: myUuid ?? this.myUuid,
+      isScanning: isScanning ?? this.isScanning,
+      isAdvertising: isAdvertising ?? this.isAdvertising,
       error: error,
     );
   }
 }
 
-/// BLEライブラリプロバイダー
+/// BarnardClient プロバイダー
 @riverpod
-BleLibraryInterface bleLibrary(Ref ref) {
-  final library = BleLibraryMock();
-  ref.onDispose(() => library.dispose());
-  return library;
+BarnardClient barnardClient(Ref ref) {
+  // モック実装を使用（実際のBLEライブラリが完成したら差し替え）
+  final client = MockBarnard(
+    simulatedPeerCount: 10,
+    tickMs: 500,
+  );
+  ref.onDispose(() => client.dispose());
+  return client;
 }
 
 /// BLEサービスプロバイダー
 @riverpod
 class BleService extends _$BleService {
-  BleLibraryInterface? _library;
-  StreamSubscription<BleState>? _stateSubscription;
-  StreamSubscription<BleDevice>? _scanSubscription;
+  BarnardClient? _client;
+  StreamSubscription<BarnardEvent>? _eventSubscription;
   Timer? _cleanupTimer;
 
-  static const _userTimeout = Duration(seconds: 10);
+  static const _userTimeout = Duration(seconds: 15);
 
   @override
   BleServiceState build() {
-    _library = ref.watch(bleLibraryProvider);
+    _client = ref.watch(barnardClientProvider);
 
-    // BLE状態の監視
-    _stateSubscription = _library!.stateStream.listen(_onBleStateChanged);
-
-    // 初期状態の取得
-    _library!.currentState.then(_onBleStateChanged);
+    // イベントの監視
+    _eventSubscription = _client!.events.listen(_onBarnardEvent);
 
     // 古い検知ユーザーのクリーンアップタイマー
     _cleanupTimer = Timer.periodic(
@@ -131,47 +154,74 @@ class BleService extends _$BleService {
     );
 
     ref.onDispose(() {
-      _stateSubscription?.cancel();
-      _scanSubscription?.cancel();
+      _eventSubscription?.cancel();
       _cleanupTimer?.cancel();
     });
 
     return const BleServiceState();
   }
 
-  void _onBleStateChanged(BleState bleState) {
-    state = state.copyWith(bleState: bleState);
-
-    // BLEがオフになったらセンシングを停止
-    if (bleState != BleState.poweredOn && state.isSensing) {
-      stopSensing();
+  void _onBarnardEvent(BarnardEvent event) {
+    switch (event) {
+      case DetectionEvent():
+        _onDetection(event);
+      case StateEvent():
+        _onStateChange(event);
+      case ConstraintEvent():
+        _onConstraint(event);
+      case ErrorEvent():
+        _onError(event);
     }
   }
 
-  void _onDeviceDetected(BleDevice device) {
-    // Beid UUIDのみを処理
-    if (!BleUuidGenerator.isBeidUuid(device.uuid)) {
-      return;
-    }
-
-    // 自分自身は除外
-    if (device.uuid == state.myUuid) {
-      return;
-    }
-
+  void _onDetection(DetectionEvent event) {
     final detectedUser = DetectedUser(
-      uuid: device.uuid,
-      rssi: device.rssi,
-      lastSeen: device.timestamp,
+      displayId: event.displayId,
+      rssi: event.rssi,
+      lastSeen: event.timestamp,
+      rssiSummary: event.rssiSummary,
     );
 
     final updatedUsers = Set<DetectedUser>.from(state.detectedUsers);
 
     // 既存のユーザーを更新または新規追加
-    updatedUsers.removeWhere((u) => u.uuid == device.uuid);
+    updatedUsers.removeWhere((u) => u.displayId == event.displayId);
     updatedUsers.add(detectedUser);
 
     state = state.copyWith(detectedUsers: updatedUsers);
+  }
+
+  void _onStateChange(StateEvent event) {
+    state = state.copyWith(
+      isScanning: event.state.isScanning,
+      isAdvertising: event.state.isAdvertising,
+    );
+
+    // 両方停止したらセンシング停止状態に
+    if (!event.state.isScanning && !event.state.isAdvertising) {
+      if (state.sensingState == SensingState.sensing) {
+        state = state.copyWith(sensingState: SensingState.stopped);
+      }
+    }
+  }
+
+  void _onConstraint(ConstraintEvent event) {
+    // 制約イベント（パーミッション不足など）
+    state = state.copyWith(
+      error: BleError(
+        message: event.message ?? event.code,
+        type: BleErrorType.permissionDenied,
+      ),
+    );
+  }
+
+  void _onError(ErrorEvent event) {
+    state = state.copyWith(
+      error: BleError(
+        message: event.message,
+        type: BleErrorType.unknown,
+      ),
+    );
   }
 
   void _cleanupOldUsers() {
@@ -186,9 +236,7 @@ class BleService extends _$BleService {
   }
 
   /// センシングを開始する
-  ///
-  /// [walletAddress] 自分のウォレットアドレス
-  Future<Result<void, AppError>> startSensing(String walletAddress) async {
+  Future<Result<void, AppError>> startSensing() async {
     if (state.bleState != BleState.poweredOn) {
       return Failure(BleError(
         message: 'Bluetoothが有効ではありません',
@@ -203,25 +251,23 @@ class BleService extends _$BleService {
     state = state.copyWith(sensingState: SensingState.starting);
 
     try {
-      // ウォレットアドレスからUUIDを生成
-      final myUuid = BleUuidGenerator.generateFromWalletAddress(walletAddress);
-      state = state.copyWith(myUuid: myUuid);
+      // スキャン+アドバタイズを同時に開始
+      final result = await _client!.startAuto();
 
-      // スキャン結果の購読
-      _scanSubscription = _library!.scanResultStream.listen(_onDeviceDetected);
-
-      // アドバタイズを開始
-      await _library!.startAdvertising(
-        serviceUuid: myUuid,
-        localName: 'Beid',
-      );
-
-      // スキャンを開始
-      await _library!.startScan();
+      if (!result.scanningStarted && !result.advertisingStarted) {
+        state = state.copyWith(sensingState: SensingState.stopped);
+        final issues = result.issues.map((i) => i.message ?? i.code).join(', ');
+        return Failure(BleError(
+          message: 'センシングの開始に失敗しました: $issues',
+          type: BleErrorType.unknown,
+        ));
+      }
 
       state = state.copyWith(
         sensingState: SensingState.sensing,
         detectedUsers: {},
+        isScanning: result.scanningStarted,
+        isAdvertising: result.advertisingStarted,
       );
 
       return const Success(null);
@@ -245,15 +291,13 @@ class BleService extends _$BleService {
     state = state.copyWith(sensingState: SensingState.stopping);
 
     try {
-      await _scanSubscription?.cancel();
-      _scanSubscription = null;
-
-      await _library!.stopScan();
-      await _library!.stopAdvertising();
+      await _client!.stopAuto();
 
       state = state.copyWith(
         sensingState: SensingState.stopped,
         detectedUsers: {},
+        isScanning: false,
+        isAdvertising: false,
       );
 
       return const Success(null);
@@ -269,11 +313,32 @@ class BleService extends _$BleService {
   }
 
   /// センシングをトグルする
-  Future<Result<void, AppError>> toggleSensing(String walletAddress) async {
+  Future<Result<void, AppError>> toggleSensing() async {
     if (state.isSensing) {
       return stopSensing();
     } else {
-      return startSensing(walletAddress);
+      return startSensing();
     }
+  }
+
+  /// RSSIサンプルを取得する
+  List<RssiSample> getRssiSamples({DateTime? since, int? limit}) {
+    return _client?.getRssiSamples(since: since, limit: limit) ?? [];
+  }
+
+  /// 特定のユーザーのRSSI履歴を取得（rpidのbase64エンコード文字列で指定）
+  List<RssiSample> getRssiSamplesForUser(String displayId, {int? limit}) {
+    // displayIdからrpidを復元することはできないため、
+    // 全サンプルから該当するものをフィルタリング
+    final samples = _client?.getRssiSamples(limit: limit ?? 100) ?? [];
+    return samples.where((s) {
+      final sDisplayId = _displayIdFromRpid(s.rpid);
+      return sDisplayId == displayId;
+    }).toList();
+  }
+
+  String _displayIdFromRpid(List<int> rpid) {
+    final take = rpid.length < 4 ? rpid.length : 4;
+    return rpid.sublist(0, take).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }

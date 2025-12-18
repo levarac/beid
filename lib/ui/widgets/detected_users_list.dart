@@ -60,7 +60,7 @@ class _DetectedUserTile extends StatelessWidget {
           child: const Icon(Icons.person, color: Colors.white),
         ),
         title: Text(
-          _formatUuid(user.uuid),
+          _formatDisplayId(user.displayId),
           style: const TextStyle(fontFamily: 'monospace'),
         ),
         subtitle: Text('最終検知: ${_formatTime(user.lastSeen)}'),
@@ -79,12 +79,9 @@ class _DetectedUserTile extends StatelessWidget {
     );
   }
 
-  String _formatUuid(String uuid) {
-    // 長いUUIDを省略表示
-    if (uuid.length > 20) {
-      return '${uuid.substring(0, 10)}...${uuid.substring(uuid.length - 6)}';
-    }
-    return uuid;
+  String _formatDisplayId(String displayId) {
+    // displayIdは8文字の16進数なのでそのまま表示
+    return displayId.toUpperCase();
   }
 
   String _formatTime(DateTime time) {
