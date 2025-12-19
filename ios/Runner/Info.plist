@@ -34,6 +34,13 @@
 	<string>このアプリはBluetooth機能のために位置情報へのアクセスが必要です。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>このアプリはBluetooth機能のために位置情報へのアクセスが必要です。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>このアプリはウォレット接続のためにローカルネットワークを使用します。</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+		<string>_https._tcp</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

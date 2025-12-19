@@ -272,43 +272,87 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
-### iOS beta（iOS 26等）での実機ビルドエラー
+### iOS beta（iOS 26等）での実機ビルド
 
-iOS beta を使用している場合、Debug ビルドで以下のエラーが発生することがあります：
+iOS beta を使用している場合、いくつかの問題が発生する可能性があります。
+
+#### 問題1: Dart VM メモリ保護エラー
+
+Debug ビルドで以下のエラーが発生します：
 
 ```
 error: Unable to flip between RX and RW memory protection on pages
 ```
 
-これは Dart VM の JIT コンパイルと iOS beta のメモリ保護機能の互換性問題です。
+または、アプリ起動後に**白い画面のまま**フリーズする場合も同様の原因です。
 
-**解決策**: Release モードでビルド・インストールします。
+**原因**: Dart VM の JIT コンパイルと iOS beta のメモリ保護機能の互換性問題
+
+**解決策**: **必ず Release モード**でビルドしてください。
+
+#### 問題2: flutter run が失敗する
+
+```
+Unable to find a destination matching the provided destination specifier
+iOS XX.X is not installed
+```
+
+**原因**: `flutter run` は iOS beta デバイスを正しく認識できない場合があります。
+
+**解決策**: CLI で手動ビルド・インストールするか、Xcode から直接実行してください。
+
+#### 問題3: Framework 'Pods_Runner' not found
+
+**解決策**: CocoaPods を再インストールします。
+
+```bash
+cd ios
+pod deintegrate
+pod install --repo-update
+cd ..
+```
+
+#### iOS beta での推奨ビルド手順
+
+**方法1: CLI でビルド・インストール**
 
 ```bash
 # 1. デバイスIDを確認
 xcrun devicectl list devices
 
-# 2. Release ビルド
+# 2. DerivedData をクリーン（必要に応じて）
+rm -rf ~/Library/Developer/Xcode/DerivedData/Runner-*
+
+# 3. Release ビルド
 flutter build ios --release
 
-# 3. デバイスにインストール
+# 4. デバイスにインストール
 xcrun devicectl device install app --device <DEVICE_UUID> build/ios/iphoneos/Runner.app
 
-# 4. アプリを起動
+# 5. アプリを起動
 xcrun devicectl device process launch --device <DEVICE_UUID> <BUNDLE_ID>
 ```
 
 **例**:
 ```bash
-# デバイスUUID: F56194BF-C20F-53BB-8E84-6304147BCA22
-# Bundle ID: icloud.gajumaru4444.beid
-
 flutter build ios --release
 xcrun devicectl device install app --device F56194BF-C20F-53BB-8E84-6304147BCA22 build/ios/iphoneos/Runner.app
 xcrun devicectl device process launch --device F56194BF-C20F-53BB-8E84-6304147BCA22 icloud.gajumaru4444.beid
 ```
 
-**注意**: Release モードでは Hot Reload は使用できません。コード変更後は再ビルド・再インストールが必要です。
+**方法2: Xcode から直接実行**
+
+1. `ios/Runner.xcworkspace` を Xcode で開く
+2. **Product → Scheme → Edit Scheme** を選択
+3. **Run** → **Info** → **Build Configuration** を **Release** に変更
+4. デバイスを選択して **Product → Run** (⌘+R)
+
+#### 重要な注意事項
+
+- **Debug モードは使用不可**: iOS beta では必ず Release モードを使用
+- **Hot Reload 不可**: コード変更後は再ビルド・再インストールが必要
+- **ログ出力なし**: Release モードではコンソールログが表示されません
+- **Xcode 17 beta 推奨**: iOS 26 を使用する場合は Xcode 17 beta が推奨されます
 
 ## 開発時のコマンド
 
