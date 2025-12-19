@@ -102,6 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final bleState = ref.watch(bleServiceProvider);
     final walletState = ref.watch(walletServiceProvider);
+    final permissionState = ref.watch(permissionServiceProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -129,7 +130,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: Column(
         children: [
           // ステータス表示
-          _buildStatusCard(bleState, walletState),
+          _buildStatusCard(bleState, walletState, permissionState),
 
           // 検知ユーザー一覧
           Expanded(
@@ -149,7 +150,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildStatusCard(BleServiceState bleState, WalletServiceState walletState) {
+  Widget _buildStatusCard(BleServiceState bleState, WalletServiceState walletState, PermissionServiceState permissionState) {
     final statusColor = bleState.isSensing ? Colors.green : Colors.grey;
     final statusText = bleState.isSensing ? 'センシング中' : '停止中';
 
@@ -157,38 +158,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       margin: const EdgeInsets.all(16),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    statusText,
-                    style: Theme.of(context).textTheme.titleMedium,
+            Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
                   ),
-                  if (bleState.isSensing)
-                    Text(
-                      '検知数: ${bleState.detectedUsers.length}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        statusText,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      if (bleState.isSensing)
+                        Text(
+                          '検知数: ${bleState.detectedUsers.length}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                ),
+                if (bleState.bleState != BleState.poweredOn)
+                  Chip(
+                    label: const Text('BLE無効'),
+                    backgroundColor: Colors.orange.shade100,
+                  ),
+              ],
             ),
-            if (bleState.bleState != BleState.poweredOn)
-              Chip(
-                label: const Text('BLE無効'),
-                backgroundColor: Colors.orange.shade100,
-              ),
+            const Divider(),
+            // デバッグ情報
+            Text(
+              'State: ${bleState.sensingState.name}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'BLE: ${bleState.bleState.name}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Scan: ${bleState.isScanning}, Adv: ${bleState.isAdvertising}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Wallet: ${walletState.isConnected ? "接続中" : "未接続"}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Perm: BT=${permissionState.bluetoothStatus.name}, Loc=${permissionState.locationStatus.name}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
       ),
