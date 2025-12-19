@@ -5,6 +5,7 @@ import '../../services/ble/ble_service.dart';
 import '../../services/permission/permission_service.dart';
 import '../../services/wallet/wallet_service.dart';
 import '../widgets/detected_users_list.dart';
+import '../widgets/radar/radar_view.dart';
 import '../widgets/sensing_button.dart';
 import '../widgets/wallet_button.dart';
 import 'history_screen.dart';
@@ -18,6 +19,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  int _currentIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -41,16 +44,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (!permissionState.allGranted) {
       final result =
           await ref.read(permissionServiceProvider.notifier).requestBlePermissions();
-      result.fold(
-        onSuccess: (_) {},
+
+      final permissionGranted = result.fold(
+        onSuccess: (_) => true,
         onFailure: (error) {
           _showSnackBar(error.message);
           if (permissionState.anyPermanentlyDenied) {
             _showPermissionSettingsDialog();
           }
+          return false;
         },
       );
-      return;
+
+      if (!permissionGranted) {
+        return;
+      }
+      // パーミッション許可後、センシングに進む
     }
 
     // センシングをトグル
@@ -102,7 +111,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final bleState = ref.watch(bleServiceProvider);
     final walletState = ref.watch(walletServiceProvider);
-    final permissionState = ref.watch(permissionServiceProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -127,19 +135,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ステータス表示
-          _buildStatusCard(bleState, walletState, permissionState),
-
-          // 検知ユーザー一覧
-          Expanded(
-            child: bleState.isSensing
-                ? DetectedUsersList(detectedUsers: bleState.detectedUsers)
-                : const _EmptyState(),
-          ),
-        ],
-      ),
+      body: _buildBody(bleState),
       floatingActionButton: SensingButton(
         isSensing: bleState.isSensing,
         isLoading: bleState.sensingState == SensingState.starting ||
@@ -147,6 +143,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onPressed: _handleSensingToggle,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.radar),
+            selectedIcon: Icon(Icons.radar),
+            label: 'レーダー',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bug_report_outlined),
+            selectedIcon: Icon(Icons.bug_report),
+            label: 'デバッグ',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(BleServiceState bleState) {
+    switch (_currentIndex) {
+      case 0:
+        return const RadarView();
+      case 1:
+        return _buildDebugView(bleState);
+      default:
+        return const RadarView();
+    }
+  }
+
+  Widget _buildDebugView(BleServiceState bleState) {
+    final walletState = ref.watch(walletServiceProvider);
+    final permissionState = ref.watch(permissionServiceProvider);
+
+    return Column(
+      children: [
+        // ステータス表示
+        _buildStatusCard(bleState, walletState, permissionState),
+
+        // 検知ユーザー一覧
+        Expanded(
+          child: bleState.isSensing
+              ? DetectedUsersList(detectedUsers: bleState.detectedUsers)
+              : const _EmptyState(),
+        ),
+      ],
     );
   }
 
