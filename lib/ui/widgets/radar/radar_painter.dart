@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../../services/ble/ble_service.dart';
+import '../../../services/position/position_service.dart';
 
 /// レーダー描画用のCustomPainter
 class RadarPainter extends CustomPainter {
@@ -11,12 +12,15 @@ class RadarPainter extends CustomPainter {
     required this.scanAngle,
     required this.primaryColor,
     required this.backgroundColor,
+    this.serverPositions,
   });
 
   final Set<DetectedUser> detectedUsers;
   final double scanAngle; // 0-2π のスキャン線角度
   final Color primaryColor;
   final Color backgroundColor;
+  /// サーバーから受信した位置情報（三点測位有効時のみ）
+  final Map<String, UserPosition>? serverPositions;
 
   // RSSI範囲の定義
   static const double rssiMin = -90.0; // 遠い
@@ -159,11 +163,19 @@ class RadarPainter extends CustomPainter {
   }
 
   Offset _calculateUserPosition(DetectedUser user, Offset center, double maxRadius) {
-    // RSSIから距離（0-1の範囲）を計算
-    final normalizedDistance = _rssiToDistance(user.rssi);
+    double angle;
+    double normalizedDistance;
 
-    // displayIdからハッシュを生成して角度を決定（固定位置）
-    final angle = _displayIdToAngle(user.displayId);
+    // サーバーから位置情報がある場合はそれを使用
+    if (serverPositions != null && serverPositions!.containsKey(user.displayId)) {
+      final serverPos = serverPositions![user.displayId]!;
+      angle = serverPos.angle;
+      normalizedDistance = serverPos.distance;
+    } else {
+      // フォールバック: RSSIから距離、displayIdから角度を計算
+      normalizedDistance = _rssiToDistance(user.rssi);
+      angle = _displayIdToAngle(user.displayId);
+    }
 
     // 位置を計算
     final distance = normalizedDistance * maxRadius * 0.9; // 外周の90%まで
@@ -198,6 +210,7 @@ class RadarPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant RadarPainter oldDelegate) {
     return oldDelegate.detectedUsers != detectedUsers ||
-        oldDelegate.scanAngle != scanAngle;
+        oldDelegate.scanAngle != scanAngle ||
+        oldDelegate.serverPositions != serverPositions;
   }
 }

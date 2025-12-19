@@ -1,31 +1,28 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'permission_service.dart';
+part of 'position_service.dart';
 
 // **************************************************************************
 // RiverpodGenerator
 // **************************************************************************
 
-String _$permissionServiceHash() => r'a3a76bb738673c0e5769d2dbe77e6b43e9a14cc8';
+String _$positionServiceHash() => r'ed49104b0ffa1a73198e0c386fd91b4384264291';
 
-/// パーミッションサービスプロバイダー
+/// 位置サービスプロバイダー
 ///
-/// Copied from [PermissionService].
-@ProviderFor(PermissionService)
-final permissionServiceProvider =
-    AutoDisposeNotifierProvider<
-      PermissionService,
-      PermissionServiceState
-    >.internal(
-      PermissionService.new,
-      name: r'permissionServiceProvider',
+/// Copied from [PositionService].
+@ProviderFor(PositionService)
+final positionServiceProvider =
+    AutoDisposeNotifierProvider<PositionService, PositionServiceState>.internal(
+      PositionService.new,
+      name: r'positionServiceProvider',
       debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
           ? null
-          : _$permissionServiceHash,
+          : _$positionServiceHash,
       dependencies: null,
       allTransitiveDependencies: null,
     );
 
-typedef _$PermissionService = AutoDisposeNotifier<PermissionServiceState>;
+typedef _$PositionService = AutoDisposeNotifier<PositionServiceState>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

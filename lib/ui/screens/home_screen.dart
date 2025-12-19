@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/ble/ble_service.dart';
 import '../../services/permission/permission_service.dart';
+import '../../services/position/position_service.dart';
 import '../../services/wallet/wallet_service.dart';
 import '../widgets/detected_users_list.dart';
 import '../widgets/radar/radar_view.dart';
@@ -64,10 +65,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // センシングをトグル
     final bleService = ref.read(bleServiceProvider.notifier);
+    final bleState = ref.read(bleServiceProvider);
+    final positionService = ref.read(positionServiceProvider.notifier);
+
+    // センシング開始前にWebSocket接続を開始
+    if (!bleState.isSensing) {
+      // センシング開始時：WebSocket接続
+      final displayId = walletState.shortAddress ?? 'unknown';
+      await positionService.connect(displayId);
+    }
+
     final result = await bleService.toggleSensing();
     result.fold(
-      onSuccess: (_) {},
-      onFailure: (error) => _showSnackBar(error.message),
+      onSuccess: (_) {
+        // センシング停止時：WebSocket切断
+        final newBleState = ref.read(bleServiceProvider);
+        if (!newBleState.isSensing) {
+          positionService.disconnect();
+        }
+      },
+      onFailure: (error) {
+        _showSnackBar(error.message);
+        // エラー時もWebSocket切断
+        positionService.disconnect();
+      },
     );
   }
 

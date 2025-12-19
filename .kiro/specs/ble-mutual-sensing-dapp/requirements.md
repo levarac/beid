@@ -64,3 +64,24 @@
 4. While ウォレット未接続の状態, the アプリ shall センシング機能は利用可能だがPOAP発行は不可とする
 5. If ウォレット接続が失敗した場合, then the アプリ shall エラーメッセージを表示し再試行オプションを提供する
 6. The アプリ shall 接続中のウォレットアドレスを表示する
+
+### Requirement 7: 相対位置可視化（三点測位）
+**Objective:** As a ユーザー, I want 検知したユーザーの方角も知りたい, so that レーダー上でより直感的に周囲のユーザーを把握できる
+
+#### Acceptance Criteria
+1. When 3人以上のユーザーが同時にセンシング中の時, the バックエンド shall 各ユーザー間の距離行列から相対位置を計算する
+2. When 相対位置が計算された時, the アプリ shall レーダー上でユーザーを計算された角度に配置する
+3. While 3人未満のユーザーのみセンシング中, the アプリ shall 距離のみに基づいて配置する（角度はハッシュ値から決定）
+4. The バックエンド shall RSSIデータを定期的に収集する（5秒間隔）
+5. The バックエンド shall 計算した位置情報をWebSocket経由でリアルタイムに配信する
+6. If 三点測位の計算が失敗した場合, then the アプリ shall 距離のみの表示にフォールバックする
+
+### Requirement 8: リアルタイム同期
+**Objective:** As a ユーザー, I want 他ユーザーの検知状態をリアルタイムで確認したい, so that 周囲の変化を即座に把握できる
+
+#### Acceptance Criteria
+1. The アプリ shall バックエンドとWebSocket接続を維持する
+2. When 他ユーザーが自分を検知した時, the バックエンド shall WebSocket経由で通知する
+3. When センシング中のユーザーが増減した時, the バックエンド shall 全ユーザーに位置情報を再配信する
+4. If WebSocket接続が切断された場合, then the アプリ shall 自動再接続を試みる
+5. While オフライン状態, the アプリ shall ローカルのRSSIデータのみでレーダー表示を継続する

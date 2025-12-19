@@ -13,12 +13,15 @@
 - 検証可能なセンシングデータに基づきPOAPを発行する
 - WalletConnect経由でウォレット接続を提供する
 - シンプルで直感的なUIを実現する
+- 三点測位による相対位置可視化を実現する（3人以上の場合）
+- リアルタイム同期によるユーザー位置の即時更新
 
 ### Non-Goals
 - バックグラウンドでの常時センシング（バッテリー消費考慮）
 - POAP自体のアプリ内表示（外部POAPアプリに委譲）
 - オフライン時のPOAP発行（ネットワーク接続必須）
 - UWBによる高精度距離測定（BLE RSSIのみ使用）
+- 絶対座標系での位置測定（相対位置のみ）
 
 ## Architecture
 
@@ -31,13 +34,18 @@ graph TB
         BLEService[BLE Service]
         WalletService[Wallet Service]
         SensingRepo[Sensing Repository]
+        PositionService[Position Service]
+        WebSocketClient[WebSocket Client]
         LocalStorage[Local Storage]
     end
 
     subgraph Backend[Backend API]
         APIGateway[API Gateway]
+        WebSocketServer[WebSocket Server]
         SensingVerifier[Sensing Verifier]
+        TrilaterationEngine[Trilateration Engine]
         POAPService[POAP Service]
+        RSSIStore[RSSI Store]
     end
 
     subgraph External[External Services]
@@ -49,11 +57,18 @@ graph TB
     UI --> BLEService
     UI --> WalletService
     UI --> SensingRepo
+    UI --> PositionService
     BLEService --> LocalStorage
     SensingRepo --> LocalStorage
     SensingRepo --> APIGateway
+    BLEService --> APIGateway
+    PositionService --> WebSocketClient
+    WebSocketClient <--> WebSocketServer
     WalletService --> WalletApp
     APIGateway --> SensingVerifier
+    APIGateway --> RSSIStore
+    RSSIStore --> TrilaterationEngine
+    TrilaterationEngine --> WebSocketServer
     SensingVerifier --> POAPService
     POAPService --> POAPAPI
     POAPAPI --> Blockchain
@@ -69,10 +84,13 @@ graph TB
 | Layer | Choice / Version | Role in Feature | Notes |
 |-------|------------------|-----------------|-------|
 | Frontend | Flutter 3.38.4 | クロスプラットフォームUI | iOS/Android対応 |
-| BLE | 独自BLEライブラリ（別リポジトリ） | スキャン+アドバタイズ（Central/Peripheral両対応） | 並行開発中 |
+| BLE | 独自BLEライブラリ（別リポジトリ） | スキャン+アドバタイズ（Central/Peripheral両対応） | barnard library |
 | Wallet | reown_appkit (AppKit) | WalletConnect連携 | 旧web3modal_flutter |
 | Local Storage | hive_ce | センシング履歴永続化 | 高速NoSQL、暗号化対応 |
+| WebSocket (Client) | web_socket_channel | リアルタイム位置同期 | 標準Flutter WebSocket |
 | Backend | Node.js / Express | API提供、POAP連携 | Vercel/Railway等にデプロイ可 |
+| WebSocket (Server) | ws | リアルタイム位置配信 | Node.js WebSocket |
+| Trilateration | 自前実装 | 三点測位アルゴリズム | MDS (多次元尺度構成法) |
 | Blockchain | Gnosis Chain | POAP発行先 | 低ガス代 |
 
 ## System Flows
@@ -118,6 +136,54 @@ sequenceDiagram
     App->>App: ログイン状態に移行
 ```
 
+### 三点測位・リアルタイム位置同期フロー
+
+```mermaid
+sequenceDiagram
+    participant UserA as User A (App)
+    participant UserB as User B (App)
+    participant UserC as User C (App)
+    participant Backend as Backend API
+    participant WS as WebSocket Server
+
+    Note over UserA,UserC: センシング開始（3人以上）
+
+    UserA->>Backend: RSSIデータ送信（B: -50dBm, C: -60dBm）
+    UserB->>Backend: RSSIデータ送信（A: -52dBm, C: -45dBm）
+    UserC->>Backend: RSSIデータ送信（A: -58dBm, B: -47dBm）
+
+    Backend->>Backend: 距離行列構築
+    Backend->>Backend: MDS三点測位計算
+    Backend->>Backend: 相対座標を正規化
+
+    Backend->>WS: 位置情報ブロードキャスト
+    WS->>UserA: 位置更新（B: 45°, C: 120°）
+    WS->>UserB: 位置更新（A: 225°, C: 80°）
+    WS->>UserC: 位置更新（A: 300°, B: 260°）
+
+    Note over UserA,UserC: レーダー表示更新
+```
+
+### 2人以下の場合のフォールバックフロー
+
+```mermaid
+sequenceDiagram
+    participant UserA as User A (App)
+    participant UserB as User B (App)
+    participant Backend as Backend API
+
+    Note over UserA,UserB: 2人のみセンシング中
+
+    UserA->>Backend: RSSIデータ送信（B: -50dBm）
+    UserB->>Backend: RSSIデータ送信（A: -52dBm）
+
+    Backend->>Backend: 三点測位不可と判定
+    Backend->>UserA: フォールバック通知
+    Backend->>UserB: フォールバック通知
+
+    Note over UserA,UserB: ローカルで角度をハッシュ値から決定<br/>（距離のみサーバーから取得）
+```
+
 ## Requirements Traceability
 
 | Requirement | Summary | Components | Interfaces | Flows |
@@ -138,16 +204,33 @@ sequenceDiagram
 | 4.1-4.6 | UI要件全般 | UI Components | - | - |
 | 5.1-5.3 | ローカルストレージ | SensingRepository | HiveBox | - |
 | 6.1-6.6 | ウォレット接続 | WalletService | WalletState | ウォレット接続フロー |
+| 7.1 | 3人以上で三点測位計算 | TrilaterationEngine | PositionData | 三点測位フロー |
+| 7.2 | 計算された角度で表示 | RadarView, PositionService | UserPosition | 三点測位フロー |
+| 7.3 | 3人未満でフォールバック | RadarPainter | - | フォールバックフロー |
+| 7.4 | RSSI定期収集 | BLEService, Backend | RSSIReport | 三点測位フロー |
+| 7.5 | WebSocket位置配信 | WebSocketServer | PositionBroadcast | 三点測位フロー |
+| 7.6 | 計算失敗時フォールバック | RadarView | - | フォールバックフロー |
+| 8.1 | WebSocket接続維持 | WebSocketClient | - | リアルタイム同期 |
+| 8.2 | 他ユーザー検知通知 | WebSocketServer | DetectionNotify | リアルタイム同期 |
+| 8.3 | 位置情報再配信 | TrilaterationEngine | PositionBroadcast | リアルタイム同期 |
+| 8.4 | WebSocket自動再接続 | WebSocketClient | - | - |
+| 8.5 | オフライン時ローカル表示 | RadarPainter | - | フォールバックフロー |
 
 ## Components and Interfaces
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies | Contracts |
 |-----------|--------------|--------|--------------|------------------|-----------|
-| BLEService | Service | BLEスキャン・アドバタイズ管理 | 1.1-1.5 | 独自BLEライブラリ (P0) | Service |
+| BLEService | Service | BLEスキャン・アドバタイズ管理 | 1.1-1.5, 7.4 | 独自BLEライブラリ (P0) | Service |
 | WalletService | Service | ウォレット接続管理 | 6.1-6.6 | reown_appkit (P0) | Service, State |
 | SensingRepository | Data | センシングデータ管理 | 2.1-2.4, 5.1-5.3 | hive_ce (P0), Backend API (P1) | Service |
+| PositionService | Service | 位置情報管理・WebSocket連携 | 7.2, 8.1, 8.4 | WebSocketClient (P0) | Service, State |
+| WebSocketClient | Infra | WebSocket接続管理 | 8.1, 8.4 | web_socket_channel (P0) | Client |
 | BackendAPI | Backend | センシング検証・POAP発行 | 3.1-3.5 | POAP API (P0) | API |
+| RSSICollector | Backend | RSSIデータ収集・保存 | 7.4 | - | API |
+| TrilaterationEngine | Backend | 三点測位計算 | 7.1, 7.6, 8.3 | - | Algorithm |
+| WebSocketServer | Backend | リアルタイム位置配信 | 7.5, 8.2 | ws (P0) | Server |
 | HomeScreen | UI | メイン画面 | 4.1-4.3 | BLEService, WalletService (P0) | State |
+| RadarView | UI | レーダー表示 | 7.2, 7.3, 7.6, 8.5 | PositionService (P0) | Widget |
 | HistoryScreen | UI | 履歴画面 | 4.4-4.5 | SensingRepository (P0) | State |
 
 ### Service Layer
@@ -387,6 +470,8 @@ class MutualSensingResult {
 |--------|----------|---------|----------|--------|
 | POST | /api/sensing/report | SensingReportRequest | SensingReportResponse | 400, 401, 500 |
 | GET | /api/sensing/status/:id | - | SensingStatusResponse | 404, 500 |
+| POST | /api/rssi/report | RSSIReportRequest | RSSIReportResponse | 400, 500 |
+| WS | /ws | - | PositionUpdate (stream) | - |
 
 ```typescript
 // Request
@@ -415,12 +500,205 @@ interface SensingStatusResponse {
   createdAt: string;
   updatedAt: string;
 }
+
+// RSSI Report (for trilateration)
+interface RSSIReportRequest {
+  userId: string; // displayId
+  detectedUsers: {
+    userId: string;
+    rssi: number;
+    timestamp: string;
+  }[];
+}
+
+interface RSSIReportResponse {
+  success: boolean;
+  activeUsers: number;
+  trilaterationEnabled: boolean;
+}
+
+// WebSocket Messages
+interface WSMessage {
+  type: 'position_update' | 'user_joined' | 'user_left' | 'fallback_mode';
+  payload: PositionUpdate | UserEvent | FallbackNotice;
+}
+
+interface PositionUpdate {
+  userId: string;
+  positions: {
+    targetUserId: string;
+    angle: number;      // 0-360 degrees
+    distance: number;   // 0-1 normalized
+    rssi: number;
+  }[];
+  timestamp: string;
+}
+
+interface UserEvent {
+  userId: string;
+  action: 'joined' | 'left';
+}
+
+interface FallbackNotice {
+  reason: 'insufficient_users' | 'calculation_failed';
+  activeUsers: number;
+}
 ```
 
 **Implementation Notes**
 - センシングレポートはタイムウィンドウ（例: 5分以内）で突合
 - 署名検証: ethers.jsでrecoverAddressを使用
 - POAP APIキーはサーバー環境変数で管理
+
+---
+
+#### TrilaterationEngine
+
+| Field | Detail |
+|-------|--------|
+| Intent | RSSIデータから三点測位で相対位置を計算 |
+| Requirements | 7.1, 7.6, 8.3 |
+
+**Responsibilities & Constraints**
+- 距離行列からMDS（多次元尺度構成法）で2D座標を計算
+- 3人以上のユーザーが必要、2人以下はフォールバック
+- 計算結果を各ユーザー視点での相対角度に変換
+
+**Dependencies**
+- Inbound: RSSICollector — 距離行列データ (P0)
+- Outbound: WebSocketServer — 位置情報配信 (P0)
+
+**Contracts**: Algorithm [x]
+
+##### Algorithm Interface
+```typescript
+interface TrilaterationEngine {
+  // 距離行列から2D座標を計算
+  calculatePositions(distanceMatrix: DistanceMatrix): Position2D[] | null;
+
+  // 特定ユーザー視点での相対角度を計算
+  calculateRelativeAngles(
+    positions: Position2D[],
+    viewerUserId: string
+  ): RelativePosition[];
+}
+
+interface DistanceMatrix {
+  userIds: string[];
+  distances: number[][]; // userIds.length x userIds.length
+}
+
+interface Position2D {
+  userId: string;
+  x: number;
+  y: number;
+}
+
+interface RelativePosition {
+  targetUserId: string;
+  angle: number;    // 0-360 degrees (0 = right, 90 = up)
+  distance: number; // normalized 0-1
+}
+```
+
+**Algorithm Notes**
+- MDS (Classical Multidimensional Scaling) を使用
+  1. 距離行列Dを二重中心化してグラム行列Bを作成
+  2. Bの固有値分解で2次元座標を取得
+  3. 座標を正規化（最大距離を1に）
+- RSSIから距離への変換: `distance = 10^((TxPower - RSSI) / (10 * n))`
+  - TxPower: 1mでの参照RSSI（-59dBm想定）
+  - n: 環境係数（2.0〜4.0、デフォルト2.5）
+
+---
+
+#### PositionService (Flutter)
+
+| Field | Detail |
+|-------|--------|
+| Intent | WebSocket経由で位置情報を受信しUIに提供 |
+| Requirements | 7.2, 8.1, 8.4 |
+
+**Responsibilities & Constraints**
+- WebSocket接続の確立と維持
+- 位置更新イベントをストリームで提供
+- 接続断時の自動再接続（指数バックオフ）
+
+**Dependencies**
+- External: web_socket_channel — WebSocket通信 (P0)
+- Inbound: BLEService — ユーザーID取得 (P1)
+
+**Contracts**: Service [x] / State [x]
+
+##### Service Interface
+```dart
+abstract class PositionServiceInterface {
+  /// 接続状態ストリーム
+  Stream<PositionConnectionState> get connectionStateStream;
+
+  /// 位置更新ストリーム
+  Stream<PositionUpdate> get positionUpdateStream;
+
+  /// 三点測位有効状態
+  Stream<bool> get trilaterationEnabledStream;
+
+  /// 接続開始
+  Future<Result<void, PositionError>> connect(String userId);
+
+  /// 切断
+  Future<void> disconnect();
+
+  /// RSSIデータ送信
+  Future<Result<void, PositionError>> sendRSSIReport(
+    List<DetectedUserRSSI> detectedUsers,
+  );
+}
+
+enum PositionConnectionState {
+  disconnected,
+  connecting,
+  connected,
+  reconnecting,
+}
+
+class PositionUpdate {
+  final String userId;
+  final List<UserPosition> positions;
+  final DateTime timestamp;
+}
+
+class UserPosition {
+  final String targetUserId;
+  final double angle;    // radians
+  final double distance; // 0-1
+  final int rssi;
+}
+
+class DetectedUserRSSI {
+  final String userId;
+  final int rssi;
+  final DateTime timestamp;
+}
+
+sealed class PositionError {
+  const PositionError();
+}
+class PositionConnectionError extends PositionError {
+  final String message;
+  const PositionConnectionError(this.message);
+}
+class PositionTimeoutError extends PositionError {}
+```
+
+##### State Management
+```dart
+class PositionServiceState {
+  final PositionConnectionState connectionState;
+  final bool trilaterationEnabled;
+  final Map<String, UserPosition> positions; // targetUserId -> position
+  final DateTime? lastUpdate;
+}
+```
 
 ---
 
