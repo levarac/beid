@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:barnard/barnard.dart';
+import 'package:barnard/barnard_ble.dart';
 import 'package:barnard/mock_barnard.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/core.dart';
@@ -119,18 +120,6 @@ class BleServiceState {
   }
 }
 
-/// BarnardClient プロバイダー
-@riverpod
-BarnardClient barnardClient(Ref ref) {
-  // モック実装を使用（実際のBLEライブラリが完成したら差し替え）
-  final client = MockBarnard(
-    simulatedPeerCount: 10,
-    tickMs: 500,
-  );
-  ref.onDispose(() => client.dispose());
-  return client;
-}
-
 /// BLEサービスプロバイダー
 @riverpod
 class BleService extends _$BleService {
@@ -142,29 +131,55 @@ class BleService extends _$BleService {
 
   @override
   BleServiceState build() {
-    _client = ref.watch(barnardClientProvider);
-
-    // イベントの監視
-    _eventSubscription = _client!.events.listen(_onBarnardEvent);
-
-    // 古い検知ユーザーのクリーンアップタイマー
-    _cleanupTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _cleanupOldUsers(),
-    );
-
     ref.onDispose(() {
       _eventSubscription?.cancel();
       _cleanupTimer?.cancel();
+      _client?.dispose();
     });
 
+    // BLEクライアントを非同期で初期化開始
+    _initializeClient();
+
     return const BleServiceState();
+  }
+
+  Future<void> _initializeClient() async {
+    try {
+      // iOS/Androidでは実際のBLEクライアントを使用、その他はモック
+      if (Platform.isIOS || Platform.isAndroid) {
+        _client = await BarnardBleClient.create();
+      } else {
+        _client = MockBarnard(
+          simulatedPeerCount: 10,
+          tickMs: 500,
+        );
+      }
+
+      // イベントの監視
+      _eventSubscription = _client!.events.listen(_onBarnardEvent);
+
+      // 古い検知ユーザーのクリーンアップタイマー
+      _cleanupTimer = Timer.periodic(
+        const Duration(seconds: 5),
+        (_) => _cleanupOldUsers(),
+      );
+    } catch (e) {
+      state = state.copyWith(
+        bleState: BleState.unsupported,
+        error: BleError(
+          message: 'BLEクライアントの初期化に失敗: $e',
+          type: BleErrorType.unknown,
+        ),
+      );
+    }
   }
 
   void _onBarnardEvent(BarnardEvent event) {
     switch (event) {
       case DetectionEvent():
         _onDetection(event);
+      case RssiUpdateEvent():
+        _onRssiUpdate(event);
       case StateEvent():
         _onStateChange(event);
       case ConstraintEvent():
@@ -187,6 +202,29 @@ class BleService extends _$BleService {
     // 既存のユーザーを更新または新規追加
     updatedUsers.removeWhere((u) => u.displayId == event.displayId);
     updatedUsers.add(detectedUser);
+
+    state = state.copyWith(detectedUsers: updatedUsers);
+  }
+
+  /// 高頻度RSSI更新イベントを処理
+  void _onRssiUpdate(RssiUpdateEvent event) {
+    final existingUser = state.detectedUsers.firstWhere(
+      (u) => u.displayId == event.displayId,
+      orElse: () => DetectedUser(
+        displayId: event.displayId,
+        rssi: event.rssi,
+        lastSeen: event.timestamp,
+      ),
+    );
+
+    final updatedUser = existingUser.copyWith(
+      rssi: event.rssi,
+      lastSeen: event.timestamp,
+    );
+
+    final updatedUsers = Set<DetectedUser>.from(state.detectedUsers);
+    updatedUsers.removeWhere((u) => u.displayId == event.displayId);
+    updatedUsers.add(updatedUser);
 
     state = state.copyWith(detectedUsers: updatedUsers);
   }
@@ -237,6 +275,13 @@ class BleService extends _$BleService {
 
   /// センシングを開始する
   Future<Result<void, AppError>> startSensing() async {
+    if (_client == null) {
+      return Failure(BleError(
+        message: 'BLEクライアントが初期化されていません',
+        type: BleErrorType.unknown,
+      ));
+    }
+
     if (state.bleState != BleState.poweredOn) {
       return Failure(BleError(
         message: 'Bluetoothが有効ではありません',

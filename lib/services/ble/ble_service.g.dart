@@ -6,26 +6,7 @@ part of 'ble_service.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$barnardClientHash() => r'6f104db4f1118bf8e1e2b93796857212cb2274c8';
-
-/// BarnardClient プロバイダー
-///
-/// Copied from [barnardClient].
-@ProviderFor(barnardClient)
-final barnardClientProvider = AutoDisposeProvider<BarnardClient>.internal(
-  barnardClient,
-  name: r'barnardClientProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$barnardClientHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
-
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-typedef BarnardClientRef = AutoDisposeProviderRef<BarnardClient>;
-String _$bleServiceHash() => r'f6d825290d4a08cc195d4ca242420df0009e5b3e';
+String _$bleServiceHash() => r'c788c17048352856f5f29c79f67aa020b9103d1f';
 
 /// BLEサービスプロバイダー
 ///

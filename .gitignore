@@ -123,3 +123,5 @@ app.*.symbols
 !/dev/ci/**/Gemfile.lock
 # Backend
 backend/node_modules/
+
+ios/.DS_Store
