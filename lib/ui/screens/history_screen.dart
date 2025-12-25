@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/sensing_record.dart';
 import '../../data/repositories/sensing_repository.dart';
+import 'debug_screen.dart';
 
 /// 履歴画面
 class HistoryScreen extends ConsumerWidget {
@@ -15,6 +16,13 @@ class HistoryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('センシング履歴'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bug_report_outlined),
+            onPressed: () => _navigateToDebug(context),
+            tooltip: 'デバッグ',
+          ),
+        ],
       ),
       body: historyAsync.when(
         data: (records) => records.isEmpty
@@ -23,6 +31,13 @@ class HistoryScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('エラー: $error')),
       ),
+    );
+  }
+
+  void _navigateToDebug(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DebugScreen()),
     );
   }
 }

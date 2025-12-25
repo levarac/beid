@@ -201,7 +201,15 @@ sequenceDiagram
 | 3.3 | POAP発行完了通知 | UI, Backend | POAPResult | POAP発行フロー |
 | 3.4, 3.5 | 検証/発行失敗時のエラー表示 | UI | ErrorState | - |
 | 3.6 | POAP表示は外部アプリ | - | - | - |
-| 4.1-4.6 | UI要件全般 | UI Components | - | - |
+| 4.1 | センシング開始/停止ボタン | HomeScreen, SensingButton | - | - |
+| 4.2 | センシング状態表示 | HomeScreen, RadarView | - | - |
+| 4.3 | レーダービューでユーザー表示 | RadarView | - | - |
+| 4.4 | 履歴一覧表示 | HistoryScreen | - | - |
+| 4.5 | POAP発行ステータス表示 | HistoryScreen | - | - |
+| 4.6 | ヘッダー左端に履歴ボタン（検知数表示） | HistoryHeaderButton | - | - |
+| 4.7 | ヘッダー右端にマイページボタン | MyPageHeaderButton | - | - |
+| 4.8 | ボトムナビゲーション廃止 | HomeScreen | - | - |
+| 4.9 | ヘッダーにサービス名表示なし | HomeScreen | - | - |
 | 5.1-5.3 | ローカルストレージ | SensingRepository | HiveBox | - |
 | 6.1-6.6 | ウォレット接続 | WalletService | WalletState | ウォレット接続フロー |
 | 7.1 | 3人以上で三点測位計算 | TrilaterationEngine | PositionData | 三点測位フロー |
@@ -215,6 +223,14 @@ sequenceDiagram
 | 8.3 | 位置情報再配信 | TrilaterationEngine | PositionBroadcast | リアルタイム同期 |
 | 8.4 | WebSocket自動再接続 | WebSocketClient | - | - |
 | 8.5 | オフライン時ローカル表示 | RadarPainter | - | フォールバックフロー |
+| 9.1 | 履歴ボタンタップで履歴ページ遷移 | HistoryHeaderButton, HistoryScreen | - | - |
+| 9.2 | 履歴ページにデバッグリンク | HistoryScreen | - | - |
+| 9.3 | 履歴ページに戻るナビゲーション | HistoryScreen | - | - |
+| 10.1 | マイページボタン（未接続時）でウォレット接続 | MyPageHeaderButton | - | ウォレット接続フロー |
+| 10.2 | マイページボタン（接続済）でマイページ遷移 | MyPageHeaderButton, MyPageScreen | - | - |
+| 10.3 | マイページにウォレットアドレス表示 | MyPageScreen | - | - |
+| 10.4 | マイページにウォレット切断ボタン | MyPageScreen | - | - |
+| 10.5 | マイページに戻るナビゲーション | MyPageScreen | - | - |
 
 ## Components and Interfaces
 
@@ -229,9 +245,13 @@ sequenceDiagram
 | RSSICollector | Backend | RSSIデータ収集・保存 | 7.4 | - | API |
 | TrilaterationEngine | Backend | 三点測位計算 | 7.1, 7.6, 8.3 | - | Algorithm |
 | WebSocketServer | Backend | リアルタイム位置配信 | 7.5, 8.2 | ws (P0) | Server |
-| HomeScreen | UI | メイン画面 | 4.1-4.3 | BLEService, WalletService (P0) | State |
+| HomeScreen | UI | メイン画面 | 4.1-4.3, 4.6-4.9 | BLEService, WalletService (P0) | State |
 | RadarView | UI | レーダー表示 | 7.2, 7.3, 7.6, 8.5 | PositionService (P0) | Widget |
-| HistoryScreen | UI | 履歴画面 | 4.4-4.5 | SensingRepository (P0) | State |
+| HistoryScreen | UI | 履歴画面 | 4.4-4.5, 9.1-9.3 | SensingRepository (P0) | State |
+| MyPageScreen | UI | マイページ | 10.2-10.5 | WalletService (P0) | State |
+| DebugScreen | UI | デバッグ画面 | 9.2 | BLEService, PermissionService (P0) | State |
+| HistoryHeaderButton | UI | 履歴ヘッダーボタン | 4.6, 9.1 | - | Widget |
+| MyPageHeaderButton | UI | マイページヘッダーボタン | 4.7, 10.1, 10.2 | WalletService (P0) | Widget |
 
 ### Service Layer
 
@@ -708,8 +728,8 @@ class PositionServiceState {
 
 | Field | Detail |
 |-------|--------|
-| Intent | メイン画面でセンシング操作とウォレット接続を提供 |
-| Requirements | 4.1, 4.2, 4.3, 4.6 |
+| Intent | メイン画面でセンシング操作とレーダービューを提供 |
+| Requirements | 4.1, 4.2, 4.3, 4.6, 4.7, 4.8, 4.9 |
 
 **State Management**
 ```dart
@@ -724,9 +744,106 @@ class HomeScreenState {
 ```
 
 **Implementation Notes**
-- センシング開始/停止ボタンは目立つFABとして配置
-- ウォレット接続状態はAppBarまたはヘッダーに表示
-- 検知ユーザー一覧はListViewでRSSI降順表示
+- センシング開始/停止ボタンは目立つFABとして画面下部中央に配置
+- ボトムナビゲーションは使用しない（シングルページレイアウト）
+- メインコンテンツはレーダービュー
+- ヘッダー構成:
+  - 左端: 履歴ボタン（円形、内部に検知ユーザー数を表示）
+  - 中央: なし（サービス名を表示しない）
+  - 右端: マイページボタン（円形アバターアイコン）
+
+---
+
+#### MyPageScreen
+
+| Field | Detail |
+|-------|--------|
+| Intent | ユーザープロフィールとウォレット管理を提供 |
+| Requirements | 10.2, 10.3, 10.4, 10.5 |
+
+**State Management**
+```dart
+class MyPageScreenState {
+  final WalletState walletState;
+  final bool isDisconnecting;
+}
+```
+
+**Implementation Notes**
+- ウォレット接続済みの場合のみ表示（未接続時はHomeScreenでモーダル表示）
+- ウォレットアドレスを全文表示
+- 切断ボタンをプロミネントに配置
+- AppBarに戻るボタンを配置
+
+##### UI Structure
+```
+MyPageScreen
+├── AppBar
+│   ├── BackButton
+│   └── Title: "マイページ"
+└── Content
+    ├── AvatarIcon (large)
+    ├── WalletAddress (full)
+    └── DisconnectButton
+```
+
+---
+
+#### HistoryHeaderButton
+
+| Field | Detail |
+|-------|--------|
+| Intent | 検知履歴ページへのナビゲーションと検知数表示を兼ねるボタン |
+| Requirements | 4.6, 9.1 |
+
+**Implementation Notes**
+- 円形ボタン（CircleAvatar または Container with BoxDecoration）
+- 内部に検知ユーザー数を表示（Text）
+- タップで検知履歴ページに遷移
+- センシング中は数字を動的に更新
+
+```dart
+class HistoryHeaderButton extends StatelessWidget {
+  final int detectedCount;
+  final VoidCallback onPressed;
+}
+```
+
+---
+
+#### MyPageHeaderButton
+
+| Field | Detail |
+|-------|--------|
+| Intent | マイページへのナビゲーションまたはウォレット接続を兼ねるボタン |
+| Requirements | 4.7, 10.1, 10.2 |
+
+**Implementation Notes**
+- 円形アバターアイコンボタン
+- ウォレット未接続時: タップでウォレット接続モーダルを表示
+- ウォレット接続済み時: タップでマイページに遷移
+- 接続状態に応じてアイコン/スタイルを変更
+
+```dart
+class MyPageHeaderButton extends StatelessWidget {
+  final bool isWalletConnected;
+  final VoidCallback onPressed;
+}
+```
+
+---
+
+#### DebugScreen
+
+| Field | Detail |
+|-------|--------|
+| Intent | 開発者向けデバッグ情報を表示 |
+| Requirements | 9.1 |
+
+**Implementation Notes**
+- 既存のデバッグビュー（ステータスカード、検知ユーザーリスト）を独立画面として分離
+- 設定ページから遷移
+- AppBarに戻るボタンを配置
 
 ---
 
@@ -734,8 +851,8 @@ class HomeScreenState {
 
 | Field | Detail |
 |-------|--------|
-| Intent | センシング履歴とPOAP発行ステータスを表示 |
-| Requirements | 4.4, 4.5 |
+| Intent | センシング履歴とPOAP発行ステータスを表示、デバッグ画面への導線を提供 |
+| Requirements | 4.4, 4.5, 9.1, 9.2, 9.3 |
 
 **State Management**
 ```dart
@@ -749,6 +866,9 @@ class HistoryScreenState {
 **Implementation Notes**
 - 履歴アイテムタップで詳細ボトムシート表示
 - POAP発行ステータスをアイコン/色で視覚化
+- ホーム画面のヘッダー左端ボタンから遷移
+- デバッグ画面へのリンクをAppBarのアクションまたはリスト項目として提供
+- AppBarに戻るボタンを配置
 
 ---
 
