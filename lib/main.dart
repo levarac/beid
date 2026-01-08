@@ -10,8 +10,12 @@ import 'ui/theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 環境変数の読み込み
-  await dotenv.load(fileName: '.env');
+  // 環境変数の読み込み（.envが無くてもエラーにしない）
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    // .envファイルが存在しない場合はデフォルト値を使用
+  }
 
   // Hiveの初期化
   await Hive.initFlutter();
