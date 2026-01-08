@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/ble/ble_service.dart';
+import '../../services/device_id/device_id_service.dart';
 import '../../services/permission/permission_service.dart';
 import '../../services/position/position_service.dart';
 import '../../services/wallet/wallet_service.dart';
@@ -24,19 +25,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // ウォレットサービスを初期化
+    // デバイスIDとウォレットサービスを初期化
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(deviceIdServiceProvider.notifier).initialize();
       ref.read(walletServiceProvider.notifier).initialize();
     });
   }
 
   Future<void> _handleSensingToggle() async {
-    final walletState = ref.read(walletServiceProvider);
+    final deviceIdState = ref.read(deviceIdServiceProvider);
     final permissionState = ref.read(permissionServiceProvider);
 
-    // ウォレット未接続の場合
-    if (!walletState.isConnected) {
-      _showSnackBar('ウォレットを接続してください');
+    // デバイスIDが初期化されていない場合
+    if (!deviceIdState.isInitialized || deviceIdState.deviceId == null) {
+      _showSnackBar('デバイスIDの初期化中です。しばらくお待ちください。');
       return;
     }
 
@@ -69,8 +71,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // センシング開始前にWebSocket接続を開始
     if (!bleState.isSensing) {
-      // センシング開始時：WebSocket接続
-      final displayId = walletState.shortAddress ?? 'unknown';
+      // センシング開始時：WebSocket接続（デバイスIDを使用）
+      final displayId = deviceIdState.shortId ?? 'unknown';
       await positionService.connect(displayId);
     }
 

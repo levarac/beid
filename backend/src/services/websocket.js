@@ -1,14 +1,20 @@
 /**
  * WebSocket service for real-time position updates
+ * Integrated with extended logging services
  */
 export class WebSocketService {
-  constructor(wss, rssiStore, trilaterationService, rssiLogger = null) {
+  constructor(wss, rssiStore, trilaterationService, loggers = {}) {
     this.wss = wss;
     this.rssiStore = rssiStore;
     this.trilaterationService = trilaterationService;
-    this.rssiLogger = rssiLogger;
 
-    // Map<WebSocket, {userId: string}>
+    // Logging services
+    this.rssiLogger = loggers.rssiLogger || null;
+    this.edgeLogger = loggers.edgeLogger || null;
+    this.nodeLogger = loggers.nodeLogger || null;
+    this.sessionManager = loggers.sessionManager || null;
+
+    // Map<WebSocket, {userId: string, metadata: object}>
     this.clients = new Map();
 
     this.setupConnectionHandlers();
@@ -39,7 +45,7 @@ export class WebSocketService {
 
       switch (message.type) {
         case 'register':
-          this.handleRegister(ws, message.userId);
+          this.handleRegister(ws, message.userId, message.metadata);
           break;
         case 'rssi_report':
           this.handleRSSIReport(ws, message);
@@ -55,7 +61,7 @@ export class WebSocketService {
     }
   }
 
-  handleRegister(ws, userId) {
+  handleRegister(ws, userId, metadata = {}) {
     if (!userId) {
       this.sendToClient(ws, {
         type: 'error',
@@ -64,8 +70,20 @@ export class WebSocketService {
       return;
     }
 
-    // Store client info
-    this.clients.set(ws, { userId });
+    // Store client info with metadata
+    this.clients.set(ws, { userId, metadata });
+
+    // Log node joined event
+    if (this.nodeLogger) {
+      this.nodeLogger.logNodeJoined(userId, metadata);
+    }
+
+    // Update session stats
+    if (this.sessionManager) {
+      this.sessionManager.updateStats({
+        nodeCount: this.clients.size
+      });
+    }
 
     // Notify other clients about new user
     this.broadcastToAll({
@@ -82,7 +100,8 @@ export class WebSocketService {
       payload: {
         userId,
         activeUsers: this.rssiStore.getActiveUserCount(),
-        trilaterationEnabled: this.rssiStore.getActiveUserCount() >= 3
+        trilaterationEnabled: this.rssiStore.getActiveUserCount() >= 3,
+        sessionId: this.sessionManager?.getSessionId() ?? null
       }
     });
 
@@ -111,9 +130,36 @@ export class WebSocketService {
     // Store RSSI data with heading
     this.rssiStore.storeRSSIReport(clientInfo.userId, detectedUsers, heading ?? null);
 
-    // Log to CSV file
+    // Log to extended RSSI CSV file
     if (this.rssiLogger) {
-      this.rssiLogger.logRSSIReport(clientInfo.userId, detectedUsers, heading);
+      this.rssiLogger.logRSSIReport(clientInfo.userId, detectedUsers, heading, {
+        rssiStore: this.rssiStore
+      });
+    }
+
+    // Update edge logger
+    if (this.edgeLogger) {
+      for (const detected of detectedUsers) {
+        this.edgeLogger.updateEdge(
+          clientInfo.userId,
+          detected.userId,
+          detected.rssi,
+          this.rssiStore
+        );
+      }
+    }
+
+    // Update node logger report count
+    if (this.nodeLogger) {
+      this.nodeLogger.incrementReportCount(clientInfo.userId);
+    }
+
+    // Update session stats
+    if (this.sessionManager) {
+      this.sessionManager.incrementReportCount();
+      this.sessionManager.updateStats({
+        edgeCount: this.edgeLogger?.getEdgeCount() ?? 0
+      });
     }
 
     // Acknowledge receipt
@@ -121,7 +167,9 @@ export class WebSocketService {
       type: 'rssi_received',
       payload: {
         activeUsers: this.rssiStore.getActiveUserCount(),
-        trilaterationEnabled: this.rssiStore.getActiveUserCount() >= 3
+        trilaterationEnabled: this.rssiStore.getActiveUserCount() >= 3,
+        edgeCount: this.edgeLogger?.getEdgeCount() ?? 0,
+        mutualEdgeCount: this.edgeLogger?.getMutualEdgeCount() ?? 0
       }
     });
   }
@@ -139,12 +187,27 @@ export class WebSocketService {
     const { enabled } = message;
     this.rssiStore.setCompassEnabled(clientInfo.userId, enabled);
 
+    // Update node metadata
+    if (this.nodeLogger) {
+      this.nodeLogger.updateNodeMetadata(clientInfo.userId, { compassEnabled: enabled });
+    }
+
     console.log(`User ${clientInfo.userId} compass ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   handleDisconnect(ws) {
     const clientInfo = this.clients.get(ws);
     if (clientInfo) {
+      // Log node left event
+      if (this.nodeLogger) {
+        this.nodeLogger.logNodeLeft(clientInfo.userId);
+      }
+
+      // Remove edges for this node
+      if (this.edgeLogger) {
+        this.edgeLogger.removeNodeEdges(clientInfo.userId);
+      }
+
       // Remove from RSSI store
       this.rssiStore.removeUser(clientInfo.userId);
 
@@ -156,6 +219,14 @@ export class WebSocketService {
           action: 'left'
         }
       }, ws);
+
+      // Update session stats
+      if (this.sessionManager) {
+        this.sessionManager.updateStats({
+          nodeCount: this.clients.size - 1,
+          edgeCount: this.edgeLogger?.getEdgeCount() ?? 0
+        });
+      }
 
       console.log(`User ${clientInfo.userId} disconnected. Active clients: ${this.clients.size - 1}`);
     }
@@ -176,7 +247,9 @@ export class WebSocketService {
         type: 'fallback_mode',
         payload: {
           reason: 'insufficient_users',
-          activeUsers
+          activeUsers,
+          edgeCount: this.edgeLogger?.getEdgeCount() ?? 0,
+          mutualEdgeCount: this.edgeLogger?.getMutualEdgeCount() ?? 0
         }
       });
       return;
@@ -192,7 +265,9 @@ export class WebSocketService {
         type: 'fallback_mode',
         payload: {
           reason: 'calculation_failed',
-          activeUsers
+          activeUsers,
+          edgeCount: this.edgeLogger?.getEdgeCount() ?? 0,
+          mutualEdgeCount: this.edgeLogger?.getMutualEdgeCount() ?? 0
         }
       });
       return;
@@ -235,7 +310,12 @@ export class WebSocketService {
           userId: clientInfo.userId,
           positions: positionsWithRSSI,
           timestamp: new Date().toISOString(),
-          compassEnabled: compassEnabled
+          compassEnabled: compassEnabled,
+          graphStats: {
+            nodeCount: activeUsers,
+            edgeCount: this.edgeLogger?.getEdgeCount() ?? 0,
+            mutualEdgeCount: this.edgeLogger?.getMutualEdgeCount() ?? 0
+          }
         }
       });
     }
@@ -270,7 +350,21 @@ export class WebSocketService {
   getStats() {
     return {
       connectedClients: this.clients.size,
-      activeUsers: this.rssiStore.getActiveUserCount()
+      activeUsers: this.rssiStore.getActiveUserCount(),
+      edgeCount: this.edgeLogger?.getEdgeCount() ?? 0,
+      mutualEdgeCount: this.edgeLogger?.getMutualEdgeCount() ?? 0,
+      sessionId: this.sessionManager?.getSessionId() ?? null
+    };
+  }
+
+  /**
+   * Get logging providers for external use
+   */
+  getLogProviders() {
+    return {
+      rssiStore: this.rssiStore,
+      edgeLogger: this.edgeLogger,
+      nodeLogger: this.nodeLogger
     };
   }
 }

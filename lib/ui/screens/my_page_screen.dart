@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../services/device_id/device_id_service.dart';
 import '../../services/wallet/wallet_service.dart';
 
 /// マイページ画面
@@ -9,6 +11,7 @@ class MyPageScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final deviceIdState = ref.watch(deviceIdServiceProvider);
     final walletState = ref.watch(walletServiceProvider);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -41,22 +44,46 @@ class MyPageScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 32),
-            // ウォレットアドレス
+            // デバイスID
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'ウォレットアドレス',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'デバイスID',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy, size: 18),
+                          onPressed: deviceIdState.deviceId != null
+                              ? () {
+                                  Clipboard.setData(
+                                    ClipboardData(text: deviceIdState.deviceId!),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('デバイスIDをコピーしました'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              : null,
+                          tooltip: 'コピー',
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     SelectableText(
-                      walletState.walletAddress ?? '-',
+                      deviceIdState.deviceId ?? '-',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontFamily: 'monospace',
                       ),
@@ -65,27 +92,56 @@ class MyPageScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            const Spacer(),
-            // 切断ボタン
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonal(
-                onPressed: () async {
-                  await ref.read(walletServiceProvider.notifier).disconnect();
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                  }
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: colorScheme.errorContainer,
-                  foregroundColor: colorScheme.onErrorContainer,
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('ウォレットを切断'),
+            const SizedBox(height: 16),
+            // ウォレットアドレス（接続済みの場合のみ表示）
+            if (walletState.isConnected)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ウォレットアドレス',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        walletState.walletAddress ?? '-',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            const Spacer(),
+            // ウォレット切断ボタン（接続済みの場合のみ表示）
+            if (walletState.isConnected)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonal(
+                  onPressed: () async {
+                    await ref.read(walletServiceProvider.notifier).disconnect();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('ウォレットを切断しました')),
+                      );
+                    }
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.errorContainer,
+                    foregroundColor: colorScheme.onErrorContainer,
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('ウォレットを切断'),
+                  ),
+                ),
+              ),
             const SizedBox(height: 24),
           ],
         ),
