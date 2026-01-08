@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../ble/ble_service.dart';
@@ -72,6 +74,8 @@ class PositionServiceState {
   final DateTime? lastUpdate;
   final int activeUsers;
   final String? fallbackReason;
+  final bool compassEnabled;
+  final double? currentHeading;
 
   const PositionServiceState({
     this.connectionState = PositionConnectionState.disconnected,
@@ -80,6 +84,8 @@ class PositionServiceState {
     this.lastUpdate,
     this.activeUsers = 0,
     this.fallbackReason,
+    this.compassEnabled = false,
+    this.currentHeading,
   });
 
   PositionServiceState copyWith({
@@ -89,6 +95,8 @@ class PositionServiceState {
     DateTime? lastUpdate,
     int? activeUsers,
     String? fallbackReason,
+    bool? compassEnabled,
+    double? currentHeading,
   }) {
     return PositionServiceState(
       connectionState: connectionState ?? this.connectionState,
@@ -97,6 +105,8 @@ class PositionServiceState {
       lastUpdate: lastUpdate ?? this.lastUpdate,
       activeUsers: activeUsers ?? this.activeUsers,
       fallbackReason: fallbackReason,
+      compassEnabled: compassEnabled ?? this.compassEnabled,
+      currentHeading: currentHeading ?? this.currentHeading,
     );
   }
 }
@@ -106,11 +116,13 @@ class PositionServiceState {
 class PositionService extends _$PositionService {
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
+  StreamSubscription<MagnetometerEvent>? _compassSubscription;
   Timer? _reconnectTimer;
   Timer? _rssiReportTimer;
   String? _userId;
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 5;
+  double? _lastHeading;
 
   @override
   PositionServiceState build() {
@@ -127,6 +139,8 @@ class PositionService extends _$PositionService {
     _reconnectTimer = null;
     _subscription?.cancel();
     _subscription = null;
+    _compassSubscription?.cancel();
+    _compassSubscription = null;
     _channel?.sink.close();
     _channel = null;
   }
@@ -198,10 +212,82 @@ class PositionService extends _$PositionService {
       'timestamp': user.lastSeen.toIso8601String(),
     }).toList();
 
-    _sendMessage({
+    final message = <String, dynamic>{
       'type': 'rssi_report',
       'detectedUsers': detectedList,
+    };
+
+    // コンパスが有効な場合はheadingを追加
+    if (state.compassEnabled && _lastHeading != null) {
+      message['heading'] = _lastHeading;
+    }
+
+    _sendMessage(message);
+  }
+
+  /// コンパスを有効化
+  void enableCompass() {
+    if (state.compassEnabled) return;
+
+    _compassSubscription = magnetometerEventStream().listen((event) {
+      // 磁力計データから方位を計算 (x, yから角度を算出)
+      // atan2(y, x) で北からの角度を取得
+      final heading = _calculateHeading(event.x, event.y);
+      _lastHeading = heading;
+      state = state.copyWith(currentHeading: heading);
     });
+
+    state = state.copyWith(compassEnabled: true);
+
+    // サーバーにコンパス有効化を通知
+    if (state.connectionState == PositionConnectionState.connected) {
+      _sendMessage({
+        'type': 'compass_enabled',
+        'enabled': true,
+      });
+    }
+  }
+
+  /// コンパスを無効化
+  void disableCompass() {
+    if (!state.compassEnabled) return;
+
+    _compassSubscription?.cancel();
+    _compassSubscription = null;
+    _lastHeading = null;
+
+    state = state.copyWith(
+      compassEnabled: false,
+      currentHeading: null,
+    );
+
+    // サーバーにコンパス無効化を通知
+    if (state.connectionState == PositionConnectionState.connected) {
+      _sendMessage({
+        'type': 'compass_enabled',
+        'enabled': false,
+      });
+    }
+  }
+
+  /// コンパスの有効/無効を切り替え
+  void toggleCompass() {
+    if (state.compassEnabled) {
+      disableCompass();
+    } else {
+      enableCompass();
+    }
+  }
+
+  /// 磁力計データから方位を計算（0-360度、北が0）
+  double _calculateHeading(double x, double y) {
+    // atan2で角度を計算（ラジアン）
+    var heading = atan2(-y, x) * (180 / pi);
+    // 0-360の範囲に正規化
+    if (heading < 0) {
+      heading += 360;
+    }
+    return heading;
   }
 
   void _sendMessage(Map<String, dynamic> message) {

@@ -2,10 +2,11 @@
  * WebSocket service for real-time position updates
  */
 export class WebSocketService {
-  constructor(wss, rssiStore, trilaterationService) {
+  constructor(wss, rssiStore, trilaterationService, rssiLogger = null) {
     this.wss = wss;
     this.rssiStore = rssiStore;
     this.trilaterationService = trilaterationService;
+    this.rssiLogger = rssiLogger;
 
     // Map<WebSocket, {userId: string}>
     this.clients = new Map();
@@ -42,6 +43,9 @@ export class WebSocketService {
           break;
         case 'rssi_report':
           this.handleRSSIReport(ws, message);
+          break;
+        case 'compass_enabled':
+          this.handleCompassEnabled(ws, message);
           break;
         default:
           console.log('Unknown message type:', message.type);
@@ -95,7 +99,7 @@ export class WebSocketService {
       return;
     }
 
-    const { detectedUsers } = message;
+    const { detectedUsers, heading } = message;
     if (!Array.isArray(detectedUsers)) {
       this.sendToClient(ws, {
         type: 'error',
@@ -104,8 +108,13 @@ export class WebSocketService {
       return;
     }
 
-    // Store RSSI data
-    this.rssiStore.storeRSSIReport(clientInfo.userId, detectedUsers);
+    // Store RSSI data with heading
+    this.rssiStore.storeRSSIReport(clientInfo.userId, detectedUsers, heading ?? null);
+
+    // Log to CSV file
+    if (this.rssiLogger) {
+      this.rssiLogger.logRSSIReport(clientInfo.userId, detectedUsers, heading);
+    }
 
     // Acknowledge receipt
     this.sendToClient(ws, {
@@ -115,6 +124,22 @@ export class WebSocketService {
         trilaterationEnabled: this.rssiStore.getActiveUserCount() >= 3
       }
     });
+  }
+
+  handleCompassEnabled(ws, message) {
+    const clientInfo = this.clients.get(ws);
+    if (!clientInfo) {
+      this.sendToClient(ws, {
+        type: 'error',
+        message: 'Client not registered. Send register message first.'
+      });
+      return;
+    }
+
+    const { enabled } = message;
+    this.rssiStore.setCompassEnabled(clientInfo.userId, enabled);
+
+    console.log(`User ${clientInfo.userId} compass ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   handleDisconnect(ws) {
@@ -180,11 +205,26 @@ export class WebSocketService {
         clientInfo.userId
       );
 
-      // Add RSSI data to positions
+      // Get viewer's heading for compass correction
+      const viewerHeading = this.rssiStore.getHeading(clientInfo.userId);
+      const compassEnabled = this.rssiStore.isCompassEnabled(clientInfo.userId);
+
+      // Add RSSI data to positions and apply compass rotation if enabled
       const positionsWithRSSI = relativePositions.map(pos => {
         const rssi = this.rssiStore.getRSSIBetween(clientInfo.userId, pos.targetUserId);
+        let adjustedAngle = pos.angle;
+
+        // If compass is enabled and we have a valid heading, rotate the angle
+        if (compassEnabled && viewerHeading !== null) {
+          // Subtract viewer's heading to get absolute direction
+          // The viewer is facing 'viewerHeading' degrees from north
+          // So we need to rotate the relative positions accordingly
+          adjustedAngle = (pos.angle - viewerHeading + 360) % 360;
+        }
+
         return {
           ...pos,
+          angle: adjustedAngle,
           rssi: rssi || -100 // Default to weak signal if not available
         };
       });
@@ -194,7 +234,8 @@ export class WebSocketService {
         payload: {
           userId: clientInfo.userId,
           positions: positionsWithRSSI,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          compassEnabled: compassEnabled
         }
       });
     }

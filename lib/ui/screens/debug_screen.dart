@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/ble/ble_service.dart';
+import '../../services/position/position_service.dart';
 import '../../services/permission/permission_service.dart';
 import '../../services/wallet/wallet_service.dart';
 import '../widgets/detected_users_list.dart';
+import 'raw_data_screen.dart';
 
 /// デバッグ画面
 class DebugScreen extends ConsumerWidget {
@@ -15,15 +18,28 @@ class DebugScreen extends ConsumerWidget {
     final bleState = ref.watch(bleServiceProvider);
     final walletState = ref.watch(walletServiceProvider);
     final permissionState = ref.watch(permissionServiceProvider);
+    final positionState = ref.watch(positionServiceProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('デバッグ'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.data_array),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RawDataScreen()),
+              );
+            },
+            tooltip: 'ローデータ',
+          ),
+        ],
       ),
       body: Column(
         children: [
           // ステータス表示
-          _buildStatusCard(context, bleState, walletState, permissionState),
+          _buildStatusCard(context, ref, bleState, walletState, permissionState, positionState),
 
           // 検知ユーザー一覧
           Expanded(
@@ -38,12 +54,15 @@ class DebugScreen extends ConsumerWidget {
 
   Widget _buildStatusCard(
     BuildContext context,
+    WidgetRef ref,
     BleServiceState bleState,
     WalletServiceState walletState,
     PermissionServiceState permissionState,
+    PositionServiceState positionState,
   ) {
     final statusColor = bleState.isSensing ? Colors.green : Colors.grey;
     final statusText = bleState.isSensing ? 'センシング中' : '停止中';
+    final apiBaseUrl = dotenv.env['API_BASE_URL'] ?? '未設定';
 
     return Card(
       margin: const EdgeInsets.all(16),
@@ -85,6 +104,62 @@ class DebugScreen extends ConsumerWidget {
                     backgroundColor: Colors.orange.shade100,
                   ),
               ],
+            ),
+            const Divider(),
+            // コンパス設定
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.explore,
+                      size: 18,
+                      color: positionState.compassEnabled ? Colors.green : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'コンパス補正',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+                Switch(
+                  value: positionState.compassEnabled,
+                  onChanged: (_) {
+                    ref.read(positionServiceProvider.notifier).toggleCompass();
+                  },
+                ),
+              ],
+            ),
+            if (positionState.compassEnabled && positionState.currentHeading != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 26),
+                child: Text(
+                  '方位: ${positionState.currentHeading!.toStringAsFixed(1)}°',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.green,
+                  ),
+                ),
+              ),
+            const Divider(),
+            // API設定
+            Text(
+              'API: $apiBaseUrl',
+              style: Theme.of(context).textTheme.bodySmall,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'WS: ${positionState.connectionState.name}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: positionState.connectionState == PositionConnectionState.connected
+                    ? Colors.green
+                    : null,
+              ),
+            ),
+            Text(
+              'Trilateration: ${positionState.trilaterationEnabled ? "有効 (${positionState.activeUsers}人)" : "無効"}',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const Divider(),
             // デバッグ情報

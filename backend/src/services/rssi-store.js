@@ -3,7 +3,7 @@
  */
 export class RSSIStore {
   constructor() {
-    // Map<userId, { detectedUsers: Map<targetId, { rssi, timestamp }>, lastUpdate: Date }>
+    // Map<userId, { detectedUsers: Map<targetId, { rssi, timestamp }>, lastUpdate: Date, heading: number|null, compassEnabled: boolean }>
     this.userRSSIData = new Map();
 
     // Auto-cleanup old data every 10 seconds
@@ -16,11 +16,15 @@ export class RSSIStore {
    * Store RSSI report from a user
    * @param {string} userId - The reporting user's ID
    * @param {Array<{userId: string, rssi: number, timestamp: string}>} detectedUsers - Detected users and their RSSI values
+   * @param {number|null} heading - Compass heading in degrees (0-360, null if disabled)
    */
-  storeRSSIReport(userId, detectedUsers) {
+  storeRSSIReport(userId, detectedUsers, heading = null) {
+    const existingData = this.userRSSIData.get(userId);
     const userData = {
       detectedUsers: new Map(),
-      lastUpdate: new Date()
+      lastUpdate: new Date(),
+      heading: heading,
+      compassEnabled: existingData?.compassEnabled ?? false
     };
 
     for (const detected of detectedUsers) {
@@ -31,6 +35,41 @@ export class RSSIStore {
     }
 
     this.userRSSIData.set(userId, userData);
+  }
+
+  /**
+   * Set compass enabled state for a user
+   * @param {string} userId - User ID
+   * @param {boolean} enabled - Whether compass is enabled
+   */
+  setCompassEnabled(userId, enabled) {
+    const userData = this.userRSSIData.get(userId);
+    if (userData) {
+      userData.compassEnabled = enabled;
+      if (!enabled) {
+        userData.heading = null;
+      }
+    }
+  }
+
+  /**
+   * Get heading for a user
+   * @param {string} userId - User ID
+   * @returns {number|null} - Heading in degrees or null
+   */
+  getHeading(userId) {
+    const userData = this.userRSSIData.get(userId);
+    return userData?.heading ?? null;
+  }
+
+  /**
+   * Check if compass is enabled for a user
+   * @param {string} userId - User ID
+   * @returns {boolean} - Whether compass is enabled
+   */
+  isCompassEnabled(userId) {
+    const userData = this.userRSSIData.get(userId);
+    return userData?.compassEnabled ?? false;
   }
 
   /**

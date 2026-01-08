@@ -67,6 +67,13 @@ dependencies:
   # Permission handling
   permission_handler: ^11.4.0
 
+  # Sensors (compass)
+  sensors_plus: ^6.1.1
+
+  # File system
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
+
   # BLE library (custom fork with high-rate RSSI)
   barnard:
     git:

@@ -6,7 +6,7 @@ part of 'ble_service.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$bleServiceHash() => r'c788c17048352856f5f29c79f67aa020b9103d1f';
+String _$bleServiceHash() => r'c506631a78ecffef4225022e823304868046fa6d';
 
 /// BLEサービスプロバイダー
 ///
