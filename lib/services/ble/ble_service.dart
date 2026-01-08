@@ -32,13 +32,17 @@ class DetectedUser {
     required this.rssi,
     required this.lastSeen,
     this.rssiSummary,
+    this.smoothedRssi,
   });
 
   /// 表示用ID（rpidから生成された短いID）
   final String displayId;
 
-  /// 受信信号強度（dBm）
+  /// 受信信号強度（dBm）- 生の値
   final int rssi;
+
+  /// スムージングされたRSSI値（表示用）
+  final double? smoothedRssi;
 
   /// 最終検知時刻
   final DateTime lastSeen;
@@ -46,17 +50,22 @@ class DetectedUser {
   /// RSSI統計情報
   final RssiSummary? rssiSummary;
 
+  /// 表示用のRSSI（スムージング済みがあればそれを使用）
+  int get displayRssi => smoothedRssi?.round() ?? rssi;
+
   DetectedUser copyWith({
     String? displayId,
     int? rssi,
     DateTime? lastSeen,
     RssiSummary? rssiSummary,
+    double? smoothedRssi,
   }) {
     return DetectedUser(
       displayId: displayId ?? this.displayId,
       rssi: rssi ?? this.rssi,
       lastSeen: lastSeen ?? this.lastSeen,
       rssiSummary: rssiSummary ?? this.rssiSummary,
+      smoothedRssi: smoothedRssi ?? this.smoothedRssi,
     );
   }
 
@@ -129,6 +138,9 @@ class BleService extends _$BleService {
 
   static const _userTimeout = Duration(seconds: 15);
 
+  /// EMAスムージング係数（0.0-1.0、小さいほど滑らか）
+  static const _smoothingAlpha = 0.2;
+
   @override
   BleServiceState build() {
     ref.onDispose(() {
@@ -190,11 +202,23 @@ class BleService extends _$BleService {
   }
 
   void _onDetection(DetectionEvent event) {
+    final existingUser = state.detectedUsers.cast<DetectedUser?>().firstWhere(
+          (u) => u?.displayId == event.displayId,
+          orElse: () => null,
+        );
+
+    // EMAスムージングを適用
+    final newSmoothedRssi = _calculateSmoothedRssi(
+      existingUser?.smoothedRssi,
+      event.rssi.toDouble(),
+    );
+
     final detectedUser = DetectedUser(
       displayId: event.displayId,
       rssi: event.rssi,
       lastSeen: event.timestamp,
       rssiSummary: event.rssiSummary,
+      smoothedRssi: newSmoothedRssi,
     );
 
     final updatedUsers = Set<DetectedUser>.from(state.detectedUsers);
@@ -208,25 +232,42 @@ class BleService extends _$BleService {
 
   /// 高頻度RSSI更新イベントを処理
   void _onRssiUpdate(RssiUpdateEvent event) {
-    final existingUser = state.detectedUsers.firstWhere(
-      (u) => u.displayId == event.displayId,
-      orElse: () => DetectedUser(
-        displayId: event.displayId,
-        rssi: event.rssi,
-        lastSeen: event.timestamp,
-      ),
+    final existingUser = state.detectedUsers.cast<DetectedUser?>().firstWhere(
+          (u) => u?.displayId == event.displayId,
+          orElse: () => null,
+        );
+
+    // EMAスムージングを適用
+    final newSmoothedRssi = _calculateSmoothedRssi(
+      existingUser?.smoothedRssi,
+      event.rssi.toDouble(),
     );
 
-    final updatedUser = existingUser.copyWith(
-      rssi: event.rssi,
-      lastSeen: event.timestamp,
-    );
+    final updatedUser = existingUser?.copyWith(
+          rssi: event.rssi,
+          lastSeen: event.timestamp,
+          smoothedRssi: newSmoothedRssi,
+        ) ??
+        DetectedUser(
+          displayId: event.displayId,
+          rssi: event.rssi,
+          lastSeen: event.timestamp,
+          smoothedRssi: newSmoothedRssi,
+        );
 
     final updatedUsers = Set<DetectedUser>.from(state.detectedUsers);
     updatedUsers.removeWhere((u) => u.displayId == event.displayId);
     updatedUsers.add(updatedUser);
 
     state = state.copyWith(detectedUsers: updatedUsers);
+  }
+
+  /// EMAスムージングを計算
+  double _calculateSmoothedRssi(double? previousSmoothed, double newRssi) {
+    if (previousSmoothed == null) {
+      return newRssi;
+    }
+    return _smoothingAlpha * newRssi + (1 - _smoothingAlpha) * previousSmoothed;
   }
 
   void _onStateChange(StateEvent event) {

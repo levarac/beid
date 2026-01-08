@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,12 +8,8 @@ import '../../services/device_id/device_id_service.dart';
 import '../../services/permission/permission_service.dart';
 import '../../services/position/position_service.dart';
 import '../../services/wallet/wallet_service.dart';
-import '../widgets/history_header_button.dart';
-import '../widgets/my_page_header_button.dart';
 import '../widgets/radar/radar_view.dart';
 import '../widgets/sensing_button.dart';
-import 'history_screen.dart';
-import 'my_page_screen.dart';
 
 /// ホーム画面
 class HomeScreen extends ConsumerStatefulWidget {
@@ -22,6 +20,10 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  DateTime? _sensingStartTime;
+  Timer? _elapsedTimer;
+  Duration _elapsedDuration = Duration.zero;
+
   @override
   void initState() {
     super.initState();
@@ -30,6 +32,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ref.read(deviceIdServiceProvider.notifier).initialize();
       ref.read(walletServiceProvider.notifier).initialize();
     });
+  }
+
+  @override
+  void dispose() {
+    _elapsedTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startElapsedTimer() {
+    _sensingStartTime = DateTime.now();
+    _elapsedDuration = Duration.zero;
+    _elapsedTimer?.cancel();
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_sensingStartTime != null) {
+        setState(() {
+          _elapsedDuration = DateTime.now().difference(_sensingStartTime!);
+        });
+      }
+    });
+  }
+
+  void _stopElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
+    _sensingStartTime = null;
+    setState(() {
+      _elapsedDuration = Duration.zero;
+    });
+  }
+
+  String _formatElapsedTime(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (duration.inHours > 0) {
+      final hours = duration.inHours.toString().padLeft(2, '0');
+      return '$hours:$minutes:$seconds';
+    }
+    return '$minutes:$seconds';
   }
 
   Future<void> _handleSensingToggle() async {
@@ -81,12 +121,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onSuccess: (_) {
         // センシング停止時：WebSocket切断
         final newBleState = ref.read(bleServiceProvider);
-        if (!newBleState.isSensing) {
+        if (newBleState.isSensing) {
+          _startElapsedTimer();
+        } else {
+          _stopElapsedTimer();
           positionService.disconnect();
         }
       },
       onFailure: (error) {
         _showSnackBar(error.message);
+        _stopElapsedTimer();
         // エラー時もWebSocket切断
         positionService.disconnect();
       },
@@ -122,67 +166,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _navigateToHistory() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const HistoryScreen()),
-    );
-  }
-
-  void _handleMyPageButtonPressed() async {
-    final walletState = ref.read(walletServiceProvider);
-
-    if (walletState.isConnected) {
-      // ウォレット接続済み：マイページに遷移
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const MyPageScreen()),
-      );
-    } else {
-      // ウォレット未接続：ウォレット接続モーダルを表示
-      await ref.read(walletServiceProvider.notifier).openModal(context);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final bleState = ref.watch(bleServiceProvider);
-    final walletState = ref.watch(walletServiceProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: HistoryHeaderButton(
-            detectedCount: bleState.detectedUsers.length,
-            onPressed: _navigateToHistory,
-          ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: Column(
+                children: [
+                  const SizedBox(height: 48),
+                  // 検知数
+                  Text(
+                    '${bleState.detectedUsers.length}',
+                    style: const TextStyle(
+                      fontFamily: 'Silkscreen',
+                      fontSize: 72,
+                      fontWeight: FontWeight.w400,
+                      height: 1,
+                    ),
+                  ),
+                  const Expanded(child: RadarView()),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: SensingButton(
+                isSensing: bleState.isSensing,
+                isLoading: bleState.sensingState == SensingState.starting ||
+                    bleState.sensingState == SensingState.stopping,
+                onPressed: _handleSensingToggle,
+                elapsedTime: bleState.isSensing ? _formatElapsedTime(_elapsedDuration) : null,
+              ),
+            ),
+          ],
         ),
-        title: null,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: MyPageHeaderButton(
-              isWalletConnected: walletState.isConnected,
-              onPressed: _handleMyPageButtonPressed,
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          const Expanded(child: RadarView()),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            child: SensingButton(
-              isSensing: bleState.isSensing,
-              isLoading: bleState.sensingState == SensingState.starting ||
-                  bleState.sensingState == SensingState.stopping,
-              onPressed: _handleSensingToggle,
-            ),
-          ),
-        ],
       ),
     );
   }

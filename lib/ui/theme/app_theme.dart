@@ -3,26 +3,33 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  // Design tokens
-  static const Color primary = Color(0xFF968CFF);
-  static const Color border = Color(0xFF473E6B);
-  static const Color textPrimary = Color(0xFF473E6B);
-  static const Color textSecondary = Color(0xFF797292);
-  static const Color textLink = Color(0xFF6D62DF);
-
+  // Design tokens - Monotone
+  static const Color primary = Color(0xFF1A1A1A);
+  static const Color primaryLight = Color(0xFF4A4A4A);
+  static const Color border = Color(0xFFD0D0D0);
+  static const Color borderDark = Color(0xFF3A3A3A);
+  static const Color textPrimary = Color(0xFF1A1A1A);
+  static const Color textSecondary = Color(0xFF6B6B6B);
+  static const Color textTertiary = Color(0xFF9A9A9A);
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.light(
         primary: primary,
         onPrimary: Colors.white,
-        secondary: textLink,
+        secondary: primaryLight,
         onSecondary: Colors.white,
         surface: Colors.white,
         onSurface: textPrimary,
         onSurfaceVariant: textSecondary,
         outline: border,
-        outlineVariant: border.withValues(alpha: 0.3),
+        outlineVariant: border.withValues(alpha: 0.5),
+        primaryContainer: const Color(0xFFF5F5F5),
+        onPrimaryContainer: textPrimary,
+        secondaryContainer: const Color(0xFFEEEEEE),
+        onSecondaryContainer: textPrimary,
+        errorContainer: const Color(0xFFFFEBEE),
+        onErrorContainer: const Color(0xFFC62828),
       ),
       scaffoldBackgroundColor: Colors.white,
       appBarTheme: const AppBarTheme(
@@ -31,7 +38,7 @@ class AppTheme {
         backgroundColor: Colors.white,
         foregroundColor: textPrimary,
       ),
-      floatingActionButtonTheme: FloatingActionButtonThemeData(
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
         elevation: 0,
         backgroundColor: primary,
         foregroundColor: Colors.white,
@@ -59,42 +66,59 @@ class AppTheme {
         labelMedium: TextStyle(color: textSecondary),
         labelSmall: TextStyle(color: textSecondary),
       ),
-      dividerColor: border.withValues(alpha: 0.3),
+      dividerColor: border.withValues(alpha: 0.5),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primary,
+          side: const BorderSide(color: primary),
+        ),
+      ),
     );
   }
 
   static ThemeData get darkTheme {
-    // Dark theme uses same primary but inverted backgrounds
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.dark(
-        primary: primary,
-        onPrimary: textPrimary,
-        secondary: textLink,
-        onSecondary: Colors.white,
-        surface: const Color(0xFF1E1B2E),
+        primary: Colors.white,
+        onPrimary: const Color(0xFF1A1A1A),
+        secondary: const Color(0xFFB0B0B0),
+        onSecondary: const Color(0xFF1A1A1A),
+        surface: const Color(0xFF121212),
         onSurface: Colors.white,
-        onSurfaceVariant: textSecondary,
-        outline: border,
-        outlineVariant: border.withValues(alpha: 0.5),
+        onSurfaceVariant: const Color(0xFFB0B0B0),
+        outline: borderDark,
+        outlineVariant: borderDark.withValues(alpha: 0.5),
+        primaryContainer: const Color(0xFF2A2A2A),
+        onPrimaryContainer: Colors.white,
+        secondaryContainer: const Color(0xFF3A3A3A),
+        onSecondaryContainer: Colors.white,
+        errorContainer: const Color(0xFF442222),
+        onErrorContainer: const Color(0xFFFF8A80),
       ),
-      scaffoldBackgroundColor: const Color(0xFF1E1B2E),
+      scaffoldBackgroundColor: const Color(0xFF121212),
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Color(0xFF1E1B2E),
+        backgroundColor: Color(0xFF121212),
         foregroundColor: Colors.white,
       ),
-      floatingActionButtonTheme: FloatingActionButtonThemeData(
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
         elevation: 0,
-        backgroundColor: primary,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Color(0xFF1A1A1A),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: border.withValues(alpha: 0.5), width: 1),
+          side: BorderSide(color: borderDark.withValues(alpha: 0.5), width: 1),
         ),
       ),
       listTileTheme: ListTileThemeData(
@@ -102,7 +126,19 @@ class AppTheme {
           borderRadius: BorderRadius.circular(8),
         ),
       ),
-      dividerColor: border.withValues(alpha: 0.5),
+      dividerColor: borderDark.withValues(alpha: 0.5),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A1A),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: Colors.white),
+        ),
+      ),
     );
   }
 }

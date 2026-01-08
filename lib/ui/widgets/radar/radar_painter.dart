@@ -26,139 +26,167 @@ class RadarPainter extends CustomPainter {
   static const double rssiMin = -90.0; // 遠い
   static const double rssiMax = -30.0; // 近い
 
+  // デザイン定数
+  static const int outerDotCount = 60;
+  static const double outerDotRadius = 2.0;
+  static const double cardinalMarkerLength = 20.0;
+  static const double cardinalMarkerWidth = 2.0;
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final maxRadius = min(size.width, size.height) / 2 - 20;
 
-    // 背景を描画
-    _drawBackground(canvas, center, maxRadius);
+    // 白い円形背景を描画
+    _drawCircleBackground(canvas, center, maxRadius);
 
-    // 同心円を描画
-    _drawConcentricCircles(canvas, center, maxRadius);
+    // 内側の点線同心円を描画
+    _drawDottedConcentricCircles(canvas, center, maxRadius);
 
-    // スキャン線を描画
-    _drawScanLine(canvas, center, maxRadius);
+    // 外周のドットリングを描画
+    _drawOuterDotRing(canvas, center, maxRadius);
 
-    // 中心点（自分）を描画
+    // 基本方位のマーカーを描画（12, 3, 6, 9時位置）
+    _drawCardinalMarkers(canvas, center, maxRadius);
+
+    // スキャン針を描画
+    _drawScanHands(canvas, center, maxRadius);
+
+    // 中心点を描画
     _drawCenterPoint(canvas, center);
 
     // 検知ユーザーを描画
     _drawDetectedUsers(canvas, center, maxRadius);
   }
 
-  void _drawBackground(Canvas canvas, Offset center, double maxRadius) {
+  void _drawCircleBackground(Canvas canvas, Offset center, double maxRadius) {
     final paint = Paint()
-      ..color = backgroundColor.withValues(alpha: 0.3)
+      ..color = Colors.white
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, maxRadius, paint);
+    // 外周ドットより少し広めに背景を描画
+    canvas.drawCircle(center, maxRadius + outerDotRadius + 6, paint);
   }
 
-  void _drawConcentricCircles(Canvas canvas, Offset center, double maxRadius) {
+  void _drawDottedConcentricCircles(Canvas canvas, Offset center, double maxRadius) {
     final paint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+      ..color = primaryColor.withValues(alpha: 0.15)
+      ..style = PaintingStyle.fill;
 
-    // 4つの同心円を描画
-    for (int i = 1; i <= 4; i++) {
-      final radius = maxRadius * i / 4;
-      canvas.drawCircle(center, radius, paint);
+    // 3つの同心円（内側から25%, 50%, 75%の位置）
+    for (int ring = 1; ring <= 3; ring++) {
+      final radius = maxRadius * ring / 4;
+      final dotCount = (24 * ring).clamp(24, 48); // 内側は少なく、外側は多く
+      final dotRadius = 1.5;
+
+      for (int i = 0; i < dotCount; i++) {
+        final angle = (i / dotCount) * 2 * pi - pi / 2;
+        final dotCenter = Offset(
+          center.dx + radius * cos(angle),
+          center.dy + radius * sin(angle),
+        );
+        canvas.drawCircle(dotCenter, dotRadius, paint);
+      }
     }
-
-    // 十字線を描画
-    final crossPaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    canvas.drawLine(
-      Offset(center.dx - maxRadius, center.dy),
-      Offset(center.dx + maxRadius, center.dy),
-      crossPaint,
-    );
-    canvas.drawLine(
-      Offset(center.dx, center.dy - maxRadius),
-      Offset(center.dx, center.dy + maxRadius),
-      crossPaint,
-    );
   }
 
-  void _drawScanLine(Canvas canvas, Offset center, double maxRadius) {
-    // スキャン線のグラデーション
-    final sweepGradient = SweepGradient(
-      center: Alignment.center,
-      startAngle: scanAngle - 0.5,
-      endAngle: scanAngle,
-      colors: [
-        primaryColor.withValues(alpha: 0.0),
-        primaryColor.withValues(alpha: 0.3),
-      ],
-      stops: const [0.0, 1.0],
-      transform: GradientRotation(scanAngle - pi / 2),
-    );
+  void _drawOuterDotRing(Canvas canvas, Offset center, double maxRadius) {
+    final paint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.4)
+      ..style = PaintingStyle.fill;
 
-    final sweepPaint = Paint()
-      ..shader = sweepGradient.createShader(
-        Rect.fromCircle(center: center, radius: maxRadius),
+    for (int i = 0; i < outerDotCount; i++) {
+      // 12時位置から開始（-π/2 オフセット）
+      final angle = (i / outerDotCount) * 2 * pi - pi / 2;
+      final dotCenter = Offset(
+        center.dx + maxRadius * cos(angle),
+        center.dy + maxRadius * sin(angle),
       );
 
-    canvas.drawCircle(center, maxRadius, sweepPaint);
+      // 基本方位（0, 15, 30, 45分位置）は少し大きく
+      final isCardinal = i % 15 == 0;
+      final radius = isCardinal ? outerDotRadius * 1.5 : outerDotRadius;
 
-    // スキャン線
-    final linePaint = Paint()
-      ..color = primaryColor.withValues(alpha: 0.8)
+      canvas.drawCircle(dotCenter, radius, paint);
+    }
+  }
+
+  void _drawCardinalMarkers(Canvas canvas, Offset center, double maxRadius) {
+    final paint = Paint()
+      ..color = primaryColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+      ..strokeWidth = cardinalMarkerWidth
+      ..strokeCap = StrokeCap.round;
 
-    final endPoint = Offset(
-      center.dx + maxRadius * cos(scanAngle),
-      center.dy + maxRadius * sin(scanAngle),
-    );
-    canvas.drawLine(center, endPoint, linePaint);
+    // 12時、3時、6時、9時の4方向
+    final cardinalAngles = [-pi / 2, 0, pi / 2, pi];
+
+    for (final angle in cardinalAngles) {
+      final innerRadius = maxRadius - cardinalMarkerLength - 8;
+      final outerRadius = maxRadius - 8;
+
+      final start = Offset(
+        center.dx + innerRadius * cos(angle),
+        center.dy + innerRadius * sin(angle),
+      );
+      final end = Offset(
+        center.dx + outerRadius * cos(angle),
+        center.dy + outerRadius * sin(angle),
+      );
+
+      canvas.drawLine(start, end, paint);
+    }
+  }
+
+  void _drawScanHands(Canvas canvas, Offset center, double maxRadius) {
+    // 3本の針を描画（120度間隔、同じ長さ）
+    final handPaint = Paint()
+      ..color = primaryColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    final handLength = maxRadius * 0.55;
+
+    // 3本の針を120度間隔で描画
+    for (int i = 0; i < 3; i++) {
+      final angle = scanAngle - pi / 2 + (i * 2 * pi / 3);
+      final handEnd = Offset(
+        center.dx + handLength * cos(angle),
+        center.dy + handLength * sin(angle),
+      );
+      canvas.drawLine(center, handEnd, handPaint);
+    }
   }
 
   void _drawCenterPoint(Canvas canvas, Offset center) {
-    // 外側の円
-    final outerPaint = Paint()
-      ..color = primaryColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-    canvas.drawCircle(center, 12, outerPaint);
-
-    // 内側の塗りつぶし
-    final innerPaint = Paint()
+    // 中心の小さな点
+    final paint = Paint()
       ..color = primaryColor
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, 6, innerPaint);
+    canvas.drawCircle(center, 4, paint);
   }
+
+  // 検知ユーザーのドット色
+  static const Color _detectedUserColor = Color(0xFFFF6000);
 
   void _drawDetectedUsers(Canvas canvas, Offset center, double maxRadius) {
     for (final user in detectedUsers) {
       final position = _calculateUserPosition(user, center, maxRadius);
-      final color = _getColorForRssi(user.rssi);
 
-      // ユーザーの点を描画
+      // ユーザーの点を描画（オレンジ）
       final paint = Paint()
-        ..color = color
+        ..color = _detectedUserColor
         ..style = PaintingStyle.fill;
 
-      // グロー効果
-      final glowPaint = Paint()
-        ..color = color.withValues(alpha: 0.3)
-        ..style = PaintingStyle.fill
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-      canvas.drawCircle(position, 12, glowPaint);
-
       // メインの点
-      canvas.drawCircle(position, 8, paint);
+      canvas.drawCircle(position, 6, paint);
 
-      // 枠線
+      // 白い枠線
       final borderPaint = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
-      canvas.drawCircle(position, 8, borderPaint);
+      canvas.drawCircle(position, 6, borderPaint);
     }
   }
 
@@ -172,13 +200,13 @@ class RadarPainter extends CustomPainter {
       angle = serverPos.angle;
       normalizedDistance = serverPos.distance;
     } else {
-      // フォールバック: RSSIから距離、displayIdから角度を計算
-      normalizedDistance = _rssiToDistance(user.rssi);
+      // フォールバック: スムージングされたRSSIから距離、displayIdから角度を計算
+      normalizedDistance = _rssiToDistance(user.displayRssi);
       angle = _displayIdToAngle(user.displayId);
     }
 
-    // 位置を計算
-    final distance = normalizedDistance * maxRadius * 0.9; // 外周の90%まで
+    // 位置を計算（内側の領域に配置）
+    final distance = normalizedDistance * maxRadius * 0.75;
     return Offset(
       center.dx + distance * cos(angle),
       center.dy + distance * sin(angle),
@@ -198,13 +226,6 @@ class RadarPainter extends CustomPainter {
       hash = displayId.codeUnitAt(i) + ((hash << 5) - hash);
     }
     return (hash % 360) * pi / 180;
-  }
-
-  Color _getColorForRssi(int rssi) {
-    // RSSIに応じた色を返す
-    if (rssi >= -50) return Colors.green;
-    if (rssi >= -70) return Colors.orange;
-    return Colors.red;
   }
 
   @override

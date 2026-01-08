@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
-
 /// センシング開始/停止ボタン
 class SensingButton extends StatelessWidget {
   const SensingButton({
@@ -9,25 +7,30 @@ class SensingButton extends StatelessWidget {
     required this.isSensing,
     required this.isLoading,
     required this.onPressed,
+    this.elapsedTime,
   });
 
   final bool isSensing;
   final bool isLoading;
   final VoidCallback onPressed;
+  final String? elapsedTime;
+
+  static const Color _startButtonColor = Color(0xFFFF6000);
+  static const Color _sensingButtonColor = Color(0xFF1A1A1A);
 
   @override
   Widget build(BuildContext context) {
+    final buttonColor = isSensing ? _sensingButtonColor : _startButtonColor;
+
     return SizedBox(
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isSensing
-              ? AppTheme.border
-              : AppTheme.primary,
+          backgroundColor: buttonColor,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.5),
+          disabledBackgroundColor: buttonColor.withValues(alpha: 0.5),
           disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -44,10 +47,11 @@ class SensingButton extends StatelessWidget {
                 ),
               )
             : Text(
-                'Sensing',
+                isSensing ? (elapsedTime ?? 'Sensing...') : 'Start Sensing',
                 style: const TextStyle(
+                  fontFamily: 'Silkscreen',
                   fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
       ),

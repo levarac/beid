@@ -122,22 +122,50 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+  fonts:
+    - family: Silkscreen
+      fonts:
+        - asset: fonts/Silkscreen/Silkscreen-Regular.ttf
+          weight: 400
+        - asset: fonts/Silkscreen/Silkscreen-Bold.ttf
+          weight: 700
+    - family: Doto
+      fonts:
+        - asset: fonts/Doto/static/Doto-Thin.ttf
+          weight: 100
+        - asset: fonts/Doto/static/Doto-ExtraLight.ttf
+          weight: 200
+        - asset: fonts/Doto/static/Doto-Light.ttf
+          weight: 300
+        - asset: fonts/Doto/static/Doto-Regular.ttf
+          weight: 400
+        - asset: fonts/Doto/static/Doto-Medium.ttf
+          weight: 500
+        - asset: fonts/Doto/static/Doto-SemiBold.ttf
+          weight: 600
+        - asset: fonts/Doto/static/Doto-Bold.ttf
+          weight: 700
+        - asset: fonts/Doto/static/Doto-ExtraBold.ttf
+          weight: 800
+        - asset: fonts/Doto/static/Doto-Black.ttf
+          weight: 900
+    - family: DotoRounded
+      fonts:
+        - asset: fonts/Doto/static/Doto_Rounded-Thin.ttf
+          weight: 100
+        - asset: fonts/Doto/static/Doto_Rounded-ExtraLight.ttf
+          weight: 200
+        - asset: fonts/Doto/static/Doto_Rounded-Light.ttf
+          weight: 300
+        - asset: fonts/Doto/static/Doto_Rounded-Regular.ttf
+          weight: 400
+        - asset: fonts/Doto/static/Doto_Rounded-Medium.ttf
+          weight: 500
+        - asset: fonts/Doto/static/Doto_Rounded-SemiBold.ttf
+          weight: 600
+        - asset: fonts/Doto/static/Doto_Rounded-Bold.ttf
+          weight: 700
+        - asset: fonts/Doto/static/Doto_Rounded-ExtraBold.ttf
+          weight: 800
+        - asset: fonts/Doto/static/Doto_Rounded-Black.ttf
+          weight: 900
