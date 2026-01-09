@@ -50,3 +50,5 @@ Kiro-style Spec Driven Development implementation on AI-DLC (AI Development Life
 - ci_scriptsディレクトリ: `ios/ci_scripts/`
 - 再ビルドをトリガーするには `what_to_test.json` を更新してプッシュ
 - Flutterバージョンは `.tool-versions` で管理
+- Team IDはXcode Cloudワークフロー設定で管理（コードにコミットしない）
+- 環境変数`CI_TEAM_ID`を設定すればci_post_clone.shで自動適用
