@@ -43,3 +43,10 @@ Kiro-style Spec Driven Development implementation on AI-DLC (AI Development Life
 - Load entire `.kiro/steering/` as project memory
 - Default files: `product.md`, `tech.md`, `structure.md`
 - Custom files are supported (managed via `/kiro:steering-custom`)
+
+## CI/CD Notes
+
+### Xcode Cloud
+- ci_scriptsディレクトリ: `ios/ci_scripts/`
+- 再ビルドをトリガーするには `what_to_test.json` を更新してプッシュ
+- Flutterバージョンは `.tool-versions` で管理
