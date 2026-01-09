@@ -27,7 +27,7 @@ fi
 # --------------------------------------------------
 # 2. Flutter Setup
 # --------------------------------------------------
-flutter_version=`cat ./.tool-versions | sed -nre 's/^[^0-9]*(([0-9]+\.)*[0-9]+(-([0-9]+\.)*[0-9a-zA-Z]+)?).*/\1/p' | sed 's/-stable//'`
+flutter_version=`grep '^flutter ' ./.tool-versions | head -n 1 | awk '{print $2}' | sed 's/-stable//'`
 echo "Flutter version: `echo $flutter_version`"
 
 echo "🔵 flutter download"
@@ -50,7 +50,7 @@ flutter pub run build_runner build --delete-conflicting-outputs
 # 3. CocoaPods Setup
 # --------------------------------------------------
 # Install CocoaPods using Homebrew.
-HOMEBREW_NO_AUTO_UPDATE=1 # disable homebrew's automatic updates.
+export HOMEBREW_NO_AUTO_UPDATE=1 # disable homebrew's automatic updates.
 echo "🔵 install cocoapods"
 brew install cocoapods
 
