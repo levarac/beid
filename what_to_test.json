@@ -1,7 +1,6 @@
-// Recent feature and refactor tests (moved to top)
 [
   {
     "language": "ja",
-    "text": "Bluetooth相互接続の動作確認"
+    "text": "Xcode Cloud CI設定の確認, .envをassetsから削除"
   }
 ]
