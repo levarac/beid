@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/app_providers.dart';
 import '../../services/ble/ble_service.dart';
 import '../../services/position/position_service.dart';
 import '../../services/permission/permission_service.dart';
@@ -62,7 +62,7 @@ class DebugScreen extends ConsumerWidget {
   ) {
     final statusColor = bleState.isSensing ? Colors.green : Colors.grey;
     final statusText = bleState.isSensing ? 'センシング中' : '停止中';
-    final apiBaseUrl = dotenv.env['API_BASE_URL'] ?? '未設定';
+    final apiBaseUrl = ref.read(envProvider).apiBaseUrl;
 
     return Card(
       margin: const EdgeInsets.all(16),

@@ -112,9 +112,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Assets for environment variables
-  assets:
-    - .env
+  # Note: .env is loaded at runtime via flutter_dotenv, not as an asset
+  # This allows builds to succeed without .env file (uses default values)
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

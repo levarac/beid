@@ -7,6 +7,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../providers/app_providers.dart';
 import '../ble/ble_service.dart';
 
 part 'position_service.g.dart';
@@ -147,9 +148,9 @@ class PositionService extends _$PositionService {
 
   /// WebSocket URLを取得
   String get _wsUrl {
-    final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:3000';
-    // http://xxx -> ws://xxx/ws
-    final wsBase = baseUrl.replaceFirst('http', 'ws').replaceFirst('/api', '');
+    final baseUrl = dotenv.env['API_BASE_URL'] ?? AppDefaults.apiBaseUrl;
+    // http(s)://xxx -> ws(s)://xxx/ws
+    final wsBase = baseUrl.replaceFirst('https', 'wss').replaceFirst('http', 'ws').replaceFirst('/api', '');
     return '$wsBase/ws';
   }
 
