@@ -166,19 +166,21 @@ class RadarPainter extends CustomPainter {
     canvas.drawCircle(center, 4, paint);
   }
 
-  // 検知ユーザーのドット色
-  static const Color _detectedUserColor = Color(0xFFFF6000);
+  // 解決済みユーザーのドット色（オレンジ）
+  static const Color _resolvedUserColor = Color(0xFFFF6000);
+  // 未解決ユーザーのドット色（グレー）
+  static const Color _unresolvedUserColor = Color(0xFF999999);
 
   void _drawDetectedUsers(Canvas canvas, Offset center, double maxRadius) {
     for (final user in detectedUsers) {
       final position = _calculateUserPosition(user, center, maxRadius);
-
-      // ユーザーの点を描画（オレンジ）
-      final paint = Paint()
-        ..color = _detectedUserColor
-        ..style = PaintingStyle.fill;
+      final isResolved = user.resolvedDisplayId != null;
+      final dotColor = isResolved ? _resolvedUserColor : _unresolvedUserColor;
 
       // メインの点
+      final paint = Paint()
+        ..color = dotColor
+        ..style = PaintingStyle.fill;
       canvas.drawCircle(position, 6, paint);
 
       // 白い枠線
@@ -187,6 +189,15 @@ class RadarPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
       canvas.drawCircle(position, 6, borderPaint);
+
+      // 解決済みの場合は外側にリングを追加
+      if (isResolved) {
+        final ringPaint = Paint()
+          ..color = _resolvedUserColor.withValues(alpha: 0.4)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5;
+        canvas.drawCircle(position, 10, ringPaint);
+      }
     }
   }
 
@@ -195,14 +206,14 @@ class RadarPainter extends CustomPainter {
     double normalizedDistance;
 
     // サーバーから位置情報がある場合はそれを使用
-    if (serverPositions != null && serverPositions!.containsKey(user.displayId)) {
-      final serverPos = serverPositions![user.displayId]!;
+    if (serverPositions != null && serverPositions!.containsKey(user.effectiveDisplayId)) {
+      final serverPos = serverPositions![user.effectiveDisplayId]!;
       angle = serverPos.angle;
       normalizedDistance = serverPos.distance;
     } else {
       // フォールバック: スムージングされたRSSIから距離、displayIdから角度を計算
       normalizedDistance = _rssiToDistance(user.displayRssi);
-      angle = _displayIdToAngle(user.displayId);
+      angle = _displayIdToAngle(user.effectiveDisplayId);
     }
 
     // 位置を計算（内側の領域に配置）

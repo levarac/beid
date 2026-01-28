@@ -176,6 +176,12 @@ class DebugScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             Text(
+              'Event: ${bleState.isEventMode ? bleState.eventCode! : "Anonymous"}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: bleState.isEventMode ? const Color(0xFFFF6000) : null,
+              ),
+            ),
+            Text(
               'Wallet: ${walletState.isConnected ? "接続中" : "未接続"}',
               style: Theme.of(context).textTheme.bodySmall,
             ),

@@ -8,12 +8,14 @@ class SensingButton extends StatelessWidget {
     required this.isLoading,
     required this.onPressed,
     this.elapsedTime,
+    this.enabled = true,
   });
 
   final bool isSensing;
   final bool isLoading;
   final VoidCallback onPressed;
   final String? elapsedTime;
+  final bool enabled;
 
   static const Color _startButtonColor = Color(0xFFFF6000);
   static const Color _sensingButtonColor = Color(0xFF1A1A1A);
@@ -26,7 +28,7 @@ class SensingButton extends StatelessWidget {
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
+        onPressed: (isLoading || !enabled) ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: buttonColor,
           foregroundColor: Colors.white,

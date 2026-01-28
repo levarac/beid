@@ -23,6 +23,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   DateTime? _sensingStartTime;
   Timer? _elapsedTimer;
   Duration _elapsedDuration = Duration.zero;
+  final TextEditingController _eventCodeController = TextEditingController();
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void dispose() {
     _elapsedTimer?.cancel();
+    _eventCodeController.dispose();
     super.dispose();
   }
 
@@ -143,6 +145,137 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Widget _buildEventModeBar(BleServiceState bleState) {
+    if (bleState.isEventMode) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6000).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.event, size: 16, color: Color(0xFFFF6000)),
+                  const SizedBox(width: 6),
+                  Text(
+                    bleState.eventCode!,
+                    style: const TextStyle(
+                      fontFamily: 'Silkscreen',
+                      fontSize: 14,
+                      color: Color(0xFFFF6000),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _handleLeaveEvent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'LEAVE',
+                  style: TextStyle(
+                    fontFamily: 'Silkscreen',
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Anonymous mode: show join input
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 140,
+            height: 36,
+            child: TextField(
+              controller: _eventCodeController,
+              textCapitalization: TextCapitalization.characters,
+              style: const TextStyle(fontFamily: 'Silkscreen', fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'EVENT CODE',
+                hintStyle: TextStyle(
+                  fontFamily: 'Silkscreen',
+                  fontSize: 11,
+                  color: Colors.grey.shade400,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _handleJoinEvent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6000),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Text(
+                'JOIN',
+                style: TextStyle(
+                  fontFamily: 'Silkscreen',
+                  fontSize: 12,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleJoinEvent() async {
+    final code = _eventCodeController.text.trim();
+    if (code.isEmpty) {
+      _showSnackBar('イベントコードを入力してください');
+      return;
+    }
+    final result = await ref.read(bleServiceProvider.notifier).joinEvent(code);
+    result.fold(
+      onSuccess: (_) {},
+      onFailure: (error) => _showSnackBar(error.message),
+    );
+  }
+
+  Future<void> _handleLeaveEvent() async {
+    final result = await ref.read(bleServiceProvider.notifier).leaveEvent();
+    result.fold(
+      onSuccess: (_) {},
+      onFailure: (error) => _showSnackBar(error.message),
+    );
+  }
+
   void _showPermissionSettingsDialog() {
     showDialog(
       context: context,
@@ -188,6 +321,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       height: 1,
                     ),
                   ),
+                  // イベントモードUI
+                  _buildEventModeBar(bleState),
                   const Expanded(child: RadarView()),
                 ],
               ),
@@ -200,6 +335,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     bleState.sensingState == SensingState.stopping,
                 onPressed: _handleSensingToggle,
                 elapsedTime: bleState.isSensing ? _formatElapsedTime(_elapsedDuration) : null,
+                enabled: bleState.isEventMode || bleState.isSensing,
               ),
             ),
           ],

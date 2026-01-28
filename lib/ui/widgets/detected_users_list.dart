@@ -52,16 +52,45 @@ class _DetectedUserTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isResolved = user.resolvedDisplayId != null;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: _getSignalColor(user.rssi),
-          child: const Icon(Icons.person, color: Colors.white),
+          backgroundColor: isResolved
+              ? const Color(0xFFFF6000)
+              : Colors.grey,
+          child: Icon(
+            isResolved ? Icons.verified : Icons.person,
+            color: Colors.white,
+          ),
         ),
-        title: Text(
-          _formatDisplayId(user.displayId),
-          style: const TextStyle(fontFamily: 'monospace'),
+        title: Row(
+          children: [
+            Text(
+              _formatDisplayId(user.effectiveDisplayId),
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+            if (isResolved) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6000).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'ID',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFFF6000),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         subtitle: Text('最終検知: ${_formatTime(user.lastSeen)}'),
         trailing: Column(
@@ -97,11 +126,6 @@ class _DetectedUserTile extends StatelessWidget {
     }
   }
 
-  Color _getSignalColor(int rssi) {
-    if (rssi >= -50) return Colors.green;
-    if (rssi >= -70) return Colors.orange;
-    return Colors.red;
-  }
 }
 
 class _SignalIndicator extends StatelessWidget {

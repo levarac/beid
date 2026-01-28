@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:barnard/barnard.dart';
 import 'package:barnard/barnard_ble.dart';
@@ -33,6 +34,8 @@ class DetectedUser {
     required this.lastSeen,
     this.rssiSummary,
     this.smoothedRssi,
+    this.resolvedDisplayId,
+    this.resolvedTek,
   });
 
   /// 表示用ID（rpidから生成された短いID）
@@ -50,8 +53,17 @@ class DetectedUser {
   /// RSSI統計情報
   final RssiSummary? rssiSummary;
 
+  /// イベントモード時の解決済み表示ID（TEKの先頭3バイトのhex）
+  final String? resolvedDisplayId;
+
+  /// 解決済みTEK（イベントモード時のみ）
+  final Uint8List? resolvedTek;
+
   /// 表示用のRSSI（スムージング済みがあればそれを使用）
   int get displayRssi => smoothedRssi?.round() ?? rssi;
+
+  /// イベントモード時はresolvedDisplayIdを優先する表示ID
+  String get effectiveDisplayId => resolvedDisplayId ?? displayId;
 
   DetectedUser copyWith({
     String? displayId,
@@ -59,6 +71,8 @@ class DetectedUser {
     DateTime? lastSeen,
     RssiSummary? rssiSummary,
     double? smoothedRssi,
+    String? resolvedDisplayId,
+    Uint8List? resolvedTek,
   }) {
     return DetectedUser(
       displayId: displayId ?? this.displayId,
@@ -66,6 +80,8 @@ class DetectedUser {
       lastSeen: lastSeen ?? this.lastSeen,
       rssiSummary: rssiSummary ?? this.rssiSummary,
       smoothedRssi: smoothedRssi ?? this.smoothedRssi,
+      resolvedDisplayId: resolvedDisplayId ?? this.resolvedDisplayId,
+      resolvedTek: resolvedTek ?? this.resolvedTek,
     );
   }
 
@@ -96,6 +112,7 @@ class BleServiceState {
     this.detectedUsers = const {},
     this.isScanning = false,
     this.isAdvertising = false,
+    this.eventCode,
     this.error,
   });
 
@@ -104,9 +121,11 @@ class BleServiceState {
   final Set<DetectedUser> detectedUsers;
   final bool isScanning;
   final bool isAdvertising;
+  final String? eventCode;
   final AppError? error;
 
   bool get isSensing => sensingState == SensingState.sensing;
+  bool get isEventMode => eventCode != null;
   bool get canStartSensing =>
       bleState == BleState.poweredOn && sensingState == SensingState.stopped;
 
@@ -116,6 +135,8 @@ class BleServiceState {
     Set<DetectedUser>? detectedUsers,
     bool? isScanning,
     bool? isAdvertising,
+    String? eventCode,
+    bool clearEventCode = false,
     AppError? error,
   }) {
     return BleServiceState(
@@ -124,6 +145,7 @@ class BleServiceState {
       detectedUsers: detectedUsers ?? this.detectedUsers,
       isScanning: isScanning ?? this.isScanning,
       isAdvertising: isAdvertising ?? this.isAdvertising,
+      eventCode: clearEventCode ? null : (eventCode ?? this.eventCode),
       error: error,
     );
   }
@@ -136,7 +158,8 @@ class BleService extends _$BleService {
   StreamSubscription<BarnardEvent>? _eventSubscription;
   Timer? _cleanupTimer;
 
-  static const _userTimeout = Duration(seconds: 15);
+  // GATT接続のcooldownが10秒/ピアで、複数ピアのキュー処理があるため余裕を持たせる
+  static const _userTimeout = Duration(seconds: 60);
 
   /// EMAスムージング係数（0.0-1.0、小さいほど滑らか）
   static const _smoothingAlpha = 0.2;
@@ -167,6 +190,11 @@ class BleService extends _$BleService {
         );
       }
 
+      // barnard側のイベントモード状態を同期
+      if (_client!.currentMode == EventMode.event && _client!.currentEventCode != null) {
+        state = state.copyWith(eventCode: _client!.currentEventCode);
+      }
+
       // イベントの監視
       _eventSubscription = _client!.events.listen(_onBarnardEvent);
 
@@ -190,8 +218,6 @@ class BleService extends _$BleService {
     switch (event) {
       case DetectionEvent():
         _onDetection(event);
-      case RssiUpdateEvent():
-        _onRssiUpdate(event);
       case StateEvent():
         _onStateChange(event);
       case ConstraintEvent():
@@ -219,6 +245,8 @@ class BleService extends _$BleService {
       lastSeen: event.timestamp,
       rssiSummary: event.rssiSummary,
       smoothedRssi: newSmoothedRssi,
+      resolvedDisplayId: event.resolvedDisplayId,
+      resolvedTek: event.resolvedTek,
     );
 
     final updatedUsers = Set<DetectedUser>.from(state.detectedUsers);
@@ -226,38 +254,6 @@ class BleService extends _$BleService {
     // 既存のユーザーを更新または新規追加
     updatedUsers.removeWhere((u) => u.displayId == event.displayId);
     updatedUsers.add(detectedUser);
-
-    state = state.copyWith(detectedUsers: updatedUsers);
-  }
-
-  /// 高頻度RSSI更新イベントを処理
-  void _onRssiUpdate(RssiUpdateEvent event) {
-    final existingUser = state.detectedUsers.cast<DetectedUser?>().firstWhere(
-          (u) => u?.displayId == event.displayId,
-          orElse: () => null,
-        );
-
-    // EMAスムージングを適用
-    final newSmoothedRssi = _calculateSmoothedRssi(
-      existingUser?.smoothedRssi,
-      event.rssi.toDouble(),
-    );
-
-    final updatedUser = existingUser?.copyWith(
-          rssi: event.rssi,
-          lastSeen: event.timestamp,
-          smoothedRssi: newSmoothedRssi,
-        ) ??
-        DetectedUser(
-          displayId: event.displayId,
-          rssi: event.rssi,
-          lastSeen: event.timestamp,
-          smoothedRssi: newSmoothedRssi,
-        );
-
-    final updatedUsers = Set<DetectedUser>.from(state.detectedUsers);
-    updatedUsers.removeWhere((u) => u.displayId == event.displayId);
-    updatedUsers.add(updatedUser);
 
     state = state.copyWith(detectedUsers: updatedUsers);
   }
@@ -311,6 +307,52 @@ class BleService extends _$BleService {
 
     if (updatedUsers.length != state.detectedUsers.length) {
       state = state.copyWith(detectedUsers: updatedUsers);
+    }
+  }
+
+  /// イベントに参加する
+  Future<Result<void, AppError>> joinEvent(String eventCode) async {
+    if (_client == null) {
+      return Failure(BleError(
+        message: 'BLEクライアントが初期化されていません',
+        type: BleErrorType.unknown,
+      ));
+    }
+
+    try {
+      await _client!.joinEvent(eventCode);
+      state = state.copyWith(eventCode: eventCode);
+      return const Success(null);
+    } catch (e, st) {
+      return Failure(BleError(
+        message: 'イベント参加に失敗しました: $e',
+        cause: e,
+        stackTrace: st,
+        type: BleErrorType.unknown,
+      ));
+    }
+  }
+
+  /// イベントから離脱する
+  Future<Result<void, AppError>> leaveEvent() async {
+    if (_client == null) {
+      return Failure(BleError(
+        message: 'BLEクライアントが初期化されていません',
+        type: BleErrorType.unknown,
+      ));
+    }
+
+    try {
+      await _client!.leaveEvent();
+      state = state.copyWith(clearEventCode: true);
+      return const Success(null);
+    } catch (e, st) {
+      return Failure(BleError(
+        message: 'イベント離脱に失敗しました: $e',
+        cause: e,
+        stackTrace: st,
+        type: BleErrorType.unknown,
+      ));
     }
   }
 
