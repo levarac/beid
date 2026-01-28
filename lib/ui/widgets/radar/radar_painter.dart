@@ -13,6 +13,7 @@ class RadarPainter extends CustomPainter {
     required this.primaryColor,
     required this.backgroundColor,
     this.serverPositions,
+    this.isDarkMode = false,
   });
 
   final Set<DetectedUser> detectedUsers;
@@ -21,6 +22,7 @@ class RadarPainter extends CustomPainter {
   final Color backgroundColor;
   /// サーバーから受信した位置情報（三点測位有効時のみ）
   final Map<String, UserPosition>? serverPositions;
+  final bool isDarkMode;
 
   // RSSI範囲の定義
   static const double rssiMin = -90.0; // 遠い
@@ -60,8 +62,10 @@ class RadarPainter extends CustomPainter {
   }
 
   void _drawCircleBackground(Canvas canvas, Offset center, double maxRadius) {
+    // ダークモード対応の背景色
+    final bgColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
     final paint = Paint()
-      ..color = Colors.white
+      ..color = bgColor
       ..style = PaintingStyle.fill;
     // 外周ドットより少し広めに背景を描画
     canvas.drawCircle(center, maxRadius + outerDotRadius + 6, paint);
@@ -168,14 +172,16 @@ class RadarPainter extends CustomPainter {
 
   // 解決済みユーザーのドット色（オレンジ）
   static const Color _resolvedUserColor = Color(0xFFFF6000);
-  // 未解決ユーザーのドット色（グレー）
-  static const Color _unresolvedUserColor = Color(0xFF999999);
 
   void _drawDetectedUsers(Canvas canvas, Offset center, double maxRadius) {
+    // ダークモード対応の色
+    final unresolvedColor = isDarkMode ? const Color(0xFF666666) : const Color(0xFF999999);
+    final borderColor = isDarkMode ? const Color(0xFF1A1A1A) : Colors.white;
+
     for (final user in detectedUsers) {
       final position = _calculateUserPosition(user, center, maxRadius);
       final isResolved = user.resolvedDisplayId != null;
-      final dotColor = isResolved ? _resolvedUserColor : _unresolvedUserColor;
+      final dotColor = isResolved ? _resolvedUserColor : unresolvedColor;
 
       // メインの点
       final paint = Paint()
@@ -183,9 +189,9 @@ class RadarPainter extends CustomPainter {
         ..style = PaintingStyle.fill;
       canvas.drawCircle(position, 6, paint);
 
-      // 白い枠線
+      // 枠線
       final borderPaint = Paint()
-        ..color = Colors.white
+        ..color = borderColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
       canvas.drawCircle(position, 6, borderPaint);
@@ -243,6 +249,7 @@ class RadarPainter extends CustomPainter {
   bool shouldRepaint(covariant RadarPainter oldDelegate) {
     return oldDelegate.detectedUsers != detectedUsers ||
         oldDelegate.scanAngle != scanAngle ||
-        oldDelegate.serverPositions != serverPositions;
+        oldDelegate.serverPositions != serverPositions ||
+        oldDelegate.isDarkMode != isDarkMode;
   }
 }

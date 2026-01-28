@@ -55,6 +55,7 @@ class _RadarViewState extends ConsumerState<RadarView>
               serverPositions: positionState.trilaterationEnabled
                   ? positionState.positions
                   : null,
+              isDarkMode: theme.brightness == Brightness.dark,
             ),
             size: Size.infinite,
           );

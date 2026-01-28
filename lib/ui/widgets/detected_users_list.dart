@@ -13,6 +13,8 @@ class DetectedUsersList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     if (detectedUsers.isEmpty) {
       return Center(
         child: Column(
@@ -23,7 +25,7 @@ class DetectedUsersList extends StatelessWidget {
             Text(
               '近くのユーザーを検索中...',
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -48,19 +50,23 @@ class DetectedUsersList extends StatelessWidget {
 class _DetectedUserTile extends StatelessWidget {
   const _DetectedUserTile({required this.user});
 
+  static const Color _accentColor = Color(0xFFFF6000);
+
   final DetectedUser user;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final isResolved = user.resolvedDisplayId != null;
+    final unresolvedColor = theme.brightness == Brightness.dark
+        ? Colors.grey.shade600
+        : Colors.grey;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: isResolved
-              ? const Color(0xFFFF6000)
-              : Colors.grey,
+          backgroundColor: isResolved ? _accentColor : unresolvedColor,
           child: Icon(
             isResolved ? Icons.verified : Icons.person,
             color: Colors.white,
@@ -77,7 +83,7 @@ class _DetectedUserTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF6000).withValues(alpha: 0.15),
+                  color: _accentColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(
@@ -85,7 +91,7 @@ class _DetectedUserTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFFF6000),
+                    color: _accentColor,
                   ),
                 ),
               ),
@@ -135,6 +141,11 @@ class _SignalIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final inactiveColor = theme.brightness == Brightness.dark
+        ? Colors.grey.shade700
+        : Colors.grey.shade300;
+
     // RSSIを0-4のバー数に変換
     // -90以下: 1バー, -80: 2バー, -70: 3バー, -60以上: 4バー
     final bars = ((-rssi - 50) ~/ 10).clamp(1, 4);
@@ -149,7 +160,7 @@ class _SignalIndicator extends StatelessWidget {
           height: 8 + (index * 3).toDouble(),
           margin: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
-            color: isActive ? activeColor : Colors.grey.shade300,
+            color: isActive ? activeColor : inactiveColor,
             borderRadius: BorderRadius.circular(1),
           ),
         );

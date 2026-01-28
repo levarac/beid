@@ -145,7 +145,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  static const Color _accentColor = Color(0xFFFF6000);
+
   Widget _buildEventModeBar(BleServiceState bleState) {
+    final theme = Theme.of(context);
+    final borderColor = theme.colorScheme.outline;
+    final subtleTextColor = theme.colorScheme.onSurfaceVariant;
+
     if (bleState.isEventMode) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
@@ -155,20 +161,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF6000).withValues(alpha: 0.15),
+                color: _accentColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.event, size: 16, color: Color(0xFFFF6000)),
+                  const Icon(Icons.event, size: 16, color: _accentColor),
                   const SizedBox(width: 6),
                   Text(
                     bleState.eventCode!,
                     style: const TextStyle(
                       fontFamily: 'Silkscreen',
                       fontSize: 14,
-                      color: Color(0xFFFF6000),
+                      color: _accentColor,
                     ),
                   ),
                 ],
@@ -180,7 +186,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
+                  border: Border.all(color: borderColor),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -188,7 +194,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   style: TextStyle(
                     fontFamily: 'Silkscreen',
                     fontSize: 11,
-                    color: Colors.grey.shade600,
+                    color: subtleTextColor,
                   ),
                 ),
               ),
@@ -216,17 +222,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 hintStyle: TextStyle(
                   fontFamily: 'Silkscreen',
                   fontSize: 11,
-                  color: Colors.grey.shade400,
+                  color: subtleTextColor,
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: borderColor),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: borderColor),
                 ),
               ),
             ),
@@ -237,7 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF6000),
+                color: _accentColor,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(

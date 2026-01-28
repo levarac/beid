@@ -201,6 +201,9 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final subtleColor = theme.colorScheme.onSurfaceVariant;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -208,14 +211,14 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.bluetooth_searching,
             size: 80,
-            color: Colors.grey.shade400,
+            color: subtleColor.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
           Text(
             'センシングを開始してください',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.grey.shade600,
+              color: subtleColor,
             ),
           ),
           const SizedBox(height: 8),
@@ -224,7 +227,7 @@ class _EmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey.shade500,
+              color: subtleColor.withValues(alpha: 0.7),
             ),
           ),
         ],
