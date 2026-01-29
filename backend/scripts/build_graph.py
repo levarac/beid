@@ -4,7 +4,10 @@ Beid Graph Builder - BLEセンシングデータから無向グラフを構築�
 
 Usage:
     python build_graph.py                           # 最新スナップショットからグラフ構築
-    python build_graph.py --snapshot <filename>     # 特定のスナップショットを使用
+    python build_graph.py --snapshot <file>         # 特定のスナップショットを使用（JSON/JSONL対応）
+    python build_graph.py --snapshot <file.jsonl> --index 5   # JSONL内の特定インデックスを使用
+    python build_graph.py --list <file.jsonl>       # JSONLファイル内のスナップショット一覧を表示
+    python build_graph.py --timeline <file.jsonl>   # スナップショットの時系列グラフを表示
     python build_graph.py --csv <edge_events.csv>   # エッジイベントCSVから構築
     python build_graph.py --live                    # APIからリアルタイム取得
     python build_graph.py --output graph.gexf       # グラフをファイルに出力
@@ -20,6 +23,7 @@ from pathlib import Path
 try:
     import networkx as nx
     import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
     import pandas as pd
 except ImportError:
     print("Required packages not found. Install with:")
@@ -39,19 +43,243 @@ DEFAULT_SNAPSHOT_DIR = DEFAULT_LOG_DIR / "snapshots"
 DEFAULT_API_URL = "http://localhost:3000"
 
 
-def load_snapshot(filepath: Path) -> dict:
-    """スナップショットJSONを読み込む"""
+def load_snapshot(filepath: Path, index: int = -1) -> dict:
+    """スナップショットを読み込む（JSON/JSONL両対応）
+
+    Args:
+        filepath: ファイルパス
+        index: JSONLの場合、どのスナップショットを読むか（-1で最新）
+
+    Returns:
+        スナップショットデータ
+    """
+    if filepath.suffix == ".jsonl":
+        return load_jsonl_snapshot(filepath, index)
+    else:
+        with open(filepath, "r") as f:
+            return json.load(f)
+
+
+def load_jsonl_snapshot(filepath: Path, index: int = -1) -> dict:
+    """JSONLファイルから指定インデックスのスナップショットを読み込む
+
+    Args:
+        filepath: JSONLファイルパス
+        index: 読み込むスナップショットのインデックス（-1で最新）
+
+    Returns:
+        スナップショットデータ
+    """
     with open(filepath, "r") as f:
-        return json.load(f)
+        lines = [line.strip() for line in f if line.strip()]
+
+    if not lines:
+        raise ValueError(f"Empty JSONL file: {filepath}")
+
+    if index < 0:
+        index = len(lines) + index
+
+    if index < 0 or index >= len(lines):
+        raise ValueError(f"Index {index} out of range (0-{len(lines)-1})")
+
+    return json.loads(lines[index])
+
+
+def load_all_snapshots(filepath: Path) -> list[dict]:
+    """JSONLファイルから全スナップショットを読み込む
+
+    Args:
+        filepath: JSONLファイルパス
+
+    Returns:
+        スナップショットデータのリスト
+    """
+    if filepath.suffix == ".jsonl":
+        with open(filepath, "r") as f:
+            return [json.loads(line) for line in f if line.strip()]
+    else:
+        # 単一JSONファイルの場合はリストで返す
+        with open(filepath, "r") as f:
+            return [json.load(f)]
 
 
 def get_latest_snapshot(snapshot_dir: Path) -> Path | None:
-    """最新のスナップショットファイルを取得"""
+    """最新のスナップショットファイルを取得（JSONL優先）"""
     if not snapshot_dir.exists():
         return None
 
-    snapshots = sorted(snapshot_dir.glob("snapshot_*.json"), reverse=True)
-    return snapshots[0] if snapshots else None
+    # 新形式（JSONL）を優先
+    jsonl_files = sorted(snapshot_dir.glob("snapshots_*.jsonl"), reverse=True)
+    if jsonl_files:
+        return jsonl_files[0]
+
+    # 旧形式（JSON）にフォールバック
+    json_files = sorted(snapshot_dir.glob("snapshot_*.json"), reverse=True)
+    return json_files[0] if json_files else None
+
+
+def list_snapshots_in_file(filepath: Path) -> list[dict]:
+    """ファイル内のスナップショット一覧を取得
+
+    Returns:
+        各スナップショットのサマリ情報リスト
+    """
+    snapshots = load_all_snapshots(filepath)
+    return [
+        {
+            "index": i,
+            "timestamp": s.get("timestamp"),
+            "snapshot_id": s.get("snapshot_id"),
+            "node_count": s.get("node_count"),
+            "edge_count": s.get("edge_count"),
+        }
+        for i, s in enumerate(snapshots)
+    ]
+
+
+def visualize_timeline(filepath: Path, output_path: Path | None = None):
+    """スナップショットの時系列グラフを作成
+
+    Args:
+        filepath: JSONLファイルパス
+        output_path: 出力画像パス（Noneの場合は表示）
+    """
+    print(f"Loading snapshots from: {filepath}")
+    snapshots = load_all_snapshots(filepath)
+
+    if not snapshots:
+        print("No snapshots found")
+        return
+
+    print(f"Found {len(snapshots)} snapshots")
+
+    # DataFrameに変換
+    data = []
+    for s in snapshots:
+        stats = s.get("statistics", {})
+        data.append({
+            "timestamp": pd.to_datetime(s.get("timestamp")),
+            "node_count": s.get("node_count", 0),
+            "edge_count": s.get("edge_count", 0),
+            "mutual_edge_count": s.get("mutual_edge_count", 0),
+            "density": stats.get("density", 0),
+            "avg_rssi": stats.get("avg_rssi"),
+            "avg_distance": stats.get("avg_distance"),
+            "avg_degree": stats.get("avg_degree", 0),
+            "max_degree": stats.get("max_degree", 0),
+            "connected_components": stats.get("connected_components", 0),
+            "is_connected": stats.get("is_connected", False),
+        })
+
+    df = pd.DataFrame(data)
+    df = df.sort_values("timestamp")
+
+    # 可視化
+    fig, axes = plt.subplots(3, 2, figsize=(14, 12))
+    fig.suptitle(f"Graph Timeline: {filepath.name}", fontsize=14, fontweight="bold")
+
+    # 1. ノード・エッジ数の推移
+    ax1 = axes[0, 0]
+    ax1.plot(df["timestamp"], df["node_count"], label="Nodes", color="blue", marker="o", markersize=3)
+    ax1.plot(df["timestamp"], df["edge_count"], label="Edges", color="green", marker="s", markersize=3)
+    ax1.plot(df["timestamp"], df["mutual_edge_count"], label="Mutual Edges", color="orange", marker="^", markersize=3)
+    ax1.set_xlabel("Time")
+    ax1.set_ylabel("Count")
+    ax1.set_title("Graph Size over Time")
+    ax1.legend()
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    ax1.tick_params(axis="x", rotation=45)
+    ax1.grid(True, alpha=0.3)
+
+    # 2. 密度の推移
+    ax2 = axes[0, 1]
+    ax2.plot(df["timestamp"], df["density"], color="purple", marker="o", markersize=3)
+    ax2.fill_between(df["timestamp"], df["density"], alpha=0.3, color="purple")
+    ax2.set_xlabel("Time")
+    ax2.set_ylabel("Density")
+    ax2.set_title("Graph Density over Time")
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    ax2.tick_params(axis="x", rotation=45)
+    ax2.set_ylim(0, max(1, df["density"].max() * 1.1))
+    ax2.grid(True, alpha=0.3)
+
+    # 3. 平均RSSI
+    ax3 = axes[1, 0]
+    rssi_valid = df[df["avg_rssi"].notna()]
+    if len(rssi_valid) > 0:
+        ax3.plot(rssi_valid["timestamp"], rssi_valid["avg_rssi"], color="red", marker="o", markersize=3)
+        ax3.fill_between(rssi_valid["timestamp"], rssi_valid["avg_rssi"], alpha=0.3, color="red")
+    ax3.set_xlabel("Time")
+    ax3.set_ylabel("RSSI (dBm)")
+    ax3.set_title("Average RSSI over Time")
+    ax3.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    ax3.tick_params(axis="x", rotation=45)
+    ax3.grid(True, alpha=0.3)
+
+    # 4. 平均距離
+    ax4 = axes[1, 1]
+    dist_valid = df[df["avg_distance"].notna()]
+    if len(dist_valid) > 0:
+        ax4.plot(dist_valid["timestamp"], dist_valid["avg_distance"], color="teal", marker="o", markersize=3)
+        ax4.fill_between(dist_valid["timestamp"], dist_valid["avg_distance"], alpha=0.3, color="teal")
+    ax4.set_xlabel("Time")
+    ax4.set_ylabel("Distance (m)")
+    ax4.set_title("Average Distance over Time")
+    ax4.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    ax4.tick_params(axis="x", rotation=45)
+    ax4.grid(True, alpha=0.3)
+
+    # 5. 次数（平均・最大）
+    ax5 = axes[2, 0]
+    ax5.plot(df["timestamp"], df["avg_degree"], label="Avg Degree", color="navy", marker="o", markersize=3)
+    ax5.plot(df["timestamp"], df["max_degree"], label="Max Degree", color="darkred", marker="s", markersize=3)
+    ax5.set_xlabel("Time")
+    ax5.set_ylabel("Degree")
+    ax5.set_title("Node Degree over Time")
+    ax5.legend()
+    ax5.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    ax5.tick_params(axis="x", rotation=45)
+    ax5.grid(True, alpha=0.3)
+
+    # 6. 連結成分数
+    ax6 = axes[2, 1]
+    ax6.plot(df["timestamp"], df["connected_components"], color="brown", marker="o", markersize=3)
+    # 連結グラフの場合は背景色を変更
+    for i in range(len(df) - 1):
+        if df.iloc[i]["is_connected"]:
+            ax6.axvspan(df.iloc[i]["timestamp"], df.iloc[i + 1]["timestamp"], alpha=0.2, color="green")
+    ax6.set_xlabel("Time")
+    ax6.set_ylabel("Components")
+    ax6.set_title("Connected Components over Time (green = fully connected)")
+    ax6.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    ax6.tick_params(axis="x", rotation=45)
+    ax6.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    ax6.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    if output_path:
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        print(f"Timeline visualization saved to: {output_path}")
+    else:
+        plt.show()
+
+    # サマリ表示
+    print("\n" + "=" * 60)
+    print("TIMELINE SUMMARY")
+    print("=" * 60)
+    print(f"Time range:     {df['timestamp'].min()} to {df['timestamp'].max()}")
+    print(f"Duration:       {df['timestamp'].max() - df['timestamp'].min()}")
+    print(f"Snapshots:      {len(df)}")
+    print(f"\nNode count:     {df['node_count'].min()} - {df['node_count'].max()} (avg: {df['node_count'].mean():.1f})")
+    print(f"Edge count:     {df['edge_count'].min()} - {df['edge_count'].max()} (avg: {df['edge_count'].mean():.1f})")
+    print(f"Density:        {df['density'].min():.4f} - {df['density'].max():.4f} (avg: {df['density'].mean():.4f})")
+    if len(rssi_valid) > 0:
+        print(f"Avg RSSI:       {rssi_valid['avg_rssi'].min():.1f} - {rssi_valid['avg_rssi'].max():.1f} dBm")
+    if len(dist_valid) > 0:
+        print(f"Avg Distance:   {dist_valid['avg_distance'].min():.2f} - {dist_valid['avg_distance'].max():.2f} m")
+    print(f"Fully connected: {df['is_connected'].sum()} / {len(df)} snapshots ({df['is_connected'].mean() * 100:.1f}%)")
+    print("=" * 60)
 
 
 def fetch_graph_from_api(api_url: str) -> dict:
@@ -294,13 +522,16 @@ def main():
 
     # 入力ソース
     source_group = parser.add_mutually_exclusive_group()
-    source_group.add_argument("--snapshot", type=Path, help="Path to snapshot JSON file")
+    source_group.add_argument("--snapshot", type=Path, help="Path to snapshot file (JSON or JSONL)")
     source_group.add_argument("--csv", type=Path, help="Path to edge_events CSV file")
     source_group.add_argument("--live", action="store_true", help="Fetch current graph from API")
+    source_group.add_argument("--list", type=Path, help="List snapshots in a JSONL file")
+    source_group.add_argument("--timeline", type=Path, help="Show timeline graph from JSONL file")
 
     # オプション
     parser.add_argument("--api-url", type=str, default=DEFAULT_API_URL, help="API base URL (for --live)")
     parser.add_argument("--log-dir", type=Path, default=DEFAULT_LOG_DIR, help="Log directory path")
+    parser.add_argument("--index", type=int, default=-1, help="Snapshot index in JSONL file (-1 for latest)")
     parser.add_argument("--include-unilateral", action="store_true", help="Include non-mutual edges")
     parser.add_argument("--no-visualize", action="store_true", help="Skip visualization")
     parser.add_argument("--no-stats", action="store_true", help="Skip statistics output")
@@ -314,6 +545,30 @@ def main():
     args = parser.parse_args()
 
     mutual_only = not args.include_unilateral
+
+    # --list オプション: スナップショット一覧を表示
+    if args.list:
+        print(f"Listing snapshots in: {args.list}")
+        try:
+            summaries = list_snapshots_in_file(args.list)
+            print(f"\nFound {len(summaries)} snapshots:\n")
+            print(f"{'Index':>6}  {'Timestamp':<26}  {'Nodes':>6}  {'Edges':>6}  Snapshot ID")
+            print("-" * 80)
+            for s in summaries:
+                print(f"{s['index']:>6}  {s['timestamp'] or 'N/A':<26}  {s['node_count'] or 0:>6}  {s['edge_count'] or 0:>6}  {s['snapshot_id'] or 'N/A'}")
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        return
+
+    # --timeline オプション: 時系列グラフを表示
+    if args.timeline:
+        try:
+            visualize_timeline(args.timeline, args.output_image)
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        return
 
     # グラフ構築
     print("Loading graph data...")
@@ -332,9 +587,12 @@ def main():
 
     elif args.snapshot:
         print(f"Loading snapshot: {args.snapshot}")
-        data = load_snapshot(args.snapshot)
+        if args.snapshot.suffix == ".jsonl":
+            print(f"  (JSONL file, using index {args.index})")
+        data = load_snapshot(args.snapshot, args.index)
         G = build_graph_from_snapshot(data, mutual_only)
-        title = f"Graph from {args.snapshot.name}"
+        snapshot_id = data.get("snapshot_id", args.snapshot.name)
+        title = f"Graph from {snapshot_id}"
 
     else:
         # デフォルト: 最新スナップショット
@@ -343,9 +601,12 @@ def main():
 
         if latest:
             print(f"Loading latest snapshot: {latest}")
-            data = load_snapshot(latest)
+            if latest.suffix == ".jsonl":
+                print(f"  (JSONL file, using index {args.index})")
+            data = load_snapshot(latest, args.index)
             G = build_graph_from_snapshot(data, mutual_only)
-            title = f"Graph from {latest.name}"
+            snapshot_id = data.get("snapshot_id", latest.name)
+            title = f"Graph from {snapshot_id}"
         else:
             print(f"No snapshots found in {snapshot_dir}")
             print("Use --live to fetch from API, or --csv/--snapshot to specify a file")

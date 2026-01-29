@@ -319,6 +319,7 @@ export function logsRouter(loggers) {
     edgeLogger.rotateLog();
     nodeLogger.rotateLog();
     statsLogger.rotateLog();
+    graphSnapshot.rotateLogFile();
 
     res.json({
       message: 'All logs rotated',
@@ -326,7 +327,8 @@ export function logsRouter(loggers) {
         rssi: rssiLogger.getCurrentLogFile(),
         edges: edgeLogger.currentLogFile,
         nodes: nodeLogger.currentLogFile,
-        stats: statsLogger.currentLogFile
+        stats: statsLogger.currentLogFile,
+        snapshots: graphSnapshot.currentLogFile
       }
     });
   });

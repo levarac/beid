@@ -12,11 +12,34 @@ export class GraphSnapshotService {
     this.isEnabled = true;
     this.snapshotCount = 0;
     this.snapshotInterval = null;
+    this.currentLogFile = null;
+    this.writeStream = null;
 
     // Ensure snapshot directory exists
     if (!fs.existsSync(this.snapshotDir)) {
       fs.mkdirSync(this.snapshotDir, { recursive: true });
     }
+
+    // Initialize log file for this session
+    this._initLogFile();
+  }
+
+  /**
+   * Initialize or rotate log file
+   */
+  _initLogFile() {
+    const date = new Date().toISOString().split('T')[0];
+    const sessionId = this.sessionManager?.getSessionId() ?? 'no-session';
+    this.currentLogFile = path.join(this.snapshotDir, `snapshots_${date}_${sessionId}.jsonl`);
+
+    // Close existing stream if any
+    if (this.writeStream) {
+      this.writeStream.end();
+    }
+
+    // Create append stream
+    this.writeStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
+    console.log(`Graph Snapshot: Using log file ${this.currentLogFile}`);
   }
 
   /**
@@ -268,19 +291,22 @@ export class GraphSnapshotService {
   }
 
   /**
-   * Save snapshot to file
+   * Save snapshot to file (JSONL format - one JSON per line)
    * @param {object} snapshot
    */
   _saveSnapshot(snapshot) {
-    const filename = `snapshot_${snapshot.timestamp.replace(/[:.]/g, '-')}.json`;
-    const filePath = path.join(this.snapshotDir, filename);
+    if (!this.writeStream) {
+      this._initLogFile();
+    }
 
-    fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
-    console.log(`Graph Snapshot: Saved ${filename}`);
+    // Write as single line JSON (JSONL format)
+    const line = JSON.stringify(snapshot) + '\n';
+    this.writeStream.write(line);
+    console.log(`Graph Snapshot: Appended snapshot #${this.snapshotCount} to ${path.basename(this.currentLogFile)}`);
   }
 
   /**
-   * Get all snapshot files
+   * Get all snapshot log files (JSONL format)
    * @returns {Array}
    */
   getSnapshotFiles() {
@@ -289,7 +315,7 @@ export class GraphSnapshotService {
     }
 
     return fs.readdirSync(this.snapshotDir)
-      .filter(f => f.startsWith('snapshot_') && f.endsWith('.json'))
+      .filter(f => f.startsWith('snapshots_') && f.endsWith('.jsonl'))
       .map(filename => {
         const filePath = path.join(this.snapshotDir, filename);
         const stats = fs.statSync(filePath);
@@ -304,11 +330,11 @@ export class GraphSnapshotService {
   }
 
   /**
-   * Get snapshot content
+   * Get all snapshots from a log file
    * @param {string} filename
-   * @returns {object|null}
+   * @returns {Array|null}
    */
-  getSnapshot(filename) {
+  getSnapshotsFromFile(filename) {
     const filePath = path.join(this.snapshotDir, filename);
     if (!fs.existsSync(filePath)) {
       return null;
@@ -316,29 +342,65 @@ export class GraphSnapshotService {
 
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
-      return JSON.parse(content);
+      const lines = content.trim().split('\n').filter(line => line.length > 0);
+      return lines.map(line => JSON.parse(line));
     } catch {
       return null;
     }
   }
 
   /**
-   * Get latest snapshot
-   * @returns {object|null}
+   * Get snapshot content (legacy compatibility - returns single snapshot or array)
+   * @param {string} filename
+   * @returns {object|Array|null}
    */
-  getLatestSnapshot() {
-    const files = this.getSnapshotFiles();
-    if (files.length === 0) return null;
+  getSnapshot(filename) {
+    // Handle legacy .json files
+    if (filename.endsWith('.json')) {
+      const filePath = path.join(this.snapshotDir, filename);
+      if (!fs.existsSync(filePath)) {
+        return null;
+      }
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return JSON.parse(content);
+      } catch {
+        return null;
+      }
+    }
 
-    return this.getSnapshot(files[0].filename);
+    // Handle new .jsonl files
+    return this.getSnapshotsFromFile(filename);
   }
 
   /**
-   * Delete old snapshots, keeping only the latest N
+   * Get latest snapshot from current log file
+   * @returns {object|null}
+   */
+  getLatestSnapshot() {
+    if (!this.currentLogFile || !fs.existsSync(this.currentLogFile)) {
+      const files = this.getSnapshotFiles();
+      if (files.length === 0) return null;
+      const snapshots = this.getSnapshotsFromFile(files[0].filename);
+      return snapshots && snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+    }
+
+    try {
+      const content = fs.readFileSync(this.currentLogFile, 'utf-8');
+      const lines = content.trim().split('\n').filter(line => line.length > 0);
+      if (lines.length === 0) return null;
+      return JSON.parse(lines[lines.length - 1]);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Delete old snapshot files, keeping only the latest N
    * @param {number} keepCount
    * @returns {number} - Number of deleted files
    */
-  cleanupOldSnapshots(keepCount = 100) {
+  cleanupOldSnapshots(keepCount = 10) {
     const files = this.getSnapshotFiles();
     let deleted = 0;
 
@@ -374,9 +436,20 @@ export class GraphSnapshotService {
   }
 
   /**
+   * Rotate log file (start a new file)
+   */
+  rotateLogFile() {
+    this._initLogFile();
+  }
+
+  /**
    * Cleanup
    */
   destroy() {
     this.stopPeriodicSnapshots();
+    if (this.writeStream) {
+      this.writeStream.end();
+      this.writeStream = null;
+    }
   }
 }
