@@ -13,7 +13,19 @@ final envProvider = Provider<Env>((ref) {
 
 /// 環境変数アクセスクラス
 class Env {
-  String get reownProjectId => dotenv.env['REOWN_PROJECT_ID'] ?? '';
-  String get apiBaseUrl =>
-      dotenv.env['API_BASE_URL'] ?? AppDefaults.apiBaseUrl;
+  String get reownProjectId {
+    try {
+      return dotenv.env['REOWN_PROJECT_ID'] ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String get apiBaseUrl {
+    try {
+      return dotenv.env['API_BASE_URL'] ?? AppDefaults.apiBaseUrl;
+    } catch (_) {
+      return AppDefaults.apiBaseUrl;
+    }
+  }
 }

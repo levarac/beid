@@ -6,7 +6,7 @@ part of 'position_service.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$positionServiceHash() => r'c186c2c6d24f882459c70c4d7cf56e9c53f7d63a';
+String _$positionServiceHash() => r'3a30b6db5321593b754c070247675f8a223c8b5b';
 
 /// 位置サービスプロバイダー
 ///

@@ -48,12 +48,15 @@ export class RSSILogger {
       'report_seq',
       'reporter_id',
       'detected_id',
+      'resolved_display_id',
       'rssi',
       'heading',
       'distance_estimate',
       'tx_power',
       'signal_quality',
-      'is_mutual'
+      'is_mutual',
+      'is_same_event',
+      'event_code'
     ];
     this.writeStream.write(headers.join(',') + '\n');
     this.rowCount = 0;
@@ -78,7 +81,8 @@ export class RSSILogger {
 
     const {
       txPower = -59,  // Default reference power
-      rssiStore = null
+      rssiStore = null,
+      eventCode = null
     } = options;
 
     for (const detected of detectedUsers) {
@@ -91,18 +95,24 @@ export class RSSILogger {
       // Calculate signal quality (placeholder - could be enhanced with historical data)
       const signalQuality = this._calculateSignalQuality(detected.rssi);
 
+      // Check if same event (resolvedDisplayId is only set when in same event)
+      const isSameEvent = detected.isResolved === true || detected.resolvedDisplayId != null;
+
       const row = [
         now,
         sessionId,
         this.reportSeq,
         reporterId,
         detected.userId,
+        detected.resolvedDisplayId ?? '',
         detected.rssi,
         heading ?? '',
         distanceEstimate.toFixed(3),
         txPower,
         signalQuality.toFixed(2),
-        isMutual
+        isMutual,
+        isSameEvent,
+        eventCode ?? ''
       ].join(',');
 
       this.writeStream.write(row + '\n');

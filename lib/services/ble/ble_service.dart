@@ -158,6 +158,9 @@ class BleService extends _$BleService {
   StreamSubscription<BarnardEvent>? _eventSubscription;
   Timer? _cleanupTimer;
 
+  /// BarnardClientを公開（デバッグ用）
+  BarnardClient? get client => _client;
+
   // 高頻度RSSI更新があるため、タイムアウトは短めで良い
   static const _userTimeout = Duration(seconds: 15);
 

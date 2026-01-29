@@ -45,7 +45,7 @@ export class WebSocketService {
 
       switch (message.type) {
         case 'register':
-          this.handleRegister(ws, message.userId, message.metadata);
+          this.handleRegister(ws, message.userId, message.eventCode, message.metadata);
           break;
         case 'rssi_report':
           this.handleRSSIReport(ws, message);
@@ -61,7 +61,7 @@ export class WebSocketService {
     }
   }
 
-  handleRegister(ws, userId, metadata = {}) {
+  handleRegister(ws, userId, eventCode = null, metadata = {}) {
     if (!userId) {
       this.sendToClient(ws, {
         type: 'error',
@@ -70,12 +70,12 @@ export class WebSocketService {
       return;
     }
 
-    // Store client info with metadata
-    this.clients.set(ws, { userId, metadata });
+    // Store client info with metadata and eventCode
+    this.clients.set(ws, { userId, eventCode, metadata });
 
-    // Log node joined event
+    // Log node joined event with eventCode
     if (this.nodeLogger) {
-      this.nodeLogger.logNodeJoined(userId, metadata);
+      this.nodeLogger.logNodeJoined(userId, { ...metadata, eventCode });
     }
 
     // Update session stats
@@ -118,7 +118,7 @@ export class WebSocketService {
       return;
     }
 
-    const { detectedUsers, heading } = message;
+    const { detectedUsers, heading, eventCode } = message;
     if (!Array.isArray(detectedUsers)) {
       this.sendToClient(ws, {
         type: 'error',
@@ -127,13 +127,19 @@ export class WebSocketService {
       return;
     }
 
+    // Update client's eventCode if provided (may change during session)
+    if (eventCode !== undefined) {
+      clientInfo.eventCode = eventCode;
+    }
+
     // Store RSSI data with heading
     this.rssiStore.storeRSSIReport(clientInfo.userId, detectedUsers, heading ?? null);
 
     // Log to extended RSSI CSV file
     if (this.rssiLogger) {
       this.rssiLogger.logRSSIReport(clientInfo.userId, detectedUsers, heading, {
-        rssiStore: this.rssiStore
+        rssiStore: this.rssiStore,
+        eventCode: clientInfo.eventCode
       });
     }
 

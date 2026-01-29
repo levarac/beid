@@ -48,7 +48,7 @@ sessionManager.startSession();
 const server = createServer(app);
 
 // Initialize WebSocket server with all loggers
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({ server, path: '/ws/ws' });
 const wsService = new WebSocketService(wss, rssiStore, trilaterationService, {
   rssiLogger,
   edgeLogger,
@@ -183,7 +183,7 @@ process.on('SIGTERM', () => {
 // Start server
 server.listen(PORT, () => {
   console.log(`Beid Backend running on port ${PORT}`);
-  console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
+  console.log(`WebSocket server available at ws://localhost:${PORT}/ws/ws`);
   console.log(`Session ID: ${sessionManager.getSessionId()}`);
   console.log(`Log directory: ${LOG_DIR}`);
 });

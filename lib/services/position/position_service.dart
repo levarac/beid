@@ -153,7 +153,7 @@ class PositionService extends _$PositionService {
         .replaceFirst('https', 'wss')
         .replaceFirst('http', 'ws')
         .replaceFirst('/api', '');
-    return '$wsBase/ws';
+    return '$wsBase/ws/ws';
   }
 
   /// 接続を開始
@@ -175,10 +175,12 @@ class PositionService extends _$PositionService {
       state = state.copyWith(connectionState: PositionConnectionState.connected);
       _reconnectAttempts = 0;
 
-      // ユーザー登録メッセージを送信
+      // ユーザー登録メッセージを送信（eventCodeを含む）
+      final bleState = ref.read(bleServiceProvider);
       _sendMessage({
         'type': 'register',
         'userId': userId,
+        'eventCode': bleState.eventCode,
       });
 
       // メッセージ受信を開始
@@ -213,11 +215,17 @@ class PositionService extends _$PositionService {
       'userId': user.displayId,
       'rssi': user.rssi,
       'timestamp': user.lastSeen.toIso8601String(),
+      'resolvedDisplayId': user.resolvedDisplayId,
+      'isResolved': user.resolvedDisplayId != null,
     }).toList();
+
+    // 現在のイベントコードを取得
+    final bleState = ref.read(bleServiceProvider);
 
     final message = <String, dynamic>{
       'type': 'rssi_report',
       'detectedUsers': detectedList,
+      'eventCode': bleState.eventCode,
     };
 
     // コンパスが有効な場合はheadingを追加

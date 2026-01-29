@@ -76,7 +76,10 @@ dependencies:
 
   # BLE library (local with resolvable ID + high-rate RSSI)
   barnard:
-    path: ../barnard/packages/dart/barnard
+    git:
+      url: https://github.com/thegreeting/barnard.git
+      path: packages/dart/barnard
+      ref: feature/high-rate-rssi-update
 
 dev_dependencies:
   flutter_test:

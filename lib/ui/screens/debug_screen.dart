@@ -7,6 +7,7 @@ import '../../services/position/position_service.dart';
 import '../../services/permission/permission_service.dart';
 import '../../services/wallet/wallet_service.dart';
 import '../widgets/detected_users_list.dart';
+import 'barnard_logs_screen.dart';
 import 'raw_data_screen.dart';
 
 /// デバッグ画面
@@ -24,6 +25,16 @@ class DebugScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('デバッグ'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BarnardLogsScreen()),
+              );
+            },
+            tooltip: 'Barnardログ',
+          ),
           IconButton(
             icon: const Icon(Icons.data_array),
             onPressed: () {
@@ -176,9 +187,9 @@ class DebugScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             Text(
-              'Event: ${bleState.isEventMode ? bleState.eventCode! : "Anonymous"}',
+              'Event: ${bleState.eventCode ?? "Anonymous"}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: bleState.isEventMode ? const Color(0xFFFF6000) : null,
+                color: bleState.eventCode != null ? const Color(0xFFFF6000) : null,
               ),
             ),
             Text(

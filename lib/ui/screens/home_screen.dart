@@ -11,6 +11,7 @@ import '../../services/position/position_service.dart';
 import '../../services/wallet/wallet_service.dart';
 import '../widgets/radar/radar_view.dart';
 import '../widgets/sensing_button.dart';
+import 'debug_screen.dart';
 
 /// ホーム画面
 class HomeScreen extends ConsumerStatefulWidget {
@@ -314,10 +315,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // デバッグボタン
+            Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8, right: 8),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.bug_report_outlined,
+                    color: Colors.grey.withValues(alpha: 0.5),
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const DebugScreen()),
+                    );
+                  },
+                  tooltip: 'デバッグ',
+                ),
+              ),
+            ),
             Expanded(
               child: Column(
                 children: [
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 16),
                   // アクティブなコネクション数（resolvedDisplayIdがあるユーザーのみ）
                   Text(
                     '${bleState.detectedUsers.where((u) => u.resolvedDisplayId != null).length}',
@@ -352,7 +374,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 AppDefaults.apiBaseUrl,
                 style: TextStyle(
                   fontSize: 8,
-                  color: Colors.grey.withOpacity(0.5),
+                  color: Colors.grey.withValues(alpha: 0.5),
                 ),
               ),
             ),

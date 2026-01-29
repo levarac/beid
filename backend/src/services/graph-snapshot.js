@@ -100,8 +100,29 @@ export class GraphSnapshotService {
     const timestamp = new Date().toISOString();
     const sessionId = this.sessionManager?.getSessionId() ?? 'no-session';
 
-    // Get nodes
-    const nodes = nodeLogger ? nodeLogger.getActiveNodeIds() : (rssiStore?.getActiveUserIds() ?? []);
+    // Get nodes with event information
+    const nodeIds = nodeLogger ? nodeLogger.getActiveNodeIds() : (rssiStore?.getActiveUserIds() ?? []);
+
+    // Build nodes array with eventCode info
+    const nodes = nodeIds;
+    const nodeEventCodes = {};
+    const eventCodeGroups = {};  // eventCode -> [nodeIds]
+
+    if (nodeLogger) {
+      for (const nodeId of nodeIds) {
+        const nodeData = nodeLogger.getNodeData(nodeId);
+        const eventCode = nodeData?.metadata?.eventCode ?? null;
+        nodeEventCodes[nodeId] = eventCode;
+
+        // Group by eventCode
+        if (eventCode) {
+          if (!eventCodeGroups[eventCode]) {
+            eventCodeGroups[eventCode] = [];
+          }
+          eventCodeGroups[eventCode].push(nodeId);
+        }
+      }
+    }
 
     // Get edges
     const edges = [];
@@ -182,6 +203,8 @@ export class GraphSnapshotService {
       snapshot_id: `${sessionId}-${this.snapshotCount}`,
       nodes,
       node_count: nodes.length,
+      node_event_codes: nodeEventCodes,
+      event_code_groups: eventCodeGroups,
       edges,
       edge_count: edges.length,
       mutual_edge_count: edges.filter(e => e.mutual).length,
