@@ -43,3 +43,17 @@ Kiro-style Spec Driven Development implementation on AI-DLC (AI Development Life
 - Load entire `.kiro/steering/` as project memory
 - Default files: `product.md`, `tech.md`, `structure.md`
 - Custom files are supported (managed via `/kiro:steering-custom`)
+
+## CI/CD Notes
+
+### Xcode Cloud
+- ci_scriptsディレクトリ: `ios/ci_scripts/`
+- 再ビルドをトリガーするには `what_to_test.json` を更新してプッシュ
+- Flutterバージョンは `.tool-versions` で管理
+- Team IDはXcode Cloudワークフロー設定で管理（コードにコミットしない）
+- 環境変数`CI_TEAM_ID`を設定すればci_post_clone.shで自動適用
+
+### what_to_test.json 更新ルール
+- コミットメッセージは `ci: xxx` 形式を使用
+- 同じPR内での更新では、過去のテスト内容も含めて累積する
+- 例: `ci: Trigger rebuild - Xcode Cloud設定, .env修正`
