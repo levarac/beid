@@ -317,9 +317,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 48),
-                  // 検知数
+                  // アクティブなコネクション数（resolvedDisplayIdがあるユーザーのみ）
                   Text(
-                    '${bleState.detectedUsers.length}',
+                    '${bleState.detectedUsers.where((u) => u.resolvedDisplayId != null).length}',
                     style: const TextStyle(
                       fontFamily: 'Silkscreen',
                       fontSize: 72,
