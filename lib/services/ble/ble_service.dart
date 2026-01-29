@@ -158,8 +158,8 @@ class BleService extends _$BleService {
   StreamSubscription<BarnardEvent>? _eventSubscription;
   Timer? _cleanupTimer;
 
-  // GATT接続のcooldownが10秒/ピアで、複数ピアのキュー処理があるため余裕を持たせる
-  static const _userTimeout = Duration(seconds: 60);
+  // 高頻度RSSI更新があるため、タイムアウトは短めで良い
+  static const _userTimeout = Duration(seconds: 15);
 
   /// EMAスムージング係数（0.0-1.0、小さいほど滑らか）
   static const _smoothingAlpha = 0.2;
@@ -218,6 +218,8 @@ class BleService extends _$BleService {
     switch (event) {
       case DetectionEvent():
         _onDetection(event);
+      case RssiUpdateEvent():
+        _onRssiUpdate(event);
       case StateEvent():
         _onStateChange(event);
       case ConstraintEvent():
@@ -254,6 +256,38 @@ class BleService extends _$BleService {
     // 既存のユーザーを更新または新規追加
     updatedUsers.removeWhere((u) => u.displayId == event.displayId);
     updatedUsers.add(detectedUser);
+
+    state = state.copyWith(detectedUsers: updatedUsers);
+  }
+
+  /// 高頻度RSSI更新イベントを処理
+  void _onRssiUpdate(RssiUpdateEvent event) {
+    final existingUser = state.detectedUsers.cast<DetectedUser?>().firstWhere(
+          (u) => u?.displayId == event.displayId,
+          orElse: () => null,
+        );
+
+    if (existingUser == null) {
+      // 未知のピアからのRSSI更新は無視（DetectionEventで初回登録される）
+      return;
+    }
+
+    // EMAスムージングを適用
+    final newSmoothedRssi = _calculateSmoothedRssi(
+      existingUser.smoothedRssi,
+      event.rssi.toDouble(),
+    );
+
+    final updatedUser = existingUser.copyWith(
+      rssi: event.rssi,
+      lastSeen: event.timestamp,
+      smoothedRssi: newSmoothedRssi,
+      resolvedDisplayId: event.resolvedDisplayId ?? existingUser.resolvedDisplayId,
+    );
+
+    final updatedUsers = Set<DetectedUser>.from(state.detectedUsers);
+    updatedUsers.removeWhere((u) => u.displayId == event.displayId);
+    updatedUsers.add(updatedUser);
 
     state = state.copyWith(detectedUsers: updatedUsers);
   }

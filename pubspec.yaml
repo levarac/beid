@@ -74,12 +74,9 @@ dependencies:
   path_provider: ^2.1.5
   share_plus: ^10.1.4
 
-  # BLE library (thegreeting with resolvable ID support)
+  # BLE library (local with resolvable ID + high-rate RSSI)
   barnard:
-    git:
-      url: https://github.com/thegreeting/barnard.git
-      path: packages/dart/barnard
-      ref: feature/resolvable-id
+    path: ../barnard/packages/dart/barnard
 
 dev_dependencies:
   flutter_test:
