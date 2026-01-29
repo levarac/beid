@@ -349,7 +349,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                ref.watch(envProvider).apiBaseUrl,
+                AppDefaults.apiBaseUrl,
                 style: TextStyle(
                   fontSize: 8,
                   color: Colors.grey.withOpacity(0.5),
