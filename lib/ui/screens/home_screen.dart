@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/app_providers.dart';
 import '../../services/ble/ble_service.dart';
 import '../../services/device_id/device_id_service.dart';
 import '../../services/permission/permission_service.dart';
@@ -349,10 +349,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                dotenv.env['API_BASE_URL'] ?? 'API_BASE_URL not set',
+                ref.watch(envProvider).apiBaseUrl,
                 style: TextStyle(
                   fontSize: 8,
-                  color: Colors.grey.withValues(alpha: 0.5),
+                  color: Colors.grey.withOpacity(0.5),
                 ),
               ),
             ),
