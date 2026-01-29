@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/ble/ble_service.dart';
@@ -342,6 +343,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 onPressed: _handleSensingToggle,
                 elapsedTime: bleState.isSensing ? _formatElapsedTime(_elapsedDuration) : null,
                 enabled: bleState.isEventMode || bleState.isSensing,
+              ),
+            ),
+            // デバッグ用: API_BASE_URL表示
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                dotenv.env['API_BASE_URL'] ?? 'API_BASE_URL not set',
+                style: TextStyle(
+                  fontSize: 8,
+                  color: Colors.grey.withValues(alpha: 0.5),
+                ),
               ),
             ),
           ],

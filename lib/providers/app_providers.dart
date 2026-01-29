@@ -3,7 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// デフォルト設定値
 class AppDefaults {
-  static const String apiBaseUrl = 'https://f4c1f349aba9.ngrok-free.app/api';
+  static const String apiBaseUrl = 'https://7eb02607c8c9.ngrok-free.app/api';
 }
 
 /// 環境変数プロバイダー
