@@ -131,3 +131,5 @@ backend/logs/
 ios/.DS_Store
 
 backend/.DS_Store
+
+.DS_Store
