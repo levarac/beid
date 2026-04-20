@@ -74,12 +74,12 @@ dependencies:
   path_provider: ^2.1.5
   share_plus: ^10.1.4
 
-  # BLE library (local with resolvable ID + high-rate RSSI)
+  # BLE library (resolvable ID + high-rate RSSI, iOS SwiftPM)
   barnard:
     git:
       url: https://github.com/thegreeting/barnard.git
       path: packages/dart/barnard
-      ref: feature/high-rate-rssi-update
+      ref: main
 
 dev_dependencies:
   flutter_test:
