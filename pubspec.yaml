@@ -77,7 +77,7 @@ dependencies:
   # BLE library (resolvable ID + high-rate RSSI, iOS SwiftPM)
   barnard:
     git:
-      url: https://github.com/thegreeting/barnard.git
+      url: https://github.com/levarac/barnard.git
       path: packages/dart/barnard
       ref: main
 
