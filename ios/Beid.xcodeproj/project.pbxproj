@@ -13,6 +13,7 @@
 		0AF9D5CDE2DAAC2670A698CB /* WalletConnectStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D25E6CA970452D0FCD73D2 /* WalletConnectStub.swift */; };
 		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
+		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
 		36423294C98FFAE0217CA7CD /* VerifyingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */; };
 		3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80A94378B0116CC976961AC /* BluetoothOffView.swift */; };
 		3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10807372081AA25A74942BE3 /* WelcomeView.swift */; };
@@ -66,6 +67,7 @@
 		5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEvent.swift; sourceTree = "<group>"; };
 		6660B6477CE489C244F95FED /* ProofCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCardView.swift; sourceTree = "<group>"; };
 		694AE8675E1F6FEF350C1485 /* VerifiedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifiedView.swift; sourceTree = "<group>"; };
+		6B26B23A64184D96C012A5B6 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		7F95B2F947E49234FCD1421B /* WalletConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectView.swift; sourceTree = "<group>"; };
 		7FAD458D67D1864749F00726 /* SensingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinator.swift; sourceTree = "<group>"; };
 		7FBF50BD01564339F11D6494 /* Barnard */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Barnard; path = Vendor/Barnard; sourceTree = SOURCE_ROOT; };
@@ -181,6 +183,7 @@
 		A8B68A7A5D14742390F795EC /* Beid */ = {
 			isa = PBXGroup;
 			children = (
+				6B26B23A64184D96C012A5B6 /* DesignSystem.swift */,
 				2F6F38F46CD774BC65D25626 /* App */,
 				4E2CC145A16B282147941B12 /* Models */,
 				129A796C8208473574C558A9 /* Navigation */,
@@ -319,6 +322,7 @@
 				12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */,
 				419B39D19457938733AE8093 /* CollectionHomeView.swift in Sources */,
 				85803786C31CF2D533B655EE /* DemoEvent.swift in Sources */,
+				2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */,
 				E95026757980944AB4C933FE /* EventFoundView.swift in Sources */,
 				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
 				CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */,
