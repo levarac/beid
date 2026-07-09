@@ -1,0 +1,36 @@
+# beid design-system enforcement (DESIGN.md §16).
+#
+# Config-only for now: not wired into CI yet. Scoped to the app target;
+# DesignSystem/ is the one place raw values are allowed, so it is excluded.
+# Run manually with: swiftlint --config .swiftlint.yml
+
+included:
+  - ios/Beid
+
+excluded:
+  - ios/Vendor
+  - ios/BeidTests
+
+# Only the design-contract rules; default style rules are out of scope here.
+only_rules:
+  - no_hardcoded_swiftui_color
+  - no_hardcoded_swiftui_font
+
+custom_rules:
+  no_hardcoded_swiftui_color:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+    name: "No hardcoded SwiftUI colors"
+    message: "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets)."
+    severity: error
+    regex: 'Color\s*\(\s*(red\s*:|hue\s*:|white\s*:|hex\s*:|\.sRGB)|\bColor\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown)\b|\.(tint|foregroundStyle|foregroundColor|fill|background)\(\s*\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown)\b|#[0-9A-Fa-f]{6}\b'
+
+  no_hardcoded_swiftui_font:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+    name: "No hardcoded SwiftUI fonts"
+    message: "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift)."
+    severity: error
+    regex: '\bFont\.system\s*\(|\.font\(\s*\.(largeTitle|title\b|title2|title3|headline|subheadline|body|callout|footnote|caption\b|caption2|system|custom)'
