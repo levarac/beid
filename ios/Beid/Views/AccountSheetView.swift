@@ -15,25 +15,43 @@ struct AccountSheetView: View {
       List {
         Section("Wallet") {
           if let address = coordinator.walletAddress {
-            LabeledContent("Address", value: truncated(address))
+            LabeledContent {
+              Text(truncated(address))
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(.secondary)
+            } label: {
+              Label("Address", systemImage: "wallet.pass")
+            }
           } else {
-            Button("Connect Wallet") {
+            Button {
+              BeidDesign.haptic()
               coordinator.connectWalletFromAccountSheet()
+            } label: {
+              Label("Connect Wallet", systemImage: "wallet.pass")
             }
           }
         }
 
         Section("Bluetooth") {
-          LabeledContent("Status", value: coordinator.bluetoothMonitor.isPoweredOff ? "Off" : "On")
+          LabeledContent {
+            Text(coordinator.bluetoothMonitor.isPoweredOff ? "Off" : "On")
+              .foregroundStyle(coordinator.bluetoothMonitor.isPoweredOff ? AnyShapeStyle(.orange) : AnyShapeStyle(.green))
+              .fontWeight(.semibold)
+          } label: {
+            Label("Status", systemImage: "dot.radiowaves.left.and.right")
+          }
         }
 
         Section {
           Button("Disconnect Wallet", role: .destructive) {
+            BeidDesign.haptic(.medium)
             coordinator.walletAddress = nil
           }
           .disabled(coordinator.walletAddress == nil)
         }
       }
+      .scrollContentBackground(.hidden)
+      .background(Color(.systemGroupedBackground))
       .navigationTitle("Account")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

@@ -9,43 +9,28 @@ struct ProofCollectedView: View {
   let proof: Proof
 
   var body: some View {
-    VStack(spacing: 24) {
-      Spacer()
-
-      ZStack {
-        Circle()
-          .fill(Color.blue.opacity(0.15))
-          .frame(width: 120, height: 120)
-        Image(systemName: "seal.fill")
-          .font(.system(size: 48))
-          .foregroundStyle(.blue)
+    BeidStatusLayout(
+      systemImage: "seal.fill",
+      title: "Proof Collected",
+      message: "Added to your collection.",
+      tint: .accentColor,
+      accessory: {
+      BeidPanel {
+        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+          Text(proof.eventName)
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
+          BeidMetricRow(label: "Peers verified", value: "\(proof.peersVerified)")
+          BeidMetricRow(label: "Status", value: "Stored", valueStyle: AnyShapeStyle(.green))
+        }
       }
-
-      Text("Proof Collected")
-        .font(.title.bold())
-
-      Text(proof.eventName)
-        .font(.title3)
-        .foregroundStyle(.secondary)
-
-      Text("Added to your collection")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-
-      Spacer()
-
-      Button {
+      },
+      footer: {
+      BeidPrimaryButton("Done", systemImage: "checkmark") {
         coordinator.finishScan()
-      } label: {
-        Text("Done")
-          .font(.headline)
-          .frame(maxWidth: .infinity)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(.blue)
-      .padding(.horizontal, 32)
-      .padding(.bottom, 40)
-    }
+      }
+    )
   }
 }
 

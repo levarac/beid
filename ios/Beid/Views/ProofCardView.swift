@@ -12,34 +12,40 @@ struct ProofCardView: View {
     return formatter
   }()
 
-  private var gradient: LinearGradient {
-    let hue = Double(abs(proof.gradientSeed) % 360) / 360.0
-    return LinearGradient(
-      colors: [
-        Color(hue: hue, saturation: 0.6, brightness: 0.9),
-        Color(hue: (hue + 0.12).truncatingRemainder(dividingBy: 1), saturation: 0.7, brightness: 0.75),
-      ],
-      startPoint: .topLeading,
-      endPoint: .bottomTrailing
-    )
-  }
-
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(gradient)
-        .frame(height: 96)
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .top) {
+        BeidGlyph(systemImage: "seal.fill", tint: .accentColor, size: 52)
+        Spacer()
+        Image(systemName: "checkmark.circle.fill")
+          .font(.title3)
+          .foregroundStyle(.green)
+          .symbolRenderingMode(.hierarchical)
+      }
 
-      VStack(alignment: .leading, spacing: 4) {
+      VStack(alignment: .leading, spacing: 6) {
         Text(proof.eventName)
-          .font(.subheadline.weight(.semibold))
-          .lineLimit(1)
+          .font(.headline)
+          .lineLimit(2)
+          .minimumScaleFactor(0.86)
+
         Text(Self.dateFormatter.string(from: proof.date))
-          .font(.caption)
+          .font(.subheadline)
           .foregroundStyle(.secondary)
       }
-      .padding(.top, 8)
+
+      Divider()
+
+      BeidMetricRow(label: "Peers", value: "\(proof.peersVerified)")
     }
+    .padding(16)
+    .frame(maxWidth: .infinity, minHeight: 188, alignment: .topLeading)
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: BeidDesign.Radius.card, style: .continuous))
+    .overlay {
+      RoundedRectangle(cornerRadius: BeidDesign.Radius.card, style: .continuous)
+        .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
+    }
+    .beidGlass(interactive: true, cornerRadius: BeidDesign.Radius.card)
   }
 }
 
