@@ -9,16 +9,16 @@ consumes the [levarac/barnard](https://github.com/levarac/barnard) BLE SDK.
 brew install xcodegen   # if you don't have it
 cd ios
 xcodegen generate
-open BeidNative.xcodeproj
+open Beid.xcodeproj
 ```
 
 Or from the CLI:
 
 ```sh
-xcodebuild -project ios/BeidNative.xcodeproj -scheme BeidNative \
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 
-xcodebuild -project ios/BeidNative.xcodeproj -scheme BeidNative \
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
@@ -63,7 +63,7 @@ App-Store-risk review recommended guest-first. That product decision is
 unresolved, so both orders are implemented behind a single flag:
 
 ```swift
-// BeidNative/Models/OnboardingMode.swift
+// Beid/Models/OnboardingMode.swift
 static let current: OnboardingMode = .walletFirst  // or .guestFirst
 ```
 
@@ -150,7 +150,7 @@ ios/
   project.yml              # XcodeGen spec
   README.md                # this file
   Vendor/Barnard/           # vendored SwiftPM package, see above
-  BeidNative/
+  Beid/
     App/                    # @main entry point, Info.plist
     Models/                 # Proof, OnboardingMode, DemoEvent
     Persistence/            # ProofStore (JSON)
@@ -158,7 +158,7 @@ ios/
     Onboarding/              # WalletConnectStub
     Navigation/              # AppCoordinator, AppScreen, RootView
     Views/                   # all 13 screens
-  BeidNativeTests/
+  BeidTests/
     SensingCoordinatorTests.swift
     ProofStoreTests.swift
     OnboardingFlagTests.swift

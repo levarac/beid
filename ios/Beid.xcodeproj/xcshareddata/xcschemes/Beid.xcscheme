@@ -15,10 +15,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A70B2D6FB7AF79D4B6F68D77"
-               BuildableName = "BeidNative.app"
-               BlueprintName = "BeidNative"
-               ReferencedContainer = "container:BeidNative.xcodeproj">
+               BlueprintIdentifier = "F1A2076DAC925B3FCE29679E"
+               BuildableName = "Beid.app"
+               BlueprintName = "Beid"
+               ReferencedContainer = "container:Beid.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -29,10 +29,10 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "FDA70543C8CB5839B3925176"
-               BuildableName = "BeidNativeTests.xctest"
-               BlueprintName = "BeidNativeTests"
-               ReferencedContainer = "container:BeidNative.xcodeproj">
+               BlueprintIdentifier = "0116823B8A813ACB378BF8FB"
+               BuildableName = "BeidTests.xctest"
+               BlueprintName = "BeidTests"
+               ReferencedContainer = "container:Beid.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,10 +46,10 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A70B2D6FB7AF79D4B6F68D77"
-            BuildableName = "BeidNative.app"
-            BlueprintName = "BeidNative"
-            ReferencedContainer = "container:BeidNative.xcodeproj">
+            BlueprintIdentifier = "F1A2076DAC925B3FCE29679E"
+            BuildableName = "Beid.app"
+            BlueprintName = "Beid"
+            ReferencedContainer = "container:Beid.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -58,10 +58,10 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "FDA70543C8CB5839B3925176"
-               BuildableName = "BeidNativeTests.xctest"
-               BlueprintName = "BeidNativeTests"
-               ReferencedContainer = "container:BeidNative.xcodeproj">
+               BlueprintIdentifier = "0116823B8A813ACB378BF8FB"
+               BuildableName = "BeidTests.xctest"
+               BlueprintName = "BeidTests"
+               ReferencedContainer = "container:Beid.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -82,10 +82,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A70B2D6FB7AF79D4B6F68D77"
-            BuildableName = "BeidNative.app"
-            BlueprintName = "BeidNative"
-            ReferencedContainer = "container:BeidNative.xcodeproj">
+            BlueprintIdentifier = "F1A2076DAC925B3FCE29679E"
+            BuildableName = "Beid.app"
+            BlueprintName = "Beid"
+            ReferencedContainer = "container:Beid.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>
@@ -101,10 +101,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A70B2D6FB7AF79D4B6F68D77"
-            BuildableName = "BeidNative.app"
-            BlueprintName = "BeidNative"
-            ReferencedContainer = "container:BeidNative.xcodeproj">
+            BlueprintIdentifier = "F1A2076DAC925B3FCE29679E"
+            BuildableName = "Beid.app"
+            BlueprintName = "Beid"
+            ReferencedContainer = "container:Beid.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
