@@ -1,0 +1,604 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04FAF61220EF2EDF7B54F01F /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */; };
+		064174C3328B39801BB488FE /* SensingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAD458D67D1864749F00726 /* SensingCoordinator.swift */; };
+		069813A870D327358882201A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
+		0AF9D5CDE2DAAC2670A698CB /* WalletConnectStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D25E6CA970452D0FCD73D2 /* WalletConnectStub.swift */; };
+		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
+		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
+		36423294C98FFAE0217CA7CD /* VerifyingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */; };
+		3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80A94378B0116CC976961AC /* BluetoothOffView.swift */; };
+		3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10807372081AA25A74942BE3 /* WelcomeView.swift */; };
+		3EEA86E51D83334A77A2A6C9 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1737F0C115BD86F89789893 /* AppCoordinator.swift */; };
+		419B39D19457938733AE8093 /* CollectionHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */; };
+		468CCE7D87235B2151E65822 /* VerifiedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694AE8675E1F6FEF350C1485 /* VerifiedView.swift */; };
+		4900D74D47E774AF213395BC /* SignalLostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 912FC62DE59B0394056CF446 /* SignalLostView.swift */; };
+		4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */; };
+		7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2169FFDF6767C427D481ED17 /* ItemDetailView.swift */; };
+		85803786C31CF2D533B655EE /* DemoEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */; };
+		875CDB76FD829588D665A7A1 /* Proof.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394E6F2E97311572D2BAED89 /* Proof.swift */; };
+		8BDF56249613D448E3FEB5EF /* AppScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812C170544758548D2A4DCC /* AppScreen.swift */; };
+		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
+		A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */; };
+		A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */; };
+		AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C21DF46165889A3C206F0C /* ProofStore.swift */; };
+		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
+		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
+		CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */; };
+		D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6660B6477CE489C244F95FED /* ProofCardView.swift */; };
+		DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */ = {isa = PBXBuildFile; productRef = 85120383F176FDA459C0D6E8 /* Barnard */; };
+		E95026757980944AB4C933FE /* EventFoundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07FD0202575465DCF463745 /* EventFoundView.swift */; };
+		EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F95B2F947E49234FCD1421B /* WalletConnectView.swift */; };
+		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
+		FD7E9D9913C3E0B56B054233 /* ScanPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5A761226A9352CA3B96B077F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0313A0B9774ED30358F9267 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F1A2076DAC925B3FCE29679E;
+			remoteInfo = Beid;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanFlowView.swift; sourceTree = "<group>"; };
+		0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionHomeView.swift; sourceTree = "<group>"; };
+		093E82F02CAFD9439A1F6661 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		10807372081AA25A74942BE3 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSheetView.swift; sourceTree = "<group>"; };
+		1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothPermissionView.swift; sourceTree = "<group>"; };
+		2169FFDF6767C427D481ED17 /* ItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailView.swift; sourceTree = "<group>"; };
+		29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingView.swift; sourceTree = "<group>"; };
+		31D25E6CA970452D0FCD73D2 /* WalletConnectStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectStub.swift; sourceTree = "<group>"; };
+		394E6F2E97311572D2BAED89 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
+		49BA528F084158430D34C634 /* BeidTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BeidTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanPhase.swift; sourceTree = "<group>"; };
+		5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEvent.swift; sourceTree = "<group>"; };
+		6660B6477CE489C244F95FED /* ProofCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCardView.swift; sourceTree = "<group>"; };
+		694AE8675E1F6FEF350C1485 /* VerifiedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifiedView.swift; sourceTree = "<group>"; };
+		7F95B2F947E49234FCD1421B /* WalletConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectView.swift; sourceTree = "<group>"; };
+		7FAD458D67D1864749F00726 /* SensingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinator.swift; sourceTree = "<group>"; };
+		7FBF50BD01564339F11D6494 /* Barnard */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Barnard; path = Vendor/Barnard; sourceTree = SOURCE_ROOT; };
+		8812C170544758548D2A4DCC /* AppScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScreen.swift; sourceTree = "<group>"; };
+		9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStoreTests.swift; sourceTree = "<group>"; };
+		912FC62DE59B0394056CF446 /* SignalLostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalLostView.swift; sourceTree = "<group>"; };
+		A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidApp.swift; sourceTree = "<group>"; };
+		A80A94378B0116CC976961AC /* BluetoothOffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothOffView.swift; sourceTree = "<group>"; };
+		AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothMonitor.swift; sourceTree = "<group>"; };
+		B07FD0202575465DCF463745 /* EventFoundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventFoundView.swift; sourceTree = "<group>"; };
+		B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingMode.swift; sourceTree = "<group>"; };
+		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
+		C58EEA07A80440D53597D515 /* ProofCollectedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCollectedView.swift; sourceTree = "<group>"; };
+		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyingView.swift; sourceTree = "<group>"; };
+		E1737F0C115BD86F89789893 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
+		E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlagTests.swift; sourceTree = "<group>"; };
+		EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinatorTests.swift; sourceTree = "<group>"; };
+		F4EF63521813A9A66345C1DA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D2B0575915CE46D4757C6675 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		129A796C8208473574C558A9 /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				E1737F0C115BD86F89789893 /* AppCoordinator.swift */,
+				8812C170544758548D2A4DCC /* AppScreen.swift */,
+				093E82F02CAFD9439A1F6661 /* RootView.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		1F78E1F8687E0FBBFF8AB06E /* Sensing */ = {
+			isa = PBXGroup;
+			children = (
+				AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */,
+				4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */,
+				7FAD458D67D1864749F00726 /* SensingCoordinator.swift */,
+			);
+			path = Sensing;
+			sourceTree = "<group>";
+		};
+		28A7FD1E68F84504A354A034 = {
+			isa = PBXGroup;
+			children = (
+				A8B68A7A5D14742390F795EC /* Beid */,
+				DA293E8A0771B440603690A0 /* BeidTests */,
+				CF8938E1F0E34EB2E1E12649 /* Packages */,
+				FD5D5F11FE5F3503CFF91250 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2F6F38F46CD774BC65D25626 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */,
+				F4EF63521813A9A66345C1DA /* Info.plist */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		40042ED67302999AA600E2D7 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				C0C21DF46165889A3C206F0C /* ProofStore.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		4E2CC145A16B282147941B12 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */,
+				B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */,
+				394E6F2E97311572D2BAED89 /* Proof.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		6BACA62F999D7F7071D2E51C /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */,
+				A80A94378B0116CC976961AC /* BluetoothOffView.swift */,
+				1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */,
+				0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */,
+				B07FD0202575465DCF463745 /* EventFoundView.swift */,
+				2169FFDF6767C427D481ED17 /* ItemDetailView.swift */,
+				6660B6477CE489C244F95FED /* ProofCardView.swift */,
+				C58EEA07A80440D53597D515 /* ProofCollectedView.swift */,
+				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
+				29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */,
+				912FC62DE59B0394056CF446 /* SignalLostView.swift */,
+				694AE8675E1F6FEF350C1485 /* VerifiedView.swift */,
+				DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */,
+				7F95B2F947E49234FCD1421B /* WalletConnectView.swift */,
+				10807372081AA25A74942BE3 /* WelcomeView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A8B68A7A5D14742390F795EC /* Beid */ = {
+			isa = PBXGroup;
+			children = (
+				2F6F38F46CD774BC65D25626 /* App */,
+				4E2CC145A16B282147941B12 /* Models */,
+				129A796C8208473574C558A9 /* Navigation */,
+				EED8243C846FD6037CB47396 /* Onboarding */,
+				40042ED67302999AA600E2D7 /* Persistence */,
+				1F78E1F8687E0FBBFF8AB06E /* Sensing */,
+				6BACA62F999D7F7071D2E51C /* Views */,
+			);
+			path = Beid;
+			sourceTree = "<group>";
+		};
+		CF8938E1F0E34EB2E1E12649 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				7FBF50BD01564339F11D6494 /* Barnard */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		DA293E8A0771B440603690A0 /* BeidTests */ = {
+			isa = PBXGroup;
+			children = (
+				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
+				9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */,
+				EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */,
+			);
+			path = BeidTests;
+			sourceTree = "<group>";
+		};
+		EED8243C846FD6037CB47396 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				31D25E6CA970452D0FCD73D2 /* WalletConnectStub.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		FD5D5F11FE5F3503CFF91250 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D311A637FF67CA20C99F7E5B /* Beid.app */,
+				49BA528F084158430D34C634 /* BeidTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0116823B8A813ACB378BF8FB /* BeidTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7EE4BD1D47C2E45C8F0DB7A8 /* Build configuration list for PBXNativeTarget "BeidTests" */;
+			buildPhases = (
+				C31F72147A5EE37360BD4157 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				25C69E438B2B734D9DE56431 /* PBXTargetDependency */,
+			);
+			name = BeidTests;
+			packageProductDependencies = (
+			);
+			productName = BeidTests;
+			productReference = 49BA528F084158430D34C634 /* BeidTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		F1A2076DAC925B3FCE29679E /* Beid */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BF0ED7C5CCC17943CF16FC11 /* Build configuration list for PBXNativeTarget "Beid" */;
+			buildPhases = (
+				5052D36531BFCFBB581197DF /* Sources */,
+				D2B0575915CE46D4757C6675 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Beid;
+			packageProductDependencies = (
+				85120383F176FDA459C0D6E8 /* Barnard */,
+			);
+			productName = Beid;
+			productReference = D311A637FF67CA20C99F7E5B /* Beid.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D0313A0B9774ED30358F9267 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					F1A2076DAC925B3FCE29679E = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 04C84A28B617644929F19A76 /* Build configuration list for PBXProject "Beid" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 28A7FD1E68F84504A354A034;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				06F8B2D6DDEB286CD8EDFE02 /* XCLocalSwiftPackageReference "Vendor/Barnard" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FD5D5F11FE5F3503CFF91250 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F1A2076DAC925B3FCE29679E /* Beid */,
+				0116823B8A813ACB378BF8FB /* BeidTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5052D36531BFCFBB581197DF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				069813A870D327358882201A /* AccountSheetView.swift in Sources */,
+				3EEA86E51D83334A77A2A6C9 /* AppCoordinator.swift in Sources */,
+				8BDF56249613D448E3FEB5EF /* AppScreen.swift in Sources */,
+				C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */,
+				A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */,
+				3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */,
+				12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */,
+				419B39D19457938733AE8093 /* CollectionHomeView.swift in Sources */,
+				85803786C31CF2D533B655EE /* DemoEvent.swift in Sources */,
+				E95026757980944AB4C933FE /* EventFoundView.swift in Sources */,
+				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
+				CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */,
+				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
+				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
+				9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */,
+				AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */,
+				18404D198F54E376B76E29F1 /* RootView.swift in Sources */,
+				04FAF61220EF2EDF7B54F01F /* ScanFlowView.swift in Sources */,
+				FD7E9D9913C3E0B56B054233 /* ScanPhase.swift in Sources */,
+				064174C3328B39801BB488FE /* SensingCoordinator.swift in Sources */,
+				B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */,
+				4900D74D47E774AF213395BC /* SignalLostView.swift in Sources */,
+				468CCE7D87235B2151E65822 /* VerifiedView.swift in Sources */,
+				36423294C98FFAE0217CA7CD /* VerifyingView.swift in Sources */,
+				0AF9D5CDE2DAAC2670A698CB /* WalletConnectStub.swift in Sources */,
+				EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */,
+				3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C31F72147A5EE37360BD4157 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
+				ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */,
+				4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		25C69E438B2B734D9DE56431 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F1A2076DAC925B3FCE29679E /* Beid */;
+			targetProxy = 5A761226A9352CA3B96B077F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1CAA137A8FA07B75B4255E63 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Beid.app/Beid";
+			};
+			name = Debug;
+		};
+		3FAA77CBEE28E49084F2849E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = Beid/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		5CB986D050BC61ECBB6A3109 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		6AC6C283A3FA63D9D88483D2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Beid.app/Beid";
+			};
+			name = Release;
+		};
+		A7A45C387D9E9EEAD0977B8D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E09E3FECC1220AB6CC01065D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = Beid/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		04C84A28B617644929F19A76 /* Build configuration list for PBXProject "Beid" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5CB986D050BC61ECBB6A3109 /* Debug */,
+				A7A45C387D9E9EEAD0977B8D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7EE4BD1D47C2E45C8F0DB7A8 /* Build configuration list for PBXNativeTarget "BeidTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1CAA137A8FA07B75B4255E63 /* Debug */,
+				6AC6C283A3FA63D9D88483D2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BF0ED7C5CCC17943CF16FC11 /* Build configuration list for PBXNativeTarget "Beid" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3FAA77CBEE28E49084F2849E /* Debug */,
+				E09E3FECC1220AB6CC01065D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		06F8B2D6DDEB286CD8EDFE02 /* XCLocalSwiftPackageReference "Vendor/Barnard" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/Barnard;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		85120383F176FDA459C0D6E8 /* Barnard */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Barnard;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = D0313A0B9774ED30358F9267 /* Project object */;
+}

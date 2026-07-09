@@ -4,7 +4,7 @@
 import SwiftUI
 
 @main
-struct BeidNativeApp: App {
+struct BeidApp: App {
   @StateObject private var coordinator = AppCoordinator()
 
   var body: some Scene {

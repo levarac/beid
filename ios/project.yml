@@ -1,4 +1,4 @@
-name: BeidNative
+name: Beid
 options:
   bundleIdPrefix: org.levarac.beid
   deploymentTarget:
@@ -12,16 +12,16 @@ packages:
     # Vendor/Barnard — see native/ios/README.md "Barnard SDK dependency".
     path: Vendor/Barnard
 targets:
-  BeidNative:
+  Beid:
     type: application
     platform: iOS
     sources:
-      - BeidNative
+      - Beid
     dependencies:
       - package: Barnard
         product: Barnard
     info:
-      path: BeidNative/App/Info.plist
+      path: Beid/App/Info.plist
       properties:
         UILaunchScreen: {}
         NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
@@ -38,26 +38,26 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: ""
         CODE_SIGN_STYLE: Automatic
-  BeidNativeTests:
+  BeidTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - BeidNativeTests
+      - BeidTests
     dependencies:
-      - target: BeidNative
+      - target: Beid
     settings:
       base:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
 schemes:
-  BeidNative:
+  Beid:
     build:
       targets:
-        BeidNative: all
-        BeidNativeTests: [test]
+        Beid: all
+        BeidTests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - BeidNativeTests
+        - BeidTests

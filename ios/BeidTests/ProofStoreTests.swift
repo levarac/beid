@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import XCTest
-@testable import BeidNative
+@testable import Beid
 
 @MainActor
 final class ProofStoreTests: XCTestCase {
