@@ -1,6 +1,6 @@
 name: BeidNative
 options:
-  bundleIdPrefix: network.greeting.beid.native
+  bundleIdPrefix: org.levarac.beid
   deploymentTarget:
     iOS: "17.0"
 packages:
@@ -33,7 +33,7 @@ targets:
           - bluetooth-peripheral
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: network.greeting.beid.native
+        PRODUCT_BUNDLE_IDENTIFIER: org.levarac.beid
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: ""

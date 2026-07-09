@@ -373,7 +373,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = network.greeting.beid.native;
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -509,7 +509,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = network.greeting.beid.native.BeidNativeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidNativeTests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -529,7 +529,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = network.greeting.beid.native;
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -546,7 +546,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = network.greeting.beid.native.BeidNativeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidNativeTests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
