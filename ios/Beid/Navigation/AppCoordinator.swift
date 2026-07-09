@@ -36,8 +36,11 @@ final class AppCoordinator: ObservableObject {
     }
   }
 
-  func completeWalletConnect() {
-    walletAddress = WalletConnectStub.fakeConnect()
+  /// `address` is supplied by the real WalletConnect (Reown) flow when
+  /// `WalletConnectMode.current == .reown`; the stub path calls this with
+  /// no argument, unchanged from before the spike.
+  func completeWalletConnect(address: String? = nil) {
+    walletAddress = address ?? WalletConnectStub.fakeConnect()
     screen = .bluetoothPermission
   }
 

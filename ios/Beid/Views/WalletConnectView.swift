@@ -3,13 +3,23 @@
 
 import SwiftUI
 
-/// Wallet step in the `.walletFirst` `OnboardingMode` order. Stubbed: no
-/// real WalletConnect SDK in this slice — tapping Connect produces a fake
-/// address via `WalletConnectStub`.
+/// Wallet step in the `.walletFirst` `OnboardingMode` order. Behind
+/// `WalletConnectMode.current`: `.stub` keeps the original fake-address
+/// button below; `.reown` shows the real pairing flow in
+/// `ReownWalletConnectView` — see ios/README.md "WalletConnect (spike)".
 struct WalletConnectView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
   var body: some View {
+    switch WalletConnectMode.current {
+    case .stub:
+      stubContent
+    case .reown:
+      ReownWalletConnectView()
+    }
+  }
+
+  private var stubContent: some View {
     VStack(spacing: 24) {
       Spacer()
 

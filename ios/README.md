@@ -56,6 +56,84 @@ mechanism (root-level `Package.swift`, package registry entry, or a
 dedicated release tag/repo), switch `project.yml` back to a real remote
 dependency and delete `Vendor/Barnard`.
 
+## WalletConnect (spike)
+
+`spike/walletconnect-native` branch only — not merged to main. Adds a real
+WalletConnect (Reown) pairing implementation alongside `WalletConnectStub`,
+switchable via a flag, same pattern as `OnboardingMode`:
+
+```swift
+// Beid/Onboarding/WalletConnectMode.swift
+static let current: WalletConnectMode = .reown  // or .stub
+```
+
+- `.stub`: unchanged original behavior — `WalletConnectView` shows the fake
+  "Connect Wallet" button, `WalletConnectStub.fakeConnect()` returns a random
+  `0x...` address instantly.
+- `.reown`: `WalletConnectView` shows `ReownWalletConnectView` — a real
+  pairing UI (QR code + copyable URI + live status) backed by
+  `ReownWalletConnectClient`, which wraps reown-swift's `Sign`/`Pair`/
+  `Networking` APIs.
+
+**SDK choice**: [reown-swift](https://github.com/reown-com/reown-swift)
+(actively maintained, latest tag 2.3.0 as of 2026-06-17). The legacy
+[WalletConnect/WalletConnectSwiftV2](https://github.com/WalletConnect/WalletConnectSwiftV2)
+repo is archived (last push 2024-09-27) — reown-swift is its successor after
+the WalletConnect → Reown rebrand. `project.yml` pins the `WalletConnect`
+product (→ `WalletConnectSign` target) only, not `ReownAppKit` — AppKit adds
+`ReownAppKitUI`/`CoinbaseWalletSDK`/`Yttrium`-adjacent surface area (wallet
+picker UI, account abstraction, on-ramp) that doesn't fit beid's "WalletConnect
+login, no account abstraction" ruling; both `Networking.configure` and
+`Sign.configure` are equally required either way, so AppKit wouldn't have
+saved any of the plumbing below. Package platform minimum is iOS 13 —
+no deployment-target change needed. Built against the iOS 26 SDK (Xcode 27).
+
+**What had to be hand-rolled** (reown-swift doesn't bundle these):
+- A `WebSocketFactory`/`WebSocketConnecting` adapter for the relay transport
+  — reown's own example app uses Starscream (last release 2024-03, stale).
+  `Beid/Onboarding/NativeWebSocketFactory.swift` implements the same ~8-method
+  protocol on native `URLSessionWebSocketTask` instead, avoiding a third
+  dependency.
+- A `CryptoProvider` (`Beid/Onboarding/NativeCryptoProvider.swift`) — only
+  exercised by SIWE (`Sign.instance.authenticate`), which this spike's plain
+  `connect(namespaces:)` pairing flow never calls. Left as `fatalError` rather
+  than pulling in Web3/CryptoSwift/HDWalletKit (as reown's example app does)
+  to satisfy a code path this spike doesn't use.
+- QR rendering (`Beid/Onboarding/QRCodeRenderer.swift`) via CoreImage's
+  built-in `CIFilter.qrCodeGenerator()` — no third-party QR dependency.
+
+**Credentials required to actually pair**: a Reown Cloud **Project ID**
+(free signup at [dashboard.reown.com](https://dashboard.reown.com/) → create
+project → copy Project ID). Read from the gitignored `Beid/Secrets.plist`
+(`WalletConnectSecrets.projectId`, key `PROJECT_ID`) — copy
+`ios/Secrets.example.plist` to `ios/Beid/Secrets.plist` and fill it in.
+Without it, `ReownWalletConnectView` shows a "WalletConnect not configured"
+state rather than crashing, and the app still builds/tests/runs.
+
+**A second, non-obvious prerequisite**: `Networking.configure(groupIdentifier:)`
+requires a syntactically valid App Group ID (`group.<id>` format) — passing
+the bare bundle ID crashes at runtime (`WalletConnectRelay/RelayClientFactory.swift:17:
+Fatal error: Could not instantiate UserDefaults for a group identifier
+org.levarac.beid`). Fixed by using `group.org.levarac.beid` plus a
+`com.apple.security.application-groups` entitlement in `project.yml`.
+Empirically this is enough to *not crash* on Simulator with ad-hoc
+"Sign to Run Locally" signing (`DEVELOPMENT_TEAM: ""`) — no real Apple
+Developer Team was needed for that part. A real device build, under a real
+team's provisioning, may enforce this more strictly; not verified here.
+
+**Verified on Simulator** (placeholder, non-functional `PROJECT_ID`): the
+real `Sign.instance.connect(namespaces:)` call runs, attempts the relay
+WebSocket connection, and fails cleanly with "Web socket is not connected to
+any URL or networking connection error" — no crash. This is the expected
+shape of the projectId-gated boundary; a real Project ID is needed to get
+further (generate a live pairing URI, see a wallet actually approve it).
+
+**Not implemented in this spike**: SIWE / `authenticate()`, the
+`beid://` redirect round-trip back from a wallet app (nothing to redirect
+from in Simulator), disconnect/session-persistence across launches, and
+wiring the real flow into `AccountSheetView`'s guest-first "Connect Wallet"
+(still stub-only, out of this spike's scope).
+
 ## Onboarding flag
 
 Team ruling is WalletConnect-first (no account abstraction), but an
@@ -108,8 +186,12 @@ Lost" button on the Verifying screen while in DemoEvent mode, and covered by
 
 ## What's stubbed / out of scope for this slice
 
-- **Wallet**: `WalletConnectStub` returns a fake `0x...` address. No real
-  WalletConnect SDK, no signing with an actual wallet key.
+- **Wallet**: `WalletConnectStub` returns a fake `0x...` address; this is
+  still the default on `main`. The `spike/walletconnect-native` branch adds
+  a real reown-swift pairing implementation behind a flag — see "WalletConnect
+  (spike)" above — but it has no Ken-side credentials configured, so it
+  hasn't completed a real pairing, and there's still no signing with an
+  actual wallet key anywhere in this slice.
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
   is available in the vendored SDK but not called from the app in this
   slice).
@@ -149,15 +231,16 @@ pixel-polished per the brief.
 ios/
   project.yml              # XcodeGen spec
   README.md                # this file
+  Secrets.example.plist    # WalletConnect spike credential template, see above
   Vendor/Barnard/           # vendored SwiftPM package, see above
   Beid/
-    App/                    # @main entry point, Info.plist
+    App/                    # @main entry point, Info.plist, Beid.entitlements
     Models/                 # Proof, OnboardingMode, DemoEvent
     Persistence/            # ProofStore (JSON)
     Sensing/                # SensingCoordinator, ScanPhase, BluetoothMonitor
-    Onboarding/              # WalletConnectStub
+    Onboarding/              # WalletConnectStub + WalletConnect (spike) files
     Navigation/              # AppCoordinator, AppScreen, RootView
-    Views/                   # all 13 screens
+    Views/                   # all 13 screens + ReownWalletConnectView (spike)
   BeidTests/
     SensingCoordinatorTests.swift
     ProofStoreTests.swift

@@ -7,3 +7,6 @@ DerivedData/
 local.properties
 *.keystore
 .env
+
+# WalletConnect (Reown) project ID — see ios/Secrets.example.plist
+ios/Beid/Secrets.plist
