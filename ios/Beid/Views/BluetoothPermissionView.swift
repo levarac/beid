@@ -7,7 +7,7 @@ import SwiftUI
 struct BluetoothPermissionView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
-  private let bullets: [(icon: String, text: String)] = [
+  private let bullets: [(icon: String, text: LocalizedStringKey)] = [
     ("sparkles", "Events find you"),
     ("lock.shield", "Private by design"),
     ("bolt.fill", "Zero effort"),
@@ -23,7 +23,8 @@ struct BluetoothPermissionView: View {
 
       BeidPanel {
         VStack(alignment: .leading, spacing: 14) {
-          ForEach(bullets, id: \.text) { bullet in
+          ForEach(bullets.indices, id: \.self) { index in
+            let bullet = bullets[index]
             BeidBulletRow(systemImage: bullet.icon, title: bullet.text)
           }
         }

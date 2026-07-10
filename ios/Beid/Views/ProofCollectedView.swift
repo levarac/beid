@@ -20,7 +20,7 @@ struct ProofCollectedView: View {
           Text(proof.eventName)
             .font(.headline)
             .fixedSize(horizontal: false, vertical: true)
-          BeidMetricRow(label: "Peers verified", value: "\(proof.peersVerified)")
+          BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
           BeidMetricRow(label: "Status", value: "Stored", valueStyle: AnyShapeStyle(.green))
         }
       }

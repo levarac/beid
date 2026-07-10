@@ -41,8 +41,8 @@ struct ItemDetailView: View {
           VStack(alignment: .leading, spacing: 14) {
             Text("Proof")
               .font(.headline)
-            BeidMetricRow(label: "Method", value: proof.method)
-            BeidMetricRow(label: "Peers verified", value: "\(proof.peersVerified)")
+            BeidMetricRow(label: "Method", verbatimValue: proof.method)
+            BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
             BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(.green))
           }
         }

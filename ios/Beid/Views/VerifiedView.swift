@@ -20,7 +20,7 @@ struct VerifiedView: View {
           Text(event.name)
             .font(.headline)
             .fixedSize(horizontal: false, vertical: true)
-          BeidMetricRow(label: "Peers verified", value: "\(peersVerified)")
+          BeidMetricRow(label: "Peers verified", verbatimValue: "\(peersVerified)")
           BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(.green))
         }
       }

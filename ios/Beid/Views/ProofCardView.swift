@@ -36,7 +36,7 @@ struct ProofCardView: View {
 
       Divider()
 
-      BeidMetricRow(label: "Peers", value: "\(proof.peersVerified)")
+      BeidMetricRow(label: "Peers", verbatimValue: "\(proof.peersVerified)")
     }
     .padding(16)
     .frame(maxWidth: .infinity, minHeight: 188, alignment: .topLeading)
