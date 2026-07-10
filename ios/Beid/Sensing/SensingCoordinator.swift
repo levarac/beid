@@ -23,6 +23,15 @@ final class SensingCoordinator: ObservableObject {
   private let identity = BarnardIdentity()
   private var demoTask: Task<Void, Never>?
 
+  private var demoStepDelayNanos: UInt64 {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
+      return 2_000_000_000
+    }
+    #endif
+    return 700_000_000
+  }
+
   /// Forced on for the simulator (no BLE radio); can be overridden for
   /// tests/demo builds.
   var useDemoEventMode: Bool = {
@@ -58,7 +67,7 @@ final class SensingCoordinator: ObservableObject {
   func startSensing(eventCode: String = "beid-demo-event", demoEvent: DemoEvent = .sample) {
     phase = .sensing
     if useDemoEventMode {
-      runDemoSequence(demoEvent: demoEvent)
+      runDemoSequence(demoEvent: demoEvent, stepDelayNanos: demoStepDelayNanos)
     } else {
       engine.requestPermissions { [weak self] status in
         guard let self else { return }
@@ -103,6 +112,7 @@ final class SensingCoordinator: ObservableObject {
     demoTask?.cancel()
     demoTask = Task { [weak self] in
       guard let self else { return }
+      guard await self.delay(stepDelayNanos) else { return }
       await self.advanceDemo(to: .eventFound(demoEvent))
       guard await self.delay(stepDelayNanos) else { return }
 
