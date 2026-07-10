@@ -37,7 +37,12 @@ if [[ "$INSTALLED_VERSION" != "$XCODEGEN_VERSION" ]]; then
     "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
   unzip -q "$XCODEGEN_TMP/xcodegen.zip" -d "$XCODEGEN_TMP"
   XCODEGEN_PREFIX="$HOME/.local/xcodegen-${XCODEGEN_VERSION}"
-  PREFIX="$XCODEGEN_PREFIX" "$XCODEGEN_TMP/xcodegen/install.sh"
+  # Use the unzipped release directly. The release's install.sh does a bare
+  # `cp` into $PREFIX and fails when the directory doesn't exist (observed
+  # on Xcode Cloud runners, build 2).
+  rm -rf "$XCODEGEN_PREFIX"
+  mkdir -p "$(dirname "$XCODEGEN_PREFIX")"
+  mv "$XCODEGEN_TMP/xcodegen" "$XCODEGEN_PREFIX"
   export PATH="$XCODEGEN_PREFIX/bin:$PATH"
   rm -rf "$XCODEGEN_TMP"
 fi
