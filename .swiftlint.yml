@@ -1,7 +1,17 @@
 # beid design-system enforcement (DESIGN.md §16).
 #
 # Config-only for now: not wired into CI yet. Scoped to the app target;
-# DesignSystem/ is the one place raw values are allowed, so it is excluded.
+# DesignSystem/ is the one place raw values are allowed, so it is excluded
+# from every custom rule.
+#
+# Known-debt handling: the pre-contract scaffold views violate these rules
+# broadly (DESIGN.md §16). Each custom rule therefore carries a TEMP-DEBT
+# exclusion for `ios/Beid/Views/.*`. The debt list may only SHRINK: as the
+# phase-2 migration lands, remove the exclusion per rule (or narrow it to
+# the files still unmigrated). New files must never be added to it —
+# "no new violations" means: lint passes on every file not in the TEMP-DEBT
+# list, and the list itself only ever loses entries.
+#
 # Run manually with: swiftlint --config .swiftlint.yml
 
 included:
@@ -11,26 +21,98 @@ excluded:
   - ios/Vendor
   - ios/BeidTests
 
-# Only the design-contract rules; default style rules are out of scope here.
+# Design-contract rules only; default style rules are out of scope here.
+# NOTE: with only_rules, custom rules are enabled via the literal entry
+# `custom_rules` (individual custom-rule ids here would silently disable
+# them — SwiftLint docs).
 only_rules:
-  - no_hardcoded_swiftui_color
-  - no_hardcoded_swiftui_font
+  - custom_rules
 
+# Comments and strings are excluded from matching via match_kinds on each
+# rule. Raw color/value strings (e.g. hex codes in string literals) are a
+# review-level check, not lint-level — see DESIGN.md §16.
 custom_rules:
   no_hardcoded_swiftui_color:
     included: "ios/Beid/.*\\.swift"
     excluded:
       - "ios/Beid/DesignSystem/.*"
+      - "ios/Beid/Views/.*" # TEMP-DEBT: pre-contract scaffold, shrink-only
     name: "No hardcoded SwiftUI colors"
     message: "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets)."
     severity: error
-    regex: 'Color\s*\(\s*(red\s*:|hue\s*:|white\s*:|hex\s*:|\.sRGB)|\bColor\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown)\b|\.(tint|foregroundStyle|foregroundColor|fill|background)\(\s*\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown)\b|#[0-9A-Fa-f]{6}\b'
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: 'Color\s*\(\s*(red\s*:|hue\s*:|white\s*:|hex\s*:|uiColor\s*:|\.sRGB|\.system\w+)|\bColor\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown|primary|secondary|accentColor)\b|\.(tint|foregroundStyle|foregroundColor|fill|background|stroke|border)\(\s*\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown|primary|secondary|tertiary|accentColor)\b|\.shadow\(\s*color\s*:|\bcolors\s*:\s*\[\s*\.|#[0-9A-Fa-f]{6}\b'
 
   no_hardcoded_swiftui_font:
     included: "ios/Beid/.*\\.swift"
     excluded:
       - "ios/Beid/DesignSystem/.*"
+      - "ios/Beid/Views/.*" # TEMP-DEBT: pre-contract scaffold, shrink-only
     name: "No hardcoded SwiftUI fonts"
     message: "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift)."
     severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
     regex: '\bFont\.system\s*\(|\.font\(\s*\.(largeTitle|title\b|title2|title3|headline|subheadline|body|callout|footnote|caption\b|caption2|system|custom)'
+
+  no_hardcoded_spacing:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+      - "ios/Beid/Views/.*" # TEMP-DEBT: pre-contract scaffold, shrink-only
+    name: "No hardcoded spacing"
+    message: "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals)."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\.padding\(\s*([2-9]\d*|1\d+)|\.padding\(\s*\.\w+\s*,\s*([2-9]\d*|1\d+)|\b(spacing|minLength)\s*:\s*([2-9]\d*|1\d+)'
+
+  no_hardcoded_radius:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+      - "ios/Beid/Views/.*" # TEMP-DEBT: pre-contract scaffold, shrink-only
+    name: "No hardcoded corner radius"
+    message: "Use DS.Radius.*."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\bcornerRadius\s*:\s*\d|\.cornerRadius\(\s*\d'
+
+  no_hardcoded_animation:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+      - "ios/Beid/Views/.*" # TEMP-DEBT: pre-contract scaffold, shrink-only
+    name: "No hardcoded animation curves or durations"
+    message: "Use DS.Motion.*."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '(withAnimation|\.animation)\(\s*\.(easeIn|easeOut|easeInOut|linear|spring|snappy|bouncy|smooth|interactiveSpring|interpolatingSpring)\b|\bAnimation\.(easeIn|easeOut|easeInOut|linear|spring|snappy|bouncy|smooth)\b|\bduration\s*:\s*[\d.]'

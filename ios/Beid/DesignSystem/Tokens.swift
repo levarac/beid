@@ -27,11 +27,14 @@ enum DS {
     static let textPrimary = SwiftUI.Color(.textPrimary)
     /// Secondary/supporting text.
     static let textSecondary = SwiftUI.Color(.textSecondary)
+    /// Neutral primary action. CTA tint on screens that have no motif
+    /// accent; also the intended app-level accent once views migrate.
+    static let actionPrimary = SwiftUI.Color(.actionPrimary)
     /// Active sensing/proximity signal. The single accent of the scan flow.
     static let signalActive = SwiftUI.Color(.signalActive)
     /// Degraded/lost signal and other recoverable warnings.
     static let signalWarning = SwiftUI.Color(.signalWarning)
-    /// Verified proof artifacts: seals, mint success, ceremony moments.
+    /// Verified proof artifacts: seals, seal success, ceremony moments.
     static let proofSeal = SwiftUI.Color(.proofSeal)
     /// Hairline strokes and dividers.
     static let strokeHairline = SwiftUI.Color(.strokeHairline)
@@ -107,9 +110,33 @@ enum DS {
     static let standard = Animation.spring(response: 0.35, dampingFraction: 1.0)
     /// Content entering the screen (e.g. event card slide-in on EventFoundView).
     static let entrance = Animation.spring(response: 0.5, dampingFraction: 0.85)
-    /// The proof mint/resolve ceremony (VerifiedView → ProofCollectedView).
+    /// The proof seal/resolve ceremony (VerifiedView → ProofCollectedView).
     static let proofResolve = Animation.spring(response: 0.6, dampingFraction: 0.8)
     /// Period of one sensing radar pulse cycle (SensingView).
     static let sensingPulsePeriod: TimeInterval = 1.8
+  }
+
+  // MARK: - Artwork
+  //
+  // Data-driven artwork generators. Raw color construction is allowed here
+  // and nowhere else. See DESIGN.md §5.
+  enum Artwork {
+    /// Per-proof Event Artifact gradient, derived from `Proof.gradientSeed`.
+    /// The only sanctioned source of `Color(hue:)` in the app.
+    static func proofCardGradient(seed: Int) -> LinearGradient {
+      let hue = Double(abs(seed) % 360) / 360.0
+      return LinearGradient(
+        colors: [
+          SwiftUI.Color(hue: hue, saturation: 0.6, brightness: 0.9),
+          SwiftUI.Color(
+            hue: (hue + 0.12).truncatingRemainder(dividingBy: 1),
+            saturation: 0.7,
+            brightness: 0.75
+          ),
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+    }
   }
 }

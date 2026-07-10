@@ -26,7 +26,7 @@ DESIGN.md documents **rules**; repo artifacts hold **values**.
 
 | Artifact | Canonical for |
 | --- | --- |
-| `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/font/motion tokens |
+| `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/size/font/motion tokens and artwork generators |
 | `ios/Beid/DesignSystem/Colors.xcassets` | Adaptive (light + dark) color values |
 | `.swiftlint.yml` (repo root) | Enforcement rules for banned raw values |
 | DESIGN.md (this file) | Semantics, usage rules, tone, review criteria |
@@ -69,7 +69,9 @@ fully coherent to a user who never connects a wallet.
 
 ## 2. Non-Negotiables
 
-Agents can audit each of these mechanically.
+Rules 1–4 are mechanically greppable and lint-backed (`.swiftlint.yml`);
+rules 5–12 are review-level checks against running UI, previews, or PR
+metadata — auditable, but not by grep alone.
 
 1. MUST: All colors in Views come from `DS.Color.*`. FORBIDDEN: `Color(red:`,
    `Color(hue:`, `Color(hex:`, `Color.white/.black/.blue/...`, shorthand
@@ -145,8 +147,9 @@ Three tiers:
 1. **Primitive values** — hex components in `Colors.xcassets`, numeric
    constants in `Tokens.swift`. Never referenced directly by Views.
 2. **Semantic tokens** — the `DS.*` namespace (`DS.Color.signalActive`,
-   `DS.Space.m`, `DS.Font.sectionTitle`, `DS.Motion.proofResolve`). This is
-   the only tier Views may use.
+   `DS.Space.m`, `DS.Size.minHitTarget`, `DS.Font.sectionTitle`,
+   `DS.Motion.proofResolve`, `DS.Artwork.proofCardGradient(seed:)`). This
+   is the only tier Views may use.
 3. **Component conventions** — per-component token bindings documented in
    §10 (e.g. proof cards use `DS.Radius.card`).
 
@@ -156,8 +159,8 @@ Rules:
   in `Colors.xcassets` for colors) *and* the token table in §17 in the same PR.
 - MUST: Token names describe role, not appearance (`signalActive`, not
   `tealAccent`).
-- SHOULD: Prefer reusing an existing semantic token over minting a near-
-  duplicate; mint a new one only when the *role* is genuinely new.
+- SHOULD: Prefer reusing an existing semantic token over adding a near-
+  duplicate; introduce a new one only when the *role* is genuinely new.
 - MAY: Introduce a DTCG `tokens.json` upstream source later if design-tool
   sync becomes real; until then Swift + xcassets are canonical.
 
@@ -172,9 +175,10 @@ not pending)
 | `DS.Color.surfaceRaised` | `#FFFFFF` | `#1B1E20` | Cards, sheets | Proof cards, event cards, sheet surfaces | Full-screen backgrounds |
 | `DS.Color.textPrimary` | `#1A1C1E` | `#ECEDEE` | Primary text | Titles, body | Decorative fills |
 | `DS.Color.textSecondary` | `#5C6165` | `#9BA1A6` | Supporting text | Subtitles, metadata | Primary CTAs |
+| `DS.Color.actionPrimary` | `#2A2E33` | `#E8EAEC` | Neutral primary action | CTA tint on screens with no motif accent; app-level accent | Motif moments (sensing/ceremony/recovery) |
 | `DS.Color.signalActive` | `#18C7A7` | `#62E8D0` | Live sensing signal | Sensing pulse, verifying progress, one key accent per scan screen | Body text, large fills |
 | `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
-| `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Seal artwork, mint/verified moments, proof accents | Generic links, nav tint |
+| `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Seal artwork, seal/verified moments, proof accents | Generic links, nav tint |
 | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
 
 Rules:
@@ -182,18 +186,25 @@ Rules:
 - MUST: Every color is an adaptive asset colorset (light + dark) exposed
   through `DS.Color.*`. High-contrast variants SHOULD be added to the same
   colorsets when the palette is ratified.
-- MUST: At most **one** accent color per screen: `signalActive` during
-  sensing, `proofSeal` at ceremony moments. Never both prominent at once.
-- FORBIDDEN: The system default blue as brand accent (`.tint(.blue)` — the
-  current scaffold's pattern; it is migration debt, not precedent).
+- MUST: Exactly **one** motif accent per screen, mapped by moment:
+  `signalActive` on sensing screens (`SensingView`, `EventFoundView`,
+  `VerifyingView`), `proofSeal` at ceremony moments (`VerifiedView`,
+  `ProofCollectedView`, proof artwork), `signalWarning` on recovery screens
+  (`SignalLostView`, `BluetoothOffView`). Screens outside these moments
+  (onboarding, home, account) have **no** motif accent — their CTAs and
+  controls tint with `DS.Color.actionPrimary`.
+- MUST NOT: System default blue as an *implicit fallback* — every tintable
+  control gets an explicit `DS.Color.*` tint, and at migration the
+  app-level accent is set to `actionPrimary`. FORBIDDEN: `.tint(.blue)`
+  (the current scaffold's pattern; it is migration debt, not precedent).
 - MAY: System semantic colors (`.primary`, `.secondary`, `Color(.systemRed)`)
   inside `DesignSystem/` as implementation details of a token — never
   directly in Views.
-- Note: the per-proof generated gradient in `ProofCardView`
-  (`Color(hue: seed)`) is a deliberate *data-driven* visual, not a token.
-  It MUST move into `DesignSystem/` as a documented artifact generator when
-  the proof-card artwork direction is ratified; until then it is a known
-  exception, confined to `ProofCardView`.
+- The per-proof generated gradient is a *data-driven* artwork generator,
+  not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
+  its canonical home and the only sanctioned source of `Color(hue:)`.
+  `ProofCardView`'s current local copy of the same math is scaffold debt;
+  the phase-2 migration replaces it with the `DS.Artwork` call.
 
 ## 6. Typography
 
@@ -230,9 +241,10 @@ Rules:
 plus `DS.Space.pageMargin` (32) for full-width content and bottom CTAs.
 
 - MUST: All padding/spacing values come from `DS.Space.*` (exceptions: `0`, `1`).
-- MUST: Full-width primary CTAs sit at the bottom with horizontal padding
-  `DS.Space.pageMargin` (the pattern in `WelcomeView`, `SignalLostView`,
-  `ProofCollectedView`).
+- MUST: On state screens in compact width, full-width primary CTAs sit at
+  the bottom with horizontal padding `DS.Space.pageMargin` (the pattern in
+  `WelcomeView`, `SignalLostView`, `ProofCollectedView`). Sheets, regular-
+  width layouts, and secondary actions MAY deviate with a stated reason.
 - MUST: Respect safe areas; content never hides behind home indicator or
   notch. Keyboard avoidance uses standard SwiftUI behavior.
 - SHOULD: Grid layouts use `DS.Space.m` (16) gutters (the
@@ -249,11 +261,17 @@ rounded rectangles use `style: .continuous`.
 - MUST: Seal/ceremony surfaces use `DS.Radius.seal`.
 - SHOULD: Elevation via material or `surfaceRaised` + hairline stroke, not
   heavy drop shadows. Beid surfaces are matte and physical, not floaty.
-- Materials: deployment target is iOS 17, so Liquid Glass APIs (iOS 26) are
-  not available. Use system materials (`.ultraThinMaterial` etc.) for
-  overlay chrome. When the min target reaches iOS 26, standard controls
-  adopt the new design automatically; custom glass MUST be deliberate
-  (Beid-specific controls or proof moments), never decorative noise.
+- Materials: the deployment target is iOS 17, so iOS 26 Liquid Glass APIs
+  (e.g. `glassEffect`) are usable only behind availability gates
+  (`if #available(iOS 26, *)`), never unguarded. Standard SwiftUI
+  controls/navigation adopt the new system appearance automatically when
+  the app is rebuilt with the iOS 26 SDK — prefer that free adoption. For
+  pre-26 fallback and overlay chrome, use system materials
+  (`.ultraThinMaterial` etc.).
+- MUST: Custom `glassEffect` use requires explicit design approval
+  (a `DesignException` link). Glass is a functional layer for controls and
+  navigation, not content decoration — proof/ceremony artwork is content
+  and does not get glass by default. No glass-on-glass nesting.
 - FORBIDDEN: Faking glass with arbitrary blur rectangles.
 
 ## 9. Motion and Haptics
@@ -266,7 +284,7 @@ damping and response (`DS.Motion`), not fixed-duration curves.
 | `DS.Motion.fast` | spring, response 0.25, damping 1.0 | Press feedback, small state flips |
 | `DS.Motion.standard` | spring, response 0.35, damping 1.0 | Default transitions |
 | `DS.Motion.entrance` | spring, response 0.5, damping 0.85 | Content entering (event card in `EventFoundView`) |
-| `DS.Motion.proofResolve` | spring, response 0.6, damping 0.8 | Proof mint/seal ceremony |
+| `DS.Motion.proofResolve` | spring, response 0.6, damping 0.8 | Proof seal ceremony |
 | `DS.Motion.sensingPulsePeriod` | 1.8 s | One radar pulse cycle in `SensingView` |
 
 Rules:
@@ -297,8 +315,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   hero (that is `ItemDetailView`'s header).
 - API: `ProofCardView(proof: Proof)`.
 - Required tokens: `DS.Radius.card`, `DS.Font.cardTitle`, `DS.Font.meta`,
-  `DS.Color.textSecondary`. Artwork: seed-driven gradient (known exception,
-  §5).
+  `DS.Color.textSecondary`. Artwork: `DS.Artwork.proofCardGradient(seed:)`
+  (§5; the view's current inline copy is scaffold debt).
 - States: default only (pending/failed proof states do not exist yet; when
   they do, they MUST pair color with a symbol per §2.9).
 - Accessibility: entire card one element; label "Proof of {eventName},
@@ -333,8 +351,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   margins, `DS.Font.sectionTitle`/`ceremonyTitle` + `DS.Font.supporting`,
   bottom CTA with `DS.Font.cta`.
 - Rules: SHOULD be extracted into a shared `StateScreen` container when the
-  UI worker migrates views (phase 2); until then new state screens copy the
-  pattern exactly.
+  UI worker migrates views (phase 2); until then new state screens match the
+  required slots and tokens above (not pixel-copying existing views).
 
 ### Component: Detail meta row (detailRow in ItemDetailView)
 
@@ -344,14 +362,16 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Rules: status values pair text with color (`Verified` +
   `DS.Color.proofSeal`), never color alone.
 
-### Component: Primary CTA button
+### Pattern: Primary CTA button
 
 - Purpose: The one main action per screen ("Get Started", "Sense Event",
-  "Try Again", "Done").
-- Rules: `.borderedProminent`, tinted with the screen's single accent
-  (`signalActive` in scan contexts, `proofSeal` at ceremony, default accent
-  elsewhere), label `DS.Font.cta`, full width inside `DS.Space.pageMargin`.
-  Max one per screen.
+  "Try Again", "Done"). A convention, not a reusable component (yet).
+- Rules: `.borderedProminent`, label `DS.Font.cta`, full width inside
+  `DS.Space.pageMargin` (compact-width state screens, §7). Tint follows the
+  §5 accent map exactly: `signalActive` on sensing screens, `proofSeal` at
+  ceremony, `signalWarning` on recovery screens, `DS.Color.actionPrimary`
+  everywhere else. There is no "default" tint — an unspecified tint is a
+  §5 violation, not a fallback. Max one per screen.
 
 ## 11. Screen Patterns
 
@@ -406,11 +426,21 @@ Policy split:
   `SignalLostView` ("exclamationmark.triangle.fill" 56 pt),
   `BluetoothOffView`, `BluetoothPermissionView`, `WalletConnectView`,
   `CollectionHomeView` empty state ("tray" 48 pt).
-- MUST: Custom illustrations go in an `Illustrations.xcassets` (to be added
-  with the first real asset) with light/dark variants when colors are
-  embedded; rendering `Original`.
-- MUST: Tintable custom icons are single-color template assets, tinted only
-  via `DS.Color.*`.
+- Two distinct custom-asset pipelines — do not mix them:
+  1. **Illustrations** (proof artwork, empty states, sensing scenes):
+     vector assets in an `Illustrations.xcassets` (to be added with the
+     first real asset), rendering `Original`, light/dark variants when
+     colors are embedded.
+  2. **Custom symbols** (small reusable glyphs that behave like SF
+     Symbols): authored from an SF Symbols app template as SVG symbol
+     sets, validated in the SF Symbols app, added to the asset catalog —
+     this preserves weights, scales, text alignment, and accessibility
+     behavior. Single-color template glyphs are tinted only via
+     `DS.Color.*`.
+- Temporary path until assets exist: a new surface that *needs* a brand
+  moment MAY ship with a placeholder (small SF Symbol ≤ 32 pt or plain
+  layout) plus a `TODO(asset): <asset-name>` comment and a checklist note —
+  never with an oversized decorative SF Symbol.
 - MUST: Decorative images use `.accessibilityHidden(true)`.
 - MUST: Symbols paired with text scale with Dynamic Type (`@ScaledMetric`
   or font-relative sizing).
@@ -452,6 +482,19 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 
 ## 15. Copywriting Voice
 
+Language model (Ken decision, 2026-07-10): the app's primary language is
+**English**, localized to ~5 major languages including Japanese via String
+Catalogs — the full localization process lives in `AGENTS.md`.
+
+- MUST: All copy is authored in English as the source language; the voice,
+  vocabulary, and forbidden-term rules below are defined against English.
+- MUST: Translations preserve the register per locale (calm/factual,
+  ceremonial, recovery — §3); the forbidden-term list maps per language
+  (e.g. the Japanese equivalents of "mint"/"NFT" jargon are equally
+  forbidden).
+- MUST: User-facing strings go through the String Catalog — no hardcoded
+  display strings that bypass localization.
+
 - Vocabulary: "proof", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A proof is **collected** or **sealed**, never "minted",
   "dropped", or "claimed".
@@ -470,7 +513,9 @@ Acceptance criteria for every component and screen, not post-hoc QA:
   "beid lost the connection to {event}. Move closer and we'll pick it back
   up automatically." + "Try Again".
 - CTAs are verb-first and specific: "Start sensing", "Open Settings",
-  "Connect wallet" — never "OK", "Continue", "Submit".
+  "Connect wallet". FORBIDDEN as generic action labels: "OK", "Submit".
+  "Continue" MAY be used where the next step is genuinely a continuation
+  (multi-step onboarding), with a stated reason; never as a lazy default.
 
 ## 16. Agent Compliance Checklist
 
@@ -480,7 +525,7 @@ Copy-paste this into every UI PR description and check each item:
 ## Design Compliance Checklist (DESIGN.md §16)
 
 - [ ] No hardcoded colors, fonts, spacing, radii, or durations in Views (DS.* only).
-- [ ] `swiftlint --config .swiftlint.yml` reports no new violations in files I touched.
+- [ ] `swiftlint --config .swiftlint.yml` passes. ("Passes" = zero violations; files under the TEMP-DEBT exclusions in `.swiftlint.yml` are skipped by the config itself. I did not add any file to a TEMP-DEBT list, and if I migrated a debt file I removed/narrowed its exclusion.)
 - [ ] All icon-only buttons have accessibility labels.
 - [ ] All interactive targets are ≥ 44×44 pt.
 - [ ] Light and dark previews attached (screenshots or #Preview variants).
@@ -488,16 +533,22 @@ Copy-paste this into every UI PR description and check each item:
 - [ ] Empty/error/loading states implemented for new surfaces.
 - [ ] No decorative SF Symbols > 32 pt; custom asset used or a TODO(asset) filed.
 - [ ] State is never conveyed by color alone.
-- [ ] Copy follows §15 (vocabulary, no web3 jargon, error formula).
+- [ ] Copy follows §15 (English source, String Catalog, vocabulary, no web3 jargon, error formula).
 - [ ] Any deviation carries `DesignException: <rationale or link>`.
 ```
 
 Enforcement layers:
 
-1. **Grep-level**: the FORBIDDEN patterns in §2 are regex-detectable;
-   `.swiftlint.yml` custom rules `no_hardcoded_swiftui_color` and
-   `no_hardcoded_swiftui_font` encode the two highest-value ones.
-   (Config only for now; CI wiring is a follow-up.)
+1. **Grep-level**: `.swiftlint.yml` encodes five custom rules —
+   `no_hardcoded_swiftui_color`, `no_hardcoded_swiftui_font`,
+   `no_hardcoded_spacing`, `no_hardcoded_radius`,
+   `no_hardcoded_animation` — activated via `only_rules: [custom_rules]`,
+   with `match_kinds` excluding comments/strings. Known scaffold debt is
+   handled by per-rule TEMP-DEBT path exclusions (`ios/Beid/Views/.*`)
+   that may only shrink as migration lands. (Config only for now; CI
+   wiring is a follow-up.) Not lint-covered and therefore review-level:
+   decorative-symbol size (§12), the one-accent map (§5), hit targets,
+   Dynamic Type behavior, and raw values inside string literals.
 2. **Review-level**: the checklist above.
 3. **Exception process**: a PR that must deviate states
    `DesignException: <reason>` in its description and links the decision;
@@ -522,8 +573,8 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 
-(Full set: 8 color tokens, 7 space, 4 radius, 9 font, 5 motion — see
-`ios/Beid/DesignSystem/Tokens.swift`.)
+(Full set: 9 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
+plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
 
@@ -535,9 +586,10 @@ Currently empty — no custom assets exist yet. First assets to produce
 
 | Date | Decision | Status |
 | --- | --- | --- |
-| 2026-07-10 | Initial contract authored (this document) | PROPOSAL — Ken ratification pending for all tagged values |
-| 2026-07-10 | Palette anchors, motif names, tone thesis, type ramp | PROPOSAL — Ken ratification pending |
-| 2026-07-10 | Token structure (DS namespace + xcassets), lint rules, section skeleton | Adopted (structural) |
+| 2026-07-09 | Initial contract authored (this document) | PROPOSAL — Ken ratification pending for all tagged values |
+| 2026-07-09 | Palette anchors, motif names, tone thesis, type ramp | PROPOSAL — Ken ratification pending |
+| 2026-07-09 | Token structure (DS namespace + xcassets), lint rules, section skeleton | Adopted (structural) |
+| 2026-07-10 | Revision round 1 (GPT-Pro audit): lint activation via `only_rules: [custom_rules]` + TEMP-DEBT model, 5 lint rules, `DS.Artwork.proofCardGradient`, accent map + `actionPrimary`, Liquid Glass availability wording, illustrations/custom-symbol split, English-primary copy (String Catalogs) | Adopted (structural; PROPOSAL tags unchanged) |
 | 2026-07 (Figma MTG) | Organizer mode, organizer thresholds, event-code rescue check-in, pre-check-in status transitions flagged as future surfaces (Koya Onodera comments on Minimal v4) | Recorded — out of scope for this slice, see §11 |
 
 ### D. Deprecated patterns
