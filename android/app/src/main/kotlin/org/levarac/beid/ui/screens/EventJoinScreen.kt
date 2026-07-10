@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -19,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import org.levarac.beid.R
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.sensing.EventJoinUiState
@@ -54,7 +54,7 @@ fun EventJoinScreen(coordinator: EventJoinCoordinator) {
         ) {
             Text(
                 text = stringResource(R.string.event_join_title),
-                style = androidx.compose.material3.MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineLarge,
                 color = BeidTheme.colors.textPrimary,
             )
 
@@ -67,7 +67,7 @@ fun EventJoinScreen(coordinator: EventJoinCoordinator) {
 
             Text(
                 text = statusText(uiState),
-                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium,
                 color = BeidTheme.colors.textSecondary,
             )
 
