@@ -33,6 +33,9 @@ why).
   `ios/Beid/Localizable.xcstrings` for the `Beid` target). Xcode
   auto-extracts strings from `Text("...")` and `String(localized:)` call
   sites into the catalog on build — you do not hand-maintain key lists.
+- **MUST:** Design-system components that display localizable text take
+  `LocalizedStringKey`, never `String`. Genuinely dynamic runtime data must
+  use an explicitly named verbatim API so it cannot be mistaken for copy.
 - **Key conventions** — two allowed forms, chosen by reuse:
   - **Literal English sentence as key** (the default, e.g.
     `Text("Get Started")`) for one-off view copy that appears in exactly one

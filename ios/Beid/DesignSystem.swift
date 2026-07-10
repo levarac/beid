@@ -60,11 +60,16 @@ struct BeidScreen<Content: View, Footer: View>: View {
 
 struct BeidHeroHeader: View {
   let systemImage: String
-  let title: String
-  let subtitle: String?
+  let title: LocalizedStringKey
+  let subtitle: LocalizedStringKey?
   let tint: Color
 
-  init(systemImage: String, title: String, subtitle: String? = nil, tint: Color = .accentColor) {
+  init(
+    systemImage: String,
+    title: LocalizedStringKey,
+    subtitle: LocalizedStringKey? = nil,
+    tint: Color = .accentColor
+  ) {
     self.systemImage = systemImage
     self.title = title
     self.subtitle = subtitle
@@ -122,11 +127,11 @@ struct BeidGlyph: View {
 }
 
 struct BeidPrimaryButton: View {
-  let title: String
+  let title: LocalizedStringKey
   let systemImage: String?
   let action: () -> Void
 
-  init(_ title: String, systemImage: String? = nil, action: @escaping () -> Void) {
+  init(_ title: LocalizedStringKey, systemImage: String? = nil, action: @escaping () -> Void) {
     self.title = title
     self.systemImage = systemImage
     self.action = action
@@ -156,7 +161,7 @@ struct BeidPrimaryButton: View {
 }
 
 struct BeidSecondaryButton: View {
-  let title: String
+  let title: LocalizedStringKey
   let action: () -> Void
 
   var body: some View {
@@ -177,7 +182,7 @@ struct BeidSecondaryButton: View {
 
 struct BeidBulletRow: View {
   let systemImage: String
-  let title: String
+  let title: LocalizedStringKey
 
   var body: some View {
     HStack(spacing: 12) {
@@ -219,16 +224,16 @@ struct BeidPanel<Content: View>: View {
 
 struct BeidStatusLayout<Accessory: View, Footer: View>: View {
   let systemImage: String
-  let title: String
-  let message: String
+  let title: LocalizedStringKey
+  let message: LocalizedStringKey
   let tint: Color
   let accessory: Accessory
   let footer: Footer
 
   init(
     systemImage: String,
-    title: String,
-    message: String,
+    title: LocalizedStringKey,
+    message: LocalizedStringKey,
     tint: Color = .accentColor,
     @ViewBuilder accessory: () -> Accessory = { EmptyView() },
     @ViewBuilder footer: () -> Footer = { EmptyView() }
@@ -254,9 +259,29 @@ struct BeidStatusLayout<Accessory: View, Footer: View>: View {
 }
 
 struct BeidMetricRow: View {
-  let label: String
-  let value: String
-  var valueStyle: AnyShapeStyle = AnyShapeStyle(.primary)
+  let label: LocalizedStringKey
+  let value: Text
+  let valueStyle: AnyShapeStyle
+
+  init(
+    label: LocalizedStringKey,
+    value: LocalizedStringKey,
+    valueStyle: AnyShapeStyle = AnyShapeStyle(.primary)
+  ) {
+    self.label = label
+    self.value = Text(value)
+    self.valueStyle = valueStyle
+  }
+
+  init(
+    label: LocalizedStringKey,
+    verbatimValue: String,
+    valueStyle: AnyShapeStyle = AnyShapeStyle(.primary)
+  ) {
+    self.label = label
+    self.value = Text(verbatim: verbatimValue)
+    self.valueStyle = valueStyle
+  }
 
   var body: some View {
     HStack(alignment: .firstTextBaseline) {
@@ -264,7 +289,7 @@ struct BeidMetricRow: View {
         .font(.subheadline)
         .foregroundStyle(.secondary)
       Spacer(minLength: 16)
-      Text(value)
+      value
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(valueStyle)
         .multilineTextAlignment(.trailing)

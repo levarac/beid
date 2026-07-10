@@ -15,6 +15,7 @@
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
 		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
 		36423294C98FFAE0217CA7CD /* VerifyingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */; };
+		388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C637EA719C58481853B15B91 /* LocalizationContractTests.swift */; };
 		3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80A94378B0116CC976961AC /* BluetoothOffView.swift */; };
 		3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10807372081AA25A74942BE3 /* WelcomeView.swift */; };
 		3EEA86E51D83334A77A2A6C9 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1737F0C115BD86F89789893 /* AppCoordinator.swift */; };
@@ -85,6 +86,7 @@
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
 		C58EEA07A80440D53597D515 /* ProofCollectedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCollectedView.swift; sourceTree = "<group>"; };
+		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyingView.swift; sourceTree = "<group>"; };
 		E1737F0C115BD86F89789893 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
@@ -212,6 +214,7 @@
 		DA293E8A0771B440603690A0 /* BeidTests */ = {
 			isa = PBXGroup;
 			children = (
+				C637EA719C58481853B15B91 /* LocalizationContractTests.swift */,
 				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
 				9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */,
 				EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */,
@@ -371,6 +374,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */,
 				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
 				ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */,
 				4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */,
@@ -422,6 +426,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -580,6 +585,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
