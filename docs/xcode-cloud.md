@@ -41,14 +41,25 @@ if you're driving this with that skill.
 executable):
 
 - **`ci_post_clone.sh`** — runs right after Xcode Cloud clones the repo.
-  Installs XcodeGen via Homebrew if missing, runs `xcodegen generate`, then
-  fails the build if that produced a diff against the committed
-  `Beid.xcodeproj`. This exists because `project.yml` is this repo's
-  source of truth (per `AGENTS.md`) and the generated `.xcodeproj` is
-  committed for local-dev convenience — if someone edits `project.yml`
-  without regenerating and committing the result, this step catches the
-  drift immediately instead of silently building a stale/wrong project on
-  Xcode Cloud.
+  Installs the XcodeGen version pinned in `ci_scripts/XCODEGEN_VERSION`
+  (downloaded straight from XcodeGen's GitHub release, not
+  `brew install xcodegen`'s always-latest — an unannounced XcodeGen release
+  could otherwise reformat/reorder the generated project and false-positive
+  the drift guard with zero repo-side change), runs `xcodegen generate`,
+  then fails the build if that left `Beid.xcodeproj` dirty
+  (`git status --porcelain`, so new/untracked files inside the `.xcodeproj`
+  bundle are caught too, not just changes to already-tracked ones). This
+  exists because `project.yml` is this repo's source of truth (per
+  `AGENTS.md`) and the generated `.xcodeproj` is committed for local-dev
+  convenience — if someone edits `project.yml` without regenerating and
+  committing the result, this step catches the drift immediately instead of
+  silently building a stale/wrong project on Xcode Cloud.
+  **Upgrading XcodeGen on purpose**: bump `ci_scripts/XCODEGEN_VERSION`,
+  then run `cd ios && xcodegen generate` locally with a matching XcodeGen
+  install and commit the resulting `Beid.xcodeproj` diff in the same PR —
+  otherwise the guard fails on the very next Xcode Cloud run for the "right"
+  reason (real drift between the pinned generator's output and what's
+  committed).
 - **`ci_post_xcodebuild.sh`** — runs after the archive build. Picks
   `release_notes.json` when `$CI_BRANCH` matches `release/*`, otherwise
   `what_to_test.json`, and converts it (via
@@ -104,7 +115,9 @@ the approval-package message for the exact click path.
 
 ```sh
 cd ios
-xcodegen generate                     # must produce no diff against the committed .xcodeproj
+xcodegen --version                    # should match ci_scripts/XCODEGEN_VERSION
+xcodegen generate                     # must leave Beid.xcodeproj clean (git status --porcelain)
+git status --porcelain -- Beid.xcodeproj
 xcodebuild -project Beid.xcodeproj -scheme Beid \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 cd ..
