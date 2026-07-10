@@ -31,6 +31,16 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(collectedProof, proof)
   }
 
+  func testDemoSequenceKeepsSensingDuringItsInitialDelay() async {
+    let coordinator = SensingCoordinator()
+    coordinator.startSensing(demoEvent: .sample)
+
+    try? await Task.sleep(nanoseconds: 10_000_000)
+
+    XCTAssertEqual(coordinator.phase, .sensing)
+    coordinator.reset()
+  }
+
   func testDemoSequenceStepsThroughVerifyingCounts() async {
     let coordinator = SensingCoordinator()
     let event = DemoEvent(name: "Test Event", totalPeersToVerify: 3)

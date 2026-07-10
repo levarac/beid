@@ -45,15 +45,17 @@ struct BeidScreen<Content: View, Footer: View>: View {
       Color(.systemGroupedBackground)
         .ignoresSafeArea()
 
-      VStack(spacing: BeidDesign.Spacing.section) {
-        Spacer(minLength: 20)
-        content
-        Spacer(minLength: 20)
-        footer
+      BeidAdaptiveContent {
+        VStack(spacing: BeidDesign.Spacing.section) {
+          Spacer(minLength: DS.Space.m)
+          content
+          Spacer(minLength: DS.Space.m)
+          footer
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+        .padding(.bottom, DS.Space.xl)
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
-      .padding(.bottom, 28)
     }
   }
 }

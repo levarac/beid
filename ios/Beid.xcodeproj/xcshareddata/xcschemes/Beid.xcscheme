@@ -64,6 +64,17 @@
                ReferencedContainer = "container:Beid.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "759056DA5DB7A35C5E0B53EE"
+               BuildableName = "BeidUITests.xctest"
+               BlueprintName = "BeidUITests"
+               ReferencedContainer = "container:Beid.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

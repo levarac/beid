@@ -16,40 +16,42 @@ struct ItemDetailView: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
-        BeidPanel {
-          VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
-            HStack(alignment: .top) {
-              BeidGlyph(systemImage: "seal.fill", tint: .accentColor, size: 72)
-              Spacer()
-              Label("Verified", systemImage: "checkmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.green)
+      BeidAdaptiveContent {
+        VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+          BeidPanel {
+            VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+              HStack(alignment: .top) {
+                BeidGlyph(systemImage: "seal.fill", tint: DS.Color.proofSeal, size: 72)
+                Spacer()
+                Label("Verified", systemImage: "checkmark.circle.fill")
+                  .font(DS.Font.cardTitle)
+                  .foregroundStyle(DS.Color.proofSeal)
+              }
+
+              Text(proof.eventName)
+                .font(DS.Font.sectionTitle)
+                .fixedSize(horizontal: false, vertical: true)
+
+              Text(Self.dateFormatter.string(from: proof.date))
+                .font(DS.Font.body)
+                .foregroundStyle(DS.Color.textSecondary)
             }
+          }
 
-            Text(proof.eventName)
-              .font(.title.weight(.semibold))
-              .fixedSize(horizontal: false, vertical: true)
-
-            Text(Self.dateFormatter.string(from: proof.date))
-              .font(.body)
-              .foregroundStyle(.secondary)
+          BeidPanel {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+              Text("Proof")
+                .font(DS.Font.cardTitle)
+              BeidMetricRow(label: "Method", verbatimValue: proof.method)
+              BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
+              BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(DS.Color.proofSeal))
+            }
           }
         }
-
-        BeidPanel {
-          VStack(alignment: .leading, spacing: 14) {
-            Text("Proof")
-              .font(.headline)
-            BeidMetricRow(label: "Method", verbatimValue: proof.method)
-            BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
-            BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(.green))
-          }
-        }
+        .padding(BeidDesign.Spacing.screenHorizontal)
       }
-      .padding(BeidDesign.Spacing.screenHorizontal)
     }
-    .background(Color(.systemGroupedBackground))
+    .background(DS.Color.surfaceCanvas)
     .navigationTitle("Proof Detail")
     .navigationBarTitleDisplayMode(.inline)
   }

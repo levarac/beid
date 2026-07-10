@@ -603,6 +603,10 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `color.proof.seal` | `DS.Color.proofSeal` | L `#6E5AEF` / D `#9D8CFF` | Sealed proof |
 | `space.m` | `DS.Space.m` | 16 pt | Default gap |
 | `radius.card` | `DS.Radius.card` | 16 pt | Cards |
+| `layout.state.content.maxWidth` | `DS.Layout.stateContentMaxWidth` | 600 pt | Readable state-screen and CTA width in regular size classes |
+| `layout.collection.content.maxWidth` | `DS.Layout.collectionContentMaxWidth` | 960 pt | Maximum collection width in regular size classes |
+| `layout.grid.card.minimum.regular` | `DS.Layout.regularGridCardMinimumWidth` | 260 pt | Minimum proof-card width in regular grids |
+| `layout.grid.card.minimum.compact` | `DS.Layout.compactGridCardMinimumWidth` | 150 pt | Minimum proof-card width in compact grids |
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 

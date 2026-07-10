@@ -10,35 +10,26 @@ struct WalletConnectView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
   var body: some View {
-    VStack(spacing: 24) {
-      Spacer()
+    BeidAdaptiveContent {
+      VStack(spacing: DS.Space.l) {
+        Spacer()
 
-      Image(systemName: "wallet.pass.fill")
-        .font(.system(size: 56))
-        .foregroundStyle(.blue)
+        BeidHeroHeader(
+          systemImage: "wallet.pass.fill",
+          title: "Connect Your Wallet",
+          subtitle: "beid uses your wallet to sign proofs. This is a stub for now — no real WalletConnect session is created.",
+          tint: DS.Color.actionPrimary
+        )
 
-      Text("Connect Your Wallet")
-        .font(.title2.bold())
+        Spacer()
 
-      Text("beid uses your wallet to sign proofs. This is a stub for now — no real WalletConnect session is created.")
-        .font(.subheadline)
-        .multilineTextAlignment(.center)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 32)
-
-      Spacer()
-
-      Button {
-        coordinator.completeWalletConnect()
-      } label: {
-        Text("Connect Wallet")
-          .font(.headline)
-          .frame(maxWidth: .infinity)
+        BeidPrimaryButton("Connect Wallet", systemImage: "wallet.pass") {
+          coordinator.completeWalletConnect()
+        }
+        .tint(DS.Color.actionPrimary)
+        .padding(.horizontal, DS.Space.pageMargin)
+        .padding(.bottom, DS.Space.xl)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(.blue)
-      .padding(.horizontal, 32)
-      .padding(.bottom, 40)
     }
   }
 }

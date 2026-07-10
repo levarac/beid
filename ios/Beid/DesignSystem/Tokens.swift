@@ -76,6 +76,21 @@ enum DS {
     static let minHitTarget: CGFloat = 44
   }
 
+  // MARK: - Layout
+  //
+  // Readable-width limits for adaptive iPad layouts. Compact width keeps the
+  // screen's existing edge-to-edge treatment; regular width uses these caps.
+  enum Layout {
+    /// Maximum readable width for state screens and their primary CTA.
+    static let stateContentMaxWidth: CGFloat = 600
+    /// Maximum width for collection content in regular horizontal size classes.
+    static let collectionContentMaxWidth: CGFloat = 960
+    /// Minimum proof-card width for regular-width collection grids.
+    static let regularGridCardMinimumWidth: CGFloat = 260
+    /// Minimum proof-card width for compact-width collection grids.
+    static let compactGridCardMinimumWidth: CGFloat = 150
+  }
+
   // MARK: - Font
   //
   // System font (SF Pro) ramp, Dynamic Type compatible. `Font.system` is

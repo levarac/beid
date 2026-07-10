@@ -6,8 +6,16 @@ import SwiftUI
 /// Screen 04 (+04b empty state): Collection home.
 struct CollectionHomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-  private let columns = [GridItem(.adaptive(minimum: 150), spacing: 16)]
+  private var columns: [GridItem] {
+    [GridItem(
+      .adaptive(minimum: horizontalSizeClass == .regular
+        ? DS.Layout.regularGridCardMinimumWidth
+        : DS.Layout.compactGridCardMinimumWidth),
+      spacing: DS.Space.m
+    )]
+  }
 
   var body: some View {
     NavigationStack {
@@ -16,18 +24,22 @@ struct CollectionHomeView: View {
           .ignoresSafeArea()
 
         ScrollView {
-          if coordinator.proofStore.proofs.isEmpty {
-            emptyState
-          } else {
-            LazyVGrid(columns: columns, spacing: 16) {
-              ForEach(coordinator.proofStore.proofs) { proof in
-                Button {
-                  BeidDesign.haptic()
-                  coordinator.openProof(proof)
-                } label: {
-                  ProofCardView(proof: proof)
+          BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
+            VStack(alignment: .leading) {
+              if coordinator.proofStore.proofs.isEmpty {
+                emptyState
+              } else {
+                LazyVGrid(columns: columns, spacing: DS.Space.m) {
+                  ForEach(coordinator.proofStore.proofs) { proof in
+                    Button {
+                      BeidDesign.haptic()
+                      coordinator.openProof(proof)
+                    } label: {
+                      ProofCardView(proof: proof)
+                    }
+                    .buttonStyle(.plain)
+                  }
                 }
-                .buttonStyle(.plain)
               }
             }
           }
@@ -45,14 +57,17 @@ struct CollectionHomeView: View {
           } label: {
             Image(systemName: "person.crop.circle")
           }
+          .accessibilityLabel("Account")
         }
       }
       .safeAreaInset(edge: .bottom) {
-        BeidPrimaryButton("Sense Event", systemImage: "dot.radiowaves.left.and.right") {
-          coordinator.startScan()
+        BeidAdaptiveContent {
+          BeidPrimaryButton("Sense Event", systemImage: "dot.radiowaves.left.and.right") {
+            coordinator.startScan()
+          }
+          .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+          .padding(.vertical, DS.Space.s)
         }
-        .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
-        .padding(.vertical, 12)
         .background(.bar)
       }
       .sheet(isPresented: $coordinator.accountSheetPresented) {
