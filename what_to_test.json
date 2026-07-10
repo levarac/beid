@@ -1,0 +1,10 @@
+[
+  {
+    "language": "ja",
+    "text": "初回のTestFlight配信です。オンボーディング（ウォレット接続のスタブ→Bluetooth権限の許可）を進めて、ホーム画面まで到達できることを確認してください。ダークモードでも表示崩れがないか確認してください。"
+  },
+  {
+    "language": "en-US",
+    "text": "This is the first TestFlight build. Please walk through onboarding (wallet-connect stub, then the Bluetooth permission prompt) and confirm you reach the home screen. Also check dark mode for layout issues."
+  }
+]
