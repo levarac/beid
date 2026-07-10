@@ -11,14 +11,18 @@ struct CollectionHomeView: View {
 
   var body: some View {
     NavigationStack {
-      Group {
-        if coordinator.proofStore.proofs.isEmpty {
-          emptyState
-        } else {
-          ScrollView {
+      ZStack {
+        Color(.systemGroupedBackground)
+          .ignoresSafeArea()
+
+        ScrollView {
+          if coordinator.proofStore.proofs.isEmpty {
+            emptyState
+          } else {
             LazyVGrid(columns: columns, spacing: 16) {
               ForEach(coordinator.proofStore.proofs) { proof in
                 Button {
+                  BeidDesign.haptic()
                   coordinator.openProof(proof)
                 } label: {
                   ProofCardView(proof: proof)
@@ -26,31 +30,35 @@ struct CollectionHomeView: View {
                 .buttonStyle(.plain)
               }
             }
-            .padding()
           }
         }
+        .contentMargins(.horizontal, BeidDesign.Spacing.screenHorizontal, for: .scrollContent)
+        .contentMargins(.vertical, 18, for: .scrollContent)
       }
       .navigationTitle("My Proofs")
+      .navigationBarTitleDisplayMode(.large)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button {
+            BeidDesign.haptic()
             coordinator.accountSheetPresented = true
           } label: {
             Image(systemName: "person.crop.circle")
           }
         }
-        ToolbarItem(placement: .bottomBar) {
-          Button {
-            coordinator.startScan()
-          } label: {
-            Label("Sense Event", systemImage: "dot.radiowaves.left.and.right")
-          }
-          .buttonStyle(.borderedProminent)
-          .tint(.blue)
+      }
+      .safeAreaInset(edge: .bottom) {
+        BeidPrimaryButton("Sense Event", systemImage: "dot.radiowaves.left.and.right") {
+          coordinator.startScan()
         }
+        .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+        .padding(.vertical, 12)
+        .background(.bar)
       }
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
+          .presentationDetents([.medium])
+          .presentationDragIndicator(.visible)
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         ItemDetailView(proof: proof)
@@ -59,20 +67,20 @@ struct CollectionHomeView: View {
   }
 
   private var emptyState: some View {
-    VStack(spacing: 16) {
-      Spacer()
-      Image(systemName: "tray")
-        .font(.system(size: 48))
-        .foregroundStyle(.secondary)
-      Text("No proofs yet")
-        .font(.title3.weight(.semibold))
-      Text("Tap Sense Event to start collecting proof of attendance automatically.")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 40)
-      Spacer()
-      Spacer()
+    VStack {
+      Spacer(minLength: 96)
+      BeidPanel {
+        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+          BeidGlyph(systemImage: "tray", tint: .secondary, size: 64)
+          Text("No proofs yet")
+            .font(.title2.weight(.semibold))
+          Text("Tap Sense Event to start collecting proof of attendance automatically.")
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      Spacer(minLength: 140)
     }
   }
 }

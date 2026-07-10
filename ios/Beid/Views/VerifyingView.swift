@@ -15,36 +15,37 @@ struct VerifyingView: View {
   }
 
   var body: some View {
-    VStack(spacing: 24) {
-      Spacer()
+    BeidStatusLayout(
+      systemImage: "person.2.wave.2.fill",
+      title: "Verifying proof",
+      message: "Nearby peers are confirming your attendance automatically.",
+      accessory: {
+      BeidPanel {
+        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+          Text(event.name)
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
 
-      ProgressView(value: progress)
-        .progressViewStyle(.circular)
-        .controlSize(.large)
-        .tint(.blue)
-
-      Text("Verifying proof automatically")
-        .font(.title3.weight(.semibold))
-
-      Text("\(peersVerified) of \(event.totalPeersToVerify) peers verified")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-
-      Text(event.name)
-        .font(.footnote)
-        .foregroundStyle(.tertiary)
-
-      Spacer()
-
+          ProgressView(value: progress) {
+            Text("\(peersVerified) of \(event.totalPeersToVerify) peers verified")
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+          }
+          .tint(.accentColor)
+        }
+      }
+      },
+      footer: {
       // Demo-mode-only affordance so the 06d Signal Lost screen stays
       // reachable even though the golden DemoEvent path completes
       // successfully.
       Button("Simulate Signal Lost", role: .destructive) {
+        BeidDesign.haptic(.medium)
         coordinator.sensingCoordinator.simulateSignalLost()
       }
       .font(.footnote)
-      .padding(.bottom, 24)
-    }
+      }
+    )
   }
 }
 

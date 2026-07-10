@@ -17,10 +17,14 @@ struct ScanFlowView: View {
   var body: some View {
     NavigationStack {
       content
+        .animation(BeidDesign.Animation.soft, value: sensing.phase)
         .toolbar {
           ToolbarItem(placement: .topBarLeading) {
-            Button("Cancel") {
+            Button {
+              BeidDesign.haptic()
               coordinator.finishScan()
+            } label: {
+              Label("Cancel", systemImage: "xmark")
             }
           }
         }

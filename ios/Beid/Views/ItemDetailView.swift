@@ -16,47 +16,42 @@ struct ItemDetailView: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 20) {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .fill(
-            LinearGradient(
-              colors: [Color.blue.opacity(0.7), Color.purple.opacity(0.6)],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-          .frame(height: 160)
+      VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+        BeidPanel {
+          VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+            HStack(alignment: .top) {
+              BeidGlyph(systemImage: "seal.fill", tint: .accentColor, size: 72)
+              Spacer()
+              Label("Verified", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.green)
+            }
 
-        Text(proof.eventName)
-          .font(.title.bold())
+            Text(proof.eventName)
+              .font(.title.weight(.semibold))
+              .fixedSize(horizontal: false, vertical: true)
 
-        Text(Self.dateFormatter.string(from: proof.date))
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
+            Text(Self.dateFormatter.string(from: proof.date))
+              .font(.body)
+              .foregroundStyle(.secondary)
+          }
+        }
 
-        Divider()
-
-        VStack(alignment: .leading, spacing: 12) {
-          detailRow(label: "Method", value: proof.method)
-          detailRow(label: "Peers verified", value: "\(proof.peersVerified)")
-          detailRow(label: "Status", value: "Verified", valueColor: .green)
+        BeidPanel {
+          VStack(alignment: .leading, spacing: 14) {
+            Text("Proof")
+              .font(.headline)
+            BeidMetricRow(label: "Method", value: proof.method)
+            BeidMetricRow(label: "Peers verified", value: "\(proof.peersVerified)")
+            BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(.green))
+          }
         }
       }
-      .padding()
+      .padding(BeidDesign.Spacing.screenHorizontal)
     }
+    .background(Color(.systemGroupedBackground))
     .navigationTitle("Proof Detail")
     .navigationBarTitleDisplayMode(.inline)
-  }
-
-  private func detailRow(label: String, value: String, valueColor: Color = .primary) -> some View {
-    HStack {
-      Text(label)
-        .foregroundStyle(.secondary)
-      Spacer()
-      Text(value)
-        .foregroundStyle(valueColor)
-        .fontWeight(.semibold)
-    }
   }
 }
 

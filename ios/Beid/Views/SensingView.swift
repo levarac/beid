@@ -6,48 +6,51 @@ import SwiftUI
 /// Screen 05: Scan screen with a radar animation, "Sensing automatically".
 struct SensingView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var pulse = false
 
   var body: some View {
-    VStack(spacing: 32) {
-      Spacer()
+    BeidScreen {
+      VStack(spacing: BeidDesign.Spacing.section) {
+        radar
 
-      ZStack {
-        ForEach(0..<3, id: \.self) { index in
-          Circle()
-            .stroke(Color.blue.opacity(0.4), lineWidth: 2)
-            .scaleEffect(pulse ? 1.6 : 0.4)
-            .opacity(pulse ? 0 : 0.8)
-            .animation(
-              .easeOut(duration: 1.8)
-                .repeatForever(autoreverses: false)
-                .delay(Double(index) * 0.5),
-              value: pulse
-            )
+        VStack(spacing: BeidDesign.Spacing.compact) {
+          Text("Sensing automatically")
+            .font(.title2.weight(.semibold))
+            .multilineTextAlignment(.center)
+
+          Text("Keep beid open nearby to collect proof of attendance.")
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .lineSpacing(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        Circle()
-          .fill(Color.blue)
-          .frame(width: 64, height: 64)
-        Image(systemName: "dot.radiowaves.left.and.right")
-          .foregroundStyle(.white)
-          .font(.title2)
       }
-      .frame(width: 200, height: 200)
-
-      Text("Sensing automatically")
-        .font(.title3.weight(.semibold))
-
-      Text("Keep beid open nearby to collect proof of attendance.")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 40)
-
-      Spacer()
-      Spacer()
     }
-    .onAppear { pulse = true }
+    .onAppear { pulse = !reduceMotion }
     .accessibilityIdentifier("scan.sensing")
+  }
+
+  private var radar: some View {
+    ZStack {
+      ForEach(0..<3, id: \.self) { index in
+        Circle()
+          .stroke(.tint.opacity(0.34), lineWidth: 2)
+          .scaleEffect(pulse ? 1.6 : 0.48)
+          .opacity(pulse ? 0 : 0.75)
+          .animation(reduceMotion ? nil : pulseAnimation(delay: Double(index) * 0.5), value: pulse)
+      }
+
+      BeidGlyph(systemImage: "dot.radiowaves.left.and.right", tint: .accentColor, size: 86)
+    }
+    .frame(width: 210, height: 210)
+  }
+
+  private func pulseAnimation(delay: Double) -> Animation {
+    .easeOut(duration: 1.8)
+      .repeatForever(autoreverses: false)
+      .delay(delay)
   }
 }
 

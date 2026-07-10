@@ -9,44 +9,24 @@ struct BluetoothOffView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
   var body: some View {
-    VStack(spacing: 24) {
-      Spacer()
-
-      Image(systemName: "antenna.radiowaves.left.and.right.slash")
-        .font(.system(size: 56))
-        .foregroundStyle(.orange)
-
-      Text("Bluetooth Is Off")
-        .font(.title2.bold())
-
-      Text("beid needs Bluetooth to sense nearby events automatically. Turn it on in Settings, then come back here.")
-        .font(.subheadline)
-        .multilineTextAlignment(.center)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 32)
-
-      Spacer()
-
+    BeidStatusLayout(
+      systemImage: "antenna.radiowaves.left.and.right.slash",
+      title: "Bluetooth Is Off",
+      message: "beid needs Bluetooth to sense nearby events automatically. Turn it on in Settings, then come back here.",
+      tint: .orange,
+      footer: {
       VStack(spacing: 12) {
-        Button {
+        BeidPrimaryButton("Open Settings", systemImage: "gearshape") {
           coordinator.sensingCoordinator.reset()
           UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
-        } label: {
-          Text("Open Settings")
-            .font(.headline)
-            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.blue)
 
-        Button("I've Enabled It") {
+        BeidSecondaryButton(title: "I've Enabled It") {
           coordinator.evaluateBluetoothState()
         }
-        .font(.subheadline)
       }
-      .padding(.horizontal, 32)
-      .padding(.bottom, 40)
-    }
+      }
+    )
   }
 }
 

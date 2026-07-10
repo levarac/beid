@@ -9,27 +9,23 @@ struct VerifiedView: View {
   let peersVerified: Int
 
   var body: some View {
-    VStack(spacing: 24) {
-      Spacer()
-
-      Image(systemName: "checkmark.circle.fill")
-        .font(.system(size: 64))
-        .foregroundStyle(.green)
-
-      Text("Verified")
-        .font(.title.bold())
-
-      Text(event.name)
-        .font(.title3)
-        .foregroundStyle(.secondary)
-
-      Text("\(peersVerified) peers verified")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-
-      Spacer()
-      Spacer()
-    }
+    BeidStatusLayout(
+      systemImage: "checkmark.circle.fill",
+      title: "Verified",
+      message: "Your attendance proof is ready to be added to your collection.",
+      tint: .green,
+      accessory: {
+      BeidPanel {
+        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+          Text(event.name)
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
+          BeidMetricRow(label: "Peers verified", value: "\(peersVerified)")
+          BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(.green))
+        }
+      }
+      }
+    )
   }
 }
 

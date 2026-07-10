@@ -8,35 +8,24 @@ struct WelcomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
   var body: some View {
-    VStack(spacing: 24) {
-      Spacer()
+    BeidScreen {
+      BeidHeroHeader(
+        systemImage: "checkmark.seal.fill",
+        title: "beid",
+        subtitle: "Prove you were there. Automatically."
+      )
 
-      Image(systemName: "checkmark.seal.fill")
-        .font(.system(size: 72))
-        .foregroundStyle(.blue)
-
-      Text("beid")
-        .font(.largeTitle.bold())
-
-      Text("Prove you were there. Automatically.")
-        .font(.title3)
-        .multilineTextAlignment(.center)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 32)
-
-      Spacer()
-
-      Button {
-        coordinator.beginOnboarding()
-      } label: {
-        Text("Get Started")
-          .font(.headline)
-          .frame(maxWidth: .infinity)
+      BeidPanel {
+        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+          BeidMetricRow(label: "Sensing", value: "Nearby events")
+          BeidMetricRow(label: "Proof", value: "Automatic")
+          BeidMetricRow(label: "Privacy", value: "On-device first")
+        }
       }
-      .buttonStyle(.borderedProminent)
-      .tint(.blue)
-      .padding(.horizontal, 32)
-      .padding(.bottom, 40)
+    } footer: {
+      BeidPrimaryButton("Get Started", systemImage: "arrow.right") {
+        coordinator.beginOnboarding()
+      }
     }
   }
 }
