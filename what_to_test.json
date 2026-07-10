@@ -1,10 +1,10 @@
 [
   {
     "language": "ja",
-    "text": "初回のTestFlight配信です。オンボーディング（ウォレット接続のスタブ→Bluetooth権限の許可）を進めて、ホーム画面まで到達できることを確認してください。ダークモードでも表示崩れがないか確認してください。"
+    "text": "iPad対応ビルドです。iPad（縦・横両方）で全画面のレイアウトが崩れないこと、iPhoneで従来通り表示されることを確認してください。オンボーディング→ホーム→センシング画面の流れもご確認を。"
   },
   {
     "language": "en-US",
-    "text": "This is the first TestFlight build. Please walk through onboarding (wallet-connect stub, then the Bluetooth permission prompt) and confirm you reach the home screen. Also check dark mode for layout issues."
+    "text": "This build adds iPad support. Please verify layouts on iPad in both portrait and landscape, confirm iPhone still renders as before, and walk onboarding through to the sensing screen."
   }
 ]
