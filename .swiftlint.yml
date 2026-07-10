@@ -1,0 +1,124 @@
+# beid design-system enforcement (DESIGN.md §16).
+#
+# Config-only for now: not wired into CI yet. Scoped to the app target;
+# DesignSystem/ is the one place raw values are allowed, so it is excluded
+# from every custom rule.
+#
+# Known-debt handling: pre-contract scaffold violations are recorded in the
+# checked-in, violation-level baseline TEMPLATE `lint/baseline.template.json`
+# (paths rooted at a __REPO_ROOT__ placeholder — SwiftLint 0.65 baselines
+# store absolute paths, so the raw file is not portable across checkouts).
+# `scripts/lint.sh` materializes the gitignored `.swiftlint-baseline.json`
+# for the current checkout and then runs swiftlint. The baseline suppresses
+# exactly the recorded violations and nothing else — new violations in old
+# files, and any violation in new files, are reported. Regenerating the
+# TEMPLATE to absorb new violations is FORBIDDEN (DESIGN.md §16); it may
+# only be regenerated to shrink after a migration.
+#
+# Pinned SwiftLint version: 0.65.0 (Homebrew). Regexes and the baseline
+# format are verified against this version; when bumping, re-run the
+# lint-fixtures/ proof pair (see lint-fixtures/README.md).
+#
+# Run with: scripts/lint.sh  (materializes the baseline, then lints)
+#
+# The lint layer intentionally catches the common ~80% of violations;
+# the long tail (values via CGFloat()/expressions, negative paddings,
+# cornerSize:, withAnimation blocks, Transaction(animation:), raw values in
+# string literals, direct asset-color shorthands) is review-level — see
+# DESIGN.md §16.
+
+included:
+  - ios/Beid
+
+excluded:
+  - ios/Vendor
+  - ios/BeidTests
+
+baseline: .swiftlint-baseline.json
+
+# Design-contract rules only; default style rules are out of scope here.
+# The literal `custom_rules` entry activates all custom rules.
+only_rules:
+  - custom_rules
+
+# match_kinds excludes comments and string literals on every rule.
+custom_rules:
+  no_hardcoded_swiftui_color:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+    name: "No hardcoded SwiftUI colors"
+    message: "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets)."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: 'Color\s*\(\s*(red\s*:|hue\s*:|white\s*:|hex\s*:|uiColor\s*:|UIColor|\.sRGB|\.system\w+)|\bColor\.init\s*\(|\bColor\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown|clear|primary|secondary|accentColor)\b|\.(tint|foregroundStyle|foregroundColor|fill|background|stroke|border|accentColor)\(\s*\.(white|black|gray|blue|green|orange|pink|purple|yellow|red|mint|teal|cyan|indigo|brown|primary|secondary|tertiary|quaternary|accentColor)\b|\.shadow\(\s*color\s*:\s*\.|\bcolors\s*:\s*\[\s*\.'
+
+  no_hardcoded_swiftui_font:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+    name: "No hardcoded SwiftUI fonts"
+    message: "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift)."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\bFont\.system\s*\(|\bFont\.custom\s*\(|\.font\(\s*Font\.|\.font\(\s*\.(largeTitle|title\b|title2|title3|headline|subheadline|body|callout|footnote|caption\b|caption2|system|custom)'
+
+  no_hardcoded_spacing:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+    name: "No hardcoded spacing"
+    message: "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals)."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\.padding\(\s*([2-9]\d*|1\d+)|\.padding\(\s*\.\w+\s*,\s*([2-9]\d*|1\d+)|\b(spacing|horizontalSpacing|verticalSpacing)\s*:\s*([2-9]\d*|1\d+)|Spacer\(\s*minLength\s*:\s*([2-9]\d*|1\d+)'
+
+  no_hardcoded_radius:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+    name: "No hardcoded corner radius"
+    message: "Use DS.Radius.*."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\bcornerRadius\s*:\s*\d|\.cornerRadius\(\s*\d'
+
+  no_hardcoded_animation:
+    included: "ios/Beid/.*\\.swift"
+    excluded:
+      - "ios/Beid/DesignSystem/.*"
+    name: "No hardcoded animation curves"
+    message: "Use DS.Motion.*."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '(withAnimation|\.animation)\(\s*\.(easeIn|easeOut|easeInOut|linear|spring|snappy|bouncy|smooth|interactiveSpring|interpolatingSpring|default)\b|\bAnimation\.(easeIn|easeOut|easeInOut|linear|spring|snappy|bouncy|smooth|interactiveSpring|interpolatingSpring)\b'

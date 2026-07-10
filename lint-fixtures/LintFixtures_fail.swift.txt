@@ -1,0 +1,33 @@
+// Lint fixture — every marked line MUST be flagged (DESIGN.md §16).
+// Stored as .swift.txt so neither the compiler nor a normal lint run sees
+// it; the proof run (lint-fixtures/README.md) copies it to a .swift path
+// under ios/Beid/ and expects one violation per FAIL comment.
+
+import SwiftUI
+
+struct LintFixturesFail: View {
+  var body: some View {
+    VStack(spacing: 12) { // FAIL no_hardcoded_spacing
+      Text("Sensing")
+        .font(.title3) // FAIL no_hardcoded_swiftui_font
+        .font(Font.body) // FAIL no_hardcoded_swiftui_font
+        .foregroundStyle(.orange) // FAIL no_hardcoded_swiftui_color
+        .padding(16) // FAIL no_hardcoded_spacing
+      Text(verbatim: String(describing: Font.custom("Marker Felt", size: 12))) // FAIL no_hardcoded_swiftui_font
+      Spacer(minLength: 24) // FAIL no_hardcoded_spacing
+      RoundedRectangle(cornerRadius: 8) // FAIL no_hardcoded_radius
+        .fill(Color.blue) // FAIL no_hardcoded_swiftui_color
+        .shadow(color: .black, radius: 2) // FAIL no_hardcoded_swiftui_color
+      LinearGradient(colors: [.purple, .pink], startPoint: .top, endPoint: .bottom) // FAIL no_hardcoded_swiftui_color
+        .cornerRadius(4) // FAIL no_hardcoded_radius
+      Circle()
+        .fill(Color(hue: 0.5, saturation: 0.6, brightness: 0.9)) // FAIL no_hardcoded_swiftui_color
+    }
+    .animation(.easeInOut, value: UUID()) // FAIL no_hardcoded_animation
+    .onAppear {
+      withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {} // FAIL no_hardcoded_animation
+    }
+    .background(Color(.systemBackground)) // FAIL no_hardcoded_swiftui_color
+    .tint(.blue) // FAIL no_hardcoded_swiftui_color
+  }
+}
