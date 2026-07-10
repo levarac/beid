@@ -36,7 +36,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.levarac.beid
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
-        DEVELOPMENT_TEAM: ""
+        DEVELOPMENT_TEAM: 4WQE792998
         CODE_SIGN_STYLE: Automatic
   BeidTests:
     type: bundle.unit-test

@@ -280,7 +280,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					F1A2076DAC925B3FCE29679E = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 4WQE792998;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -389,7 +389,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 4WQE792998;
 				INFOPLIST_FILE = Beid/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -545,7 +545,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 4WQE792998;
 				INFOPLIST_FILE = Beid/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
