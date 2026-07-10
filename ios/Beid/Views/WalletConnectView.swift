@@ -23,10 +23,16 @@ struct WalletConnectView: View {
 
         Spacer()
 
-        BeidPrimaryButton("Connect Wallet", systemImage: "wallet.pass") {
-          coordinator.completeWalletConnect()
+        VStack(spacing: DS.Space.s) {
+          BeidPrimaryButton("Connect Wallet", systemImage: "wallet.pass") {
+            coordinator.completeWalletConnect()
+          }
+          .tint(DS.Color.actionPrimary)
+
+          BeidSecondaryButton(title: "Enter event code instead") {
+            coordinator.skipWalletForEventCode()
+          }
         }
-        .tint(DS.Color.actionPrimary)
         .padding(.horizontal, DS.Space.pageMargin)
         .padding(.bottom, DS.Space.xl)
       }

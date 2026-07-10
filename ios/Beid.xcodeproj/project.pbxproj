@@ -14,6 +14,7 @@
 		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
 		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
+		2AAE343C266A4EF91A080FFD /* EventCodeEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
 		36423294C98FFAE0217CA7CD /* VerifyingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */; };
 		388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C637EA719C58481853B15B91 /* LocalizationContractTests.swift */; };
@@ -29,6 +30,7 @@
 		7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2169FFDF6767C427D481ED17 /* ItemDetailView.swift */; };
 		85803786C31CF2D533B655EE /* DemoEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */; };
 		875CDB76FD829588D665A7A1 /* Proof.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394E6F2E97311572D2BAED89 /* Proof.swift */; };
+		8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */; };
 		8BDF56249613D448E3FEB5EF /* AppScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812C170544758548D2A4DCC /* AppScreen.swift */; };
 		903C47844113AADA5701273B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */; };
 		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
@@ -39,6 +41,7 @@
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
 		BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00B88F37F569ED386AB057A8 /* Assets.xcassets */; };
 		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
+		CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */; };
 		CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */; };
 		D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6660B6477CE489C244F95FED /* ProofCardView.swift */; };
 		DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */ = {isa = PBXBuildFile; productRef = 85120383F176FDA459C0D6E8 /* Barnard */; };
@@ -99,16 +102,19 @@
 		B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingMode.swift; sourceTree = "<group>"; };
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
+		C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinError.swift; sourceTree = "<group>"; };
 		C58EEA07A80440D53597D515 /* ProofCollectedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCollectedView.swift; sourceTree = "<group>"; };
 		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyingView.swift; sourceTree = "<group>"; };
 		E1737F0C115BD86F89789893 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
+		E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinTests.swift; sourceTree = "<group>"; };
 		E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlagTests.swift; sourceTree = "<group>"; };
 		EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinatorTests.swift; sourceTree = "<group>"; };
 		F079463118A0C298F6C6BCEA /* Colors.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Colors.xcassets; sourceTree = "<group>"; };
 		F4EF63521813A9A66345C1DA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidAdaptiveContent.swift; sourceTree = "<group>"; };
+		FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeEntryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -183,6 +189,7 @@
 			isa = PBXGroup;
 			children = (
 				5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */,
+				C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */,
 				B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */,
 				394E6F2E97311572D2BAED89 /* Proof.swift */,
 			);
@@ -206,6 +213,7 @@
 				A80A94378B0116CC976961AC /* BluetoothOffView.swift */,
 				1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */,
 				0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */,
+				FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */,
 				B07FD0202575465DCF463745 /* EventFoundView.swift */,
 				2169FFDF6767C427D481ED17 /* ItemDetailView.swift */,
 				6660B6477CE489C244F95FED /* ProofCardView.swift */,
@@ -250,6 +258,7 @@
 		DA293E8A0771B440603690A0 /* BeidTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */,
 				C637EA719C58481853B15B91 /* LocalizationContractTests.swift */,
 				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
 				9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */,
@@ -418,6 +427,8 @@
 				419B39D19457938733AE8093 /* CollectionHomeView.swift in Sources */,
 				85803786C31CF2D533B655EE /* DemoEvent.swift in Sources */,
 				2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */,
+				2AAE343C266A4EF91A080FFD /* EventCodeEntryView.swift in Sources */,
+				8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */,
 				E95026757980944AB4C933FE /* EventFoundView.swift in Sources */,
 				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
 				CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */,
@@ -444,6 +455,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */,
 				388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */,
 				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
 				ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */,

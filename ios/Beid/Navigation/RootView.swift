@@ -13,6 +13,8 @@ struct RootView: View {
         WelcomeView()
       case .walletConnect:
         WalletConnectView()
+      case .eventCodeEntry:
+        EventCodeEntryView()
       case .bluetoothPermission:
         BluetoothPermissionView()
       case .bluetoothOff:

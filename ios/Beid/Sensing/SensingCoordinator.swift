@@ -15,6 +15,10 @@ final class SensingCoordinator: ObservableObject {
   @Published private(set) var phase: ScanPhase = .idle
   @Published private(set) var isScanning = false
   @Published private(set) var isAdvertising = false
+  /// Event code most recently confirmed by `joinEvent(_:)`, if any. Feeds
+  /// `startSensing(eventCode:)` once the user has joined manually via
+  /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
+  @Published private(set) var joinedEventCode: String?
 
   /// Fired once a proof is minted, before `phase` flips to `.collected`.
   var onProofCollected: ((Proof) -> Void)?
@@ -64,7 +68,20 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  func startSensing(eventCode: String = "beid-demo-event", demoEvent: DemoEvent = .sample) {
+  /// Calls the vendored Barnard SDK's join API (`BarnardEngine.joinEvent`)
+  /// with a manually entered event code — the wallet-optional fallback path
+  /// (`EventCodeEntryView`) for choosing which event to sense, since there
+  /// is no BLE auto-discovery yet. Returns whether the code took effect.
+  @discardableResult
+  func joinEvent(_ code: String) -> Bool {
+    engine.joinEvent(code)
+    let confirmed = engine.getCurrentEventCode()
+    joinedEventCode = confirmed
+    return confirmed == code
+  }
+
+  func startSensing(eventCode: String? = nil, demoEvent: DemoEvent = .sample) {
+    let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
     phase = .sensing
     if useDemoEventMode {
       runDemoSequence(demoEvent: demoEvent, stepDelayNanos: demoStepDelayNanos)
