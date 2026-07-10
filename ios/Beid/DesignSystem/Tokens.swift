@@ -30,9 +30,11 @@ enum DS {
     /// Neutral primary action. CTA tint on screens that have no motif
     /// accent; also the intended app-level accent once views migrate.
     static let actionPrimary = SwiftUI.Color(.actionPrimary)
-    /// Active sensing/proximity signal. The single accent of the scan flow.
+    /// Live sensing signal. The single accent of sensing screens
+    /// (SensingView, EventFoundView, VerifyingView) — DESIGN.md §5 map.
     static let signalActive = SwiftUI.Color(.signalActive)
-    /// Degraded/lost signal and other recoverable warnings.
+    /// Degraded/lost signal. The single accent of recovery screens
+    /// (SignalLostView, BluetoothOffView); not for generic warnings.
     static let signalWarning = SwiftUI.Color(.signalWarning)
     /// Verified proof artifacts: seals, seal success, ceremony moments.
     static let proofSeal = SwiftUI.Color(.proofSeal)
@@ -114,6 +116,12 @@ enum DS {
     static let proofResolve = Animation.spring(response: 0.6, dampingFraction: 0.8)
     /// Period of one sensing radar pulse cycle (SensingView).
     static let sensingPulsePeriod: TimeInterval = 1.8
+    /// The sanctioned sensing-pulse animation (one ring's expand+fade,
+    /// repeating). Views use this token; per-ring stagger MAY add
+    /// `.delay(_:)` derived from `sensingPulsePeriod`.
+    static let sensingPulse = Animation
+      .easeOut(duration: sensingPulsePeriod)
+      .repeatForever(autoreverses: false)
   }
 
   // MARK: - Artwork
@@ -124,7 +132,7 @@ enum DS {
     /// Per-proof Event Artifact gradient, derived from `Proof.gradientSeed`.
     /// The only sanctioned source of `Color(hue:)` in the app.
     static func proofCardGradient(seed: Int) -> LinearGradient {
-      let hue = Double(abs(seed) % 360) / 360.0
+      let hue = Double(seed.magnitude % 360) / 360.0
       return LinearGradient(
         colors: [
           SwiftUI.Color(hue: hue, saturation: 0.6, brightness: 0.9),

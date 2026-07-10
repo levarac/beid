@@ -12,11 +12,13 @@ criteria applied to UI PRs.
 - **SHOULD** — default; deviation needs a stated reason in the PR.
 - **MAY** — explicitly allowed.
 
-**Proposal tags.** Brand-defining values in this document are marked
-`PROPOSAL — Ken ratification pending`. Those values (tone thesis wording,
-motif names, palette hex anchors, type ramp choice) are the author's proposal
-and may be replaced wholesale in review. Structural and enforcement rules
-carry no tag and are not pending.
+**Proposal tags.** Brand-defining values start as
+`PROPOSAL — Ken ratification pending` and lose the tag when ratified. On
+2026-07-10 Ken ratified the palette direction, the tone thesis, all four
+motifs, and the locale set (see §C decision log). Remaining `PROPOSAL` tags
+mark the values still genuinely undecided (type ramp choice, exact secondary
+hex values, CTA sentence-case grandfathering). Structural and enforcement
+rules carry no tag and are not pending.
 
 ---
 
@@ -34,10 +36,10 @@ DESIGN.md documents **rules**; repo artifacts hold **values**.
 
 Note on the Figma board: the mock (branded "SenseProof", an earlier name)
 anchors a light minimal look with a blue, Bluetooth-centric accent. This
-document's palette proposal (§5) deviates from that blue deliberately; both
-are `PROPOSAL — Ken ratification pending`, and ratification decides. Layout
-and flow in the Figma are authoritative reference; its colors are not
-tokens.
+document's palette (§5) deviates from that blue deliberately; Ken resolved
+the tension **against** blue on 2026-07-10 (deep ink + quiet teal + violet
+seal adopted). Layout and flow in the Figma are authoritative reference;
+its colors are not tokens.
 
 - MUST: When this document and `Tokens.swift` disagree on a value, the code
   is right and this document has drifted — fix the document, and treat the
@@ -49,7 +51,7 @@ tokens.
 
 ## 1. Product Design Thesis
 
-`PROPOSAL — Ken ratification pending` (wording)
+Ratified (Ken, 2026-07-10) — thesis wording adopted as-is.
 
 > Beid is a quiet field instrument for remembering who was really there.
 > It senses, verifies, and seals encounters at real-world events. It should
@@ -69,9 +71,12 @@ fully coherent to a user who never connects a wallet.
 
 ## 2. Non-Negotiables
 
-Rules 1–4 are mechanically greppable and lint-backed (`.swiftlint.yml`);
-rules 5–12 are review-level checks against running UI, previews, or PR
-metadata — auditable, but not by grep alone.
+Rules 1–4 are lint-backed for their *common surface forms*
+(`.swiftlint.yml` catches the direct call-site patterns — roughly the 80%
+case); values reached through expressions, wrappers, or indirection are
+review-level (§16 lists the known long tail). Rules 5–12 are review-level
+checks against running UI, previews, or PR metadata — auditable, but not
+by grep alone.
 
 1. MUST: All colors in Views come from `DS.Color.*`. FORBIDDEN: `Color(red:`,
    `Color(hue:`, `Color(hex:`, `Color.white/.black/.blue/...`, shorthand
@@ -104,7 +109,8 @@ metadata — auditable, but not by grep alone.
 Adjectives don't constrain agents; named motifs do. Each motif names a
 recurring visual idea, where it applies, and what it must not decay into.
 
-`PROPOSAL — Ken ratification pending` (motif names and definitions)
+Ratified (Ken, 2026-07-10) — all four motif names and definitions adopted
+as-is.
 
 | Motif | Meaning | UI use | Avoid |
 | --- | --- | --- | --- |
@@ -166,8 +172,11 @@ Rules:
 
 ## 5. Color
 
-`PROPOSAL — Ken ratification pending` (hex anchors; roles and structure are
-not pending)
+Direction ratified (Ken, 2026-07-10): deep ink background + quiet teal
+(`#18C7A7` family) + violet proof seal — the Figma Minimal v4 blue is
+resolved **against**. Exact secondary hex values (surfaces, text, hairline,
+`actionPrimary`, dark variants) remain
+`PROPOSAL — Ken ratification pending`; roles and structure are not pending.
 
 | Token | Light | Dark | Role | Allowed use | Forbidden use |
 | --- | --- | --- | --- | --- | --- |
@@ -483,8 +492,9 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 ## 15. Copywriting Voice
 
 Language model (Ken decision, 2026-07-10): the app's primary language is
-**English**, localized to ~5 major languages including Japanese via String
-Catalogs — the full localization process lives in `AGENTS.md`.
+**English**, localized via String Catalogs to the confirmed locale set
+`en` (source) + `ja`, `zh-Hans`, `es`, `fr` — the full localization process
+lives in `AGENTS.md`.
 
 - MUST: All copy is authored in English as the source language; the voice,
   vocabulary, and forbidden-term rules below are defined against English.
@@ -494,6 +504,11 @@ Catalogs — the full localization process lives in `AGENTS.md`.
   forbidden).
 - MUST: User-facing strings go through the String Catalog — no hardcoded
   display strings that bypass localization.
+- Per-locale term mapping, Japanese (Ken decision, 2026-07-10): the UI terms
+  are **検知** for "Sensing" and **証明** for "Proof". Do NOT "correct" these
+  to the team-internal vocabulary (センシング / 証) — plain-user readability
+  wins over internal jargon. Future translators: this is a deliberate,
+  ratified choice, not an oversight.
 
 - Vocabulary: "proof", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A proof is **collected** or **sealed**, never "minted",
@@ -525,7 +540,7 @@ Copy-paste this into every UI PR description and check each item:
 ## Design Compliance Checklist (DESIGN.md §16)
 
 - [ ] No hardcoded colors, fonts, spacing, radii, or durations in Views (DS.* only).
-- [ ] `swiftlint --config .swiftlint.yml` passes. ("Passes" = zero violations; files under the TEMP-DEBT exclusions in `.swiftlint.yml` are skipped by the config itself. I did not add any file to a TEMP-DEBT list, and if I migrated a debt file I removed/narrowed its exclusion.)
+- [ ] `swiftlint lint --config .swiftlint.yml --no-cache` passes. ("Passes" = zero violations beyond the checked-in `.swiftlint-baseline.json`. I did NOT regenerate the baseline to absorb new violations; if I migrated a scaffold file I regenerated it to shrink and said so in the PR.)
 - [ ] All icon-only buttons have accessibility labels.
 - [ ] All interactive targets are ≥ 44×44 pt.
 - [ ] Light and dark previews attached (screenshots or #Preview variants).
@@ -539,16 +554,32 @@ Copy-paste this into every UI PR description and check each item:
 
 Enforcement layers:
 
-1. **Grep-level**: `.swiftlint.yml` encodes five custom rules —
+1. **Lint-level**: `.swiftlint.yml` encodes five custom rules —
    `no_hardcoded_swiftui_color`, `no_hardcoded_swiftui_font`,
    `no_hardcoded_spacing`, `no_hardcoded_radius`,
    `no_hardcoded_animation` — activated via `only_rules: [custom_rules]`,
    with `match_kinds` excluding comments/strings. Known scaffold debt is
-   handled by per-rule TEMP-DEBT path exclusions (`ios/Beid/Views/.*`)
-   that may only shrink as migration lands. (Config only for now; CI
-   wiring is a follow-up.) Not lint-covered and therefore review-level:
-   decorative-symbol size (§12), the one-accent map (§5), hit targets,
-   Dynamic Type behavior, and raw values inside string literals.
+   recorded in the checked-in, violation-level baseline
+   `.swiftlint-baseline.json`: the baseline suppresses exactly those
+   recorded violations and nothing else, so any new violation — in an old
+   file or a new one — is reported. **"No new violations" is computed as:**
+   `swiftlint lint --config .swiftlint.yml --no-cache` reports zero
+   violations (the config's `baseline:` key applies the baseline
+   automatically). Regenerating the baseline to absorb new violations is
+   FORBIDDEN; it may only be regenerated to *shrink* after a migration
+   lands. Lint fixtures proving pass/fail behavior live in
+   `lint-fixtures/` (see its README for the proof-run procedure).
+   (Config only for now; CI wiring is a follow-up.)
+
+   The lint layer intentionally catches the common ~80% of violations —
+   direct call-site literals. The long tail is **review-level MUST**, not
+   lint-covered: values laundered through expressions or variables
+   (`CGFloat(16)`, `let pad = 20`), negative paddings, `cornerSize:`,
+   animation curves inside `withAnimation { }` bodies or
+   `Transaction(animation:)`, raw color/value strings inside string
+   literals, decorative-symbol size (§12), the one-accent map (§5), hit
+   targets, and Dynamic Type behavior. An honest 80% lint layer plus
+   review beats a broken 100% regex.
 2. **Review-level**: the checklist above.
 3. **Exception process**: a PR that must deviate states
    `DesignException: <reason>` in its description and links the decision;
@@ -591,6 +622,8 @@ Currently empty — no custom assets exist yet. First assets to produce
 | 2026-07-09 | Token structure (DS namespace + xcassets), lint rules, section skeleton | Adopted (structural) |
 | 2026-07-10 | Revision round 1 (GPT-Pro audit): lint activation via `only_rules: [custom_rules]` + TEMP-DEBT model, 5 lint rules, `DS.Artwork.proofCardGradient`, accent map + `actionPrimary`, Liquid Glass availability wording, illustrations/custom-symbol split, English-primary copy (String Catalogs) | Adopted (structural; PROPOSAL tags unchanged) |
 | 2026-07 (Figma MTG) | Organizer mode, organizer thresholds, event-code rescue check-in, pre-check-in status transitions flagged as future surfaces (Koya Onodera comments on Minimal v4) | Recorded — out of scope for this slice, see §11 |
+| 2026-07-10 | **Ken ratification**: (1) palette direction — deep ink + quiet teal (`#18C7A7` family) + violet proof seal; Figma Minimal v4 blue resolved against; (2) tone thesis "quiet field instrument" + all four motifs (Encounter Field / Proof Seal / Ledger Trace / Event Artifact) as-is; (3) locale set `en` + `ja`/`zh-Hans`/`es`/`fr`; (4) Japanese UI terms 検知 (Sensing) / 証明 (Proof), not team-internal センシング/証 | Ratified — PROPOSAL tags removed on these four areas; exact secondary hexes, type ramp, CTA sentence-case grandfathering remain PROPOSAL |
+| 2026-07-10 | Revision round 2 (GPT-Pro re-audit, final): TEMP-DEBT path exclusions replaced by checked-in violation-level baseline (`.swiftlint-baseline.json`); regex FP fixes (blanket `.shadow(color:)` scoped, `minLength:` scoped to `Spacer(`, bare `duration:` branch dropped) and FN fixes (`Font.custom`, `.font(Font.…)`); long-tail patterns explicitly demoted to review-level MUST (§16); pinned SwiftLint + `lint-fixtures/` proof pair; `abs(seed)` → `seed.magnitude`; `DS.Motion.sensingPulse` sanctioned token; §2 lint claim scoped to common surface forms | Adopted (enforcement) |
 
 ### D. Deprecated patterns
 
