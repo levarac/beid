@@ -11,8 +11,8 @@ struct CollectionHomeView: View {
   private var columns: [GridItem] {
     [GridItem(
       .adaptive(minimum: horizontalSizeClass == .regular
-        ? BeidAdaptiveLayout.regularGridCardMinimumWidth
-        : BeidAdaptiveLayout.compactGridCardMinimumWidth),
+        ? DS.Layout.regularGridCardMinimumWidth
+        : DS.Layout.compactGridCardMinimumWidth),
       spacing: DS.Space.m
     )]
   }
@@ -24,7 +24,7 @@ struct CollectionHomeView: View {
           .ignoresSafeArea()
 
         ScrollView {
-          BeidAdaptiveContent(regularMaxWidth: BeidAdaptiveLayout.collectionContentMaxWidth) {
+          BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
             VStack(alignment: .leading) {
               if coordinator.proofStore.proofs.isEmpty {
                 emptyState

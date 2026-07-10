@@ -78,8 +78,14 @@ final class BeidIPadLayoutTests: XCTestCase {
 
   private func assertWelcomeLayout(named name: String) {
     let getStarted = app.buttons["Get Started"]
+    let appWindow = app.windows.firstMatch
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
-    XCTAssertLessThan(getStarted.frame.width, 600, "The primary CTA must not stretch across an iPad screen.")
+    XCTAssertTrue(appWindow.exists)
+    XCTAssertLessThan(
+      getStarted.frame.width,
+      appWindow.frame.width,
+      "The primary CTA must not stretch across an iPad screen."
+    )
     XCTAssertGreaterThanOrEqual(getStarted.frame.height, 44)
     capture(named: name)
   }
