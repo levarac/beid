@@ -24,6 +24,11 @@ targets:
       path: Beid/App/Info.plist
       properties:
         UILaunchScreen: {}
+        # Release template (TestFlight/App Store): standard crypto only
+        # (HTTPS/BLE) => exempt, skips the per-upload export-compliance question.
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
         NSBluetoothPeripheralUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
         UISupportedInterfaceOrientations:
@@ -38,6 +43,9 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: 4WQE792998
         CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   BeidTests:
     type: bundle.unit-test
     platform: iOS
