@@ -5,18 +5,21 @@
 # from every custom rule.
 #
 # Known-debt handling: pre-contract scaffold violations are recorded in the
-# checked-in, violation-level baseline `.swiftlint-baseline.json` (generated
-# with `swiftlint lint --write-baseline .swiftlint-baseline.json`). The
-# baseline suppresses exactly those recorded violations and nothing else —
-# new violations in old files, and any violation in new files, are reported.
-# Regenerating the baseline to absorb new violations is FORBIDDEN
-# (DESIGN.md §16); it may only be regenerated to shrink after a migration.
+# checked-in, violation-level baseline TEMPLATE `lint/baseline.template.json`
+# (paths rooted at a __REPO_ROOT__ placeholder — SwiftLint 0.65 baselines
+# store absolute paths, so the raw file is not portable across checkouts).
+# `scripts/lint.sh` materializes the gitignored `.swiftlint-baseline.json`
+# for the current checkout and then runs swiftlint. The baseline suppresses
+# exactly the recorded violations and nothing else — new violations in old
+# files, and any violation in new files, are reported. Regenerating the
+# TEMPLATE to absorb new violations is FORBIDDEN (DESIGN.md §16); it may
+# only be regenerated to shrink after a migration.
 #
 # Pinned SwiftLint version: 0.65.0 (Homebrew). Regexes and the baseline
 # format are verified against this version; when bumping, re-run the
 # lint-fixtures/ proof pair (see lint-fixtures/README.md).
 #
-# Run with: swiftlint lint --config .swiftlint.yml --no-cache
+# Run with: scripts/lint.sh  (materializes the baseline, then lints)
 #
 # The lint layer intentionally catches the common ~80% of violations;
 # the long tail (values via CGFloat()/expressions, negative paddings,

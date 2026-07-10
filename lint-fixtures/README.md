@@ -20,14 +20,17 @@ From the repo root:
 ```sh
 cp lint-fixtures/LintFixtures_pass.swift ios/Beid/LintFixtures_pass.swift
 cp lint-fixtures/LintFixtures_fail.swift.txt ios/Beid/LintFixtures_fail.swift
-swiftlint lint --config .swiftlint.yml --no-cache
+scripts/lint.sh
 rm ios/Beid/LintFixtures_pass.swift ios/Beid/LintFixtures_fail.swift
 ```
+
+(`scripts/lint.sh` materializes the per-checkout baseline from
+`lint/baseline.template.json` before linting — see DESIGN.md §16.)
 
 Expected output: violations only in `LintFixtures_fail.swift`, one per
 `// FAIL` comment (count them: `grep -c '// FAIL' lint-fixtures/LintFixtures_fail.swift.txt`),
 and none in `LintFixtures_pass.swift` or any other file (scaffold debt is
-absorbed by the checked-in `.swiftlint-baseline.json`).
+absorbed by the baseline materialized from `lint/baseline.template.json`).
 
 Run this after editing any custom-rule regex or bumping the pinned
 SwiftLint version.

@@ -7,3 +7,6 @@ DerivedData/
 local.properties
 *.keystore
 .env
+
+# Materialized per-checkout by scripts/lint.sh from lint/baseline.template.json
+.swiftlint-baseline.json

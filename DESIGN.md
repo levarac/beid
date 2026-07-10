@@ -540,7 +540,7 @@ Copy-paste this into every UI PR description and check each item:
 ## Design Compliance Checklist (DESIGN.md §16)
 
 - [ ] No hardcoded colors, fonts, spacing, radii, or durations in Views (DS.* only).
-- [ ] `swiftlint lint --config .swiftlint.yml --no-cache` passes. ("Passes" = zero violations beyond the checked-in `.swiftlint-baseline.json`. I did NOT regenerate the baseline to absorb new violations; if I migrated a scaffold file I regenerated it to shrink and said so in the PR.)
+- [ ] `scripts/lint.sh` passes. ("Passes" = zero violations beyond the checked-in baseline template `lint/baseline.template.json`. I did NOT regenerate the template to absorb new violations; if I migrated a scaffold file I regenerated it to shrink and said so in the PR.)
 - [ ] All icon-only buttons have accessibility labels.
 - [ ] All interactive targets are ≥ 44×44 pt.
 - [ ] Light and dark previews attached (screenshots or #Preview variants).
@@ -559,17 +559,19 @@ Enforcement layers:
    `no_hardcoded_spacing`, `no_hardcoded_radius`,
    `no_hardcoded_animation` — activated via `only_rules: [custom_rules]`,
    with `match_kinds` excluding comments/strings. Known scaffold debt is
-   recorded in the checked-in, violation-level baseline
-   `.swiftlint-baseline.json`: the baseline suppresses exactly those
-   recorded violations and nothing else, so any new violation — in an old
-   file or a new one — is reported. **"No new violations" is computed as:**
-   `swiftlint lint --config .swiftlint.yml --no-cache` reports zero
-   violations (the config's `baseline:` key applies the baseline
-   automatically). Regenerating the baseline to absorb new violations is
-   FORBIDDEN; it may only be regenerated to *shrink* after a migration
-   lands. Lint fixtures proving pass/fail behavior live in
+   recorded in the checked-in, violation-level baseline **template**
+   `lint/baseline.template.json` (SwiftLint 0.65 baselines store absolute
+   paths, so the template roots them at a `__REPO_ROOT__` placeholder;
+   `scripts/lint.sh` materializes the gitignored
+   `.swiftlint-baseline.json` for the current checkout and then runs
+   swiftlint). The baseline suppresses exactly those recorded violations
+   and nothing else, so any new violation — in an old file or a new one —
+   is reported. **"No new violations" is computed as:** `scripts/lint.sh`
+   reports zero violations. Regenerating the template to absorb new
+   violations is FORBIDDEN; it may only be regenerated to *shrink* after
+   a migration lands. Lint fixtures proving pass/fail behavior live in
    `lint-fixtures/` (see its README for the proof-run procedure).
-   (Config only for now; CI wiring is a follow-up.)
+   (Config + script only for now; CI wiring is a follow-up.)
 
    The lint layer intentionally catches the common ~80% of violations —
    direct call-site literals. The long tail is **review-level MUST**, not
@@ -624,6 +626,7 @@ Currently empty — no custom assets exist yet. First assets to produce
 | 2026-07 (Figma MTG) | Organizer mode, organizer thresholds, event-code rescue check-in, pre-check-in status transitions flagged as future surfaces (Koya Onodera comments on Minimal v4) | Recorded — out of scope for this slice, see §11 |
 | 2026-07-10 | **Ken ratification**: (1) palette direction — deep ink + quiet teal (`#18C7A7` family) + violet proof seal; Figma Minimal v4 blue resolved against; (2) tone thesis "quiet field instrument" + all four motifs (Encounter Field / Proof Seal / Ledger Trace / Event Artifact) as-is; (3) locale set `en` + `ja`/`zh-Hans`/`es`/`fr`; (4) Japanese UI terms 検知 (Sensing) / 証明 (Proof), not team-internal センシング/証 | Ratified — PROPOSAL tags removed on these four areas; exact secondary hexes, type ramp, CTA sentence-case grandfathering remain PROPOSAL |
 | 2026-07-10 | Revision round 2 (GPT-Pro re-audit, final): TEMP-DEBT path exclusions replaced by checked-in violation-level baseline (`.swiftlint-baseline.json`); regex FP fixes (blanket `.shadow(color:)` scoped, `minLength:` scoped to `Spacer(`, bare `duration:` branch dropped) and FN fixes (`Font.custom`, `.font(Font.…)`); long-tail patterns explicitly demoted to review-level MUST (§16); pinned SwiftLint + `lint-fixtures/` proof pair; `abs(seed)` → `seed.magnitude`; `DS.Motion.sensingPulse` sanctioned token; §2 lint claim scoped to common surface forms | Adopted (enforcement) |
+| 2026-07-10 | Revision round 3 (Fable audit): SwiftLint 0.65 baselines store absolute paths, so the checked-in baseline is replaced by a portable template (`lint/baseline.template.json`, `__REPO_ROOT__` placeholder) + `scripts/lint.sh` that materializes the gitignored per-checkout `.swiftlint-baseline.json` and runs swiftlint; shrink-only policy governs the template | Adopted (enforcement) |
 
 ### D. Deprecated patterns
 
