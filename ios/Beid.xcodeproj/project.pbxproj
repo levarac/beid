@@ -31,6 +31,7 @@
 		A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */; };
 		AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C21DF46165889A3C206F0C /* ProofStore.swift */; };
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
+		BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00B88F37F569ED386AB057A8 /* Assets.xcassets */; };
 		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
 		CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */; };
 		D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6660B6477CE489C244F95FED /* ProofCardView.swift */; };
@@ -52,6 +53,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00B88F37F569ED386AB057A8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanFlowView.swift; sourceTree = "<group>"; };
 		0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionHomeView.swift; sourceTree = "<group>"; };
 		093E82F02CAFD9439A1F6661 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -183,6 +185,7 @@
 		A8B68A7A5D14742390F795EC /* Beid */ = {
 			isa = PBXGroup;
 			children = (
+				00B88F37F569ED386AB057A8 /* Assets.xcassets */,
 				6B26B23A64184D96C012A5B6 /* DesignSystem.swift */,
 				2F6F38F46CD774BC65D25626 /* App */,
 				4E2CC145A16B282147941B12 /* Models */,
@@ -256,6 +259,7 @@
 			buildConfigurationList = BF0ED7C5CCC17943CF16FC11 /* Build configuration list for PBXNativeTarget "Beid" */;
 			buildPhases = (
 				5052D36531BFCFBB581197DF /* Sources */,
+				3930DDD287FC4C7A7AAC443D /* Resources */,
 				D2B0575915CE46D4757C6675 /* Frameworks */,
 			);
 			buildRules = (
@@ -307,6 +311,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3930DDD287FC4C7A7AAC443D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		5052D36531BFCFBB581197DF /* Sources */ = {
@@ -389,12 +404,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				INFOPLIST_FILE = Beid/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
@@ -545,12 +562,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				INFOPLIST_FILE = Beid/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
