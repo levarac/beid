@@ -1,0 +1,18 @@
+<!--
+  Machine-drafted translation — needs human review before ship.
+  (Android string resources have no built-in needs_review state like Xcode's
+  String Catalogs; this comment is the equivalent marker per AGENTS.md's
+  localization process. See android/README.md "Localization".)
+-->
+<resources>
+    <string name="app_name">beid</string>
+
+    <string name="event_join_title">イベントに参加</string>
+    <string name="event_join_code_label">イベントコード</string>
+    <string name="event_join_button">イベントに参加</string>
+    <string name="event_join_status_idle">主催者から共有されたイベントコードを入力してください。</string>
+    <string name="event_join_status_requesting_permission">Bluetoothの許可をリクエスト中…</string>
+    <string name="event_join_status_sensing">近くの相手を検知中…</string>
+    <string name="event_join_status_permission_denied">近くの相手を検知するには、beidにBluetoothの許可が必要です。設定アプリで許可してください。</string>
+    <string name="event_join_open_settings">設定を開く</string>
+</resources>

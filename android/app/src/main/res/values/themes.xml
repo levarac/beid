@@ -1,0 +1,5 @@
+<resources>
+    <!-- Window-level theme only; all in-app styling comes from ui/theme/Theme.kt
+         (Compose MaterialTheme). This just sets the pre-Compose window chrome. -->
+    <style name="Theme.Beid" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

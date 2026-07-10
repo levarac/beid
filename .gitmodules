@@ -1,0 +1,3 @@
+[submodule "android/vendor/barnard"]
+	path = android/vendor/barnard
+	url = https://github.com/levarac/barnard.git

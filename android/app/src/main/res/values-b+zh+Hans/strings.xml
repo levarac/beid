@@ -1,0 +1,16 @@
+<!--
+  Machine-drafted translation — needs human review before ship.
+  See android/README.md "Localization".
+-->
+<resources>
+    <string name="app_name">beid</string>
+
+    <string name="event_join_title">加入活动</string>
+    <string name="event_join_code_label">活动代码</string>
+    <string name="event_join_button">加入活动</string>
+    <string name="event_join_status_idle">请输入主办方分享的活动代码。</string>
+    <string name="event_join_status_requesting_permission">正在请求蓝牙权限…</string>
+    <string name="event_join_status_sensing">正在感知附近的用户…</string>
+    <string name="event_join_status_permission_denied">beid 需要蓝牙权限才能感知附近的用户。请在设置中授予权限。</string>
+    <string name="event_join_open_settings">打开设置</string>
+</resources>
