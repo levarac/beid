@@ -1,0 +1,16 @@
+<!--
+  Machine-drafted translation — needs human review before ship.
+  See android/README.md "Localization".
+-->
+<resources>
+    <string name="app_name">beid</string>
+
+    <string name="event_join_title">Unirse a un evento</string>
+    <string name="event_join_code_label">Código del evento</string>
+    <string name="event_join_button">Unirse al evento</string>
+    <string name="event_join_status_idle">Introduce el código del evento que te compartió el organizador.</string>
+    <string name="event_join_status_requesting_permission">Solicitando permiso de Bluetooth…</string>
+    <string name="event_join_status_sensing">Detectando personas cercanas…</string>
+    <string name="event_join_status_permission_denied">beid necesita permiso de Bluetooth para detectar a las personas cercanas. Ábrelo en Ajustes para concederlo.</string>
+    <string name="event_join_open_settings">Abrir Ajustes</string>
+</resources>
