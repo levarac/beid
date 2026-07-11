@@ -11,6 +11,7 @@ struct WelcomeView: View {
     BeidScreen {
       BeidHeroHeader(
         systemImage: "checkmark.seal.fill",
+        assetImage: "welcome-mark",
         title: "beid",
         subtitle: "Prove you were there. Automatically."
       )

@@ -42,7 +42,12 @@ struct SensingView: View {
           .animation(reduceMotion ? nil : pulseAnimation(delay: Double(index) * 0.5), value: pulse)
       }
 
-      BeidGlyph(systemImage: "dot.radiowaves.left.and.right", tint: .accentColor, size: 86)
+      BeidGlyph(
+        systemImage: "dot.radiowaves.left.and.right",
+        assetImage: "encounter-field-pulse",
+        tint: .accentColor,
+        size: 86
+      )
     }
     .frame(width: 210, height: 210)
   }

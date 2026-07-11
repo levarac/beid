@@ -86,7 +86,7 @@ struct CollectionHomeView: View {
       Spacer(minLength: 96)
       BeidPanel {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
-          BeidGlyph(systemImage: "tray", tint: .secondary, size: 64)
+          BeidGlyph(systemImage: "tray", assetImage: "encounter-field-empty", tint: .secondary, size: 64)
           Text("No proofs yet")
             .font(DS.Font.sectionTitle)
           Text("Tap Sense Event to start collecting proof of attendance automatically.")

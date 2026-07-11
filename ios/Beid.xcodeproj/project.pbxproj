@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		04FAF61220EF2EDF7B54F01F /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */; };
+		05FF89CD532B46703B2E9C8D /* Illustrations.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */; };
 		064174C3328B39801BB488FE /* SensingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAD458D67D1864749F00726 /* SensingCoordinator.swift */; };
 		069813A870D327358882201A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
 		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
@@ -125,6 +126,7 @@
 		F079463118A0C298F6C6BCEA /* Colors.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Colors.xcassets; sourceTree = "<group>"; };
 		F4EF63521813A9A66345C1DA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidAdaptiveContent.swift; sourceTree = "<group>"; };
+		FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Illustrations.xcassets; sourceTree = "<group>"; };
 		FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeEntryView.swift; sourceTree = "<group>"; };
 		FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -215,6 +217,7 @@
 			children = (
 				F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */,
 				F079463118A0C298F6C6BCEA /* Colors.xcassets */,
+				FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */,
 				B2A0822EAE8F243702AA4F1C /* Tokens.swift */,
 			);
 			path = DesignSystem;
@@ -418,6 +421,7 @@
 			files = (
 				BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */,
 				3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */,
+				05FF89CD532B46703B2E9C8D /* Illustrations.xcassets in Resources */,
 				903C47844113AADA5701273B /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

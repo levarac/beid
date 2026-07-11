@@ -11,6 +11,7 @@ struct ProofCollectedView: View {
   var body: some View {
     BeidStatusLayout(
       systemImage: "seal.fill",
+      assetImage: "proof-seal-mark",
       title: "Proof Collected",
       message: "Added to your collection.",
       tint: .accentColor,
