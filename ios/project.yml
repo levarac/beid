@@ -12,6 +12,16 @@ packages:
     # root. Vendored verbatim from levarac/barnard@54385d2 into
     # Vendor/Barnard — see native/ios/README.md "Barnard SDK dependency".
     path: Vendor/Barnard
+  WalletConnect:
+    # Reown (formerly WalletConnect Inc) — the legacy
+    # WalletConnect/WalletConnectSwiftV2 repo is archived; reown-swift is
+    # the maintained successor. Only the low-level "WalletConnect" product
+    # (Sign + Pairing) is used, not ReownAppKit, to avoid pulling in
+    # Yttrium/CoinbaseWalletSDK surface that doesn't fit beid's
+    # WalletConnect-login-no-account-abstraction ruling. Validated by
+    # spike/walletconnect-native (commit a22d0f4) on Simulator.
+    url: https://github.com/reown-com/reown-swift
+    exactVersion: 2.3.0
 targets:
   Beid:
     type: application
@@ -21,6 +31,13 @@ targets:
     dependencies:
       - package: Barnard
         product: Barnard
+      - package: WalletConnect
+        product: WalletConnect
+    entitlements:
+      path: Beid/App/Beid.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.org.levarac.beid
     info:
       path: Beid/App/Info.plist
       properties:
@@ -42,6 +59,9 @@ targets:
         UIBackgroundModes:
           - bluetooth-central
           - bluetooth-peripheral
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - beid
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.levarac.beid

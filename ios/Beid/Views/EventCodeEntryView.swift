@@ -36,6 +36,7 @@ struct EventCodeEntryView: View {
               .submitLabel(.join)
               .focused($codeFieldFocused)
               .tint(DS.Color.actionPrimary)
+              .accessibilityIdentifier("Event code")
               .padding(DS.Space.m)
               .background(
                 RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous)

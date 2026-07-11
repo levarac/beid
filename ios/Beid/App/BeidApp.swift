@@ -11,6 +11,9 @@ struct BeidApp: App {
     WindowGroup {
       RootView()
         .environmentObject(coordinator)
+        .onOpenURL { url in
+          ReownWalletConnectClient.shared.handle(url: url)
+        }
     }
   }
 }

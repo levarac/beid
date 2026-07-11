@@ -29,8 +29,8 @@ final class OnboardingFlagTests: XCTestCase {
     coordinator.beginOnboarding()
     XCTAssertEqual(coordinator.screen, .walletConnect)
 
-    coordinator.completeWalletConnect()
-    XCTAssertNotNil(coordinator.walletAddress)
+    coordinator.completeWalletConnect(address: "0xREALADDRESS")
+    XCTAssertEqual(coordinator.walletAddress, "0xREALADDRESS")
     XCTAssertEqual(coordinator.screen, .bluetoothPermission)
   }
 
@@ -42,13 +42,5 @@ final class OnboardingFlagTests: XCTestCase {
     coordinator.beginOnboarding()
     XCTAssertEqual(coordinator.screen, .bluetoothPermission)
     XCTAssertNil(coordinator.walletAddress)
-  }
-
-  func testWalletConnectStubProducesDistinctFakeAddresses() {
-    let a = WalletConnectStub.fakeConnect()
-    let b = WalletConnectStub.fakeConnect()
-    XCTAssertTrue(a.hasPrefix("0x"))
-    XCTAssertEqual(a.count, 42)
-    XCTAssertNotEqual(a, b)
   }
 }
