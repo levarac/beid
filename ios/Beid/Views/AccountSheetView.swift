@@ -45,7 +45,7 @@ struct AccountSheetView: View {
         Section {
           Button("Disconnect Wallet", role: .destructive) {
             BeidDesign.haptic(.medium)
-            coordinator.walletAddress = nil
+            coordinator.disconnectWallet()
           }
           .disabled(coordinator.walletAddress == nil)
         }
@@ -60,6 +60,9 @@ struct AccountSheetView: View {
         }
       }
     }
+    .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
+      WalletConnectSheetView()
+    }
   }
 
   private func truncated(_ address: String) -> String {
@@ -67,6 +70,41 @@ struct AccountSheetView: View {
     let prefix = address.prefix(6)
     let suffix = address.suffix(4)
     return "\(prefix)...\(suffix)"
+  }
+}
+
+/// Sheet wrapper around `WalletConnectPairingView` for the Account sheet's
+/// "Connect Wallet" action. Unlike `WalletConnectView` (onboarding), success
+/// here just sets `walletAddress` and dismisses — it does not advance
+/// `coordinator.screen`. No `secondaryAction`; Cancel in the toolbar is the
+/// escape hatch instead.
+private struct WalletConnectSheetView: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
+
+  var body: some View {
+    NavigationStack {
+      BeidAdaptiveContent {
+        VStack(spacing: DS.Space.l) {
+          Spacer()
+          WalletConnectPairingView { address in
+            coordinator.walletAddress = address
+            coordinator.walletConnectSheetPresented = false
+          }
+          .padding(.horizontal, DS.Space.pageMargin)
+          Spacer()
+        }
+        .padding(.bottom, DS.Space.xl)
+      }
+      .navigationTitle("Connect Wallet")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel", role: .cancel) {
+            coordinator.walletConnectSheetPresented = false
+          }
+        }
+      }
+    }
   }
 }
 

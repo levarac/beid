@@ -13,6 +13,7 @@ final class AppCoordinator: ObservableObject {
   @Published var scanPresented = false
   @Published var selectedProof: Proof?
   @Published var accountSheetPresented = false
+  @Published var walletConnectSheetPresented = false
 
   let onboardingMode = OnboardingMode.current
   let proofStore = ProofStore()
@@ -36,8 +37,10 @@ final class AppCoordinator: ObservableObject {
     }
   }
 
-  func completeWalletConnect() {
-    walletAddress = WalletConnectStub.fakeConnect()
+  /// `address` is supplied by the real WalletConnect (Reown) pairing flow
+  /// (`WalletConnectPairingView`) once a session settles.
+  func completeWalletConnect(address: String) {
+    walletAddress = address
     screen = .bluetoothPermission
   }
 
@@ -81,8 +84,21 @@ final class AppCoordinator: ObservableObject {
     screen = bluetoothMonitor.isPoweredOff ? .bluetoothOff : .home
   }
 
+  /// Presents the real WalletConnect pairing flow as a sheet over the
+  /// Account sheet — see `AccountSheetView`'s `walletConnectSheetPresented`
+  /// binding.
   func connectWalletFromAccountSheet() {
-    walletAddress = WalletConnectStub.fakeConnect()
+    walletConnectSheetPresented = true
+  }
+
+  /// Clears the connected address and resets `ReownWalletConnectClient`'s
+  /// local state back to `.idle`, so reopening the pairing sheet shows the
+  /// "Connect Wallet" button again instead of a stale `.connected` screen.
+  /// Does not tear down the underlying WalletConnect session with the
+  /// wallet (session teardown is out of scope for this slice).
+  func disconnectWallet() {
+    walletAddress = nil
+    ReownWalletConnectClient.shared.reset()
   }
 
   // MARK: - Scan flow
