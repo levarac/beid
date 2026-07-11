@@ -57,6 +57,34 @@
         }
       }
     },
+    "Connect wallet instead" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Conectar billetera en su lugar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Connecter un portefeuille à la place"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "代わりにウォレットを接続"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "改为连接钱包"
+          }
+        }
+      }
+    },
     "Enter Event Code" : {
       "localizations" : {
         "es" : {

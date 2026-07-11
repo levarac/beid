@@ -47,6 +47,13 @@ final class AppCoordinator: ObservableObject {
     screen = .eventCodeEntry
   }
 
+  /// The way back out of `EventCodeEntryView` for a user who doesn't
+  /// actually have a code — this is a root-switch screen (not a modal
+  /// push), so there is no system back affordance without this.
+  func returnToWalletConnect() {
+    screen = .walletConnect
+  }
+
   /// Validates and joins the manually entered event code
   /// (`EventCodeEntryView`), calling into the vendored Barnard SDK's join
   /// API via `SensingCoordinator`. On success, advances onboarding exactly

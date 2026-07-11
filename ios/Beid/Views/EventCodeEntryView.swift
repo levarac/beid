@@ -10,7 +10,6 @@ import SwiftUI
 /// `completeWalletConnect()` does.
 struct EventCodeEntryView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
-  @Environment(\.dismiss) private var dismiss
   @State private var code = ""
   @State private var errorMessage: LocalizedStringKey?
   @FocusState private var codeFieldFocused: Bool
@@ -36,6 +35,7 @@ struct EventCodeEntryView: View {
               .autocorrectionDisabled()
               .submitLabel(.join)
               .focused($codeFieldFocused)
+              .tint(DS.Color.actionPrimary)
               .padding(DS.Space.m)
               .background(
                 RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous)
@@ -63,10 +63,17 @@ struct EventCodeEntryView: View {
 
         Spacer()
 
-        BeidPrimaryButton("Join Event", systemImage: "checkmark.circle", action: submit)
+        VStack(spacing: DS.Space.s) {
+          BeidPrimaryButton("Join Event", systemImage: "checkmark.circle", action: submit)
+            .tint(DS.Color.actionPrimary)
+
+          BeidSecondaryButton(title: "Connect wallet instead") {
+            coordinator.returnToWalletConnect()
+          }
           .tint(DS.Color.actionPrimary)
-          .padding(.horizontal, DS.Space.pageMargin)
-          .padding(.bottom, DS.Space.xl)
+        }
+        .padding(.horizontal, DS.Space.pageMargin)
+        .padding(.bottom, DS.Space.xl)
       }
     }
     .onAppear { codeFieldFocused = true }

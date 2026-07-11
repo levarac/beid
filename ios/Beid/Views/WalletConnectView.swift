@@ -32,6 +32,7 @@ struct WalletConnectView: View {
           BeidSecondaryButton(title: "Enter event code instead") {
             coordinator.skipWalletForEventCode()
           }
+          .tint(DS.Color.actionPrimary)
         }
         .padding(.horizontal, DS.Space.pageMargin)
         .padding(.bottom, DS.Space.xl)
