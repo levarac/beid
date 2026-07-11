@@ -1,6 +1,34 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Ask the event organizer for the code. This joins the event directly, without connecting a wallet." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Pide el código al organizador del evento. Esto te une al evento directamente, sin conectar una billetera."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Demandez le code à l'organisateur de l'événement. Cela vous permet de rejoindre l'événement directement, sans connecter de portefeuille."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "イベントコードは主催者に確認してください。ウォレットを接続せずに、直接イベントに参加できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "向活动主办方索取代码。这样可以直接加入活动，无需连接钱包。"
+          }
+        }
+      }
+    },
     "Automatic" : {
       "localizations" : {
         "es" : {
@@ -29,6 +57,147 @@
         }
       }
     },
+    "Connect wallet instead" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Conectar billetera en su lugar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Connecter un portefeuille à la place"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "代わりにウォレットを接続"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "改为连接钱包"
+          }
+        }
+      }
+    },
+    "Enter Event Code" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Introducir código de evento"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Saisir le code de l'événement"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "イベントコードを入力"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "输入活动代码"
+          }
+        }
+      }
+    },
+    "Enter an event code to continue. Ask the event organizer for it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Introduce un código de evento para continuar. Pídeselo al organizador del evento."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Saisissez un code d'événement pour continuer. Demandez-le à l'organisateur de l'événement."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "続けるにはイベントコードを入力してください。コードは主催者に確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "请输入活动代码以继续。请向活动主办方索取。"
+          }
+        }
+      }
+    },
+    "Enter event code instead" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Introducir código del evento en su lugar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Saisir le code de l'événement à la place"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "代わりにイベントコードを入力"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "改为输入活动代码"
+          }
+        }
+      }
+    },
+    "Event code" : {
+      "comment" : "Label for the text field where the user types the alphanumeric code for the event they want to join.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Código del evento"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Code de l'événement"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "イベントコード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "活动代码"
+          }
+        }
+      }
+    },
     "Get Started" : {
       "localizations" : {
         "es" : {
@@ -53,6 +222,34 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "开始使用"
+          }
+        }
+      }
+    },
+    "Join Event" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Unirse al evento"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Rejoindre l'événement"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "イベントに参加"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "加入活动"
           }
         }
       }
@@ -250,6 +447,63 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "beid"
+          }
+        }
+      }
+    },
+    "beid couldn't join that event. Check the code and try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "beid no pudo unirse a ese evento. Comprueba el código e inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "beid n'a pas pu rejoindre cet événement. Vérifiez le code et réessayez."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "beidはそのイベントに参加できませんでした。コードを確認してもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "beid 无法加入该活动。请检查代码后重试。"
+          }
+        }
+      }
+    },
+    "e.g. ETHTOKYO2026" : {
+      "comment" : "Placeholder shown in the empty event-code text field. Keep the invented example code (ETHTOKYO2026) as-is; translate only the localized equivalent of \"e.g.\".",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "p. ej. ETHTOKYO2026"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "p. ex. ETHTOKYO2026"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "例: ETHTOKYO2026"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "例如：ETHTOKYO2026"
           }
         }
       }

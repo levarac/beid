@@ -9,6 +9,7 @@ import Foundation
 enum AppScreen: Equatable {
   case welcome
   case walletConnect
+  case eventCodeEntry
   case bluetoothPermission
   case bluetoothOff
   case home

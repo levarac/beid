@@ -41,6 +41,33 @@ final class AppCoordinator: ObservableObject {
     screen = .bluetoothPermission
   }
 
+  /// Wallet-optional fallback from `WalletConnectView`'s secondary action:
+  /// join an event by manually entered code instead of connecting a wallet.
+  func skipWalletForEventCode() {
+    screen = .eventCodeEntry
+  }
+
+  /// The way back out of `EventCodeEntryView` for a user who doesn't
+  /// actually have a code — this is a root-switch screen (not a modal
+  /// push), so there is no system back affordance without this.
+  func returnToWalletConnect() {
+    screen = .walletConnect
+  }
+
+  /// Validates and joins the manually entered event code
+  /// (`EventCodeEntryView`), calling into the vendored Barnard SDK's join
+  /// API via `SensingCoordinator`. On success, advances onboarding exactly
+  /// where `completeWalletConnect()` does, without ever setting
+  /// `walletAddress`.
+  @discardableResult
+  func joinEvent(code rawCode: String) -> EventCodeJoinError? {
+    let trimmed = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return .emptyCode }
+    guard sensingCoordinator.joinEvent(trimmed) else { return .joinFailed }
+    screen = .bluetoothPermission
+    return nil
+  }
+
   func requestBluetoothPermission() {
     bluetoothMonitor.start()
     // Give CoreBluetooth's delegate callback a beat to land before deciding.
