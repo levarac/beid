@@ -115,29 +115,41 @@ fun EventJoinScreen(coordinator: EventJoinCoordinator) {
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = BeidTheme.colors.textPrimary,
                         unfocusedTextColor = BeidTheme.colors.textPrimary,
+                        errorTextColor = BeidTheme.colors.textPrimary,
                         focusedContainerColor = BeidTheme.colors.surfaceRaised,
                         unfocusedContainerColor = BeidTheme.colors.surfaceRaised,
+                        errorContainerColor = BeidTheme.colors.surfaceRaised,
+                        // iOS's EventCodeEntryView never varies the field's own border/label/
+                        // cursor color on error — only the message below it changes — so the
+                        // error variants mirror the unfocused/normal ones instead of Material3's
+                        // stock red, keeping this control visually identical to iOS on error.
                         focusedBorderColor = BeidTheme.colors.actionPrimary,
                         unfocusedBorderColor = BeidTheme.colors.strokeHairline,
-                        errorBorderColor = BeidTheme.colors.signalWarning,
+                        errorBorderColor = BeidTheme.colors.strokeHairline,
+                        errorLabelColor = BeidTheme.colors.textSecondary,
                         cursorColor = BeidTheme.colors.actionPrimary,
+                        errorCursorColor = BeidTheme.colors.actionPrimary,
+                        errorSupportingTextColor = BeidTheme.colors.textPrimary,
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 fieldError?.let { error ->
+                    // iOS renders this row in DS.Color.textPrimary (plain ink), not a warning
+                    // accent — DESIGN.md §5's accent map reserves signalWarning for BLE
+                    // signal-loss recovery screens, and a validation/join error isn't that.
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
                     ) {
                         Text(
                             text = "⚠",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = BeidTheme.colors.signalWarning,
+                            color = BeidTheme.colors.textPrimary,
                         )
                         Text(
                             text = error.message(),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = BeidTheme.colors.signalWarning,
+                            color = BeidTheme.colors.textPrimary,
                         )
                     }
                 }
@@ -267,14 +279,14 @@ private fun EventJoinFieldErrorPreview(error: EventJoinFieldError) {
                 singleLine = true,
                 shape = RoundedCornerShape(BeidRadius.control),
                 colors = OutlinedTextFieldDefaults.colors(
-                    errorBorderColor = BeidTheme.colors.signalWarning,
+                    errorBorderColor = BeidTheme.colors.strokeHairline,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
-                Text(text = "⚠", color = BeidTheme.colors.signalWarning)
-                Text(text = error.message(), color = BeidTheme.colors.signalWarning)
+                Text(text = "⚠", color = BeidTheme.colors.textPrimary)
+                Text(text = error.message(), color = BeidTheme.colors.textPrimary)
             }
         }
 
