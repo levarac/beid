@@ -19,10 +19,10 @@ struct EventFoundView: View {
       BeidPanel {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.compact) {
           Text("Detected event")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .font(DS.Font.supporting)
+            .foregroundStyle(DS.Color.textSecondary)
           Text(event.name)
-            .font(.title2.weight(.semibold))
+            .font(DS.Font.sectionTitle)
             .fixedSize(horizontal: false, vertical: true)
         }
       }

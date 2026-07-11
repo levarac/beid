@@ -20,7 +20,7 @@ struct CollectionHomeView: View {
   var body: some View {
     NavigationStack {
       ZStack {
-        Color(.systemGroupedBackground)
+        DS.Color.surfaceCanvas
           .ignoresSafeArea()
 
         ScrollView {
@@ -88,10 +88,10 @@ struct CollectionHomeView: View {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
           BeidGlyph(systemImage: "tray", tint: .secondary, size: 64)
           Text("No proofs yet")
-            .font(.title2.weight(.semibold))
+            .font(DS.Font.sectionTitle)
           Text("Tap Sense Event to start collecting proof of attendance automatically.")
-            .font(.body)
-            .foregroundStyle(.secondary)
+            .font(DS.Font.body)
+            .foregroundStyle(DS.Color.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
         }
       }

@@ -23,10 +23,11 @@ struct RootView: View {
         CollectionHomeView()
       }
     }
-    .tint(.accentColor)
+    .tint(DS.Color.actionPrimary)
     .animation(BeidDesign.Animation.soft, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
       ScanFlowView(sensing: coordinator.sensingCoordinator)
+        .tint(DS.Color.actionPrimary)
         .presentationBackground(.regularMaterial)
     }
   }

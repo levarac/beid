@@ -1,872 +1,242 @@
 [
-{
-"text": "    static let entrance = SwiftUI.Animation.spring(response: 0.48, dampingFraction: 0.84)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_animation",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 22,
-"character": 35
-},
-"reason": "Use DS.Motion.*.",
-"ruleDescription": "",
-"ruleName": "No hardcoded animation curves",
-"severity": "error"
-}
-},
-{
-"text": "    static let soft = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_animation",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 23,
-"character": 31
-},
-"reason": "Use DS.Motion.*.",
-"ruleDescription": "",
-"ruleName": "No hardcoded animation curves",
-"severity": "error"
-}
-},
-{
-"text": "      Color(.systemGroupedBackground)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 45,
-"character": 7
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "        Spacer(minLength: 20)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 49,
-"character": 9
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "        Spacer(minLength: 20)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 51,
-"character": 9
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "      .padding(.bottom, 28)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 56,
-"character": 7
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "          .font(.largeTitle.weight(.semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 85,
-"character": 11
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.body)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 92,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 93,
-"character": 13
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "        .font(.system(size: size * 0.38, weight: .semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 119,
-"character": 9
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "      HStack(spacing: 8) {",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 142,
-"character": 14
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "      .font(.headline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 148,
-"character": 7
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "        .font(.subheadline.weight(.semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 170,
-"character": 9
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "    HStack(spacing: 12) {",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 188,
-"character": 12
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "        .font(.body.weight(.semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 190,
-"character": 9
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "        .font(.body)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 197,
-"character": 9
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "        .foregroundStyle(.primary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 198,
-"character": 9
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "      .padding(18)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 214,
-"character": 7
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "        .font(.subheadline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 289,
-"character": 9
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "        .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 290,
-"character": 9
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "      Spacer(minLength: 16)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 291,
-"character": 7
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "        .font(.subheadline.weight(.semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-"line": 293,
-"character": 9
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "    .tint(.accentColor)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Navigation/RootView.swift",
-"line": 24,
-"character": 5
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "                .font(.system(.body, design: .monospaced))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/AccountSheetView.swift",
-"line": 20,
-"character": 17
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "                .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/AccountSheetView.swift",
-"line": 21,
-"character": 17
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "      .background(Color(.systemGroupedBackground))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/AccountSheetView.swift",
-"line": 54,
-"character": 19
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "      VStack(spacing: 12) {",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothOffView.swift",
-"line": 18,
-"character": 14
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "        VStack(alignment: .leading, spacing: 14) {",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothPermissionView.swift",
-"line": 25,
-"character": 37
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "  private let columns = [GridItem(.adaptive(minimum: 150), spacing: 16)]",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 10,
-"character": 60
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "        Color(.systemGroupedBackground)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 15,
-"character": 9
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "            LazyVGrid(columns: columns, spacing: 16) {",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 22,
-"character": 41
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "        .padding(.vertical, 12)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 55,
-"character": 9
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "      Spacer(minLength: 96)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 71,
-"character": 7
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.title2.weight(.semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 76,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.body)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 78,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 79,
-"character": 13
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "      Spacer(minLength: 140)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-"line": 83,
-"character": 7
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.subheadline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/EventFoundView.swift",
-"line": 22,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/EventFoundView.swift",
-"line": 23,
-"character": 13
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.title2.weight(.semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/EventFoundView.swift",
-"line": 25,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "    VStack(alignment: .leading, spacing: 12) {",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 16,
-"character": 33
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "          .font(.title3)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 21,
-"character": 11
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "          .foregroundStyle(.green)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 22,
-"character": 11
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "      VStack(alignment: .leading, spacing: 6) {",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 26,
-"character": 35
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "          .font(.headline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 28,
-"character": 11
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "          .font(.subheadline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 33,
-"character": 11
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "          .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 34,
-"character": 11
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "    .padding(16)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_spacing",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
-"line": 41,
-"character": 5
-},
-"reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-"ruleDescription": "",
-"ruleName": "No hardcoded spacing",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.headline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCollectedView.swift",
-"line": 21,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.title2.weight(.semibold))",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/SensingView.swift",
-"line": 19,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.body)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/SensingView.swift",
-"line": 23,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/SensingView.swift",
-"line": 24,
-"character": 13
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.headline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/VerifiedView.swift",
-"line": 21,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "            .font(.headline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/VerifyingView.swift",
-"line": 26,
-"character": 13
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "              .font(.subheadline)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/VerifyingView.swift",
-"line": 31,
-"character": 15
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-},
-{
-"text": "              .foregroundStyle(.secondary)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/VerifyingView.swift",
-"line": 32,
-"character": 15
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "          .tint(.accentColor)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_color",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/VerifyingView.swift",
-"line": 34,
-"character": 11
-},
-"reason": "Use DS.Color.* (or add a semantic token in DesignSystem/Tokens.swift + Colors.xcassets).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI colors",
-"severity": "error"
-}
-},
-{
-"text": "      .font(.footnote)",
-"violation": {
-"ruleIdentifier": "no_hardcoded_swiftui_font",
-"location": {
-"file": "file://__REPO_ROOT__/ios/Beid/Views/VerifyingView.swift",
-"line": 46,
-"character": 7
-},
-"reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-"ruleDescription": "",
-"ruleName": "No hardcoded SwiftUI fonts",
-"severity": "error"
-}
-}
+  {
+    "text": "          Spacer(minLength: 20)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 50,
+        "character": 11
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "          Spacer(minLength: 20)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 52,
+        "character": 11
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "        .padding(.bottom, 28)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 57,
+        "character": 9
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "    static let soft = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_animation",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 23,
+        "character": 31
+      },
+      "reason": "Use DS.Motion.*.",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded animation curves",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "        .font(.system(size: size * 0.38, weight: .semibold))",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_swiftui_font",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 119,
+        "character": 9
+      },
+      "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded SwiftUI fonts",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "    HStack(spacing: 12) {",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 188,
+        "character": 12
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "        .font(.body.weight(.semibold))",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_swiftui_font",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 190,
+        "character": 9
+      },
+      "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded SwiftUI fonts",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "      .padding(18)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 214,
+        "character": 7
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "      VStack(spacing: 12) {",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothOffView.swift",
+        "line": 18,
+        "character": 14
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "        VStack(alignment: .leading, spacing: 14) {",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothPermissionView.swift",
+        "line": 25,
+        "character": 37
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "      Spacer(minLength: 96)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
+        "line": 86,
+        "character": 7
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "      Spacer(minLength: 140)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
+        "line": 98,
+        "character": 7
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "    VStack(alignment: .leading, spacing: 12) {",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
+        "line": 16,
+        "character": 33
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "          .font(.title3)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_swiftui_font",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
+        "line": 21,
+        "character": 11
+      },
+      "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded SwiftUI fonts",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "      VStack(alignment: .leading, spacing: 6) {",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/ProofCardView.swift",
+        "line": 26,
+        "character": 35
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "      .font(.footnote)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_swiftui_font",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/Views/VerifyingView.swift",
+        "line": 46,
+        "character": 7
+      },
+      "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded SwiftUI fonts",
+      "severity": "error"
+    }
+  }
 ]

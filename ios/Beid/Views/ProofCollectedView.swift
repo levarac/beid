@@ -18,7 +18,7 @@ struct ProofCollectedView: View {
       BeidPanel {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
           Text(proof.eventName)
-            .font(.headline)
+            .font(DS.Font.cardTitle)
             .fixedSize(horizontal: false, vertical: true)
           BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
           BeidMetricRow(label: "Status", value: "Stored", valueStyle: AnyShapeStyle(.green))

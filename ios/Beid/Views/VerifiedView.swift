@@ -18,7 +18,7 @@ struct VerifiedView: View {
       BeidPanel {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
           Text(event.name)
-            .font(.headline)
+            .font(DS.Font.cardTitle)
             .fixedSize(horizontal: false, vertical: true)
           BeidMetricRow(label: "Peers verified", verbatimValue: "\(peersVerified)")
           BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(.green))
