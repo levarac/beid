@@ -111,7 +111,112 @@ repository grant/OAuth handshake) is interactive-only — there's no ASC API
 for it. That has to happen before either workflow above can be created. See
 the approval-package message for the exact click path.
 
-## Local equivalent of what CI does
+## TestFlight beta-group auto-linking — investigation
+
+**Status: unresolved, diagnosis needed before any fix is built.** TestFlight
+builds are not auto-linking to the "Dev" internal beta group
+(`5422706d-fbf9-41dc-9f6e-60e6e6fda8e4`, app `6789376188`) despite that group
+having `hasAccessToAllBuilds=true`, which per Apple's model should make every
+processed build available to it with no explicit per-build action. Build 3
+was linked as a one-off manual workaround via `asc builds add-groups`, which
+is not durable — this section is the investigation trail for a real fix.
+
+### Why the fix can't live in `ci_post_xcodebuild.sh`
+
+The obvious-looking fix — add a step to `ci_post_xcodebuild.sh` that calls
+the App Store Connect API to link the just-archived build to the Dev group —
+does not work, structurally, regardless of implementation (a direct API
+poll and the `asc` CLI both fail the same way). Xcode Cloud's workflow action
+order is:
+
+```
+... → xcodebuild archive → ci_post_xcodebuild.sh → TestFlight post-action (Apple-run upload + processing)
+```
+
+`ci_post_xcodebuild.sh` runs **before** Xcode Cloud's own TestFlight
+post-action uploads the archive to App Store Connect. The workflow does not
+begin that upload until the hook script exits. So at the moment
+`ci_post_xcodebuild.sh` runs, the build does not yet exist as an ASC `Build`
+resource — there is no build ID to poll for: the very thing a poll would
+wait for cannot be created until the polling script has already finished. A
+bounded or unbounded poll
+inside this hook is a deadlock by construction, not a slow/expensive
+tradeoff — no timeout tuning fixes it. There is currently no other
+repo-scriptable Xcode Cloud hook that runs *after* the TestFlight
+post-action completes.
+
+(Confirmed against Apple's
+[Configuring your Xcode Cloud workflow's actions](https://developer.apple.com/documentation/xcode/configuring-your-xcode-cloud-workflow-s-actions)
+and cross-checked against community documentation of the same ordering,
+e.g. [polpiella.dev — Deploying beta versions via Xcode Cloud](https://www.polpiella.dev/how-to-deploy-beta-versions-of-your-app-to-testflight-and-appcenter-with-xcode-cloud).)
+
+### Diagnose before building anything
+
+Before building a fix, confirm there is actually a bug to fix, and that
+explicit build-group linking is even the right shape. Run this first
+(needs an ASC API key with App Manager or Developer role; the `asc` CLI
+config on this machine currently points at the Levarac key `76FJ56SHXV`):
+
+```sh
+# 1. Confirm the Dev group's actual hasAccessToAllBuilds state and app linkage
+asc api get "/v1/betaGroups/5422706d-fbf9-41dc-9f6e-60e6e6fda8e4?include=app"
+# or raw REST if you don't have `asc`'s api passthrough:
+# GET https://api.appstoreconnect.apple.com/v1/betaGroups/5422706d-fbf9-41dc-9f6e-60e6e6fda8e4?include=app
+
+# 2. List recent VALID (fully processed) builds for the app
+asc api get "/v1/builds?filter[app]=6789376188&filter[processingState]=VALID&sort=-uploadedDate&limit=10"
+
+# 3. For each recent VALID build, check whether it's actually available to the Dev group
+asc api get "/v1/builds/<BUILD_ID>/betaGroups"
+```
+
+What this should tell us:
+- If `hasAccessToAllBuilds` reads `true` and recent VALID builds already show
+  up under `betaGroups` for that build without ever having been explicitly
+  linked, then build 3's failure to auto-link may have been a one-off
+  (e.g. still `PROCESSING` at the time it was checked, or checked before
+  ASC's internal propagation caught up) rather than a systemic bug — in
+  which case no automation is needed at all, just patience or a documented
+  "processing can take up to ~60 minutes" expectation.
+- If `hasAccessToAllBuilds` is `true` but recent VALID builds are still not
+  showing as available to the group, that's a real ASC-side inconsistency
+  worth a support case, separate from anything this repo can script around.
+- **409 risk**: the `POST /v1/betaGroups/{id}/relationships/builds`
+  endpoint (explicit build-to-group linking) is designed for curated
+  (non-all-access) groups. If `hasAccessToAllBuilds` is genuinely `true` for
+  the Dev group, ASC may reject explicit linking calls as a conflict. Don't
+  assume "add an explicit link step" is the fix without first confirming
+  the group's real state and whether the API will even accept the call.
+
+### If diagnosis confirms explicit linking is genuinely needed
+
+Do not attempt this in `ci_post_xcodebuild.sh` (see above). The durable
+shape is an out-of-band, idempotent reconciler outside Xcode Cloud's build
+machine entirely — proposed, not implemented:
+
+- A new GitHub Actions workflow (e.g. `.github/workflows/testflight-beta-link.yml`)
+  triggered on a `schedule` cron (e.g. every 15 minutes) plus
+  `workflow_dispatch` for manual runs.
+- Each run: `GET /v1/builds?filter[app]=6789376188&filter[processingState]=VALID`
+  for a recent window, diff against builds already linked to the Dev group,
+  and `POST .../relationships/builds` for any that are missing. Reconciling
+  the full unlinked set (rather than tracking "the one build from this CI
+  run") avoids needing to hand a build ID from Xcode Cloud to GitHub Actions,
+  and is self-healing across ASC outages or long processing delays.
+- Log-and-continue on a per-build 409 rather than failing the whole run, so
+  a `hasAccessToAllBuilds` semantics mismatch shows up as a visible log line
+  instead of a red workflow.
+- Testers see a new build up to `(processing time + cron interval)` after
+  archive — that latency is inherent to Apple's own processing pipeline,
+  not something this reconciler can shorten; don't "fix" it later by moving
+  the poll back into `ci_post_xcodebuild.sh`.
+
+**Ken action needed if this path is taken:** a new ASC API key scoped to
+Xcode-Cloud/TestFlight read + beta-group-write only (not the broader Levarac
+key already in use), added as GitHub Actions repository secrets — see the PR
+description for the exact key name, permission scope, and where to paste it.
+
+### Local equivalent of what CI does
 
 ```sh
 cd ios
