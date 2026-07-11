@@ -60,13 +60,13 @@
     }
   },
   {
-    "text": "        .font(.system(size: size * 0.38, weight: .semibold))",
+    "text": "          .font(.system(size: size * 0.38, weight: .semibold))",
     "violation": {
       "ruleIdentifier": "no_hardcoded_swiftui_font",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 119,
-        "character": 9
+        "line": 134,
+        "character": 11
       },
       "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
       "ruleDescription": "",

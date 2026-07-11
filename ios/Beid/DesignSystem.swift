@@ -62,17 +62,22 @@ struct BeidScreen<Content: View, Footer: View>: View {
 
 struct BeidHeroHeader: View {
   let systemImage: String
+  /// Original SVG artwork asset name (DesignSystem/Illustrations.xcassets). Takes
+  /// precedence over `systemImage` when set — see DESIGN.md §12 custom-asset policy.
+  var assetImage: String?
   let title: LocalizedStringKey
   let subtitle: LocalizedStringKey?
   let tint: Color
 
   init(
     systemImage: String,
+    assetImage: String? = nil,
     title: LocalizedStringKey,
     subtitle: LocalizedStringKey? = nil,
     tint: Color = .accentColor
   ) {
     self.systemImage = systemImage
+    self.assetImage = assetImage
     self.title = title
     self.subtitle = subtitle
     self.tint = tint
@@ -80,7 +85,7 @@ struct BeidHeroHeader: View {
 
   var body: some View {
     VStack(spacing: BeidDesign.Spacing.content) {
-      BeidGlyph(systemImage: systemImage, tint: tint)
+      BeidGlyph(systemImage: systemImage, assetImage: assetImage, tint: tint)
 
       VStack(spacing: BeidDesign.Spacing.compact) {
         Text(title)
@@ -105,6 +110,8 @@ struct BeidHeroHeader: View {
 
 struct BeidGlyph: View {
   let systemImage: String
+  /// Original SVG artwork asset name. Takes precedence over `systemImage` when set.
+  var assetImage: String?
   let tint: Color
   var size: CGFloat = 72
 
@@ -117,10 +124,17 @@ struct BeidGlyph: View {
             .strokeBorder(.separator.opacity(0.35), lineWidth: 1)
         }
 
-      Image(systemName: systemImage)
-        .font(.system(size: size * 0.38, weight: .semibold))
-        .foregroundStyle(tint)
-        .symbolRenderingMode(.hierarchical)
+      if let assetImage {
+        Image(assetImage)
+          .resizable()
+          .scaledToFit()
+          .padding(size * 0.16)
+      } else {
+        Image(systemName: systemImage)
+          .font(.system(size: size * 0.38, weight: .semibold))
+          .foregroundStyle(tint)
+          .symbolRenderingMode(.hierarchical)
+      }
     }
     .frame(width: size, height: size)
     .beidGlass(interactive: false, cornerRadius: BeidDesign.Radius.glyph)
@@ -226,6 +240,8 @@ struct BeidPanel<Content: View>: View {
 
 struct BeidStatusLayout<Accessory: View, Footer: View>: View {
   let systemImage: String
+  /// Original SVG artwork asset name. Takes precedence over `systemImage` when set.
+  var assetImage: String?
   let title: LocalizedStringKey
   let message: LocalizedStringKey
   let tint: Color
@@ -234,6 +250,7 @@ struct BeidStatusLayout<Accessory: View, Footer: View>: View {
 
   init(
     systemImage: String,
+    assetImage: String? = nil,
     title: LocalizedStringKey,
     message: LocalizedStringKey,
     tint: Color = .accentColor,
@@ -241,6 +258,7 @@ struct BeidStatusLayout<Accessory: View, Footer: View>: View {
     @ViewBuilder footer: () -> Footer = { EmptyView() }
   ) {
     self.systemImage = systemImage
+    self.assetImage = assetImage
     self.title = title
     self.message = message
     self.tint = tint
@@ -251,7 +269,7 @@ struct BeidStatusLayout<Accessory: View, Footer: View>: View {
   var body: some View {
     BeidScreen {
       VStack(spacing: BeidDesign.Spacing.section) {
-        BeidHeroHeader(systemImage: systemImage, title: title, subtitle: message, tint: tint)
+        BeidHeroHeader(systemImage: systemImage, assetImage: assetImage, title: title, subtitle: message, tint: tint)
         accessory
       }
     } footer: {

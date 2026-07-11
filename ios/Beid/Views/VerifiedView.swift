@@ -11,9 +11,9 @@ struct VerifiedView: View {
   var body: some View {
     BeidStatusLayout(
       systemImage: "checkmark.circle.fill",
+      assetImage: "proof-seal-mark",
       title: "Verified",
       message: "Your attendance proof is ready to be added to your collection.",
-      tint: .green,
       accessory: {
       BeidPanel {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
