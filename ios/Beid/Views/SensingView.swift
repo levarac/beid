@@ -16,12 +16,12 @@ struct SensingView: View {
 
         VStack(spacing: BeidDesign.Spacing.compact) {
           Text("Sensing automatically")
-            .font(.title2.weight(.semibold))
+            .font(DS.Font.sectionTitle)
             .multilineTextAlignment(.center)
 
           Text("Keep beid open nearby to collect proof of attendance.")
-            .font(.body)
-            .foregroundStyle(.secondary)
+            .font(DS.Font.body)
+            .foregroundStyle(DS.Color.textSecondary)
             .multilineTextAlignment(.center)
             .lineSpacing(2)
             .fixedSize(horizontal: false, vertical: true)

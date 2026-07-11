@@ -23,15 +23,15 @@ struct VerifyingView: View {
       BeidPanel {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
           Text(event.name)
-            .font(.headline)
+            .font(DS.Font.cardTitle)
             .fixedSize(horizontal: false, vertical: true)
 
           ProgressView(value: progress) {
             Text("\(peersVerified) of \(event.totalPeersToVerify) peers verified")
-              .font(.subheadline)
-              .foregroundStyle(.secondary)
+              .font(DS.Font.supporting)
+              .foregroundStyle(DS.Color.textSecondary)
           }
-          .tint(.accentColor)
+          .tint(DS.Color.signalActive)
         }
       }
       },

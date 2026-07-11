@@ -17,8 +17,8 @@ struct AccountSheetView: View {
           if let address = coordinator.walletAddress {
             LabeledContent {
               Text(truncated(address))
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(DS.Font.ledgerMono)
+                .foregroundStyle(DS.Color.textSecondary)
             } label: {
               Label("Address", systemImage: "wallet.pass")
             }
@@ -51,7 +51,7 @@ struct AccountSheetView: View {
         }
       }
       .scrollContentBackground(.hidden)
-      .background(Color(.systemGroupedBackground))
+      .background(DS.Color.surfaceCanvas)
       .navigationTitle("Account")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

@@ -19,26 +19,26 @@ struct ProofCardView: View {
         Spacer()
         Image(systemName: "checkmark.circle.fill")
           .font(.title3)
-          .foregroundStyle(.green)
+          .foregroundStyle(DS.Color.proofSeal)
           .symbolRenderingMode(.hierarchical)
       }
 
       VStack(alignment: .leading, spacing: 6) {
         Text(proof.eventName)
-          .font(.headline)
+          .font(DS.Font.cardTitle)
           .lineLimit(2)
           .minimumScaleFactor(0.86)
 
         Text(Self.dateFormatter.string(from: proof.date))
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .font(DS.Font.supporting)
+          .foregroundStyle(DS.Color.textSecondary)
       }
 
       Divider()
 
       BeidMetricRow(label: "Peers", verbatimValue: "\(proof.peersVerified)")
     }
-    .padding(16)
+    .padding(DS.Space.m)
     .frame(maxWidth: .infinity, minHeight: 188, alignment: .topLeading)
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: BeidDesign.Radius.card, style: .continuous))
     .overlay {

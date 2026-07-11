@@ -19,7 +19,7 @@ enum BeidDesign {
   }
 
   enum Animation {
-    static let entrance = SwiftUI.Animation.spring(response: 0.48, dampingFraction: 0.84)
+    static let entrance = DS.Motion.entrance
     static let soft = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)
   }
 
@@ -42,7 +42,7 @@ struct BeidScreen<Content: View, Footer: View>: View {
 
   var body: some View {
     ZStack {
-      Color(.systemGroupedBackground)
+      DS.Color.surfaceCanvas
         .ignoresSafeArea()
 
       BeidAdaptiveContent {
@@ -84,15 +84,15 @@ struct BeidHeroHeader: View {
 
       VStack(spacing: BeidDesign.Spacing.compact) {
         Text(title)
-          .font(.largeTitle.weight(.semibold))
+          .font(DS.Font.screenTitle)
           .multilineTextAlignment(.center)
           .lineLimit(2)
           .minimumScaleFactor(0.82)
 
         if let subtitle {
           Text(subtitle)
-            .font(.body)
-            .foregroundStyle(.secondary)
+            .font(DS.Font.body)
+            .foregroundStyle(DS.Color.textSecondary)
             .multilineTextAlignment(.center)
             .lineSpacing(2)
             .fixedSize(horizontal: false, vertical: true)
@@ -141,13 +141,13 @@ struct BeidPrimaryButton: View {
 
   var body: some View {
     Button(action: performAction) {
-      HStack(spacing: 8) {
+      HStack(spacing: DS.Space.s) {
         if let systemImage {
           Image(systemName: systemImage)
         }
         Text(title)
       }
-      .font(.headline)
+      .font(DS.Font.cta)
       .frame(maxWidth: .infinity)
       .frame(minHeight: 52)
     }
@@ -169,7 +169,7 @@ struct BeidSecondaryButton: View {
   var body: some View {
     Button(action: performAction) {
       Text(title)
-        .font(.subheadline.weight(.semibold))
+        .font(DS.Font.cardTitle)
         .frame(maxWidth: .infinity, minHeight: 44)
     }
     .buttonStyle(.bordered)
@@ -196,8 +196,8 @@ struct BeidBulletRow: View {
         .background(.thinMaterial, in: Circle())
 
       Text(title)
-        .font(.body)
-        .foregroundStyle(.primary)
+        .font(DS.Font.body)
+        .foregroundStyle(DS.Color.textPrimary)
 
       Spacer(minLength: 0)
     }
@@ -288,11 +288,11 @@ struct BeidMetricRow: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline) {
       Text(label)
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-      Spacer(minLength: 16)
+        .font(DS.Font.supporting)
+        .foregroundStyle(DS.Color.textSecondary)
+      Spacer(minLength: DS.Space.m)
       value
-        .font(.subheadline.weight(.semibold))
+        .font(DS.Font.cardTitle)
         .foregroundStyle(valueStyle)
         .multilineTextAlignment(.trailing)
     }
