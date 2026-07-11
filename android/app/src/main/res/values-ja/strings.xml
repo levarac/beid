@@ -15,4 +15,6 @@
     <string name="event_join_status_sensing">近くの相手を検知中…</string>
     <string name="event_join_status_permission_denied">近くの相手を検知するには、beidにBluetoothの許可が必要です。設定アプリで許可してください。</string>
     <string name="event_join_open_settings">設定を開く</string>
+    <string name="event_join_error_empty_code">続けるにはイベントコードを入力してください。主催者に確認してください。</string>
+    <string name="event_join_error_join_failed">beidはそのイベントに参加できませんでした。コードを確認してもう一度お試しください。</string>
 </resources>
