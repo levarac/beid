@@ -100,11 +100,16 @@ private struct WalletConnectSheetView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", role: .cancel) {
+            ReownWalletConnectClient.shared.reset()
             coordinator.walletConnectSheetPresented = false
           }
         }
       }
     }
+    // Sheets don't inherit the presenter's .tint (unlike push navigation),
+    // so without this the toolbar Cancel button renders system blue — a
+    // §5 MUST-NOT violation (see WalletConnectView's doc comment).
+    .tint(DS.Color.actionPrimary)
   }
 }
 

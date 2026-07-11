@@ -11,15 +11,20 @@ import XCTest
 /// which are available in CI; see ios/README.md "WalletConnect".
 @MainActor
 final class WalletConnectTests: XCTestCase {
-  func testProjectIdIsNilWithoutSecretsPlist() {
+  func testProjectIdIsNilWithoutSecretsPlist() throws {
     // On a fresh checkout (and in CI) `Beid/Secrets.plist` doesn't exist —
     // it's gitignored. This documents that WalletConnectSecrets degrades to
     // nil rather than crashing, which is what lets the pairing UI reach
-    // `.notConfigured` instead of the app failing to build or launch.
+    // `.notConfigured` instead of the app failing to build or launch. Skips
+    // on a dev machine that has installed its own Secrets.plist per the
+    // README's setup instructions — this assertion is only meaningful when
+    // no project ID is present.
+    try XCTSkipIf(WalletConnectSecrets.projectId != nil, "Secrets.plist with a project ID is installed on this machine")
     XCTAssertNil(WalletConnectSecrets.projectId)
   }
 
-  func testClientReachesNotConfiguredWithoutProjectId() {
+  func testClientReachesNotConfiguredWithoutProjectId() throws {
+    try XCTSkipIf(WalletConnectSecrets.projectId != nil, "Secrets.plist with a project ID is installed on this machine")
     let client = ReownWalletConnectClient.shared
     client.configureIfNeeded()
     XCTAssertEqual(client.state, .notConfigured)
@@ -41,7 +46,8 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertNil(coordinator.walletAddress)
   }
 
-  func testDisconnectWalletClearsAddressAndResetsClient() {
+  func testDisconnectWalletClearsAddressAndResetsClient() throws {
+    try XCTSkipIf(WalletConnectSecrets.projectId != nil, "Secrets.plist with a project ID is installed on this machine")
     let coordinator = AppCoordinator()
     coordinator.walletAddress = "0xREALADDRESS"
 

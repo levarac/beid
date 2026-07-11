@@ -43,7 +43,14 @@ final class NativeWebSocket: NSObject, WebSocketConnecting {
   }
 
   func write(string: String, completion: (() -> Void)?) {
-    task?.send(.string(string)) { _ in completion?() }
+    task?.send(.string(string)) { error in
+      // WebSocketConnecting's `write` has no error channel to propagate
+      // this through, so logging is the only signal available here.
+      if let error {
+        NSLog("NativeWebSocket write failed: \(error)")
+      }
+      completion?()
+    }
   }
 
   private func receiveNext() {

@@ -29,6 +29,16 @@ final class ReownWalletConnectClient: ObservableObject {
   private var isConfigured = false
   private var subscriptions = Set<AnyCancellable>()
 
+  /// Set when the user explicitly cancels an `.awaitingApproval` pairing.
+  /// reown-swift 2.3.0 has no working "cancel my pending proposal" API —
+  /// `Pair.instance.disconnect(topic:)` is a documented no-op ("pairing
+  /// will disconnect automatically" via the URI's 5-minute expiry) — so a
+  /// wallet can still approve a cancelled pairing after the user has left
+  /// the screen. When that happens, `observeSessions()` immediately
+  /// disconnects the just-settled *session* (a real, working call, unlike
+  /// the pairing disconnect) instead of surfacing it as `.connected`.
+  private var cancelledPendingApproval = false
+
   private init() {}
 
   /// Configures the SDK singletons on first use. Safe to call repeatedly.
@@ -68,6 +78,7 @@ final class ReownWalletConnectClient: ObservableObject {
   /// the relay before `.connected` is reached.
   func connect() async {
     guard isConfigured else { return }
+    cancelledPendingApproval = false
     state = .connecting
     do {
       let namespaces: [String: ProposalNamespace] = [
@@ -85,9 +96,15 @@ final class ReownWalletConnectClient: ObservableObject {
   }
 
   /// Returns to `.idle` from `.awaitingApproval`/`.failed` (Cancel/Try
-  /// Again). No-op when not configured or already idle.
+  /// Again). No-op when not configured or already idle. When cancelling an
+  /// in-flight `.awaitingApproval` pairing, marks it so a late-arriving
+  /// wallet approval gets auto-disconnected instead of surfacing as
+  /// `.connected` — see `cancelledPendingApproval`.
   func reset() {
     guard isConfigured else { return }
+    if case .awaitingApproval = state {
+      cancelledPendingApproval = true
+    }
     state = .idle
   }
 
@@ -102,6 +119,11 @@ final class ReownWalletConnectClient: ObservableObject {
       .receive(on: DispatchQueue.main)
       .sink { [weak self] session, _ in
         guard let self else { return }
+        if cancelledPendingApproval {
+          cancelledPendingApproval = false
+          Task { try? await Sign.instance.disconnect(topic: session.topic) }
+          return
+        }
         if let account = session.namespaces.values.first?.accounts.first {
           self.state = .connected(address: account.address)
         }

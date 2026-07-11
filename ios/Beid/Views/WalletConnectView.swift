@@ -72,6 +72,15 @@ struct WalletConnectPairingView: View {
     }
     .task {
       client.configureIfNeeded()
+      // A wallet may have approved a pairing started from a previous
+      // mount of this view (e.g. the user backgrounded the app, or left
+      // for the event-code fallback, while `.awaitingApproval`) — deliver
+      // that already-settled state now, since `.onChange` below only
+      // fires on a *transition* and would otherwise never fire for a
+      // state that was already `.connected` when this view appeared.
+      if case .connected(let address) = client.state {
+        onConnected(address)
+      }
     }
     .onChange(of: client.state) { _, newState in
       if case .connected(let address) = newState {
