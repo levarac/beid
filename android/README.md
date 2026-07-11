@@ -84,16 +84,22 @@ submodule.
 
 ## Design-system theme
 
-`ui/theme/{Color,Type,Spacing,Theme}.kt` port DESIGN.md's ratified token
-values (§5 Color, §6 Typography, §7 Spacing, §8 Shape) into Compose, mirroring
-iOS's `DS` namespace (`ios/Beid/DesignSystem/Tokens.swift`) role-for-role —
-`BeidTheme.colors.signalActive`, `BeidSpacing.pageMargin`, etc. This is a
-values port, not a code port: `DesignSystem/Tokens.swift`'s Swift is not
-translated line-by-line, since Compose's token/theming idioms
-(`CompositionLocal`, Material3 `ColorScheme`/`Typography`) differ structurally
-from SwiftUI's. Colors are hardcoded (not read from `Colors.xcassets`, which
-is iOS-only tooling) — see `Color.kt`'s kdoc for the source hex values and
-DESIGN.md §5's table for the canonical values if they're re-ratified.
+`ui/theme/{Color,Type,Spacing,Theme}.kt` port DESIGN.md's token values into
+Compose, mirroring iOS's `DS` namespace (`ios/Beid/DesignSystem/Tokens.swift`)
+role-for-role — `BeidTheme.colors.signalActive`, `BeidSpacing.pageMargin`,
+etc. Ratification status varies by section, per DESIGN.md itself: §5 Color's
+palette *direction* and color *roles* are ratified (Ken, 2026-07-10), though
+the exact secondary hex values are still `PROPOSAL — Ken ratification
+pending`; §7 Spacing and §8 Shape are ratified; §6 Typography is explicitly
+`PROPOSAL — Ken ratification pending` in full — `Type.kt`'s sp values are
+this scaffold's own iOS-Dynamic-Type-to-Material3 mapping, not a ratified
+spec, and its kdoc says so. This is a values port, not a code port:
+`DesignSystem/Tokens.swift`'s Swift is not translated line-by-line, since
+Compose's token/theming idioms (`CompositionLocal`, Material3
+`ColorScheme`/`Typography`) differ structurally from SwiftUI's. Colors are
+hardcoded (not read from `Colors.xcassets`, which is iOS-only tooling) — see
+`Color.kt`'s kdoc for the source hex values and DESIGN.md §5's table for the
+canonical values if they change.
 
 Not yet ported (out of scope for this slice, DESIGN.md marks them
 `PROPOSAL — Ken ratification pending` anyway): `DS.Motion` springs (Compose
