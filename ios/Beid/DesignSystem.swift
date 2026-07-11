@@ -47,14 +47,14 @@ struct BeidScreen<Content: View, Footer: View>: View {
 
       BeidAdaptiveContent {
         VStack(spacing: BeidDesign.Spacing.section) {
-          Spacer(minLength: DS.Space.m)
+          Spacer(minLength: 20)
           content
-          Spacer(minLength: DS.Space.m)
+          Spacer(minLength: 20)
           footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
-        .padding(.bottom, DS.Space.xl)
+        .padding(.bottom, 28)
       }
     }
   }

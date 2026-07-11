@@ -1,5 +1,50 @@
 [
   {
+    "text": "          Spacer(minLength: 20)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 50,
+        "character": 11
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "          Spacer(minLength: 20)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 52,
+        "character": 11
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "        .padding(.bottom, 28)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 57,
+        "character": 9
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
     "text": "    static let soft = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)",
     "violation": {
       "ruleIdentifier": "no_hardcoded_animation",
@@ -110,7 +155,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-        "line": 71,
+        "line": 86,
         "character": 7
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
@@ -125,7 +170,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-        "line": 83,
+        "line": 98,
         "character": 7
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
