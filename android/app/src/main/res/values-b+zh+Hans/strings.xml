@@ -13,4 +13,6 @@
     <string name="event_join_status_sensing">正在感知附近的用户…</string>
     <string name="event_join_status_permission_denied">beid 需要蓝牙权限才能感知附近的用户。请在设置中授予权限。</string>
     <string name="event_join_open_settings">打开设置</string>
+    <string name="event_join_error_empty_code">请输入活动代码以继续。请向主办方索取。</string>
+    <string name="event_join_error_join_failed">beid 无法加入该活动。请检查代码后重试。</string>
 </resources>
