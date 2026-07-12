@@ -26,6 +26,12 @@ final class ReownWalletConnectClient: ObservableObject {
 
   @Published private(set) var state: State = .notConfigured
 
+  /// The settled session backing the current `.connected` state — kept
+  /// alongside `state` (rather than folded into its associated value) so
+  /// signing (`requestPersonalSign`) can reuse the exact session/topic this
+  /// pairing flow established instead of opening a second one.
+  private(set) var connectedSession: Session?
+
   private var isConfigured = false
   private var subscriptions = Set<AnyCancellable>()
 
@@ -105,6 +111,7 @@ final class ReownWalletConnectClient: ObservableObject {
     if case .awaitingApproval = state {
       cancelledPendingApproval = true
     }
+    connectedSession = nil
     state = .idle
   }
 
@@ -125,9 +132,109 @@ final class ReownWalletConnectClient: ObservableObject {
           return
         }
         if let account = session.namespaces.values.first?.accounts.first {
+          self.connectedSession = session
           self.state = .connected(address: account.address)
         }
       }
       .store(in: &subscriptions)
+  }
+}
+
+// MARK: - Signing
+
+extension ReownWalletConnectClient {
+  enum SignatureRequestError: Error, Equatable {
+    /// No settled session to sign against — the UI MUST gate the sign
+    /// action on `walletAddress != nil` so this is a defensive case, not an
+    /// expected path.
+    case notConnected
+    /// The wallet explicitly declined (EIP-1193 code 4001).
+    case rejected
+    /// No response within the client-side deadline — relay/wallet may
+    /// still be working; the proof is untouched and safe to retry.
+    case timedOut
+    case relayFailure(String)
+  }
+
+  /// Sends a `personal_sign` request for `digestHex` over the currently
+  /// connected session (reusing its topic/account — never opens a second
+  /// pairing flow) and awaits the wallet's response, bounded by
+  /// `responseTimeout`. Returns the hex signature on success. `onDispatched`
+  /// fires once the request has been handed to the relay (before the
+  /// wallet's response is known) so callers can move from a "connecting"
+  /// to an "awaiting approval" UI state at the right moment.
+  func requestPersonalSign(
+    digestHex: String,
+    responseTimeout: TimeInterval = 90,
+    onDispatched: (() -> Void)? = nil
+  ) async -> Result<String, SignatureRequestError> {
+    guard case .connected(let address) = state,
+          let session = connectedSession,
+          let chain = session.namespaces["eip155"]?.accounts.first?.blockchain
+    else {
+      return .failure(.notConnected)
+    }
+
+    let request: Request
+    do {
+      request = try Request(
+        topic: session.topic,
+        method: "personal_sign",
+        params: AnyCodable([digestHex, address]),
+        chainId: chain
+      )
+    } catch {
+      return .failure(.relayFailure(error.localizedDescription))
+    }
+
+    do {
+      try await Sign.instance.request(params: request)
+    } catch {
+      return .failure(.relayFailure(error.localizedDescription))
+    }
+
+    onDispatched?()
+    return await awaitResponse(to: request.id, timeout: responseTimeout)
+  }
+
+  private enum RaceOutcome {
+    case response(Response)
+    case timedOut
+  }
+
+  private func awaitResponse(to requestId: RPCID, timeout: TimeInterval) async -> Result<String, SignatureRequestError> {
+    let outcome = await withTaskGroup(of: RaceOutcome.self) { group in
+      group.addTask {
+        for await response in Sign.instance.sessionResponsePublisher.values {
+          if response.id == requestId {
+            return .response(response)
+          }
+        }
+        return .timedOut
+      }
+      group.addTask {
+        try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+        return .timedOut
+      }
+      let first = await group.next() ?? .timedOut
+      group.cancelAll()
+      return first
+    }
+
+    switch outcome {
+    case .timedOut:
+      return .failure(.timedOut)
+    case .response(let response):
+      switch response.result {
+      case .response(let value):
+        guard let signature = try? value.get(String.self) else {
+          return .failure(.relayFailure("Malformed signature response"))
+        }
+        return .success(signature)
+      case .error(let error):
+        // EIP-1193 userRejectedRequest.
+        return error.code == 4001 ? .failure(.rejected) : .failure(.relayFailure(error.message))
+      }
+    }
   }
 }

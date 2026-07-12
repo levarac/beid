@@ -40,6 +40,12 @@ enum DS {
     static let proofSeal = SwiftUI.Color(.proofSeal)
     /// Hairline strokes and dividers.
     static let strokeHairline = SwiftUI.Color(.strokeHairline)
+    /// Non-signal caution/error state — e.g. a declined, timed-out, or
+    /// failed wallet-signature attempt. Deliberately distinct from
+    /// `signalWarning`, which is reserved for BLE signal degradation only
+    /// (DESIGN.md §5: "Errors that aren't signal-related" is a forbidden
+    /// use of `signalWarning`).
+    static let statusCaution = SwiftUI.Color(.statusCaution)
   }
 
   // MARK: - Space

@@ -16,13 +16,18 @@ struct ProofCollectedView: View {
       message: "Added to your collection.",
       tint: .accentColor,
       accessory: {
-      BeidPanel {
-        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
-          Text(proof.eventName)
-            .font(DS.Font.cardTitle)
-            .fixedSize(horizontal: false, vertical: true)
-          BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
-          BeidMetricRow(label: "Status", value: "Stored", valueStyle: AnyShapeStyle(.green))
+      VStack(spacing: BeidDesign.Spacing.section) {
+        BeidPanel {
+          VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+            Text(proof.eventName)
+              .font(DS.Font.cardTitle)
+              .fixedSize(horizontal: false, vertical: true)
+            BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
+            BeidMetricRow(label: "Status", value: "Stored", valueStyle: AnyShapeStyle(DS.Color.proofSeal))
+          }
+        }
+        BeidPanel {
+          ProofSignatureControlsView(proofId: proof.id)
         }
       }
       },
@@ -36,6 +41,10 @@ struct ProofCollectedView: View {
 }
 
 #Preview {
-  ProofCollectedView(proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
-    .environmentObject(AppCoordinator())
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return ProofCollectedView(proof: proof)
+    .environmentObject(coordinator)
 }
