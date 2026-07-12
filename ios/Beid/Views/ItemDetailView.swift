@@ -47,6 +47,10 @@ struct ItemDetailView: View {
               BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(DS.Color.proofSeal))
             }
           }
+
+          BeidPanel {
+            ProofSignatureControlsView(proofId: proof.id)
+          }
         }
         .padding(BeidDesign.Spacing.screenHorizontal)
       }
@@ -58,7 +62,12 @@ struct ItemDetailView: View {
 }
 
 #Preview {
-  NavigationStack {
-    ItemDetailView(proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return NavigationStack {
+    ItemDetailView(proof: proof)
   }
+  .environmentObject(coordinator)
 }

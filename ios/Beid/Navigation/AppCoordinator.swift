@@ -118,4 +118,52 @@ final class AppCoordinator: ObservableObject {
   func openProof(_ proof: Proof) {
     selectedProof = proof
   }
+
+  // MARK: - Proof signing
+
+  /// Drives `proof.signatureState` through the wallet-signing lifecycle by
+  /// reusing the already-connected WalletConnect session (never opens a
+  /// second pairing flow — see `ReownWalletConnectClient.requestPersonalSign`).
+  /// Callers MUST only offer this action when `walletAddress != nil`; the
+  /// underlying `Proof` in `proofStore` is never touched beyond its
+  /// `signatureState` field, regardless of outcome.
+  func signProof(_ proof: Proof) async {
+    guard let walletAddress else { return }
+    proofStore.updateSignatureState(for: proof.id, to: .connecting)
+
+    let chainId = ReownWalletConnectClient.shared.connectedSession?
+      .namespaces["eip155"]?.accounts.first?.blockchainIdentifier ?? "eip155:1"
+    let payload = SignaturePayload(proof: proof, chainId: chainId)
+
+    let digestHex: String
+    do {
+      digestHex = try payload.signingDigestHex()
+    } catch {
+      proofStore.updateSignatureState(for: proof.id, to: .failed(reason: error.localizedDescription))
+      return
+    }
+
+    let result = await ReownWalletConnectClient.shared.requestPersonalSign(digestHex: digestHex) { [weak self] in
+      self?.proofStore.updateSignatureState(for: proof.id, to: .awaitingApproval)
+    }
+
+    switch result {
+    case .success(let signatureHex):
+      let record = SignatureRecord(
+        signerAddress: walletAddress,
+        signatureHex: signatureHex,
+        payload: payload,
+        signedAt: Date()
+      )
+      proofStore.updateSignatureState(for: proof.id, to: .signed(record))
+    case .failure(.notConnected):
+      proofStore.updateSignatureState(for: proof.id, to: .failed(reason: "No connected wallet"))
+    case .failure(.rejected):
+      proofStore.updateSignatureState(for: proof.id, to: .rejected)
+    case .failure(.timedOut):
+      proofStore.updateSignatureState(for: proof.id, to: .deferred)
+    case .failure(.relayFailure(let message)):
+      proofStore.updateSignatureState(for: proof.id, to: .failed(reason: message))
+    }
+  }
 }

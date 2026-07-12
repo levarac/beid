@@ -32,6 +32,15 @@ final class ProofStore: ObservableObject {
     proofs.first { $0.id == id }
   }
 
+  /// Updates only the signature lifecycle of an already-stored proof — the
+  /// proof's own collected fields are immutable once added. No-op if the
+  /// proof was removed since the caller last read it.
+  func updateSignatureState(for id: UUID, to state: ProofSignatureState) {
+    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return }
+    proofs[index].signatureState = state
+    save()
+  }
+
   private func load() {
     guard let data = try? Data(contentsOf: fileURL) else { return }
     proofs = (try? JSONDecoder().decode([Proof].self, from: data)) ?? []

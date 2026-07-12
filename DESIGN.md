@@ -189,6 +189,7 @@ resolved **against**. Exact secondary hex values (surfaces, text, hairline,
 | `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
 | `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Seal artwork, seal/verified moments, proof accents | Generic links, nav tint |
 | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
+| `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView`, `ProofCollectedView` signature controls) | BLE signal issues (use `signalWarning` instead) |
 
 Rules:
 
@@ -326,10 +327,38 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Required tokens: `DS.Radius.card`, `DS.Font.cardTitle`, `DS.Font.meta`,
   `DS.Color.textSecondary`. Artwork: `DS.Artwork.proofCardGradient(seed:)`
   (§5; the view's current inline copy is scaffold debt).
-- States: default only (pending/failed proof states do not exist yet; when
-  they do, they MUST pair color with a symbol per §2.9).
+- States: default only. Per-proof wallet-signature states (`notRequested` /
+  `connecting` / `awaitingApproval` / `signed` / `deferred` / `rejected` /
+  `failed`) exist as of 2026-07-12 but are surfaced in `ItemDetailView` and
+  `ProofCollectedView`, not on the grid card itself — keeps the card dense
+  and avoids a second status affordance competing with the existing
+  "collected" checkmark. Revisit if a future design pass wants a compact
+  card-level signature badge; it MUST pair color with a symbol per §2.9.
 - Accessibility: entire card one element; label "Proof of {eventName},
   {date}".
+
+### Component: ProofSignatureControlsView
+
+- Purpose: Wallet-signing status + action for one `Proof` — reads live
+  `signatureState` from `AppCoordinator.proofStore` (never a point-in-time
+  snapshot, since a sign attempt mutates state while this view is on
+  screen).
+- Use when: A screen needs to show/offer proof signing. Currently
+  `ItemDetailView` (Screen 08, persistent) and `ProofCollectedView`
+  (Screen 07, ceremony moment) — chosen because 08 is the durable place a
+  user manages a proof over time, and 07 is the moment signing is most
+  top-of-mind right after collection.
+- Don't use when: `ProofCardView` (grid density) or `VerifiedView` (no
+  `Proof` exists yet at that point in the flow).
+- API: `ProofSignatureControlsView(proofId: UUID)`, requires
+  `AppCoordinator` in the environment.
+- Required tokens: `DS.Color.actionPrimary` (sign/connect CTA tint — no
+  motif accent per the Primary CTA button rule, §10), `DS.Color.proofSeal`
+  (signed status), `DS.Color.statusCaution` (deferred/rejected/failed
+  status), `DS.Font.ledgerMono` (signer address).
+- Rules: state is never color alone (§2.9) — every non-default status pairs
+  its color with distinct status text. When no wallet is connected, shows a
+  "Connect Wallet" path instead of hiding the feature outright.
 
 ### Component: ScanFlowView (phase container)
 
@@ -610,7 +639,7 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 
-(Full set: 9 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
+(Full set: 10 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
 plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
@@ -631,6 +660,7 @@ Currently empty — no custom assets exist yet. First assets to produce
 | 2026-07-10 | **Ken ratification**: (1) palette direction — deep ink + quiet teal (`#18C7A7` family) + violet proof seal; Figma Minimal v4 blue resolved against; (2) tone thesis "quiet field instrument" + all four motifs (Encounter Field / Proof Seal / Ledger Trace / Event Artifact) as-is; (3) locale set `en` + `ja`/`zh-Hans`/`es`/`fr`; (4) Japanese UI terms 検知 (Sensing) / 証明 (Proof), not team-internal センシング/証 | Ratified — PROPOSAL tags removed on these four areas; exact secondary hexes, type ramp, CTA sentence-case grandfathering remain PROPOSAL |
 | 2026-07-10 | Revision round 2 (GPT-Pro re-audit, final): TEMP-DEBT path exclusions replaced by checked-in violation-level baseline (`.swiftlint-baseline.json`); regex FP fixes (blanket `.shadow(color:)` scoped, `minLength:` scoped to `Spacer(`, bare `duration:` branch dropped) and FN fixes (`Font.custom`, `.font(Font.…)`); long-tail patterns explicitly demoted to review-level MUST (§16); pinned SwiftLint + `lint-fixtures/` proof pair; `abs(seed)` → `seed.magnitude`; `DS.Motion.sensingPulse` sanctioned token; §2 lint claim scoped to common surface forms | Adopted (enforcement) |
 | 2026-07-10 | Revision round 3 (Fable audit): SwiftLint 0.65 baselines store absolute paths, so the checked-in baseline is replaced by a portable template (`lint/baseline.template.json`, `__REPO_ROOT__` placeholder) + `scripts/lint.sh` that materializes the gitignored per-checkout `.swiftlint-baseline.json` and runs swiftlint; shrink-only policy governs the template | Adopted (enforcement) |
+| 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView`/`ProofCollectedView` carrying the new signature states instead of the card itself | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
 
 ### D. Deprecated patterns
 
