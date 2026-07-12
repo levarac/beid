@@ -129,6 +129,20 @@ final class AppCoordinator: ObservableObject {
   /// `signatureState` field, regardless of outcome.
   func signProof(_ proof: Proof) async {
     guard let walletAddress else { return }
+
+    // Reentrancy guard: `ProofSignatureControlsView` already hides the
+    // "Sign this proof" action while a request is in flight, but that's a
+    // reactive re-render, not a lock — two rapid taps in the same runloop
+    // tick can both read the pre-tap state before either write lands. Bail
+    // out here so at most one `personal_sign` request is ever in flight
+    // for a given proof.
+    switch proofStore.proof(withId: proof.id)?.signatureState {
+    case .connecting, .awaitingApproval:
+      return
+    default:
+      break
+    }
+
     proofStore.updateSignatureState(for: proof.id, to: .connecting)
 
     let chainId = ReownWalletConnectClient.shared.connectedSession?

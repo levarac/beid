@@ -43,7 +43,33 @@ final class ProofStore: ObservableObject {
 
   private func load() {
     guard let data = try? Data(contentsOf: fileURL) else { return }
-    proofs = (try? JSONDecoder().decode([Proof].self, from: data)) ?? []
+    var loaded = (try? JSONDecoder().decode([Proof].self, from: data)) ?? []
+
+    // `.connecting`/`.awaitingApproval` are only meaningful while this
+    // process is alive and actively waiting on a wallet response. If the
+    // process was killed mid-wait (e.g. iOS jetsam while the user is
+    // backgrounded approving in their wallet app — the prime scenario,
+    // since that's exactly what the flow asks the user to do) and the
+    // proof reloads still "awaiting approval", there is no live request to
+    // ever resolve it: it would spin forever with no retry affordance.
+    // Sanitize to `.deferred` on load so it's always retryable, matching
+    // the "proof is untouched and safe to retry" contract in
+    // `ProofSignature.swift`.
+    var didSanitize = false
+    for index in loaded.indices {
+      switch loaded[index].signatureState {
+      case .connecting, .awaitingApproval:
+        loaded[index].signatureState = .deferred
+        didSanitize = true
+      case .notRequested, .signed, .deferred, .rejected, .failed:
+        break
+      }
+    }
+
+    proofs = loaded
+    if didSanitize {
+      save()
+    }
   }
 
   private func save() {

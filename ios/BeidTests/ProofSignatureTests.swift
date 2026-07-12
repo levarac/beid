@@ -31,6 +31,37 @@ final class ProofSignatureTests: XCTestCase {
     XCTAssertEqual(reloaded.proof(withId: proof.id)?.signatureState, .rejected)
   }
 
+  func testLoadingStoreSanitizesStrandedAwaitingApprovalToDeferred() {
+    // Simulates the process being killed while `.awaitingApproval` was
+    // persisted (e.g. jetsam while the user backgrounded the app to
+    // approve in their wallet — the flow's own prime scenario). Without
+    // sanitizing on load, this proof would spin forever with no retry
+    // affordance on next launch.
+    let fileURL = makeTempFileURL()
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+
+    let store = ProofStore(fileURL: fileURL)
+    let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+    store.add(proof)
+    store.updateSignatureState(for: proof.id, to: .awaitingApproval)
+
+    let reloaded = ProofStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.proof(withId: proof.id)?.signatureState, .deferred)
+  }
+
+  func testLoadingStoreSanitizesStrandedConnectingToDeferred() {
+    let fileURL = makeTempFileURL()
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+
+    let store = ProofStore(fileURL: fileURL)
+    let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+    store.add(proof)
+    store.updateSignatureState(for: proof.id, to: .connecting)
+
+    let reloaded = ProofStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.proof(withId: proof.id)?.signatureState, .deferred)
+  }
+
   func testUpdateSignatureStateIsNoOpForUnknownProof() {
     let fileURL = makeTempFileURL()
     defer { try? FileManager.default.removeItem(at: fileURL) }
@@ -106,5 +137,23 @@ final class ProofSignatureTests: XCTestCase {
     let data = try JSONEncoder().encode(signedProof)
     let decoded = try JSONDecoder().decode(Proof.self, from: data)
     XCTAssertEqual(decoded.signatureState, signedProof.signatureState)
+  }
+
+  func testSignProofIsReentrantSafeWhileAwaitingApproval() async {
+    // Two rapid taps on "Sign this proof" must not both reach
+    // `ReownWalletConnectClient` — the second call MUST bail out as soon as
+    // it observes the proof is already `.connecting`/`.awaitingApproval`,
+    // before touching the store again. Pre-seeding `.awaitingApproval`
+    // (rather than racing two real calls) isolates the guard itself from
+    // timing.
+    let coordinator = AppCoordinator()
+    let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+    coordinator.proofStore.add(proof)
+    coordinator.proofStore.updateSignatureState(for: proof.id, to: .awaitingApproval)
+    coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+
+    await coordinator.signProof(proof)
+
+    XCTAssertEqual(coordinator.proofStore.proof(withId: proof.id)?.signatureState, .awaitingApproval)
   }
 }
