@@ -143,6 +143,166 @@ round-trip back from a wallet app, disconnect/session-persistence across
 launches, and SIWE/`authenticate()` (out of scope — beid does WalletConnect
 login, not SIWE).
 
+## WalletConnect Link Mode spike (2026-07-12, `spike/walletconnect-linkmode`)
+
+**Status: informational only, not merged.** This branch is a source-investigation
+spike (same discipline as `spike/walletconnect-native`, which fed into the real
+WalletConnect integration above) answering one question left open by GPT-Pro
+deep research (kura journal
+`2026-07-12-levarac-walletconnect-relay-decentralization.md`, "学び3"): does
+reown-swift 2.3.0 have a production-usable, non-deprecated way to run
+WalletConnect **without ever touching the Reown relay**, for a wallet on the
+same device reachable via Universal Links ("Link Mode")? Answered by reading
+reown-swift 2.3.0 source directly (checked out at
+`SourcePackages/checkouts/reown-swift`, tag `2.3.0`,
+commit `e2e42a0`), not by more doc-reading — no Link Mode section exists in
+that repo's own docs (`find ... -iname '*.md' | xargs grep -l 'link mode'`
+returns nothing), which is itself evidence the gap GPT-Pro flagged is real.
+
+### Verdict: no, not on the recommended API path. Only the deprecated path can start one.
+
+- `SignClient.connect(namespaces:sessionProperties:scopedProperties:authentication:)`
+  — the **non-deprecated, currently-recommended** entry point
+  (`Sources/WalletConnectSign/Sign/SignClient.swift:288-308`) —
+  unconditionally calls `pairingClient.create()` (an irn/relay Pairing) and
+  then `appProposeService.propose(..., relay: RelayProtocolOptions(protocol:
+  "irn", ...), authentication: authentication)`. Tracing `authentication`
+  into `AppProposeService.propose` (`Services/App/AppProposeService.swift:24-74`)
+  shows it only gets turned into `AuthPayload`s embedded *inside* the relay
+  proposal (`requests: ProposalRequests(authentication: authPayloads)`) — it
+  never switches transport. **`connect()` always creates a relay Pairing,
+  regardless of the `authentication` argument.** This is a straight read of
+  the source, not an inference from behavior.
+- The only method that can start a *new* session without ever creating a
+  relay Pairing is `authenticate(_:walletUniversalLink:)`
+  (`SignClient.swift:341-347`) — which is marked
+  `@available(*, deprecated, message: "Use connect(namespaces:...
+  authentication:) ... instead.")`. It delegates to
+  `AuthenticateTransportTypeSwitcher.authenticate`
+  (`Auth/Services/App/AuthenticateTransportTypeSwitcher.swift`), which tries
+  `LinkAuthRequester.request` first and only falls back to the relay
+  `pairingClient.create()` path if that throws
+  `walletLinkSupportNotProven`. So the deprecated method *is* the real
+  relay-less entry point — the recommended replacement's doc comment points
+  at an API that cannot do what Link Mode needs.
+- There are three purpose-built Link Mode methods —
+  `authenticateLinkMode(_:walletUniversalLink:)`, `requestLinkMode(params:)`,
+  `respondLinkMode(topic:requestId:response:)` (`SignClient.swift:350-357,
+  452-457, 467-473) — but all three are wrapped in `#if DEBUG`. **They do not
+  exist in a Release/App Store build.** They appear to be test-only hooks for
+  reown's own unit tests to introspect the raw envelope, not a public
+  integration surface.
+- Good news once a session *is* on Link Mode: ordinary, non-deprecated,
+  non-DEBUG-gated `request(params:)` / `respond(topic:requestId:response:)`
+  correctly stay off the relay. `SessionRequestDispatcher.request`
+  (`LinkAndRelayDispatchers/SessionRequestDispatcher.swift`) switches on
+  `session.transportType` (`.relay` vs `.linkMode`,
+  `Types/Session/WCSession.swift:4-6`) and calls `linkSessionRequester`
+  instead of `relaySessionRequester` when the session was established as
+  `.linkMode`. So the gap is specifically in **session establishment**, not
+  in-session traffic.
+
+### How "wallet support proven" actually works (no static list, no discovery call)
+
+`walletLinkSupportNotProven` (`Auth/Link/LinkAuthRequester.swift:7,37`) fires
+whenever `linkModeLinksStore.get(key: walletUniversalLink) == nil` — a local,
+persisted `CodableStore<Bool>` keyed by the wallet's universal link
+(`Sign/SignClientFactory.swift:112`). There is no static capability list and
+no separate discovery/probe call. The store is only populated after a
+**successful relay round-trip**: in
+`Auth/Services/App/AuthResponseSubscriber.swift:127-140`
+(`getTransportTypeUpgradeIfPossible`), when a relay-based `authenticate`
+response comes back, the dApp inspects the *wallet's own*
+`AppMetadata.Redirect` in that response (`peerMetadata.redirect.linkMode ==
+true` and a `peerRedirect.universal` link present) — if so, and only if the
+dApp's *own* metadata also declares `linkMode: true`
+(`supportLinkMode = metadata.redirect?.linkMode ?? false`,
+`SignClientFactory.swift:114`), it writes `linkModeLinksStore.set(true,
+forKey: universalLink)` and upgrades the newly-created session's
+`transportType` to `.linkMode` on the spot. Practically: **the first
+`authenticate()` call to any given wallet always goes over relay**; only the
+*second and later* calls to that same wallet's universal link, using the
+deprecated `authenticate(_:walletUniversalLink:)` API, can skip relay
+entirely (no Pairing created at all). This proof is symmetric — both sides
+must declare `linkMode: true` with a valid `universal` redirect in their
+`AppMetadata`, which beid does not do today (`ReownWalletConnectClient.swift:60`
+passes `AppMetadata.Redirect(native: "beid://", universal: nil)`, i.e.
+`linkMode` defaults to `false`).
+
+### What beid would need to add (not wired up in this spike)
+
+1. A real `https://` Universal Link domain for beid (e.g.
+   `https://beid.app` or a subdomain), with an
+   `apple-app-site-association` file hosted at
+   `https://<domain>/.well-known/apple-app-site-association` (no file
+   extension, served as `application/json`, no redirects) declaring beid's
+   Team ID + Bundle ID under `applinks`, restricted to paths WalletConnect
+   will use for its envelope callback (reown's own code appends
+   `?wc_ev=...&topic=...` query params, so a permissive path component
+   whose only job is being redirected into `dispatchEnvelope(_:)` is
+   enough — see `Auth/Link/LinkEnvelopesDispatcher.swift:145-160` for the
+   exact query-param shape it builds and expects back).
+2. `com.apple.developer.associated-domains` entitlement with
+   `applinks:<domain>` added to `Beid.entitlements` /
+   `project.yml` (alongside the existing App Group entitlement) — this
+   needs a real Apple Developer Team (associated domains are not usable
+   with ad-hoc "Sign to Run Locally" signing, unlike the App Group
+   entitlement which the earlier spike found *was* enough on Simulator).
+3. `AppMetadata.Redirect(native: "beid://", universal: "https://<domain>/...",
+   linkMode: true)` in `ReownWalletConnectClient.swift`, replacing the
+   current `universal: nil`.
+4. A `NSUserActivity`/`onOpenURL` handler in `BeidApp.swift` (or
+   `AppCoordinator`) that recognizes the incoming Universal Link and calls
+   `Sign.instance.dispatchEnvelope(_:)` with the full URL string.
+5. Switching the pairing call site from `connect(namespaces:...)` (current,
+   relay-only per above) to the deprecated
+   `authenticate(_:walletUniversalLink:)` — meaning beid would knowingly
+   depend on a deprecated reown-swift API to get any relay-less behavior at
+   all, with no non-deprecated substitute available in 2.3.0.
+
+### Step 3 (live prototype against a real wallet): skipped, not blocked
+
+No wallet app is installed on any available Simulator
+(`xcrun simctl list apps` — none match wallet/MetaMask/Rainbow/Trust), and
+Link Mode is fundamentally a same-physical-device Universal Link handoff
+between two real native apps — the DemoEvent-style simulator workaround this
+repo uses for BLE has no equivalent for Link Mode. This spike had no physical
+device with a wallet app installed available to it, and device-lab (`emi`) is
+scoped to BLE/two-device proximity testing, not WalletConnect. Noted per the
+task brief's "does not need to be blocked on" allowance — the source
+investigation above is the deliverable, not a live pairing screenshot.
+
+### Recommendation: drop it, don't pursue further right now
+
+- The only working relay-less path requires depending on a method reown-swift
+  has explicitly deprecated with a doc comment that misdirects to an API
+  that cannot do what's being asked of it — that is a maintenance liability,
+  not a stable integration surface. There is no signal reown-swift will keep
+  the deprecated method around, and the DEBUG-gating of the "real" Link Mode
+  methods (`authenticateLinkMode` etc.) reads as those APIs still being
+  pre-release/unstable internally, not a documentation gap that will
+  resolve soon.
+- Even if pursued, Link Mode only ever applies to wallets on the *same
+  physical device* that have separately proven support via a prior relay
+  round-trip — it can never replace relay for cross-device pairing (the
+  common case: scan a QR code with a phone, approve on that same phone
+  where the wallet app lives, which is same-device — but *also* the desktop
+  dApp / mobile wallet cross-device case that WalletConnect exists for in
+  the first place). So even a full implementation only removes relay
+  dependency for a subset of same-device sessions, never eliminates it.
+- beid's own design already treats WalletConnect as optional and
+  non-critical-path (`AGENTS.md` — the underlying attendance proof is BLE +
+  local signing; see also kura "学び5" — proof-signing is being split out
+  into its own state machine on `feat/proof-signing` independent of
+  WalletConnect). Given that, spending an Apple-Developer-Team-gated
+  Associated Domains + AASA hosting setup to shave relay dependency off a
+  same-device subset of an already-optional feature is not worth it at
+  beid's current stage.
+- Re-evaluate if: reown-swift ships a non-deprecated Link Mode entry point
+  (watch reown-swift release notes past 2.3.0), or wallet-signing becomes a
+  hard requirement rather than optional (see kura doc's "再検討すべき条件"
+  — same trigger list the relay self-host question uses applies here).
+
 ## DemoEvent mode
 
 The simulator has no BLE radio, so `SensingCoordinator.useDemoEventMode` is
