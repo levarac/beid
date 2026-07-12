@@ -34,6 +34,17 @@ struct SignatureRecord: Codable, Equatable, Hashable {
   let signedAt: Date
 }
 
+/// **PROVISIONAL — not the protocol's self-proof.** This schema is a local
+/// convenience signature only. It is unconnected to barnard's per-event
+/// signing key / RPID-ownership proof, to whitepaper §3.4's EAS
+/// EventGraphCommitment, or to §3.5's three-leg credential model. The
+/// whitepaper's §3.2 "self-proof" leg explicitly calls for a separate
+/// **account key** (distinct from the per-event key barnard already
+/// implements) — whether the wallet key fills that role is an open protocol
+/// design question, deliberately left "仮決めでよい" at the 2026-07-09 MTG.
+/// No backend/verifier may depend on this payload. See beid#33 before
+/// changing this schema or building anything against it.
+///
 /// Canonical, versioned payload a wallet signs for a given `Proof` — never
 /// the raw `Proof` fields directly. Schema `AttendanceProof/v1`:
 ///
