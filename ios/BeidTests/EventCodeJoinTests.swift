@@ -6,6 +6,11 @@ import XCTest
 
 @MainActor
 final class EventCodeJoinTests: XCTestCase {
+  override func tearDown() {
+    UserDefaults.standard.removeObject(forKey: "barnard.eventCode")
+    super.tearDown()
+  }
+
   func testSkipWalletForEventCodeRoutesToEventCodeEntry() {
     let coordinator = AppCoordinator()
     coordinator.screen = .walletConnect
