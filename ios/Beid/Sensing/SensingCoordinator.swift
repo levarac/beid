@@ -7,9 +7,9 @@ import Foundation
 /// Wraps `BarnardEngine` (scan+advertise) and `BarnardIdentity` (per-event
 /// signing) behind the app's `ScanPhase` state machine.
 ///
-/// The simulator has no BLE radio, so `useDemoEventMode` drives a simulated
-/// peer sequence (06a→06c) instead of real detections — this doubles as the
-/// future App-Review demo mode (see README).
+/// In Debug builds, `useDemoEventMode` can drive a simulated peer sequence
+/// (06a→06c) instead of real detections. Release builds always use the real
+/// sensing path (see README).
 @MainActor
 final class SensingCoordinator: ObservableObject {
   @Published private(set) var phase: ScanPhase = .idle
@@ -36,8 +36,9 @@ final class SensingCoordinator: ObservableObject {
     return 700_000_000
   }
 
+  #if DEBUG
   /// Forced on for the simulator (no BLE radio); can be overridden for
-  /// tests/demo builds.
+  /// tests and controlled demo walkthroughs.
   var useDemoEventMode: Bool = {
     #if targetEnvironment(simulator)
     return true
@@ -45,6 +46,15 @@ final class SensingCoordinator: ObservableObject {
     return false
     #endif
   }()
+  #else
+  /// Fabricated proof data must never enter a shipping build's sensing path.
+  /// Keep the setter shape so Release-configured tests can prove assignments
+  /// have no effect.
+  var useDemoEventMode: Bool {
+    get { false }
+    set {}
+  }
+  #endif
 
   init() {
     engine.onEvent = { [weak self] event in

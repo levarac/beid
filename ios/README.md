@@ -145,20 +145,25 @@ login, not SIWE).
 
 ## DemoEvent mode
 
-The simulator has no BLE radio, so `SensingCoordinator.useDemoEventMode` is
-forced on under `#if targetEnvironment(simulator)`. It drives the same
-`ScanPhase` state machine a real detection would, without touching
+The simulator has no BLE radio, so Debug builds force
+`SensingCoordinator.useDemoEventMode` on there. Debug builds can also
+override the flag for tests and controlled demo walkthroughs. It drives the
+same `ScanPhase` state machine a real detection would, without touching
 `BarnardEngine`'s scan/advertise calls:
 
 `05 Sensing → 06a Event Found → 06b Verifying (peer count ramps to
 totalPeersToVerify) → 06c Verified → 07 Proof Collected → back to 04 home`,
 and the new proof lands in `ProofStore`.
 
-This doubles as the intended future App Review demo mode — a reviewer on a
-device with no other beid devices nearby still sees the full flow.
+Release configurations, including TestFlight and App Store archives, always
+report `useDemoEventMode == false` and ignore attempts to enable it. A future
+App Review walkthrough in a shipping build therefore needs its own deliberate,
+reviewed release mechanism. Walkthroughs run from Debug builds, including on
+the Simulator, remain available without letting fabricated proof data enter
+the shipping sensing path.
 
-On a real device (`!targetEnvironment(simulator)`), `startSensing()` instead
-calls `BarnardEngine.requestPermissions` → `configure(eventCode:)` →
+When demo mode is off — including in every Release build — `startSensing()`
+instead calls `BarnardEngine.requestPermissions` → `configure(eventCode:)` →
 `startAuto()`, and a `BarnardIdentity` per-event signing key is derived via
 `signingPublicKey(eventCode:)`. Real BLE detections currently just transition
 `.sensing → .eventFound` on the first detection (a real verifying/consensus

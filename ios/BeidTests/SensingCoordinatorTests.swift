@@ -6,6 +6,34 @@ import XCTest
 
 @MainActor
 final class SensingCoordinatorTests: XCTestCase {
+  func testDemoEventModeRemainsOverridableInDebugSimulator() throws {
+    #if DEBUG && targetEnvironment(simulator)
+    let coordinator = SensingCoordinator()
+    XCTAssertTrue(coordinator.useDemoEventMode)
+
+    coordinator.useDemoEventMode = false
+    XCTAssertFalse(coordinator.useDemoEventMode)
+
+    coordinator.useDemoEventMode = true
+    XCTAssertTrue(coordinator.useDemoEventMode)
+    #else
+    throw XCTSkip("only applicable to Debug Simulator builds")
+    #endif
+  }
+
+  func testReleaseConfigurationCannotEnableDemoEventMode() throws {
+    #if DEBUG
+    throw XCTSkip("only applicable to Release-configured builds")
+    #else
+    let coordinator = SensingCoordinator()
+    coordinator.useDemoEventMode = false
+    XCTAssertFalse(coordinator.useDemoEventMode)
+
+    coordinator.useDemoEventMode = true
+    XCTAssertFalse(coordinator.useDemoEventMode)
+    #endif
+  }
+
   func testEngineOnEventIsWired() {
     // Smoke test: constructing the coordinator wires BarnardEngine's
     // onEvent callback without crashing (barnard#56 engine integration).
