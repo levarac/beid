@@ -23,6 +23,20 @@ final class NativeWebSocket: NSObject, WebSocketConnecting {
   var request: URLRequest
 
   private var task: URLSessionWebSocketTask?
+
+  // Lifecycle note (#39): URLSession strongly retains its delegate until
+  // invalidated, so using `self` here forms a retain cycle. In beid that
+  // cycle is bounded to one process-lifetime instance: the shared wallet
+  // client configures Reown once, and Reown's static Relay instance creates
+  // one socket that its Dispatcher reuses across reconnects.
+  //
+  // Do not invalidate this session from `disconnect()`: that is a temporary
+  // transport disconnect, and the same NativeWebSocket must create the next
+  // URLSessionWebSocketTask. A `deinit`-only invalidate cannot break this
+  // cycle either, because the session's delegate reference prevents deinit
+  // from being reached. If this socket ever gains a finite owner, add an
+  // explicit terminal shutdown owned by that owner (or use a weak delegate
+  // proxy), separate from reconnect-cycle disconnects.
   private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
 
   init(url: URL) {
