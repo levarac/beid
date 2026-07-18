@@ -28,8 +28,9 @@ Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 ## Barnard SDK dependency
 
 `project.yml` vendors the SDK locally at `Vendor/Barnard` rather than using a
-remote SwiftPM git dependency, pinned to
-`levarac/barnard@54385d2fc36e13b436b9fb49691f14a21e17dd5e`.
+remote SwiftPM git dependency. The exact upstream commit is recorded in
+[`Vendor/Barnard/.pin`](Vendor/Barnard/.pin), the canonical machine-readable
+pin.
 
 **Why not a remote git dependency** (the task brief's preferred default):
 levarac/barnard's Swift package lives at `packages/swift/barnard`, not at the
@@ -42,14 +43,28 @@ straight remote dependency on the pinned SHA isn't possible without a
 companion package-registry entry or a root-level `Package.swift` on barnard's
 side (out of scope for this slice).
 
-**What we did instead**: copied `packages/swift/barnard` verbatim from
-`levarac/barnard@54385d2` into `ios/Vendor/Barnard`, referenced via a local
-SwiftPM `path` dependency in `project.yml`. This mirrors the pattern the
+**What we did instead**: copied `packages/swift/barnard` verbatim from the
+commit in `Vendor/Barnard/.pin` into `ios/Vendor/Barnard`, referenced via a
+local SwiftPM `path` dependency in `project.yml`. This mirrors the pattern the
 barnard repo itself already uses (its Swift package is documented as a
 mirror, not a move, of the Flutter plugin's Flutter-free sources, with a
 `check-swift-mirror.sh` script to catch drift) — vendoring with a pinned SHA
-and a drift note is an accepted convention in this ecosystem, not a one-off
+and a drift guard is an accepted convention in this ecosystem, not a one-off
 hack.
+
+Run the guard from the repository root whenever the vendored package or pin
+changes:
+
+```sh
+ios/scripts/check-barnard-vendor.sh
+```
+
+It shallow-fetches the commit in `Vendor/Barnard/.pin`, compares upstream's
+`packages/swift/barnard` with the local package, and fails on source drift or
+if this README or `project.yml` stops referring to the canonical pin. The
+`Barnard vendor drift` GitHub Actions workflow runs the guard and its offline
+regression tests on pull requests and `main` pushes that touch
+`ios/Vendor/**` or the guard's contract files.
 
 **Follow-up**: once barnard publishes the Swift package via a proper
 mechanism (root-level `Package.swift`, package registry entry, or a
