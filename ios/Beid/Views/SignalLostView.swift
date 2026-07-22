@@ -26,3 +26,9 @@ struct SignalLostView: View {
 #Preview {
   SignalLostView(event: .sample).environmentObject(AppCoordinator())
 }
+
+#Preview("Dark") {
+  SignalLostView(event: .sample)
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
+}

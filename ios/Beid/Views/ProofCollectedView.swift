@@ -40,11 +40,29 @@ struct ProofCollectedView: View {
   }
 }
 
-#Preview {
+#Preview("Wallet connected") {
   let coordinator = AppCoordinator()
   let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
   coordinator.proofStore.add(proof)
   coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return ProofCollectedView(proof: proof)
+    .environmentObject(coordinator)
+}
+
+#Preview("Wallet connected (Dark)") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return ProofCollectedView(proof: proof)
+    .environmentObject(coordinator)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("No wallet") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
   return ProofCollectedView(proof: proof)
     .environmentObject(coordinator)
 }

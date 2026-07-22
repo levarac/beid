@@ -62,3 +62,9 @@ struct SensingView: View {
 #Preview {
   SensingView().environmentObject(AppCoordinator())
 }
+
+#Preview("Dark") {
+  SensingView()
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
+}

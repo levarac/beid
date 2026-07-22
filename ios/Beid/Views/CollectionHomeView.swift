@@ -29,15 +29,17 @@ struct CollectionHomeView: View {
               if coordinator.proofStore.proofs.isEmpty {
                 emptyState
               } else {
-                LazyVGrid(columns: columns, spacing: DS.Space.m) {
-                  ForEach(coordinator.proofStore.proofs) { proof in
-                    Button {
-                      BeidDesign.haptic()
-                      coordinator.openProof(proof)
-                    } label: {
-                      ProofCardView(proof: proof)
+                BeidGlassGroup(spacing: DS.Space.m) {
+                  LazyVGrid(columns: columns, spacing: DS.Space.m) {
+                    ForEach(coordinator.proofStore.proofs) { proof in
+                      Button {
+                        BeidDesign.haptic()
+                        coordinator.openProof(proof)
+                      } label: {
+                        ProofCardView(proof: proof)
+                      }
+                      .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                   }
                 }
               }
@@ -100,6 +102,29 @@ struct CollectionHomeView: View {
   }
 }
 
-#Preview {
+#Preview("Empty") {
   CollectionHomeView().environmentObject(AppCoordinator())
+}
+
+#Preview("Empty (Dark)") {
+  CollectionHomeView()
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Populated") {
+  let coordinator = AppCoordinator()
+  coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
+  coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
+  coordinator.proofStore.add(Proof(eventName: "beid Meetup", date: Date().addingTimeInterval(-86400 * 30), peersVerified: 1))
+  return CollectionHomeView().environmentObject(coordinator)
+}
+
+#Preview("Populated (Dark)") {
+  let coordinator = AppCoordinator()
+  coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
+  coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
+  return CollectionHomeView()
+    .environmentObject(coordinator)
+    .preferredColorScheme(.dark)
 }

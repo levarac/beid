@@ -32,3 +32,8 @@ struct VerifiedView: View {
 #Preview {
   VerifiedView(event: .sample, peersVerified: 3)
 }
+
+#Preview("Dark") {
+  VerifiedView(event: .sample, peersVerified: 3)
+    .preferredColorScheme(.dark)
+}

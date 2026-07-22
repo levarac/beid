@@ -40,12 +40,7 @@ struct ProofCardView: View {
     }
     .padding(DS.Space.m)
     .frame(maxWidth: .infinity, minHeight: 188, alignment: .topLeading)
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: BeidDesign.Radius.card, style: .continuous))
-    .overlay {
-      RoundedRectangle(cornerRadius: BeidDesign.Radius.card, style: .continuous)
-        .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
-    }
-    .beidGlass(interactive: true, cornerRadius: BeidDesign.Radius.card)
+    .beidSurface(interactive: true, cornerRadius: BeidDesign.Radius.card)
   }
 }
 
@@ -53,4 +48,11 @@ struct ProofCardView: View {
   ProofCardView(proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
     .frame(width: 160)
     .padding()
+}
+
+#Preview("Dark") {
+  ProofCardView(proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
+    .frame(width: 160)
+    .padding()
+    .preferredColorScheme(.dark)
 }

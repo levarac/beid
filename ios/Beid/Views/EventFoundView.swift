@@ -41,3 +41,8 @@ struct EventFoundView: View {
 #Preview {
   EventFoundView(event: .sample)
 }
+
+#Preview("Dark") {
+  EventFoundView(event: .sample)
+    .preferredColorScheme(.dark)
+}

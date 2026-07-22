@@ -52,3 +52,14 @@ struct VerifyingView: View {
 #Preview {
   VerifyingView(event: .sample, peersVerified: 1).environmentObject(AppCoordinator())
 }
+
+#Preview("Dark") {
+  VerifyingView(event: .sample, peersVerified: 1)
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Nearly complete") {
+  VerifyingView(event: .sample, peersVerified: DemoEvent.sample.totalPeersToVerify - 1)
+    .environmentObject(AppCoordinator())
+}

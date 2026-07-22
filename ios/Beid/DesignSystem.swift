@@ -46,15 +46,17 @@ struct BeidScreen<Content: View, Footer: View>: View {
         .ignoresSafeArea()
 
       BeidAdaptiveContent {
-        VStack(spacing: BeidDesign.Spacing.section) {
-          Spacer(minLength: 20)
-          content
-          Spacer(minLength: 20)
-          footer
+        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
+          VStack(spacing: BeidDesign.Spacing.section) {
+            Spacer(minLength: 20)
+            content
+            Spacer(minLength: 20)
+            footer
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+          .padding(.bottom, 28)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
-        .padding(.bottom, 28)
       }
     }
   }
@@ -116,14 +118,7 @@ struct BeidGlyph: View {
   var size: CGFloat = 72
 
   var body: some View {
-    ZStack {
-      RoundedRectangle(cornerRadius: BeidDesign.Radius.glyph, style: .continuous)
-        .fill(.thinMaterial)
-        .overlay {
-          RoundedRectangle(cornerRadius: BeidDesign.Radius.glyph, style: .continuous)
-            .strokeBorder(.separator.opacity(0.35), lineWidth: 1)
-        }
-
+    Group {
       if let assetImage {
         Image(assetImage)
           .resizable()
@@ -137,7 +132,7 @@ struct BeidGlyph: View {
       }
     }
     .frame(width: size, height: size)
-    .beidGlass(interactive: false, cornerRadius: BeidDesign.Radius.glyph)
+    .beidSurface(cornerRadius: BeidDesign.Radius.glyph, fallback: .thinMaterial)
     .accessibilityHidden(true)
   }
 }
@@ -154,20 +149,29 @@ struct BeidPrimaryButton: View {
   }
 
   var body: some View {
-    Button(action: performAction) {
-      HStack(spacing: DS.Space.s) {
-        if let systemImage {
-          Image(systemName: systemImage)
-        }
-        Text(title)
+    Group {
+      if #available(iOS 26.0, *) {
+        Button(action: performAction, label: label)
+          .buttonStyle(.glassProminent)
+      } else {
+        Button(action: performAction, label: label)
+          .buttonStyle(.borderedProminent)
+          .buttonBorderShape(.roundedRectangle(radius: BeidDesign.Radius.control))
       }
-      .font(DS.Font.cta)
-      .frame(maxWidth: .infinity)
-      .frame(minHeight: 52)
     }
-    .buttonStyle(.borderedProminent)
-    .buttonBorderShape(.roundedRectangle(radius: BeidDesign.Radius.control))
     .controlSize(.large)
+  }
+
+  private func label() -> some View {
+    HStack(spacing: DS.Space.s) {
+      if let systemImage {
+        Image(systemName: systemImage)
+      }
+      Text(title)
+    }
+    .font(DS.Font.cta)
+    .frame(maxWidth: .infinity)
+    .frame(minHeight: 52)
   }
 
   private func performAction() {
@@ -181,13 +185,20 @@ struct BeidSecondaryButton: View {
   let action: () -> Void
 
   var body: some View {
-    Button(action: performAction) {
-      Text(title)
-        .font(DS.Font.cardTitle)
-        .frame(maxWidth: .infinity, minHeight: 44)
+    if #available(iOS 26.0, *) {
+      Button(action: performAction, label: label)
+        .buttonStyle(.glass)
+    } else {
+      Button(action: performAction, label: label)
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: BeidDesign.Radius.control))
     }
-    .buttonStyle(.bordered)
-    .buttonBorderShape(.roundedRectangle(radius: BeidDesign.Radius.control))
+  }
+
+  private func label() -> some View {
+    Text(title)
+      .font(DS.Font.cardTitle)
+      .frame(maxWidth: .infinity, minHeight: 44)
   }
 
   private func performAction() {
@@ -207,7 +218,7 @@ struct BeidBulletRow: View {
         .foregroundStyle(.tint)
         .symbolRenderingMode(.hierarchical)
         .frame(width: 28, height: 28)
-        .background(.thinMaterial, in: Circle())
+        .beidSurface(cornerRadius: BeidDesign.Radius.control, fallback: .thinMaterial)
 
       Text(title)
         .font(DS.Font.body)
@@ -229,12 +240,7 @@ struct BeidPanel<Content: View>: View {
     content
       .padding(18)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: BeidDesign.Radius.card, style: .continuous))
-      .overlay {
-        RoundedRectangle(cornerRadius: BeidDesign.Radius.card, style: .continuous)
-          .strokeBorder(.separator.opacity(0.32), lineWidth: 1)
-      }
-      .beidGlass(interactive: false, cornerRadius: BeidDesign.Radius.card)
+      .beidSurface(cornerRadius: BeidDesign.Radius.card)
   }
 }
 
@@ -317,17 +323,53 @@ struct BeidMetricRow: View {
   }
 }
 
-extension View {
-  @ViewBuilder
-  func beidGlass(interactive: Bool, cornerRadius: CGFloat) -> some View {
+/// Groups nearby Liquid Glass surfaces so iOS 26 can blend and morph them
+/// as one material instead of compositing each independently — see
+/// DESIGN.md §8 "Materials". Below iOS 26 there is no glass to group, so
+/// this is a plain passthrough. Wrap any cluster of `beidSurface`-backed
+/// views that sit visually close together on one screen (a glyph, a panel,
+/// a footer button); do not wrap views that are far apart or on different
+/// screens — that defeats the container's purpose.
+struct BeidGlassGroup<Content: View>: View {
+  var spacing: CGFloat = BeidDesign.Spacing.content
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
     if #available(iOS 26.0, *) {
-      if interactive {
-        self.glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
-      } else {
-        self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+      GlassEffectContainer(spacing: spacing) {
+        content()
       }
     } else {
+      content()
+    }
+  }
+}
+
+extension View {
+  /// The one sanctioned way to give a view a physical surface: Liquid
+  /// Glass on iOS 26+, a system material + hairline stroke below it. This
+  /// modifier owns the entire surface fill — MUST NOT be paired with a
+  /// separate `.background(material:)`/`.background(color:)` call, which
+  /// would stack a second material or color directly underneath the glass
+  /// (DESIGN.md §8: no glass-on-glass nesting).
+  @ViewBuilder
+  func beidSurface(
+    interactive: Bool = false,
+    cornerRadius: CGFloat,
+    fallback: Material = .regularMaterial
+  ) -> some View {
+    if #available(iOS 26.0, *) {
+      self.glassEffect(
+        interactive ? .regular.interactive() : .regular,
+        in: .rect(cornerRadius: cornerRadius)
+      )
+    } else {
       self
+        .background(fallback, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(DS.Color.strokeHairline, lineWidth: 1)
+        }
     }
   }
 }

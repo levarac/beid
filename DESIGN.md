@@ -284,6 +284,64 @@ rounded rectangles use `style: .continuous`.
   and does not get glass by default. No glass-on-glass nesting.
 - FORBIDDEN: Faking glass with arbitrary blur rectangles.
 
+### 8a. Liquid Glass materials (design-approved surface, DesignException: this section)
+
+Beid expresses Liquid Glass through the quiet-field-instrument register, not
+against it: glass is restrained, matte-adjacent, and reserved for chrome —
+never a decorative flourish layered onto content or artwork.
+
+- **The one sanctioned mechanism**: `View.beidSurface(interactive:cornerRadius:fallback:)`
+  in `ios/Beid/DesignSystem.swift`. On iOS 26+ it applies `.glassEffect`
+  (regular, `.interactive()` only when the surface is genuinely tappable);
+  below iOS 26 it falls back to a system `Material` plus a
+  `DS.Color.strokeHairline` stroke. This modifier owns the entire surface
+  fill — call sites MUST NOT pair it with a separate
+  `.background(material:)`/`.background(color:)`. (A real instance of this
+  bug shipped in the original `beidGlass` helper: `BeidPanel` and
+  `ProofCardView` both painted `.background(.regularMaterial, in: …)`
+  *underneath* `.glassEffect(...)`, stacking two materials on iOS 26 — the
+  exact glass-on-glass nesting this document forbids. Fixed by folding the
+  fallback material into `beidSurface` itself, so glass and material are
+  mutually exclusive by construction, not by call-site discipline.)
+- **Where glass applies** (functional chrome, per the existing §8 rule):
+  `BeidGlyph` (icon roundels), `BeidPanel` (metadata/status card
+  backgrounds), `ProofCardView` (interactive grid cards — `interactive:
+  true`, since tapping opens the detail screen), `BeidPrimaryButton`
+  (`.buttonStyle(.glassProminent)`) and `BeidSecondaryButton`
+  (`.buttonStyle(.glass)`), `BeidBulletRow`'s icon roundel.
+- **Where glass does not apply**: `DS.Color.surfaceCanvas` screen
+  backgrounds (a root background is structural, not a floating control —
+  glassing it would remove the "matte and physical" ground everything else
+  sits on); proof/ceremony artwork (`DS.Artwork.proofCardGradient`, seal
+  moments) — content, per the existing §8 rule, not chrome; `AccountSheetView`'s
+  `List` rows (§2.10: standard containers first; a system `List` already
+  gets the platform's own Liquid Glass row treatment on iOS 26 for free —
+  wrapping rows in `beidSurface` on top of that would itself be
+  glass-on-glass); the `WalletConnectPairingView` QR code surface and the
+  `EventCodeEntryView` text-field container, which stay `surfaceRaised` +
+  hairline — a scan target and a text-entry field are read, not tapped as
+  chrome, so matte legibility wins over glass.
+- **Grouping**: `BeidGlassGroup` (also in `DesignSystem.swift`) wraps
+  `GlassEffectContainer` on iOS 26+ (plain passthrough below it). Use it
+  around any cluster of `beidSurface`-backed views that sit close together
+  on one screen, so iOS 26 can blend/merge them in one render pass instead
+  of compositing each independently — `BeidScreen` wraps its whole
+  content+footer stack (covers every state-screen pattern: glyph header +
+  panel + CTA), `CollectionHomeView` wraps the proof-card grid,
+  `ItemDetailView` wraps its three stacked panels. Do not wrap views that
+  are far apart or on different screens; that defeats the container's
+  purpose per the upstream guidance.
+- **Deployment target**: stays iOS 17 (`ios/project.yml`); every Liquid
+  Glass call site is gated behind `#available(iOS 26, *)` with a real
+  fallback, never unguarded. Ken's "ふんだんに" (generously) directive is
+  read as *thorough adoption of the sanctioned surface pattern across every
+  eligible chrome element*, not as raising the minimum OS — beid's existing
+  users on iOS 17–25 get the identical matte-material look this app
+  already shipped with; iOS 26 users get glass. No `DesignException` is
+  needed for staying on iOS 17; raising the deployment target is a
+  business decision (device-support cutoff) outside this design pass's
+  scope.
+
 ## 9. Motion and Haptics
 
 Motion is spring-first and interruptible. Springs are parameterized by
