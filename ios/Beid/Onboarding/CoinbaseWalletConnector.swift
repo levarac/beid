@@ -88,6 +88,9 @@ final class CoinbaseWalletConnector: ObservableObject, WalletConnector {
     guard let account else {
       return .failure(.notConnected)
     }
+    guard transport.isWalletInstalled else {
+      return .failure(.relayFailure("Coinbase Wallet is not installed"))
+    }
 
     return await withCheckedContinuation { continuation in
       let gate = CoinbaseSignResultGate(continuation: continuation)
@@ -103,9 +106,16 @@ final class CoinbaseWalletConnector: ObservableObject, WalletConnector {
           }
         }
       }
+      // Contract divergence from ReownWalletConnectClient: the Coinbase SDK
+      // exposes no dispatch-success signal (makeRequest only calls back with a
+      // response or failure), so onDispatched fires as soon as the request is
+      // handed to the SDK. An immediate dispatch failure briefly persists
+      // .awaitingApproval before the failure result overwrites it; the
+      // installed-wallet guard above removes the dominant failure mode.
       onDispatched?()
-      Task { @MainActor in
+      gate.timeoutTask = Task { @MainActor in
         try? await Task.sleep(nanoseconds: UInt64(responseTimeout * 1_000_000_000))
+        guard !Task.isCancelled else { return }
         gate.finish(.failure(.timedOut))
       }
     }
@@ -127,12 +137,15 @@ final class CoinbaseWalletConnector: ObservableObject, WalletConnector {
 @MainActor
 private final class CoinbaseSignResultGate {
   private var continuation: CheckedContinuation<Result<String, WalletConnectorError>, Never>?
+  var timeoutTask: Task<Void, Never>?
 
   init(continuation: CheckedContinuation<Result<String, WalletConnectorError>, Never>) {
     self.continuation = continuation
   }
 
   func finish(_ result: Result<String, WalletConnectorError>) {
+    timeoutTask?.cancel()
+    timeoutTask = nil
     continuation?.resume(returning: result)
     continuation = nil
   }
