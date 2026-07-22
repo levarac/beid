@@ -140,11 +140,18 @@ struct BeidGlyph: View {
 struct BeidPrimaryButton: View {
   let title: LocalizedStringKey
   let systemImage: String?
+  let labelColor: Color
   let action: () -> Void
 
-  init(_ title: LocalizedStringKey, systemImage: String? = nil, action: @escaping () -> Void) {
+  init(
+    _ title: LocalizedStringKey,
+    systemImage: String? = nil,
+    labelColor: Color = DS.Color.surfaceCanvas,
+    action: @escaping () -> Void
+  ) {
     self.title = title
     self.systemImage = systemImage
+    self.labelColor = labelColor
     self.action = action
   }
 
@@ -172,10 +179,12 @@ struct BeidPrimaryButton: View {
     .font(DS.Font.cta)
     // Prominent styles default the label to white, which disappears on the
     // light fills this palette uses in dark mode (actionPrimary dark is
-    // #E8EAEC → 1.2:1). surfaceCanvas is the per-mode inverse of every
-    // prominent fill in the palette: ≥4.4:1 on all fill×mode pairs except
-    // signalWarning/light (2.8:1, on par with the 3.1:1 white it replaces).
-    .foregroundStyle(DS.Color.surfaceCanvas)
+    // #E8EAEC → 1.2:1). The surfaceCanvas default is the per-mode inverse
+    // of actionPrimary and proofSeal (≥4.4:1 both modes). signalWarning is
+    // mid-luminance in BOTH modes — those call sites pass
+    // DS.Color.labelOnWarning instead. signalActive is not a sanctioned
+    // CTA fill (DESIGN.md §5) and neither label works on it (~2:1).
+    .foregroundStyle(labelColor)
     .frame(maxWidth: .infinity)
     .frame(minHeight: 52)
   }

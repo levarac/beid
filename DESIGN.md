@@ -188,6 +188,7 @@ resolved **against**. Exact secondary hex values (surfaces, text, hairline,
 | `DS.Color.signalActive` | `#18C7A7` | `#62E8D0` | Live sensing signal | Sensing pulse, verifying progress, one key accent per scan screen | Body text, large fills |
 | `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
 | `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Seal artwork, seal/verified moments, proof accents | Generic links, nav tint |
+| `DS.Color.labelOnWarning` | `#1A1C1E` | `#111315` | CTA label on `signalWarning` fill | Prominent-button labels on recovery screens | Anything except labels sitting on a `signalWarning` fill |
 | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
 | `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView`, `ProofCollectedView` signature controls) | BLE signal issues (use `signalWarning` instead) |
 
@@ -210,6 +211,14 @@ Rules:
 - MAY: System semantic colors (`.primary`, `.secondary`, `Color(.systemRed)`)
   inside `DesignSystem/` as implementation details of a token — never
   directly in Views.
+- MUST: Prominent CTA labels never rely on the button style's default
+  white. The label is `surfaceCanvas` (fill inversion) on `actionPrimary`
+  and `proofSeal` fills, and `labelOnWarning` on `signalWarning` fills
+  (that fill is mid-luminance in both modes, so inversion fails there) —
+  see `BeidPrimaryButton`. Any fill hex change (including ratifying this
+  PROPOSAL palette) MUST re-check ≥3:1 label-on-fill contrast in both
+  modes. `signalActive` is not a CTA fill; no sanctioned label exists
+  for it.
 - The per-proof generated gradient is a *data-driven* artwork generator,
   not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
   its canonical home and the only sanctioned source of `Color(hue:)`.
@@ -233,7 +242,7 @@ Ramp (all Dynamic Type text styles, defined in `DS.Font`):
 | `DS.Font.supporting` | `.subheadline` | Supporting copy | Pair with `textSecondary` |
 | `DS.Font.meta` | `.caption` | Dates, counts | |
 | `DS.Font.ledgerMono` | `.footnote` monospaced | Addresses, hashes, proof IDs | Ledger Trace motif only |
-| `DS.Font.cta` | `.headline` | Primary CTA labels | Label color is `surfaceCanvas` (fill inversion), never the style default white — see `BeidPrimaryButton` |
+| `DS.Font.cta` | `.headline` | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
 
 Rules:
 
