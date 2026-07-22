@@ -76,6 +76,11 @@ struct CollectionHomeView: View {
         AccountSheetView()
           .presentationDetents([.medium])
           .presentationDragIndicator(.visible)
+          // Sheets don't inherit the presenter's .tint (unlike push
+          // navigation) — without this, the Done/Connect Wallet buttons
+          // render system blue. Same fix as AccountSheetView's own
+          // WalletConnectSheetView doc comment already describes.
+          .tint(DS.Color.actionPrimary)
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         ItemDetailView(proof: proof)

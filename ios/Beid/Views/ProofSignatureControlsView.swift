@@ -204,6 +204,19 @@ struct ProofSignatureControlsView: View {
   .environmentObject(coordinator)
 }
 
+#Preview("Awaiting approval") {
+  let coordinator = AppCoordinator()
+  var proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  proof.signatureState = .awaitingApproval
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return BeidPanel {
+    ProofSignatureControlsView(proofId: proof.id)
+  }
+  .padding()
+  .environmentObject(coordinator)
+}
+
 #Preview("Not signed, wallet connected (Dark)") {
   let coordinator = AppCoordinator()
   let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)

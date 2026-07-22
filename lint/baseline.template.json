@@ -10,7 +10,7 @@
       },
       "reason": "Use DS.Motion.*.",
       "ruleDescription": "",
-      "ruleName": "No hardcoded animation",
+      "ruleName": "No hardcoded animation curves",
       "severity": "error"
     }
   },
@@ -125,7 +125,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothOffView.swift",
-        "line": 18,
+        "line": 17,
         "character": 14
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
@@ -155,7 +155,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-        "line": 88,
+        "line": 93,
         "character": 7
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
@@ -170,7 +170,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-        "line": 100,
+        "line": 105,
         "character": 7
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",

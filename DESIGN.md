@@ -336,8 +336,11 @@ never a decorative flourish layered onto content or artwork.
   fallback, never unguarded. Ken's "ふんだんに" (generously) directive is
   read as *thorough adoption of the sanctioned surface pattern across every
   eligible chrome element*, not as raising the minimum OS — beid's existing
-  users on iOS 17–25 get the identical matte-material look this app
-  already shipped with; iOS 26 users get glass. No `DesignException` is
+  users on iOS 17–25 get an equivalent matte-material look (the pre-26
+  fallback path in `beidSurface` now draws its hairline stroke from
+  `DS.Color.strokeHairline` instead of the previous `.separator.opacity`,
+  a deliberate token-correctness fix, not a value-preserving no-op); iOS 26
+  users get glass. No `DesignException` is
   needed for staying on iOS 17; raising the deployment target is a
   business decision (device-support cutoff) outside this design pass's
   scope.
