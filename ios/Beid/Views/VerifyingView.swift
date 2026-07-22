@@ -46,6 +46,8 @@ struct VerifyingView: View {
       .font(.footnote)
       }
     )
+    // Sensing screen: DESIGN.md §5 "one motif accent per screen".
+    .tint(DS.Color.signalActive)
   }
 }
 

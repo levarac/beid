@@ -13,13 +13,15 @@ struct SignalLostView: View {
       systemImage: "exclamationmark.triangle.fill",
       title: "Signal Lost",
       message: "beid lost the connection to \(event.name). Move closer and we'll pick it back up automatically.",
-      tint: .orange,
       footer: {
       BeidPrimaryButton("Try Again", systemImage: "arrow.clockwise") {
         coordinator.sensingCoordinator.startSensing(demoEvent: event)
       }
       }
     )
+    // Recovery screen: header glyph + "Try Again" both get the shared
+    // signalWarning accent — DESIGN.md §5 "one motif accent per screen".
+    .tint(DS.Color.signalWarning)
   }
 }
 

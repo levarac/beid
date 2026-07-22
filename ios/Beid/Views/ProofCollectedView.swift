@@ -14,7 +14,6 @@ struct ProofCollectedView: View {
       assetImage: "proof-seal-mark",
       title: "Proof Collected",
       message: "Added to your collection.",
-      tint: .accentColor,
       accessory: {
       VStack(spacing: BeidDesign.Spacing.section) {
         BeidPanel {
@@ -37,6 +36,12 @@ struct ProofCollectedView: View {
       }
       }
     )
+    // Ceremony screen: header glyph + "Done" both get the shared proofSeal
+    // accent — DESIGN.md §5 "one motif accent per screen". (Previously
+    // this fell through to the screen switch's ambient actionPrimary tint,
+    // since `tint:` only colored the header glyph, not the footer button —
+    // a real §5 gap, not just a debug-tool artifact.)
+    .tint(DS.Color.proofSeal)
   }
 }
 
