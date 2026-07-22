@@ -156,4 +156,61 @@ final class ProofSignatureTests: XCTestCase {
 
     XCTAssertEqual(coordinator.proofStore.proof(withId: proof.id)?.signatureState, .awaitingApproval)
   }
+
+  func testSignProofRoutesAttendanceProofDigestThroughSelectedConnector() async throws {
+    let fileURL = makeTempFileURL()
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+    let store = ProofStore(fileURL: fileURL)
+    let connector = FakeProofSigningConnector()
+    let coordinator = AppCoordinator(walletConnector: connector, proofStore: store)
+    let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+    store.add(proof)
+    coordinator.walletAddress = connector.address
+
+    await coordinator.signProof(proof)
+
+    guard case .signed(let record) = store.proof(withId: proof.id)?.signatureState else {
+      return XCTFail("Expected the proof to be signed")
+    }
+    XCTAssertEqual(record.payload.schema, "AttendanceProof/v1")
+    XCTAssertEqual(record.payload.chainId, connector.chainId)
+    XCTAssertEqual(connector.requestedDigest, try record.payload.signingDigestHex())
+    XCTAssertTrue(connector.didDispatch)
+  }
+}
+
+@MainActor
+private final class FakeProofSigningConnector: ObservableObject, WalletConnector {
+  @Published private(set) var state: WalletConnectorState = .connected(address: "0xABSTRACTION")
+  let chainId = "eip155:8453"
+  private(set) var requestedDigest: String?
+  private(set) var didDispatch = false
+
+  var address: String? {
+    if case .connected(let address) = state { return address }
+    return nil
+  }
+
+  func configureIfNeeded() {}
+
+  func connect() async {}
+
+  func requestPersonalSign(
+    digestHex: String,
+    responseTimeout: TimeInterval,
+    onDispatched: (() -> Void)?
+  ) async -> Result<String, WalletConnectorError> {
+    requestedDigest = digestHex
+    onDispatched?()
+    didDispatch = true
+    return .success("0xSIGNATURE")
+  }
+
+  func disconnect() {
+    state = .idle
+  }
+
+  func handle(url: URL) -> Bool {
+    false
+  }
 }

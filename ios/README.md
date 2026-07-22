@@ -97,9 +97,11 @@ The wallet step uses the real WalletConnect (Reown) pairing flow — see
 
 `WalletConnectView` (onboarding) and the Account sheet's "Connect Wallet"
 action both use `WalletConnectPairingView`
-(`Beid/Views/WalletConnectView.swift`), backed by
-`ReownWalletConnectClient` (`Beid/Onboarding/`), which wraps reown-swift
-2.3.0's `Sign`/`Pair`/`Networking` APIs directly.
+(`Beid/Views/WalletConnectView.swift`). The UI selects a `WalletConnector`:
+`ReownWalletConnectClient` wraps reown-swift 2.3.0, while
+`CoinbaseWalletConnector` wraps Coinbase's direct app-to-app mobile SDK.
+The selected connector is retained by `AppCoordinator`, so proof signing
+uses the same session that supplied the connected address.
 
 **SDK choice**: [reown-swift](https://github.com/reown-com/reown-swift)
 (actively maintained; the legacy
@@ -157,6 +159,24 @@ URI actually being scanned/approved by a wallet, the `beid://` redirect
 round-trip back from a wallet app, disconnect/session-persistence across
 launches, and SIWE/`authenticate()` (out of scope — beid does WalletConnect
 login, not SIWE).
+
+### Coinbase Wallet connector
+
+`project.yml` pins `coinbase/wallet-mobile-sdk` exactly at **1.1.2** and
+links its `CoinbaseWalletSDK` product directly. It uses the existing `beid`
+custom URL scheme with callback `beid://coinbase-wallet`; no API key,
+project ID, relay, or `Secrets.plist` change is required. The app declares
+the SDK's `cbwallet` and `mwp+1.1` query schemes so it can detect whether
+Coinbase Wallet is installed. If it is absent, the connector does not start
+a handshake and the UI offers the Coinbase Wallet App Store page instead.
+
+The upstream project is not archived, but tag 1.1.2 dates from 2024-09-10
+and the repository's last source push was 2025-06-12. An
+[open upstream issue](https://github.com/coinbase/wallet-mobile-sdk/issues/10)
+reports that Mobile Wallet Protocol connection requests may not reach the
+Base app on 1.1.2; this is a real-device verification risk, not something a
+Simulator test can settle. Keep the exact pin until an upgrade is reviewed
+against a real Coinbase Wallet pairing and `personal_sign` round trip.
 
 ## DemoEvent mode
 

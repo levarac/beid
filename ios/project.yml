@@ -22,6 +22,11 @@ packages:
     # spike/walletconnect-native (commit a22d0f4) on Simulator.
     url: https://github.com/reown-com/reown-swift
     exactVersion: 2.3.0
+  CoinbaseWallet:
+    # Direct app-to-app wallet transport. Pinned because upstream activity
+    # is limited and compatibility must be reviewed before any upgrade.
+    url: https://github.com/coinbase/wallet-mobile-sdk
+    exactVersion: 1.1.2
 targets:
   Beid:
     type: application
@@ -33,6 +38,8 @@ targets:
         product: Barnard
       - package: WalletConnect
         product: WalletConnect
+      - package: CoinbaseWallet
+        product: CoinbaseWalletSDK
     entitlements:
       path: Beid/App/Beid.entitlements
       properties:
@@ -62,6 +69,9 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLSchemes:
               - beid
+        LSApplicationQueriesSchemes:
+          - cbwallet
+          - mwp+1.1
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.levarac.beid

@@ -16,8 +16,8 @@ struct WalletConnectView: View {
         Spacer()
 
         WalletConnectPairingView(
-          onConnected: { address in
-            coordinator.completeWalletConnect(address: address)
+          onConnected: { address, connector in
+            coordinator.completeWalletConnect(address: address, connector: connector)
           },
           secondaryAction: (
             title: "Enter event code instead",
@@ -41,12 +41,20 @@ struct WalletConnectView: View {
 /// code instead"; the Account sheet passes `nil` and relies on its own
 /// Cancel toolbar button instead).
 struct WalletConnectPairingView: View {
-  @StateObject private var client = ReownWalletConnectClient.shared
-  let onConnected: (String) -> Void
+  private enum Provider: Equatable {
+    case reown
+    case coinbase
+  }
+
+  @Environment(\.openURL) private var openURL
+  @StateObject private var reownClient = ReownWalletConnectClient.shared
+  @StateObject private var coinbaseClient = CoinbaseWalletConnector.shared
+  @State private var selectedProvider: Provider?
+  let onConnected: (String, any WalletConnector) -> Void
   let secondaryAction: (title: LocalizedStringKey, action: () -> Void)?
 
   init(
-    onConnected: @escaping (String) -> Void,
+    onConnected: @escaping (String, any WalletConnector) -> Void,
     secondaryAction: (title: LocalizedStringKey, action: () -> Void)? = nil
   ) {
     self.onConnected = onConnected
@@ -55,41 +63,61 @@ struct WalletConnectPairingView: View {
 
   var body: some View {
     VStack(spacing: DS.Space.l) {
-      switch client.state {
-      case .notConfigured:
-        notConfiguredContent
-      case .idle:
-        idleContent
-      case .connecting:
-        connectingContent
-      case .awaitingApproval(let uri):
-        awaitingApprovalContent(uri: uri)
-      case .connected(let address):
-        connectedContent(address: address)
-      case .failed(let message):
-        failedContent(message: message)
+      switch selectedProvider {
+      case nil:
+        providerSelectionContent
+      case .reown:
+        connectorContent(reownClient, provider: .reown)
+      case .coinbase:
+        connectorContent(coinbaseClient, provider: .coinbase)
       }
     }
     .task {
-      client.configureIfNeeded()
+      reownClient.configureIfNeeded()
+      coinbaseClient.configureIfNeeded()
       // A wallet may have approved a pairing started from a previous
       // mount of this view (e.g. the user backgrounded the app, or left
       // for the event-code fallback, while `.awaitingApproval`) — deliver
       // that already-settled state now, since `.onChange` below only
       // fires on a *transition* and would otherwise never fire for a
       // state that was already `.connected` when this view appeared.
-      if case .connected(let address) = client.state {
-        onConnected(address)
+      deliverConnectedState(from: reownClient, provider: .reown)
+      deliverConnectedState(from: coinbaseClient, provider: .coinbase)
+    }
+    .onChange(of: reownClient.state) { _, newState in
+      if selectedProvider == .reown, case .connected(let address) = newState {
+        onConnected(address, reownClient)
       }
     }
-    .onChange(of: client.state) { _, newState in
-      if case .connected(let address) = newState {
-        onConnected(address)
+    .onChange(of: coinbaseClient.state) { _, newState in
+      if selectedProvider == .coinbase, case .connected(let address) = newState {
+        onConnected(address, coinbaseClient)
       }
     }
   }
 
-  private var notConfiguredContent: some View {
+  @ViewBuilder
+  private func connectorContent<C: WalletConnector>(_ client: C, provider: Provider) -> some View {
+    switch client.state {
+    case .notConfigured:
+      notConfiguredContent(client: client)
+    case .unavailable(.walletNotInstalled):
+      walletNotInstalledContent(client: client)
+    case .idle:
+      connectingContent
+        .task { await client.connect() }
+    case .connecting:
+      connectingContent
+    case .awaitingApproval(let uri):
+      awaitingApprovalContent(uri: uri, provider: provider, client: client)
+    case .connected(let address):
+      connectedContent(address: address)
+    case .failed(let message):
+      failedContent(message: message, client: client)
+    }
+  }
+
+  private func notConfiguredContent<C: WalletConnector>(client: C) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
         systemImage: "exclamationmark.triangle.fill",
@@ -97,6 +125,10 @@ struct WalletConnectPairingView: View {
         subtitle: "beid needs a Reown Cloud project ID to connect a wallet. Copy ios/Secrets.example.plist to ios/Beid/Secrets.plist and fill in PROJECT_ID from dashboard.reown.com.",
         tint: DS.Color.actionPrimary
       )
+      BeidSecondaryButton(title: "Choose another wallet") {
+        chooseAnotherWallet(client)
+      }
+      .tint(DS.Color.actionPrimary)
       if let secondaryAction {
         BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)
           .tint(DS.Color.actionPrimary)
@@ -104,7 +136,7 @@ struct WalletConnectPairingView: View {
     }
   }
 
-  private var idleContent: some View {
+  private var providerSelectionContent: some View {
     VStack(spacing: DS.Space.s) {
       BeidHeroHeader(
         systemImage: "wallet.pass.fill",
@@ -115,10 +147,15 @@ struct WalletConnectPairingView: View {
 
       VStack(spacing: DS.Space.s) {
         BeidPrimaryButton("Connect Wallet", systemImage: "wallet.pass") {
-          Task { await client.connect() }
+          selectedProvider = .reown
         }
         .tint(DS.Color.actionPrimary)
         .padding(.top, DS.Space.s)
+
+        BeidSecondaryButton(title: "Connect with Coinbase Wallet") {
+          selectedProvider = .coinbase
+        }
+        .tint(DS.Color.actionPrimary)
 
         if let secondaryAction {
           BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)
@@ -141,14 +178,18 @@ struct WalletConnectPairingView: View {
     }
   }
 
-  private func awaitingApprovalContent(uri: String) -> some View {
+  private func awaitingApprovalContent<C: WalletConnector>(
+    uri: String?,
+    provider: Provider,
+    client: C
+  ) -> some View {
     VStack(spacing: DS.Space.m) {
-      Text("Scan with a WalletConnect-compatible wallet")
+      Text(approvalTitle(for: provider))
         .font(DS.Font.sectionTitle)
         .foregroundStyle(DS.Color.textPrimary)
         .multilineTextAlignment(.center)
 
-      if let qrImage = QRCodeRenderer.image(for: uri) {
+      if let uri, let qrImage = QRCodeRenderer.image(for: uri) {
         qrImage
           .interpolation(.none)
           .resizable()
@@ -166,18 +207,20 @@ struct WalletConnectPairingView: View {
           .accessibilityHidden(true)
       }
 
-      Text(verbatim: uri)
-        .font(DS.Font.ledgerMono)
-        .lineLimit(3)
-        .truncationMode(.middle)
-        .foregroundStyle(DS.Color.textSecondary)
-        .textSelection(.enabled)
-        .accessibilityLabel(Text("Pairing URI"))
+      if let uri {
+        Text(verbatim: uri)
+          .font(DS.Font.ledgerMono)
+          .lineLimit(3)
+          .truncationMode(.middle)
+          .foregroundStyle(DS.Color.textSecondary)
+          .textSelection(.enabled)
+          .accessibilityLabel(Text("Pairing URI"))
 
-      BeidSecondaryButton(title: "Copy URI") {
-        UIPasteboard.general.string = uri
+        BeidSecondaryButton(title: "Copy URI") {
+          UIPasteboard.general.string = uri
+        }
+        .tint(DS.Color.actionPrimary)
       }
-      .tint(DS.Color.actionPrimary)
 
       HStack(spacing: DS.Space.s) {
         ProgressView()
@@ -189,7 +232,7 @@ struct WalletConnectPairingView: View {
       .padding(.top, DS.Space.s)
 
       Button("Cancel", role: .cancel) {
-        client.reset()
+        chooseAnotherWallet(client)
       }
       .tint(DS.Color.actionPrimary)
       .padding(.top, DS.Space.xs)
@@ -205,7 +248,7 @@ struct WalletConnectPairingView: View {
     )
   }
 
-  private func failedContent(message: String) -> some View {
+  private func failedContent<C: WalletConnector>(message: String, client: C) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
         systemImage: "xmark.octagon.fill",
@@ -219,7 +262,13 @@ struct WalletConnectPairingView: View {
         .multilineTextAlignment(.center)
       VStack(spacing: DS.Space.s) {
         BeidSecondaryButton(title: "Try Again") {
-          client.reset()
+          client.disconnect()
+          Task { await client.connect() }
+        }
+        .tint(DS.Color.actionPrimary)
+
+        BeidSecondaryButton(title: "Choose another wallet") {
+          chooseAnotherWallet(client)
         }
         .tint(DS.Color.actionPrimary)
 
@@ -229,6 +278,50 @@ struct WalletConnectPairingView: View {
         }
       }
     }
+  }
+
+  private func walletNotInstalledContent<C: WalletConnector>(client: C) -> some View {
+    VStack(spacing: DS.Space.l) {
+      BeidHeroHeader(
+        systemImage: "wallet.pass.fill",
+        title: "Coinbase Wallet is not installed",
+        subtitle: "Install Coinbase Wallet to connect without a Reown project ID.",
+        tint: DS.Color.actionPrimary
+      )
+      VStack(spacing: DS.Space.s) {
+        BeidPrimaryButton("Get Coinbase Wallet", systemImage: "arrow.up.right.square") {
+          openURL(CoinbaseWalletConnector.appStoreURL)
+        }
+        .tint(DS.Color.actionPrimary)
+
+        BeidSecondaryButton(title: "Choose another wallet") {
+          chooseAnotherWallet(client)
+        }
+        .tint(DS.Color.actionPrimary)
+
+        if let secondaryAction {
+          BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)
+            .tint(DS.Color.actionPrimary)
+        }
+      }
+    }
+  }
+
+  private func chooseAnotherWallet<C: WalletConnector>(_ client: C) {
+    client.disconnect()
+    selectedProvider = nil
+  }
+
+  private func approvalTitle(for provider: Provider) -> LocalizedStringKey {
+    provider == .reown
+      ? "Scan with a WalletConnect-compatible wallet"
+      : "Approve the connection in Coinbase Wallet"
+  }
+
+  private func deliverConnectedState<C: WalletConnector>(from client: C, provider: Provider) {
+    guard selectedProvider == nil, case .connected(let address) = client.state else { return }
+    selectedProvider = provider
+    onConnected(address, client)
   }
 }
 
