@@ -189,6 +189,7 @@ resolved **against**. Exact secondary hex values (surfaces, text, hairline,
 | `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
 | `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Seal artwork, seal/verified moments, proof accents | Generic links, nav tint |
 | `DS.Color.labelOnWarning` | `#1A1C1E` | `#111315` | CTA label on `signalWarning` fill | Prominent-button labels on recovery screens | Anything except labels sitting on a `signalWarning` fill |
+| `DS.Color.labelOnSeal` | `#FFFFFF` | `#111315` | CTA label on `proofSeal` fill | Prominent-button labels at ceremony moments | Anything except labels sitting on a `proofSeal` fill |
 | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
 | `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView`, `ProofCollectedView` signature controls) | BLE signal issues (use `signalWarning` instead) |
 
@@ -212,13 +213,14 @@ Rules:
   inside `DesignSystem/` as implementation details of a token — never
   directly in Views.
 - MUST: Prominent CTA labels never rely on the button style's default
-  white. The label is `surfaceCanvas` (fill inversion) on `actionPrimary`
-  and `proofSeal` fills, and `labelOnWarning` on `signalWarning` fills
-  (that fill is mid-luminance in both modes, so inversion fails there) —
-  see `BeidPrimaryButton`. Any fill hex change (including ratifying this
-  PROPOSAL palette) MUST re-check ≥3:1 label-on-fill contrast in both
-  modes. `signalActive` is not a CTA fill; no sanctioned label exists
-  for it.
+  white. Label pairing per fill (see `BeidPrimaryButton`):
+  `actionPrimary` → `surfaceCanvas` (fill inversion), `proofSeal` →
+  `labelOnSeal`, `signalWarning` → `labelOnWarning`. `signalActive` is a
+  sanctioned CTA tint per the §10 accent map but no sensing screen has a
+  primary CTA today — whoever introduces one MUST add its on-fill label
+  token first (ink-style measures ~8:1/12:1; the inversion default fails
+  at ~2:1). Any fill hex change (including ratifying this PROPOSAL
+  palette) MUST re-check ≥4.5:1 label-on-fill contrast in both modes.
 - The per-proof generated gradient is a *data-driven* artwork generator,
   not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
   its canonical home and the only sanctioned source of `Color(hue:)`.
@@ -479,7 +481,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   §5 accent map exactly: `signalActive` on sensing screens, `proofSeal` at
   ceremony, `signalWarning` on recovery screens, `DS.Color.actionPrimary`
   everywhere else. There is no "default" tint — an unspecified tint is a
-  §5 violation, not a fallback. Max one per screen.
+  §5 violation, not a fallback. Label color follows §5's CTA-label pairing
+  rule (never the style default white). Max one per screen.
 
 ## 11. Screen Patterns
 

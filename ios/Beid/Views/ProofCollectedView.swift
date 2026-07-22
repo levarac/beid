@@ -31,7 +31,7 @@ struct ProofCollectedView: View {
       }
       },
       footer: {
-      BeidPrimaryButton("Done", systemImage: "checkmark") {
+      BeidPrimaryButton("Done", systemImage: "checkmark", labelColor: DS.Color.labelOnSeal) {
         coordinator.finishScan()
       }
       }
