@@ -158,6 +158,13 @@ three pieces together:
 3. Re-add the `entitlements:` block under the `Beid` target in
    `project.yml` and run `xcodegen generate`.
 
+This applies to **local development too**: do NOT put a real Project ID in
+`Secrets.plist` on a checkout without steps 2-3 — with a projectId present,
+`configureIfNeeded()` hands the group ID to the Reown SDK, whose
+`UserDefaults(suiteName:)` / keychain-access-group usage can fail (up to
+`fatalError` in `NetworkingClientFactory`) on a build that lacks the
+entitlement, especially on a real device.
+
 Historical note: with the entitlement present, Simulator ad-hoc "Sign to
 Run Locally" signing worked without any portal registration (discovered by
 `spike/walletconnect-native`, commit `a22d0f4`) — the failure only appears
