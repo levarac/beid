@@ -50,7 +50,21 @@ struct ScanFlowView: View {
   }
 }
 
-#Preview {
+#Preview("Sensing") {
   let coordinator = AppCoordinator()
   return ScanFlowView(sensing: coordinator.sensingCoordinator).environmentObject(coordinator)
 }
+
+#Preview("Sensing (Dark)") {
+  let coordinator = AppCoordinator()
+  return ScanFlowView(sensing: coordinator.sensingCoordinator)
+    .environmentObject(coordinator)
+    .preferredColorScheme(.dark)
+}
+
+// Only the container's default (.idle/.sensing) phase is previewed here.
+// `phase` is `private(set)` on `SensingCoordinator` by design (state only
+// advances through the real/demo sensing sequence) so other phases aren't
+// independently reachable from a preview; each phase already has its own
+// dedicated #Preview on its view (EventFoundView, VerifyingView,
+// VerifiedView, SignalLostView, ProofCollectedView).

@@ -40,3 +40,9 @@ struct BluetoothPermissionView: View {
 #Preview {
   BluetoothPermissionView().environmentObject(AppCoordinator())
 }
+
+#Preview("Dark") {
+  BluetoothPermissionView()
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
+}

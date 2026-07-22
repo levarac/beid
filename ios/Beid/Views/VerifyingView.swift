@@ -46,9 +46,22 @@ struct VerifyingView: View {
       .font(.footnote)
       }
     )
+    // Sensing screen: DESIGN.md §5 "one motif accent per screen".
+    .tint(DS.Color.signalActive)
   }
 }
 
 #Preview {
   VerifyingView(event: .sample, peersVerified: 1).environmentObject(AppCoordinator())
+}
+
+#Preview("Dark") {
+  VerifyingView(event: .sample, peersVerified: 1)
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Nearly complete") {
+  VerifyingView(event: .sample, peersVerified: DemoEvent.sample.totalPeersToVerify - 1)
+    .environmentObject(AppCoordinator())
 }

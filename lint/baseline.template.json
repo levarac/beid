@@ -1,50 +1,5 @@
 [
   {
-    "text": "          Spacer(minLength: 20)",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_spacing",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 50,
-        "character": 11
-      },
-      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded spacing",
-      "severity": "error"
-    }
-  },
-  {
-    "text": "          Spacer(minLength: 20)",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_spacing",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 52,
-        "character": 11
-      },
-      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded spacing",
-      "severity": "error"
-    }
-  },
-  {
-    "text": "        .padding(.bottom, 28)",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_spacing",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 57,
-        "character": 9
-      },
-      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded spacing",
-      "severity": "error"
-    }
-  },
-  {
     "text": "    static let soft = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)",
     "violation": {
       "ruleIdentifier": "no_hardcoded_animation",
@@ -60,12 +15,57 @@
     }
   },
   {
+    "text": "            Spacer(minLength: 20)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 51,
+        "character": 13
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "            Spacer(minLength: 20)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 53,
+        "character": 13
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "          .padding(.bottom, 28)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 58,
+        "character": 11
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
     "text": "          .font(.system(size: size * 0.38, weight: .semibold))",
     "violation": {
       "ruleIdentifier": "no_hardcoded_swiftui_font",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 134,
+        "line": 129,
         "character": 11
       },
       "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
@@ -80,7 +80,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 188,
+        "line": 215,
         "character": 12
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
@@ -95,7 +95,7 @@
       "ruleIdentifier": "no_hardcoded_swiftui_font",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 190,
+        "line": 217,
         "character": 9
       },
       "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
@@ -110,7 +110,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 214,
+        "line": 241,
         "character": 7
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
@@ -125,7 +125,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothOffView.swift",
-        "line": 18,
+        "line": 17,
         "character": 14
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
@@ -155,7 +155,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-        "line": 86,
+        "line": 93,
         "character": 7
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
@@ -170,7 +170,7 @@
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/Views/CollectionHomeView.swift",
-        "line": 98,
+        "line": 105,
         "character": 7
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",

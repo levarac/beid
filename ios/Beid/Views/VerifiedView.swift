@@ -21,14 +21,21 @@ struct VerifiedView: View {
             .font(DS.Font.cardTitle)
             .fixedSize(horizontal: false, vertical: true)
           BeidMetricRow(label: "Peers verified", verbatimValue: "\(peersVerified)")
-          BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(.green))
+          BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(DS.Color.proofSeal))
         }
       }
       }
     )
+    // Ceremony screen: DESIGN.md §5 "one motif accent per screen".
+    .tint(DS.Color.proofSeal)
   }
 }
 
 #Preview {
   VerifiedView(event: .sample, peersVerified: 3)
+}
+
+#Preview("Dark") {
+  VerifiedView(event: .sample, peersVerified: 3)
+    .preferredColorScheme(.dark)
 }

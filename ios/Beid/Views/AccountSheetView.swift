@@ -114,6 +114,18 @@ private struct WalletConnectSheetView: View {
   }
 }
 
-#Preview {
+#Preview("No wallet") {
   AccountSheetView().environmentObject(AppCoordinator())
+}
+
+#Preview("No wallet (Dark)") {
+  AccountSheetView()
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Wallet connected") {
+  let coordinator = AppCoordinator()
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return AccountSheetView().environmentObject(coordinator)
 }

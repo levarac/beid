@@ -17,42 +17,44 @@ struct ItemDetailView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
-          BeidPanel {
-            VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
-              HStack(alignment: .top) {
-                BeidGlyph(systemImage: "seal.fill", tint: DS.Color.proofSeal, size: 72)
-                Spacer()
-                Label("Verified", systemImage: "checkmark.circle.fill")
-                  .font(DS.Font.cardTitle)
-                  .foregroundStyle(DS.Color.proofSeal)
+        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
+          VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+            BeidPanel {
+              VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+                HStack(alignment: .top) {
+                  BeidGlyph(systemImage: "seal.fill", tint: DS.Color.proofSeal, size: 72)
+                  Spacer()
+                  Label("Verified", systemImage: "checkmark.circle.fill")
+                    .font(DS.Font.cardTitle)
+                    .foregroundStyle(DS.Color.proofSeal)
+                }
+
+                Text(proof.eventName)
+                  .font(DS.Font.sectionTitle)
+                  .fixedSize(horizontal: false, vertical: true)
+
+                Text(Self.dateFormatter.string(from: proof.date))
+                  .font(DS.Font.body)
+                  .foregroundStyle(DS.Color.textSecondary)
               }
+            }
 
-              Text(proof.eventName)
-                .font(DS.Font.sectionTitle)
-                .fixedSize(horizontal: false, vertical: true)
+            BeidPanel {
+              VStack(alignment: .leading, spacing: DS.Space.m) {
+                Text("Proof")
+                  .font(DS.Font.cardTitle)
+                BeidMetricRow(label: "Method", verbatimValue: proof.method)
+                BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
+                BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(DS.Color.proofSeal))
+              }
+            }
 
-              Text(Self.dateFormatter.string(from: proof.date))
-                .font(DS.Font.body)
-                .foregroundStyle(DS.Color.textSecondary)
+            BeidPanel {
+              ProofSignatureControlsView(proofId: proof.id)
             }
           }
-
-          BeidPanel {
-            VStack(alignment: .leading, spacing: DS.Space.m) {
-              Text("Proof")
-                .font(DS.Font.cardTitle)
-              BeidMetricRow(label: "Method", verbatimValue: proof.method)
-              BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
-              BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(DS.Color.proofSeal))
-            }
-          }
-
-          BeidPanel {
-            ProofSignatureControlsView(proofId: proof.id)
-          }
+          .padding(BeidDesign.Spacing.screenHorizontal)
         }
-        .padding(BeidDesign.Spacing.screenHorizontal)
       }
     }
     .background(DS.Color.surfaceCanvas)
@@ -61,11 +63,33 @@ struct ItemDetailView: View {
   }
 }
 
-#Preview {
+#Preview("Wallet connected") {
   let coordinator = AppCoordinator()
   let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
   coordinator.proofStore.add(proof)
   coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return NavigationStack {
+    ItemDetailView(proof: proof)
+  }
+  .environmentObject(coordinator)
+}
+
+#Preview("Wallet connected (Dark)") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return NavigationStack {
+    ItemDetailView(proof: proof)
+  }
+  .environmentObject(coordinator)
+  .preferredColorScheme(.dark)
+}
+
+#Preview("No wallet") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
   return NavigationStack {
     ItemDetailView(proof: proof)
   }

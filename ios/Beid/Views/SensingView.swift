@@ -28,6 +28,10 @@ struct SensingView: View {
         }
       }
     }
+    // Sensing screen: DESIGN.md §5 "one motif accent per screen" — also
+    // what the radar rings' `.tint.opacity(...)` and the center glyph's
+    // default `.accentColor` resolve to.
+    .tint(DS.Color.signalActive)
     .onAppear { pulse = !reduceMotion }
     .accessibilityIdentifier("scan.sensing")
   }
@@ -61,4 +65,10 @@ struct SensingView: View {
 
 #Preview {
   SensingView().environmentObject(AppCoordinator())
+}
+
+#Preview("Dark") {
+  SensingView()
+    .environmentObject(AppCoordinator())
+    .preferredColorScheme(.dark)
 }

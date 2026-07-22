@@ -164,3 +164,68 @@ struct ProofSignatureControlsView: View {
   .padding()
   .environmentObject(coordinator)
 }
+
+#Preview("Deferred") {
+  let coordinator = AppCoordinator()
+  var proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  proof.signatureState = .deferred
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return BeidPanel {
+    ProofSignatureControlsView(proofId: proof.id)
+  }
+  .padding()
+  .environmentObject(coordinator)
+}
+
+#Preview("Failed") {
+  let coordinator = AppCoordinator()
+  var proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  proof.signatureState = .failed(reason: "The wallet did not respond in time.")
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return BeidPanel {
+    ProofSignatureControlsView(proofId: proof.id)
+  }
+  .padding()
+  .environmentObject(coordinator)
+}
+
+#Preview("Connecting") {
+  let coordinator = AppCoordinator()
+  var proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  proof.signatureState = .connecting
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return BeidPanel {
+    ProofSignatureControlsView(proofId: proof.id)
+  }
+  .padding()
+  .environmentObject(coordinator)
+}
+
+#Preview("Awaiting approval") {
+  let coordinator = AppCoordinator()
+  var proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  proof.signatureState = .awaitingApproval
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return BeidPanel {
+    ProofSignatureControlsView(proofId: proof.id)
+  }
+  .padding()
+  .environmentObject(coordinator)
+}
+
+#Preview("Not signed, wallet connected (Dark)") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return BeidPanel {
+    ProofSignatureControlsView(proofId: proof.id)
+  }
+  .padding()
+  .environmentObject(coordinator)
+  .preferredColorScheme(.dark)
+}

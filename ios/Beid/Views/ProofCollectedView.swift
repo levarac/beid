@@ -14,7 +14,6 @@ struct ProofCollectedView: View {
       assetImage: "proof-seal-mark",
       title: "Proof Collected",
       message: "Added to your collection.",
-      tint: .accentColor,
       accessory: {
       VStack(spacing: BeidDesign.Spacing.section) {
         BeidPanel {
@@ -37,14 +36,38 @@ struct ProofCollectedView: View {
       }
       }
     )
+    // Ceremony screen: header glyph + "Done" both get the shared proofSeal
+    // accent — DESIGN.md §5 "one motif accent per screen". (Previously
+    // this fell through to the screen switch's ambient actionPrimary tint,
+    // since `tint:` only colored the header glyph, not the footer button —
+    // a real §5 gap, not just a debug-tool artifact.)
+    .tint(DS.Color.proofSeal)
   }
 }
 
-#Preview {
+#Preview("Wallet connected") {
   let coordinator = AppCoordinator()
   let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
   coordinator.proofStore.add(proof)
   coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return ProofCollectedView(proof: proof)
+    .environmentObject(coordinator)
+}
+
+#Preview("Wallet connected (Dark)") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return ProofCollectedView(proof: proof)
+    .environmentObject(coordinator)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("No wallet") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
   return ProofCollectedView(proof: proof)
     .environmentObject(coordinator)
 }

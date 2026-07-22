@@ -10,9 +10,17 @@ import SwiftUI
 /// `completeWalletConnect()` does.
 struct EventCodeEntryView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
-  @State private var code = ""
+  @State private var code: String
   @State private var errorMessage: LocalizedStringKey?
   @FocusState private var codeFieldFocused: Bool
+
+  /// `code`/`errorMessage` defaults reproduce the view's normal empty
+  /// starting state; the parameters exist so previews can seed the error
+  /// state without faking a `submit()` tap.
+  init(code: String = "", errorMessage: LocalizedStringKey? = nil) {
+    _code = State(initialValue: code)
+    _errorMessage = State(initialValue: errorMessage)
+  }
 
   var body: some View {
     BeidAdaptiveContent {
@@ -104,4 +112,12 @@ struct EventCodeEntryView: View {
   EventCodeEntryView()
     .environmentObject(AppCoordinator())
     .preferredColorScheme(.dark)
+}
+
+#Preview("Error") {
+  EventCodeEntryView(
+    code: "BADCODE",
+    errorMessage: "beid couldn't join that event. Check the code and try again."
+  )
+  .environmentObject(AppCoordinator())
 }

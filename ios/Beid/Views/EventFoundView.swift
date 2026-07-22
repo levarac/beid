@@ -30,6 +30,8 @@ struct EventFoundView: View {
       .opacity(appeared ? 1 : 0)
       }
     )
+    // Sensing screen: DESIGN.md §5 "one motif accent per screen".
+    .tint(DS.Color.signalActive)
     .onAppear {
       withAnimation(reduceMotion ? nil : BeidDesign.Animation.entrance) {
         appeared = true
@@ -40,4 +42,9 @@ struct EventFoundView: View {
 
 #Preview {
   EventFoundView(event: .sample)
+}
+
+#Preview("Dark") {
+  EventFoundView(event: .sample)
+    .preferredColorScheme(.dark)
 }
