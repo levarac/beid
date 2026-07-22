@@ -12,19 +12,22 @@ import WalletConnectSign
 /// spike/walletconnect-native (commit a22d0f4): the real relay connection
 /// attempt runs and fails cleanly without a project ID, with no crash.
 @MainActor
-final class ReownWalletConnectClient: ObservableObject {
-  enum State: Equatable {
-    case notConfigured
-    case idle
-    case connecting
-    case awaitingApproval(uri: String)
-    case connected(address: String)
-    case failed(String)
-  }
+final class ReownWalletConnectClient: ObservableObject, WalletConnector {
+  typealias State = WalletConnectorState
+  typealias SignatureRequestError = WalletConnectorError
 
   static let shared = ReownWalletConnectClient()
 
   @Published private(set) var state: State = .notConfigured
+
+  var address: String? {
+    guard case .connected(let address) = state else { return nil }
+    return address
+  }
+
+  var chainId: String {
+    connectedSession?.namespaces["eip155"]?.accounts.first?.blockchainIdentifier ?? "eip155:1"
+  }
 
   /// The settled session backing the current `.connected` state — kept
   /// alongside `state` (rather than folded into its associated value) so
@@ -116,9 +119,19 @@ final class ReownWalletConnectClient: ObservableObject {
   }
 
   /// Dispatches a redirect URL (wallet → app, via `beid://`) into the SDK.
-  func handle(url: URL) {
-    guard isConfigured else { return }
-    try? Sign.instance.dispatchEnvelope(url.absoluteString)
+  @discardableResult
+  func handle(url: URL) -> Bool {
+    guard isConfigured else { return false }
+    do {
+      try Sign.instance.dispatchEnvelope(url.absoluteString)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  func disconnect() {
+    reset()
   }
 
   private func observeSessions() {
@@ -143,19 +156,6 @@ final class ReownWalletConnectClient: ObservableObject {
 // MARK: - Signing
 
 extension ReownWalletConnectClient {
-  enum SignatureRequestError: Error, Equatable {
-    /// No settled session to sign against — the UI MUST gate the sign
-    /// action on `walletAddress != nil` so this is a defensive case, not an
-    /// expected path.
-    case notConnected
-    /// The wallet explicitly declined (EIP-1193 code 4001).
-    case rejected
-    /// No response within the client-side deadline — relay/wallet may
-    /// still be working; the proof is untouched and safe to retry.
-    case timedOut
-    case relayFailure(String)
-  }
-
   /// Sends a `personal_sign` request for `digestHex` over the currently
   /// connected session (reusing its topic/account — never opens a second
   /// pairing flow) and awaits the wallet's response, bounded by
@@ -167,7 +167,7 @@ extension ReownWalletConnectClient {
     digestHex: String,
     responseTimeout: TimeInterval = 90,
     onDispatched: (() -> Void)? = nil
-  ) async -> Result<String, SignatureRequestError> {
+  ) async -> Result<String, WalletConnectorError> {
     guard case .connected(let address) = state,
           let session = connectedSession,
           let chain = session.namespaces["eip155"]?.accounts.first?.blockchain
@@ -202,7 +202,7 @@ extension ReownWalletConnectClient {
     case timedOut
   }
 
-  private func awaitResponse(to requestId: RPCID, timeout: TimeInterval) async -> Result<String, SignatureRequestError> {
+  private func awaitResponse(to requestId: RPCID, timeout: TimeInterval) async -> Result<String, WalletConnectorError> {
     let outcome = await withTaskGroup(of: RaceOutcome.self) { group in
       group.addTask {
         for await response in Sign.instance.sessionResponsePublisher.values {

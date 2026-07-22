@@ -15,12 +15,19 @@ final class AppCoordinator: ObservableObject {
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
 
+  private(set) var walletConnector: (any WalletConnector)?
+
   let onboardingMode = OnboardingMode.current
-  let proofStore = ProofStore()
+  let proofStore: ProofStore
   let sensingCoordinator = SensingCoordinator()
   let bluetoothMonitor = BluetoothMonitor()
 
-  init() {
+  init(
+    walletConnector: (any WalletConnector)? = nil,
+    proofStore: ProofStore? = nil
+  ) {
+    self.walletConnector = walletConnector
+    self.proofStore = proofStore ?? ProofStore()
     sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
     }
@@ -39,9 +46,16 @@ final class AppCoordinator: ObservableObject {
 
   /// `address` is supplied by the real WalletConnect (Reown) pairing flow
   /// (`WalletConnectPairingView`) once a session settles.
-  func completeWalletConnect(address: String) {
-    walletAddress = address
+  func completeWalletConnect(address: String, connector: (any WalletConnector)? = nil) {
+    recordWalletConnection(address: address, connector: connector)
     screen = .bluetoothPermission
+  }
+
+  func recordWalletConnection(address: String, connector: (any WalletConnector)? = nil) {
+    if let connector {
+      walletConnector = connector
+    }
+    walletAddress = address
   }
 
   /// Wallet-optional fallback from `WalletConnectView`'s secondary action:
@@ -98,7 +112,8 @@ final class AppCoordinator: ObservableObject {
   /// wallet (session teardown is out of scope for this slice).
   func disconnectWallet() {
     walletAddress = nil
-    ReownWalletConnectClient.shared.reset()
+    (walletConnector ?? ReownWalletConnectClient.shared).disconnect()
+    walletConnector = nil
   }
 
   // MARK: - Scan flow
@@ -128,7 +143,7 @@ final class AppCoordinator: ObservableObject {
   /// underlying `Proof` in `proofStore` is never touched beyond its
   /// `signatureState` field, regardless of outcome.
   func signProof(_ proof: Proof) async {
-    guard let walletAddress else { return }
+    guard let walletAddress, let walletConnector else { return }
 
     // Reentrancy guard: `ProofSignatureControlsView` already hides the
     // "Sign this proof" action while a request is in flight, but that's a
@@ -145,8 +160,7 @@ final class AppCoordinator: ObservableObject {
 
     proofStore.updateSignatureState(for: proof.id, to: .connecting)
 
-    let chainId = ReownWalletConnectClient.shared.connectedSession?
-      .namespaces["eip155"]?.accounts.first?.blockchainIdentifier ?? "eip155:1"
+    let chainId = walletConnector.chainId
     let payload = SignaturePayload(proof: proof, chainId: chainId)
 
     let digestHex: String
@@ -157,7 +171,7 @@ final class AppCoordinator: ObservableObject {
       return
     }
 
-    let result = await ReownWalletConnectClient.shared.requestPersonalSign(digestHex: digestHex) { [weak self] in
+    let result = await walletConnector.requestPersonalSign(digestHex: digestHex) { [weak self] in
       self?.proofStore.updateSignatureState(for: proof.id, to: .awaitingApproval)
     }
 

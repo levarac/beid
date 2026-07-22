@@ -85,6 +85,91 @@
         }
       }
     },
+    "Approve the connection in Coinbase Wallet": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Aprueba la conexión en Coinbase Wallet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Approuvez la connexion dans Coinbase Wallet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Coinbase Wallet で接続を承認してください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "请在 Coinbase Wallet 中批准连接"
+          }
+        }
+      }
+    },
+    "Choose another wallet": {
+      "comment": "Button: returns to the wallet-provider selection without connecting.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Elegir otra cartera"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Choisir un autre portefeuille"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "別のウォレットを選ぶ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "选择其他钱包"
+          }
+        }
+      }
+    },
+    "Coinbase Wallet is not installed": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Coinbase Wallet no está instalada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Coinbase Wallet n’est pas installé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Coinbase Wallet がインストールされていません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "尚未安装 Coinbase Wallet"
+          }
+        }
+      }
+    },
     "Connect Wallet": {
       "localizations": {
         "ja": {
@@ -109,6 +194,35 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "Connecter le portefeuille"
+          }
+        }
+      }
+    },
+    "Connect with Coinbase Wallet": {
+      "comment": "Button: starts a direct app-to-app connection with the Coinbase Wallet app.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Conectar con Coinbase Wallet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Se connecter avec Coinbase Wallet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Coinbase Wallet で接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "使用 Coinbase Wallet 连接"
           }
         }
       }
@@ -394,6 +508,35 @@
         }
       }
     },
+    "Get Coinbase Wallet": {
+      "comment": "Button: opens the App Store page for Coinbase Wallet.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Obtener Coinbase Wallet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Obtenir Coinbase Wallet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Coinbase Wallet を入手"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "获取 Coinbase Wallet"
+          }
+        }
+      }
+    },
     "Get Started": {
       "localizations": {
         "es": {
@@ -418,6 +561,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "开始使用"
+          }
+        }
+      }
+    },
+    "Install Coinbase Wallet to connect without a Reown project ID.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Instala Coinbase Wallet para conectarte sin un ID de proyecto de Reown."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Installez Coinbase Wallet pour vous connecter sans identifiant de projet Reown."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Reown のプロジェクト ID なしで接続するには、Coinbase Wallet をインストールしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "安装 Coinbase Wallet，无需 Reown 项目 ID 即可连接。"
           }
         }
       }

@@ -13,6 +13,7 @@ struct BeidApp: App {
         .environmentObject(coordinator)
         .onOpenURL { url in
           ReownWalletConnectClient.shared.handle(url: url)
+          CoinbaseWalletConnector.shared.handle(url: url)
         }
     }
   }

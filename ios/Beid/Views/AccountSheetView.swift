@@ -86,8 +86,8 @@ private struct WalletConnectSheetView: View {
       BeidAdaptiveContent {
         VStack(spacing: DS.Space.l) {
           Spacer()
-          WalletConnectPairingView { address in
-            coordinator.walletAddress = address
+          WalletConnectPairingView { address, connector in
+            coordinator.recordWalletConnection(address: address, connector: connector)
             coordinator.walletConnectSheetPresented = false
           }
           .padding(.horizontal, DS.Space.pageMargin)
@@ -101,6 +101,7 @@ private struct WalletConnectSheetView: View {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", role: .cancel) {
             ReownWalletConnectClient.shared.reset()
+            CoinbaseWalletConnector.shared.disconnect()
             coordinator.walletConnectSheetPresented = false
           }
         }
