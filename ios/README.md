@@ -135,16 +135,33 @@ state rather than crashing, and the app still builds/tests/runs — this is
 the graceful-degradation path exercised by `WalletConnectTests` and the
 default state in CI, where no `Secrets.plist` exists.
 
-**App Group requirement**: `Networking.configure(groupIdentifier:)`
-requires a syntactically valid App Group ID (`group.<id>` format) —
-`project.yml` wires `Beid/App/Beid.entitlements` with
-`group.org.levarac.beid` and the matching
-`com.apple.security.application-groups` entitlement. Empirically this is
-enough to not crash on Simulator with ad-hoc "Sign to Run Locally" signing
-— no real Apple Developer Team was needed for that part (discovered by
-`spike/walletconnect-native`, commit `a22d0f4`). A real device build,
-under a real team's provisioning, may enforce this more strictly; not
-verified here.
+**App Group requirement — intentionally NOT shipped while Reown is
+unconfigured**: `Networking.configure(groupIdentifier:)` requires a
+syntactically valid App Group ID (`group.<id>` format), but that call only
+runs when `WalletConnectSecrets.projectId` resolves (see
+`configureIfNeeded()`), which it never does in CI/TestFlight builds — no
+`Secrets.plist` is present there. The app therefore ships **without** the
+`com.apple.security.application-groups` entitlement: carrying it breaks
+Xcode Cloud's App Store export ("No profiles for 'org.levarac.beid' were
+found") unless the App Group is also registered and assigned in the
+Developer Portal, which Apple exposes no API for. When Reown actually gets
+configured (a real Project ID reaches distributed builds), restore all
+three pieces together:
+
+1. Register `group.org.levarac.beid` under Identifiers → App Groups in the
+   Developer Portal, and assign it to the `org.levarac.beid` App ID's App
+   Groups capability (both are portal-manual; the capability itself is
+   already enabled on the App ID).
+2. Re-add `Beid/App/Beid.entitlements` with the
+   `com.apple.security.application-groups` array containing
+   `group.org.levarac.beid`.
+3. Re-add the `entitlements:` block under the `Beid` target in
+   `project.yml` and run `xcodegen generate`.
+
+Historical note: with the entitlement present, Simulator ad-hoc "Sign to
+Run Locally" signing worked without any portal registration (discovered by
+`spike/walletconnect-native`, commit `a22d0f4`) — the failure only appears
+at real distribution signing.
 
 **Verified on Simulator** (no `Secrets.plist` present, matching CI): the
 pairing UI reaches `.notConfigured` and does not crash — this is the
