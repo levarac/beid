@@ -40,11 +40,6 @@ targets:
         product: WalletConnect
       - package: CoinbaseWallet
         product: CoinbaseWalletSDK
-    entitlements:
-      path: Beid/App/Beid.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.org.levarac.beid
     info:
       path: Beid/App/Info.plist
       properties:
