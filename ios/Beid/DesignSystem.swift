@@ -170,6 +170,12 @@ struct BeidPrimaryButton: View {
       Text(title)
     }
     .font(DS.Font.cta)
+    // Prominent styles default the label to white, which disappears on the
+    // light fills this palette uses in dark mode (actionPrimary dark is
+    // #E8EAEC → 1.2:1). surfaceCanvas is the per-mode inverse of every
+    // prominent fill in the palette: ≥4.4:1 on all fill×mode pairs except
+    // signalWarning/light (2.8:1, on par with the 3.1:1 white it replaces).
+    .foregroundStyle(DS.Color.surfaceCanvas)
     .frame(maxWidth: .infinity)
     .frame(minHeight: 52)
   }

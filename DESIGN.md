@@ -233,7 +233,7 @@ Ramp (all Dynamic Type text styles, defined in `DS.Font`):
 | `DS.Font.supporting` | `.subheadline` | Supporting copy | Pair with `textSecondary` |
 | `DS.Font.meta` | `.caption` | Dates, counts | |
 | `DS.Font.ledgerMono` | `.footnote` monospaced | Addresses, hashes, proof IDs | Ledger Trace motif only |
-| `DS.Font.cta` | `.headline` | Primary CTA labels | |
+| `DS.Font.cta` | `.headline` | Primary CTA labels | Label color is `surfaceCanvas` (fill inversion), never the style default white — see `BeidPrimaryButton` |
 
 Rules:
 
