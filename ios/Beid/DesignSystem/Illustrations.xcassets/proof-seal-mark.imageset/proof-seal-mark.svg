@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
   <!-- signet rim: one heavy band, one fine rule -->
-  <circle cx="100" cy="100" r="62" fill="none" stroke="#6E5AEF" stroke-width="5"/>
-  <circle cx="100" cy="100" r="48" fill="none" stroke="#6E5AEF" stroke-width="1.5"/>
+  <circle cx="100" cy="100" r="62" fill="none" stroke="#6E5AEF" stroke-width="7"/>
+  <circle cx="100" cy="100" r="45" fill="none" stroke="#6E5AEF" stroke-width="3.5"/>
   <!-- the stamped mark: bold bar + impression dot -->
-  <line x1="94" y1="78" x2="94" y2="122" stroke="#6E5AEF" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="113" cy="117" r="5.5" fill="#6E5AEF"/>
+  <line x1="94" y1="78" x2="94" y2="122" stroke="#6E5AEF" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="115" cy="116" r="8" fill="#6E5AEF"/>
 </svg>
