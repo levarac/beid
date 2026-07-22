@@ -1,10 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "iPad対応ビルドです。iPad（縦・横両方）で全画面のレイアウトが崩れないこと、iPhoneで従来通り表示されることを確認してください。オンボーディング→ホーム→センシング画面の流れもご確認を。"
+    "text": "デザインを全面的に磨き直したビルドです。すべての画面をライト・ダーク両方の外観で開き、配色やレイアウトの崩れがないか確認してください。ウォレット画面から Coinbase Wallet での接続もお試しください（MetaMask などその他のウォレット接続はこのビルドではまだ利用できません）。"
   },
   {
     "language": "en-US",
-    "text": "This build adds iPad support. Please verify layouts on iPad in both portrait and landscape, confirm iPhone still renders as before, and walk onboarding through to the sensing screen."
+    "text": "This build refreshes the visual design across every screen. Please open each screen in both light and dark appearance and look for layout or color issues. Also try connecting with Coinbase Wallet from the wallet screen (other wallets such as MetaMask are not available in this build yet)."
+  },
+  {
+    "language": "zh-Hans",
+    "text": "本次构建全面打磨了视觉设计。请在浅色和深色外观下打开每个界面，检查配色和布局是否有问题。也请在钱包界面尝试使用 Coinbase Wallet 连接（MetaMask 等其他钱包在本次构建中暂不可用）。"
+  },
+  {
+    "language": "es-ES",
+    "text": "Esta versión renueva el diseño visual de todas las pantallas. Abre cada pantalla en apariencia clara y oscura y busca problemas de color o disposición. Prueba también a conectar con Coinbase Wallet desde la pantalla de cartera (otras carteras como MetaMask aún no están disponibles en esta versión)."
+  },
+  {
+    "language": "fr-FR",
+    "text": "Cette version renouvelle le design visuel de tous les écrans. Ouvrez chaque écran en apparence claire et sombre et vérifiez l'absence de problèmes de couleurs ou de mise en page. Essayez aussi la connexion avec Coinbase Wallet depuis l'écran de portefeuille (les autres portefeuilles comme MetaMask ne sont pas encore disponibles dans cette version)."
   }
 ]
