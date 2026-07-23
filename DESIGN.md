@@ -703,6 +703,8 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `color.surface.canvas` | `DS.Color.surfaceCanvas` | L `#F7F4EE` / D `#111315` | Root background |
 | `color.signal.active` | `DS.Color.signalActive` | L `#18C7A7` / D `#62E8D0` | Live sensing |
 | `color.proof.seal` | `DS.Color.proofSeal` | L `#6E5AEF` / D `#9D8CFF` | Sealed proof |
+| `color.label.onWarning` | `DS.Color.labelOnWarning` | L `#1A1C1E` / D `#111315` | CTA label on `signalWarning` fill |
+| `color.label.onSeal` | `DS.Color.labelOnSeal` | L `#FFFFFF` / D `#111315` | CTA label on `proofSeal` fill |
 | `space.m` | `DS.Space.m` | 16 pt | Default gap |
 | `radius.card` | `DS.Radius.card` | 16 pt | Cards |
 | `layout.state.content.maxWidth` | `DS.Layout.stateContentMaxWidth` | 600 pt | Readable state-screen and CTA width in regular size classes |
@@ -712,7 +714,7 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 
-(Full set: 10 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
+(Full set: 12 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
 plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
