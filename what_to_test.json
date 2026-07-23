@@ -1,22 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "ダークモードでボタンの文字が読めなかった問題を修正したビルドです。すべての画面のボタン（「はじめる」「ウォレットを接続」「完了」など）が、ライト・ダーク両方の外観ではっきり読めることを確認してください。Coinbase Wallet での接続も引き続きお試しください。"
+    "text": "アプリの土台部分を内部的に入れ替えたビルドです。見た目や機能の変更はありません。起動からイベント参加、センシング開始、Coinbase Wallet 接続までが前回ビルドと同じように動くことを確認してください。"
   },
   {
     "language": "en-US",
-    "text": "This build fixes button labels that were unreadable in dark mode. Please check that buttons on every screen (Get Started, Connect Wallet, Done, and others) are clearly readable in both light and dark appearance. Also keep trying Coinbase Wallet connection."
+    "text": "This build swaps an internal foundation of the app. No visible or functional changes are intended. Please confirm that launching the app, joining an event, starting sensing, and connecting Coinbase Wallet all work the same as the previous build."
   },
   {
     "language": "zh-Hans",
-    "text": "本次构建修复了深色模式下按钮文字无法辨认的问题。请确认每个界面的按钮（开始使用、连接钱包、完成等）在浅色和深色外观下都清晰可读。也请继续尝试 Coinbase Wallet 连接。"
+    "text": "本次构建替换了应用的内部基础，预期没有任何可见或功能上的变化。请确认启动应用、加入活动、开始感应以及连接 Coinbase Wallet 均与上一版本表现一致。"
   },
   {
     "language": "es-ES",
-    "text": "Esta versión corrige las etiquetas de botones ilegibles en modo oscuro. Comprueba que los botones de cada pantalla (Empezar, Conectar cartera, Hecho, etc.) se leen claramente en apariencia clara y oscura. Sigue probando también la conexión con Coinbase Wallet."
+    "text": "Esta versión sustituye una base interna de la app. No se esperan cambios visibles ni funcionales. Comprueba que abrir la app, unirse a un evento, iniciar la detección y conectar Coinbase Wallet funcionan igual que en la versión anterior."
   },
   {
     "language": "fr-FR",
-    "text": "Cette version corrige les libellés de boutons illisibles en mode sombre. Vérifiez que les boutons de chaque écran (Commencer, Connecter le portefeuille, Terminé, etc.) sont bien lisibles en apparence claire et sombre. Continuez aussi à tester la connexion Coinbase Wallet."
+    "text": "Cette version remplace une fondation interne de l'app. Aucun changement visible ou fonctionnel n'est attendu. Vérifiez que le lancement de l'app, la participation à un événement, le démarrage de la détection et la connexion Coinbase Wallet fonctionnent comme dans la version précédente."
   }
 ]
