@@ -1,22 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "デザインを全面的に磨き直したビルドです。すべての画面をライト・ダーク両方の外観で開き、配色やレイアウトの崩れがないか確認してください。ウォレット画面から Coinbase Wallet での接続もお試しください（MetaMask などその他のウォレット接続はこのビルドではまだ利用できません）。"
+    "text": "ダークモードでボタンの文字が読めなかった問題を修正したビルドです。すべての画面のボタン（「はじめる」「ウォレットを接続」「完了」など）が、ライト・ダーク両方の外観ではっきり読めることを確認してください。Coinbase Wallet での接続も引き続きお試しください。"
   },
   {
     "language": "en-US",
-    "text": "This build refreshes the visual design across every screen. Please open each screen in both light and dark appearance and look for layout or color issues. Also try connecting with Coinbase Wallet from the wallet screen (other wallets such as MetaMask are not available in this build yet)."
+    "text": "This build fixes button labels that were unreadable in dark mode. Please check that buttons on every screen (Get Started, Connect Wallet, Done, and others) are clearly readable in both light and dark appearance. Also keep trying Coinbase Wallet connection."
   },
   {
     "language": "zh-Hans",
-    "text": "本次构建全面打磨了视觉设计。请在浅色和深色外观下打开每个界面，检查配色和布局是否有问题。也请在钱包界面尝试使用 Coinbase Wallet 连接（MetaMask 等其他钱包在本次构建中暂不可用）。"
+    "text": "本次构建修复了深色模式下按钮文字无法辨认的问题。请确认每个界面的按钮（开始使用、连接钱包、完成等）在浅色和深色外观下都清晰可读。也请继续尝试 Coinbase Wallet 连接。"
   },
   {
     "language": "es-ES",
-    "text": "Esta versión renueva el diseño visual de todas las pantallas. Abre cada pantalla en apariencia clara y oscura y busca problemas de color o disposición. Prueba también a conectar con Coinbase Wallet desde la pantalla de cartera (otras carteras como MetaMask aún no están disponibles en esta versión)."
+    "text": "Esta versión corrige las etiquetas de botones ilegibles en modo oscuro. Comprueba que los botones de cada pantalla (Empezar, Conectar cartera, Hecho, etc.) se leen claramente en apariencia clara y oscura. Sigue probando también la conexión con Coinbase Wallet."
   },
   {
     "language": "fr-FR",
-    "text": "Cette version renouvelle le design visuel de tous les écrans. Ouvrez chaque écran en apparence claire et sombre et vérifiez l'absence de problèmes de couleurs ou de mise en page. Essayez aussi la connexion avec Coinbase Wallet depuis l'écran de portefeuille (les autres portefeuilles comme MetaMask ne sont pas encore disponibles dans cette version)."
+    "text": "Cette version corrige les libellés de boutons illisibles en mode sombre. Vérifiez que les boutons de chaque écran (Commencer, Connecter le portefeuille, Terminé, etc.) sont bien lisibles en apparence claire et sombre. Continuez aussi à tester la connexion Coinbase Wallet."
   }
 ]
