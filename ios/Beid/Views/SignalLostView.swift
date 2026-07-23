@@ -14,7 +14,7 @@ struct SignalLostView: View {
       title: "Signal Lost",
       message: "beid lost the connection to \(event.name). Move closer and we'll pick it back up automatically.",
       footer: {
-      BeidPrimaryButton("Try Again", systemImage: "arrow.clockwise") {
+      BeidPrimaryButton("Try Again", systemImage: "arrow.clockwise", labelColor: DS.Color.labelOnWarning) {
         coordinator.sensingCoordinator.startSensing(demoEvent: event)
       }
       }

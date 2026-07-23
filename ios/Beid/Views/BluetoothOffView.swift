@@ -15,7 +15,7 @@ struct BluetoothOffView: View {
       message: "beid needs Bluetooth to sense nearby events automatically. Turn it on in Settings, then come back here.",
       footer: {
       VStack(spacing: 12) {
-        BeidPrimaryButton("Open Settings", systemImage: "gearshape") {
+        BeidPrimaryButton("Open Settings", systemImage: "gearshape", labelColor: DS.Color.labelOnWarning) {
           coordinator.sensingCoordinator.reset()
           UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
         }

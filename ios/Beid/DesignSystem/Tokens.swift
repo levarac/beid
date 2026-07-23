@@ -36,6 +36,13 @@ enum DS {
     /// Degraded/lost signal. The single accent of recovery screens
     /// (SignalLostView, BluetoothOffView); not for generic warnings.
     static let signalWarning = SwiftUI.Color(.signalWarning)
+    /// CTA label on a signalWarning fill. That fill is mid-luminance in
+    /// BOTH modes, so the fill-inverse default (surfaceCanvas) fails in
+    /// light mode — this stays ink in both (5.5:1 / 9.9:1 measured).
+    static let labelOnWarning = SwiftUI.Color(.labelOnWarning)
+    /// CTA label on a proofSeal fill: white in light (4.8:1, the inverse
+    /// default only reaches 4.4:1), ink in dark (6.8:1).
+    static let labelOnSeal = SwiftUI.Color(.labelOnSeal)
     /// Verified proof artifacts: seals, seal success, ceremony moments.
     static let proofSeal = SwiftUI.Color(.proofSeal)
     /// Hairline strokes and dividers.

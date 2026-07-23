@@ -140,11 +140,18 @@ struct BeidGlyph: View {
 struct BeidPrimaryButton: View {
   let title: LocalizedStringKey
   let systemImage: String?
+  let labelColor: Color
   let action: () -> Void
 
-  init(_ title: LocalizedStringKey, systemImage: String? = nil, action: @escaping () -> Void) {
+  init(
+    _ title: LocalizedStringKey,
+    systemImage: String? = nil,
+    labelColor: Color = DS.Color.surfaceCanvas,
+    action: @escaping () -> Void
+  ) {
     self.title = title
     self.systemImage = systemImage
+    self.labelColor = labelColor
     self.action = action
   }
 
@@ -170,6 +177,13 @@ struct BeidPrimaryButton: View {
       Text(title)
     }
     .font(DS.Font.cta)
+    // Prominent styles default the label to white, which disappears on the
+    // light fills this palette uses in dark mode (actionPrimary dark is
+    // #E8EAEC → 1.2:1). Label pairing lives in DESIGN.md §5's CTA-label
+    // rule: the surfaceCanvas default fits actionPrimary; proofSeal and
+    // signalWarning call sites pass labelOnSeal / labelOnWarning; a future
+    // signalActive CTA needs its own on-fill token before it exists.
+    .foregroundStyle(labelColor)
     .frame(maxWidth: .infinity)
     .frame(minHeight: 52)
   }

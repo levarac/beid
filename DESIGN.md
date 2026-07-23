@@ -188,6 +188,8 @@ resolved **against**. Exact secondary hex values (surfaces, text, hairline,
 | `DS.Color.signalActive` | `#18C7A7` | `#62E8D0` | Live sensing signal | Sensing pulse, verifying progress, one key accent per scan screen | Body text, large fills |
 | `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
 | `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Seal artwork, seal/verified moments, proof accents | Generic links, nav tint |
+| `DS.Color.labelOnWarning` | `#1A1C1E` | `#111315` | CTA label on `signalWarning` fill | Prominent-button labels on recovery screens | Anything except labels sitting on a `signalWarning` fill |
+| `DS.Color.labelOnSeal` | `#FFFFFF` | `#111315` | CTA label on `proofSeal` fill | Prominent-button labels at ceremony moments | Anything except labels sitting on a `proofSeal` fill |
 | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
 | `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView`, `ProofCollectedView` signature controls) | BLE signal issues (use `signalWarning` instead) |
 
@@ -210,6 +212,15 @@ Rules:
 - MAY: System semantic colors (`.primary`, `.secondary`, `Color(.systemRed)`)
   inside `DesignSystem/` as implementation details of a token — never
   directly in Views.
+- MUST: Prominent CTA labels never rely on the button style's default
+  white. Label pairing per fill (see `BeidPrimaryButton`):
+  `actionPrimary` → `surfaceCanvas` (fill inversion), `proofSeal` →
+  `labelOnSeal`, `signalWarning` → `labelOnWarning`. `signalActive` is a
+  sanctioned CTA tint per the §10 accent map but no sensing screen has a
+  primary CTA today — whoever introduces one MUST add its on-fill label
+  token first (ink-style measures ~8:1/12:1; the inversion default fails
+  at ~2:1). Any fill hex change (including ratifying this PROPOSAL
+  palette) MUST re-check ≥4.5:1 label-on-fill contrast in both modes.
 - The per-proof generated gradient is a *data-driven* artwork generator,
   not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
   its canonical home and the only sanctioned source of `Color(hue:)`.
@@ -233,7 +244,7 @@ Ramp (all Dynamic Type text styles, defined in `DS.Font`):
 | `DS.Font.supporting` | `.subheadline` | Supporting copy | Pair with `textSecondary` |
 | `DS.Font.meta` | `.caption` | Dates, counts | |
 | `DS.Font.ledgerMono` | `.footnote` monospaced | Addresses, hashes, proof IDs | Ledger Trace motif only |
-| `DS.Font.cta` | `.headline` | Primary CTA labels | |
+| `DS.Font.cta` | `.headline` | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
 
 Rules:
 
@@ -470,7 +481,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   §5 accent map exactly: `signalActive` on sensing screens, `proofSeal` at
   ceremony, `signalWarning` on recovery screens, `DS.Color.actionPrimary`
   everywhere else. There is no "default" tint — an unspecified tint is a
-  §5 violation, not a fallback. Max one per screen.
+  §5 violation, not a fallback. Label color follows §5's CTA-label pairing
+  rule (never the style default white). Max one per screen.
 
 ## 11. Screen Patterns
 
@@ -691,6 +703,8 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `color.surface.canvas` | `DS.Color.surfaceCanvas` | L `#F7F4EE` / D `#111315` | Root background |
 | `color.signal.active` | `DS.Color.signalActive` | L `#18C7A7` / D `#62E8D0` | Live sensing |
 | `color.proof.seal` | `DS.Color.proofSeal` | L `#6E5AEF` / D `#9D8CFF` | Sealed proof |
+| `color.label.onWarning` | `DS.Color.labelOnWarning` | L `#1A1C1E` / D `#111315` | CTA label on `signalWarning` fill |
+| `color.label.onSeal` | `DS.Color.labelOnSeal` | L `#FFFFFF` / D `#111315` | CTA label on `proofSeal` fill |
 | `space.m` | `DS.Space.m` | 16 pt | Default gap |
 | `radius.card` | `DS.Radius.card` | 16 pt | Cards |
 | `layout.state.content.maxWidth` | `DS.Layout.stateContentMaxWidth` | 600 pt | Readable state-screen and CTA width in regular size classes |
@@ -700,7 +714,7 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 
-(Full set: 10 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
+(Full set: 12 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
 plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
