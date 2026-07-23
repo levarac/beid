@@ -159,11 +159,14 @@ delivery files:
   only, 1-3 plain sentences per locale (ASC locales: `en-US`, `ja`,
   `zh-Hans`, `es-ES`, `fr-FR`), no PR numbers, no internal jargon, no
   accumulated history.
-- **`release_notes.json` is App Store "What's New" copy ONLY.** It is
-  never delivered to TestFlight testers, and editing it neither triggers
-  nor annotates test builds. Mixing these two files up has shipped stale
-  tester notes for 19 hours in a sister project — when in doubt, the file
-  you want is `what_to_test.json`.
+- **`release_notes.json` is App Store "What's New" copy.** On non-release
+  branches it is never delivered to testers and editing it neither
+  triggers nor annotates test builds. Caveat: on `release/*` branches the
+  current `ci_post_xcodebuild.sh` sources TestFlight notes from
+  `release_notes.json` instead (a legacy pattern slated for revision in
+  issue #55 — the sister project that originated it abandoned it after
+  shipping stale tester notes for 19 hours through exactly this file
+  confusion). When in doubt, the file you want is `what_to_test.json`.
 - **Versioning**: `MARKETING_VERSION` lives once in `ios/project.yml`
   (the project is xcodegen-generated — never hand-edit the `.xcodeproj`).
   Build numbers are managed by Xcode Cloud (build number = run number);
