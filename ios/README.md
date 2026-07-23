@@ -40,8 +40,8 @@ The vendored workaround was retired on 2026-07-24 after barnard added the root
 manifest and published the `v0.1.0` tag.
 
 For local barnard development, drag a local `barnard` checkout into Xcode to
-create a package override, or use a temporary local-path override in
-`Package.swift`; do not commit the override.
+create a package override, or temporarily point `project.yml` at a local
+`path:` and re-run `xcodegen generate`; do not commit the override.
 
 ## Onboarding flag
 
@@ -257,7 +257,7 @@ Lost" button on the Verifying screen while in DemoEvent mode, and covered by
   wallet app. No signing with an actual wallet key anywhere in this slice
   (WalletConnect connects an address; it doesn't sign proofs yet).
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
-  is available in the vendored SDK but not called from the app in this
+  is available in the barnard SDK but not called from the app in this
   slice).
 - **Server**: no backend calls. Proofs are local-only.
 - **Real BLE verification policy**: on-device, `.eventFound` fires on the

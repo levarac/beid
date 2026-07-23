@@ -48,11 +48,10 @@ includeBuild("vendor/barnard/packages/android/barnard") {
 `app/build.gradle.kts` then depends on it as an ordinary coordinate:
 `implementation("network.greeting.barnard:barnard:1.0-SNAPSHOT")`.
 
-**Why this differs from iOS's approach**: `ios/README.md` vendors
-(copies) the Swift package verbatim into `ios/Vendor/Barnard` because SwiftPM
-requires a remote git dependency's `Package.swift` to live at the
-*repository root*, and levarac/barnard's Swift package lives at
-`packages/swift/barnard` — a hard technical constraint, not a preference.
+**Why this differs from iOS's approach**: iOS consumes barnard as a remote
+SwiftPM package pinned to an exact release (see `ios/README.md` "Barnard SDK
+dependency"); Android keeps the submodule until barnard publishes to Maven
+Central, at which point a coordinate dependency becomes possible.
 Gradle has no equivalent constraint: `includeBuild` can point at any
 subdirectory of any local checkout. That local-checkout requirement is the
 only remaining wrinkle — a plain relative `includeBuild("../../barnard/...")`
