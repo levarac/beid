@@ -1,5 +1,15 @@
 {
+  "originHash" : "a052b6343329c380988235ed7674f392ac9d96252333b3184687d04031eec065",
   "pins" : [
+    {
+      "identity" : "barnard",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/levarac/barnard.git",
+      "state" : {
+        "revision" : "f9c930dffc478f58ff78356c569e9627483018cb",
+        "version" : "0.1.0"
+      }
+    },
     {
       "identity" : "metamask-ios-sdk",
       "kind" : "remoteSourceControl",
@@ -82,5 +92,5 @@
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

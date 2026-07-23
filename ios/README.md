@@ -27,49 +27,21 @@ Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 
 ## Barnard SDK dependency
 
-`project.yml` vendors the SDK locally at `Vendor/Barnard` rather than using a
-remote SwiftPM git dependency. The exact upstream commit is recorded in
-[`Vendor/Barnard/.pin`](Vendor/Barnard/.pin), the canonical machine-readable
-pin.
+`project.yml` consumes
+[`levarac/barnard`](https://github.com/levarac/barnard) as a remote SwiftPM
+package pinned to the exact `0.1.0` release. The committed
+`Package.resolved` records the release's precise revision for reproducible
+builds.
 
-**Why not a remote git dependency** (the task brief's preferred default):
-levarac/barnard's Swift package lives at `packages/swift/barnard`, not at the
-repo root, and SwiftPM's remote git dependencies require `Package.swift` at
-the dependency repo's root. Pointing `packages.Barnard.url` at
-`https://github.com/levarac/barnard` fails to resolve
-(`the package manifest at '/Package.swift' cannot be accessed`). A remote-URL
-dependency with a subdirectory `path` isn't supported by SwiftPM today, so a
-straight remote dependency on the pinned SHA isn't possible without a
-companion package-registry entry or a root-level `Package.swift` on barnard's
-side (out of scope for this slice).
+Historically, beid copied barnard's Swift package into the repository because
+barnard did not have a root `Package.swift`, which SwiftPM requires for a
+remote git dependency; a commit pin and drift guard kept that copy aligned.
+The vendored workaround was retired on 2026-07-24 after barnard added the root
+manifest and published the `v0.1.0` tag.
 
-**What we did instead**: copied `packages/swift/barnard` verbatim from the
-commit in `Vendor/Barnard/.pin` into `ios/Vendor/Barnard`, referenced via a
-local SwiftPM `path` dependency in `project.yml`. This mirrors the pattern the
-barnard repo itself already uses (its Swift package is documented as a
-mirror, not a move, of the Flutter plugin's Flutter-free sources, with a
-`check-swift-mirror.sh` script to catch drift) — vendoring with a pinned SHA
-and a drift guard is an accepted convention in this ecosystem, not a one-off
-hack.
-
-Run the guard from the repository root whenever the vendored package or pin
-changes:
-
-```sh
-ios/scripts/check-barnard-vendor.sh
-```
-
-It shallow-fetches the commit in `Vendor/Barnard/.pin`, compares upstream's
-`packages/swift/barnard` with the local package, and fails on source drift or
-if this README or `project.yml` stops referring to the canonical pin. The
-`Barnard vendor drift` GitHub Actions workflow runs the guard and its offline
-regression tests on pull requests and `main` pushes that touch
-`ios/Vendor/**` or the guard's contract files.
-
-**Follow-up**: once barnard publishes the Swift package via a proper
-mechanism (root-level `Package.swift`, package registry entry, or a
-dedicated release tag/repo), switch `project.yml` back to a real remote
-dependency and delete `Vendor/Barnard`.
+For local barnard development, drag a local `barnard` checkout into Xcode to
+create a package override, or temporarily point `project.yml` at a local
+`path:` and re-run `xcodegen generate`; do not commit the override.
 
 ## Onboarding flag
 
@@ -285,7 +257,7 @@ Lost" button on the Verifying screen while in DemoEvent mode, and covered by
   wallet app. No signing with an actual wallet key anywhere in this slice
   (WalletConnect connects an address; it doesn't sign proofs yet).
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
-  is available in the vendored SDK but not called from the app in this
+  is available in the barnard SDK but not called from the app in this
   slice).
 - **Server**: no backend calls. Proofs are local-only.
 - **Real BLE verification policy**: on-device, `.eventFound` fires on the
@@ -324,7 +296,6 @@ ios/
   project.yml              # XcodeGen spec
   README.md                # this file
   Secrets.example.plist    # WalletConnect credential template, see above
-  Vendor/Barnard/           # vendored SwiftPM package, see above
   Beid/
     App/                    # @main entry point, Info.plist, Beid.entitlements
     Models/                 # Proof, OnboardingMode, DemoEvent

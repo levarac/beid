@@ -4,8 +4,8 @@
 import SwiftUI
 
 /// Wallet-optional fallback reached from `WalletConnectView`'s secondary
-/// action: joins an event by manually entered code (calling the vendored
-/// Barnard SDK's `BarnardEngine.joinEvent` via `SensingCoordinator`) instead
+/// action: joins an event by manually entered code (calling the Barnard
+/// SDK's `BarnardEngine.joinEvent` via `SensingCoordinator`) instead
 /// of connecting a wallet, then continues onboarding exactly where
 /// `completeWalletConnect()` does.
 struct EventCodeEntryView: View {

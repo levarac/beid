@@ -72,7 +72,7 @@ final class AppCoordinator: ObservableObject {
   }
 
   /// Validates and joins the manually entered event code
-  /// (`EventCodeEntryView`), calling into the vendored Barnard SDK's join
+  /// (`EventCodeEntryView`), calling into the Barnard SDK's join
   /// API via `SensingCoordinator`. On success, advances onboarding exactly
   /// where `completeWalletConnect()` does, without ever setting
   /// `walletAddress`.

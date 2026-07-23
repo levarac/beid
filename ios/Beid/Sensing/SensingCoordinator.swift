@@ -81,7 +81,7 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Calls the vendored Barnard SDK's join API (`BarnardEngine.joinEvent`)
+  /// Calls the Barnard SDK's join API (`BarnardEngine.joinEvent`)
   /// with a manually entered event code — the wallet-optional fallback path
   /// (`EventCodeEntryView`) for choosing which event to sense, since there
   /// is no BLE auto-discovery yet. Returns whether the code took effect.
