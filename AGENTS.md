@@ -170,10 +170,12 @@ delivery files:
 - **Versioning**: `MARKETING_VERSION` lives once in `ios/project.yml`
   (the project is xcodegen-generated — never hand-edit the `.xcodeproj`).
   Build numbers are managed by Xcode Cloud (build number = run number);
-  do not set or bump `CURRENT_PROJECT_VERSION` in the repo.
+  `CURRENT_PROJECT_VERSION` in `project.yml` is an inert placeholder
+  (`"1"`) — leave it, never bump it per build.
 - **"Uploaded" ≠ "delivered"**: a build can be `VALID` in App Store
   Connect yet reach no tester. Internal builds auto-deliver to the "Dev"
-  TestFlight group via the ASC workflow post-action; verify group
+  TestFlight group via the ASC workflow post-action (configured
+  2026-07-23; permanence re-confirmed per issue #37); verify group
   assignment through `GET /v1/betaGroups/{id}/builds` (the reverse
   direction reads empty for internal groups).
 - **ASC GUI is the source of truth for workflow settings** — they are not
