@@ -32,6 +32,7 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>cbwallet</string>
+		<string>metamask</string>
 		<string>mwp+1.1</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>

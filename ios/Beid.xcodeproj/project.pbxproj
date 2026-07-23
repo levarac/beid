@@ -43,6 +43,8 @@
 		905D529AD4D49A99A809159C /* QRCodeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */; };
 		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
 		98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */; };
+		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
+		9AF6D3FBAC122293464DBB8A /* metamask-ios-sdk in Frameworks */ = {isa = PBXBuildFile; productRef = ACAE69DE8C145F1780AED9E0 /* metamask-ios-sdk */; };
 		A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */; };
 		A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */; };
 		AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C21DF46165889A3C206F0C /* ProofStore.swift */; };
@@ -127,6 +129,7 @@
 		C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinError.swift; sourceTree = "<group>"; };
 		C58EEA07A80440D53597D515 /* ProofCollectedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCollectedView.swift; sourceTree = "<group>"; };
 		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
+		C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskConnector.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyingView.swift; sourceTree = "<group>"; };
 		E1737F0C115BD86F89789893 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
@@ -149,6 +152,7 @@
 				DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */,
 				BF333C1DDD4F41914CE56A1A /* WalletConnect in Frameworks */,
 				0ABD0998DA3A69A3CEAD5584 /* CoinbaseWalletSDK in Frameworks */,
+				9AF6D3FBAC122293464DBB8A /* metamask-ios-sdk in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -302,6 +306,7 @@
 			isa = PBXGroup;
 			children = (
 				B394137F6B9C4AEFC21E7266 /* CoinbaseWalletConnector.swift */,
+				C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */,
 				7F17F48A8733EF3CE98885F4 /* NativeCryptoProvider.swift */,
 				910158074CF21A3B7DD559AE /* NativeWebSocketFactory.swift */,
 				745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */,
@@ -378,6 +383,7 @@
 				85120383F176FDA459C0D6E8 /* Barnard */,
 				44B73AA6A65E8F59682BC25A /* WalletConnect */,
 				8637F46B3A9B15C9CD8C2B63 /* CoinbaseWalletSDK */,
+				ACAE69DE8C145F1780AED9E0 /* metamask-ios-sdk */,
 			);
 			productName = Beid;
 			productReference = D311A637FF67CA20C99F7E5B /* Beid.app */;
@@ -416,6 +422,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				0E17956A72D7EBC5B3E740F3 /* XCRemoteSwiftPackageReference "wallet-mobile-sdk" */,
+				621304B4DA65813927254E25 /* XCRemoteSwiftPackageReference "metamask-ios-sdk" */,
 				2E0280DEB01CD72D853FFDC7 /* XCRemoteSwiftPackageReference "reown-swift" */,
 				06F8B2D6DDEB286CD8EDFE02 /* XCLocalSwiftPackageReference "Vendor/Barnard" */,
 			);
@@ -474,6 +481,7 @@
 				8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */,
 				E95026757980944AB4C933FE /* EventFoundView.swift in Sources */,
 				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
+				9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */,
 				1ECA910ABFBA80B5249DDA2B /* NativeCryptoProvider.swift in Sources */,
 				5B3DAEF2A80374F87F5836F2 /* NativeWebSocketFactory.swift in Sources */,
 				CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */,
@@ -831,6 +839,14 @@
 				version = 2.3.0;
 			};
 		};
+		621304B4DA65813927254E25 /* XCRemoteSwiftPackageReference "metamask-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/MetaMask/metamask-ios-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = 0.8.10;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -847,6 +863,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0E17956A72D7EBC5B3E740F3 /* XCRemoteSwiftPackageReference "wallet-mobile-sdk" */;
 			productName = CoinbaseWalletSDK;
+		};
+		ACAE69DE8C145F1780AED9E0 /* metamask-ios-sdk */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 621304B4DA65813927254E25 /* XCRemoteSwiftPackageReference "metamask-ios-sdk" */;
+			productName = "metamask-ios-sdk";
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
