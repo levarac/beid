@@ -202,6 +202,39 @@ Base app on 1.1.2; this is a real-device verification risk, not something a
 Simulator test can settle. Keep the exact pin until an upgrade is reviewed
 against a real Coinbase Wallet pairing and `personal_sign` round trip.
 
+### MetaMask direct-connect spike (DEBUG only)
+
+`project.yml` pins the archived `MetaMask/metamask-ios-sdk` exactly at
+**0.8.10**. The connector initializes the SDK only with
+`.deeplinking(dappScheme: "beid")`; it does not select the SDK's Socket.IO
+communication layer. `beid://mmsdk` callbacks are forwarded from
+`BeidApp.onOpenURL`, and `metamask` is declared in
+`LSApplicationQueriesSchemes` so the SDK can detect whether MetaMask is
+installed.
+
+The connector and every MetaMask UI entry point are wrapped in `#if DEBUG`.
+Release builds therefore retain the existing WalletConnect/Coinbase choices
+and behavior. This is a time-bounded compatibility spike: the SDK is archived
+and carries a non-commercial license, so it is not a production wallet
+foundation.
+
+The 0.8.10 package's bundled `Ecies.xcframework` has an arm64 Simulator slice
+but no x86_64 Simulator slice. A multi-architecture Simulator build therefore
+fails at link time. The required iPhone 17 Pro Debug test builds only its
+active arm64 architecture; for other configurations, explicitly build arm64
+only or use a physical device for this spike.
+
+`MetaMaskConnector` owns the active account, chain, connection-attempt ID, and
+session ID. It deliberately never reads the SDK's `connected` property because
+0.8.10 can leave that value true after disconnect. Unit tests cover an absent
+MetaMask installation, disconnect cleanup despite stale SDK state, and a late
+connect response after cancellation.
+
+**Still requires a physical-device E2E:** install a current MetaMask Mobile
+build and a DEBUG beid build, then verify connect → `personal_sign` → automatic
+return to beid, including MetaMask and beid cold starts. The Simulator cannot
+settle this because it does not provide the installed-wallet round trip.
+
 ## DemoEvent mode
 
 The simulator has no BLE radio, so Debug builds force

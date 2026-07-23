@@ -27,6 +27,12 @@ packages:
     # is limited and compatibility must be reviewed before any upgrade.
     url: https://github.com/coinbase/wallet-mobile-sdk
     exactVersion: 1.1.2
+  MetaMask:
+    # Archived, non-commercially licensed spike dependency. Keep this exact
+    # pin: compatibility must be proven on a physical device before any
+    # upgrade or non-DEBUG exposure.
+    url: https://github.com/MetaMask/metamask-ios-sdk
+    exactVersion: 0.8.10
 targets:
   Beid:
     type: application
@@ -40,6 +46,7 @@ targets:
         product: WalletConnect
       - package: CoinbaseWallet
         product: CoinbaseWalletSDK
+      - target: BeidMetaMaskDebug
     info:
       path: Beid/App/Info.plist
       properties:
@@ -66,6 +73,7 @@ targets:
               - beid
         LSApplicationQueriesSchemes:
           - cbwallet
+          - metamask
           - mwp+1.1
     settings:
       base:
@@ -78,6 +86,29 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: YES
+      configs:
+        Debug:
+          # XcodeGen 2.45.3 has no configuration filter for package
+          # dependencies. BeidMetaMaskDebug keeps the package build-order
+          # dependency stable, while only Debug links the pinned package's
+          # static product objects and binary target.
+          OTHER_LDFLAGS:
+            - "$(inherited)"
+            - "$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o"
+            - "$(BUILT_PRODUCTS_DIR)/SocketIO.o"
+            - "$(BUILT_PRODUCTS_DIR)/Starscream.o"
+            - "-lecies"
+  BeidMetaMaskDebug:
+    type: library.static
+    platform: iOS
+    sources:
+      - BeidMetaMaskDebug
+    dependencies:
+      - package: MetaMask
+        product: metamask-ios-sdk
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
   BeidTests:
     type: bundle.unit-test
     platform: iOS
