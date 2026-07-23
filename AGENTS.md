@@ -180,3 +180,10 @@ delivery files:
 - Release-branch conventions (`release/X.Y.Z` stabilization branches,
   version rules, CI guards) are being established in issue #55 — read it
   before doing release work.
+- **Code signing / team ID**: `DEVELOPMENT_TEAM` in `ios/project.yml` is
+  the maintainer's personal Apple Developer team. To build on a device
+  with a different account, change the team locally (Xcode signing pane
+  or a local `project.yml` edit + `xcodegen generate`) — but **never
+  commit a team-ID change**. PRs that touch `DEVELOPMENT_TEAM`, bundle
+  identifiers, or signing settings are rejected unless the maintainer
+  authored them.
