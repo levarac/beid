@@ -31,7 +31,6 @@ included:
   - ios/Beid
 
 excluded:
-  - ios/Vendor
   - ios/BeidTests
 
 baseline: .swiftlint-baseline.json
