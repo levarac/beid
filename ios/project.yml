@@ -6,12 +6,8 @@ options:
     iOS: "17.0"
 packages:
   Barnard:
-    # Vendored (not a remote git dependency): levarac/barnard's Swift
-    # package lives at packages/swift/barnard, not at its repo root, and
-    # SwiftPM remote git dependencies require Package.swift at the repo
-    # root. The exact upstream commit is recorded only in the canonical
-    # Vendor/Barnard/.pin — see README.md "Barnard SDK dependency".
-    path: Vendor/Barnard
+    url: https://github.com/levarac/barnard.git
+    exactVersion: 0.1.0
   WalletConnect:
     # Reown (formerly WalletConnect Inc) — the legacy
     # WalletConnect/WalletConnectSwiftV2 repo is archived; reown-swift is
