@@ -210,6 +210,15 @@ override the flag for tests and controlled demo walkthroughs. It drives the
 same `ScanPhase` state machine a real detection would, without touching
 `BarnardEngine`'s scan/advertise calls:
 
+On a real device (DEBUG builds), launch with the `-beid-demo-event`
+argument (e.g. `xcrun devicectl device process launch --device <id>
+org.levarac.beid -- -beid-demo-event`) to run the scripted demo without a
+second BLE device. Caveat: demo proofs persist in the app container
+(`Documents/proofs.json`) indistinguishably from real proofs, and the
+container survives installing a TestFlight build over the dev build —
+delete the app between a demo E2E session and any real-sensing or
+TestFlight evaluation.
+
 `05 Sensing → 06a Event Found → 06b Verifying (peer count ramps to
 totalPeersToVerify) → 06c Verified → 07 Proof Collected → back to 04 home`,
 and the new proof lands in `ProofStore`.
