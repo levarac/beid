@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license.
 
 #if DEBUG
+import BeidMetaMaskDebug
 import Combine
 import Foundation
-import metamask_ios_sdk
 
 struct MetaMaskWalletAccount: Equatable {
   let address: String

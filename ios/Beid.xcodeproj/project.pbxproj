@@ -12,6 +12,7 @@
 		064174C3328B39801BB488FE /* SensingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAD458D67D1864749F00726 /* SensingCoordinator.swift */; };
 		069813A870D327358882201A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
 		0ABD0998DA3A69A3CEAD5584 /* CoinbaseWalletSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 8637F46B3A9B15C9CD8C2B63 /* CoinbaseWalletSDK */; };
+		0EDB197705C554ECE54A12EA /* libBeidMetaMaskDebug.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */; };
 		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
 		1ECA910ABFBA80B5249DDA2B /* NativeCryptoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F17F48A8733EF3CE98885F4 /* NativeCryptoProvider.swift */; };
@@ -44,7 +45,6 @@
 		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
 		98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */; };
 		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
-		9AF6D3FBAC122293464DBB8A /* metamask-ios-sdk in Frameworks */ = {isa = PBXBuildFile; productRef = ACAE69DE8C145F1780AED9E0 /* metamask-ios-sdk */; };
 		A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */; };
 		A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */; };
 		AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C21DF46165889A3C206F0C /* ProofStore.swift */; };
@@ -61,6 +61,7 @@
 		E95026757980944AB4C933FE /* EventFoundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07FD0202575465DCF463745 /* EventFoundView.swift */; };
 		E9736692F462A659CE323E75 /* ProofSignatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */; };
 		EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F95B2F947E49234FCD1421B /* WalletConnectView.swift */; };
+		ED252F32287118C0229A7041 /* MetaMaskDebugSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4649A0DA5850F0EA17519B40 /* MetaMaskDebugSupport.swift */; };
 		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
 		FD7E9D9913C3E0B56B054233 /* ScanPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */; };
@@ -81,6 +82,13 @@
 			remoteGlobalIDString = F1A2076DAC925B3FCE29679E;
 			remoteInfo = Beid;
 		};
+		D94627A25B963950E007DADC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0313A0B9774ED30358F9267 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6C9F9DBB3CABFF7DD1994CA3;
+			remoteInfo = BeidMetaMaskDebug;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -95,6 +103,7 @@
 		29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingView.swift; sourceTree = "<group>"; };
 		29E157C35B263F222E1DBDD5 /* ProofSignature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignature.swift; sourceTree = "<group>"; };
 		394E6F2E97311572D2BAED89 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
+		4649A0DA5850F0EA17519B40 /* MetaMaskDebugSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskDebugSupport.swift; sourceTree = "<group>"; };
 		49BA528F084158430D34C634 /* BeidTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BeidTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanPhase.swift; sourceTree = "<group>"; };
 		5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEvent.swift; sourceTree = "<group>"; };
@@ -136,6 +145,7 @@
 		E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinTests.swift; sourceTree = "<group>"; };
 		E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlagTests.swift; sourceTree = "<group>"; };
 		EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinatorTests.swift; sourceTree = "<group>"; };
+		F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libBeidMetaMaskDebug.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		F079463118A0C298F6C6BCEA /* Colors.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Colors.xcassets; sourceTree = "<group>"; };
 		F4EF63521813A9A66345C1DA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidAdaptiveContent.swift; sourceTree = "<group>"; };
@@ -152,7 +162,7 @@
 				DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */,
 				BF333C1DDD4F41914CE56A1A /* WalletConnect in Frameworks */,
 				0ABD0998DA3A69A3CEAD5584 /* CoinbaseWalletSDK in Frameworks */,
-				9AF6D3FBAC122293464DBB8A /* metamask-ios-sdk in Frameworks */,
+				0EDB197705C554ECE54A12EA /* libBeidMetaMaskDebug.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -183,6 +193,7 @@
 			isa = PBXGroup;
 			children = (
 				A8B68A7A5D14742390F795EC /* Beid */,
+				3A654FA68E2C9A2EF85B223A /* BeidMetaMaskDebug */,
 				DA293E8A0771B440603690A0 /* BeidTests */,
 				490CBC4967C88D5ADFE619BA /* BeidUITests */,
 				CF8938E1F0E34EB2E1E12649 /* Packages */,
@@ -197,6 +208,14 @@
 				F4EF63521813A9A66345C1DA /* Info.plist */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		3A654FA68E2C9A2EF85B223A /* BeidMetaMaskDebug */ = {
+			isa = PBXGroup;
+			children = (
+				4649A0DA5850F0EA17519B40 /* MetaMaskDebugSupport.swift */,
+			);
+			path = BeidMetaMaskDebug;
 			sourceTree = "<group>";
 		};
 		40042ED67302999AA600E2D7 /* Persistence */ = {
@@ -323,6 +342,7 @@
 				D311A637FF67CA20C99F7E5B /* Beid.app */,
 				49BA528F084158430D34C634 /* BeidTests.xctest */,
 				8D7E4363D6595156BB5B3C21 /* BeidUITests.xctest */,
+				F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -347,6 +367,26 @@
 			productName = BeidTests;
 			productReference = 49BA528F084158430D34C634 /* BeidTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		6C9F9DBB3CABFF7DD1994CA3 /* BeidMetaMaskDebug */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D774893A6FBEAD20BB8B6C93 /* Build configuration list for PBXNativeTarget "BeidMetaMaskDebug" */;
+			buildPhases = (
+				E6536C5751BF62787319DDF7 /* Sources */,
+				4BF06756FBD2526FBC19DC7F /* Copy Swift Objective-C Interface Header */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A64849BBC23642E8E64E999C /* PBXTargetDependency */,
+			);
+			name = BeidMetaMaskDebug;
+			packageProductDependencies = (
+				4A479F967624190B3ABFA761 /* metamask-ios-sdk */,
+			);
+			productName = BeidMetaMaskDebug;
+			productReference = F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */;
+			productType = "com.apple.product-type.library.static";
 		};
 		759056DA5DB7A35C5E0B53EE /* BeidUITests */ = {
 			isa = PBXNativeTarget;
@@ -377,13 +417,13 @@
 			buildRules = (
 			);
 			dependencies = (
+				3D9C568E5EEA04FB7BB1648D /* PBXTargetDependency */,
 			);
 			name = Beid;
 			packageProductDependencies = (
 				85120383F176FDA459C0D6E8 /* Barnard */,
 				44B73AA6A65E8F59682BC25A /* WalletConnect */,
 				8637F46B3A9B15C9CD8C2B63 /* CoinbaseWalletSDK */,
-				ACAE69DE8C145F1780AED9E0 /* metamask-ios-sdk */,
 			);
 			productName = Beid;
 			productReference = D311A637FF67CA20C99F7E5B /* Beid.app */;
@@ -432,6 +472,7 @@
 			projectRoot = "";
 			targets = (
 				F1A2076DAC925B3FCE29679E /* Beid */,
+				6C9F9DBB3CABFF7DD1994CA3 /* BeidMetaMaskDebug */,
 				0116823B8A813ACB378BF8FB /* BeidTests */,
 				759056DA5DB7A35C5E0B53EE /* BeidUITests */,
 			);
@@ -451,6 +492,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		4BF06756FBD2526FBC19DC7F /* Copy Swift Objective-C Interface Header */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			name = "Copy Swift Objective-C Interface Header";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/include/$(PRODUCT_MODULE_NAME)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ditto \"${SCRIPT_INPUT_FILE_0}\" \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		060579DF8347120D1F6D593F /* Sources */ = {
@@ -523,6 +583,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E6536C5751BF62787319DDF7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED252F32287118C0229A7041 /* MetaMaskDebugSupport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -530,6 +598,15 @@
 			isa = PBXTargetDependency;
 			target = F1A2076DAC925B3FCE29679E /* Beid */;
 			targetProxy = 5A761226A9352CA3B96B077F /* PBXContainerItemProxy */;
+		};
+		3D9C568E5EEA04FB7BB1648D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6C9F9DBB3CABFF7DD1994CA3 /* BeidMetaMaskDebug */;
+			targetProxy = D94627A25B963950E007DADC /* PBXContainerItemProxy */;
+		};
+		A64849BBC23642E8E64E999C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = 4A479F967624190B3ABFA761 /* metamask-ios-sdk */;
 		};
 		F3FB8E8CB0FD48D6D88E574D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -539,6 +616,21 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		194D6B08F9E6C78BAF8BFE1E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidMetaMaskDebug;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		1CAA137A8FA07B75B4255E63 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -589,6 +681,14 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o",
+					"$(BUILT_PRODUCTS_DIR)/SocketIO.o",
+					"$(BUILT_PRODUCTS_DIR)/Starscream.o",
+					"-lecies",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -596,6 +696,21 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		54A1373DC3B604F93A12254F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidMetaMaskDebug;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
 		};
 		5CB986D050BC61ECBB6A3109 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -766,6 +881,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -813,6 +932,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		D774893A6FBEAD20BB8B6C93 /* Build configuration list for PBXNativeTarget "BeidMetaMaskDebug" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				194D6B08F9E6C78BAF8BFE1E /* Debug */,
+				54A1373DC3B604F93A12254F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -855,6 +983,11 @@
 			package = 2E0280DEB01CD72D853FFDC7 /* XCRemoteSwiftPackageReference "reown-swift" */;
 			productName = WalletConnect;
 		};
+		4A479F967624190B3ABFA761 /* metamask-ios-sdk */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 621304B4DA65813927254E25 /* XCRemoteSwiftPackageReference "metamask-ios-sdk" */;
+			productName = "metamask-ios-sdk";
+		};
 		85120383F176FDA459C0D6E8 /* Barnard */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Barnard;
@@ -863,11 +996,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0E17956A72D7EBC5B3E740F3 /* XCRemoteSwiftPackageReference "wallet-mobile-sdk" */;
 			productName = CoinbaseWalletSDK;
-		};
-		ACAE69DE8C145F1780AED9E0 /* metamask-ios-sdk */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 621304B4DA65813927254E25 /* XCRemoteSwiftPackageReference "metamask-ios-sdk" */;
-			productName = "metamask-ios-sdk";
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
