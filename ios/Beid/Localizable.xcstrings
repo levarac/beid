@@ -113,6 +113,35 @@
         }
       }
     },
+    "Approve the connection in MetaMask": {
+      "comment": "Instruction shown while beid waits for the user to approve the direct connection in the MetaMask app.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Aprueba la conexión en MetaMask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Approuvez la connexion dans MetaMask"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MetaMask で接続を承認してください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "请在 MetaMask 中批准连接"
+          }
+        }
+      }
+    },
     "Choose another wallet": {
       "comment": "Button: returns to the wallet-provider selection without connecting.",
       "localizations": {
@@ -223,6 +252,35 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "使用 Coinbase Wallet 连接"
+          }
+        }
+      }
+    },
+    "Connect with MetaMask": {
+      "comment": "Button: starts the DEBUG-only direct app-to-app connection with the MetaMask app.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Conectar con MetaMask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Se connecter avec MetaMask"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MetaMask で接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "使用 MetaMask 连接"
           }
         }
       }
@@ -537,6 +595,35 @@
         }
       }
     },
+    "Get MetaMask": {
+      "comment": "Button: opens the App Store page for MetaMask.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Obtener MetaMask"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Obtenir MetaMask"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MetaMask を入手"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "获取 MetaMask"
+          }
+        }
+      }
+    },
     "Get Started": {
       "localizations": {
         "es": {
@@ -593,6 +680,34 @@
         }
       }
     },
+    "Install MetaMask to test the direct connection.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Instala MetaMask para probar la conexión directa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Installez MetaMask pour tester la connexion directe."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "直接接続をテストするには、MetaMask をインストールしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "安装 MetaMask 以测试直接连接。"
+          }
+        }
+      }
+    },
     "Join Event": {
       "localizations": {
         "es": {
@@ -617,6 +732,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "加入活动"
+          }
+        }
+      }
+    },
+    "MetaMask is not installed": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MetaMask no está instalada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MetaMask n’est pas installé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MetaMask がインストールされていません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "尚未安装 MetaMask"
           }
         }
       }

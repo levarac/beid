@@ -44,11 +44,17 @@ struct WalletConnectPairingView: View {
   private enum Provider: Equatable {
     case reown
     case coinbase
+    #if DEBUG
+    case metamask
+    #endif
   }
 
   @Environment(\.openURL) private var openURL
   @StateObject private var reownClient = ReownWalletConnectClient.shared
   @StateObject private var coinbaseClient = CoinbaseWalletConnector.shared
+  #if DEBUG
+  @StateObject private var metaMaskClient = MetaMaskConnector.shared
+  #endif
   @State private var selectedProvider: Provider?
   let onConnected: (String, any WalletConnector) -> Void
   let secondaryAction: (title: LocalizedStringKey, action: () -> Void)?
@@ -70,11 +76,18 @@ struct WalletConnectPairingView: View {
         connectorContent(reownClient, provider: .reown)
       case .coinbase:
         connectorContent(coinbaseClient, provider: .coinbase)
+      #if DEBUG
+      case .metamask:
+        connectorContent(metaMaskClient, provider: .metamask)
+      #endif
       }
     }
     .task {
       reownClient.configureIfNeeded()
       coinbaseClient.configureIfNeeded()
+      #if DEBUG
+      metaMaskClient.configureIfNeeded()
+      #endif
       // A wallet may have approved a pairing started from a previous
       // mount of this view (e.g. the user backgrounded the app, or left
       // for the event-code fallback, while `.awaitingApproval`) — deliver
@@ -83,6 +96,9 @@ struct WalletConnectPairingView: View {
       // state that was already `.connected` when this view appeared.
       deliverConnectedState(from: reownClient, provider: .reown)
       deliverConnectedState(from: coinbaseClient, provider: .coinbase)
+      #if DEBUG
+      deliverConnectedState(from: metaMaskClient, provider: .metamask)
+      #endif
     }
     .onChange(of: reownClient.state) { _, newState in
       if selectedProvider == .reown, case .connected(let address) = newState {
@@ -94,6 +110,13 @@ struct WalletConnectPairingView: View {
         onConnected(address, coinbaseClient)
       }
     }
+    #if DEBUG
+    .onChange(of: metaMaskClient.state) { _, newState in
+      if selectedProvider == .metamask, case .connected(let address) = newState {
+        onConnected(address, metaMaskClient)
+      }
+    }
+    #endif
   }
 
   @ViewBuilder
@@ -102,7 +125,7 @@ struct WalletConnectPairingView: View {
     case .notConfigured:
       notConfiguredContent(client: client)
     case .unavailable(.walletNotInstalled):
-      walletNotInstalledContent(client: client)
+      walletNotInstalledContent(provider: provider, client: client)
     case .idle:
       connectingContent
         .task { await client.connect() }
@@ -156,6 +179,13 @@ struct WalletConnectPairingView: View {
           selectedProvider = .coinbase
         }
         .tint(DS.Color.actionPrimary)
+
+        #if DEBUG
+        BeidSecondaryButton(title: "Connect with MetaMask") {
+          selectedProvider = .metamask
+        }
+        .tint(DS.Color.actionPrimary)
+        #endif
 
         if let secondaryAction {
           BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)
@@ -280,17 +310,20 @@ struct WalletConnectPairingView: View {
     }
   }
 
-  private func walletNotInstalledContent<C: WalletConnector>(client: C) -> some View {
+  private func walletNotInstalledContent<C: WalletConnector>(
+    provider: Provider,
+    client: C
+  ) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
         systemImage: "wallet.pass.fill",
-        title: "Coinbase Wallet is not installed",
-        subtitle: "Install Coinbase Wallet to connect without a Reown project ID.",
+        title: walletNotInstalledTitle(for: provider),
+        subtitle: walletNotInstalledSubtitle(for: provider),
         tint: DS.Color.actionPrimary
       )
       VStack(spacing: DS.Space.s) {
-        BeidPrimaryButton("Get Coinbase Wallet", systemImage: "arrow.up.right.square") {
-          openURL(CoinbaseWalletConnector.appStoreURL)
+        BeidPrimaryButton(walletStoreButtonTitle(for: provider), systemImage: "arrow.up.right.square") {
+          openURL(walletStoreURL(for: provider))
         }
         .tint(DS.Color.actionPrimary)
 
@@ -313,9 +346,60 @@ struct WalletConnectPairingView: View {
   }
 
   private func approvalTitle(for provider: Provider) -> LocalizedStringKey {
-    provider == .reown
-      ? "Scan with a WalletConnect-compatible wallet"
-      : "Approve the connection in Coinbase Wallet"
+    switch provider {
+    case .reown:
+      return "Scan with a WalletConnect-compatible wallet"
+    case .coinbase:
+      return "Approve the connection in Coinbase Wallet"
+    #if DEBUG
+    case .metamask:
+      return "Approve the connection in MetaMask"
+    #endif
+    }
+  }
+
+  private func walletNotInstalledTitle(for provider: Provider) -> LocalizedStringKey {
+    switch provider {
+    case .reown, .coinbase:
+      return "Coinbase Wallet is not installed"
+    #if DEBUG
+    case .metamask:
+      return "MetaMask is not installed"
+    #endif
+    }
+  }
+
+  private func walletNotInstalledSubtitle(for provider: Provider) -> LocalizedStringKey {
+    switch provider {
+    case .reown, .coinbase:
+      return "Install Coinbase Wallet to connect without a Reown project ID."
+    #if DEBUG
+    case .metamask:
+      return "Install MetaMask to test the direct connection."
+    #endif
+    }
+  }
+
+  private func walletStoreButtonTitle(for provider: Provider) -> LocalizedStringKey {
+    switch provider {
+    case .reown, .coinbase:
+      return "Get Coinbase Wallet"
+    #if DEBUG
+    case .metamask:
+      return "Get MetaMask"
+    #endif
+    }
+  }
+
+  private func walletStoreURL(for provider: Provider) -> URL {
+    switch provider {
+    case .reown, .coinbase:
+      return CoinbaseWalletConnector.appStoreURL
+    #if DEBUG
+    case .metamask:
+      return MetaMaskConnector.appStoreURL
+    #endif
+    }
   }
 
   private func deliverConnectedState<C: WalletConnector>(from client: C, provider: Provider) {

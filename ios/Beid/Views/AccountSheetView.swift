@@ -102,6 +102,9 @@ private struct WalletConnectSheetView: View {
           Button("Cancel", role: .cancel) {
             ReownWalletConnectClient.shared.reset()
             CoinbaseWalletConnector.shared.disconnect()
+            #if DEBUG
+            MetaMaskConnector.shared.disconnect()
+            #endif
             coordinator.walletConnectSheetPresented = false
           }
         }
