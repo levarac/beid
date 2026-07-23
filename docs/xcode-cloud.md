@@ -94,15 +94,13 @@ Cloud → Workflows). Two workflows, both building the same scheme:
 | Post-Action script | none beyond the two `ci_scripts/` hooks (Xcode Cloud runs those automatically by filename/location) | same |
 
 Version/build numbers: `project.yml` hardcodes
-`MARKETING_VERSION: "1.0"` / `CURRENT_PROJECT_VERSION: "1"` — the same
-values already used for the manually-uploaded 1.0(1) build in Organizer.
-**Recommend Ken set ASC's Xcode Cloud "Build Number Source" to "Xcode
-Cloud"** for the `Beid` product (ASC → Xcode Cloud → product settings) so
-Xcode Cloud auto-increments the build number per successful build instead of
-colliding with the manually-uploaded 1.0(1) or requiring a repo commit per
-build. If that setting is left off, `CURRENT_PROJECT_VERSION: "1"` will
-collide with the existing manual upload on the very first Xcode Cloud build
-and get rejected by ASC — bump it in `project.yml` first in that case.
+`MARKETING_VERSION: "1.0"` / `CURRENT_PROJECT_VERSION: "1"`.
+**Verified 2026-07-23**: ASC's "Build Number Source: Xcode Cloud" is in
+effect — delivered build numbers equal the Xcode Cloud run numbers
+(builds 3/7/8/9 = runs 3/7/8/9), so the repo's
+`CURRENT_PROJECT_VERSION` is inert and must not be bumped per build.
+`MARKETING_VERSION` remains the single version knob, in `project.yml`
+only.
 
 ## First-time-only ASC step (not scriptable from here)
 
@@ -113,8 +111,21 @@ the approval-package message for the exact click path.
 
 ## TestFlight beta-group auto-linking — investigation
 
-**Status: unresolved, diagnosis needed before any fix is built.** TestFlight
-builds are not auto-linking to the "Dev" internal beta group
+**Status: RESOLVED 2026-07-23.** Root cause: the workflows were created via
+the ASC API, which cannot express the GUI-only "TestFlight Internal
+Testing → group selection" post-action — so no group assignment existed at
+all (the workflow's API view shows only `ARCHIVE` +
+`buildDistributionAudience: INTERNAL_ONLY`). Fix: the Dev-group delivery
+was added to the Internal Build workflow **in the ASC GUI** on 2026-07-23;
+builds 8 and 9 then auto-delivered to Dev with no manual `add-groups`
+(verified). Diagnosis note for the future: check membership via
+`GET /v1/betaGroups/{id}/builds` — the reverse direction
+(`GET /v1/builds/{id}/betaGroups`) reads empty for internal groups even
+when linked, and misled the first diagnosis. Historical investigation
+trail follows (kept for the ci_post_xcodebuild timing analysis, which
+remains true).
+
+Builds are not auto-linking to the "Dev" internal beta group
 (`5422706d-fbf9-41dc-9f6e-60e6e6fda8e4`, app `6789376188`) despite that group
 having `hasAccessToAllBuilds=true`, which per Apple's model should make every
 processed build available to it with no explicit per-build action. Build 3

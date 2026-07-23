@@ -145,3 +145,50 @@ English-specific — each target locale needs its own equivalent-term check
 string "mint"). When DESIGN.md and this section conflict on copy tone vs.
 mechanism, DESIGN.md governs tone/vocabulary and this section governs the
 localization mechanism — they are not meant to overlap.
+
+## Delivery / CI contract (Xcode Cloud)
+
+The full delivery doc is `docs/xcode-cloud.md` (canonical, carries
+verification dates). The contract every agent must know before touching
+delivery files:
+
+- **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
+  root). Changing this file on any branch push both **triggers** the
+  Internal Build workflow and becomes the tester-facing "What to Test"
+  notes. Rewrite it wholesale each time — what to check in *this* build
+  only, 1-3 plain sentences per locale (ASC locales: `en-US`, `ja`,
+  `zh-Hans`, `es-ES`, `fr-FR`), no PR numbers, no internal jargon, no
+  accumulated history.
+- **`release_notes.json` is App Store "What's New" copy.** On non-release
+  branches it is never delivered to testers and editing it neither
+  triggers nor annotates test builds. Caveat: on `release/*` branches the
+  current `ci_post_xcodebuild.sh` sources TestFlight notes from
+  `release_notes.json` instead (a legacy pattern slated for revision in
+  issue #55 — the sister project that originated it abandoned it after
+  shipping stale tester notes for 19 hours through exactly this file
+  confusion). When in doubt, the file you want is `what_to_test.json`.
+- **Versioning**: `MARKETING_VERSION` lives once in `ios/project.yml`
+  (the project is xcodegen-generated — never hand-edit the `.xcodeproj`).
+  Build numbers are managed by Xcode Cloud (build number = run number);
+  `CURRENT_PROJECT_VERSION` in `project.yml` is an inert placeholder
+  (`"1"`) — leave it, never bump it per build.
+- **"Uploaded" ≠ "delivered"**: a build can be `VALID` in App Store
+  Connect yet reach no tester. Internal builds auto-deliver to the "Dev"
+  TestFlight group via the ASC workflow post-action (configured
+  2026-07-23; permanence re-confirmed per issue #37); verify group
+  assignment through `GET /v1/betaGroups/{id}/builds` (the reverse
+  direction reads empty for internal groups).
+- **ASC GUI is the source of truth for workflow settings** — they are not
+  in this repo and can drift from the docs. When observed behavior
+  contradicts `docs/xcode-cloud.md`, trust App Store Connect, then update
+  the doc with a new verification date.
+- Release-branch conventions (`release/X.Y.Z` stabilization branches,
+  version rules, CI guards) are being established in issue #55 — read it
+  before doing release work.
+- **Code signing / team ID**: `DEVELOPMENT_TEAM` in `ios/project.yml` is
+  the maintainer's personal Apple Developer team. To build on a device
+  with a different account, change the team locally (Xcode signing pane
+  or a local `project.yml` edit + `xcodegen generate`) — but **never
+  commit a team-ID change**. PRs that touch `DEVELOPMENT_TEAM`, bundle
+  identifiers, or signing settings are rejected unless the maintainer
+  authored them.
