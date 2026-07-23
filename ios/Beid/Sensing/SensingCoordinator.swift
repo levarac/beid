@@ -43,7 +43,10 @@ final class SensingCoordinator: ObservableObject {
     #if targetEnvironment(simulator)
     return true
     #else
-    return false
+    // Real devices default to the real sensing path; the launch argument
+    // lets a driver (devicectl) run the scripted demo walkthrough on
+    // device, e.g. to collect a proof for wallet-signing E2E.
+    return ProcessInfo.processInfo.arguments.contains("-beid-demo-event")
     #endif
   }()
   #else
