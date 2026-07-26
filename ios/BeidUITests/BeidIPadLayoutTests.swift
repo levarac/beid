@@ -26,23 +26,14 @@ final class BeidIPadLayoutTests: XCTestCase {
 
     assertWelcomeLayout(named: "welcome-\(orientation)")
     app.buttons["Get Started"].tap()
-    capture(named: "wallet-connect-\(orientation)")
 
-    // No Secrets.plist/project ID in CI/UI-test runs, so WalletConnectView
-    // shows its "not configured" state (no live relay to pair against) —
-    // the golden path continues via the event-code fallback instead, same
-    // as a wallet-less guest.
-    app.buttons["Enter event code instead"].tap()
-    let codeField = app.textFields["Event code"]
-    XCTAssertTrue(codeField.waitForExistence(timeout: 5))
-    codeField.tap()
-    codeField.typeText("ETHTOKYO2026")
-    capture(named: "event-code-entry-\(orientation)")
-    app.buttons["Join Event"].tap()
-    XCTAssertTrue(app.buttons["Enable Bluetooth"].waitForExistence(timeout: 5))
+    // OnboardingMode.current is .guestFirst (event-first, the default — see
+    // OnboardingFlagTests): Welcome's CTA routes straight to the
+    // Bluetooth-permission screen, with no wallet-connect/event-code step.
+    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     capture(named: "bluetooth-permission-\(orientation)")
 
-    app.buttons["Enable Bluetooth"].tap()
+    app.buttons["Allow Bluetooth"].tap()
     let senseEvent = app.buttons["Sense Event"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-empty-\(orientation)")
