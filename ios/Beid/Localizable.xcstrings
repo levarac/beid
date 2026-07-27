@@ -1099,7 +1099,35 @@
         }
       }
     },
-    "Off": {},
+    "Off": {
+      "comment": "Status label shown next to a colored dot when Bluetooth is powered off.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オフ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已停用"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Inactivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Inactif"
+          }
+        }
+      }
+    },
     "On": {},
     "On-device first": {
       "localizations": {

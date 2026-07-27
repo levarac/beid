@@ -63,7 +63,7 @@ struct AccountSheetView: View {
             HStack(spacing: DS.Space.xs) {
               Circle()
                 .fill(bluetoothStatusColor)
-                .frame(width: 8, height: 8)
+                .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
                 .accessibilityHidden(true)
               Text(bluetoothStatusText)
                 .font(DS.Font.supporting)
