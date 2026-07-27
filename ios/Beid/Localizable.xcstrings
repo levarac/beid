@@ -171,6 +171,35 @@
         }
       }
     },
+    "Close": {
+      "comment": "Accessibility label for the scan flow's toolbar close (X) button that dismisses the scan modal.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Cerrar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Fermer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "閉じる"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "关闭"
+          }
+        }
+      }
+    },
     "Coinbase Wallet is not installed": {
       "localizations": {
         "es": {
@@ -960,6 +989,35 @@
         }
       }
     },
+    "Scan": {
+      "comment": "Screen title for the scan/sensing flow's modal header (noun, the name of the flow, not an instruction to scan something).",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Escanear"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Scan"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "スキャン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "扫描"
+          }
+        }
+      }
+    },
     "Scan with a WalletConnect-compatible wallet": {
       "localizations": {
         "ja": {
@@ -1012,6 +1070,63 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "感知"
+          }
+        }
+      }
+    },
+    "Sensing automatically": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Detección automática"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Détection automatique"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "自動で検知中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "自动感知中"
+          }
+        }
+      }
+    },
+    "Sensing paused": {
+      "comment": "Status pill label: sensing is temporarily paused. Parallels 'Sensing automatically' — keep the same grammatical form.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Detección en pausa"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Détection en pause"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "検知を一時停止中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "感知已暂停"
           }
         }
       }
@@ -1266,6 +1381,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "En attente de l'approbation du portefeuille…"
+          }
+        }
+      }
+    },
+    "Walk into an event — it will show up here automatically.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Entra en un evento y aparecerá aquí automáticamente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Entrez dans un événement, il apparaîtra ici automatiquement."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "イベント会場に入ると、自動的にここに表示されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "走进活动现场，它会自动显示在这里。"
           }
         }
       }

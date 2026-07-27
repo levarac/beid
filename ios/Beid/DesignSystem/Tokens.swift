@@ -87,6 +87,12 @@ enum DS {
   enum Size {
     /// HIG minimum hit region for interactive elements.
     static let minHitTarget: CGFloat = 44
+    /// `BeidStatusPill` indicator dot diameter.
+    static let statusDot: CGFloat = 8
+    /// Sensing radar field — width/height of the concentric-ring frame in `SensingView`.
+    static let radarField: CGFloat = 210
+    /// Sensing radar center glyph size in `SensingView`.
+    static let radarCore: CGFloat = 86
   }
 
   // MARK: - Layout

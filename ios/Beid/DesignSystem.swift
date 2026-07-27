@@ -243,6 +243,45 @@ struct BeidBulletRow: View {
   }
 }
 
+struct BeidStatusPill: View {
+  enum State {
+    case sensingAutomatically
+    case sensingPaused
+
+    fileprivate var label: LocalizedStringKey {
+      switch self {
+      case .sensingAutomatically: "Sensing automatically"
+      case .sensingPaused: "Sensing paused"
+      }
+    }
+
+    fileprivate var dotColor: Color {
+      switch self {
+      case .sensingAutomatically: DS.Color.signalActive
+      case .sensingPaused: DS.Color.signalWarning
+      }
+    }
+  }
+
+  let state: State
+
+  var body: some View {
+    HStack(spacing: DS.Space.s) {
+      Circle()
+        .fill(state.dotColor)
+        .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+        .accessibilityHidden(true)
+
+      Text(state.label)
+        .font(DS.Font.supporting)
+        .foregroundStyle(DS.Color.textSecondary)
+    }
+    .padding(.horizontal, DS.Space.m)
+    .padding(.vertical, DS.Space.s)
+    .beidSurface(cornerRadius: DS.Radius.pill)
+  }
+}
+
 struct BeidPanel<Content: View>: View {
   let content: Content
 
