@@ -53,6 +53,15 @@ enum DS {
     /// (DESIGN.md §5: "Errors that aren't signal-related" is a forbidden
     /// use of `signalWarning`).
     static let statusCaution = SwiftUI.Color(.statusCaution)
+    /// Binary on/off status indicators — currently the Bluetooth power
+    /// state in `AccountSheetView`. Deliberately distinct from
+    /// `signalWarning` (BLE *signal quality* degradation only, not a
+    /// simple power toggle), `statusCaution` (wallet-signature failure
+    /// only), and `signalActive` (the single reserved accent of sensing
+    /// screens, not for use outside sensing moments).
+    static let statusOn = SwiftUI.Color(.statusOn)
+    /// The "off" half of the `statusOn` pair — see its doc comment.
+    static let statusOff = SwiftUI.Color(.statusOff)
   }
 
   // MARK: - Space
