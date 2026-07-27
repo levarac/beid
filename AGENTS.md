@@ -152,6 +152,13 @@ The full delivery doc is `docs/xcode-cloud.md` (canonical, carries
 verification dates). The contract every agent must know before touching
 delivery files:
 
+### PR CI
+
+- `pr-ci` はすべての PR で Ubuntu 上の lint と sanity を実行する。macOS
+  でのビルドとテストは Xcode Cloud が担当するため、この workflow には
+  含めない。
+- レビューは必須ではない。これは 2026-07-27 のオーナー判断による。
+
 - **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
   root). Changing this file on any branch push both **triggers** the
   Internal Build workflow and becomes the tester-facing "What to Test"
