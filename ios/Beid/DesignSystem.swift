@@ -18,6 +18,13 @@ enum BeidDesign {
     static let glyph: CGFloat = 24
   }
 
+  enum Size {
+    /// Icon roundel diameter for two-line bullet rows (screen 02 benefits).
+    static let bulletIcon: CGFloat = 32
+    /// Numbered badge diameter for step lists (screen 03).
+    static let stepBadge: CGFloat = 28
+  }
+
   enum Animation {
     static let entrance = DS.Motion.entrance
     static let soft = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)
@@ -221,25 +228,80 @@ struct BeidSecondaryButton: View {
   }
 }
 
+/// One benefit/permission bullet: an icon roundel plus a title, and
+/// optionally a second, smaller supporting sentence (screen 02's three
+/// Bluetooth benefits — DESIGN.md §10). Omit `subtitle` for a title-only row.
 struct BeidBulletRow: View {
   let systemImage: String
   let title: LocalizedStringKey
+  var subtitle: LocalizedStringKey?
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(alignment: subtitle == nil ? .center : .top, spacing: DS.Space.s) {
       Image(systemName: systemImage)
-        .font(.body.weight(.semibold))
+        .font(DS.Font.cardTitle)
         .foregroundStyle(.tint)
         .symbolRenderingMode(.hierarchical)
-        .frame(width: 28, height: 28)
+        .frame(width: BeidDesign.Size.bulletIcon, height: BeidDesign.Size.bulletIcon)
         .beidSurface(cornerRadius: BeidDesign.Radius.control, fallback: .thinMaterial)
+        .accessibilityHidden(true)
 
-      Text(title)
-        .font(DS.Font.body)
-        .foregroundStyle(DS.Color.textPrimary)
+      VStack(alignment: .leading, spacing: DS.Space.xs) {
+        Text(title)
+          .font(DS.Font.cardTitle)
+          .foregroundStyle(DS.Color.textPrimary)
+
+        if let subtitle {
+          Text(subtitle)
+            .font(DS.Font.meta)
+            .foregroundStyle(DS.Color.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
 
       Spacer(minLength: 0)
     }
+  }
+}
+
+/// Sequential numbered instructions in a bordered card — one filled index
+/// badge + one line per step (screen 03's "Open Settings / Tap Bluetooth /
+/// Switch it on" — DESIGN.md §10). The badge fill follows the ambient
+/// `.tint()` (so it picks up whichever motif accent the hosting screen sets,
+/// e.g. `signalWarning` on a recovery screen); `labelColor` must be the
+/// on-fill pairing token for that same tint (see DESIGN.md §5's CTA-label
+/// rule — the same pairing applies to any text sitting on a tint fill).
+struct BeidNumberedStepList: View {
+  let steps: [LocalizedStringKey]
+  var labelColor: Color = DS.Color.surfaceCanvas
+
+  var body: some View {
+    VStack(spacing: 0) {
+      ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+        HStack(spacing: DS.Space.m) {
+          Text("\(index + 1)")
+            .font(DS.Font.meta.weight(.semibold))
+            .foregroundStyle(labelColor)
+            .frame(width: BeidDesign.Size.stepBadge, height: BeidDesign.Size.stepBadge)
+            .background(.tint, in: Circle())
+
+          Text(step)
+            .font(DS.Font.body)
+            .foregroundStyle(DS.Color.textPrimary)
+
+          Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.s)
+
+        if index < steps.count - 1 {
+          Divider()
+            .padding(.leading, DS.Space.m + BeidDesign.Size.stepBadge + DS.Space.m)
+        }
+      }
+    }
+    .padding(.vertical, DS.Space.xs)
+    .beidSurface(cornerRadius: BeidDesign.Radius.card)
   }
 }
 
