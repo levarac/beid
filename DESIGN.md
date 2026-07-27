@@ -478,6 +478,46 @@ Real components in this codebase. Each entry is the contract for reuse.
   combined accessibility element, so it stays independently queryable by
   its string.
 
+### Component: BeidBulletRow
+
+- Purpose: One benefit/permission bullet — an icon roundel plus a title, and
+  optionally a second, smaller supporting sentence.
+- Use when: A state screen needs a short list of benefit/permission bullets
+  (`BluetoothPermissionView`'s three Bluetooth benefits).
+- Don't use when: The row needs numbering/sequence (use
+  `BeidNumberedStepList` instead) or is itself a full panel/card.
+- API: `BeidBulletRow(systemImage: String, title: LocalizedStringKey, subtitle: LocalizedStringKey? = nil)`.
+  Omit `subtitle` for a title-only row.
+- Required tokens: `DS.Space.s`/`DS.Space.xs` stack spacing, `DS.Font.cardTitle`
+  (title), `DS.Font.meta` + `DS.Color.textSecondary` (subtitle),
+  `BeidDesign.Radius.control` + `BeidDesign.Size.bulletIcon` (icon roundel).
+  Icon tint follows ambient `.tint()` (no motif accent on onboarding screens
+  → `actionPrimary`; §5 accent map elsewhere).
+- Accessibility: icon roundel is `.accessibilityHidden(true)` (decorative;
+  the title/subtitle text already carries the meaning).
+
+### Component: BeidNumberedStepList
+
+- Purpose: Sequential numbered instructions in a bordered card — one filled
+  index badge + one line per step.
+- Use when: A recovery/setup screen needs an ordered short sequence
+  (`BluetoothOffView`'s "Open Settings / Tap Bluetooth / Switch it on").
+- Don't use when: The list isn't ordered (use `BeidBulletRow` instead) or
+  has more than a handful of steps (this is not a scrolling list).
+- API: `BeidNumberedStepList(steps: [LocalizedStringKey], labelColor: Color = DS.Color.surfaceCanvas)`.
+- Required tokens: `DS.Space.m`/`DS.Space.s`/`DS.Space.xs` spacing,
+  `DS.Font.meta` (badge number) + `DS.Font.body` (step text),
+  `BeidDesign.Radius.card` + `BeidDesign.Size.stepBadge` (badge), hairline
+  `Divider()` between rows.
+- Rules: the badge fill follows ambient `.tint()` so it always matches the
+  hosting screen's single motif accent (§5) — `labelColor` MUST be that
+  tint's on-fill pairing token (e.g. `signalWarning` fill → `labelOnWarning`
+  label, the same rule `BeidPrimaryButton` follows). Never hardcode a
+  specific `DS.Color` for the badge fill; that would fight whatever tint the
+  screen sets.
+- Accessibility: badge + step text read as one line per row; no separate
+  accessibility grouping needed since nothing is interactive.
+
 ### Component: State screen (pattern shared by 01/02/03/06c/06d/07)
 
 - Purpose: Icon/artwork → title → supporting text → optional bottom CTA.

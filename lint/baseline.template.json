@@ -120,36 +120,6 @@
     }
   },
   {
-    "text": "      VStack(spacing: 12) {",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_spacing",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothOffView.swift",
-        "line": 17,
-        "character": 14
-      },
-      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded spacing",
-      "severity": "error"
-    }
-  },
-  {
-    "text": "        VStack(alignment: .leading, spacing: 14) {",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_spacing",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/Views/BluetoothPermissionView.swift",
-        "line": 25,
-        "character": 37
-      },
-      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded spacing",
-      "severity": "error"
-    }
-  },
-  {
     "text": "      Spacer(minLength: 96)",
     "violation": {
       "ruleIdentifier": "no_hardcoded_spacing",

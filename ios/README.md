@@ -45,18 +45,19 @@ create a package override, or temporarily point `project.yml` at a local
 
 ## Onboarding flag
 
-Team ruling is WalletConnect-first (no account abstraction), but an
-App-Store-risk review recommended guest-first. That product decision is
-unresolved, so both orders are implemented behind a single flag:
+Resolved 2026-07-26: the default entry flow is event-first (`guestFirst`).
+Wallet connect and binding happen after event confirmation, not at Welcome —
+see `docs/specs/onboarding-redesign.md`. Both orders remain implemented
+behind a single flag so `walletFirst` stays flippable for demos:
 
 ```swift
 // Beid/Models/OnboardingMode.swift
-static let current: OnboardingMode = .walletFirst  // or .guestFirst
+static let current: OnboardingMode = .guestFirst  // or .walletFirst
 ```
 
 - `.walletFirst`: Welcome → Connect Wallet (stub) → Bluetooth permission → home.
-- `.guestFirst`: Welcome → Bluetooth permission → home, with wallet connect
-  deferred to the Account sheet.
+- `.guestFirst` (default): Welcome → Bluetooth permission → home, with wallet
+  connect deferred to the Account sheet.
 
 Flip the flag and rebuild to demo the other order — `OnboardingFlagTests`
 exercises both branches (the inapplicable one self-skips via `XCTSkip`

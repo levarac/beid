@@ -3,7 +3,11 @@
 
 import SwiftUI
 
-/// Screen 01: Welcome.
+/// Screen 01: Welcome. Event-first entry (docs/specs/onboarding-redesign.md
+/// §3/§4.1): the CTA does not connect a wallet — it resolves
+/// `OnboardingMode.current` via `beginOnboarding()`, which routes to
+/// `.bluetoothPermission` for the event-first (guestFirst) path. No
+/// Terms/Privacy footer here; that belongs to the later wallet-connect step.
 struct WelcomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
@@ -15,14 +19,6 @@ struct WelcomeView: View {
         title: "beid",
         subtitle: "Prove you were there. Automatically."
       )
-
-      BeidPanel {
-        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
-          BeidMetricRow(label: "Sensing", value: "Nearby events")
-          BeidMetricRow(label: "Proof", value: "Automatic")
-          BeidMetricRow(label: "Privacy", value: "On-device first")
-        }
-      }
     } footer: {
       BeidPrimaryButton("Get Started", systemImage: "arrow.right") {
         coordinator.beginOnboarding()
