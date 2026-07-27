@@ -1,40 +1,18 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "account.wallet.connectedVia": {
+    "%lld": {},
+    "%lld of %lld peers verified": {
       "localizations": {
         "en": {
           "stringUnit": {
-            "state": "translated",
-            "value": "Connected via %@"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "%@ 経由で接続"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "通过 %@ 连接"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Conectado a través de %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Connecté via %@"
+            "state": "new",
+            "value": "%1$lld of %2$lld peers verified"
           }
         }
       }
     },
+    "Account": {},
     "Active": {
       "comment": "Status label shown next to a colored dot when Bluetooth is powered on.",
       "localizations": {
@@ -64,115 +42,32 @@
         }
       }
     },
-    "Copy address": {
-      "comment": "Button: copies the connected wallet address to the clipboard, not a noun.",
+    "Added to your collection.": {},
+    "Address": {},
+    "Allow Bluetooth": {
       "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "アドレスをコピー"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "复制地址"
-          }
-        },
         "es": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "Copiar dirección"
+            "value": "Permitir Bluetooth"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "Copier l'adresse"
-          }
-        }
-      }
-    },
-    "Ask the event organizer for the code. This joins the event directly, without connecting a wallet.": {
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Pide el código al organizador del evento. Esto te une al evento directamente, sin conectar una billetera."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Demandez le code à l'organisateur de l'événement. Cela vous permet de rejoindre l'événement directement, sans connecter de portefeuille."
+            "value": "Autoriser le Bluetooth"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "イベントコードは主催者に確認してください。ウォレットを接続せずに、直接イベントに参加できます。"
+            "value": "Bluetoothを許可"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "向活动主办方索取代码。这样可以直接加入活动，无需连接钱包。"
-          }
-        }
-      }
-    },
-    "Automatic": {
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Automático"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Automatique"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "自動"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "自动"
-          }
-        }
-      }
-    },
-    "Cancel": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "キャンセル"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "取消"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Cancelar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Annuler"
+            "value": "允许蓝牙"
           }
         }
       }
@@ -234,6 +129,119 @@
         }
       }
     },
+    "Ask the event organizer for the code. This joins the event directly, without connecting a wallet.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Pide el código al organizador del evento. Esto te une al evento directamente, sin conectar una billetera."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Demandez le code à l'organisateur de l'événement. Cela vous permet de rejoindre l'événement directement, sans connecter de portefeuille."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "イベントコードは主催者に確認してください。ウォレットを接続せずに、直接イベントに参加できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "向活动主办方索取代码。这样可以直接加入活动，无需连接钱包。"
+          }
+        }
+      }
+    },
+    "Automatic": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Automático"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Automatique"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "自動"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "自动"
+          }
+        }
+      }
+    },
+    "Bluetooth": {},
+    "Bluetooth is off": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Bluetooth está desactivado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Le Bluetooth est désactivé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Bluetoothがオフです"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "蓝牙已关闭"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "キャンセル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "取消"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Cancelar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Annuler"
+          }
+        }
+      }
+    },
     "Choose another wallet": {
       "comment": "Button: returns to the wallet-provider selection without connecting.",
       "localizations": {
@@ -259,6 +267,35 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "选择其他钱包"
+          }
+        }
+      }
+    },
+    "Close": {
+      "comment": "Accessibility label for the scan flow's toolbar close (X) button that dismisses the scan modal.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Cerrar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Fermer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "閉じる"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "关闭"
           }
         }
       }
@@ -319,6 +356,62 @@
         }
       }
     },
+    "Connect Your Wallet": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ウォレットを接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "连接您的钱包"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Conecta tu cartera"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Connectez votre portefeuille"
+          }
+        }
+      }
+    },
+    "Connect wallet instead": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Conectar billetera en su lugar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Connecter un portefeuille à la place"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "代わりにウォレットを接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "改为连接钱包"
+          }
+        }
+      }
+    },
     "Connect with Coinbase Wallet": {
       "comment": "Button: starts a direct app-to-app connection with the Coinbase Wallet app.",
       "localizations": {
@@ -373,62 +466,6 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "使用 MetaMask 连接"
-          }
-        }
-      }
-    },
-    "Connect Your Wallet": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "ウォレットを接続"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "连接您的钱包"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Conecta tu cartera"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Connectez votre portefeuille"
-          }
-        }
-      }
-    },
-    "Connect wallet instead": {
-      "localizations": {
-        "es": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Conectar billetera en su lugar"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "Connecter un portefeuille à la place"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "代わりにウォレットを接続"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "改为连接钱包"
           }
         }
       }
@@ -545,6 +582,66 @@
         }
       }
     },
+    "Copy address": {
+      "comment": "Button: copies the connected wallet address to the clipboard, not a noun.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "アドレスをコピー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "复制地址"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Copiar dirección"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Copier l'adresse"
+          }
+        }
+      }
+    },
+    "Detected event": {},
+    "Disconnect Wallet": {},
+    "Done": {},
+    "Enable Bluetooth": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Activar Bluetooth"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Activer le Bluetooth"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Bluetoothを有効にする"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "启用蓝牙"
+          }
+        }
+      }
+    },
     "Enter Event Code": {
       "localizations": {
         "es": {
@@ -629,6 +726,7 @@
         }
       }
     },
+    "Event Found": {},
     "Event code": {
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join.",
       "localizations": {
@@ -654,6 +752,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "活动代码"
+          }
+        }
+      }
+    },
+    "Events find you": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Los eventos te encuentran"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Les événements vous trouvent"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "イベントの方から見つかる"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "活动会主动找到你"
           }
         }
       }
@@ -744,6 +870,34 @@
         }
       }
     },
+    "I've turned it on": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Ya lo activé"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Je l'ai activé"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オンにしました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "我已打开"
+          }
+        }
+      }
+    },
     "Install Coinbase Wallet to connect without a Reown project ID.": {
       "localizations": {
         "es": {
@@ -828,6 +982,7 @@
         }
       }
     },
+    "Keep beid open nearby to collect proof of attendance.": {},
     "MetaMask is not installed": {
       "localizations": {
         "es": {
@@ -856,6 +1011,8 @@
         }
       }
     },
+    "Method": {},
+    "My Proofs": {},
     "Nearby events": {
       "localizations": {
         "es": {
@@ -884,6 +1041,36 @@
         }
       }
     },
+    "Nearby events appear automatically — no codes, no search.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Los eventos cercanos aparecen automáticamente: sin códigos, sin búsquedas."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Les événements à proximité apparaissent automatiquement : pas de code, pas de recherche."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "近くのイベントが自動的に表示されます — コード入力も検索も不要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "附近的活动会自动显示 — 无需代码,无需搜索。"
+          }
+        }
+      }
+    },
+    "Nearby peers are confirming your attendance automatically.": {},
+    "No proofs yet": {},
     "Not signed": {
       "localizations": {
         "ja": {
@@ -912,6 +1099,8 @@
         }
       }
     },
+    "Off": {},
+    "On": {},
     "On-device first": {
       "localizations": {
         "es": {
@@ -936,6 +1125,62 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "优先设备端处理"
+          }
+        }
+      }
+    },
+    "Only anonymous proofs are exchanged, never your identity.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Solo se intercambian pruebas anónimas, nunca tu identidad."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Seules des preuves anonymes sont échangées, jamais votre identité."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "やり取りされるのは匿名の証明のみで、あなたの身元は含まれません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "交换的仅是匿名证明,绝不会涉及您的身份。"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Abrir Ajustes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Ouvrir Réglages"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "設定を開く"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "打开设置"
           }
         }
       }
@@ -968,6 +1213,8 @@
         }
       }
     },
+    "Peers": {},
+    "Peers verified": {},
     "Privacy": {
       "localizations": {
         "es": {
@@ -992,6 +1239,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "隐私"
+          }
+        }
+      }
+    },
+    "Private by design": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Privado por diseño"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Confidentiel par conception"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "設計段階からプライベート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "设计上即注重隐私"
           }
         }
       }
@@ -1024,6 +1299,8 @@
         }
       }
     },
+    "Proof Collected": {},
+    "Proof Detail": {},
     "Prove you were there. Automatically.": {
       "localizations": {
         "es": {
@@ -1048,6 +1325,35 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "自动证明你曾在场。"
+          }
+        }
+      }
+    },
+    "Scan": {
+      "comment": "Screen title for the scan/sensing flow's modal header (noun, the name of the flow, not an instruction to scan something).",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Escanear"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Scan"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "スキャン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "扫描"
           }
         }
       }
@@ -1080,6 +1386,7 @@
         }
       }
     },
+    "Sense Event": {},
     "Sensing": {
       "localizations": {
         "es": {
@@ -1104,6 +1411,91 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "感知"
+          }
+        }
+      }
+    },
+    "Sensing automatically": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Detección automática"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Détection automatique"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "自動で検知中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "自动感知中"
+          }
+        }
+      }
+    },
+    "Sensing paused": {
+      "comment": "Status pill label: sensing is temporarily paused. Parallels 'Sensing automatically' — keep the same grammatical form.",
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Detección en pausa"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Détection en pause"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "検知を一時停止中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "感知已暂停"
+          }
+        }
+      }
+    },
+    "Sensing runs quietly in the background. Nothing to tap.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "La detección se ejecuta silenciosamente en segundo plano. No hay nada que tocar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "La détection s'exécute discrètement en arrière-plan. Rien à faire."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "検知はバックグラウンドで静かに動作します。タップする操作は必要ありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "感知在后台静默运行,无需任何点按操作。"
           }
         }
       }
@@ -1137,6 +1529,7 @@
       },
       "comment": "Button: initiates a wallet-signature request for an already-collected proof."
     },
+    "Signal Lost": {},
     "Signature": {
       "localizations": {
         "ja": {
@@ -1278,6 +1671,66 @@
         }
       }
     },
+    "Simulate Signal Lost": {},
+    "Status": {},
+    "Stored": {},
+    "Switch it on": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Actívalo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Activez-le"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オンに切り替える"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "将其打开"
+          }
+        }
+      }
+    },
+    "Tap Bluetooth": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Toca Bluetooth"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Appuyez sur Bluetooth"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Bluetoothをタップ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "点按蓝牙"
+          }
+        }
+      }
+    },
+    "Tap Sense Event to start collecting proof of attendance automatically.": {},
     "The request timed out. Try again once your wallet is reachable.": {
       "localizations": {
         "ja": {
@@ -1334,6 +1787,8 @@
         }
       }
     },
+    "Verified": {},
+    "Verifying proof": {},
     "Waiting for wallet to approve…": {
       "localizations": {
         "ja": {
@@ -1362,6 +1817,35 @@
         }
       }
     },
+    "Walk into an event — it will show up here automatically.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Entra en un evento y aparecerá aquí automáticamente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Entrez dans un événement, il apparaîtra ici automatiquement."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "イベント会場に入ると、自動的にここに表示されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "走进活动现场，它会自动显示在这里。"
+          }
+        }
+      }
+    },
+    "Wallet": {},
     "WalletConnect not configured": {
       "localizations": {
         "ja": {
@@ -1386,6 +1870,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "WalletConnect n'est pas configuré"
+          }
+        }
+      }
+    },
+    "You can change this anytime in Settings.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Puedes cambiar esto en cualquier momento desde Ajustes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Vous pouvez modifier ce réglage à tout moment dans Réglages."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "この設定はいつでも「設定」から変更できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "您可以随时在设置中更改此项。"
           }
         }
       }
@@ -1418,6 +1930,69 @@
         }
       }
     },
+    "Your attendance proof is ready to be added to your collection.": {},
+    "Zero effort": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Cero esfuerzo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Aucun effort"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "手間ゼロ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "零操作"
+          }
+        }
+      }
+    },
+    "account.wallet.connectedVia": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected via %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ 経由で接続"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "通过 %@ 连接"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Conectado a través de %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Connecté via %@"
+          }
+        }
+      }
+    },
     "beid": {
       "comment": "Brand name, appears as the app title on the Welcome screen. Not translated in any target locale.",
       "localizations": {
@@ -1443,6 +2018,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "beid"
+          }
+        }
+      }
+    },
+    "beid can't sense events or collect proofs while Bluetooth is off.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid no puede detectar eventos ni recopilar pruebas mientras el Bluetooth esté desactivado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid ne peut pas détecter d'événements ni collecter de preuves tant que le Bluetooth est désactivé."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Bluetoothがオフの間、beidはイベントを検知したり証明を収集したりできません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "蓝牙关闭时,beid 无法感知活动或收集证明。"
           }
         }
       }
@@ -1503,6 +2106,8 @@
         }
       }
     },
+    "beid found a nearby event signal.": {},
+    "beid lost the connection to %@. Move closer and we'll pick it back up automatically.": {},
     "beid needs a Reown Cloud project ID to connect a wallet. Copy ios/Secrets.example.plist to ios/Beid/Secrets.plist and fill in PROJECT_ID from dashboard.reown.com.": {
       "localizations": {
         "ja": {
@@ -1527,6 +2132,34 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "beid a besoin d'un ID de projet Reown Cloud pour connecter un portefeuille. Copiez ios/Secrets.example.plist vers ios/Beid/Secrets.plist et renseignez PROJECT_ID depuis dashboard.reown.com."
+          }
+        }
+      }
+    },
+    "beid senses nearby events and people over Bluetooth Low Energy — that's how it proves you were really there.": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid detecta eventos y personas cercanas mediante Bluetooth de baja energía; así es como demuestra que realmente estuviste allí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid détecte les événements et les personnes à proximité via le Bluetooth basse consommation — c'est ainsi qu'il prouve que vous étiez vraiment présent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beidはBluetooth Low Energyを通じて近くのイベントや人を検知します — こうしてあなたが本当にそこにいたことを証明します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid 通过低功耗蓝牙(BLE)感知附近的活动和人群 — 这就是它证明你确实到场的方式。"
           }
         }
       }

@@ -442,9 +442,9 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Use when: The single entry point to sensing; presented via
   `fullScreenCover` from `RootView`.
 - Don't use when: Anything else — there is exactly one scan flow.
-- Rules: phase transitions animate with `DS.Motion.standard`; Cancel is
-  always reachable in the toolbar; each phase view owns its content but not
-  its chrome.
+- Rules: phase transitions animate with `DS.Motion.standard`; a trailing
+  close (X) button is always reachable in the toolbar; each phase view owns
+  its content but not its chrome.
 
 ### Component: Sensing pulse (in SensingView)
 
@@ -453,6 +453,72 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Rules: the only permitted `repeatForever` animation; MUST degrade under
   Reduce Motion (§9); center symbol needs `.accessibilityHidden(true)` with
   the state conveyed by the title text.
+
+### Component: BeidStatusPill
+
+- Purpose: Dot + label status indicator, e.g. "Sensing automatically" atop
+  `SensingView`.
+- Use when: A screen needs a compact, glanceable state readout that is not
+  a navigable control.
+- Don't use when: The status is interactive (use a button/toggle) or needs
+  more than a dot + one line of text (use `BeidBulletRow` or a bespoke row
+  instead).
+- API: `BeidStatusPill(state:)`, `state: BeidStatusPill.State` —
+  `.sensingAutomatically` / `.sensingPaused`.
+- Required tokens: `DS.Space.m` (horizontal padding), `DS.Space.s`
+  (vertical padding and the dot-label gap), `DS.Size.statusDot`,
+  `DS.Radius.pill` (via `beidSurface`), `DS.Font.supporting`,
+  `DS.Color.textSecondary` (label, both states), `DS.Color.signalActive` /
+  `DS.Color.signalWarning` (dot).
+- States: `.sensingAutomatically` (active, `signalActive` dot) /
+  `.sensingPaused` (warning, `signalWarning` dot; defined for future reuse,
+  not yet rendered anywhere). Label color never changes with state — only
+  the dot does, and the label text itself names the state, so color is
+  never the only signal (§2.9).
+- Accessibility: dot is `.accessibilityHidden(true)` (decorative — state is
+  named by the label text); label is a plain `Text`, not merged into a
+  combined accessibility element, so it stays independently queryable by
+  its string.
+
+### Component: BeidBulletRow
+
+- Purpose: One benefit/permission bullet — an icon roundel plus a title, and
+  optionally a second, smaller supporting sentence.
+- Use when: A state screen needs a short list of benefit/permission bullets
+  (`BluetoothPermissionView`'s three Bluetooth benefits).
+- Don't use when: The row needs numbering/sequence (use
+  `BeidNumberedStepList` instead) or is itself a full panel/card.
+- API: `BeidBulletRow(systemImage: String, title: LocalizedStringKey, subtitle: LocalizedStringKey? = nil)`.
+  Omit `subtitle` for a title-only row.
+- Required tokens: `DS.Space.s`/`DS.Space.xs` stack spacing, `DS.Font.cardTitle`
+  (title), `DS.Font.meta` + `DS.Color.textSecondary` (subtitle),
+  `BeidDesign.Radius.control` + `BeidDesign.Size.bulletIcon` (icon roundel).
+  Icon tint follows ambient `.tint()` (no motif accent on onboarding screens
+  → `actionPrimary`; §5 accent map elsewhere).
+- Accessibility: icon roundel is `.accessibilityHidden(true)` (decorative;
+  the title/subtitle text already carries the meaning).
+
+### Component: BeidNumberedStepList
+
+- Purpose: Sequential numbered instructions in a bordered card — one filled
+  index badge + one line per step.
+- Use when: A recovery/setup screen needs an ordered short sequence
+  (`BluetoothOffView`'s "Open Settings / Tap Bluetooth / Switch it on").
+- Don't use when: The list isn't ordered (use `BeidBulletRow` instead) or
+  has more than a handful of steps (this is not a scrolling list).
+- API: `BeidNumberedStepList(steps: [LocalizedStringKey], labelColor: Color = DS.Color.surfaceCanvas)`.
+- Required tokens: `DS.Space.m`/`DS.Space.s`/`DS.Space.xs` spacing,
+  `DS.Font.meta` (badge number) + `DS.Font.body` (step text),
+  `BeidDesign.Radius.card` + `BeidDesign.Size.stepBadge` (badge), hairline
+  `Divider()` between rows.
+- Rules: the badge fill follows ambient `.tint()` so it always matches the
+  hosting screen's single motif accent (§5) — `labelColor` MUST be that
+  tint's on-fill pairing token (e.g. `signalWarning` fill → `labelOnWarning`
+  label, the same rule `BeidPrimaryButton` follows). Never hardcode a
+  specific `DS.Color` for the badge fill; that would fight whatever tint the
+  screen sets.
+- Accessibility: badge + step text read as one line per row; no separate
+  accessibility grouping needed since nothing is interactive.
 
 ### Component: State screen (pattern shared by 01/02/03/06c/06d/07)
 
@@ -501,8 +567,9 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   `ProofCardView`; account entry top-trailing; "Sense Event" CTA in the
   bottom bar. Empty state (04b) follows the §3 do/don't.
 - **Scan flow (05–07)**: `fullScreenCover` — sensing is a modal session with
-  a clear exit (Cancel). Phase progression is linear; `SignalLostView`
-  (06d) is the recovery branch and MUST always offer "Try Again".
+  a clear exit (a trailing close (X) button). Phase progression is linear;
+  `SignalLostView` (06d) is the recovery branch and MUST always offer "Try
+  Again".
 - **Detail (08)**: push via `navigationDestination(item:)` from the grid.
 - **Account (09)**: `.sheet` with `List` + inline title; wallet
   connect/disconnect lives here in guest-first mode. Destructive actions
@@ -713,12 +780,15 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `layout.collection.content.maxWidth` | `DS.Layout.collectionContentMaxWidth` | 960 pt | Maximum collection width in regular size classes |
 | `layout.grid.card.minimum.regular` | `DS.Layout.regularGridCardMinimumWidth` | 260 pt | Minimum proof-card width in regular grids |
 | `layout.grid.card.minimum.compact` | `DS.Layout.compactGridCardMinimumWidth` | 150 pt | Minimum proof-card width in compact grids |
+| `size.status.dot` | `DS.Size.statusDot` | 8 pt | `BeidStatusPill` dot diameter |
+| `size.radar.field` | `DS.Size.radarField` | 210 pt | Sensing radar frame (`SensingView`) |
+| `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center glyph (`SensingView`) |
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 | `color.status.on` | `DS.Color.statusOn` | L `#1E7E34` / D `#30D158` | Binary on/off status, "on" (Bluetooth active) |
 | `color.status.off` | `DS.Color.statusOff` | L `#6B7075` / D `#83898F` | Binary on/off status, "off" (Bluetooth off) |
 
-(Full set: 14 color tokens, 7 space, 4 radius, 1 size, 9 font, 5 motion,
+(Full set: 14 color tokens, 7 space, 4 radius, 4 size, 9 font, 5 motion,
 plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
