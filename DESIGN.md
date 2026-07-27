@@ -192,6 +192,8 @@ resolved **against**. Exact secondary hex values (surfaces, text, hairline,
 | `DS.Color.labelOnSeal` | `#FFFFFF` | `#111315` | CTA label on `proofSeal` fill | Prominent-button labels at ceremony moments | Anything except labels sitting on a `proofSeal` fill |
 | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
 | `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView`, `ProofCollectedView` signature controls) | BLE signal issues (use `signalWarning` instead) |
+| `DS.Color.statusOn` | `#1E7E34` | `#30D158` | Binary on/off status, "on" | Bluetooth-active badge (`AccountSheetView`) | BLE signal quality (use `signalWarning`), wallet-signature status (use `statusCaution`), sensing-screen accent (use `signalActive`) |
+| `DS.Color.statusOff` | `#6B7075` | `#83898F` | Binary on/off status, "off" | Bluetooth-off badge (`AccountSheetView`) | Same as `statusOn`'s forbidden uses — this pair is for a neutral toggle state only, not an alarm |
 
 Rules:
 
@@ -783,8 +785,10 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center glyph (`SensingView`) |
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
+| `color.status.on` | `DS.Color.statusOn` | L `#1E7E34` / D `#30D158` | Binary on/off status, "on" (Bluetooth active) |
+| `color.status.off` | `DS.Color.statusOff` | L `#6B7075` / D `#83898F` | Binary on/off status, "off" (Bluetooth off) |
 
-(Full set: 12 color tokens, 7 space, 4 radius, 4 size, 9 font, 5 motion,
+(Full set: 14 color tokens, 7 space, 4 radius, 4 size, 9 font, 5 motion,
 plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
@@ -806,6 +810,7 @@ Currently empty — no custom assets exist yet. First assets to produce
 | 2026-07-10 | Revision round 2 (GPT-Pro re-audit, final): TEMP-DEBT path exclusions replaced by checked-in violation-level baseline (`.swiftlint-baseline.json`); regex FP fixes (blanket `.shadow(color:)` scoped, `minLength:` scoped to `Spacer(`, bare `duration:` branch dropped) and FN fixes (`Font.custom`, `.font(Font.…)`); long-tail patterns explicitly demoted to review-level MUST (§16); pinned SwiftLint + `lint-fixtures/` proof pair; `abs(seed)` → `seed.magnitude`; `DS.Motion.sensingPulse` sanctioned token; §2 lint claim scoped to common surface forms | Adopted (enforcement) |
 | 2026-07-10 | Revision round 3 (Fable audit): SwiftLint 0.65 baselines store absolute paths, so the checked-in baseline is replaced by a portable template (`lint/baseline.template.json`, `__REPO_ROOT__` placeholder) + `scripts/lint.sh` that materializes the gitignored per-checkout `.swiftlint-baseline.json` and runs swiftlint; shrink-only policy governs the template | Adopted (enforcement) |
 | 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView`/`ProofCollectedView` carrying the new signature states instead of the card itself | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
+| 2026-07-27 | Account sheet reskin (Figma `104:463`, `docs/specs/account-redesign.md`) adds `DS.Color.statusOn`/`DS.Color.statusOff` (binary Bluetooth on/off status pair, deliberately separate from `signalWarning`'s BLE-signal-*quality*-only scope, `statusCaution`'s signature-failure-only scope, and `signalActive`'s reserved sensing-screen-accent scope), replacing `AccountSheetView`'s raw `.orange`/`.green` (Non-Negotiable #1 fix). `statusOn`'s hue is sourced from Figma's Bluetooth badge (`#34C759`) but darkened for light mode to clear WCAG AA text contrast (the raw Figma value measures ~2:1 on white, well under the 4.5:1 text minimum); `statusOff` has no Figma reference (Figma's mock never draws the "off" state) and uses a neutral gray pair instead of an alarm hue, since Bluetooth-off in the Account sheet is a neutral toggle state, not the degraded-signal alarm `signalWarning` already owns | PROPOSAL — Ken ratification pending for the exact `statusOn`/`statusOff` hex values, same as other secondary hexes |
 
 ### D. Deprecated patterns
 

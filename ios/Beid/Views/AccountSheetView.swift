@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license.
 
 import SwiftUI
+import UIKit
 
-/// Screen 09: Account sheet — wallet address placeholder, Bluetooth status,
-/// disconnect. In `.guestFirst` onboarding, the wallet may not be connected
-/// yet; this sheet is where that stubbed connection happens.
+/// Screen 09: Account sheet — wallet address, Bluetooth status, disconnect.
+/// In `.guestFirst` onboarding, the wallet may not be connected yet; this
+/// sheet is where that stubbed connection happens.
 struct AccountSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.dismiss) private var dismiss
@@ -15,12 +16,35 @@ struct AccountSheetView: View {
       List {
         Section("Wallet") {
           if let address = coordinator.walletAddress {
-            LabeledContent {
-              Text(truncated(address))
-                .font(DS.Font.ledgerMono)
-                .foregroundStyle(DS.Color.textSecondary)
-            } label: {
-              Label("Address", systemImage: "wallet.pass")
+            HStack(spacing: DS.Space.m) {
+              Label {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                  Text(truncated(address))
+                    .font(DS.Font.ledgerMono)
+                    .foregroundStyle(DS.Color.textPrimary)
+                  Text(connectedViaText)
+                    .font(DS.Font.supporting)
+                    .foregroundStyle(DS.Color.textSecondary)
+                }
+              } icon: {
+                Image(systemName: "wallet.pass")
+              }
+              Spacer()
+              Button {
+                UIPasteboard.general.string = coordinator.walletAddress
+                BeidDesign.haptic()
+              } label: {
+                Image(systemName: "doc.on.doc")
+                  .foregroundStyle(DS.Color.actionPrimary)
+              }
+              .buttonStyle(.borderless)
+              .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
+              .accessibilityLabel(
+                Text(
+                  "Copy address",
+                  comment: "Button: copies the connected wallet address to the clipboard, not a noun."
+                )
+              )
             }
           } else {
             Button {
@@ -32,20 +56,29 @@ struct AccountSheetView: View {
           }
         }
 
-        Section("Bluetooth") {
-          LabeledContent {
-            Text(coordinator.bluetoothMonitor.isPoweredOff ? "Off" : "On")
-              .foregroundStyle(coordinator.bluetoothMonitor.isPoweredOff ? AnyShapeStyle(.orange) : AnyShapeStyle(.green))
-              .fontWeight(.semibold)
-          } label: {
-            Label("Status", systemImage: "dot.radiowaves.left.and.right")
+        Section {
+          HStack(spacing: DS.Space.m) {
+            Label("Bluetooth", systemImage: "dot.radiowaves.left.and.right")
+            Spacer()
+            HStack(spacing: DS.Space.xs) {
+              Circle()
+                .fill(bluetoothStatusColor)
+                .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+                .accessibilityHidden(true)
+              Text(bluetoothStatusText)
+                .font(DS.Font.supporting)
+                .fontWeight(.semibold)
+                .foregroundStyle(bluetoothStatusColor)
+            }
           }
         }
 
         Section {
-          Button("Disconnect Wallet", role: .destructive) {
+          Button(role: .destructive) {
             BeidDesign.haptic(.medium)
             coordinator.disconnectWallet()
+          } label: {
+            Label("Disconnect Wallet", systemImage: "rectangle.portrait.and.arrow.right")
           }
           .disabled(coordinator.walletAddress == nil)
         }
@@ -63,6 +96,40 @@ struct AccountSheetView: View {
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()
     }
+  }
+
+  private var bluetoothStatusColor: Color {
+    coordinator.bluetoothMonitor.isPoweredOff ? DS.Color.statusOff : DS.Color.statusOn
+  }
+
+  private var bluetoothStatusText: LocalizedStringKey {
+    coordinator.bluetoothMonitor.isPoweredOff ? "Off" : "Active"
+  }
+
+  private var connectedViaText: String {
+    String(
+      localized: "account.wallet.connectedVia",
+      defaultValue: "Connected via \(connectorDisplayName)"
+    )
+  }
+
+  /// `WalletConnector` has no name/display-name property (adding one is out
+  /// of this task's allowed scope — see `ios/Beid/Onboarding/WalletConnector.swift`),
+  /// so the connector's display name is derived here from its concrete type.
+  private var connectorDisplayName: String {
+    let connector = coordinator.walletConnector
+    if connector is CoinbaseWalletConnector {
+      return "Coinbase Wallet"
+    }
+    if connector is ReownWalletConnectClient {
+      return "WalletConnect"
+    }
+    #if DEBUG
+    if connector is MetaMaskConnector {
+      return "MetaMask"
+    }
+    #endif
+    return "WalletConnect"
   }
 
   private func truncated(_ address: String) -> String {
@@ -131,4 +198,12 @@ private struct WalletConnectSheetView: View {
   let coordinator = AppCoordinator()
   coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
   return AccountSheetView().environmentObject(coordinator)
+}
+
+#Preview("Wallet connected (Dark)") {
+  let coordinator = AppCoordinator()
+  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  return AccountSheetView()
+    .environmentObject(coordinator)
+    .preferredColorScheme(.dark)
 }
