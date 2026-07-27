@@ -1,0 +1,55 @@
+name: PR CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: SwiftLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: ghcr.io/realm/swiftlint:0.65.0
+    steps:
+      - name: Install container prerequisites (git, python3)
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq git python3 > /dev/null
+      - uses: actions/checkout@v4
+      - name: Mark workspace as safe for git in container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Check lint prerequisites
+        run: |
+          git --version
+          python3 --version
+          swiftlint version
+      - name: Run design-contract lint
+        run: scripts/lint.sh
+
+  sanity:
+    name: Repository sanity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate XcodeGen project definition
+        run: |
+          ruby -e 'require "yaml"; YAML.safe_load(File.read("ios/project.yml"), aliases: true); puts "ios/project.yml is valid YAML"'
+      - name: Validate TestFlight note JSON
+        run: |
+          python3 -c 'import json, pathlib; paths = [pathlib.Path("what_to_test.json"), pathlib.Path("release_notes.json")]; [json.load(path.open(encoding="utf-8")) for path in paths if path.is_file()]; print("TestFlight note JSON is valid")'
+      - name: Validate TestFlight note structure
+        run: |
+          python3 scripts/prepare_testflight_notes.py --source what_to_test.json --output-dir /tmp/what-to-test-notes
+          if [ -f release_notes.json ]; then
+            python3 scripts/prepare_testflight_notes.py --source release_notes.json --output-dir /tmp/release-notes
+          fi

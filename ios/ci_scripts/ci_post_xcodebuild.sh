@@ -13,6 +13,13 @@
 
 set -euo pipefail
 
+# Test actions (e.g. the PR Build & Test workflow) run this hook without
+# CI_PRIMARY_REPOSITORY_PATH and never need TestFlight notes.
+if [[ -z "${CI_PRIMARY_REPOSITORY_PATH:-}" ]]; then
+  echo "No CI_PRIMARY_REPOSITORY_PATH (test action); skipping TestFlight note generation."
+  exit 0
+fi
+
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 
 if [[ ! -d "${CI_APP_STORE_SIGNED_APP_PATH:-}" ]]; then
