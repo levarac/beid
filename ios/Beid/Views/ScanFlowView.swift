@@ -18,14 +18,20 @@ struct ScanFlowView: View {
     NavigationStack {
       content
         .animation(BeidDesign.Animation.soft, value: sensing.phase)
+        .navigationTitle("Scan")
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
-          ToolbarItem(placement: .topBarLeading) {
+          ToolbarItem(placement: .topBarTrailing) {
             Button {
               BeidDesign.haptic()
               coordinator.finishScan()
             } label: {
-              Label("Cancel", systemImage: "xmark")
+              Image(systemName: "xmark")
+                .foregroundStyle(DS.Color.textPrimary)
+                .frame(width: DS.Size.minHitTarget, height: DS.Size.minHitTarget)
+                .beidSurface(interactive: true, cornerRadius: DS.Radius.pill)
             }
+            .accessibilityLabel("Close")
           }
         }
     }

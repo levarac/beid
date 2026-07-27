@@ -12,20 +12,16 @@ struct SensingView: View {
   var body: some View {
     BeidScreen {
       VStack(spacing: BeidDesign.Spacing.section) {
+        BeidStatusPill(state: .sensingAutomatically)
+
         radar
 
-        VStack(spacing: BeidDesign.Spacing.compact) {
-          Text("Sensing automatically")
-            .font(DS.Font.sectionTitle)
-            .multilineTextAlignment(.center)
-
-          Text("Keep beid open nearby to collect proof of attendance.")
-            .font(DS.Font.body)
-            .foregroundStyle(DS.Color.textSecondary)
-            .multilineTextAlignment(.center)
-            .lineSpacing(2)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+        Text("Walk into an event — it will show up here automatically.")
+          .font(DS.Font.body)
+          .foregroundStyle(DS.Color.textSecondary)
+          .multilineTextAlignment(.center)
+          .lineSpacing(2)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
     // Sensing screen: DESIGN.md §5 "one motif accent per screen" — also
@@ -50,10 +46,10 @@ struct SensingView: View {
         systemImage: "dot.radiowaves.left.and.right",
         assetImage: "encounter-field-pulse",
         tint: .accentColor,
-        size: 86
+        size: DS.Size.radarCore
       )
     }
-    .frame(width: 210, height: 210)
+    .frame(width: DS.Size.radarField, height: DS.Size.radarField)
   }
 
   private func pulseAnimation(delay: Double) -> Animation {
