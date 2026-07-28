@@ -104,6 +104,9 @@ enum DS {
     static let radarCore: CGFloat = 86
     /// `ProofCardView`'s circular per-proof gradient avatar diameter.
     static let proofCardArtwork: CGFloat = 76
+    /// `ItemDetailView`'s circular per-proof gradient avatar diameter —
+    /// the same artwork generator as `proofCardArtwork`, at detail scale.
+    static let itemDetailArtwork: CGFloat = 190
   }
 
   // MARK: - Layout
