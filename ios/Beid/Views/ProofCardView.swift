@@ -13,34 +13,35 @@ struct ProofCardView: View {
   }()
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .top) {
-        BeidGlyph(systemImage: "seal.fill", tint: .accentColor, size: 52)
-        Spacer()
-        Image(systemName: "checkmark.circle.fill")
-          .font(.title3)
-          .foregroundStyle(DS.Color.proofSeal)
-          .symbolRenderingMode(.hierarchical)
-      }
+    VStack(spacing: DS.Space.s) {
+      Circle()
+        .fill(DS.Artwork.proofCardGradient(seed: proof.gradientSeed))
+        .frame(width: DS.Size.proofCardArtwork, height: DS.Size.proofCardArtwork)
+        .accessibilityHidden(true)
 
-      VStack(alignment: .leading, spacing: 6) {
-        Text(proof.eventName)
-          .font(DS.Font.cardTitle)
-          .lineLimit(2)
-          .minimumScaleFactor(0.86)
+      Text(proof.eventName)
+        .font(DS.Font.cardTitle)
+        .multilineTextAlignment(.center)
+        .lineLimit(2)
+        .minimumScaleFactor(0.86)
 
-        Text(Self.dateFormatter.string(from: proof.date))
-          .font(DS.Font.supporting)
-          .foregroundStyle(DS.Color.textSecondary)
-      }
-
-      Divider()
-
-      BeidMetricRow(label: "Peers", verbatimValue: "\(proof.peersVerified)")
+      Text(Self.dateFormatter.string(from: proof.date))
+        .font(DS.Font.meta)
+        .foregroundStyle(DS.Color.textSecondary)
     }
     .padding(DS.Space.m)
-    .frame(maxWidth: .infinity, minHeight: 188, alignment: .topLeading)
+    .frame(maxWidth: .infinity, alignment: .top)
     .beidSurface(interactive: true, cornerRadius: BeidDesign.Radius.card)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(accessibilityLabelText)
+  }
+
+  private var accessibilityLabelText: String {
+    String(
+      localized: "proofCard.accessibilityLabel",
+      defaultValue: "Proof of \(proof.eventName), \(Self.dateFormatter.string(from: proof.date))",
+      comment: "VoiceOver label for one proof card in the Collection Home grid — composed from the event name and collection date."
+    )
   }
 }
 
