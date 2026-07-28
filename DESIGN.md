@@ -399,15 +399,19 @@ Real components in this codebase. Each entry is the contract for reuse.
   hero (that is `ItemDetailView`'s header).
 - API: `ProofCardView(proof: Proof)`.
 - Required tokens: `DS.Radius.card`, `DS.Font.cardTitle`, `DS.Font.meta`,
-  `DS.Color.textSecondary`. Artwork: `DS.Artwork.proofCardGradient(seed:)`
-  (§5; the view's current inline copy is scaffold debt).
-- States: default only. Per-proof wallet-signature states (`notRequested` /
-  `connecting` / `awaitingApproval` / `signed` / `deferred` / `rejected` /
-  `failed`) exist as of 2026-07-12 but are surfaced in `ItemDetailView` and
-  `ProofCollectedView`, not on the grid card itself — keeps the card dense
-  and avoids a second status affordance competing with the existing
-  "collected" checkmark. Revisit if a future design pass wants a compact
-  card-level signature badge; it MUST pair color with a symbol per §2.9.
+  `DS.Color.textSecondary`, `DS.Size.proofCardArtwork`. Artwork:
+  `DS.Artwork.proofCardGradient(seed:)` (§5), rendered as a centered
+  circular avatar — adopted as of the 04 Collection Home redesign
+  (`docs/specs/collection-redesign.md`); no longer scaffold debt.
+- States: default only. No "collected" checkmark or peer-count row on the
+  card face as of the 04 redesign — peers-verified stays visible on
+  `ItemDetailView` only. Per-proof wallet-signature states
+  (`notRequested` / `connecting` / `awaitingApproval` / `signed` /
+  `deferred` / `rejected` / `failed`) exist as of 2026-07-12 but are
+  surfaced in `ItemDetailView` and `ProofCollectedView`, not on the grid
+  card itself — keeps the card dense and avoids a second status affordance.
+  Revisit if a future design pass wants a compact card-level signature
+  badge; it MUST pair color with a symbol per §2.9.
 - Accessibility: entire card one element; label "Proof of {eventName},
   {date}".
 
@@ -604,8 +608,9 @@ Policy split:
   `WelcomeView` ("checkmark.seal.fill" 72 pt), `ProofCollectedView`
   ("seal.fill" 48 pt), `VerifiedView` ("checkmark.circle.fill" 64 pt),
   `SignalLostView` ("exclamationmark.triangle.fill" 56 pt),
-  `BluetoothOffView`, `BluetoothPermissionView`, `WalletConnectView`,
-  `CollectionHomeView` empty state ("tray" 48 pt).
+  `BluetoothOffView`, `BluetoothPermissionView`, `WalletConnectView`.
+  `CollectionHomeView`'s empty-state icon was brought into compliance
+  (32 pt + `TODO(asset)`) by the 04 Collection Home redesign.
 - Two distinct custom-asset pipelines — do not mix them:
   1. **Illustrations** (proof artwork, empty states, sensing scenes):
      vector assets in an `Illustrations.xcassets` (to be added with the
@@ -783,12 +788,13 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `size.status.dot` | `DS.Size.statusDot` | 8 pt | `BeidStatusPill` dot diameter |
 | `size.radar.field` | `DS.Size.radarField` | 210 pt | Sensing radar frame (`SensingView`) |
 | `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center glyph (`SensingView`) |
+| `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 | `color.status.on` | `DS.Color.statusOn` | L `#1E7E34` / D `#30D158` | Binary on/off status, "on" (Bluetooth active) |
 | `color.status.off` | `DS.Color.statusOff` | L `#6B7075` / D `#83898F` | Binary on/off status, "off" (Bluetooth off) |
 
-(Full set: 14 color tokens, 7 space, 4 radius, 4 size, 9 font, 5 motion,
+(Full set: 14 color tokens, 7 space, 4 radius, 5 size, 9 font, 5 motion,
 plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
@@ -811,6 +817,7 @@ Currently empty — no custom assets exist yet. First assets to produce
 | 2026-07-10 | Revision round 3 (Fable audit): SwiftLint 0.65 baselines store absolute paths, so the checked-in baseline is replaced by a portable template (`lint/baseline.template.json`, `__REPO_ROOT__` placeholder) + `scripts/lint.sh` that materializes the gitignored per-checkout `.swiftlint-baseline.json` and runs swiftlint; shrink-only policy governs the template | Adopted (enforcement) |
 | 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView`/`ProofCollectedView` carrying the new signature states instead of the card itself | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
 | 2026-07-27 | Account sheet reskin (Figma `104:463`, `docs/specs/account-redesign.md`) adds `DS.Color.statusOn`/`DS.Color.statusOff` (binary Bluetooth on/off status pair, deliberately separate from `signalWarning`'s BLE-signal-*quality*-only scope, `statusCaution`'s signature-failure-only scope, and `signalActive`'s reserved sensing-screen-accent scope), replacing `AccountSheetView`'s raw `.orange`/`.green` (Non-Negotiable #1 fix). `statusOn`'s hue is sourced from Figma's Bluetooth badge (`#34C759`) but darkened for light mode to clear WCAG AA text contrast (the raw Figma value measures ~2:1 on white, well under the 4.5:1 text minimum); `statusOff` has no Figma reference (Figma's mock never draws the "off" state) and uses a neutral gray pair instead of an alarm hue, since Bluetooth-off in the Account sheet is a neutral toggle state, not the degraded-signal alarm `signalWarning` already owns | PROPOSAL — Ken ratification pending for the exact `statusOn`/`statusOff` hex values, same as other secondary hexes |
+| 2026-07-28 | Collection Home reskin (Figma `104:300`, `docs/specs/collection-redesign.md`) adds `DS.Size.proofCardArtwork` (76 pt) and wires the previously-unused `DS.Artwork.proofCardGradient(seed:)` into `ProofCardView` as a centered circular avatar, replacing the seal icon/checkmark/divider/Peers-verified row (peers count stays on `ItemDetailView`). Bottom "Sense Event" CTA becomes icon-only once proofs exist (labeled CTA retained on the 04b empty state per §3's first-run-discoverability rule); the existing localized "Sense Event" string is retained as the icon button's `.accessibilityLabel`, not removed. `CollectionHomeView`'s empty-state icon fixed to the 32 pt cap (see §12) | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 
 ### D. Deprecated patterns
 

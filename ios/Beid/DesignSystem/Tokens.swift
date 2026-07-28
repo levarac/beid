@@ -102,6 +102,8 @@ enum DS {
     static let radarField: CGFloat = 210
     /// Sensing radar center glyph size in `SensingView`.
     static let radarCore: CGFloat = 86
+    /// `ProofCardView`'s circular per-proof gradient avatar diameter.
+    static let proofCardArtwork: CGFloat = 76
   }
 
   // MARK: - Layout

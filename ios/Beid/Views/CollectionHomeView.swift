@@ -25,10 +25,13 @@ struct CollectionHomeView: View {
 
         ScrollView {
           BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
               if coordinator.proofStore.proofs.isEmpty {
                 emptyState
               } else {
+                Text(proofCountText)
+                  .font(DS.Font.supporting)
+                  .foregroundStyle(DS.Color.textSecondary)
                 BeidGlassGroup(spacing: DS.Space.m) {
                   LazyVGrid(columns: columns, spacing: DS.Space.m) {
                     ForEach(coordinator.proofStore.proofs) { proof in
@@ -49,7 +52,7 @@ struct CollectionHomeView: View {
         .contentMargins(.horizontal, BeidDesign.Spacing.screenHorizontal, for: .scrollContent)
         .contentMargins(.vertical, 18, for: .scrollContent)
       }
-      .navigationTitle("My Proofs")
+      .navigationTitle("Collection")
       .navigationBarTitleDisplayMode(.large)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
@@ -64,11 +67,9 @@ struct CollectionHomeView: View {
       }
       .safeAreaInset(edge: .bottom) {
         BeidAdaptiveContent {
-          BeidPrimaryButton("Sense Event", systemImage: "dot.radiowaves.left.and.right") {
-            coordinator.startScan()
-          }
-          .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
-          .padding(.vertical, DS.Space.s)
+          scanButton
+            .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+            .padding(.vertical, DS.Space.s)
         }
         .background(.bar)
       }
@@ -88,21 +89,67 @@ struct CollectionHomeView: View {
     }
   }
 
+  /// Icon-only once proofs exist (dense grid, per the approved 04 redesign);
+  /// the empty state keeps a labeled CTA for first-run discoverability
+  /// (DESIGN.md §3) — same `startScan()` action and localized "Sense Event"
+  /// string either way, only the visible label differs.
+  @ViewBuilder
+  private var scanButton: some View {
+    if coordinator.proofStore.proofs.isEmpty {
+      BeidPrimaryButton("Sense Event", systemImage: "dot.radiowaves.left.and.right") {
+        coordinator.startScan()
+      }
+    } else {
+      Group {
+        if #available(iOS 26.0, *) {
+          Button(action: startScan, label: scanIcon)
+            .buttonStyle(.glassProminent)
+        } else {
+          Button(action: startScan, label: scanIcon)
+            .buttonStyle(.borderedProminent)
+        }
+      }
+      .buttonBorderShape(.circle)
+      .accessibilityLabel("Sense Event")
+    }
+  }
+
+  private func scanIcon() -> some View {
+    Image(systemName: "dot.radiowaves.left.and.right")
+      .font(DS.Font.cta)
+      .foregroundStyle(DS.Color.surfaceCanvas)
+      .frame(width: DS.Size.minHitTarget, height: DS.Size.minHitTarget)
+  }
+
+  private func startScan() {
+    BeidDesign.haptic()
+    coordinator.startScan()
+  }
+
+  private var proofCountText: String {
+    String(
+      localized: "collection.proofCount",
+      defaultValue: "\(coordinator.proofStore.proofs.count) proofs collected",
+      comment: "Caption above the Collection Home grid, showing how many proofs the user has collected so far."
+    )
+  }
+
   private var emptyState: some View {
     VStack {
-      Spacer(minLength: 96)
+      Spacer()
       BeidPanel {
         VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
-          BeidGlyph(systemImage: "tray", assetImage: "encounter-field-empty", tint: .secondary, size: 64)
+          // TODO(asset): encounter-field-empty
+          BeidGlyph(systemImage: "tray", assetImage: "encounter-field-empty", tint: .secondary, size: 32)
           Text("No proofs yet")
             .font(DS.Font.sectionTitle)
-          Text("Tap Sense Event to start collecting proof of attendance automatically.")
+          Text("Start sensing at an event to collect your first proof.")
             .font(DS.Font.body)
             .foregroundStyle(DS.Color.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
         }
       }
-      Spacer(minLength: 140)
+      Spacer()
     }
   }
 }
