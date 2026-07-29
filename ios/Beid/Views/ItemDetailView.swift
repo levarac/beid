@@ -9,8 +9,7 @@ struct ItemDetailView: View {
 
   private static let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
-    formatter.dateStyle = .long
-    formatter.timeStyle = .short
+    formatter.dateStyle = .medium
     return formatter
   }()
 
@@ -19,33 +18,13 @@ struct ItemDetailView: View {
       BeidAdaptiveContent {
         BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
           VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
-            BeidPanel {
-              VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
-                HStack(alignment: .top) {
-                  BeidGlyph(systemImage: "seal.fill", tint: DS.Color.proofSeal, size: 72)
-                  Spacer()
-                  Label("Verified", systemImage: "checkmark.circle.fill")
-                    .font(DS.Font.cardTitle)
-                    .foregroundStyle(DS.Color.proofSeal)
-                }
-
-                Text(proof.eventName)
-                  .font(DS.Font.sectionTitle)
-                  .fixedSize(horizontal: false, vertical: true)
-
-                Text(Self.dateFormatter.string(from: proof.date))
-                  .font(DS.Font.body)
-                  .foregroundStyle(DS.Color.textSecondary)
-              }
-            }
+            artworkHeader
 
             BeidPanel {
               VStack(alignment: .leading, spacing: DS.Space.m) {
-                Text("Proof")
-                  .font(DS.Font.cardTitle)
                 BeidMetricRow(label: "Method", verbatimValue: proof.method)
                 BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
-                BeidMetricRow(label: "Status", value: "Verified", valueStyle: AnyShapeStyle(DS.Color.proofSeal))
+                statusRow
               }
             }
 
@@ -60,6 +39,45 @@ struct ItemDetailView: View {
     .background(DS.Color.surfaceCanvas)
     .navigationTitle("Proof Detail")
     .navigationBarTitleDisplayMode(.inline)
+  }
+
+  private var artworkHeader: some View {
+    VStack(spacing: DS.Space.l) {
+      Circle()
+        .fill(DS.Artwork.proofCardGradient(seed: proof.gradientSeed))
+        .frame(width: DS.Size.itemDetailArtwork, height: DS.Size.itemDetailArtwork)
+        .accessibilityHidden(true)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, DS.Space.xl)
+        .beidSurface(interactive: false, cornerRadius: DS.Radius.seal)
+
+      VStack(spacing: DS.Space.s) {
+        Text(proof.eventName)
+          .font(DS.Font.sectionTitle)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+
+        Text(Self.dateFormatter.string(from: proof.date))
+          .font(DS.Font.body)
+          .foregroundStyle(DS.Color.textSecondary)
+      }
+    }
+  }
+
+  /// Fixed, unconditional "Verified" — deliberately not derived from
+  /// `proof.signatureState`, which already has its own distinct readout in
+  /// the `ProofSignatureControlsView` panel below. See
+  /// `docs/specs/itemdetail-redesign.md` §5.2.
+  private var statusRow: some View {
+    HStack(alignment: .firstTextBaseline) {
+      Text("Status")
+        .font(DS.Font.supporting)
+        .foregroundStyle(DS.Color.textSecondary)
+      Spacer(minLength: DS.Space.m)
+      Label("Verified", systemImage: "checkmark.circle.fill")
+        .font(DS.Font.cardTitle)
+        .foregroundStyle(DS.Color.proofSeal)
+    }
   }
 }
 
@@ -94,4 +112,15 @@ struct ItemDetailView: View {
     ItemDetailView(proof: proof)
   }
   .environmentObject(coordinator)
+}
+
+#Preview("No wallet (Dark)") {
+  let coordinator = AppCoordinator()
+  let proof = Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3)
+  coordinator.proofStore.add(proof)
+  return NavigationStack {
+    ItemDetailView(proof: proof)
+  }
+  .environmentObject(coordinator)
+  .preferredColorScheme(.dark)
 }

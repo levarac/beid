@@ -538,11 +538,27 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Component: Detail meta row (detailRow in ItemDetailView)
 
-- Purpose: Ledger Trace metadata (`Method`, `Peers verified`, `Status`).
+- Purpose: Ledger Trace metadata (`Method`, `Peers verified`, `Status`), in
+  a `BeidPanel` with no section title — the panel goes straight into rows
+  (as of the 08 Item Detail redesign, `docs/specs/itemdetail-redesign.md`).
 - Required tokens: `DS.Font.supporting`, `DS.Color.textSecondary` label,
   `DS.Font.ledgerMono` for identifiers/addresses when they appear.
 - Rules: status values pair text with color (`Verified` +
-  `DS.Color.proofSeal`), never color alone.
+  `DS.Color.proofSeal`, plus a `checkmark.circle.fill` glyph as of the 08
+  redesign), never color alone. `Status` is a fixed, unconditional
+  "Verified" — deliberately NOT derived from `Proof.signatureState`: that
+  state already has its own distinct readout in the
+  `ProofSignatureControlsView` panel below, and reusing it here would show
+  two overlapping status indicators for what looks like the same concern.
+  "On-chain"/protocol-verification language is FORBIDDEN on this row (§15)
+  — there is no such backing claim.
+- Header: above this panel, a centered `DS.Artwork.proofCardGradient(seed:)`
+  avatar (`DS.Size.itemDetailArtwork`, in a non-interactive
+  `.beidSurface(cornerRadius: DS.Radius.seal)` container) replaces the
+  former seal-glyph + "Verified" label header; `proof.eventName`
+  (`DS.Font.sectionTitle`, centered) and a medium-style, date-only caption
+  (`DS.Color.textSecondary`, centered — no venue/time, matching
+  `ProofCardView`'s date formatting) follow.
 
 ### Pattern: Primary CTA button
 
@@ -789,6 +805,7 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `size.radar.field` | `DS.Size.radarField` | 210 pt | Sensing radar frame (`SensingView`) |
 | `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center glyph (`SensingView`) |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
+| `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 | `color.status.on` | `DS.Color.statusOn` | L `#1E7E34` / D `#30D158` | Binary on/off status, "on" (Bluetooth active) |
@@ -818,6 +835,7 @@ Currently empty — no custom assets exist yet. First assets to produce
 | 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView`/`ProofCollectedView` carrying the new signature states instead of the card itself | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
 | 2026-07-27 | Account sheet reskin (Figma `104:463`, `docs/specs/account-redesign.md`) adds `DS.Color.statusOn`/`DS.Color.statusOff` (binary Bluetooth on/off status pair, deliberately separate from `signalWarning`'s BLE-signal-*quality*-only scope, `statusCaution`'s signature-failure-only scope, and `signalActive`'s reserved sensing-screen-accent scope), replacing `AccountSheetView`'s raw `.orange`/`.green` (Non-Negotiable #1 fix). `statusOn`'s hue is sourced from Figma's Bluetooth badge (`#34C759`) but darkened for light mode to clear WCAG AA text contrast (the raw Figma value measures ~2:1 on white, well under the 4.5:1 text minimum); `statusOff` has no Figma reference (Figma's mock never draws the "off" state) and uses a neutral gray pair instead of an alarm hue, since Bluetooth-off in the Account sheet is a neutral toggle state, not the degraded-signal alarm `signalWarning` already owns | PROPOSAL — Ken ratification pending for the exact `statusOn`/`statusOff` hex values, same as other secondary hexes |
 | 2026-07-28 | Collection Home reskin (Figma `104:300`, `docs/specs/collection-redesign.md`) adds `DS.Size.proofCardArtwork` (76 pt) and wires the previously-unused `DS.Artwork.proofCardGradient(seed:)` into `ProofCardView` as a centered circular avatar, replacing the seal icon/checkmark/divider/Peers-verified row (peers count stays on `ItemDetailView`). Bottom "Sense Event" CTA becomes icon-only once proofs exist (labeled CTA retained on the 04b empty state per §3's first-run-discoverability rule); the existing localized "Sense Event" string is retained as the icon button's `.accessibilityLabel`, not removed. `CollectionHomeView`'s empty-state icon fixed to the 32 pt cap (see §12) | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
+| 2026-07-28 | Item Detail reskin (Figma `104:407`, `docs/specs/itemdetail-redesign.md`) adds `DS.Size.itemDetailArtwork` (190 pt) and reuses `DS.Artwork.proofCardGradient(seed:)` in `ItemDetailView` at detail scale, replacing the former seal-glyph + "Verified"-label header. The Method/Peers-verified/Status panel drops its plain "Proof" section title and pairs the Status row with a `checkmark.circle.fill` glyph; Status stays a fixed, unconditional "Verified" deliberately decoupled from `Proof.signatureState` (that state has its own distinct readout in `ProofSignatureControlsView` directly below), and Figma's "on-chain" qualifier is dropped as unmodeled and forbidden copy (§15). Figma's venue text ("Tokyo Big Sight") is not rendered — no backing `Proof` field — and the date caption drops to date-only (medium style, no time), matching `ProofCardView`. Figma's custom back/share nav pills are not adopted (standard back button kept; no share action exists in the app). `ProofSignatureControlsView`/`ProofSignatureState`/`Proof`/`ProofStore` are untouched — reskin is display-chrome only, pending Option C | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 
 ### D. Deprecated patterns
 
