@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Screen 06c: Verified.
 struct VerifiedView: View {
-  let event: DemoEvent
+  let event: EventSession
   let peersVerified: Int
 
   var body: some View {
@@ -32,10 +32,10 @@ struct VerifiedView: View {
 }
 
 #Preview {
-  VerifiedView(event: .sample, peersVerified: 3)
+  VerifiedView(event: .demoSample, peersVerified: 3)
 }
 
 #Preview("Dark") {
-  VerifiedView(event: .sample, peersVerified: 3)
+  VerifiedView(event: .demoSample, peersVerified: 3)
     .preferredColorScheme(.dark)
 }

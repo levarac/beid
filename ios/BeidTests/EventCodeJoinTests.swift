@@ -60,14 +60,14 @@ final class EventCodeJoinTests: XCTestCase {
     let coordinator = SensingCoordinator()
     coordinator.joinEvent("beid-test-event")
 
-    coordinator.runDemoSequence(demoEvent: .sample, stepDelayNanos: 0)
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
-    guard case .collected(let proof) = coordinator.phase else {
-      XCTFail("expected .collected phase, got \(coordinator.phase)")
+    guard case .recording(let event, _) = coordinator.phase else {
+      XCTFail("expected .recording phase, got \(coordinator.phase)")
       return
     }
-    XCTAssertEqual(proof.eventName, DemoEvent.sample.name)
+    XCTAssertEqual(event.name, EventSession.demoSample.name)
     XCTAssertEqual(coordinator.joinedEventCode, "beid-test-event")
   }
 }

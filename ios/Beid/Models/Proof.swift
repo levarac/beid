@@ -12,7 +12,11 @@ struct Proof: Identifiable, Codable, Hashable {
   let eventName: String
   let date: Date
   let method: String
-  let peersVerified: Int
+  /// `var`, not `let`: under the merged `.recording` phase this grows in
+  /// place while a proof is being recorded — see `ProofStore
+  /// .updatePeersVerified(for:to:)` and `docs/specs/scan-slice2-redesign.md`
+  /// §4.6.
+  var peersVerified: Int
   let gradientSeed: Int
   var signatureState: ProofSignatureState
 

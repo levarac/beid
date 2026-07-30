@@ -6,7 +6,7 @@ import SwiftUI
 /// Screen 06a: Event Found — event card slides in.
 struct EventFoundView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  let event: DemoEvent
+  let event: EventSession
 
   @State private var appeared = false
 
@@ -41,10 +41,10 @@ struct EventFoundView: View {
 }
 
 #Preview {
-  EventFoundView(event: .sample)
+  EventFoundView(event: .demoSample)
 }
 
 #Preview("Dark") {
-  EventFoundView(event: .sample)
+  EventFoundView(event: .demoSample)
     .preferredColorScheme(.dark)
 }

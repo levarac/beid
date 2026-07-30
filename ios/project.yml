@@ -38,6 +38,8 @@ targets:
     dependencies:
       - package: Barnard
         product: Barnard
+      - package: Barnard
+        product: BarnardCore
       - package: WalletConnect
         product: WalletConnect
       - package: CoinbaseWallet

@@ -3,12 +3,11 @@
 
 import Foundation
 
-/// A simulated event used by `DemoEvent` mode to drive the 06a→06c scan
-/// states without real BLE. The simulator has no Bluetooth radio, so this
-/// doubles as the future App-Review demo mode (see README).
-struct DemoEvent: Equatable {
-  let name: String
-  let totalPeersToVerify: Int
-
-  static let sample = DemoEvent(name: "ETHGlobal Tokyo", totalPeersToVerify: 3)
+/// `EventSession` fixture used by `DemoEvent` mode to drive the scan phase
+/// machine without real BLE. The simulator has no Bluetooth radio, so this
+/// doubles as the future App-Review demo mode (see README). Kept in this
+/// file per `AGENTS.md`'s localization note — demo fixture data is real
+/// user-visible copy, not a test-only value.
+extension EventSession {
+  static let demoSample = EventSession(id: "ETHGLOBALTOKYO-DEMO", name: "ETHGlobal Tokyo", venue: "Shibuya Hikarie")
 }

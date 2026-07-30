@@ -52,16 +52,18 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 10))
     capture(named: "event-found-\(orientation)")
 
+    // Verifying/Verified/Proof Collected merge into one continuous
+    // `.recording` phase (Scan Slice-2 sub-slice 2a) — there is no
+    // terminal screen to wait for anymore. Threshold-confirm auto-flips
+    // into `.recording` in the background; the "Simulate Signal Lost"
+    // affordance existing is the earliest reliable signal that happened.
     let signalLost = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(signalLost.waitForExistence(timeout: 10))
-    capture(named: "verifying-\(orientation)")
+    capture(named: "recording-\(orientation)")
 
-    XCTAssertTrue(app.staticTexts["Verified"].waitForExistence(timeout: 10))
-    capture(named: "verified-\(orientation)")
-
-    XCTAssertTrue(app.staticTexts["Proof Collected"].waitForExistence(timeout: 10))
-    capture(named: "proof-collected-\(orientation)")
-    app.buttons["Done"].tap()
+    // The scan modal's close button ends the session at any point during
+    // `.recording` — there is no separate terminal "Done" CTA anymore.
+    app.buttons["Close"].tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
@@ -71,7 +73,11 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.navigationBars.buttons.firstMatch.tap()
 
     resumedSenseEvent.tap()
-    XCTAssertTrue(signalLost.waitForExistence(timeout: 10))
+    // Generous timeout: re-entering the scan flow a second time in one test
+    // run has been observed to take noticeably longer than the first entry
+    // (accumulated simulator/accessibility-tree overhead from the
+    // intervening Collection/Proof Detail navigation), not a hang.
+    XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     signalLost.tap()
     XCTAssertTrue(app.staticTexts["Signal Lost"].waitForExistence(timeout: 5))
     capture(named: "signal-lost-\(orientation)")

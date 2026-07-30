@@ -41,6 +41,17 @@ final class ProofStore: ObservableObject {
     save()
   }
 
+  /// Updates a recording proof's peer count in place as
+  /// `SensingCoordinator` observes more distinct peers — the proof itself
+  /// is created once, at the instant `.recording` begins, and never
+  /// re-created (`docs/specs/scan-slice2-redesign.md` §4.6). No-op if the
+  /// proof was removed since the caller last read it.
+  func updatePeersVerified(for id: UUID, to peersVerified: Int) {
+    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return }
+    proofs[index].peersVerified = peersVerified
+    save()
+  }
+
   private func load() {
     guard let data = try? Data(contentsOf: fileURL) else { return }
     var loaded = (try? JSONDecoder().decode([Proof].self, from: data)) ?? []
