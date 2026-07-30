@@ -1,22 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "アプリの土台部分を内部的に入れ替えたビルドです。見た目や機能の変更はありません。起動からイベント参加、センシング開始、Coinbase Wallet 接続までが前回ビルドと同じように動くことを確認してください。"
+    "text": "アプリの主要画面をリデザインしたビルドです（オンボーディング、センシング画面、アカウント、コレクション、証明の詳細）。起動→オンボーディング→センシング開始→証明を開く→アカウントシートと操作し、新しい画面が正しく表示されこれまでどおり動作することを、ライトとダークの両方で確認してください。"
   },
   {
     "language": "en-US",
-    "text": "This build swaps an internal foundation of the app. No visible or functional changes are intended. Please confirm that launching the app, joining an event, starting sensing, and connecting Coinbase Wallet all work the same as the previous build."
+    "text": "This build redesigns the app's main screens: onboarding, the sensing screen, the account panel, the collection, and the proof detail. Please move through the app — launch, onboarding, start sensing, open a proof, and the account sheet — and confirm the new screens look right and behave as before, in both light and dark appearance."
   },
   {
     "language": "zh-Hans",
-    "text": "本次构建替换了应用的内部基础，预期没有任何可见或功能上的变化。请确认启动应用、加入活动、开始感应以及连接 Coinbase Wallet 均与上一版本表现一致。"
+    "text": "本次构建重新设计了应用的主要界面：引导、感应界面、账户、收藏和证明详情。请依次操作——启动、引导、开始感应、打开一个证明、账户面板——在浅色和深色模式下确认新界面显示正确且行为与以往一致。"
   },
   {
     "language": "es-ES",
-    "text": "Esta versión sustituye una base interna de la app. No se esperan cambios visibles ni funcionales. Comprueba que abrir la app, unirse a un evento, iniciar la detección y conectar Coinbase Wallet funcionan igual que en la versión anterior."
+    "text": "Esta versión rediseña las pantallas principales de la app: la introducción, la pantalla de detección, la cuenta, la colección y el detalle de la prueba. Recorre la app (abrir, introducción, iniciar la detección, abrir una prueba, panel de cuenta) y comprueba que las nuevas pantallas se ven bien y funcionan como antes, en modo claro y oscuro."
   },
   {
     "language": "fr-FR",
-    "text": "Cette version remplace une fondation interne de l'app. Aucun changement visible ou fonctionnel n'est attendu. Vérifiez que le lancement de l'app, la participation à un événement, le démarrage de la détection et la connexion Coinbase Wallet fonctionnent comme dans la version précédente."
+    "text": "Cette version redessine les écrans principaux de l'app : l'introduction, l'écran de détection, le compte, la collection et le détail de la preuve. Parcourez l'app (lancement, introduction, démarrage de la détection, ouverture d'une preuve, panneau de compte) et vérifiez que les nouveaux écrans s'affichent bien et fonctionnent comme avant, en thème clair et sombre."
   }
 ]
