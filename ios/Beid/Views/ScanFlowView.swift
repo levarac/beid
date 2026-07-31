@@ -44,14 +44,15 @@ struct ScanFlowView: View {
       SensingView()
     case .eventFound(let event):
       EventFoundView(event: event)
-    case .verifying(let event, let peersVerified):
+    case .recording(let event, let peersVerified):
+      // Interim 2a stand-in for the merged 06b/06c/07 `RecordingView` —
+      // its visual design (entrance ceremony, badge/caption polish) is
+      // sub-slice 2c; this only wires the new `.recording` phase to an
+      // existing, still-compiling view. `VerifiedView`/`ProofCollectedView`
+      // are temporarily unreachable here until 2c.
       VerifyingView(event: event, peersVerified: peersVerified)
-    case .verified(let event, let peersVerified):
-      VerifiedView(event: event, peersVerified: peersVerified)
-    case .signalLost(let event):
+    case .signalLost(let event, _):
       SignalLostView(event: event)
-    case .collected(let proof):
-      ProofCollectedView(proof: proof)
     }
   }
 }

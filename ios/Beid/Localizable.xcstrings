@@ -13,6 +13,41 @@
       }
     },
     "Account": {},
+    "scan.verifying.peersVerifiedCount": {
+      "comment": "Cumulative count of distinct peers who have mutually sensed this device at the event; no fixed target.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld peers verified"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld人のピアを確認済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已验证 %lld 位对等设备"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld pares verificados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld pairs vérifiés"
+          }
+        }
+      }
+    },
     "Active": {
       "comment": "Status label shown next to a colored dot when Bluetooth is powered on.",
       "localizations": {

@@ -2,30 +2,60 @@
 // Use of this source code is governed by a BSD-style license.
 
 import Barnard
+import BarnardCore
 import Foundation
 
 /// Wraps `BarnardEngine` (scan+advertise) and `BarnardIdentity` (per-event
 /// signing) behind the app's `ScanPhase` state machine.
 ///
 /// In Debug builds, `useDemoEventMode` can drive a simulated peer sequence
-/// (06a→06c) instead of real detections. Release builds always use the real
-/// sensing path (see README).
+/// (event found → recording) instead of real detections. Release builds
+/// always use the real sensing path (see README).
 @MainActor
 final class SensingCoordinator: ObservableObject {
   @Published private(set) var phase: ScanPhase = .idle
   @Published private(set) var isScanning = false
   @Published private(set) var isAdvertising = false
+  /// Wallet connect+binding lifecycle for the event currently being
+  /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
+  /// `.pendingConnect`; the interstitial that drives the rest is 2b.
+  @Published private(set) var bindingState: EventBindingState = .none
   /// Event code most recently confirmed by `joinEvent(_:)`, if any. Feeds
   /// `startSensing(eventCode:)` once the user has joined manually via
   /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
   @Published private(set) var joinedEventCode: String?
 
-  /// Fired once a proof is minted, before `phase` flips to `.collected`.
+  /// Fired once, the instant `.recording` begins and a `Proof` is created.
   var onProofCollected: ((Proof) -> Void)?
+  /// Fired on every subsequent distinct-peer observation while
+  /// `.recording`, so the caller can update the same `Proof` in place
+  /// (`ProofStore.updatePeersVerified(for:to:)`) rather than re-creating it.
+  var onPeersVerifiedChanged: ((UUID, Int) -> Void)?
 
   private let engine = BarnardEngine()
   private let identity = BarnardIdentity()
+  private let ownerKeyProvider = OwnerKeyProvider()
+  private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
+  private let windowReportStore = WindowReportStore()
   private var demoTask: Task<Void, Never>?
+
+  // MARK: - Per-session protocol state
+  //
+  // Reset at the start of every new event (`beginEventFound`) and on
+  // `stopSensing()`/`reset()` so nothing leaks into the next session.
+
+  /// Distinct peer RPIDs observed so far this session — the real-path
+  /// equivalent of the demo sequence's loop counter, and the source of
+  /// `peersVerified` (§4.3).
+  private var distinctPeerRpids: Set<String> = []
+  private var currentWindowEnin: Int?
+  private var currentWindowRpids: Set<String> = []
+  /// `commit = H(event signing key ‖ owner key ‖ salt)`, fixed once per
+  /// event at the instant it's found (§5 — the owner key is a cross-event
+  /// anchor "fixed at event time"). Carried on every window report signed
+  /// during this session.
+  private var activeCommit: Data?
+  private var activeProofId: UUID?
 
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
@@ -71,11 +101,52 @@ final class SensingCoordinator: ObservableObject {
     case .state(let state):
       isScanning = state.isScanning
       isAdvertising = state.isAdvertising
-    case .detection:
-      if case .sensing = phase {
-        let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
-        phase = .eventFound(DemoEvent(name: eventCode, totalPeersToVerify: 1))
+    case .detection(let detection):
+      handleDetection(detection)
+    default:
+      break
+    }
+  }
+
+  private func handleDetection(_ detection: BarnardDetectionEvent) {
+    switch phase {
+    case .sensing:
+      let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
+      let session = EventSession(id: eventCode, name: eventCode, venue: nil)
+      beginEventFound(session)
+      observe(detection, for: session)
+    case .eventFound(let session):
+      observe(detection, for: session)
+    case .recording(let session, _):
+      observe(detection, for: session)
+    case .idle, .signalLost:
+      // `.signalLost` is frozen — real signal-loss *detection* doesn't
+      // exist yet (only the demo-only manual trigger does), so this branch
+      // is unreached today, but resuming is an explicit user action
+      // (`resumeSensing()`), never automatic on the next detection.
+      break
+    }
+  }
+
+  /// Records `detection` against the running peer count and window, then
+  /// applies whatever phase transition that observation implies. Called
+  /// from the real detection path only — `handleDetection`'s isolation
+  /// context is already MainActor via `engine.onEvent`'s `Task { @MainActor
+  /// in }`, so no `await` is needed here or in the phase-transition helpers
+  /// it calls.
+  private func observe(_ detection: BarnardDetectionEvent, for session: EventSession) {
+    advanceWindowIfNeeded(enin: detection.enin, eventCode: session.id)
+    currentWindowRpids.insert(detection.rpid)
+    guard distinctPeerRpids.insert(detection.rpid).inserted else { return }
+
+    let peersVerified = distinctPeerRpids.count
+    switch phase {
+    case .eventFound:
+      if peersVerified >= BeidConfig.eventConfirmThreshold {
+        beginRecording(event: session, peersVerified: peersVerified)
       }
+    case .recording:
+      updateRecording(event: session, peersVerified: peersVerified)
     default:
       break
     }
@@ -93,8 +164,9 @@ final class SensingCoordinator: ObservableObject {
     return confirmed == code
   }
 
-  func startSensing(eventCode: String? = nil, demoEvent: DemoEvent = .sample) {
+  func startSensing(eventCode: String? = nil, demoEvent: EventSession = .demoSample) {
     let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
+    resetSessionState()
     phase = .sensing
     if useDemoEventMode {
       runDemoSequence(demoEvent: demoEvent, stepDelayNanos: demoStepDelayNanos)
@@ -104,7 +176,6 @@ final class SensingCoordinator: ObservableObject {
         Task { @MainActor in
           guard status.canScan, status.canAdvertise else { return }
           self.engine.configure(eventCode: eventCode)
-          _ = self.identity.signingPublicKey(eventCode: eventCode)
           self.engine.startAuto()
         }
       }
@@ -115,48 +186,168 @@ final class SensingCoordinator: ObservableObject {
     demoTask?.cancel()
     demoTask = nil
     engine.stopAuto()
+    resetSessionState()
     phase = .idle
   }
 
-  /// Manual trigger so the 06d Signal Lost screen is reachable from the demo
-  /// flow (the golden DemoEvent path itself completes successfully).
+  /// Manual trigger so the Signal Lost screen is reachable from the demo
+  /// flow (the golden EventSession path itself keeps recording
+  /// indefinitely otherwise).
   func simulateSignalLost() {
-    guard case .verifying(let event, _) = phase else { return }
+    guard case .recording(let event, let peersVerified) = phase else { return }
     demoTask?.cancel()
-    phase = .signalLost(event: event)
+    phase = .signalLost(event: event, peersVerified: peersVerified)
+  }
+
+  /// Resumes the same `EventSession`/count in place — never a restart, so
+  /// nothing already recorded (the stored `Proof`, queued window reports)
+  /// is discarded (D4, §5.4). Real BLE signal-loss *detection* (vs. this
+  /// demo-only manual trigger) is still unimplemented, so on a real device
+  /// this only clears the frozen UI state — scanning was never stopped, so
+  /// `handle(_:)` keeps updating `peersVerified` in place regardless.
+  func resumeSensing() {
+    guard case .signalLost(let event, let peersVerified) = phase else { return }
+    phase = .recording(event: event, peersVerified: peersVerified)
+    if useDemoEventMode {
+      continueDemoRecording(event: event, from: peersVerified, stepDelayNanos: demoStepDelayNanos)
+    }
   }
 
   func reset() {
     demoTask?.cancel()
     demoTask = nil
+    resetSessionState()
     phase = .idle
+  }
+
+  private func resetSessionState() {
+    distinctPeerRpids = []
+    currentWindowEnin = nil
+    currentWindowRpids = []
+    activeCommit = nil
+    activeProofId = nil
+  }
+
+  // MARK: - Shared phase transitions
+  //
+  // Called synchronously from the real detection path (`observe`, already
+  // MainActor-isolated) and via `await` from the demo `Task` below — both
+  // are valid call shapes for a MainActor-isolated method, depending on
+  // whether the caller is already statically known to be on this actor.
+
+  /// Computes and fixes this session's `commit` (§5 — "fixed at event
+  /// time"), then transitions to `.eventFound`. Resets prior-session state
+  /// first so nothing leaks across events.
+  private func beginEventFound(_ session: EventSession) {
+    resetSessionState()
+    let eventSigningKey = identity.signingPublicKey(eventCode: session.id)
+    let ownerKey = ownerKeyProvider.publicKeyCompressed()
+    let salt = Data(randomSource.randomBytes(count: 16))
+    activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
+    phase = .eventFound(session)
+  }
+
+  /// Threshold-confirm (D3, §4.3): creates the `Proof` the instant
+  /// `.recording` begins and marks the event `.pendingConnect` for the next
+  /// foreground wallet-binding opportunity (2b builds the interstitial that
+  /// consumes this; 2a only sets the state).
+  private func beginRecording(event: EventSession, peersVerified: Int) {
+    phase = .recording(event: event, peersVerified: peersVerified)
+    let proofId = UUID()
+    activeProofId = proofId
+    let proof = Proof(id: proofId, eventName: event.name, date: Date(), peersVerified: peersVerified)
+    onProofCollected?(proof)
+    bindingState = .pendingConnect(event)
+  }
+
+  /// Updates the already-created `Proof` in place as more distinct peers
+  /// are observed (§4.6) — never re-created.
+  private func updateRecording(event: EventSession, peersVerified: Int) {
+    phase = .recording(event: event, peersVerified: peersVerified)
+    if let activeProofId {
+      onPeersVerifiedChanged?(activeProofId, peersVerified)
+    }
+  }
+
+  // MARK: - Per-window report signing (Q9, §4.5)
+
+  private func advanceWindowIfNeeded(enin: Int, eventCode: String) {
+    guard let openEnin = currentWindowEnin else {
+      currentWindowEnin = enin
+      return
+    }
+    guard openEnin != enin else { return }
+    closeWindow(enin: openEnin, eventCode: eventCode)
+    currentWindowRpids = []
+    currentWindowEnin = enin
+  }
+
+  /// Signs the closing window's observations with the event signing key
+  /// (no wallet, no user approval — high frequency, per the protocol model)
+  /// and queues the report locally. No transport exists yet
+  /// (`scan-protocol-model.md` §9 lists that as separate downstream work) —
+  /// this only produces and stores the signature.
+  private func closeWindow(enin: Int, eventCode: String) {
+    guard let commit = activeCommit else { return }
+    let payload = windowReportPayload(eventCode: eventCode, enin: enin, peerRpids: currentWindowRpids, commit: commit)
+    let signature = identity.sign(eventCode: eventCode, bytes: payload)
+    let report = WindowReport(
+      eventCode: eventCode,
+      enin: enin,
+      peerCount: currentWindowRpids.count,
+      commit: commit,
+      signature: signature
+    )
+    windowReportStore.add(report)
+  }
+
+  private func windowReportPayload(eventCode: String, enin: Int, peerRpids: Set<String>, commit: Data) -> Data {
+    var payload = Data(eventCode.utf8)
+    payload.append(contentsOf: withUnsafeBytes(of: Int64(enin).bigEndian) { Array($0) })
+    payload.append(commit)
+    for rpid in peerRpids.sorted() {
+      payload.append(contentsOf: Array(rpid.utf8))
+    }
+    return payload
   }
 
   // MARK: - Demo sequence
   //
-  // Pure state advancement (`advanceDemo`) is separated from timing so tests
-  // can drive it with a zero delay and await completion via
-  // `waitForDemoSequenceToFinish()`.
+  // Pure state advancement is separated from timing so tests can drive it
+  // with a zero delay and await completion via
+  // `waitForDemoSequenceToFinish()`. Demo mode has no real `BarnardEvent`
+  // stream, so it drives the same shared phase-transition helpers directly
+  // instead of going through `observe(_:for:)`; it does not produce window
+  // reports (those depend on real `.detection` ENIN boundaries).
 
-  func runDemoSequence(demoEvent: DemoEvent, stepDelayNanos: UInt64 = 700_000_000) {
+  func runDemoSequence(demoEvent: EventSession, stepDelayNanos: UInt64 = 700_000_000) {
     demoTask?.cancel()
     demoTask = Task { [weak self] in
       guard let self else { return }
       guard await self.delay(stepDelayNanos) else { return }
-      await self.advanceDemo(to: .eventFound(demoEvent))
+      await self.beginEventFound(demoEvent)
       guard await self.delay(stepDelayNanos) else { return }
 
-      for verified in 1...demoEvent.totalPeersToVerify {
-        await self.advanceDemo(to: .verifying(event: demoEvent, peersVerified: verified))
+      let threshold = BeidConfig.eventConfirmThreshold
+      await self.beginRecording(event: demoEvent, peersVerified: threshold)
+
+      for peersVerified in (threshold + 1)...(threshold + 2) {
         guard await self.delay(stepDelayNanos) else { return }
+        await self.updateRecording(event: demoEvent, peersVerified: peersVerified)
       }
+    }
+  }
 
-      await self.advanceDemo(to: .verified(event: demoEvent, peersVerified: demoEvent.totalPeersToVerify))
-      guard await self.delay(stepDelayNanos) else { return }
-
-      let proof = Proof(eventName: demoEvent.name, date: Date(), peersVerified: demoEvent.totalPeersToVerify)
-      self.onProofCollected?(proof)
-      await self.advanceDemo(to: .collected(proof))
+  /// Continues the demo growth loop from a frozen (post-signal-lost) count
+  /// — `resumeSensing()`'s demo-mode counterpart to `runDemoSequence`.
+  private func continueDemoRecording(event: EventSession, from peersVerified: Int, stepDelayNanos: UInt64) {
+    demoTask?.cancel()
+    demoTask = Task { [weak self] in
+      guard let self else { return }
+      for next in (peersVerified + 1)...(peersVerified + 2) {
+        guard await self.delay(stepDelayNanos) else { return }
+        await self.updateRecording(event: event, peersVerified: next)
+      }
     }
   }
 
@@ -168,9 +359,5 @@ final class SensingCoordinator: ObservableObject {
     guard nanos > 0 else { return !Task.isCancelled }
     try? await Task.sleep(nanoseconds: nanos)
     return !Task.isCancelled
-  }
-
-  private func advanceDemo(to newPhase: ScanPhase) {
-    phase = newPhase
   }
 }

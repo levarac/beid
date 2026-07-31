@@ -3,16 +3,14 @@
 
 import SwiftUI
 
-/// Screen 06b: Verifying — progress + "N peers verified".
+/// Interim stand-in for the merged 06b/06c `.recording` phase — reuses the
+/// pre-Slice-2 "Verifying" screen shell with the model changes needed to
+/// compile against `EventSession`/the merged phase (sub-slice 2a); its
+/// full visual redesign into `RecordingView` is sub-slice 2c.
 struct VerifyingView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
-  let event: DemoEvent
+  let event: EventSession
   let peersVerified: Int
-
-  private var progress: Double {
-    guard event.totalPeersToVerify > 0 else { return 0 }
-    return Double(peersVerified) / Double(event.totalPeersToVerify)
-  }
 
   var body: some View {
     BeidStatusLayout(
@@ -26,8 +24,12 @@ struct VerifyingView: View {
             .font(DS.Font.cardTitle)
             .fixedSize(horizontal: false, vertical: true)
 
-          ProgressView(value: progress) {
-            Text("\(peersVerified) of \(event.totalPeersToVerify) peers verified")
+          // No fixed denominator exists anymore (§4.2 drops
+          // `totalPeersToVerify`), so this is an indeterminate indicator,
+          // not `ProgressView(value:)` — the fixed-fraction bar's full
+          // removal across the scan flow is sub-slice 2c.
+          ProgressView {
+            Text(peersVerifiedCaption)
               .font(DS.Font.supporting)
               .foregroundStyle(DS.Color.textSecondary)
           }
@@ -36,9 +38,9 @@ struct VerifyingView: View {
       }
       },
       footer: {
-      // Demo-mode-only affordance so the 06d Signal Lost screen stays
-      // reachable even though the golden DemoEvent path completes
-      // successfully.
+      // Demo-mode-only affordance so the Signal Lost screen stays
+      // reachable even though the golden EventSession path keeps
+      // recording indefinitely otherwise.
       Button("Simulate Signal Lost", role: .destructive) {
         BeidDesign.haptic(.medium)
         coordinator.sensingCoordinator.simulateSignalLost()
@@ -49,19 +51,27 @@ struct VerifyingView: View {
     // Sensing screen: DESIGN.md §5 "one motif accent per screen".
     .tint(DS.Color.signalActive)
   }
+
+  private var peersVerifiedCaption: String {
+    String(
+      localized: "scan.verifying.peersVerifiedCount",
+      defaultValue: "\(peersVerified) peers verified",
+      comment: "Cumulative count of distinct peers who have mutually sensed this device at the event; no fixed target."
+    )
+  }
 }
 
 #Preview {
-  VerifyingView(event: .sample, peersVerified: 1).environmentObject(AppCoordinator())
+  VerifyingView(event: .demoSample, peersVerified: 1).environmentObject(AppCoordinator())
 }
 
 #Preview("Dark") {
-  VerifyingView(event: .sample, peersVerified: 1)
+  VerifyingView(event: .demoSample, peersVerified: 1)
     .environmentObject(AppCoordinator())
     .preferredColorScheme(.dark)
 }
 
-#Preview("Nearly complete") {
-  VerifyingView(event: .sample, peersVerified: DemoEvent.sample.totalPeersToVerify - 1)
+#Preview("Growing") {
+  VerifyingView(event: .demoSample, peersVerified: 7)
     .environmentObject(AppCoordinator())
 }

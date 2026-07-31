@@ -11,7 +11,7 @@
 		05FF89CD532B46703B2E9C8D /* Illustrations.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */; };
 		064174C3328B39801BB488FE /* SensingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAD458D67D1864749F00726 /* SensingCoordinator.swift */; };
 		069813A870D327358882201A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
-		0ABD0998DA3A69A3CEAD5584 /* CoinbaseWalletSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 8637F46B3A9B15C9CD8C2B63 /* CoinbaseWalletSDK */; };
+		0ABD0998DA3A69A3CEAD5584 /* WalletConnect in Frameworks */ = {isa = PBXBuildFile; productRef = 44B73AA6A65E8F59682BC25A /* WalletConnect */; };
 		0EDB197705C554ECE54A12EA /* libBeidMetaMaskDebug.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */; };
 		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
@@ -32,26 +32,33 @@
 		468CCE7D87235B2151E65822 /* VerifiedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694AE8675E1F6FEF350C1485 /* VerifiedView.swift */; };
 		48805AF863EF6409D14E5B2E /* BeidIPadLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */; };
 		4900D74D47E774AF213395BC /* SignalLostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 912FC62DE59B0394056CF446 /* SignalLostView.swift */; };
+		490405CF5FE60573566176DF /* EventBindingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CC905CF81F08471CF0F471 /* EventBindingState.swift */; };
 		4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */; };
 		516EB6C209C600A66F08EFF1 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2A0822EAE8F243702AA4F1C /* Tokens.swift */; };
 		5B3DAEF2A80374F87F5836F2 /* NativeWebSocketFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 910158074CF21A3B7DD559AE /* NativeWebSocketFactory.swift */; };
+		71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0333AAF8319263B67E8FE36 /* EventSession.swift */; };
 		7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2169FFDF6767C427D481ED17 /* ItemDetailView.swift */; };
 		85803786C31CF2D533B655EE /* DemoEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */; };
 		875CDB76FD829588D665A7A1 /* Proof.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394E6F2E97311572D2BAED89 /* Proof.swift */; };
 		8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */; };
 		8BDF56249613D448E3FEB5EF /* AppScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812C170544758548D2A4DCC /* AppScreen.swift */; };
+		8C4D4B90304963291F940D0E /* EventCommitment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7209389876A87B83EB5B49B9 /* EventCommitment.swift */; };
 		903C47844113AADA5701273B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */; };
 		905D529AD4D49A99A809159C /* QRCodeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */; };
 		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
+		95A3A750404DCA7A584953FC /* BeidConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C29C55477E4B93296A630 /* BeidConfig.swift */; };
 		98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */; };
 		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
+		9AF6D3FBAC122293464DBB8A /* CoinbaseWalletSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 8637F46B3A9B15C9CD8C2B63 /* CoinbaseWalletSDK */; };
 		A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */; };
 		A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */; };
+		A9FCF4EEF2564227A009A346 /* WindowReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1EACAE869F3E0B456C222A /* WindowReport.swift */; };
 		AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C21DF46165889A3C206F0C /* ProofStore.swift */; };
 		ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E157C35B263F222E1DBDD5 /* ProofSignature.swift */; };
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
+		BD424B0B114CBB6F3FE6BA8E /* WindowReportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C453FB39D62870ECDBCBF0 /* WindowReportStore.swift */; };
 		BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00B88F37F569ED386AB057A8 /* Assets.xcassets */; };
-		BF333C1DDD4F41914CE56A1A /* WalletConnect in Frameworks */ = {isa = PBXBuildFile; productRef = 44B73AA6A65E8F59682BC25A /* WalletConnect */; };
+		BF333C1DDD4F41914CE56A1A /* BarnardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 49E0DF602DDE12EC7E201301 /* BarnardCore */; };
 		BFCBDC766B167C57D8FDC606 /* ReownWalletConnectClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A156A80B8C8B96AD33133358 /* ReownWalletConnectClient.swift */; };
 		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
 		CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */; };
@@ -61,6 +68,7 @@
 		E95026757980944AB4C933FE /* EventFoundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07FD0202575465DCF463745 /* EventFoundView.swift */; };
 		E9736692F462A659CE323E75 /* ProofSignatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */; };
 		EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F95B2F947E49234FCD1421B /* WalletConnectView.swift */; };
+		EBBF003BA24A47DD167584A5 /* OwnerKeyProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */; };
 		ED252F32287118C0229A7041 /* MetaMaskDebugSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4649A0DA5850F0EA17519B40 /* MetaMaskDebugSupport.swift */; };
 		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
@@ -93,6 +101,7 @@
 
 /* Begin PBXFileReference section */
 		00B88F37F569ED386AB057A8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		00C453FB39D62870ECDBCBF0 /* WindowReportStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportStore.swift; sourceTree = "<group>"; };
 		03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanFlowView.swift; sourceTree = "<group>"; };
 		0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionHomeView.swift; sourceTree = "<group>"; };
 		093E82F02CAFD9439A1F6661 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -112,7 +121,9 @@
 		694AE8675E1F6FEF350C1485 /* VerifiedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifiedView.swift; sourceTree = "<group>"; };
 		6B26B23A64184D96C012A5B6 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectSecrets.swift; sourceTree = "<group>"; };
+		7209389876A87B83EB5B49B9 /* EventCommitment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCommitment.swift; sourceTree = "<group>"; };
 		745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeRenderer.swift; sourceTree = "<group>"; };
+		7A1EACAE869F3E0B456C222A /* WindowReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReport.swift; sourceTree = "<group>"; };
 		7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignatureTests.swift; sourceTree = "<group>"; };
 		7F17F48A8733EF3CE98885F4 /* NativeCryptoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCryptoProvider.swift; sourceTree = "<group>"; };
 		7F95B2F947E49234FCD1421B /* WalletConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectView.swift; sourceTree = "<group>"; };
@@ -123,11 +134,13 @@
 		910158074CF21A3B7DD559AE /* NativeWebSocketFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeWebSocketFactory.swift; sourceTree = "<group>"; };
 		912FC62DE59B0394056CF446 /* SignalLostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalLostView.swift; sourceTree = "<group>"; };
 		957B35015FE66EA57458D691 /* WalletConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnector.swift; sourceTree = "<group>"; };
+		9E9C29C55477E4B93296A630 /* BeidConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidConfig.swift; sourceTree = "<group>"; };
 		A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidIPadLayoutTests.swift; sourceTree = "<group>"; };
 		A156A80B8C8B96AD33133358 /* ReownWalletConnectClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReownWalletConnectClient.swift; sourceTree = "<group>"; };
 		A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidApp.swift; sourceTree = "<group>"; };
 		A80A94378B0116CC976961AC /* BluetoothOffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothOffView.swift; sourceTree = "<group>"; };
 		AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothMonitor.swift; sourceTree = "<group>"; };
+		B0333AAF8319263B67E8FE36 /* EventSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSession.swift; sourceTree = "<group>"; };
 		B07FD0202575465DCF463745 /* EventFoundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventFoundView.swift; sourceTree = "<group>"; };
 		B2A0822EAE8F243702AA4F1C /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		B394137F6B9C4AEFC21E7266 /* CoinbaseWalletConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoinbaseWalletConnector.swift; sourceTree = "<group>"; };
@@ -137,6 +150,7 @@
 		C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinError.swift; sourceTree = "<group>"; };
 		C58EEA07A80440D53597D515 /* ProofCollectedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCollectedView.swift; sourceTree = "<group>"; };
 		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
+		C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyProvider.swift; sourceTree = "<group>"; };
 		C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskConnector.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyingView.swift; sourceTree = "<group>"; };
@@ -148,6 +162,7 @@
 		F079463118A0C298F6C6BCEA /* Colors.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Colors.xcassets; sourceTree = "<group>"; };
 		F4EF63521813A9A66345C1DA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidAdaptiveContent.swift; sourceTree = "<group>"; };
+		F5CC905CF81F08471CF0F471 /* EventBindingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventBindingState.swift; sourceTree = "<group>"; };
 		FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Illustrations.xcassets; sourceTree = "<group>"; };
 		FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeEntryView.swift; sourceTree = "<group>"; };
 		FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectTests.swift; sourceTree = "<group>"; };
@@ -159,8 +174,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */,
-				BF333C1DDD4F41914CE56A1A /* WalletConnect in Frameworks */,
-				0ABD0998DA3A69A3CEAD5584 /* CoinbaseWalletSDK in Frameworks */,
+				BF333C1DDD4F41914CE56A1A /* BarnardCore in Frameworks */,
+				0ABD0998DA3A69A3CEAD5584 /* WalletConnect in Frameworks */,
+				9AF6D3FBAC122293464DBB8A /* CoinbaseWalletSDK in Frameworks */,
 				0EDB197705C554ECE54A12EA /* libBeidMetaMaskDebug.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -182,6 +198,9 @@
 			isa = PBXGroup;
 			children = (
 				AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */,
+				F5CC905CF81F08471CF0F471 /* EventBindingState.swift */,
+				7209389876A87B83EB5B49B9 /* EventCommitment.swift */,
+				C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */,
 				4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */,
 				7FAD458D67D1864749F00726 /* SensingCoordinator.swift */,
 			);
@@ -220,6 +239,8 @@
 			isa = PBXGroup;
 			children = (
 				C0C21DF46165889A3C206F0C /* ProofStore.swift */,
+				7A1EACAE869F3E0B456C222A /* WindowReport.swift */,
+				00C453FB39D62870ECDBCBF0 /* WindowReportStore.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -235,8 +256,10 @@
 		4E2CC145A16B282147941B12 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				9E9C29C55477E4B93296A630 /* BeidConfig.swift */,
 				5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */,
 				C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */,
+				B0333AAF8319263B67E8FE36 /* EventSession.swift */,
 				B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */,
 				394E6F2E97311572D2BAED89 /* Proof.swift */,
 				29E157C35B263F222E1DBDD5 /* ProofSignature.swift */,
@@ -412,6 +435,7 @@
 			name = Beid;
 			packageProductDependencies = (
 				85120383F176FDA459C0D6E8 /* Barnard */,
+				49E0DF602DDE12EC7E201301 /* BarnardCore */,
 				44B73AA6A65E8F59682BC25A /* WalletConnect */,
 				8637F46B3A9B15C9CD8C2B63 /* CoinbaseWalletSDK */,
 			);
@@ -520,6 +544,7 @@
 				8BDF56249613D448E3FEB5EF /* AppScreen.swift in Sources */,
 				98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */,
 				C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */,
+				95A3A750404DCA7A584953FC /* BeidConfig.swift in Sources */,
 				A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */,
 				3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */,
 				12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */,
@@ -527,14 +552,18 @@
 				419B39D19457938733AE8093 /* CollectionHomeView.swift in Sources */,
 				85803786C31CF2D533B655EE /* DemoEvent.swift in Sources */,
 				2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */,
+				490405CF5FE60573566176DF /* EventBindingState.swift in Sources */,
 				2AAE343C266A4EF91A080FFD /* EventCodeEntryView.swift in Sources */,
 				8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */,
+				8C4D4B90304963291F940D0E /* EventCommitment.swift in Sources */,
 				E95026757980944AB4C933FE /* EventFoundView.swift in Sources */,
+				71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */,
 				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
 				9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */,
 				1ECA910ABFBA80B5249DDA2B /* NativeCryptoProvider.swift in Sources */,
 				5B3DAEF2A80374F87F5836F2 /* NativeWebSocketFactory.swift in Sources */,
 				CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */,
+				EBBF003BA24A47DD167584A5 /* OwnerKeyProvider.swift in Sources */,
 				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
 				9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */,
@@ -556,6 +585,8 @@
 				EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */,
 				2BE226469BAD8E51D02C60A2 /* WalletConnector.swift in Sources */,
 				3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */,
+				A9FCF4EEF2564227A009A346 /* WindowReport.swift in Sources */,
+				BD424B0B114CBB6F3FE6BA8E /* WindowReportStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -973,6 +1004,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 2E0280DEB01CD72D853FFDC7 /* XCRemoteSwiftPackageReference "reown-swift" */;
 			productName = WalletConnect;
+		};
+		49E0DF602DDE12EC7E201301 /* BarnardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FFA48BD936658DFB778A3CE6 /* XCRemoteSwiftPackageReference "barnard" */;
+			productName = BarnardCore;
 		};
 		4A479F967624190B3ABFA761 /* metamask-ios-sdk */ = {
 			isa = XCSwiftPackageProductDependency;
