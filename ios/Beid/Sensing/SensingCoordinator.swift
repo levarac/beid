@@ -37,6 +37,7 @@ final class SensingCoordinator: ObservableObject {
   private let ownerKeyProvider = OwnerKeyProvider()
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private let windowReportStore = WindowReportStore()
+  private let bindingRecordStore = BindingRecordStore()
   private var demoTask: Task<Void, Never>?
 
   // MARK: - Per-session protocol state
@@ -56,6 +57,11 @@ final class SensingCoordinator: ObservableObject {
   /// during this session.
   private var activeCommit: Data?
   private var activeProofId: UUID?
+  /// The in-flight binding attempt's fixed message, reused across the
+  /// wallet `personal_sign` digest and the later device countersign so both
+  /// signatures commit to identical bytes (`BindingMessage`'s `issuedAt`
+  /// must not be recomputed with a fresh `Date()` between the two steps).
+  private var pendingBindingMessage: BindingMessage?
 
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
@@ -226,6 +232,8 @@ final class SensingCoordinator: ObservableObject {
     currentWindowRpids = []
     activeCommit = nil
     activeProofId = nil
+    pendingBindingMessage = nil
+    bindingState = .none
   }
 
   // MARK: - Shared phase transitions
@@ -266,6 +274,96 @@ final class SensingCoordinator: ObservableObject {
     phase = .recording(event: event, peersVerified: peersVerified)
     if let activeProofId {
       onPeersVerifiedChanged?(activeProofId, peersVerified)
+    }
+  }
+
+  // MARK: - Wallet connect+binding (beid#33, sub-slice 2b, §5.6)
+  //
+  // The interstitial (`EventBindingSheetView`) drives these; this type owns
+  // the message/signing/persistence side so the view only ever handles the
+  // wallet connector's `connect()`/`requestPersonalSign(digestHex:)` calls.
+
+  private var currentBindingEvent: EventSession? {
+    switch phase {
+    case .recording(let event, _), .signalLost(let event, _):
+      return event
+    case .idle, .sensing, .eventFound:
+      return nil
+    }
+  }
+
+  /// Starts (or resumes) this attempt, moving to `.connecting` and
+  /// returning the `0x`-prefixed digest the wallet's `personal_sign` must
+  /// sign. Reuses `pendingBindingMessage` if a digest was already handed out
+  /// for this attempt — recomputing with a fresh `Date()` would desync the
+  /// wallet signature and the later device countersign. `nil` if not
+  /// currently recording (defensive; the sheet only calls this while
+  /// `bindingState` implies `.recording`/`.signalLost`).
+  func beginBinding() -> String? {
+    guard let event = currentBindingEvent else { return nil }
+    bindingState = .connecting
+    let message = pendingBindingMessage ?? BindingMessage(
+      eventCode: event.id,
+      eventSigningPublicKey: identity.signingPublicKey(eventCode: event.id),
+      issuedAt: Date()
+    )
+    pendingBindingMessage = message
+    return message.walletDigestHex()
+  }
+
+  /// Called once the wallet request has been dispatched (`onDispatched` on
+  /// `WalletConnector.requestPersonalSign`) — moves the ambient status from
+  /// "connecting" to "waiting on the wallet". No-op if a decline/failure
+  /// already raced it.
+  func markBindingAwaitingApproval() {
+    guard case .connecting = bindingState else { return }
+    bindingState = .awaitingApproval
+  }
+
+  /// Completes the round trip: countersigns the same `BindingMessage` bytes
+  /// the wallet just signed (the mutual-signature requirement, §4/§6 —
+  /// neither signature alone is a valid binding), builds and persists the
+  /// `BindingRecord`, and moves to `.bound`. `nil` (no state change) if
+  /// there is no in-flight attempt to complete — defensive against a stale
+  /// callback racing a decline.
+  @discardableResult
+  func completeBinding(walletAddress: String, walletSignatureHex: String) -> BindingRecord? {
+    guard let message = pendingBindingMessage, let proofId = activeProofId else { return nil }
+    let deviceSignature = identity.sign(eventCode: message.eventCode, bytes: message.canonicalBytes)
+    let record = BindingRecord(
+      proofId: proofId,
+      eventCode: message.eventCode,
+      walletAddress: walletAddress,
+      eventSigningPublicKey: message.eventSigningPublicKey,
+      boundAt: message.issuedAt,
+      walletSignatureHex: walletSignatureHex,
+      deviceSignature: deviceSignature
+    )
+    bindingRecordStore.add(record)
+    bindingState = .bound(record)
+    pendingBindingMessage = nil
+    return record
+  }
+
+  /// The wallet declined, or a transport/timeout error occurred. Distinct
+  /// from `declineBinding()`: this is the round trip failing, not the user
+  /// dismissing the sheet before starting one.
+  func failBinding(reason: String) {
+    pendingBindingMessage = nil
+    bindingState = .failed(reason: reason)
+  }
+
+  /// The user closed the sheet without completing a binding (decline,
+  /// swipe-dismiss, or backing out of a failure) — wallet is optional
+  /// (DESIGN.md §1), so this only resets `bindingState`, never `phase`;
+  /// recording keeps running untouched. Re-offered next foreground per
+  /// §5.6, never re-shown mid-session on its own.
+  func declineBinding() {
+    pendingBindingMessage = nil
+    if let event = currentBindingEvent {
+      bindingState = .pendingConnect(event)
+    } else {
+      bindingState = .none
     }
   }
 
