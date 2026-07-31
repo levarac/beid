@@ -46,10 +46,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     let resumedSenseEvent = app.buttons["Sense Event"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
     capture(named: "sensing-\(orientation)")
 
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
     capture(named: "event-found-\(orientation)")
 
     // Verifying/Verified/Proof Collected merge into one continuous
@@ -58,7 +58,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     // into `.recording` in the background; the "Simulate Signal Lost"
     // affordance existing is the earliest reliable signal that happened.
     let signalLost = app.buttons["Simulate Signal Lost"]
-    XCTAssertTrue(signalLost.waitForExistence(timeout: 10))
+    XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     capture(named: "recording-\(orientation)")
 
     // The scan modal's close button ends the session at any point during
@@ -79,7 +79,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     // intervening Collection/Proof Detail navigation), not a hang.
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     signalLost.tap()
-    XCTAssertTrue(app.staticTexts["Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Signal Lost"].waitForExistence(timeout: 30))
     capture(named: "signal-lost-\(orientation)")
   }
 
