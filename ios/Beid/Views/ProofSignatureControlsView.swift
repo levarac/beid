@@ -3,9 +3,11 @@
 
 import SwiftUI
 
-/// Wallet-signing status + action for one `Proof`. Shared by
-/// `ProofCollectedView` and `ItemDetailView` — see DESIGN.md §10
-/// "Component: ProofSignatureControlsView".
+/// Wallet-signing status + action for one `Proof`. Used by `ItemDetailView`
+/// — see DESIGN.md §10 "Component: ProofSignatureControlsView". No longer
+/// embedded in the scan flow as of Scan Slice-2 sub-slice 2c: the old
+/// `ProofCollectedView` call site is retired, replaced by the connect+
+/// binding interstitial (`EventBindingSheetView`).
 ///
 /// Looks up `signatureState` live from `AppCoordinator.proofStore` on every
 /// render rather than taking a `Proof` snapshot: a sign attempt mutates

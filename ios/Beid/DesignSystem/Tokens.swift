@@ -31,7 +31,7 @@ enum DS {
     /// accent; also the intended app-level accent once views migrate.
     static let actionPrimary = SwiftUI.Color(.actionPrimary)
     /// Live sensing signal. The single accent of sensing screens
-    /// (SensingView, EventFoundView, VerifyingView) — DESIGN.md §5 map.
+    /// (SensingView, EventFoundView) — DESIGN.md §5 map.
     static let signalActive = SwiftUI.Color(.signalActive)
     /// Degraded/lost signal. The single accent of recovery screens
     /// (SignalLostView, BluetoothOffView); not for generic warnings.
@@ -160,7 +160,8 @@ enum DS {
     static let standard = Animation.spring(response: 0.35, dampingFraction: 1.0)
     /// Content entering the screen (e.g. event card slide-in on EventFoundView).
     static let entrance = Animation.spring(response: 0.5, dampingFraction: 0.85)
-    /// The proof seal/resolve ceremony (VerifiedView → ProofCollectedView).
+    /// The proof seal/resolve ceremony (RecordingView's one-time entrance
+    /// ceremony fading into its steady state).
     static let proofResolve = Animation.spring(response: 0.6, dampingFraction: 0.8)
     /// Period of one sensing radar pulse cycle (SensingView).
     static let sensingPulsePeriod: TimeInterval = 1.8

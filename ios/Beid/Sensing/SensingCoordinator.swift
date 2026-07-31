@@ -24,6 +24,14 @@ final class SensingCoordinator: ObservableObject {
   /// `startSensing(eventCode:)` once the user has joined manually via
   /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
   @Published private(set) var joinedEventCode: String?
+  /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
+  /// played for the current session. Lives here rather than as view-local
+  /// `@State` because `.recording` can be interrupted by `.signalLost` and
+  /// resumed (`resumeSensing()`), which recreates `RecordingView` — a flag
+  /// on the view itself would incorrectly replay the ceremony after every
+  /// resume. Reset alongside the rest of per-session state in
+  /// `resetSessionState()`.
+  @Published private(set) var recordingCeremonyShown = false
 
   /// Fired once, the instant `.recording` begins and a `Proof` is created.
   var onProofCollected: ((Proof) -> Void)?
@@ -219,6 +227,14 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
+  /// Marks the one-time entrance ceremony consumed so it never replays —
+  /// called once by `RecordingView` the first time it appears for this
+  /// session (including across a `resumeSensing()` cycle, since this flag
+  /// outlives the view instance).
+  func markRecordingCeremonyShown() {
+    recordingCeremonyShown = true
+  }
+
   func reset() {
     demoTask?.cancel()
     demoTask = nil
@@ -234,6 +250,7 @@ final class SensingCoordinator: ObservableObject {
     activeProofId = nil
     pendingBindingMessage = nil
     bindingState = .none
+    recordingCeremonyShown = false
   }
 
   // MARK: - Shared phase transitions

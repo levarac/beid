@@ -22,20 +22,19 @@
 		2F6282D16C15B8EBCA2669DC /* WalletConnectSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
 		358E49BED52D55C3EFB92F25 /* ProofSignatureControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6921FE4135B616BF315A048C /* ProofSignatureControlsView.swift */; };
-		36423294C98FFAE0217CA7CD /* VerifyingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */; };
 		388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C637EA719C58481853B15B91 /* LocalizationContractTests.swift */; };
 		3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80A94378B0116CC976961AC /* BluetoothOffView.swift */; };
 		3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10807372081AA25A74942BE3 /* WelcomeView.swift */; };
 		3EEA86E51D83334A77A2A6C9 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1737F0C115BD86F89789893 /* AppCoordinator.swift */; };
 		419B39D19457938733AE8093 /* CollectionHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */; };
 		43D7BE4C85505A5ABB25D035 /* CoinbaseWalletConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B394137F6B9C4AEFC21E7266 /* CoinbaseWalletConnector.swift */; };
-		468CCE7D87235B2151E65822 /* VerifiedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694AE8675E1F6FEF350C1485 /* VerifiedView.swift */; };
 		48805AF863EF6409D14E5B2E /* BeidIPadLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */; };
 		4900D74D47E774AF213395BC /* SignalLostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 912FC62DE59B0394056CF446 /* SignalLostView.swift */; };
 		490405CF5FE60573566176DF /* EventBindingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CC905CF81F08471CF0F471 /* EventBindingState.swift */; };
 		4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */; };
 		516EB6C209C600A66F08EFF1 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2A0822EAE8F243702AA4F1C /* Tokens.swift */; };
 		5B3DAEF2A80374F87F5836F2 /* NativeWebSocketFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 910158074CF21A3B7DD559AE /* NativeWebSocketFactory.swift */; };
+		5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBBF900C092346BBFDF6BA96 /* RecordingView.swift */; };
 		5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */; };
 		6A3EBE0C491228EBED4028E1 /* DemoWalletConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */; };
 		71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0333AAF8319263B67E8FE36 /* EventSession.swift */; };
@@ -50,7 +49,6 @@
 		8FDC27D2283A74EB215D9DE0 /* BindingRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = E065C15C72E249BC341A101C /* BindingRecord.swift */; };
 		903C47844113AADA5701273B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */; };
 		905D529AD4D49A99A809159C /* QRCodeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */; };
-		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
 		95A3A750404DCA7A584953FC /* BeidConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C29C55477E4B93296A630 /* BeidConfig.swift */; };
 		98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */; };
 		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
@@ -79,6 +77,7 @@
 		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
 		EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25F9B71C531690F799D13498 /* EventBindingTests.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
+		FBB92DC557CD10D7B999A416 /* EventCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000D4B43F2D5A1703701E95 /* EventCardView.swift */; };
 		FD7E9D9913C3E0B56B054233 /* ScanPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */; };
 /* End PBXBuildFile section */
 
@@ -113,6 +112,7 @@
 		0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionHomeView.swift; sourceTree = "<group>"; };
 		093E82F02CAFD9439A1F6661 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingMessageTests.swift; sourceTree = "<group>"; };
+		1000D4B43F2D5A1703701E95 /* EventCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCardView.swift; sourceTree = "<group>"; };
 		10807372081AA25A74942BE3 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSheetView.swift; sourceTree = "<group>"; };
 		185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoWalletConnector.swift; sourceTree = "<group>"; };
@@ -128,7 +128,6 @@
 		5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEvent.swift; sourceTree = "<group>"; };
 		6660B6477CE489C244F95FED /* ProofCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCardView.swift; sourceTree = "<group>"; };
 		6921FE4135B616BF315A048C /* ProofSignatureControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignatureControlsView.swift; sourceTree = "<group>"; };
-		694AE8675E1F6FEF350C1485 /* VerifiedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifiedView.swift; sourceTree = "<group>"; };
 		6B26B23A64184D96C012A5B6 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectSecrets.swift; sourceTree = "<group>"; };
 		7209389876A87B83EB5B49B9 /* EventCommitment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCommitment.swift; sourceTree = "<group>"; };
@@ -159,12 +158,11 @@
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
 		C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinError.swift; sourceTree = "<group>"; };
-		C58EEA07A80440D53597D515 /* ProofCollectedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCollectedView.swift; sourceTree = "<group>"; };
 		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 		C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyProvider.swift; sourceTree = "<group>"; };
 		C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskConnector.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyingView.swift; sourceTree = "<group>"; };
+		DBBF900C092346BBFDF6BA96 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		DE886DB77235ACE898E6D2CF /* BindingMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingMessage.swift; sourceTree = "<group>"; };
 		E065C15C72E249BC341A101C /* BindingRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingRecord.swift; sourceTree = "<group>"; };
 		E1737F0C115BD86F89789893 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
@@ -304,17 +302,16 @@
 				1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */,
 				0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */,
 				99A0CFB332AC5A882931E08F /* EventBindingSheetView.swift */,
+				1000D4B43F2D5A1703701E95 /* EventCardView.swift */,
 				FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */,
 				B07FD0202575465DCF463745 /* EventFoundView.swift */,
 				2169FFDF6767C427D481ED17 /* ItemDetailView.swift */,
 				6660B6477CE489C244F95FED /* ProofCardView.swift */,
-				C58EEA07A80440D53597D515 /* ProofCollectedView.swift */,
 				6921FE4135B616BF315A048C /* ProofSignatureControlsView.swift */,
+				DBBF900C092346BBFDF6BA96 /* RecordingView.swift */,
 				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
 				29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */,
 				912FC62DE59B0394056CF446 /* SignalLostView.swift */,
-				694AE8675E1F6FEF350C1485 /* VerifiedView.swift */,
-				DBB7DC6F074DD961EB7769F7 /* VerifyingView.swift */,
 				7F95B2F947E49234FCD1421B /* WalletConnectView.swift */,
 				10807372081AA25A74942BE3 /* WelcomeView.swift */,
 			);
@@ -579,6 +576,7 @@
 				2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */,
 				77142B7104D24CD50E325988 /* EventBindingSheetView.swift in Sources */,
 				490405CF5FE60573566176DF /* EventBindingState.swift in Sources */,
+				FBB92DC557CD10D7B999A416 /* EventCardView.swift in Sources */,
 				2AAE343C266A4EF91A080FFD /* EventCodeEntryView.swift in Sources */,
 				8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */,
 				8C4D4B90304963291F940D0E /* EventCommitment.swift in Sources */,
@@ -592,11 +590,11 @@
 				EBBF003BA24A47DD167584A5 /* OwnerKeyProvider.swift in Sources */,
 				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
-				9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */,
 				ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */,
 				358E49BED52D55C3EFB92F25 /* ProofSignatureControlsView.swift in Sources */,
 				AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */,
 				905D529AD4D49A99A809159C /* QRCodeRenderer.swift in Sources */,
+				5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */,
 				BFCBDC766B167C57D8FDC606 /* ReownWalletConnectClient.swift in Sources */,
 				18404D198F54E376B76E29F1 /* RootView.swift in Sources */,
 				04FAF61220EF2EDF7B54F01F /* ScanFlowView.swift in Sources */,
@@ -605,8 +603,6 @@
 				B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */,
 				4900D74D47E774AF213395BC /* SignalLostView.swift in Sources */,
 				516EB6C209C600A66F08EFF1 /* Tokens.swift in Sources */,
-				468CCE7D87235B2151E65822 /* VerifiedView.swift in Sources */,
-				36423294C98FFAE0217CA7CD /* VerifyingView.swift in Sources */,
 				2F6282D16C15B8EBCA2669DC /* WalletConnectSecrets.swift in Sources */,
 				EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */,
 				2BE226469BAD8E51D02C60A2 /* WalletConnector.swift in Sources */,

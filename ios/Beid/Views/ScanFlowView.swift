@@ -68,14 +68,9 @@ struct ScanFlowView: View {
     case .eventFound(let event):
       EventFoundView(event: event)
     case .recording(let event, let peersVerified):
-      // Interim 2a stand-in for the merged 06b/06c/07 `RecordingView` —
-      // its visual design (entrance ceremony, badge/caption polish) is
-      // sub-slice 2c; this only wires the new `.recording` phase to an
-      // existing, still-compiling view. `VerifiedView`/`ProofCollectedView`
-      // are temporarily unreachable here until 2c.
-      VerifyingView(event: event, peersVerified: peersVerified)
-    case .signalLost(let event, _):
-      SignalLostView(event: event)
+      RecordingView(sensing: sensing, event: event, peersVerified: peersVerified)
+    case .signalLost(let event, let peersVerified):
+      SignalLostView(event: event, peersVerified: peersVerified)
     }
   }
 }
@@ -96,5 +91,5 @@ struct ScanFlowView: View {
 // `phase` is `private(set)` on `SensingCoordinator` by design (state only
 // advances through the real/demo sensing sequence) so other phases aren't
 // independently reachable from a preview; each phase already has its own
-// dedicated #Preview on its view (EventFoundView, VerifyingView,
-// VerifiedView, SignalLostView, ProofCollectedView).
+// dedicated #Preview on its view (EventFoundView, RecordingView,
+// SignalLostView).
