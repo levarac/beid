@@ -2458,6 +2458,321 @@
           }
         }
       }
+    },
+    "Connect a wallet to seal your attendance to this event.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ウォレットを接続して、このイベントへの参加を確定します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "连接钱包以确认您对此活动的出席。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Conecta una billetera para sellar tu asistencia a este evento."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Connectez un portefeuille pour sceller votre présence à cet événement."
+          }
+        }
+      }
+    },
+    "Seal with connected wallet": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "接続済みのウォレットでシール"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "使用已连接的钱包封存"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Sellar con la billetera conectada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Sceller avec le portefeuille connecté"
+          }
+        }
+      }
+    },
+    "Sealed": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "シール済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已封存"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Sellado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Scellé"
+          }
+        }
+      }
+    },
+    "Couldn't seal attendance": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "出席をシールできませんでした"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "无法封存出席记录"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "No se pudo sellar la asistencia"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Impossible de sceller la présence"
+          }
+        }
+      }
+    },
+    "beid couldn't finish sealing your attendance with this wallet.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beidはこのウォレットで出席のシールを完了できませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid 未能使用此钱包完成出席封存。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid no pudo completar el sellado de tu asistencia con esta billetera."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid n'a pas pu terminer de sceller votre présence avec ce portefeuille."
+          }
+        }
+      }
+    },
+    "scan.binding.title": {
+      "comment": "Event name, e.g. 'ETH Tokyo 2026 confirmed' — heading on the wallet connect+binding prompt.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ を確認しました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ 已确认"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ confirmado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ confirmé"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ confirmed"
+          }
+        }
+      }
+    },
+    "scan.binding.sealedSubtitle": {
+      "comment": "Confirmation after the wallet-binding signature succeeds; event name is interpolated, e.g. 'Your attendance to ETH Tokyo 2026 is sealed.'",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ への出席がシールされました。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "您对 %@ 的出席已封存。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Tu asistencia a %@ está sellada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Votre présence à %@ est scellée."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your attendance to %@ is sealed."
+          }
+        }
+      }
+    },
+    "scan.binding.declined": {
+      "comment": "Reason shown when the user's wallet app declines the binding signature request.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ウォレットで拒否されました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已在钱包中拒绝"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Rechazado en la billetera"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Refusé dans le portefeuille"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Declined in wallet"
+          }
+        }
+      }
+    },
+    "scan.binding.notConnected": {
+      "comment": "Reason shown when the binding signature request has no connected wallet session to use.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ウォレットが接続されていません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "钱包未连接"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Billetera no conectada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Portefeuille non connecté"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet not connected"
+          }
+        }
+      }
+    },
+    "scan.binding.timedOut": {
+      "comment": "Reason shown when the wallet app never responds to the binding signature request within the timeout.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ウォレットからの応答がタイムアウトしました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "钱包响应超时"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "La billetera no respondió a tiempo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Le portefeuille n'a pas répondu à temps"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet did not respond in time"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

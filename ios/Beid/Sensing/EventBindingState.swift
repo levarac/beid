@@ -8,9 +8,12 @@ import Foundation
 /// decoupled from phase transitions — see
 /// `docs/specs/scan-slice2-redesign.md` §5.6.
 ///
-/// Sub-slice 2a wires this to `.pendingConnect` the instant `.recording`
-/// begins (state only). The connect+binding interstitial UI that drives
-/// `.connecting`/`.awaitingApproval`/`.bound`/`.failed` is sub-slice 2b.
+/// Sub-slice 2a wired this to `.pendingConnect` the instant `.recording`
+/// begins (state only). Sub-slice 2b drives the rest:
+/// `.connecting`/`.awaitingApproval`/`.bound`/`.failed`, via the connect+
+/// binding interstitial (`EventBindingSheetView`) and
+/// `SensingCoordinator`'s binding methods. See `BindingRecord`
+/// (`Persistence/BindingRecord.swift`) for what `.bound` carries.
 enum EventBindingState: Equatable {
   case none
   case pendingConnect(EventSession)
@@ -18,13 +21,4 @@ enum EventBindingState: Equatable {
   case awaitingApproval
   case bound(BindingRecord)
   case failed(reason: String)
-}
-
-/// Evidence that a wallet endorsed this device's owner key for one event —
-/// the combined wallet `personal_sign` + device countersign round trip
-/// (beid#33). Built out fully in sub-slice 2b; only the shape needed for
-/// `EventBindingState.bound` to compile exists here.
-struct BindingRecord: Equatable {
-  let walletAddress: String
-  let boundAt: Date
 }
