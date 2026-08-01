@@ -31,8 +31,8 @@ class MainActivity : ComponentActivity() {
     }
 
     // BarnardEngine.requestPermissions is built on the classic
-    // onRequestPermissionsResult callback (not ActivityResultContracts) —
-    // see vendor/barnard's README "Usage". Deliberate, not migration debt.
+    // onRequestPermissionsResult callback (not ActivityResultContracts).
+    // Deliberate, not migration debt.
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun onRequestPermissionsResult(
         requestCode: Int,

@@ -30,56 +30,16 @@ adb shell am start -n org.levarac.beid/.MainActivity
 
 ## Barnard SDK dependency
 
-**What we did**: `android/vendor/barnard` is a **git submodule** pointing at
-[levarac/barnard](https://github.com/levarac/barnard) (public repo, no
-credentials needed), pinned to `54385d2` (origin/main HEAD as of this slice —
-the commit that added the Android SDK, barnard#56, plus a follow-up
-permission-callback fix). `settings.gradle.kts` wires it in as a **Gradle
-composite build**:
+beid consumes [levarac/barnard](https://github.com/levarac/barnard) from
+Maven Central with the exact coordinate
+`implementation("org.levarac:barnard:0.2.0")`. Both the Android application
+and the SDK therefore resolve from published, reproducible artifacts; no
+submodule or Gradle composite build is required.
 
-```kotlin
-includeBuild("vendor/barnard/packages/android/barnard") {
-    dependencySubstitution {
-        substitute(module("network.greeting.barnard:barnard")).using(project(":"))
-    }
-}
-```
-
-`app/build.gradle.kts` then depends on it as an ordinary coordinate:
-`implementation("network.greeting.barnard:barnard:1.0-SNAPSHOT")`.
-
-**Why this differs from iOS's approach**: iOS consumes barnard as a remote
-SwiftPM package pinned to an exact release (see `ios/README.md` "Barnard SDK
-dependency"); Android keeps the submodule until barnard publishes to Maven
-Central, at which point a coordinate dependency becomes possible.
-Gradle has no equivalent constraint: `includeBuild` can point at any
-subdirectory of any local checkout. That local-checkout requirement is the
-only remaining wrinkle — a plain relative `includeBuild("../../barnard/...")`
-(the pattern barnard's own `examples/android-native` uses, since the example
-lives inside the same monorepo) would only work if every developer and CI
-runner happened to check out `barnard` at exactly that relative path next to
-`beid`, which isn't guaranteed. A git submodule resolves that: the path is
-now *inside this repo*, deterministic, and (since levarac/barnard is public)
-cloneable with no auth setup — `git submodule update --init` is enough,
-including in CI.
-
-**Trade-off accepted**: this vendors the whole `barnard` monorepo (all
-platforms' packages, examples, docs), not just `packages/android/barnard`.
-Git submodules don't support a lightweight "only this subdirectory" checkout
-without extra sparse-checkout configuration; given this is a first scaffold
-slice, the simplicity of a plain submodule won out over minimizing checkout
-size. A sparse submodule (or splitting `packages/android/barnard` into its
-own repo once it's published) is a reasonable follow-up if checkout size
-becomes a real problem.
-
-**Follow-up**: once barnard publishes the Android package to Maven (its own
-`README.md` already notes this as the intended end state — "publish to Maven
-once this package is released"), switch `settings.gradle.kts` /
-`app/build.gradle.kts` to a normal `mavenCentral()` coordinate and delete the
-submodule.
-
-**Bumping the pin**: `cd android/vendor/barnard && git fetch && git checkout
-<new-sha> && cd ../.. && git add android/vendor/barnard && git commit`.
+`settings.gradle.kts` provides `mavenCentral()` through
+`dependencyResolutionManagement.repositories`. To update the SDK, change the
+version in `app/build.gradle.kts`, then run `./gradlew :app:assembleDebug` to
+verify Central resolution and compilation.
 
 ## Design-system theme
 
@@ -127,7 +87,7 @@ follow-up slices.
 **Why `BarnardEngine` is owned by `MainActivity`, not the composable**:
 `requestPermissions` is Activity-driven — the hosting `Activity` must forward
 `onRequestPermissionsResult` back into the *same* engine instance for the
-pending callback to ever resolve (per `vendor/barnard`'s own README). A
+pending callback to ever resolve. A
 composable-scoped instance would have no way to receive that callback, so
 `MainActivity` creates one `EventJoinCoordinator` in `onCreate`, forwards
 `onRequestPermissionsResult` into it, and disposes it in `onDestroy`.

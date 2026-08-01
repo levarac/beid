@@ -69,8 +69,7 @@ private fun EventJoinFieldError.message(): String = when (this) {
  * [coordinator] is owned by `MainActivity` (not created here) because
  * `BarnardEngine.requestPermissions` is Activity-driven on Android — the
  * hosting Activity must forward `onRequestPermissionsResult` into the same
- * engine instance for the request to ever resolve (see
- * android/vendor/barnard's README "Usage").
+ * engine instance for the request to ever resolve.
  */
 @Composable
 fun EventJoinScreen(coordinator: EventJoinCoordinator) {

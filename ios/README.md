@@ -29,7 +29,7 @@ Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 
 `project.yml` consumes
 [`levarac/barnard`](https://github.com/levarac/barnard) as a remote SwiftPM
-package pinned to the exact `0.1.0` release. The committed
+package pinned to the exact `0.2.0` release. The committed
 `Package.resolved` records the release's precise revision for reproducible
 builds.
 

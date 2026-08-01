@@ -21,7 +21,7 @@ sealed class EventJoinUiState {
 }
 
 /**
- * Thin wrapper around [BarnardEngine] proving the vendored Barnard SDK call
+ * Thin wrapper around [BarnardEngine] proving the Barnard SDK call
  * compiles and runs end to end (permission request → `joinEvent` →
  * `startAuto`). This is intentionally not a full `SensingCoordinator` port —
  * see android/README.md for scaffold scope.
