@@ -118,20 +118,5 @@
       "ruleName": "No hardcoded spacing",
       "severity": "error"
     }
-  },
-  {
-    "text": "      .font(.footnote)",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_swiftui_font",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/Views/VerifyingView.swift",
-        "line": 46,
-        "character": 7
-      },
-      "reason": "Use DS.Font.* (or add a role in DesignSystem/Tokens.swift).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded SwiftUI fonts",
-      "severity": "error"
-    }
   }
 ]

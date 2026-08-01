@@ -2773,6 +2773,156 @@
           }
         }
       }
+    },
+    "DETECTED": {
+      "comment": "Status badge on the event card during BLE sensing, not audio/video recording.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "検知済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已检测"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "DETECTADO"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "DÉTECTÉ"
+          }
+        }
+      }
+    },
+    "RECORDING": {
+      "comment": "Status badge on the event card during BLE sensing, not audio/video recording.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "記録中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "记录中"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "REGISTRANDO"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ENREGISTREMENT"
+          }
+        }
+      }
+    },
+    "PAUSED": {
+      "comment": "Status badge on the event card during BLE sensing, not audio/video recording.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "一時停止中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已暂停"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "PAUSADO"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "EN PAUSE"
+          }
+        }
+      }
+    },
+    "Verification starts automatically — stay nearby": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "確認は自動的に開始されます — 近くにいてください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "验证将自动开始 — 请留在附近"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "La verificación comienza automáticamente. Permanece cerca."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "La vérification démarre automatiquement. Restez à proximité."
+          }
+        }
+      }
+    },
+    "scan.recording.caption": {
+      "comment": "Cumulative count of distinct peers who have mutually sensed this device at the event; no fixed target.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording your attendance automatically · %lld peers verified"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "出席を自動的に記録中 · %lld人のピアを確認済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "正在自动记录您的出席 · 已验证 %lld 位对等设备"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Registrando tu asistencia automáticamente · %lld pares verificados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Enregistrement automatique de votre présence · %lld pairs vérifiés"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

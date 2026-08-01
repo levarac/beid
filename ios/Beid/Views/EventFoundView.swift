@@ -14,20 +14,11 @@ struct EventFoundView: View {
     BeidStatusLayout(
       systemImage: "sparkles",
       title: "Event Found",
-      message: "beid found a nearby event signal.",
+      message: "Verification starts automatically — stay nearby",
       accessory: {
-      BeidPanel {
-        VStack(alignment: .leading, spacing: BeidDesign.Spacing.compact) {
-          Text("Detected event")
-            .font(DS.Font.supporting)
-            .foregroundStyle(DS.Color.textSecondary)
-          Text(event.name)
-            .font(DS.Font.sectionTitle)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
-      .offset(y: appeared ? 0 : 40)
-      .opacity(appeared ? 1 : 0)
+      EventCardView(event: event, badge: .detected)
+        .offset(y: appeared ? 0 : 40)
+        .opacity(appeared ? 1 : 0)
       }
     )
     // Sensing screen: DESIGN.md §5 "one motif accent per screen".

@@ -3,17 +3,32 @@
 
 import SwiftUI
 
-/// Screen 06d: Signal Lost — warning state.
+/// Screen 06d: Signal Lost — a pause, not a restart. `peersVerified` is
+/// frozen but preserved (never reset) while signal is lost — see
+/// `docs/specs/scan-slice2-redesign.md` §5.4.
 struct SignalLostView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   let event: EventSession
+  let peersVerified: Int
 
   var body: some View {
     BeidStatusLayout(
       systemImage: "exclamationmark.triangle.fill",
       title: "Signal Lost",
       message: "beid lost the connection to \(event.name). Move closer and we'll pick it back up automatically.",
+      accessory: {
+      VStack(spacing: BeidDesign.Spacing.content) {
+        BeidStatusPill(state: .sensingPaused)
+        EventCardView(event: event, badge: .paused) {
+          BeidMetricRow(label: "Peers verified", verbatimValue: "\(peersVerified)")
+        }
+      }
+      },
       footer: {
+      // "Try Again" keeps its exact label (DESIGN.md §11 requires
+      // SignalLostView to always offer it), but the handler it calls
+      // resumes the same session in place — never `startSensing`, which
+      // would discard `peersVerified` and re-create the `Proof` (§5.4).
       BeidPrimaryButton("Try Again", systemImage: "arrow.clockwise", labelColor: DS.Color.labelOnWarning) {
         coordinator.sensingCoordinator.resumeSensing()
       }
@@ -26,11 +41,11 @@ struct SignalLostView: View {
 }
 
 #Preview {
-  SignalLostView(event: .demoSample).environmentObject(AppCoordinator())
+  SignalLostView(event: .demoSample, peersVerified: 5).environmentObject(AppCoordinator())
 }
 
 #Preview("Dark") {
-  SignalLostView(event: .demoSample)
+  SignalLostView(event: .demoSample, peersVerified: 5)
     .environmentObject(AppCoordinator())
     .preferredColorScheme(.dark)
 }
