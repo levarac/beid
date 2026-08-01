@@ -1,22 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "アプリの主要画面をリデザインしたビルドです（オンボーディング、センシング画面、アカウント、コレクション、証明の詳細）。起動→オンボーディング→センシング開始→証明を開く→アカウントシートと操作し、新しい画面が正しく表示されこれまでどおり動作することを、ライトとダークの両方で確認してください。"
+    "text": "センシングの流れを作り直したビルドです。同じ場所で4人以上が同時にアプリを開いてセンシングを始め、近くの3人が確認できた時点でイベントが自動的に確定し、証明を集めた表示のあと記録中の画面が続くことを確認してください。次にアプリを前面に戻したときにウォレット接続の案内が出るので、接続して署名（ウォレット側で2回承認）できること、断っても記録が止まらないこと、電波が途切れると人数が止まったまま保持され「Try Again」で元の人数から再開することも確認してください。"
   },
   {
     "language": "en-US",
-    "text": "This build redesigns the app's main screens: onboarding, the sensing screen, the account panel, the collection, and the proof detail. Please move through the app — launch, onboarding, start sensing, open a proof, and the account sheet — and confirm the new screens look right and behave as before, in both light and dark appearance."
+    "text": "This build reworks the sensing flow. With four or more people opening the app and sensing together in the same place, confirm that the event confirms on its own once three nearby people are verified, and that the proof-collected moment is followed by the ongoing recording screen. Then bring the app back to the front: it should offer to connect a wallet and seal your attendance (two approvals in the wallet) — please also check that declining leaves recording running, and that after a signal drop the count stays frozen and \"Try Again\" resumes from the same count."
   },
   {
     "language": "zh-Hans",
-    "text": "本次构建重新设计了应用的主要界面：引导、感应界面、账户、收藏和证明详情。请依次操作——启动、引导、开始感应、打开一个证明、账户面板——在浅色和深色模式下确认新界面显示正确且行为与以往一致。"
+    "text": "本次构建重做了感应流程。请四人以上在同一地点同时打开应用并开始感应，确认在验证到附近三人后活动会自动确认，并且在显示已收集证明后继续进入记录中的界面。随后把应用切回前台，应会提示连接钱包并封存出席记录（需在钱包中确认两次）；也请确认拒绝后记录仍在继续，以及信号中断时人数会保持不变、点击“Try Again”可从相同人数继续。"
   },
   {
     "language": "es-ES",
-    "text": "Esta versión rediseña las pantallas principales de la app: la introducción, la pantalla de detección, la cuenta, la colección y el detalle de la prueba. Recorre la app (abrir, introducción, iniciar la detección, abrir una prueba, panel de cuenta) y comprueba que las nuevas pantallas se ven bien y funcionan como antes, en modo claro y oscuro."
+    "text": "Esta versión rehace el flujo de detección. Con cuatro o más personas abriendo la app y detectando a la vez en el mismo lugar, comprueba que el evento se confirma solo al verificar a tres personas cercanas y que, tras el momento de prueba recogida, continúa la pantalla de grabación en curso. Después vuelve a poner la app en primer plano: debe ofrecer conectar una cartera y sellar tu asistencia (dos aprobaciones en la cartera); comprueba también que al rechazar la grabación sigue activa y que, tras una pérdida de señal, el recuento se mantiene congelado y \"Try Again\" reanuda desde el mismo recuento."
   },
   {
     "language": "fr-FR",
-    "text": "Cette version redessine les écrans principaux de l'app : l'introduction, l'écran de détection, le compte, la collection et le détail de la preuve. Parcourez l'app (lancement, introduction, démarrage de la détection, ouverture d'une preuve, panneau de compte) et vérifiez que les nouveaux écrans s'affichent bien et fonctionnent comme avant, en thème clair et sombre."
+    "text": "Cette version refait le flux de détection. À quatre personnes ou plus ouvrant l'app et détectant en même temps au même endroit, vérifiez que l'événement se confirme tout seul une fois trois personnes proches vérifiées, et qu'après le moment de preuve collectée l'écran d'enregistrement en cours prend le relais. Repassez ensuite l'app au premier plan : elle doit proposer de connecter un portefeuille et de sceller votre présence (deux approbations dans le portefeuille) ; vérifiez aussi qu'un refus laisse l'enregistrement actif et qu'après une perte de signal le compte reste figé et que « Try Again » reprend au même compte."
   }
 ]
