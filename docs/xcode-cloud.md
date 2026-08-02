@@ -3,10 +3,9 @@
 This document is the source of truth for beid's Xcode Cloud setup. It exists
 because Xcode Cloud workflows are configured in the App Store Connect (ASC)
 GUI, not in this repo, so the exact values used there need to live somewhere
-reviewable. Modeled on
-[umidori](https://github.com/ShiokazeHD/umidori)'s `docs/CICD.md`, trimmed to
-beid's current scope (TestFlight only — no App Store submission automation
-yet).
+reviewable. Modeled on the delivery documentation of a sister project,
+trimmed to beid's current scope (TestFlight only — no App Store submission
+automation yet).
 
 ## Two convention files, two audiences
 
@@ -23,10 +22,10 @@ Catalog uses `en`/`es`/`fr`, ASC wants the region-qualified form). `ja` and
 
 - **`what_to_test.json`**: what to check in *this* build. Rewrite it each
   time — don't accumulate history. 1–3 plain-language sentences, no PR/issue
-  numbers, no internal file or API names, no CI/CD jargon. This is the same
-  contract umidori's `docs/CICD.md` documents; see that file if you want the
-  fuller rationale (e.g. why build numbers/git-height never go in the text
-  body).
+  numbers, no internal file or API names, no CI/CD jargon. Rationale:
+  tester-facing notes are product copy, not a changelog — build numbers,
+  git height, and other machine-derived identifiers already travel in ASC
+  metadata and never belong in the text body.
 - **`release_notes.json`**: this version's marketing-style "what's new"
   copy. Rewrite completely per release, don't diff against the previous
   version.
@@ -73,7 +72,7 @@ executable):
 Nothing in these scripts calls the App Store Connect API or needs secrets —
 scope is intentionally just "get a TestFlight build out with the right
 notes." Pushing `release_notes.json` into an actual App Store version's
-"What's New" text (like umidori's `add_new_version.rb`) is out of scope
+"What's New" text (via an ASC API script) is out of scope
 until beid has real App Store submissions to automate.
 
 ## Workflow configuration Ken needs to enter in ASC
