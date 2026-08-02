@@ -75,10 +75,20 @@ notes." Pushing `release_notes.json` into an actual App Store version's
 "What's New" text (via an ASC API script) is out of scope
 until beid has real App Store submissions to automate.
 
-## Workflow configuration Ken needs to enter in ASC
+## Workflow configuration in ASC
 
-Xcode Cloud workflows are ASC-GUI-only (App Store Connect → beid → Xcode
-Cloud → Workflows). Two workflows, both building the same scheme:
+Xcode Cloud workflow settings live in App Store Connect (App Store
+Connect → beid → Xcode Cloud → Workflows), not in this repo. Most start
+conditions (branch/PR patterns, files-and-folders rules) are also
+editable via the App Store Connect API (`PATCH /v1/ciWorkflows/{id}`);
+the TestFlight group post-action is the part that remains GUI-only (see
+the beta-group section below). API quirk (verified 2026-08-02): `GET` on
+a workflow omits `filesAndFoldersRule.matchers` — only the `mode` comes
+back — but the `PATCH` response echoes the stored matchers, and the GUI
+shows them; don't read an empty matcher list off a `GET` as "no filter".
+
+Four workflows exist. The two delivery workflows, both building the same
+scheme:
 
 | Setting | Internal Build | Release Build |
 |---|---|---|
@@ -91,6 +101,25 @@ Cloud → Workflows). Two workflows, both building the same scheme:
 | Post-Action: TestFlight | Internal Testing group | Internal Testing group (flip to External once beid has passed beta app review, at Ken's discretion) |
 | Environment variables | none required | none required |
 | Post-Action script | none beyond the two `ci_scripts/` hooks (Xcode Cloud runs those automatically by filename/location) | same |
+
+The other two workflows:
+
+- **PR Build & Test** (id `a465d6ac-e3b5-4fe0-b586-db7285435990`) — the PR
+  CI gate: build + test on pull requests targeting `main` (created
+  2026-07-27; CI required, reviews optional per the maintainer decision in
+  `AGENTS.md`). **Docs-only changes do not trigger it** (verified
+  2026-08-02): its start condition carries a files-and-folders rule,
+  `DO_NOT_START_IF_ALL_FILES_MATCH` with matchers `docs/` (directory),
+  `.github/` (directory), and `md` (file extension) — a PR whose every
+  changed file matches one of those starts no macOS build. Mixed PRs
+  (docs + code) still build. The rule fails open: if a matcher doesn't
+  match the way this doc claims, the build runs anyway, so a
+  misconfiguration here can waste compute but never silently skip CI for
+  a code change. Background: before 2026-08-02 this workflow had no files
+  rule at all, and a one-line docs PR burned a full macOS build+test.
+- **Default** — the leftover initial-setup workflow (branch `main`, no
+  files rule). Disable-or-delete candidate; kept only until the
+  maintainer rules on it.
 
 Version/build numbers: `project.yml` hardcodes
 `MARKETING_VERSION: "1.0"` / `CURRENT_PROJECT_VERSION: "1"`.
