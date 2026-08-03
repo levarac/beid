@@ -20,12 +20,13 @@ import Security
 /// random seed below is generated independently of `DeviceSecret`, so the
 /// owner key has no relationship to — and no continuity story inherited
 /// from — the event signing key/TEK root.
+///
+/// The owner private key never leaves this type — only the public key
+/// (`publicKeyCompressed()`) and signatures (`signSelfProof`,
+/// `signWalletAcknowledgement`) do, mirroring `BarnardIdentity.sign(eventCode:bytes:)`'s
+/// gatekeeping of the event signing key (`docs/specs/barnard-binding-conformance.md` §2.1).
 final class OwnerKeyProvider {
   private static let seedKey = "beid.ownerKeySeed"
-  /// Domain-separation context for `deriveSigningKeyPair`, standing in for
-  /// its `eventCode` parameter — the owner key is not event-scoped, so this
-  /// is a fixed constant, not an actual event code.
-  private static let derivationContext = "beid-owner-key:v1"
 
   private let keyStorage: any BarnardCoreKeyStorage
   private let randomSource: any BarnardCoreRandomSource
@@ -33,7 +34,7 @@ final class OwnerKeyProvider {
   /// cached after first derivation so repeated `SensingCoordinator
   /// .beginEventFound` calls (once per scan session) don't re-run
   /// secp256k1 scalar multiplication every time.
-  private var cachedPublicKeyCompressed: Data?
+  private var cachedKeyPair: BarnardCoreSigningKeyPair?
 
   init(
     keyStorage: any BarnardCoreKeyStorage = BeidUserDefaultsKeyStorage(),
@@ -47,8 +48,46 @@ final class OwnerKeyProvider {
   /// ever leaves the device (per the key roster, secrets never leave;
   /// only public keys, signatures, and commitment hashes do).
   func publicKeyCompressed() -> Data {
-    if let cachedPublicKeyCompressed {
-      return cachedPublicKeyCompressed
+    Data(keyPair().publicKeyCompressed)
+  }
+
+  /// Owner-key-signed self-proof (`docs/specs/barnard-binding-conformance.md`
+  /// §2.2) — `nil` if `eventIdHash`/`eventSigningPublicKey` fail Barnard's
+  /// own shape validation (see `BarnardCoreSigning.buildSelfProofMessage`).
+  func signSelfProof(
+    eventIdHash: Data,
+    eventSigningPublicKey: Data,
+    eninStart: UInt64,
+    eninEnd: UInt64
+  ) -> BarnardCoreRecoverableSignature? {
+    let pair = keyPair()
+    return BarnardCoreSigning.signSelfProof(
+      ownerPrivateKey: pair.privateKey,
+      eventIdHash: Array(eventIdHash),
+      eventSigningPublicKey: Array(eventSigningPublicKey),
+      eninStart: eninStart,
+      eninEnd: eninEnd,
+      ownerPublicKey: pair.publicKeyCompressed
+    )
+  }
+
+  /// Owner-key-signed wallet acknowledgement (`docs/specs/barnard-binding-conformance.md`
+  /// §2.4) — `nil` if `walletAddress`/`walletSignature` fail Barnard's own
+  /// shape validation (see `BarnardCoreSigning.buildWalletAcknowledgementMessage`).
+  func signWalletAcknowledgement(
+    walletAddress: Data,
+    walletSignature: Data
+  ) -> BarnardCoreRecoverableSignature? {
+    BarnardCoreSigning.signWalletAcknowledgement(
+      ownerPrivateKey: keyPair().privateKey,
+      walletAddress: Array(walletAddress),
+      walletSignature: Array(walletSignature)
+    )
+  }
+
+  private func keyPair() -> BarnardCoreSigningKeyPair {
+    if let cachedKeyPair {
+      return cachedKeyPair
     }
     let seed = BarnardCoreKeyManager.loadOrCreate(
       key: Self.seedKey,
@@ -57,10 +96,9 @@ final class OwnerKeyProvider {
       storage: keyStorage,
       randomSource: randomSource
     )
-    let keyPair = BarnardCoreSigning.deriveSigningKeyPair(deviceSecret: seed, eventCode: Self.derivationContext)
-    let publicKeyCompressed = Data(keyPair.publicKeyCompressed)
-    cachedPublicKeyCompressed = publicKeyCompressed
-    return publicKeyCompressed
+    let keyPair = BarnardCoreSigning.deriveOwnerKeyPair(accountSecret: seed)
+    cachedKeyPair = keyPair
+    return keyPair
   }
 }
 
