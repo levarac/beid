@@ -7,7 +7,7 @@ options:
 packages:
   Barnard:
     url: https://github.com/levarac/barnard.git
-    exactVersion: 0.2.0
+    exactVersion: 0.3.0
   WalletConnect:
     # Reown (formerly WalletConnect Inc) — the legacy
     # WalletConnect/WalletConnectSwiftV2 repo is archived; reown-swift is
