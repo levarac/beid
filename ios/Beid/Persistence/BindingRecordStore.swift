@@ -19,7 +19,13 @@ final class BindingRecordStore: ObservableObject {
 
   private static func defaultFileURL() -> URL {
     let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    return dir.appendingPathComponent("binding-records.json")
+    // v2: pre-conformance records (`binding-records.json`) are orphaned by
+    // construction, never migrated — old records decode successfully under
+    // the new `BindingRecord` shape while being cryptographically
+    // meaningless (wrong signer, wrong signed content), so the new code
+    // must never open the old filename
+    // (`docs/specs/barnard-binding-conformance.md` §6.d).
+    return dir.appendingPathComponent("binding-records-v2.json")
   }
 
   func add(_ record: BindingRecord) {

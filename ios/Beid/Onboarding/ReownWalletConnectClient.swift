@@ -156,7 +156,7 @@ final class ReownWalletConnectClient: ObservableObject, WalletConnector {
 // MARK: - Signing
 
 extension ReownWalletConnectClient {
-  /// Sends a `personal_sign` request for `digestHex` over the currently
+  /// Sends a `personal_sign` request for `messageHex` over the currently
   /// connected session (reusing its topic/account — never opens a second
   /// pairing flow) and awaits the wallet's response, bounded by
   /// `responseTimeout`. Returns the hex signature on success. `onDispatched`
@@ -164,7 +164,7 @@ extension ReownWalletConnectClient {
   /// wallet's response is known) so callers can move from a "connecting"
   /// to an "awaiting approval" UI state at the right moment.
   func requestPersonalSign(
-    digestHex: String,
+    messageHex: String,
     responseTimeout: TimeInterval = 90,
     onDispatched: (() -> Void)? = nil
   ) async -> Result<String, WalletConnectorError> {
@@ -180,7 +180,7 @@ extension ReownWalletConnectClient {
       request = try Request(
         topic: session.topic,
         method: "personal_sign",
-        params: AnyCodable([digestHex, address]),
+        params: AnyCodable([messageHex, address]),
         chainId: chain
       )
     } catch {

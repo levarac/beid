@@ -99,13 +99,13 @@ final class WalletConnectTests: XCTestCase {
     await connector.connect()
 
     var dispatched = false
-    let result = await connector.requestPersonalSign(digestHex: "0xDIGEST") {
+    let result = await connector.requestPersonalSign(messageHex: "0xMESSAGE") {
       dispatched = true
     }
 
     XCTAssertEqual(result, .success("0xSIGNATURE"))
     XCTAssertEqual(transport.requestedAddress, "0xCOINBASE")
-    XCTAssertEqual(transport.requestedDigest, "0xDIGEST")
+    XCTAssertEqual(transport.requestedMessage, "0xMESSAGE")
     XCTAssertTrue(dispatched)
   }
 
@@ -176,13 +176,13 @@ final class WalletConnectTests: XCTestCase {
     await connector.connect()
 
     var dispatched = false
-    let result = await connector.requestPersonalSign(digestHex: "0xDIGEST") {
+    let result = await connector.requestPersonalSign(messageHex: "0xMESSAGE") {
       dispatched = true
     }
 
     XCTAssertEqual(result, .success("0xSIGNATURE"))
     XCTAssertEqual(transport.requestedAddress, "0xMETAMASK")
-    XCTAssertEqual(transport.requestedDigest, "0xDIGEST")
+    XCTAssertEqual(transport.requestedMessage, "0xMESSAGE")
     XCTAssertTrue(dispatched)
   }
 
@@ -220,7 +220,7 @@ private final class FakeCoinbaseWalletTransport: CoinbaseWalletTransport {
   private(set) var handshakeCount = 0
   private(set) var disconnectCount = 0
   private(set) var requestedAddress: String?
-  private(set) var requestedDigest: String?
+  private(set) var requestedMessage: String?
 
   init(isWalletInstalled: Bool) {
     self.isWalletInstalled = isWalletInstalled
@@ -235,11 +235,11 @@ private final class FakeCoinbaseWalletTransport: CoinbaseWalletTransport {
 
   func requestPersonalSign(
     address: String,
-    digestHex: String,
+    messageHex: String,
     completion: @escaping (Result<String, CoinbaseWalletTransportError>) -> Void
   ) {
     requestedAddress = address
-    requestedDigest = digestHex
+    requestedMessage = messageHex
     completion(signatureResult)
   }
 
@@ -264,7 +264,7 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   private(set) var disconnectCount = 0
   private(set) var sdkConnected = false
   private(set) var requestedAddress: String?
-  private(set) var requestedDigest: String?
+  private(set) var requestedMessage: String?
   private var connectContinuation:
     CheckedContinuation<Result<MetaMaskWalletAccount, MetaMaskTransportError>, Never>?
 
@@ -283,10 +283,10 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
 
   func requestPersonalSign(
     address: String,
-    digestHex: String
+    messageHex: String
   ) async -> Result<String, MetaMaskTransportError> {
     requestedAddress = address
-    requestedDigest = digestHex
+    requestedMessage = messageHex
     return signatureResult
   }
 

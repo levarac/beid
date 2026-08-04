@@ -22,7 +22,7 @@ protocol MetaMaskTransport: AnyObject {
   func connect() async -> Result<MetaMaskWalletAccount, MetaMaskTransportError>
   func requestPersonalSign(
     address: String,
-    digestHex: String
+    messageHex: String
   ) async -> Result<String, MetaMaskTransportError>
   func disconnect()
   func handle(url: URL) -> Bool
@@ -93,7 +93,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   }
 
   func requestPersonalSign(
-    digestHex: String,
+    messageHex: String,
     responseTimeout: TimeInterval = 90,
     onDispatched: (() -> Void)? = nil
   ) async -> Result<String, WalletConnectorError> {
@@ -121,7 +121,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
         onDispatched?()
         let result = await self.transport.requestPersonalSign(
           address: account.address,
-          digestHex: digestHex
+          messageHex: messageHex
         )
         guard self.sessionID == sessionID, self.signAttemptID == attemptID else {
           gate.finish(.failure(.notConnected))
@@ -228,9 +228,9 @@ private final class MetaMaskSDKTransport: MetaMaskTransport {
 
   func requestPersonalSign(
     address: String,
-    digestHex: String
+    messageHex: String
   ) async -> Result<String, MetaMaskTransportError> {
-    switch await sdk.personalSign(message: digestHex, address: address) {
+    switch await sdk.personalSign(message: messageHex, address: address) {
     case .success(let signature):
       return .success(signature)
     case .failure(let error):

@@ -4,56 +4,78 @@
 import BarnardCore
 import Foundation
 
-/// Canonical content of the wallet `personal_sign` + device countersign
-/// binding round trip (beid#33, confirmed 2026-07-23): the wallet signs
-/// "per-event signing pubkey K belongs to wallet W". `W` itself is never
-/// embedded here — the act of signing is what proves `W`'s endorsement; this
-/// type only fixes what `K` attests to and when, so both signatures commit
-/// to the exact same bytes (`docs/specs/scan-slice2-redesign.md` §5.6,
-/// `docs/specs/scan-protocol-model.md` §4/§6's "verifiable timestamp").
+/// Canonical content of the wallet `personal_sign` step in the wallet
+/// connect+binding round trip (beid#33, gh#88) — the literal
+/// `barnard-account-binding:v1` text a Barnard-conformant verifier expects
+/// (`docs/specs/barnard-binding-conformance.md` §2.3), built via
+/// `BarnardCoreSigning.buildAccountBindingText`. Replaces the old
+/// beid-native scheme, where the wallet signed a bare SHA-256 digest of
+/// beid's own byte layout: the wallet now signs the literal ~400-byte
+/// human-readable text itself (EIP-191), so wallet apps can render the
+/// statement instead of falling back to an opaque-hex blind-sign warning
+/// (§3).
 ///
-/// Exact byte layout was left as an implementation-time TBD by
-/// `scan-slice2-redesign.md` §11 ("needs pinning down alongside whichever
-/// wallet SDK integration lands it") — this is that pinning for sub-slice
-/// 2b. Not a finished protocol/report wire format; see `EventCommitment` and
-/// `SensingCoordinator.windowReportPayload` for the separate per-window
-/// report payload, which this does not change.
+/// Fixed once per binding attempt and reused across both the wallet
+/// signature and the later owner-key wallet-ack (§2.4), so both reference
+/// the identical `nonce`/`issuedAt` — recomputing either between the two
+/// steps would desync them (mirrors the old `BindingMessage`'s same
+/// invariant, `SensingCoordinator.pendingBindingMessage`).
 struct BindingMessage: Equatable {
-  private static let schemaTag = Data("beid-binding/v1".utf8)
+  /// Resolved 2026-08-03 (decision 6.a): the literal example domain from
+  /// Barnard's own worked example and pinned test vector. Not a domain
+  /// beid currently serves or proves ownership of (§6.a) — Barnard's own
+  /// validation treats the domain as an opaque label, not a fetched URL.
+  static let domain = "beid.levarac.org"
 
-  let eventCode: String
-  /// Per-event signing public key `K`, compressed secp256k1 —
-  /// `BarnardIdentity.signingPublicKey(eventCode:)`.
-  let eventSigningPublicKey: Data
-  /// The verifiable timestamp the protocol model requires in the signing
-  /// payload (`scan-protocol-model.md` §6) so late binding can't be hidden;
-  /// millisecond precision, truncated to whole milliseconds before signing.
-  let issuedAt: Date
+  let walletAddress: Data
+  let ownerPublicKey: Data
+  let chainId: UInt64
+  let nonce: Data
+  /// RFC 3339 UTC, second precision (`YYYY-MM-DDTHH:MM:SSZ`) — the exact
+  /// literal string both signatures' content ultimately references.
+  /// Carried as the already-formatted `String` (via
+  /// `canonicalIssuedAt(_:)`), not a `Date` reformatted at each use site,
+  /// so there is exactly one formatting call per attempt and no risk of
+  /// the stored/signed text drifting from a later re-derivation.
+  let issuedAt: String
 
-  /// Canonical bytes both signatures commit to: schema tag ‖ UTF-8
-  /// `eventCode` ‖ compressed `eventSigningPublicKey` ‖ big-endian Int64
-  /// Unix milliseconds. Fixed-order `‖`-concatenation (like `EventCommitment
-  /// .compute` and `SensingCoordinator.windowReportPayload`'s big-endian
-  /// ENIN encoding) rather than JSON, so the wallet's `personal_sign` digest
-  /// and the device countersign (`BarnardIdentity.sign`, which hashes its
-  /// own `bytes` argument internally) provably cover identical content.
-  var canonicalBytes: Data {
-    var bytes = Self.schemaTag
-    bytes.append(Data(eventCode.utf8))
-    bytes.append(eventSigningPublicKey)
-    let millis = Int64((issuedAt.timeIntervalSince1970 * 1000).rounded())
-    bytes.append(contentsOf: withUnsafeBytes(of: millis.bigEndian) { Array($0) })
-    return bytes
+  /// The literal canonical text, or `nil` if any field fails Barnard's own
+  /// shape validation (`BarnardCoreSigning.buildAccountBindingText`) —
+  /// should not happen in practice given this type's fields are only ever
+  /// constructed from already-validated shapes (`SensingCoordinator
+  /// .beginBinding`), but the underlying API is optional so this stays
+  /// optional too rather than asserting.
+  func canonicalText() -> String? {
+    BarnardCoreSigning.buildAccountBindingText(
+      domain: Self.domain,
+      walletAddress: Array(walletAddress),
+      ownerPublicKey: Array(ownerPublicKey),
+      chainId: chainId,
+      nonce: Array(nonce),
+      issuedAt: issuedAt
+    )
   }
 
-  /// What the wallet's `personal_sign` actually signs: SHA-256 of
-  /// `canonicalBytes`, `0x`-prefixed hex. Mirrors `SignaturePayload
-  /// .signingDigestHex()`'s convention — every `WalletConnector
-  /// .requestPersonalSign` call site in this app (Coinbase/MetaMask/Reown)
-  /// already expects a `0x`-prefixed hex digest as the "message" parameter,
-  /// not a literal human-readable string.
-  func walletDigestHex() -> String {
-    "0x" + Data(BarnardCoreCrypto.sha256(Array(canonicalBytes))).hexString
+  /// What the wallet's `personal_sign` actually signs: `0x`-prefixed hex of
+  /// the canonical text's UTF-8 bytes (not a digest of it) — every
+  /// `WalletConnector.requestPersonalSign` call site already accepts a
+  /// `0x`-prefixed hex string as an opaque "message" parameter and never
+  /// inspects its length, so only what the hex decodes to changes
+  /// (`docs/specs/barnard-binding-conformance.md` §2.3).
+  func walletMessageHex() -> String? {
+    guard let text = canonicalText() else { return nil }
+    return "0x" + Data(text.utf8).hexString
+  }
+
+  /// Formats `date` as the RFC 3339 UTC second-precision string
+  /// `BarnardCoreSigning.buildAccountBindingText`'s own validation
+  /// requires (`YYYY-MM-DDTHH:MM:SSZ`, no fractional seconds, literal `Z`).
+  static func canonicalIssuedAt(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
+    return formatter.string(from: date)
   }
 }
 

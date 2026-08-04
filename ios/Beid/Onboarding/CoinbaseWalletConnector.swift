@@ -23,7 +23,7 @@ protocol CoinbaseWalletTransport: AnyObject {
   )
   func requestPersonalSign(
     address: String,
-    digestHex: String,
+    messageHex: String,
     completion: @escaping (Result<String, CoinbaseWalletTransportError>) -> Void
   )
   func disconnect()
@@ -81,7 +81,7 @@ final class CoinbaseWalletConnector: ObservableObject, WalletConnector {
   }
 
   func requestPersonalSign(
-    digestHex: String,
+    messageHex: String,
     responseTimeout: TimeInterval = 90,
     onDispatched: (() -> Void)? = nil
   ) async -> Result<String, WalletConnectorError> {
@@ -94,7 +94,7 @@ final class CoinbaseWalletConnector: ObservableObject, WalletConnector {
 
     return await withCheckedContinuation { continuation in
       let gate = CoinbaseSignResultGate(continuation: continuation)
-      transport.requestPersonalSign(address: account.address, digestHex: digestHex) { result in
+      transport.requestPersonalSign(address: account.address, messageHex: messageHex) { result in
         Task { @MainActor in
           switch result {
           case .success(let signature):
@@ -190,11 +190,11 @@ private final class CoinbaseWalletSDKTransport: CoinbaseWalletTransport {
 
   func requestPersonalSign(
     address: String,
-    digestHex: String,
+    messageHex: String,
     completion: @escaping (Result<String, CoinbaseWalletTransportError>) -> Void
   ) {
     sdk.makeRequest(Request(actions: [
-      Action(jsonRpc: .personal_sign(address: address, message: digestHex)),
+      Action(jsonRpc: .personal_sign(address: address, message: messageHex)),
     ])) { result in
       Task { @MainActor in
         switch result {

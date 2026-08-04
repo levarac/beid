@@ -6,9 +6,13 @@ import XCTest
 
 @MainActor
 final class EventBindingTests: XCTestCase {
+  private let testWalletAddress = "0x1234567890123456789012345678901234567890"
+  private let testChainId = "eip155:1"
+  private let testWalletSignatureHex = "0x" + String(repeating: "ab", count: 65)
+
   func testBeginBindingReturnsNilWhenNotRecording() {
     let coordinator = SensingCoordinator()
-    XCTAssertNil(coordinator.beginBinding())
+    XCTAssertNil(coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId))
     XCTAssertEqual(coordinator.bindingState, .none)
   }
 
@@ -22,29 +26,74 @@ final class EventBindingTests: XCTestCase {
     XCTAssertEqual(coordinator.bindingState, .pendingConnect(event))
   }
 
-  func testBeginBindingMovesToConnectingAndReturnsDigest() async {
+  func testBeginBindingMovesToConnectingAndReturnsMessageHex() async {
     let coordinator = SensingCoordinator()
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
-    let digest = coordinator.beginBinding()
+    let messageHex = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
 
     XCTAssertEqual(coordinator.bindingState, .connecting)
-    XCTAssertNotNil(digest)
-    XCTAssertTrue(digest?.hasPrefix("0x") == true)
+    XCTAssertNotNil(messageHex)
+    XCTAssertTrue(messageHex?.hasPrefix("0x") == true)
   }
 
-  func testBeginBindingReusesTheSameDigestAcrossRepeatedCalls() async {
-    // Guards the mutual-signature invariant: the wallet digest and the
-    // later device countersign must cover identical bytes, so a second
-    // `beginBinding()` call for the same attempt must not recompute a
-    // fresh `issuedAt`.
+  func testBeginBindingReturnsNilForMalformedWalletAddress() async {
     let coordinator = SensingCoordinator()
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
-    let first = coordinator.beginBinding()
-    let second = coordinator.beginBinding()
+    XCTAssertNil(coordinator.beginBinding(walletAddress: "not-hex", chainId: testChainId))
+    XCTAssertNil(coordinator.beginBinding(walletAddress: "0x1234", chainId: testChainId), "must be exactly 20 bytes")
+  }
+
+  func testBeginBindingReturnsNilForMalformedChainId() async {
+    let coordinator = SensingCoordinator()
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    XCTAssertNil(coordinator.beginBinding(walletAddress: testWalletAddress, chainId: "not-caip2"))
+  }
+
+  func testBeginBindingWithMalformedInputLeavesBindingStateRecoverable() async {
+    // Regression test: `bindingState` must never move to `.connecting`
+    // before wallet-address/chain-ID validation succeeds. If it did (the
+    // original bug), `EventBindingSheetView` would disable swipe-dismiss
+    // and hide the Cancel button with no path back — asserting only the
+    // `nil` return (as the two tests above do) would not catch that, since
+    // `beginBinding` still returns `nil` correctly either way. This asserts
+    // on `bindingState` itself after each failed call.
+    let coordinator = SensingCoordinator()
+    let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
+    coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    XCTAssertNil(coordinator.beginBinding(walletAddress: "not-hex", chainId: testChainId))
+    XCTAssertEqual(coordinator.bindingState, .pendingConnect(event), "must not get stuck in .connecting")
+
+    XCTAssertNil(coordinator.beginBinding(walletAddress: testWalletAddress, chainId: "not-caip2"))
+    XCTAssertEqual(coordinator.bindingState, .pendingConnect(event), "must not get stuck in .connecting")
+
+    // "0x1234" is valid hex but only 2 bytes, not the 20 Barnard's own
+    // `buildAccountBindingText` requires — `Data(hexEncoded:)` has no
+    // length check, so this only fails deep inside `walletMessageHex()`,
+    // not at either shallow guard above. This is the exact input shape
+    // that slipped past this test's first version.
+    XCTAssertNil(coordinator.beginBinding(walletAddress: "0x1234", chainId: testChainId))
+    XCTAssertEqual(coordinator.bindingState, .pendingConnect(event), "must not get stuck in .connecting")
+  }
+
+  func testBeginBindingReusesTheSameMessageAcrossRepeatedCalls() async {
+    // Guards the mutual-signature invariant: the wallet message and the
+    // later owner-key wallet-ack must reference identical nonce/issuedAt,
+    // so a second `beginBinding()` call for the same attempt must not
+    // regenerate either.
+    let coordinator = SensingCoordinator()
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    let first = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+    let second = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
 
     XCTAssertEqual(first, second)
   }
@@ -57,7 +106,7 @@ final class EventBindingTests: XCTestCase {
     coordinator.markBindingAwaitingApproval()
     XCTAssertEqual(coordinator.bindingState, .pendingConnect(.demoSample), "no-op outside .connecting")
 
-    _ = coordinator.beginBinding()
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
     coordinator.markBindingAwaitingApproval()
     XCTAssertEqual(coordinator.bindingState, .awaitingApproval)
   }
@@ -76,19 +125,30 @@ final class EventBindingTests: XCTestCase {
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
-    _ = coordinator.beginBinding()
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
     coordinator.markBindingAwaitingApproval()
-    let record = coordinator.completeBinding(walletAddress: "0xWALLET", walletSignatureHex: "0xSIGNATURE")
+    let record = coordinator.completeBinding(
+      walletAddress: testWalletAddress,
+      walletSignatureHex: testWalletSignatureHex
+    )
 
     guard let record else {
       XCTFail("expected a BindingRecord")
       return
     }
     XCTAssertEqual(record.eventCode, event.id)
-    XCTAssertEqual(record.walletAddress, "0xWALLET")
-    XCTAssertEqual(record.walletSignatureHex, "0xSIGNATURE")
-    XCTAssertEqual(record.proofId, collectedProof?.id, "the record must attach to the Proof created for this recording session")
+    XCTAssertEqual(record.walletAddress, testWalletAddress)
+    XCTAssertEqual(record.walletSignatureHex, testWalletSignatureHex)
+    XCTAssertEqual(
+      record.proofId,
+      collectedProof?.id,
+      "the record must attach to the Proof created for this recording session"
+    )
+    XCTAssertEqual(record.chainId, 1)
+    XCTAssertEqual(record.nonceHex.count, 32, "nonce is always 16 bytes")
+    XCTAssertFalse(record.issuedAt.isEmpty)
     XCTAssertFalse(record.eventSigningPublicKeyHex.isEmpty)
+    XCTAssertFalse(record.ownerPublicKeyHex.isEmpty)
     XCTAssertFalse(record.deviceSignatureRHex.isEmpty)
     XCTAssertFalse(record.deviceSignatureSHex.isEmpty)
 
@@ -99,13 +159,25 @@ final class EventBindingTests: XCTestCase {
     XCTAssertEqual(stateRecord, record)
   }
 
+  func testCompleteBindingReturnsNilForMalformedWalletSignatureHex() async {
+    let coordinator = SensingCoordinator()
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+
+    XCTAssertNil(coordinator.completeBinding(walletAddress: testWalletAddress, walletSignatureHex: "not-hex"))
+  }
+
   func testBindingRecordRoundTripsThroughCodable() async throws {
     let coordinator = SensingCoordinator()
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding()
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
 
-    guard let record = coordinator.completeBinding(walletAddress: "0xWALLET", walletSignatureHex: "0xSIGNATURE") else {
+    guard let record = coordinator.completeBinding(
+      walletAddress: testWalletAddress,
+      walletSignatureHex: testWalletSignatureHex
+    ) else {
       XCTFail("expected a BindingRecord")
       return
     }
@@ -120,7 +192,7 @@ final class EventBindingTests: XCTestCase {
     let coordinator = SensingCoordinator()
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding()
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
 
     coordinator.failBinding(reason: "Declined in wallet")
 
@@ -136,7 +208,7 @@ final class EventBindingTests: XCTestCase {
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding()
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
 
     coordinator.declineBinding()
 
@@ -152,7 +224,7 @@ final class EventBindingTests: XCTestCase {
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding()
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
     coordinator.failBinding(reason: "boom")
 
     coordinator.declineBinding()
@@ -172,8 +244,11 @@ final class EventBindingTests: XCTestCase {
     let coordinator = SensingCoordinator()
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding()
-    XCTAssertNotNil(coordinator.completeBinding(walletAddress: "0xWALLET", walletSignatureHex: "0xSIGNATURE"))
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+    XCTAssertNotNil(coordinator.completeBinding(
+      walletAddress: testWalletAddress,
+      walletSignatureHex: testWalletSignatureHex
+    ))
 
     coordinator.reset()
 
@@ -189,8 +264,11 @@ final class EventBindingTests: XCTestCase {
     let coordinator = SensingCoordinator()
     coordinator.startSensing(demoEvent: .demoSample)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding()
-    XCTAssertNotNil(coordinator.completeBinding(walletAddress: "0xWALLET", walletSignatureHex: "0xSIGNATURE"))
+    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+    XCTAssertNotNil(coordinator.completeBinding(
+      walletAddress: testWalletAddress,
+      walletSignatureHex: testWalletSignatureHex
+    ))
     coordinator.reset()
 
     coordinator.startSensing(demoEvent: .demoSample)
@@ -221,7 +299,7 @@ final class DemoWalletConnectorTests: XCTestCase {
     let connector = DemoWalletConnector.shared
     connector.disconnect()
 
-    let result = await connector.requestPersonalSign(digestHex: "0xDIGEST")
+    let result = await connector.requestPersonalSign(messageHex: "0xMESSAGE")
 
     XCTAssertEqual(result, .failure(.notConnected))
     #else
@@ -236,7 +314,7 @@ final class DemoWalletConnectorTests: XCTestCase {
     await connector.connect()
 
     var dispatched = false
-    let result = await connector.requestPersonalSign(digestHex: "0xDIGEST") {
+    let result = await connector.requestPersonalSign(messageHex: "0xMESSAGE") {
       dispatched = true
     }
 

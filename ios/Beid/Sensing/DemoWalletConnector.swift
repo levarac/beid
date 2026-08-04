@@ -17,7 +17,13 @@ import Foundation
 @MainActor
 final class DemoWalletConnector: ObservableObject, WalletConnector {
   static let shared = DemoWalletConnector()
-  static let demoAddress = "0xDE00000000000000000000000000000000DEC0"
+  // 40 hex chars after "0x" — a valid 20-byte EVM address shape. (Was
+  // previously 38 chars/19 bytes, an off-by-one-byte typo invisible while
+  // this string was only ever displayed, never decoded — sub-slice C's
+  // `BarnardCoreSigning.buildAccountBindingText` now requires exactly 20
+  // bytes, which would otherwise make the DEBUG-only "Simulate binding"
+  // path silently no-op.)
+  static let demoAddress = "0xDE0000000000000000000000000000000000DEC0"
 
   @Published private(set) var state: WalletConnectorState = .idle
 
@@ -39,7 +45,7 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
   }
 
   func requestPersonalSign(
-    digestHex: String,
+    messageHex: String,
     responseTimeout: TimeInterval = 90,
     onDispatched: (() -> Void)? = nil
   ) async -> Result<String, WalletConnectorError> {
