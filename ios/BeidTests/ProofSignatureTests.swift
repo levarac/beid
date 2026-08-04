@@ -196,11 +196,11 @@ private final class FakeProofSigningConnector: ObservableObject, WalletConnector
   func connect() async {}
 
   func requestPersonalSign(
-    digestHex: String,
+    messageHex: String,
     responseTimeout: TimeInterval,
     onDispatched: (() -> Void)?
   ) async -> Result<String, WalletConnectorError> {
-    requestedDigest = digestHex
+    requestedDigest = messageHex
     onDispatched?()
     didDispatch = true
     return .success("0xSIGNATURE")

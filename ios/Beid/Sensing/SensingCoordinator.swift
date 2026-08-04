@@ -77,9 +77,10 @@ final class SensingCoordinator: ObservableObject {
   private var activeCommit: Data?
   private var activeProofId: UUID?
   /// The in-flight binding attempt's fixed message, reused across the
-  /// wallet `personal_sign` digest and the later device countersign so both
-  /// signatures commit to identical bytes (`BindingMessage`'s `issuedAt`
-  /// must not be recomputed with a fresh `Date()` between the two steps).
+  /// wallet `personal_sign` message and the later owner-key wallet-ack so
+  /// both reference identical `nonce`/`issuedAt` (`BindingMessage`'s
+  /// `issuedAt` must not be recomputed with a fresh `Date()` between the
+  /// two steps).
   private var pendingBindingMessage: BindingMessage?
 
   private var demoStepDelayNanos: UInt64 {
@@ -313,11 +314,13 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  // MARK: - Wallet connect+binding (beid#33, sub-slice 2b, §5.6)
+  // MARK: - Wallet connect+binding (beid#33, sub-slice 2b, §5.6; Barnard
+  // conformance sub-slice C, `docs/specs/barnard-binding-conformance.md`
+  // §2.3/§2.4)
   //
   // The interstitial (`EventBindingSheetView`) drives these; this type owns
   // the message/signing/persistence side so the view only ever handles the
-  // wallet connector's `connect()`/`requestPersonalSign(digestHex:)` calls.
+  // wallet connector's `connect()`/`requestPersonalSign(messageHex:)` calls.
 
   private var currentBindingEvent: EventSession? {
     switch phase {
@@ -329,22 +332,50 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// Starts (or resumes) this attempt, moving to `.connecting` and
-  /// returning the `0x`-prefixed digest the wallet's `personal_sign` must
-  /// sign. Reuses `pendingBindingMessage` if a digest was already handed out
-  /// for this attempt — recomputing with a fresh `Date()` would desync the
-  /// wallet signature and the later device countersign. `nil` if not
-  /// currently recording (defensive; the sheet only calls this while
-  /// `bindingState` implies `.recording`/`.signalLost`).
-  func beginBinding() -> String? {
-    guard let event = currentBindingEvent else { return nil }
+  /// returning the `0x`-prefixed hex the wallet's `personal_sign` must
+  /// sign — the UTF-8 bytes of the literal `barnard-account-binding:v1`
+  /// canonical text (`docs/specs/barnard-binding-conformance.md` §2.3), not
+  /// a digest of it. Reuses `pendingBindingMessage` if one was already
+  /// handed out for this attempt — recomputing with a fresh `Date()`/nonce
+  /// would desync the wallet signature and the later wallet-ack. `nil` if
+  /// not currently recording, or if `walletAddress`/`chainId` aren't in the
+  /// shape Barnard's own validation requires (defensive; the sheet only
+  /// calls this while `bindingState` implies `.recording`/`.signalLost`,
+  /// with a real connector's already-connected address/chain, §6.b).
+  func beginBinding(walletAddress: String, chainId: String) -> String? {
+    guard currentBindingEvent != nil else { return nil }
+
+    let message: BindingMessage
+    if let pending = pendingBindingMessage {
+      message = pending
+    } else {
+      guard
+        let walletAddressBytes = Data(hexEncoded: walletAddress),
+        let numericChainId = Self.numericChainId(fromCaip2: chainId)
+      else {
+        return nil
+      }
+      message = BindingMessage(
+        walletAddress: walletAddressBytes,
+        ownerPublicKey: ownerKeyProvider.publicKeyCompressed(),
+        chainId: numericChainId,
+        nonce: Data(randomSource.randomBytes(count: 16)),
+        issuedAt: BindingMessage.canonicalIssuedAt(Date())
+      )
+    }
+    guard let messageHex = message.walletMessageHex() else { return nil }
     bindingState = .connecting
-    let message = pendingBindingMessage ?? BindingMessage(
-      eventCode: event.id,
-      eventSigningPublicKey: identity.signingPublicKey(eventCode: event.id),
-      issuedAt: Date()
-    )
     pendingBindingMessage = message
-    return message.walletDigestHex()
+    return messageHex
+  }
+
+  /// Parses the numeric suffix of a CAIP-2 chain identifier (e.g.
+  /// `"eip155:1"` → `1`) — `WalletConnector.chainId`'s own format
+  /// (§6.b) — into the `UInt64` `BarnardCoreSigning.buildAccountBindingText`
+  /// expects. `nil` if `caip2` isn't in that shape.
+  private static func numericChainId(fromCaip2 caip2: String) -> UInt64? {
+    guard let colonIndex = caip2.firstIndex(of: ":") else { return nil }
+    return UInt64(caip2[caip2.index(after: colonIndex)...])
   }
 
   /// Called once the wallet request has been dispatched (`onDispatched` on
@@ -356,24 +387,40 @@ final class SensingCoordinator: ObservableObject {
     bindingState = .awaitingApproval
   }
 
-  /// Completes the round trip: countersigns the same `BindingMessage` bytes
-  /// the wallet just signed (the mutual-signature requirement, §4/§6 —
-  /// neither signature alone is a valid binding), builds and persists the
+  /// Completes the round trip: has the owner key countersign a
+  /// `barnard-wallet-ack:v1` message referencing the wallet's own signature
+  /// bytes (§2.4 — the mutual-signature requirement, §4/§6: neither
+  /// signature alone is a valid binding), builds and persists the
   /// `BindingRecord`, and moves to `.bound`. `nil` (no state change) if
-  /// there is no in-flight attempt to complete — defensive against a stale
-  /// callback racing a decline.
+  /// there is no in-flight attempt to complete, or `walletSignatureHex`
+  /// isn't valid hex — defensive against a stale callback racing a
+  /// decline, or a malformed transport response.
   @discardableResult
   func completeBinding(walletAddress: String, walletSignatureHex: String) -> BindingRecord? {
-    guard let message = pendingBindingMessage, let proofId = activeProofId else { return nil }
-    let deviceSignature = identity.sign(eventCode: message.eventCode, bytes: message.canonicalBytes)
+    guard
+      let message = pendingBindingMessage,
+      let proofId = activeProofId,
+      let event = currentBindingEvent,
+      let walletSignatureBytes = Data(hexEncoded: walletSignatureHex),
+      let ackSignature = ownerKeyProvider.signWalletAcknowledgement(
+        walletAddress: message.walletAddress,
+        walletSignature: walletSignatureBytes
+      )
+    else {
+      return nil
+    }
+
     let record = BindingRecord(
       proofId: proofId,
-      eventCode: message.eventCode,
+      eventCode: event.id,
       walletAddress: walletAddress,
-      eventSigningPublicKey: message.eventSigningPublicKey,
-      boundAt: message.issuedAt,
+      eventSigningPublicKey: identity.signingPublicKey(eventCode: event.id),
+      ownerPublicKey: message.ownerPublicKey,
+      chainId: message.chainId,
+      nonce: message.nonce,
+      issuedAt: message.issuedAt,
       walletSignatureHex: walletSignatureHex,
-      deviceSignature: deviceSignature
+      deviceSignature: ackSignature
     )
     bindingRecordStore.add(record)
     bindingState = .bound(record)
@@ -574,5 +621,28 @@ final class SensingCoordinator: ObservableObject {
     guard nanos > 0 else { return !Task.isCancelled }
     try? await Task.sleep(nanoseconds: nanos)
     return !Task.isCancelled
+  }
+}
+
+private extension Data {
+  /// Decodes a `0x`-prefixed (or bare) hex string into raw bytes; `nil` if
+  /// malformed (odd length, non-hex characters) — used to turn the wallet
+  /// address/signature strings the connector layer hands over as opaque
+  /// hex into the raw bytes Barnard's owner-key API requires.
+  init?(hexEncoded string: String) {
+    let stripped = string.hasPrefix("0x") || string.hasPrefix("0X")
+      ? String(string.dropFirst(2))
+      : string
+    guard stripped.count.isMultiple(of: 2) else { return nil }
+    var bytes = [UInt8]()
+    bytes.reserveCapacity(stripped.count / 2)
+    var index = stripped.startIndex
+    while index < stripped.endIndex {
+      let next = stripped.index(index, offsetBy: 2)
+      guard let byte = UInt8(stripped[index..<next], radix: 16) else { return nil }
+      bytes.append(byte)
+      index = next
+    }
+    self = Data(bytes)
   }
 }

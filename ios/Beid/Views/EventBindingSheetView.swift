@@ -183,8 +183,8 @@ struct EventBindingSheetView: View {
 
   @MainActor
   private func performBinding(address: String, connector: any WalletConnector) async {
-    guard let digestHex = sensing.beginBinding() else { return }
-    let result = await connector.requestPersonalSign(digestHex: digestHex) {
+    guard let messageHex = sensing.beginBinding(walletAddress: address, chainId: connector.chainId) else { return }
+    let result = await connector.requestPersonalSign(messageHex: messageHex) {
       sensing.markBindingAwaitingApproval()
     }
     switch result {

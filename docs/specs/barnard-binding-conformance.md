@@ -256,6 +256,19 @@ that's needed — `BindingRecord`'s own field shape
 produced the bytes it stores (relevant to §6.d's migration answer: the
 on-disk schema is unchanged, only its cryptographic meaning is).
 
+**Correction (implementation-confirmed):** the one-line bridge above turned
+out not to be constructible. `Barnard.BarnardRecoverableSignature`'s
+auto-synthesized memberwise initializer is `internal`, not `public` — a
+real Swift behavior: a struct's implicit memberwise init is never
+automatically `public`, even when the struct itself and all its properties
+are — so it cannot be built from raw bytes outside the `Barnard` module the
+way `Data($0)` implied. The shipped code instead types
+`BindingRecord.deviceSignature` as `BarnardCore.BarnardCoreRecoverableSignature`
+directly, which does have a public init and is exactly what
+`OwnerKeyProvider.signWalletAcknowledgement` already returns natively — so
+no bridge is needed at all, simpler than what this section originally
+proposed.
+
 ## 3. UX delta at the wallet `personal_sign` step
 
 **What the user currently sees**: today's `digestHex` is `"0x" +

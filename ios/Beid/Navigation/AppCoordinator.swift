@@ -171,7 +171,7 @@ final class AppCoordinator: ObservableObject {
       return
     }
 
-    let result = await walletConnector.requestPersonalSign(digestHex: digestHex) { [weak self] in
+    let result = await walletConnector.requestPersonalSign(messageHex: digestHex) { [weak self] in
       self?.proofStore.updateSignatureState(for: proof.id, to: .awaitingApproval)
     }
 

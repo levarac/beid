@@ -36,7 +36,7 @@ protocol WalletConnector: ObservableObject {
   func configureIfNeeded()
   func connect() async
   func requestPersonalSign(
-    digestHex: String,
+    messageHex: String,
     responseTimeout: TimeInterval,
     onDispatched: (() -> Void)?
   ) async -> Result<String, WalletConnectorError>
@@ -46,11 +46,11 @@ protocol WalletConnector: ObservableObject {
 
 extension WalletConnector {
   func requestPersonalSign(
-    digestHex: String,
+    messageHex: String,
     onDispatched: (() -> Void)? = nil
   ) async -> Result<String, WalletConnectorError> {
     await requestPersonalSign(
-      digestHex: digestHex,
+      messageHex: messageHex,
       responseTimeout: 90,
       onDispatched: onDispatched
     )
