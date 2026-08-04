@@ -46,7 +46,13 @@ final class SensingCoordinator: ObservableObject {
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private let windowReportStore = WindowReportStore()
   private let bindingRecordStore = BindingRecordStore()
+  private let selfProofStore = SelfProofStore()
   private var demoTask: Task<Void, Never>?
+  /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
+  /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
+  /// `advanceWindowIfNeeded`-derived `firstWindowEnin`/`currentWindowEnin`
+  /// so the self-proof layer (§2.2) is exercisable under demo mode too.
+  private var demoWindowEnin = 0
 
   // MARK: - Per-session protocol state
   //
@@ -58,6 +64,11 @@ final class SensingCoordinator: ObservableObject {
   /// `peersVerified` (§4.3).
   private var distinctPeerRpids: Set<String> = []
   private var currentWindowEnin: Int?
+  /// The session's first observed ENIN window — `eninStart` for the
+  /// self-proof layer (§2.2). Set once, the first time `currentWindowEnin`
+  /// is set (real path: `advanceWindowIfNeeded`; demo path:
+  /// `advanceDemoWindow()`), and not touched again until the next session.
+  private var firstWindowEnin: Int?
   private var currentWindowRpids: Set<String> = []
   /// `commit = H(event signing key ‖ owner key ‖ salt)`, fixed once per
   /// event at the instant it's found (§5 — the owner key is a cross-event
@@ -196,12 +207,15 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  func stopSensing() {
+  @discardableResult
+  func stopSensing() -> SelfProofRecord? {
+    let selfProof = finalizeSelfProofIfNeeded()
     demoTask?.cancel()
     demoTask = nil
     engine.stopAuto()
     resetSessionState()
     phase = .idle
+    return selfProof
   }
 
   /// Manual trigger so the Signal Lost screen is reachable from the demo
@@ -235,16 +249,21 @@ final class SensingCoordinator: ObservableObject {
     recordingCeremonyShown = true
   }
 
-  func reset() {
+  @discardableResult
+  func reset() -> SelfProofRecord? {
+    let selfProof = finalizeSelfProofIfNeeded()
     demoTask?.cancel()
     demoTask = nil
     resetSessionState()
     phase = .idle
+    return selfProof
   }
 
   private func resetSessionState() {
     distinctPeerRpids = []
     currentWindowEnin = nil
+    firstWindowEnin = nil
+    demoWindowEnin = 0
     currentWindowRpids = []
     activeCommit = nil
     activeProofId = nil
@@ -389,6 +408,7 @@ final class SensingCoordinator: ObservableObject {
   private func advanceWindowIfNeeded(enin: Int, eventCode: String) {
     guard let openEnin = currentWindowEnin else {
       currentWindowEnin = enin
+      firstWindowEnin = enin
       return
     }
     guard openEnin != enin else { return }
@@ -426,6 +446,66 @@ final class SensingCoordinator: ObservableObject {
     return payload
   }
 
+  // MARK: - Self-proof (owner-key attestation, §2.2)
+  //
+  // A structurally separate mechanism from the per-window report path just
+  // above — same boundary §4 draws for `EventCommitment`/`activeCommit`: no
+  // self-proof byte ever feeds `windowReportPayload` or any other on-wire
+  // path (self-proofs are a "holder-held artifact", never placed on
+  // Advertise/GATT/anchors/witness blobs). `eninEnd` can only be known once
+  // the session's last observed ENIN window is known, which — per this
+  // type's actual lifecycle, not assumed — is only true at session end
+  // (`stopSensing()`/`reset()`, both call `finalizeSelfProofIfNeeded()`
+  // before `resetSessionState()` clears the state it reads), never at
+  // `beginEventFound` (where only `activeCommit` is fixed).
+
+  /// Builds, signs (`OwnerKeyProvider.signSelfProof`), and persists this
+  /// session's self-proof, if one is due. `nil` if there is no `Proof` for
+  /// this session (`activeProofId` unset — never reached `.recording`) or no
+  /// ENIN window was ever observed (`firstWindowEnin`/`currentWindowEnin`
+  /// unset). A session gated on `activeProofId` mirrors `BindingRecord
+  /// .proofId`'s linkage: a session that stayed in `.eventFound` without
+  /// meeting the peer threshold produced no `Proof`, so there is nothing to
+  /// attest.
+  @discardableResult
+  private func finalizeSelfProofIfNeeded() -> SelfProofRecord? {
+    guard
+      let proofId = activeProofId,
+      let eventCode = currentBindingEvent?.id,
+      let start = firstWindowEnin,
+      let end = currentWindowEnin
+    else {
+      return nil
+    }
+
+    let eventIdHash = EventIdHash.compute(eventCode: eventCode)
+    let eventSigningPublicKey = identity.signingPublicKey(eventCode: eventCode)
+    let ownerPublicKey = ownerKeyProvider.publicKeyCompressed()
+    guard
+      let signature = ownerKeyProvider.signSelfProof(
+        eventIdHash: eventIdHash,
+        eventSigningPublicKey: eventSigningPublicKey,
+        eninStart: UInt64(start),
+        eninEnd: UInt64(end)
+      )
+    else {
+      return nil
+    }
+
+    let record = SelfProofRecord(
+      proofId: proofId,
+      eventCode: eventCode,
+      eventIdHash: eventIdHash,
+      eventSigningPublicKey: eventSigningPublicKey,
+      eninStart: UInt64(start),
+      eninEnd: UInt64(end),
+      ownerPublicKey: ownerPublicKey,
+      signature: signature
+    )
+    selfProofStore.add(record)
+    return record
+  }
+
   // MARK: - Demo sequence
   //
   // Pure state advancement is separated from timing so tests can drive it
@@ -441,14 +521,17 @@ final class SensingCoordinator: ObservableObject {
       guard let self else { return }
       guard await self.delay(stepDelayNanos) else { return }
       await self.beginEventFound(demoEvent)
+      await self.advanceDemoWindow()
       guard await self.delay(stepDelayNanos) else { return }
 
       let threshold = BeidConfig.eventConfirmThreshold
       await self.beginRecording(event: demoEvent, peersVerified: threshold)
+      await self.advanceDemoWindow()
 
       for peersVerified in (threshold + 1)...(threshold + 2) {
         guard await self.delay(stepDelayNanos) else { return }
         await self.updateRecording(event: demoEvent, peersVerified: peersVerified)
+        await self.advanceDemoWindow()
       }
     }
   }
@@ -462,8 +545,25 @@ final class SensingCoordinator: ObservableObject {
       for next in (peersVerified + 1)...(peersVerified + 2) {
         guard await self.delay(stepDelayNanos) else { return }
         await self.updateRecording(event: event, peersVerified: next)
+        await self.advanceDemoWindow()
       }
     }
+  }
+
+  /// Demo-only stand-in for the real path's `advanceWindowIfNeeded` —
+  /// advances just enough ENIN-window state
+  /// (`firstWindowEnin`/`currentWindowEnin`) for the self-proof layer
+  /// (§2.2) to be exercisable under demo mode, since there is no real BLE
+  /// path to drive it with on the simulator. Deliberately never calls
+  /// `closeWindow`/touches `WindowReportStore` — demo mode intentionally
+  /// produces no window reports (see this section's own doc comment above),
+  /// and this must not change that.
+  private func advanceDemoWindow() {
+    demoWindowEnin += 1
+    if firstWindowEnin == nil {
+      firstWindowEnin = demoWindowEnin
+    }
+    currentWindowEnin = demoWindowEnin
   }
 
   func waitForDemoSequenceToFinish() async {

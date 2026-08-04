@@ -107,16 +107,42 @@ The other two workflows:
 - **PR Build & Test** (id `a465d6ac-e3b5-4fe0-b586-db7285435990`) — the PR
   CI gate: build + test on pull requests targeting `main` (created
   2026-07-27; CI required, reviews optional per the maintainer decision in
-  `AGENTS.md`). **Docs-only changes do not trigger it** (verified
-  2026-08-02): its start condition carries a files-and-folders rule,
-  `DO_NOT_START_IF_ALL_FILES_MATCH` with matchers `docs/` (directory),
-  `.github/` (directory), and `md` (file extension) — a PR whose every
-  changed file matches one of those starts no macOS build. Mixed PRs
-  (docs + code) still build. The rule fails open: if a matcher doesn't
-  match the way this doc claims, the build runs anyway, so a
-  misconfiguration here can waste compute but never silently skip CI for
-  a code change. Background: before 2026-08-02 this workflow had no files
+  `AGENTS.md`). Its start condition carries a files-and-folders rule
+  intended to read `DO_NOT_START_IF_ALL_FILES_MATCH` with matchers
+  `docs/` (directory), `.github/` (directory), and `md` (file extension),
+  so that a PR whose every changed file matches one of those starts no
+  macOS build. Background: before 2026-08-02 this workflow had no files
   rule at all, and a one-line docs PR burned a full macOS build+test.
+
+  **⚠️ The rule does NOT behave as described above. Observed
+  2026-08-03 — do not trust the intended reading until someone fixes the
+  workflow in ASC:**
+
+  | PR | Changed files | macOS build |
+  |---|---|---|
+  | #87 | docs only | skipped (intended) |
+  | #89 | docs + code | ran |
+  | #90 | docs + code | ran |
+  | **#92** | **code only** | **skipped — WRONG** |
+
+  A code-only PR gets **no macOS build and no test run at all**, silently:
+  no failed check, no pending check, nothing on the commit — the PR simply
+  shows green from the two Ubuntu checks and looks ready to merge. In
+  effect the workflow currently starts only when a `docs/`/`.github/`/`.md`
+  file is present, which is close to the inverse of the intent. #92 was
+  the first code-only PR after the 2026-08-02 rule change, which is why
+  this went unnoticed for a day.
+
+  This directly contradicts the "fails open" claim this section used to
+  make (that a misconfiguration "can waste compute but never silently skip
+  CI for a code change"). That claim was an assumption about ASC's matcher
+  semantics, never tested in the code-only direction. It has now been
+  tested and it is false. Per `AGENTS.md`, ASC is the source of truth over
+  this doc — the fix belongs in the ASC GUI, not here.
+
+  **Until it is fixed**, a code-only PR's green checks mean only that
+  Ubuntu lint and sanity passed. Nothing was built or tested on macOS.
+  Tracked as gh#93.
 - **Default** — the leftover initial-setup workflow (branch `main`, no
   files rule). Disable-or-delete candidate; kept only until the
   maintainer rules on it.
