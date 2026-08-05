@@ -1,22 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "センシングの流れを作り直したビルドです。同じ場所で4人以上が同時にアプリを開いてセンシングを始め、近くの3人が確認できた時点でイベントが自動的に確定し、証明を集めた表示のあと記録中の画面が続くことを確認してください。次にアプリを前面に戻したときにウォレット接続の案内が出るので、接続して署名（ウォレット側で2回承認）できること、断っても記録が止まらないこと、電波が途切れると人数が止まったまま保持され「Try Again」で元の人数から再開することも確認してください。"
+    "text": "ウォレットで出席を封印するときの表示が変わりました。この画面に到達するには、これまでどおり同じ場所で4人以上が同時にアプリを開いてセンシングする必要があります（近くの3人が確認できるとイベントが自動的に確定し、次にアプリを前面に戻したときにウォレットの案内が出ます）。ウォレットの確認画面に、読める文章とアプリ名、そして「この署名は取引を承認せず資産を動かしません」という趣旨の説明が表示されること、そのうえで署名がこれまでどおり完了することを確認してください。"
   },
   {
     "language": "en-US",
-    "text": "This build reworks the sensing flow. With four or more people opening the app and sensing together in the same place, confirm that the event confirms on its own once three nearby people are verified, and that the proof-collected moment is followed by the ongoing recording screen. Then bring the app back to the front: it should offer to connect a wallet and seal your attendance (two approvals in the wallet) — please also check that declining leaves recording running, and that after a signal drop the count stays frozen and \"Try Again\" resumes from the same count."
+    "text": "This build changes what your wallet shows when you seal your attendance. Reaching that screen still needs four or more people opening the app and sensing together in the same place: the event confirms on its own once three nearby people are verified, and the wallet prompt appears the next time you bring the app to the front. Please confirm the wallet's confirmation screen now shows readable text naming the app and a line saying the signature authorizes no transaction and moves no assets, and that signing still completes as before."
   },
   {
     "language": "zh-Hans",
-    "text": "本次构建重做了感应流程。请四人以上在同一地点同时打开应用并开始感应，确认在验证到附近三人后活动会自动确认，并且在显示已收集证明后继续进入记录中的界面。随后把应用切回前台，应会提示连接钱包并封存出席记录（需在钱包中确认两次）；也请确认拒绝后记录仍在继续，以及信号中断时人数会保持不变、点击“Try Again”可从相同人数继续。"
+    "text": "本次构建更改了在钱包中封存出席记录时的显示内容。要到达该界面，仍需四人以上在同一地点同时打开应用并开始感应（验证到附近三人后活动会自动确认，再次把应用切回前台时会出现钱包提示）。请确认钱包的确认界面现在显示的是可读的文字并写明应用名称，还有一句说明该签名不会授权任何交易、不会转移任何资产，并确认签名仍能像以往一样完成。"
   },
   {
     "language": "es-ES",
-    "text": "Esta versión rehace el flujo de detección. Con cuatro o más personas abriendo la app y detectando a la vez en el mismo lugar, comprueba que el evento se confirma solo al verificar a tres personas cercanas y que, tras el momento de prueba recogida, continúa la pantalla de grabación en curso. Después vuelve a poner la app en primer plano: debe ofrecer conectar una cartera y sellar tu asistencia (dos aprobaciones en la cartera); comprueba también que al rechazar la grabación sigue activa y que, tras una pérdida de señal, el recuento se mantiene congelado y \"Try Again\" reanuda desde el mismo recuento."
+    "text": "Esta versión cambia lo que muestra tu cartera al sellar tu asistencia. Para llegar a esa pantalla sigue haciendo falta que cuatro o más personas abran la app y detecten a la vez en el mismo lugar: el evento se confirma solo al verificar a tres personas cercanas, y el aviso de la cartera aparece la próxima vez que pongas la app en primer plano. Comprueba que la pantalla de confirmación de la cartera ahora muestra un texto legible con el nombre de la app y una línea que indica que la firma no autoriza ninguna transacción ni mueve activos, y que firmar sigue completándose como antes."
   },
   {
     "language": "fr-FR",
-    "text": "Cette version refait le flux de détection. À quatre personnes ou plus ouvrant l'app et détectant en même temps au même endroit, vérifiez que l'événement se confirme tout seul une fois trois personnes proches vérifiées, et qu'après le moment de preuve collectée l'écran d'enregistrement en cours prend le relais. Repassez ensuite l'app au premier plan : elle doit proposer de connecter un portefeuille et de sceller votre présence (deux approbations dans le portefeuille) ; vérifiez aussi qu'un refus laisse l'enregistrement actif et qu'après une perte de signal le compte reste figé et que « Try Again » reprend au même compte."
+    "text": "Cette version change ce que votre portefeuille affiche au moment de sceller votre présence. Pour atteindre cet écran, il faut toujours que quatre personnes ou plus ouvrent l'app et détectent en même temps au même endroit : l'événement se confirme tout seul une fois trois personnes proches vérifiées, et l'invite du portefeuille apparaît au prochain passage de l'app au premier plan. Vérifiez que l'écran de confirmation du portefeuille affiche désormais un texte lisible nommant l'app ainsi qu'une ligne indiquant que la signature n'autorise aucune transaction et ne déplace aucun actif, et que la signature aboutit toujours comme avant."
   }
 ]
