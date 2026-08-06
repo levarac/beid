@@ -390,52 +390,40 @@ class UnsentWindowLedgerReducerTest {
     }
 
     @Test
-    fun everyEninStopAndBackgroundCloseOrderingClosesOneWindowExactlyOnce() {
-        val permutations = listOf(
-            listOf(CloseTrigger.ENIN_TRANSITION, CloseTrigger.EXPLICIT_STOP, CloseTrigger.BACKGROUND),
-            listOf(CloseTrigger.ENIN_TRANSITION, CloseTrigger.BACKGROUND, CloseTrigger.EXPLICIT_STOP),
-            listOf(CloseTrigger.EXPLICIT_STOP, CloseTrigger.ENIN_TRANSITION, CloseTrigger.BACKGROUND),
-            listOf(CloseTrigger.EXPLICIT_STOP, CloseTrigger.BACKGROUND, CloseTrigger.ENIN_TRANSITION),
-            listOf(CloseTrigger.BACKGROUND, CloseTrigger.ENIN_TRANSITION, CloseTrigger.EXPLICIT_STOP),
-            listOf(CloseTrigger.BACKGROUND, CloseTrigger.EXPLICIT_STOP, CloseTrigger.ENIN_TRANSITION),
+    fun repeatedIdenticalCloseInputsCloseOneWindowExactlyOnce() {
+        var ledger = assertNotNull(
+            createUnsentWindowLedger(
+                ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
+            ).ledger,
         )
+        ledger = openUnsentWindow(ledger, "window-1").ledger
 
-        permutations.forEach { ordering ->
-            var ledger = assertNotNull(
-                createUnsentWindowLedger(
-                    ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
-                ).ledger,
-            )
-            ledger = openUnsentWindow(ledger, "window-1").ledger
+        val first = closeUnsentWindow(ledger, "window-1", "window-1")
+        assertTrue(first.isSuccess)
+        assertTrue(first.changed)
 
-            var closeRevision = 0L
-            ordering.forEachIndexed { index, trigger ->
-                val closed = applyExplicitCloseTrigger(
-                    ledger = ledger,
-                    windowId = "window-1",
-                    trigger = trigger,
-                )
-                assertTrue(closed.isSuccess, ordering.toString())
-                if (index == 0) {
-                    assertTrue(closed.changed, ordering.toString())
-                    closeRevision = closed.persistenceRevision
-                } else {
-                    assertFalse(closed.changed, ordering.toString())
-                    assertEquals(0L, closed.persistenceRevision, ordering.toString())
-                }
-                ledger = closed.ledger
-            }
+        val second = closeUnsentWindow(first.ledger, "window-1", "window-1")
+        assertTrue(second.isSuccess)
+        assertFalse(second.changed)
+        assertEquals(0L, second.persistenceRevision)
 
-            ledger = confirmUnsentWindowLedgerPersistence(ledger, closeRevision).ledger
-            val prepared = prepareNextUnsentWindowSubmission(ledger, 10, 0L)
-            val persisted = confirmUnsentWindowLedgerPersistence(
-                ledger = prepared.ledger,
-                revision = prepared.persistenceRevision,
-            )
-            val submission = assertNotNull(persisted.submission, ordering.toString())
-            assertEquals(1, submission.windowCount, ordering.toString())
-            assertEquals("window-1", submission.windowIdAt(0), ordering.toString())
-        }
+        val third = closeUnsentWindow(second.ledger, "window-1", "window-1")
+        assertTrue(third.isSuccess)
+        assertFalse(third.changed)
+        assertEquals(0L, third.persistenceRevision)
+
+        ledger = confirmUnsentWindowLedgerPersistence(
+            ledger = third.ledger,
+            revision = first.persistenceRevision,
+        ).ledger
+        val prepared = prepareNextUnsentWindowSubmission(ledger, 10, 0L)
+        val persisted = confirmUnsentWindowLedgerPersistence(
+            ledger = prepared.ledger,
+            revision = prepared.persistenceRevision,
+        )
+        val submission = assertNotNull(persisted.submission)
+        assertEquals(1, submission.windowCount)
+        assertEquals("window-1", submission.windowIdAt(0))
     }
 
     @Test
@@ -622,20 +610,4 @@ class UnsentWindowLedgerReducerTest {
         val submission: UnsentWindowSubmission,
     )
 
-    private fun applyExplicitCloseTrigger(
-        ledger: UnsentWindowLedger,
-        windowId: String,
-        trigger: CloseTrigger,
-    ): UnsentWindowLedgerTransition = when (trigger) {
-        CloseTrigger.ENIN_TRANSITION,
-        CloseTrigger.EXPLICIT_STOP,
-        CloseTrigger.BACKGROUND,
-        -> closeUnsentWindow(ledger, windowId, windowId)
-    }
-
-    private enum class CloseTrigger {
-        ENIN_TRANSITION,
-        EXPLICIT_STOP,
-        BACKGROUND,
-    }
 }

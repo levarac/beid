@@ -6,7 +6,14 @@ internal const val MAX_LEDGER_RECORD_COUNT = 100_000
 internal const val MAX_LEDGER_TEXT_FIELD_BYTES = 4 * 1024
 private val SUBMISSION_KEY = Regex("[0-9a-f]{48}")
 
-/** Returns the canonical UTF-8 snapshot text that native storage must persist atomically. */
+/**
+ * Returns the canonical UTF-8 snapshot text that native storage must persist atomically.
+ *
+ * Version 1 deliberately retains acknowledged reports and their windows; it
+ * has no pruning or compaction rule. A future format may legalize omission,
+ * but doing so changes canonical membership semantics and requires a
+ * versioned format revision rather than an encoder-only optimization.
+ */
 public fun encodeUnsentWindowLedgerSnapshot(
     ledger: UnsentWindowLedger,
 ): String = buildString {

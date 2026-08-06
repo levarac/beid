@@ -10,7 +10,16 @@ public class UnsentWindowLedger internal constructor(
     internal val state: LedgerState,
 )
 
-/** A reducer result with only concrete Swift-exportable properties. */
+/**
+ * A reducer result with only concrete Swift-exportable properties.
+ *
+ * `changed` means that native storage must persist `snapshotText`; it does
+ * not mean that `ledger` is identical when false. Persistence confirmation
+ * and one-shot submission emission intentionally return `changed == false`
+ * while advancing in-memory `durableRevision` or
+ * `lastEmittedReportRevision`. Every successful caller must therefore adopt
+ * the returned `ledger`, including the no-write path.
+ */
 public class UnsentWindowLedgerTransition internal constructor(
     public val ledger: UnsentWindowLedger,
     public val isSuccess: Boolean,

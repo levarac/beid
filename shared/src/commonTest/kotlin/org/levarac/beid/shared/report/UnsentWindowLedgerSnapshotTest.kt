@@ -1,6 +1,7 @@
 package org.levarac.beid.shared.report
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -8,6 +9,125 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class UnsentWindowLedgerSnapshotTest {
+    @Test
+    fun retryableFailureSnapshotHasStableBytesAndPreservesMultiWindowMembership() {
+        var ledger = assertNotNull(
+            createUnsentWindowLedger(
+                ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
+            ).ledger,
+        )
+
+        val openedA = openUnsentWindow(ledger, "window-a")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            openedA.ledger,
+            openedA.persistenceRevision,
+        ).ledger
+        val closedA = closeUnsentWindow(ledger, "window-a", "window-a")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            closedA.ledger,
+            closedA.persistenceRevision,
+        ).ledger
+
+        val openedB = openUnsentWindow(ledger, "window-b")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            openedB.ledger,
+            openedB.persistenceRevision,
+        ).ledger
+        val closedB = closeUnsentWindow(ledger, "window-b", "window-b")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            closedB.ledger,
+            closedB.persistenceRevision,
+        ).ledger
+
+        val prepared = prepareNextUnsentWindowSubmission(ledger, 10, 0L)
+        val preparedPersisted = confirmUnsentWindowLedgerPersistence(
+            prepared.ledger,
+            prepared.persistenceRevision,
+        )
+        val submission = assertNotNull(preparedPersisted.submission)
+        val failed = markUnsentWindowSubmissionRetryable(
+            ledger = preparedPersisted.ledger,
+            submissionKey = submission.submissionKey,
+            retryNotBeforeEpochMilliseconds = 1_234L,
+        )
+        val snapshot = assertNotNull(failed.snapshotText)
+        val expected = """
+            beid-ledger-snapshot\t1
+            revision\t6
+            ledger-id\t000102030405060708090a0b0c0d0e0f
+            next-window-sequence\t3
+            next-report-sequence\t2
+            windows\t2
+            window\t77696e646f772d61\t1\t2\t77696e646f772d61
+            window\t77696e646f772d62\t2\t4\t77696e646f772d62
+            reports\t1
+            report\t000102030405060708090a0b0c0d0e0f0000000000000001\t6\t1\tretryable_failed\t1234\t-\t77696e646f772d61,77696e646f772d62
+            end
+        """.trimIndent().replace("\\t", "\t") + "\n"
+
+        assertContentEquals(expected.encodeToByteArray(), snapshot.encodeToByteArray())
+        val restored = assertNotNull(decodeUnsentWindowLedgerSnapshot(snapshot).ledger)
+        assertEquals(snapshot, encodeUnsentWindowLedgerSnapshot(restored))
+    }
+
+    @Test
+    fun acknowledgedInclusionSnapshotHasStableBytes() {
+        var ledger = assertNotNull(
+            createUnsentWindowLedger(
+                ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
+            ).ledger,
+        )
+
+        val opened = openUnsentWindow(ledger, "window-1")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            opened.ledger,
+            opened.persistenceRevision,
+        ).ledger
+        val closed = closeUnsentWindow(ledger, "window-1", "window-1")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            closed.ledger,
+            closed.persistenceRevision,
+        ).ledger
+
+        val prepared = prepareNextUnsentWindowSubmission(ledger, 10, 0L)
+        val preparedPersisted = confirmUnsentWindowLedgerPersistence(
+            prepared.ledger,
+            prepared.persistenceRevision,
+        )
+        val submission = assertNotNull(preparedPersisted.submission)
+        val accepted = recordUnsentWindowSubmissionAcceptance(
+            ledger = preparedPersisted.ledger,
+            submissionKey = submission.submissionKey,
+            persistedAcceptanceReceiptReference = "acceptance-1",
+        )
+        ledger = confirmUnsentWindowLedgerPersistence(
+            accepted.ledger,
+            accepted.persistenceRevision,
+        ).ledger
+        val included = recordUnsentWindowSubmissionInclusion(
+            ledger = ledger,
+            submissionKey = submission.submissionKey,
+            persistedInclusionReceiptReference = "inclusion-1",
+        )
+        val snapshot = assertNotNull(included.snapshotText)
+        val expected = """
+            beid-ledger-snapshot\t1
+            revision\t5
+            ledger-id\t000102030405060708090a0b0c0d0e0f
+            next-window-sequence\t2
+            next-report-sequence\t2
+            windows\t1
+            window\t77696e646f772d31\t1\t2\t77696e646f772d31
+            reports\t1
+            report\t000102030405060708090a0b0c0d0e0f0000000000000001\t5\t1\tacknowledged\t616363657074616e63652d31\t696e636c7573696f6e2d31\t77696e646f772d31
+            end
+        """.trimIndent().replace("\\t", "\t") + "\n"
+
+        assertContentEquals(expected.encodeToByteArray(), snapshot.encodeToByteArray())
+        val restored = assertNotNull(decodeUnsentWindowLedgerSnapshot(snapshot).ledger)
+        assertEquals(snapshot, encodeUnsentWindowLedgerSnapshot(restored))
+    }
+
     @Test
     fun rejectsAReportWhoseWindowMembershipIsNotInCanonicalCloseOrder() {
         var ledger = assertNotNull(
