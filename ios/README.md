@@ -15,12 +15,22 @@ open Beid.xcodeproj
 Or from the CLI:
 
 ```sh
-xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcrun simctl list devices available
 
 xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' build
+
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' test
 ```
+
+Use a concrete UDID from the first command. Several installed simulators can
+share a name, so `name=...` is ambiguous on this host. Do not replace the
+destination with `generic/platform=iOS Simulator`: a generic destination can
+also build x86_64, while one binary dependency currently provides only an
+arm64 Simulator slice. If a link error names an architecture that no usable
+simulator on the host actually has, check the destination before changing
+code or chasing the error's symbol names.
 
 Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 `navigationDestination(item:)` for the item-detail push requires it).
@@ -29,9 +39,9 @@ Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 
 `project.yml` consumes
 [`levarac/barnard`](https://github.com/levarac/barnard) as a remote SwiftPM
-package pinned to the exact `0.2.0` release. The committed
+package pinned to the exact `0.3.0` release. The committed
 `Package.resolved` records the release's precise revision for reproducible
-builds.
+builds. Verified 2026-08-07 against `project.yml` and `Package.resolved`.
 
 Historically, beid copied barnard's Swift package into the repository because
 barnard did not have a root `Package.swift`, which SwiftPM requires for a

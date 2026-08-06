@@ -1,10 +1,16 @@
 # beid KMP shared foundation 作業マニュアル
 
-最終更新: 2026-08-06
+最終更新: 2026-08-07
+
+実装照合: `origin/main` @
+`11e33f5ce0f110f6083ae4a9a1b5cd90c33f1edf`、`ios/project.yml`、
+`Package.resolved`、Android Gradle graph、`.github/workflows/pr-ci.yml`。
 
 この文書は、beid に Kotlin Multiplatform の `shared/` module を導入し、iOS と Android の共通判断を一つずつ移すための手順書です。設計案を並べる文書ではありません。作業者は上から順に実施し、各 gate を満たしてから次へ進んでください。
 
 基礎にした方法は ShiokazeHD/umidori の v0.10.0 KMP 切替です。ただし、beid は greenfield、Umidori は既存の Swift shared runtime からの切替でした。Umidori の構造と証明方法を使い、Umidori 固有の runner・一括置換・旧 runtime 削除はコピーしません。
+
+上の照合時点で `origin/main` に production 接続されている KMP 実装は walking skeleton だけです。以下の family 一覧は移行台帳であり、実装済み機能の一覧ではありません。各 family の code、両 platform の production caller、test が揃うまで「動いている」と扱いません。
 
 ## 1. 最初に決めること
 
@@ -115,6 +121,10 @@ effect は native が実行します。たとえば reducer が `PersistWindow` 
 
 表示は native のままですが、表示する数値は shared output を使います。相互確認数、時間帯別集計、Contributor Proof、anchor edge、将来の booth-visit derivation を Swift / Kotlin で別々に計算しません。
 
+### 両 OS を一つの feature として扱う
+
+feature を追加または shared へ移す PR は、Android と iOS の production caller を両方更新します。一方を触らない場合は、PR description に理由を書きます。「今回は対象外」だけではなく、platform 固有の effect なのか、もう一方の production flow がまだ存在しないのかを明記します。shared test だけ通っても、どちらの app が実際にその判断を使うかは証明できないためです。
+
 ## 3. walking skeleton を作る
 
 最初の PR は product rule を移しません。module boundary と build path だけを作ります。
@@ -132,6 +142,8 @@ effect は native が実行します。たとえば reducer が `PersistWindow` 
 
 Swift Export の生成物は derived artifact です。手で編集せず、runtime authority として commit しません。API review 用 snapshot を置く場合も、fresh generation と一致することを CI で検査し、snapshot を実行時依存にはしません。
 
+Kotlin の package 配置は Swift source API の一部です。package を移すと生成される Swift の呼び方が変わるため、内部整理だけとは扱いません。生成 package namespace は lowercase で、同名の local binding に shadow されます。既定は `BeidSharedKit.report.SomeSharedType` のような module-qualified spelling です。同じ concrete type を何度も使う時だけ、`private typealias Ledger = BeidSharedKit.report.UnsentWindowLedger` のように右辺を完全修飾した private alias を使えます。package 全体の namespace alias は ownership の出所を隠すため作りません。
+
 ### walking skeleton の完了条件
 
 - Android app が `project(":shared")` を使って compile する。
@@ -139,7 +151,7 @@ Swift Export の生成物は derived artifact です。手で編集せず、runt
 - `:shared:iosSimulatorArm64Test` が通る。
 - Xcode build が build phase で Swift Export を新規生成し、iOS app と tests がそれを import する。
 - generated output を消した状態からでも Xcode build が復元できる。
-- 存在しない shared symbol、古い module 名、古い import を意図的に入れると CI が compile error で落ちる。
+- `compile-fixtures/` の one-shot patch を disposable checkout へ適用し、存在しない shared symbol、古い module 名、古い import が compile error になることを手動で確認する。negative fixture の定期 CI gate 化は Issue #110 へ意図的に延期されており、現行 CI はこの確認を実行しない。
 
 ## 4. 一つの family を移す
 
@@ -215,6 +227,34 @@ native persistence adapter は shared codec が返した bytes を tmp file + at
 
 ## 6. CI lane
 
+### local Gradle
+
+macOS の local build は Android Studio 同梱 JDK を使います。system Java 25 はこの Gradle / Kotlin 構成を起動できません。
+
+```bash
+cd android
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+  ./gradlew :shared:testAndroidHostTest \
+  :app:testDebugUnitTest \
+  :app:assembleDebug \
+  --no-daemon --no-parallel
+```
+
+最後の `BUILD SUCCESSFUL` だけでは test 実行の証拠になりません。実行を期待した task に `NO-SOURCE` が出たら、その task は source / test を 0 件処理したという意味です。対象 task が `NO-SOURCE` でないことと、test report の件数を確認します。beid では空の test task が長く green に見えていたため、これは形式的な注意ではありません。
+
+### local iOS
+
+build 先は、`xcrun simctl list devices available` で得た concrete Simulator UDID を指定します。複数の simulator が同じ名前を持つため name-based destination は使いません。`generic/platform=iOS Simulator` は x86_64 も build 対象に含めることがあり、arm64-only binary dependency の link に失敗します。
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
+  xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  build-for-testing
+```
+
+link error が、この host の simulator に存在しない architecture を名指ししたら、symbol 名から自分の code を疑う前に destination を確認します。dependency が変わっても使える signal は error に出た architecture です。
+
 ### GitHub-hosted Ubuntu
 
 beid は ShiokazeHD の self-hosted-only 制約の対象ではありません。軽量な required check は `ubuntu-latest` で構いません。
@@ -245,9 +285,29 @@ Xcode Cloud で確認するもの:
 - iOS app build と tests が fresh output に対して通る。
 - ownership gate が iOS production caller を含めて通る。
 
+Xcode Cloud の iOS lane は metered です。open PR の branch へ push すると実費のある build が起動し得るため、反復は local build で行い、push はまとめます。
+
+自動 PR workflow では、green の有無を見る前に exact head SHA に iOS check が存在することを確認します。現在は workflow が無言で起動しない場合があり、Ubuntu の checks だけが green のまま残るためです。存在し、かつ同じ SHA で green になって初めて iOS gate を満たします。
+
+将来 workflow を manual trigger へ変えた場合、この存在確認の読み方は逆になります。trigger 前の不在は正常です。その場合は、意図して起動した run が exact head SHA を対象にし、green になったことを記録します。自動起動を前提にした「不在は異常」という規則を、そのまま manual workflow に適用しません。
+
+### test scope
+
+変更した file には、その file の production behavior を覆う full covering suite を実行します。個別 test だけを指定してよいのは、その test の下にある code を変更していない時だけです。新しく書いた test class が green でも、同じ production file を覆う既存 suite の代わりにはなりません。
+
+metered な CI の費用は、local で反復して push をまとめる理由にはなります。しかし、変更した code の regression coverage を狭める理由にはなりません。ledger slice では、費用を抑えるため targeted test を選んだ時、変更済みの native coordinator を覆う既存 test が実行対象から外れました。その既存 test が覆っていた App Review demo の停止 regression と durable record の重複は、suite ではなく後続 review で発見されました。
+
+**A cost constraint quietly rewrote a correctness practice, and it looked reasonable at the time.**
+
+### review gate
+
+作者が手配した review は有用な self-check ですが、独立 review gate を満たしません。gate には、作者から独立して dispatch された reviewer が必要です。self-check と independent gate は別の evidence として報告します。
+
+この train では二度、違いが具体化しました。walking-skeleton slice の maker-arranged audit は blocker なしでしたが、independent review は app-local class が shared type を置き換えても既存 check が green のままになる ownership hole を見つけました。ledger slice でも maker-arranged audit の後、independent review が二つの blocker を見つけ、その一つは shipped App Review path の regression と durable record の重複でした。どちらの self-check も不誠実ではなく、実装者の落ち度を示す事例でもありません。作者が review の範囲と入口を選ぶ構造と、独立した gate の構造が違うためです。
+
 ### path filter
 
-`shared/**` の変更は Android と iOS の両 lane を起動します。`android/settings.gradle.kts`、Gradle wrapper/plugin version、JDK selector の変更も両 lane を起動します。module build の前提が変わるためです。
+`shared/**` の変更は Android と iOS の両 lane の対象です。`android/settings.gradle.kts`、Gradle wrapper/plugin version、JDK selector の変更も同じです。module build の前提が変わるためです。GitHub Actions の Android lane は repository workflow から確認できます。Xcode Cloud の自動 PR workflow でも start condition 上の対象ですが、無言で欠落する既知事象があるため、実際に exact head に存在することまで確認します。
 
 ## 7. build 成功を報告する時の証拠
 
@@ -302,6 +362,7 @@ source branch で通った結果を destination branch の証拠として使い�
 - [ ] 台帳の family / class / oracle または invariant が埋まっている
 - [ ] RED の falsifier を確認した
 - [ ] shared vector に欠落・空・境界・unknown を含めた
+- [ ] feature PR は Android / iOS の両方を更新した。片方を触らない場合は、その platform 境界または未配線の理由を PR description に書いた
 - [ ] Android と iOS の production caller を全数確認した
 - [ ] native adapter に判断が残っていない
 - [ ] report の署名対象 payload と digest は shared が facilitator spec に従って作り、native signer は digest だけを受け取る
@@ -311,8 +372,11 @@ source branch で通った結果を destination branch の証拠として使い�
 - [ ] Barnard-shaped code を shared に置かず、境界確認を null / length / container shape に限定して semantic re-check を重複させていない
 - [ ] candidate scoring を含める場合、Issue #100 担当者の interface ACK が記録され、adoption / presentation を移していない
 - [ ] OS / wallet / storage engine の責務を shared に移していない
-- [ ] Android host test と app build が clean checkout で通った
+- [ ] Android host test と app build が clean checkout で通り、期待した test task が `NO-SOURCE` でなく test 件数を記録した
+- [ ] 変更した各 file を覆う full covering suite を実行した。個別 test だけに絞った場合は、その下の code を変更していないことを確認した
 - [ ] Xcode Cloud が fresh Swift Export から app/test を build した
+- [ ] 自動 Xcode Cloud workflow では exact head SHA に iOS check が存在し、green であることを確認した。manual workflow なら exact head を対象に起動した run を記録した
+- [ ] 作者から独立して dispatch された reviewer が gate を実施した。maker-arranged review は self-check として別に記録した
 - [ ] exact head SHA と SHA-filtered CI run ID を記録した
 - [ ] published dependency を変更した場合、resolved version と取得経路を記録した
 - [ ] forward-port がある場合、destination branch の graph で再検証した
@@ -325,3 +389,5 @@ source branch で通った結果を destination branch の証拠として使い�
 - `ShiokazeHD/umidori@release/0.10.0`: `shared/build.gradle.kts`、Android settings/app、PR CI
 - `Levarac/design-notes/2026-08-06-beid-reporting-claim-architecture.md`
 - Kura `journal/2026-08-06-levarac-beid-android-ci-blind-spot.md`
+- thegreeting/beid Issue #115: cold-start worker 向けの shared/native 境界と運用知識
+- thegreeting/beid Issue #110: negative compile fixture の定期 CI gate 化（現時点では未実装）

@@ -13,6 +13,145 @@ is consumed from the exact remote SwiftPM release pinned in
 `ios/project.yml` and `Package.resolved` (see `ios/README.md` "Barnard SDK
 dependency").
 
+## KMP shared/native development contract
+
+Verified 2026-08-07 against `origin/main` at
+`11e33f5ce0f110f6083ae4a9a1b5cd90c33f1edf`, `ios/project.yml`,
+`Package.resolved`, the Android Gradle graph, and the current CI files.
+This is a last-checked record, not a substitute for refreshing the target ref
+before new work.
+
+[`docs/kmp-shared-foundation.md`](docs/kmp-shared-foundation.md) is the
+implementation contract for moving a behavior into `shared/`. It is an
+ordered procedure, not a list of optional ideas: classify the behavior, fix
+its oracle or invariant, record RED evidence, implement the shared decision,
+add thin native adapters and production callers, then pass every ownership
+and build gate before moving on. Start at section 1 and work downward.
+
+At the verification point above, `origin/main` wires only the KMP walking
+skeleton into both apps. The families listed in the foundation manual are a
+migration inventory, not proof that those features work in production. A
+family is wired only when its current code, platform callers, and tests show
+that it is.
+
+### Ownership boundary
+
+`shared/` owns decisions for which iOS and Android must produce the same
+answer. Native code owns effects and operating-system integration.
+
+| `shared/` owns | Native iOS / Android owns |
+| --- | --- |
+| beid data models, decode/validation, deterministic derivation, reducers, portable snapshot formats, common error/recovery categories, and port interfaces | BLE and lifecycle callbacks, permissions, Keychain/Keystore, storage location and atomic writes, network transport, key retrieval and signature execution, UI and navigation |
+| Canonical payload or digest assembly only when the governing external specification makes it a client responsibility | Calling Barnard and preserving Barnard artifacts without reimplementing its protocol semantics |
+
+A native adapter normally maps native input to a shared input, calls shared
+once, performs the returned effect, and maps the result back. If Swift and
+Kotlin each retain a branch that chooses the same product outcome, the
+decision has not actually moved to `shared/`.
+
+Three decisions define this boundary:
+
+- **KMP-001 — `shared/` is project-internal.** Android and iOS build it from
+  the same checkout instead of consuming a published Maven or SwiftPM
+  artifact. The checked-out tree therefore identifies the shared code
+  without a second version-resolution surface. Publishing it later is a
+  change to this decision and requires artifact provenance in CI.
+- **KMP-002 — Barnard remains native on both platforms.** Barnard already
+  owns BLE, B002-B005, owner-key/binding ceremonies, canonical Barnard
+  messages, and their protocol invariants. Rechecking those semantics in
+  beid shared code would create a second Barnard implementation. `shared/`
+  may check only boundary shape such as nullability, byte length, and
+  container form.
+- **KMP-003 — event scoring and event adoption are separate.** A pure time
+  filter and deterministic ranking may become shared so both platforms
+  order candidates identically. Choosing a candidate, presenting it, and
+  changing lifecycle state remain native/product behavior owned by Issue
+  #100. Do not migrate scoring until that owner has acknowledged the
+  interface.
+
+### Both-OS feature rule
+
+A PR that adds or moves a product feature must touch both platform call
+paths, or its description must state why one platform is intentionally
+untouched. A valid reason names the actual boundary or current gap—for
+example, a platform-only effect or an Android production flow that does not
+exist yet. Silence is not a reason. Shared tests alone also do not prove that
+either app calls the shared implementation.
+
+### Swift Export package names are API
+
+Moving a Kotlin declaration between packages changes generated Swift source
+names, so package placement is a public-API decision for this repository.
+Generated package namespaces are lowercase, and a local Swift binding with
+the same name shadows them.
+
+- Default to module-qualified spelling such as
+  `BeidSharedKit.report.SomeSharedType`.
+- When a concrete type repeats, a private alias is acceptable only with a
+  fully qualified right-hand side, for example
+  `private typealias Ledger = BeidSharedKit.report.UnsentWindowLedger`.
+- Never create a package-wide namespace alias. It hides which module owns a
+  decision, and that provenance is what the ownership gate is meant to
+  prove.
+
+### Local and CI evidence traps
+
+- **Use a concrete iOS Simulator UDID.** Several installed simulators can
+  share a name, so name-based destinations are ambiguous. A generic
+  Simulator destination may add x86_64 even when every usable simulator on
+  the host is arm64. If a link error names an architecture that no simulator
+  on the host actually uses, inspect the destination before changing code or
+  dependency symbols. See `ios/README.md` for the command form.
+- **Use Android Studio's JDK for local Gradle.** The ambient system Java 25
+  breaks this build. On macOS the stable local default is
+  `/Applications/Android Studio.app/Contents/jbr/Contents/Home`; CI selects
+  its own pinned JDK 17.
+- **Read Gradle task outcomes, not only the final green line.** `NO-SOURCE`
+  means that task executed zero sources or tests. For every test task that
+  was expected to run, require a non-`NO-SOURCE` outcome and report the test
+  count; otherwise an empty test lane can look successful.
+- **Run the full covering suite for any file you modified. Target individual
+  tests only when you did not modify the code beneath them.** A metered CI
+  lane is a reason to iterate locally and batch pushes; it is not a reason
+  to narrow regression coverage over changed code. During the ledger slice,
+  targeted tests were selected under budget pressure even though the native
+  coordinator had changed. Existing tests covered the resulting App Review
+  demo regression and duplicate durable records, but review found them later
+  because that suite was not run at the implementation gate.
+
+  **A cost constraint quietly rewrote a correctness practice, and it looked
+  reasonable at the time.**
+- **Require the Xcode Cloud iOS check on the exact head SHA.** The current
+  automatic PR workflow can silently omit the check while the Ubuntu checks
+  remain green. Verify both existence and success on the commit under
+  review. Xcode Cloud is metered, so pushing to a branch with an open PR can
+  spend real budget; use local builds for iteration and batch pushes. If the
+  workflow later becomes manually triggered, invert the existence rule:
+  absence before the deliberate trigger is expected, and the evidence must
+  instead record that the manual run targeted the exact head and passed.
+- **Negative compile fixtures are manual today.** The fixtures in
+  `compile-fixtures/` prove stale Kotlin symbols and old Swift module names
+  fail when applied in a disposable checkout. Recurring CI automation is
+  intentionally deferred to Issue #110; do not claim that CI currently runs
+  them.
+
+### Review gate
+
+**A review arranged by the author of the work does not satisfy the review
+gate. The gate requires a reviewer dispatched independently of the author.**
+An author-arranged review is still a useful self-check; report the two
+artifacts separately.
+
+This train produced the same distinction twice. On the walking-skeleton
+slice, an author-arranged audit found no blockers, while the independently
+dispatched review found an ownership hole that allowed an app-local class to
+replace the shared type with every existing check still green. On the ledger
+slice, an author-arranged audit also passed, while the independent review
+found two blockers, including a regression in the shipped App Review path
+that produced duplicate durable records. Neither self-check was dishonest and
+no implementer did anything wrong: the gap is a structural property of who
+selects the reviewer and frames the review, not a judgment about a person.
+
 ## Localization Process
 
 - **Source language**: English (`en`). All user-facing strings are authored
@@ -157,7 +296,10 @@ delivery files:
 - `pr-ci` はすべての PR で Ubuntu 上の lint と sanity を実行する。macOS
   でのビルドとテストは Xcode Cloud が担当するため、この workflow には
   含めない。
-- レビューは必須ではない。これは 2026-07-27 のオーナー判断による。
+- GitHub branch protection は approving review を merge 条件にしない。
+  これは 2026-07-27 のオーナー判断による repository setting であり、
+  上の KMP review gate を免除しない。KMP の independent review は作業上の
+  gate、GitHub の approving review は merge button の設定で、別の条件である。
 
 - **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
   root). Changing this file on any branch push both **triggers** the

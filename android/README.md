@@ -8,18 +8,19 @@ screen, the design-system theme, and a compiling SDK dependency.
 
 ## Build & run
 
-Requires **JDK 17** — AGP 8.11.1 fails to run under JDK 25 with an opaque
-`BUILD FAILED … What went wrong: 25.0.3` error (no stack trace). If your
-default `JAVA_HOME` is newer, point Gradle at 17 explicitly:
+For local macOS builds, use the JDK bundled with Android Studio. AGP 8.11.1
+fails under the ambient system Java 25 with an opaque
+`BUILD FAILED … What went wrong: 25.0.3` error (no stack trace). Point Gradle
+at Android Studio's JBR explicitly instead of relying on the shell default:
 
 ```sh
-brew install openjdk@17   # if you don't have it
 cd android
-JAVA_HOME=$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+  ./gradlew assembleDebug
 ```
 
-Or set `org.gradle.java.home` in `gradle.properties` / your global Gradle
-config if you'd rather not pass `JAVA_HOME` per invocation.
+CI selects its pinned JDK 17 separately. Do not change the repository's
+Gradle configuration merely to accommodate an unsupported ambient JDK.
 
 APK lands at `app/build/outputs/apk/debug/app-debug.apk`. To run it:
 
@@ -32,9 +33,10 @@ adb shell am start -n org.levarac.beid/.MainActivity
 
 beid consumes [levarac/barnard](https://github.com/levarac/barnard) from
 Maven Central with the exact coordinate
-`implementation("org.levarac:barnard:0.2.0")`. Both the Android application
+`implementation("org.levarac:barnard:0.3.0")`. Both the Android application
 and the SDK therefore resolve from published, reproducible artifacts; no
-submodule or Gradle composite build is required.
+submodule or Gradle composite build is required. Verified 2026-08-07 against
+`app/build.gradle.kts`.
 
 `settings.gradle.kts` provides `mavenCentral()` through
 `dependencyResolutionManagement.repositories`. To update the SDK, change the
@@ -122,12 +124,9 @@ translations in this PR is safe.
 
 ## What's deliberately not here
 
-- No CI workflow wiring (task scope: prove `./gradlew assembleDebug`
-  succeeds locally; CI wiring is a stated follow-up).
 - No ProGuard/R8 minification config beyond Gradle defaults (`isMinifyEnabled
   = false` for debug and release, matching barnard's own example app — real
   release signing/minification is a pre-launch concern, not scaffold scope).
-- No unit/instrumentation tests yet (iOS's scaffold PR landed
-  `BeidNativeTests` alongside its views; the Android equivalent is a
-  reasonable immediate follow-up rather than bundling it into an
-  already-broad first slice).
+- No instrumentation or device E2E tests yet. JVM unit tests currently cover
+  the app-to-`shared/` bridge, and `.github/workflows/pr-ci.yml` runs those
+  tests, the shared Android host tests, and `:app:assembleDebug` on PRs.
