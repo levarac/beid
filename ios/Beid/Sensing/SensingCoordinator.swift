@@ -45,6 +45,7 @@ final class SensingCoordinator: ObservableObject {
   private let ownerKeyProvider = OwnerKeyProvider()
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private let windowReportStore: WindowReportStore
+  private let unsentWindowLedgerRuntime: UnsentWindowLedgerRuntime?
   private let bindingRecordStore = BindingRecordStore()
   private let selfProofStore: SelfProofStore
   private var demoTask: Task<Void, Never>?
@@ -64,6 +65,13 @@ final class SensingCoordinator: ObservableObject {
   /// `peersVerified` (§4.3).
   private var distinctPeerRpids: Set<String> = []
   private var currentWindowEnin: Int?
+  private var currentWindowId: UUID?
+  private var currentWindowObservationReference: String?
+  #if DEBUG
+  /// Test seam for pre-seeding an already-durable observation artifact so
+  /// ledger lifecycle tests do not benchmark the out-of-scope Barnard signer.
+  var currentWindowIdForTesting: UUID? { currentWindowId }
+  #endif
   /// The session's first observed ENIN window — `eninStart` for the
   /// self-proof layer (§2.2). Set once, the first time `currentWindowEnin`
   /// is set (real path: `advanceWindowIfNeeded`; demo path:
@@ -131,7 +139,20 @@ final class SensingCoordinator: ObservableObject {
   #endif
 
   convenience init() {
-    self.init(windowReportStore: WindowReportStore())
+    let runtime: UnsentWindowLedgerRuntime?
+    do {
+      runtime = try UnsentWindowLedgerRuntime(
+        store: try UnsentWindowLedgerStore()
+      )
+    } catch {
+      runtime = nil
+      print("Unable to load the shared unsent-window ledger: \(error)")
+    }
+    self.init(
+      windowReportStore: WindowReportStore(),
+      selfProofStore: SelfProofStore(),
+      unsentWindowLedgerRuntime: runtime
+    )
   }
 
   /// Test-only entry point: `WindowReportStore()`'s default file-backed
@@ -140,7 +161,10 @@ final class SensingCoordinator: ObservableObject {
   /// the compiler — so the injectable overload can't carry its own default
   /// value; `init()` above supplies it instead.
   convenience init(windowReportStore: WindowReportStore) {
-    self.init(windowReportStore: windowReportStore, selfProofStore: SelfProofStore())
+    self.init(
+      windowReportStore: windowReportStore,
+      selfProofStore: SelfProofStore()
+    )
   }
 
   /// Test-only entry point, same rationale as `init(windowReportStore:)`
@@ -149,9 +173,45 @@ final class SensingCoordinator: ObservableObject {
   /// `docs/specs/session-end-finalization.md` §8.2) against an isolated
   /// file instead of the shared on-device default, without touching the
   /// self-proof signing/persistence logic itself.
-  init(windowReportStore: WindowReportStore, selfProofStore: SelfProofStore) {
+  convenience init(windowReportStore: WindowReportStore, selfProofStore: SelfProofStore) {
+    let fileURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent("unsent-window-ledger-test-\(UUID().uuidString).snapshot")
+    guard
+      let store = try? UnsentWindowLedgerStore(fileURL: fileURL),
+      let runtime = try? UnsentWindowLedgerRuntime(store: store)
+    else {
+      preconditionFailure("Unable to create isolated unsent-window ledger")
+    }
+    self.init(
+      windowReportStore: windowReportStore,
+      selfProofStore: selfProofStore,
+      unsentWindowLedgerRuntime: runtime
+    )
+  }
+
+  init(
+    windowReportStore: WindowReportStore,
+    selfProofStore: SelfProofStore,
+    unsentWindowLedgerRuntime: UnsentWindowLedgerRuntime?
+  ) {
+    var recoveredRuntime = unsentWindowLedgerRuntime
+    if let runtime = recoveredRuntime {
+      do {
+        let durableReports = try windowReportStore.persistedReportsForLedgerRecovery()
+        let persistedObservations = durableReports.map { report in
+          let reference = report.id.uuidString.lowercased()
+          return (windowId: reference, reference: reference)
+        }
+        try runtime.reconcileAfterRelaunch(persistedObservations: persistedObservations)
+      } catch {
+        recoveredRuntime = nil
+        print("Unable to reconcile the shared unsent-window ledger: \(error)")
+      }
+    }
+
     self.windowReportStore = windowReportStore
     self.selfProofStore = selfProofStore
+    self.unsentWindowLedgerRuntime = recoveredRuntime
     engine.onEvent = { [weak self] event in
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
@@ -200,7 +260,7 @@ final class SensingCoordinator: ObservableObject {
   /// Records the detection against the running peer count and window, then
   /// applies whatever phase transition that observation implies.
   private func observe(enin: Int, rpid: String, for session: EventSession) {
-    advanceWindowIfNeeded(enin: enin, eventCode: session.id)
+    guard advanceWindowIfNeeded(enin: enin, eventCode: session.id) else { return }
     currentWindowRpids.insert(rpid)
     guard distinctPeerRpids.insert(rpid).inserted else { return }
 
@@ -250,7 +310,7 @@ final class SensingCoordinator: ObservableObject {
   @discardableResult
   func stopSensing() -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
-    closeFinalWindowIfNeeded()
+    guard closeFinalWindowIfNeeded() else { return selfProof }
     demoTask?.cancel()
     demoTask = nil
     engine.stopAuto()
@@ -293,7 +353,7 @@ final class SensingCoordinator: ObservableObject {
   @discardableResult
   func reset() -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
-    closeFinalWindowIfNeeded()
+    guard closeFinalWindowIfNeeded() else { return selfProof }
     demoTask?.cancel()
     demoTask = nil
     resetSessionState()
@@ -304,6 +364,8 @@ final class SensingCoordinator: ObservableObject {
   private func resetSessionState() {
     distinctPeerRpids = []
     currentWindowEnin = nil
+    currentWindowId = nil
+    currentWindowObservationReference = nil
     firstWindowEnin = nil
     lastWindowEnin = nil
     demoWindowEnin = 0
@@ -511,25 +573,42 @@ final class SensingCoordinator: ObservableObject {
 
   // MARK: - Per-window report signing (Q9, §4.5)
 
-  private func advanceWindowIfNeeded(enin: Int, eventCode: String) {
+  private func advanceWindowIfNeeded(enin: Int, eventCode: String) -> Bool {
     guard let openEnin = currentWindowEnin else {
-      currentWindowEnin = enin
-      lastWindowEnin = enin
-      // Not unconditional: once a mid-session checkpoint can nil
-      // `currentWindowEnin` without ending the session (backgrounding,
-      // `docs/specs/session-end-finalization.md` §3.4), this branch can be
-      // re-entered more than once per session — `firstWindowEnin` must
-      // still only ever be set once, at the session's true first window.
-      if firstWindowEnin == nil {
-        firstWindowEnin = enin
-      }
-      return
+      return openWindow(enin: enin)
     }
-    guard openEnin != enin else { return }
-    closeWindow(enin: openEnin, eventCode: eventCode)
+    guard openEnin != enin else {
+      return currentWindowObservationReference == nil
+    }
+    guard closeWindow(enin: openEnin, eventCode: eventCode) else { return false }
     currentWindowRpids = []
+    currentWindowEnin = nil
+    currentWindowId = nil
+    currentWindowObservationReference = nil
+    return openWindow(enin: enin)
+  }
+
+  private func openWindow(enin: Int) -> Bool {
+    guard let unsentWindowLedgerRuntime else { return false }
+    let windowId = UUID()
+    do {
+      try unsentWindowLedgerRuntime.openWindow(
+        windowId: windowId.uuidString.lowercased()
+      )
+    } catch {
+      print("Unable to persist an open shared-ledger window: \(error)")
+      return false
+    }
+
+    currentWindowId = windowId
     currentWindowEnin = enin
     lastWindowEnin = enin
+    // Not unconditional: a background checkpoint can open another window
+    // in the same session, but the self-proof start remains the first one.
+    if firstWindowEnin == nil {
+      firstWindowEnin = enin
+    }
+    return true
   }
 
   /// Closes whatever window is still open at explicit-stop time
@@ -540,12 +619,13 @@ final class SensingCoordinator: ObservableObject {
   /// is open (`currentWindowEnin == nil`) — true both for a session that
   /// never observed a peer, and, once this is called a second time in a
   /// row, for the case right after the first call already closed the
-  /// window and `resetSessionState()` nil'd `currentWindowEnin` — the same
-  /// guard covers both, so no separate idempotency mechanism is needed
-  /// (§3.6).
-  private func closeFinalWindowIfNeeded() {
-    guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
-    closeWindow(enin: enin, eventCode: eventCode)
+  /// window and `resetSessionState()` nil'd `currentWindowEnin`. This native
+  /// guard only says there is no lifecycle input to forward; shared remains
+  /// authoritative if duplicate close inputs race (§3.6).
+  private func closeFinalWindowIfNeeded() -> Bool {
+    guard let enin = currentWindowEnin else { return true }
+    guard let eventCode = currentSessionEventCode else { return false }
+    return closeWindow(enin: enin, eventCode: eventCode)
   }
 
   /// Checkpoints (does not end) an in-progress session when the app
@@ -564,17 +644,15 @@ final class SensingCoordinator: ObservableObject {
   /// leaving the just-closed `enin` in place) for two reasons: (1) so the
   /// next detection opens a genuinely new window instead of silently
   /// reusing the closed one, and (2) so a following
-  /// `stopSensing()`/`reset()` doesn't re-close the same `enin` a second
-  /// time — `closeFinalWindowIfNeeded()`'s existing guard on
-  /// `currentWindowEnin` being non-nil already covers that once this is
-  /// nil'd, the same guard-on-nil mechanism §3.6 already relies on for
-  /// `stopSensing()`/`reset()` called twice in a row. No separate
-  /// idempotency mechanism is introduced here.
+  /// `stopSensing()`/`reset()` has no stale lifecycle input to forward.
+  /// Shared still owns duplicate-close handling if callbacks race (§3.6).
   func checkpointOpenWindowForBackgrounding() {
     guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
-    closeWindow(enin: enin, eventCode: eventCode)
+    guard closeWindow(enin: enin, eventCode: eventCode) else { return }
     currentWindowRpids = []
     currentWindowEnin = nil
+    currentWindowId = nil
+    currentWindowObservationReference = nil
   }
 
   /// Signs the closing window's observations with the event signing key
@@ -582,18 +660,51 @@ final class SensingCoordinator: ObservableObject {
   /// and queues the report locally. No transport exists yet
   /// (`scan-protocol-model.md` §9 lists that as separate downstream work) —
   /// this only produces and stores the signature.
-  private func closeWindow(enin: Int, eventCode: String) {
-    guard let commit = activeCommit else { return }
-    let payload = windowReportPayload(eventCode: eventCode, enin: enin, peerRpids: currentWindowRpids, commit: commit)
-    let signature = identity.sign(eventCode: eventCode, bytes: payload)
-    let report = WindowReport(
-      eventCode: eventCode,
-      enin: enin,
-      peerCount: currentWindowRpids.count,
-      commit: commit,
-      signature: signature
-    )
-    windowReportStore.add(report)
+  private func closeWindow(enin: Int, eventCode: String) -> Bool {
+    guard
+      let commit = activeCommit,
+      let currentWindowId,
+      let unsentWindowLedgerRuntime
+    else {
+      return false
+    }
+
+    do {
+      let observationReference: String
+      if let currentWindowObservationReference {
+        observationReference = currentWindowObservationReference
+      } else if let persisted = windowReportStore.report(id: currentWindowId) {
+        observationReference = persisted.id.uuidString.lowercased()
+        currentWindowObservationReference = observationReference
+      } else {
+        let payload = windowReportPayload(
+          eventCode: eventCode,
+          enin: enin,
+          peerRpids: currentWindowRpids,
+          commit: commit
+        )
+        let signature = identity.sign(eventCode: eventCode, bytes: payload)
+        let report = WindowReport(
+          id: currentWindowId,
+          eventCode: eventCode,
+          enin: enin,
+          peerCount: currentWindowRpids.count,
+          commit: commit,
+          signature: signature
+        )
+        observationReference = try windowReportStore.add(report)
+        currentWindowObservationReference = observationReference
+      }
+
+      try unsentWindowLedgerRuntime.closeWindow(
+        windowId: currentWindowId.uuidString.lowercased(),
+        persistedObservationReference: observationReference
+      )
+      return true
+    } catch {
+      print("Unable to persist a closed shared-ledger window: \(error)")
+      return false
+    }
   }
 
   private func windowReportPayload(eventCode: String, enin: Int, peerRpids: Set<String>, commit: Data) -> Data {

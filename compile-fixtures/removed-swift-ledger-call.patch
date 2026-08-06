@@ -1,0 +1,16 @@
+--- a/ios/Beid/Persistence/UnsentWindowLedgerRuntime.swift
++++ b/ios/Beid/Persistence/UnsentWindowLedgerRuntime.swift
+@@ -59,11 +59,6 @@ final class UnsentWindowLedgerRuntime {
+     windowId: String,
+     persistedObservationReference: String
+   ) throws {
+-    try apply(
+-      BeidSharedKit.report.closeUnsentWindow(
+-        ledger: ledger,
+-        windowId: windowId,
+-        persistedObservationReference: persistedObservationReference
+-      )
+-    )
++    _ = windowId
++    _ = persistedObservationReference
+   }
