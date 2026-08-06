@@ -14,10 +14,17 @@ import XCTest
 @MainActor
 final class BackgroundingCheckpointTests: XCTestCase {
   private func makeCoordinator() -> (SensingCoordinator, WindowReportStore) {
-    let fileURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("window-reports-test-\(UUID().uuidString).json")
-    let store = WindowReportStore(fileURL: fileURL)
-    let coordinator = SensingCoordinator(windowReportStore: store)
+    let directory = makeTemporaryDirectory()
+    let store = WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    )
+    let coordinator = SensingCoordinator(
+      windowReportStore: store,
+      selfProofStore: SelfProofStore(
+        fileURL: directory.appendingPathComponent("self-proofs.json")
+      ),
+      unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot")
+    )
     coordinator.useDemoEventMode = false
     return (coordinator, store)
   }
@@ -30,15 +37,32 @@ final class BackgroundingCheckpointTests: XCTestCase {
   private func makeCoordinatorWithIsolatedSelfProofStore()
     -> (SensingCoordinator, WindowReportStore, SelfProofStore)
   {
-    let windowReportFileURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("window-reports-test-\(UUID().uuidString).json")
-    let selfProofFileURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("self-proofs-test-\(UUID().uuidString).json")
-    let windowReportStore = WindowReportStore(fileURL: windowReportFileURL)
-    let selfProofStore = SelfProofStore(fileURL: selfProofFileURL)
-    let coordinator = SensingCoordinator(windowReportStore: windowReportStore, selfProofStore: selfProofStore)
+    let directory = makeTemporaryDirectory()
+    let windowReportStore = WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    )
+    let selfProofStore = SelfProofStore(
+      fileURL: directory.appendingPathComponent("self-proofs.json")
+    )
+    let coordinator = SensingCoordinator(
+      windowReportStore: windowReportStore,
+      selfProofStore: selfProofStore,
+      unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot")
+    )
     coordinator.useDemoEventMode = false
     return (coordinator, windowReportStore, selfProofStore)
+  }
+
+  private func makeTemporaryDirectory() -> URL {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("background-checkpoint-test-\(UUID().uuidString)", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    } catch {
+      preconditionFailure("Unable to create test directory: \(error)")
+    }
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+    return directory
   }
 
   // MARK: - Basic checkpoint behavior (§3.4)

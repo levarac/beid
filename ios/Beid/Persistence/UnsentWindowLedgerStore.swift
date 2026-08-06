@@ -10,6 +10,11 @@ enum UnsentWindowLedgerStoreError: Error {
   case sameRevisionConflict
 }
 
+struct UnsentWindowLedgerStoreRecovery {
+  let store: UnsentWindowLedgerStore
+  let quarantinedSnapshotURL: URL?
+}
+
 /// Mechanical persistence for the shared unsent-window ledger.
 ///
 /// Ledger state and transitions remain owned by `BeidSharedKit`; this store
@@ -25,6 +30,40 @@ final class UnsentWindowLedgerStore {
     self.fileURL = fileURL ?? Self.defaultFileURL()
     _ = try withPersistenceLock {
       try durableRevision()
+    }
+  }
+
+  /// Production startup policy for a snapshot whose shared decoder rejects
+  /// its bytes. Strict `init`/`load` remain fail-closed; this opt-in path
+  /// preserves the corrupt bytes under a timestamped sibling name and opens
+  /// an empty store at the canonical path so future sensing can continue.
+  /// Other I/O errors are not treated as corruption and still propagate.
+  static func recoveringCorruptSnapshot(
+    fileURL: URL? = nil,
+    now: Date = Date()
+  ) throws -> UnsentWindowLedgerStoreRecovery {
+    let resolvedFileURL = fileURL ?? defaultFileURL()
+    persistenceLock.lock()
+    defer { persistenceLock.unlock() }
+
+    let store = UnsentWindowLedgerStore(unvalidatedFileURL: resolvedFileURL)
+    do {
+      _ = try store.durableRevision()
+      return UnsentWindowLedgerStoreRecovery(
+        store: store,
+        quarantinedSnapshotURL: nil
+      )
+    } catch UnsentWindowLedgerStoreError.invalidSnapshot {
+      let timestampMilliseconds = Int64(
+        (now.timeIntervalSince1970 * 1_000).rounded(.down)
+      )
+      let suffix = "corrupt-\(timestampMilliseconds)-\(UUID().uuidString.lowercased())"
+      let quarantinedURL = resolvedFileURL.appendingPathExtension(suffix)
+      try FileManager.default.moveItem(at: resolvedFileURL, to: quarantinedURL)
+      return UnsentWindowLedgerStoreRecovery(
+        store: store,
+        quarantinedSnapshotURL: quarantinedURL
+      )
     }
   }
 
@@ -92,6 +131,10 @@ final class UnsentWindowLedgerStore {
       in: .userDomainMask
     )[0]
     return directory.appendingPathComponent("unsent-window-ledger.snapshot")
+  }
+
+  private init(unvalidatedFileURL: URL) {
+    fileURL = unvalidatedFileURL
   }
 
   private func durableRevision() throws -> Int64 {

@@ -98,6 +98,9 @@ final class UnsentWindowLedgerRuntime {
         transition.errorCode ?? "ledger_transition_failed"
       )
     }
+    // `changed` only controls whether a durable snapshot write is required.
+    // Shared may still return a new in-memory ledger (durable revision or
+    // one-shot emission marker) on the no-write path, so always adopt it.
     guard transition.changed else {
       ledger = transition.ledger
       return

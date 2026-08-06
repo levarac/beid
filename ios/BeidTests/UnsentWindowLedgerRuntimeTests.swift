@@ -27,8 +27,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       windowId: "stable-window-1",
       persistedObservationReference: "observation-1"
     )
-    // ENIN boundary, explicit stop, and background may race. The native
-    // caller forwards all three inputs; shared owns duplicate-close handling.
+    // Native lifecycle coverage below owns the real trigger orderings. This
+    // direct shared test is the degenerate companion: once one close changed
+    // the ledger, identical close inputs remain idempotent.
     try runtime.closeWindow(
       windowId: "stable-window-1",
       persistedObservationReference: "observation-1"
@@ -58,11 +59,25 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertEqual(submission.observationReferenceAt(index: 0), "observation-1")
   }
 
-  func testProductionLifecycleRoutesEninStopAndBackgroundCloseInputsThroughShared() throws {
-    for trigger in CloseTrigger.allCases {
+  func testEveryNativeEninStopAndBackgroundOrderingClosesEachWindowExactlyOnce() throws {
+    let orderings: [[CloseTrigger]] = [
+      [.enin, .stop, .background],
+      [.enin, .background, .stop],
+      [.stop, .enin, .background],
+      [.stop, .background, .enin],
+      [.background, .enin, .stop],
+      [.background, .stop, .enin],
+    ]
+
+    // These six sequential orders are exhaustive only while
+    // SensingCoordinator and all three entry points are @MainActor-isolated,
+    // so close operations cannot overlap. Revisit this test with true
+    // concurrency coverage if coordinator isolation or window-closing work
+    // moves off MainActor.
+    for ordering in orderings {
       let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent(
-          "beid-ledger-lifecycle-\(trigger.rawValue)-\(UUID().uuidString)",
+          "beid-ledger-lifecycle-\(ordering.map(\.rawValue).joined(separator: "-"))-\(UUID().uuidString)",
           isDirectory: true
         )
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -87,45 +102,161 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
         unsentWindowLedgerRuntime: runtime
       )
       coordinator.useDemoEventMode = false
-      coordinator.startSensing(eventCode: "TEST-SHARED-\(trigger.rawValue)")
-      coordinator.handleDetection(enin: 1, rpid: "peer-1")
-      let openWindowId = try XCTUnwrap(coordinator.currentWindowIdForTesting, trigger.rawValue)
-      try reportStore.add(try makeReport(id: openWindowId))
+      coordinator.startSensing(eventCode: "TEST-SHARED-ORDERING")
+      coordinator.handleDetection(enin: 1, rpid: "peer-original")
 
-      switch trigger {
-      case .enin:
-        coordinator.handleDetection(enin: 2, rpid: "peer-2")
-      case .stop:
-        coordinator.stopSensing()
-      case .background:
-        coordinator.checkpointOpenWindowForBackgrounding()
+      for trigger in ordering {
+        apply(trigger, to: coordinator)
       }
 
-      let report = try XCTUnwrap(reportStore.reports.first, trigger.rawValue)
-      let durable = try XCTUnwrap(try ledgerStore.load(), trigger.rawValue)
+      let eninIndex = try XCTUnwrap(ordering.firstIndex(of: .enin))
+      let stopIndex = try XCTUnwrap(ordering.firstIndex(of: .stop))
+      let eninPrecedesStop = eninIndex < stopIndex
+      let expectedReportCount = eninPrecedesStop ? 2 : 1
+      XCTAssertEqual(
+        reportStore.reports.filter { $0.enin == 1 }.count,
+        1,
+        ordering.description
+      )
+      XCTAssertEqual(
+        reportStore.reports.filter { $0.enin == 2 }.count,
+        eninPrecedesStop ? 1 : 0,
+        ordering.description
+      )
+      XCTAssertEqual(reportStore.reports.count, expectedReportCount, ordering.description)
+      XCTAssertEqual(Set(reportStore.reports.map(\.id)).count, expectedReportCount, ordering.description)
+      XCTAssertEqual(coordinator.phase, .idle, ordering.description)
+
+      let durable = try XCTUnwrap(try ledgerStore.load(), ordering.description)
       let prepared = BeidSharedKit.report.prepareNextUnsentWindowSubmission(
-        ledger: try XCTUnwrap(durable.ledger, trigger.rawValue),
+        ledger: try XCTUnwrap(durable.ledger, ordering.description),
         maximumWindowCount: 10,
         nowEpochMilliseconds: 0
       )
-      XCTAssertTrue(prepared.changed, trigger.rawValue)
+      XCTAssertTrue(prepared.changed, ordering.description)
       try ledgerStore.persist(prepared)
-      let inFlight = try XCTUnwrap(try ledgerStore.load(), trigger.rawValue)
+      let inFlight = try XCTUnwrap(try ledgerStore.load(), ordering.description)
       let submission = try XCTUnwrap(
         BeidSharedKit.report.resumeUnsentWindowSubmissionAfterRestore(
-          ledger: try XCTUnwrap(inFlight.ledger, trigger.rawValue)
+          ledger: try XCTUnwrap(inFlight.ledger, ordering.description)
         ).submission,
-        trigger.rawValue
+        ordering.description
       )
 
-      let expectedReference = report.id.uuidString.lowercased()
-      XCTAssertEqual(submission.windowCount, 1, trigger.rawValue)
-      XCTAssertEqual(submission.windowIdAt(index: 0), expectedReference, trigger.rawValue)
-      XCTAssertEqual(
-        submission.observationReferenceAt(index: 0),
-        expectedReference,
-        trigger.rawValue
-      )
+      let reportReferences = Set(reportStore.reports.map { $0.id.uuidString.lowercased() })
+      let ledgerReferences = Set((0..<submission.windowCount).compactMap { index in
+        let windowId = submission.windowIdAt(index: Int32(index))
+        XCTAssertEqual(
+          windowId,
+          submission.observationReferenceAt(index: Int32(index)),
+          ordering.description
+        )
+        return windowId
+      })
+      XCTAssertEqual(Int(submission.windowCount), expectedReportCount, ordering.description)
+      XCTAssertEqual(ledgerReferences, reportReferences, ordering.description)
+    }
+  }
+
+  func testUnavailableLedgerDoesNotBlockPeerCountingOrRecordingTransition() {
+    let directory = temporaryDirectory(named: "unavailable-ledger")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let reportStore = WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    )
+    let coordinator = SensingCoordinator(
+      windowReportStore: reportStore,
+      selfProofStore: SelfProofStore(
+        fileURL: directory.appendingPathComponent("self-proofs.json")
+      ),
+      unsentWindowLedgerRuntime: nil
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "TEST-LEDGER-UNAVAILABLE")
+
+    for index in 0..<BeidConfig.eventConfirmThreshold {
+      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+    }
+
+    guard case .recording(_, let peersVerified) = coordinator.phase else {
+      XCTFail("ledger availability must not gate sensing, got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(peersVerified, BeidConfig.eventConfirmThreshold)
+  }
+
+  func testFailedLedgerCloseAtEninBoundaryStillAcceptsTheTriggeringObservation() throws {
+    let fixture = try makeRuntimeFixture(named: "failed-enin-close")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    fixture.coordinator.startSensing(eventCode: "TEST-FAILED-ENIN-CLOSE")
+
+    let peersBeforeBoundary = max(1, BeidConfig.eventConfirmThreshold - 1)
+    for index in 0..<peersBeforeBoundary {
+      fixture.coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+    }
+    let originalWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
+
+    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-at-boundary")
+
+    XCTAssertEqual(fixture.reportStore.reports.count, 1)
+    XCTAssertEqual(fixture.reportStore.reports.first?.enin, 1)
+    XCTAssertEqual(fixture.reportStore.reports.first?.peerCount, peersBeforeBoundary)
+    XCTAssertNotEqual(fixture.coordinator.currentWindowIdForTesting, originalWindowId)
+    guard case .recording(_, let peersAtBoundary) = fixture.coordinator.phase else {
+      XCTFail("the boundary observation must still reach recording, got \(fixture.coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(peersAtBoundary, peersBeforeBoundary + 1)
+
+    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-after-boundary")
+    guard case .recording(_, let peersAfterBoundary) = fixture.coordinator.phase else {
+      XCTFail("same-ENIN intake must continue after ledger failure")
+      return
+    }
+    XCTAssertEqual(peersAfterBoundary, peersBeforeBoundary + 2)
+  }
+
+  func testFailedCheckpointCloseDoesNotDropLaterSameEninObservations() throws {
+    let fixture = try makeRuntimeFixture(named: "failed-checkpoint-close")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    fixture.coordinator.startSensing(eventCode: "TEST-FAILED-CHECKPOINT-CLOSE")
+    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-0")
+    let originalWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
+
+    fixture.coordinator.checkpointOpenWindowForBackgrounding()
+
+    XCTAssertEqual(fixture.reportStore.reports.count, 1)
+    XCTAssertNil(fixture.coordinator.currentWindowIdForTesting)
+    for index in 1..<BeidConfig.eventConfirmThreshold {
+      fixture.coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+    }
+
+    XCTAssertNotNil(fixture.coordinator.currentWindowIdForTesting)
+    XCTAssertNotEqual(fixture.coordinator.currentWindowIdForTesting, originalWindowId)
+    guard case .recording(_, let peersVerified) = fixture.coordinator.phase else {
+      XCTFail("post-checkpoint observations must continue after ledger failure")
+      return
+    }
+    XCTAssertEqual(peersVerified, BeidConfig.eventConfirmThreshold)
+  }
+
+  func testSessionEndAlwaysTearsDownAfterLedgerCloseFailure() throws {
+    for action in SessionEndAction.allCases {
+      let fixture = try makeRuntimeFixture(named: "failed-\(action.rawValue)")
+      defer { try? FileManager.default.removeItem(at: fixture.directory) }
+      fixture.coordinator.startSensing(eventCode: "TEST-FAILED-\(action.rawValue)")
+      fixture.coordinator.handleDetection(enin: 1, rpid: "peer-1")
+      try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
+
+      apply(action, to: fixture.coordinator)
+
+      XCTAssertEqual(fixture.coordinator.phase, .idle, action.rawValue)
+      XCTAssertNil(fixture.coordinator.currentWindowIdForTesting, action.rawValue)
+      XCTAssertEqual(fixture.reportStore.reports.count, 1, action.rawValue)
+      apply(action, to: fixture.coordinator)
+      XCTAssertEqual(fixture.reportStore.reports.count, 1, action.rawValue)
     }
   }
 
@@ -247,9 +378,78 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     return try JSONDecoder().decode(WindowReport.self, from: data)
   }
 
-  private enum CloseTrigger: String, CaseIterable {
+  private func temporaryDirectory(named name: String) -> URL {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-ledger-\(name)-\(UUID().uuidString)", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    } catch {
+      preconditionFailure("Unable to create test directory: \(error)")
+    }
+    return directory
+  }
+
+  private func makeRuntimeFixture(named name: String) throws -> RuntimeFixture {
+    let directory = temporaryDirectory(named: name)
+    let ledgerFileURL = directory.appendingPathComponent("ledger.snapshot")
+    let reportStore = WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    )
+    let runtime = try UnsentWindowLedgerRuntime(
+      store: try UnsentWindowLedgerStore(fileURL: ledgerFileURL),
+      ledgerInstanceIdHex: "000102030405060708090a0b0c0d0e0f"
+    )
+    let coordinator = SensingCoordinator(
+      windowReportStore: reportStore,
+      selfProofStore: SelfProofStore(
+        fileURL: directory.appendingPathComponent("self-proofs.json")
+      ),
+      unsentWindowLedgerRuntime: runtime
+    )
+    coordinator.useDemoEventMode = false
+    return RuntimeFixture(
+      directory: directory,
+      ledgerFileURL: ledgerFileURL,
+      reportStore: reportStore,
+      coordinator: coordinator
+    )
+  }
+
+  private func apply(_ trigger: CloseTrigger, to coordinator: SensingCoordinator) {
+    switch trigger {
+    case .enin:
+      coordinator.handleDetection(enin: 2, rpid: "peer-new-enin")
+    case .stop:
+      coordinator.stopSensing()
+    case .background:
+      coordinator.checkpointOpenWindowForBackgrounding()
+    }
+  }
+
+  private func apply(_ action: SessionEndAction, to coordinator: SensingCoordinator) {
+    switch action {
+    case .stop:
+      coordinator.stopSensing()
+    case .reset:
+      coordinator.reset()
+    }
+  }
+
+  private struct RuntimeFixture {
+    let directory: URL
+    let ledgerFileURL: URL
+    let reportStore: WindowReportStore
+    let coordinator: SensingCoordinator
+  }
+
+  private enum CloseTrigger: String {
     case enin
     case stop
     case background
+  }
+
+  private enum SessionEndAction: String, CaseIterable {
+    case stop
+    case reset
   }
 }
