@@ -35,6 +35,19 @@ targets:
     platform: iOS
     sources:
       - Beid
+    preBuildScripts:
+      - name: Build BeidSharedKit
+        shell: /bin/sh
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          KMP_JAVA_HOME="$("$SRCROOT/../scripts/resolve_kmp_java_home.sh")"
+          export JAVA_HOME="$KMP_JAVA_HOME"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          echo "Using KMP JDK: $JAVA_HOME"
+          "$JAVA_HOME/bin/java" -version
+          cd "$SRCROOT/../android"
+          ./gradlew :shared:embedSwiftExportForXcode --no-daemon
     dependencies:
       - package: Barnard
         product: Barnard
@@ -84,6 +97,7 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
       configs:
         Debug:
           # XcodeGen 2.45.3 has no configuration filter for package

@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 rootProject.name = "Beid"
 
 include(":app")
+include(":shared")
+project(":shared").projectDir = file("../shared")

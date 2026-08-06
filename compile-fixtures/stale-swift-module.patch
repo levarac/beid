@@ -1,0 +1,5 @@
+--- a/ios/Beid/App/SharedRuntimeProbe.swift
++++ b/ios/Beid/App/SharedRuntimeProbe.swift
+@@ -1 +1 @@
+-import BeidSharedKit
++import BeidShared
