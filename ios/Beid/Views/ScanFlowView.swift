@@ -50,6 +50,36 @@ struct ScanFlowView: View {
       EventBindingSheetView(sensing: sensing)
     }
     .onChange(of: scenePhase) { oldPhase, newPhase in
+      // Extends the existing observer rather than adding a second
+      // `.onChange(of: scenePhase)` — two independent handlers on the same
+      // transition would be a needless duplicate-firing risk with no
+      // offsetting benefit (`docs/specs/session-end-finalization.md` §3.4).
+      //
+      // Gated on the bare `newPhase == .background` value, with no
+      // additional `oldPhase` check — deliberately, not by omission.
+      // `onChange`'s own semantics only invoke this closure when
+      // `scenePhase` actually *changes*, so reaching this branch already
+      // means a real .active/.inactive → .background TRANSITION just
+      // happened, not a bare state re-check on every render. That is
+      // exactly the bug the foreground branch below once had (originally
+      // gated on "is scenePhase currently .active", which fired on every
+      // re-render while already active because it wasn't tied to a change
+      // event at all) — the fix there was moving the check into
+      // `onChange`, which this branch already lives inside of. The
+      // `oldPhase != .active` guard on the foreground branch is in fact
+      // always true once `onChange` fires with `newPhase == .active` (two
+      // different values are required to fire), so it is self-documenting
+      // rather than load-bearing; the same reasoning means an
+      // `oldPhase != .background` clause here would be equally redundant,
+      // so it's omitted. If the app backgrounds more than once in a
+      // session (background → foreground → background again), this
+      // correctly checkpoints each real entry — the checkpoint's own
+      // guard-on-nil (`SensingCoordinator.checkpointOpenWindowForBackgrounding()`)
+      // already makes a second checkpoint with nothing new observed a safe
+      // no-op, so firing on every genuine entry is correct, not a risk.
+      if newPhase == .background {
+        sensing.checkpointOpenWindowForBackgrounding()
+      }
       guard oldPhase != .active, newPhase == .active else { return }
       presentBindingSheetIfNeeded()
     }

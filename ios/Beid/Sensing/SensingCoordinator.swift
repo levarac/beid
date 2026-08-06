@@ -46,7 +46,7 @@ final class SensingCoordinator: ObservableObject {
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private let windowReportStore: WindowReportStore
   private let bindingRecordStore = BindingRecordStore()
-  private let selfProofStore = SelfProofStore()
+  private let selfProofStore: SelfProofStore
   private var demoTask: Task<Void, Never>?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
@@ -69,6 +69,21 @@ final class SensingCoordinator: ObservableObject {
   /// is set (real path: `advanceWindowIfNeeded`; demo path:
   /// `advanceDemoWindow()`), and not touched again until the next session.
   private var firstWindowEnin: Int?
+  /// The session's most recently observed ENIN window — `eninEnd` for the
+  /// self-proof layer (§2.2). Unlike `currentWindowEnin`, this is never
+  /// nil'd by `checkpointOpenWindowForBackgrounding()`
+  /// (`docs/specs/session-end-finalization.md` §3.4): a backgrounding
+  /// checkpoint deliberately nils `currentWindowEnin` mid-session (so the
+  /// next detection opens a genuinely new window rather than reusing the
+  /// checkpointed one, §3.6), but `finalizeSelfProofIfNeeded()` still needs
+  /// the *last* window this session actually observed, even if the user
+  /// stops without any further detection after the checkpoint — otherwise
+  /// a checkpoint immediately followed by a stop with nothing new observed
+  /// would silently fail to produce any self-proof at all, despite a
+  /// complete, valid session. Mirrors `firstWindowEnin`'s own "must survive
+  /// a mid-session currentWindowEnin nil" fix (§3.5) at the opposite end of
+  /// the range.
+  private var lastWindowEnin: Int?
   private var currentWindowRpids: Set<String> = []
   /// `commit = H(event signing key ‖ owner key ‖ salt)`, fixed once per
   /// event at the instant it's found (§5 — the owner key is a cross-event
@@ -124,8 +139,19 @@ final class SensingCoordinator: ObservableObject {
   /// expression referencing it is evaluated in a nonisolated context by
   /// the compiler — so the injectable overload can't carry its own default
   /// value; `init()` above supplies it instead.
-  init(windowReportStore: WindowReportStore) {
+  convenience init(windowReportStore: WindowReportStore) {
+    self.init(windowReportStore: windowReportStore, selfProofStore: SelfProofStore())
+  }
+
+  /// Test-only entry point, same rationale as `init(windowReportStore:)`
+  /// above: lets a test assert `SelfProofStore`'s contents (e.g. that a
+  /// backgrounding checkpoint alone adds no record,
+  /// `docs/specs/session-end-finalization.md` §8.2) against an isolated
+  /// file instead of the shared on-device default, without touching the
+  /// self-proof signing/persistence logic itself.
+  init(windowReportStore: WindowReportStore, selfProofStore: SelfProofStore) {
     self.windowReportStore = windowReportStore
+    self.selfProofStore = selfProofStore
     engine.onEvent = { [weak self] event in
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
@@ -279,6 +305,7 @@ final class SensingCoordinator: ObservableObject {
     distinctPeerRpids = []
     currentWindowEnin = nil
     firstWindowEnin = nil
+    lastWindowEnin = nil
     demoWindowEnin = 0
     currentWindowRpids = []
     activeCommit = nil
@@ -487,6 +514,7 @@ final class SensingCoordinator: ObservableObject {
   private func advanceWindowIfNeeded(enin: Int, eventCode: String) {
     guard let openEnin = currentWindowEnin else {
       currentWindowEnin = enin
+      lastWindowEnin = enin
       // Not unconditional: once a mid-session checkpoint can nil
       // `currentWindowEnin` without ending the session (backgrounding,
       // `docs/specs/session-end-finalization.md` §3.4), this branch can be
@@ -501,6 +529,7 @@ final class SensingCoordinator: ObservableObject {
     closeWindow(enin: openEnin, eventCode: eventCode)
     currentWindowRpids = []
     currentWindowEnin = enin
+    lastWindowEnin = enin
   }
 
   /// Closes whatever window is still open at explicit-stop time
@@ -517,6 +546,35 @@ final class SensingCoordinator: ObservableObject {
   private func closeFinalWindowIfNeeded() {
     guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
     closeWindow(enin: enin, eventCode: eventCode)
+  }
+
+  /// Checkpoints (does not end) an in-progress session when the app
+  /// backgrounds — called from `ScanFlowView`'s existing `scenePhase`
+  /// observer (`docs/specs/session-end-finalization.md` §3.4). Closes
+  /// whatever window is currently open, exactly like `closeFinalWindowIfNeeded`,
+  /// but deliberately does **not** call `resetSessionState()` and does not
+  /// touch `phase`/`bindingState`: this app declares
+  /// `bluetooth-central`/`bluetooth-peripheral` background modes (§2.4), so
+  /// sensing may keep running after `.background` — this is a checkpoint of
+  /// what has been observed so far, not a session-end. Also does **not**
+  /// produce a self-proof (§7.1 Option A was considered and rejected; that
+  /// is sub-slice 3's concern, not this one).
+  ///
+  /// Nils `currentWindowEnin`/clears `currentWindowRpids` (rather than
+  /// leaving the just-closed `enin` in place) for two reasons: (1) so the
+  /// next detection opens a genuinely new window instead of silently
+  /// reusing the closed one, and (2) so a following
+  /// `stopSensing()`/`reset()` doesn't re-close the same `enin` a second
+  /// time — `closeFinalWindowIfNeeded()`'s existing guard on
+  /// `currentWindowEnin` being non-nil already covers that once this is
+  /// nil'd, the same guard-on-nil mechanism §3.6 already relies on for
+  /// `stopSensing()`/`reset()` called twice in a row. No separate
+  /// idempotency mechanism is introduced here.
+  func checkpointOpenWindowForBackgrounding() {
+    guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
+    closeWindow(enin: enin, eventCode: eventCode)
+    currentWindowRpids = []
+    currentWindowEnin = nil
   }
 
   /// Signs the closing window's observations with the event signing key
@@ -564,18 +622,25 @@ final class SensingCoordinator: ObservableObject {
   /// Builds, signs (`OwnerKeyProvider.signSelfProof`), and persists this
   /// session's self-proof, if one is due. `nil` if there is no `Proof` for
   /// this session (`activeProofId` unset — never reached `.recording`) or no
-  /// ENIN window was ever observed (`firstWindowEnin`/`currentWindowEnin`
+  /// ENIN window was ever observed (`firstWindowEnin`/`lastWindowEnin`
   /// unset). A session gated on `activeProofId` mirrors `BindingRecord
   /// .proofId`'s linkage: a session that stayed in `.eventFound` without
   /// meeting the peer threshold produced no `Proof`, so there is nothing to
   /// attest.
+  ///
+  /// Reads `lastWindowEnin`, not `currentWindowEnin`, for `end`: the latter
+  /// is nil'd mid-session by `checkpointOpenWindowForBackgrounding()`
+  /// (`docs/specs/session-end-finalization.md` §3.4) without ending the
+  /// session, so a stop that follows a checkpoint with no further detection
+  /// would otherwise find `currentWindowEnin == nil` here and silently
+  /// return `nil` for a session that was, in fact, complete and valid.
   @discardableResult
   private func finalizeSelfProofIfNeeded() -> SelfProofRecord? {
     guard
       let proofId = activeProofId,
       let eventCode = currentBindingEvent?.id,
       let start = firstWindowEnin,
-      let end = currentWindowEnin
+      let end = lastWindowEnin
     else {
       return nil
     }
@@ -654,18 +719,19 @@ final class SensingCoordinator: ObservableObject {
 
   /// Demo-only stand-in for the real path's `advanceWindowIfNeeded` —
   /// advances just enough ENIN-window state
-  /// (`firstWindowEnin`/`currentWindowEnin`) for the self-proof layer
-  /// (§2.2) to be exercisable under demo mode, since there is no real BLE
-  /// path to drive it with on the simulator. Deliberately never calls
-  /// `closeWindow`/touches `WindowReportStore` — demo mode intentionally
-  /// produces no window reports (see this section's own doc comment above),
-  /// and this must not change that.
+  /// (`firstWindowEnin`/`currentWindowEnin`/`lastWindowEnin`) for the
+  /// self-proof layer (§2.2) to be exercisable under demo mode, since there
+  /// is no real BLE path to drive it with on the simulator. Deliberately
+  /// never calls `closeWindow`/touches `WindowReportStore` — demo mode
+  /// intentionally produces no window reports (see this section's own doc
+  /// comment above), and this must not change that.
   private func advanceDemoWindow() {
     demoWindowEnin += 1
     if firstWindowEnin == nil {
       firstWindowEnin = demoWindowEnin
     }
     currentWindowEnin = demoWindowEnin
+    lastWindowEnin = demoWindowEnin
   }
 
   func waitForDemoSequenceToFinish() async {
