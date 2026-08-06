@@ -8,14 +8,16 @@ screen, the design-system theme, and a compiling SDK dependency.
 
 ## Build & run
 
-For local macOS builds, use the JDK bundled with Android Studio. AGP 8.11.1
-fails under the ambient system Java 25 with an opaque
-`BUILD FAILED … What went wrong: 25.0.3` error (no stack trace). Point Gradle
-at Android Studio's JBR explicitly instead of relying on the shell default:
+For local macOS builds, resolve a supported JDK through the repository helper.
+It accepts a supported `KMP_JAVA_HOME`, then tries Android Studio JBR 21
+(commonly `/Applications/Android Studio.app/Contents/jbr/Contents/Home`),
+Homebrew JDK 17, and macOS's Java 17 resolver. AGP 8.11.1 fails under the
+ambient system Java 25 with an opaque `BUILD FAILED … What went wrong:
+25.0.3` error (no stack trace), so do not rely on the shell default:
 
 ```sh
 cd android
-JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew assembleDebug
 ```
 
@@ -40,8 +42,13 @@ submodule or Gradle composite build is required. Verified 2026-08-07 against
 
 `settings.gradle.kts` provides `mavenCentral()` through
 `dependencyResolutionManagement.repositories`. To update the SDK, change the
-version in `app/build.gradle.kts`, then run `./gradlew :app:assembleDebug` to
-verify Central resolution and compilation.
+version in `app/build.gradle.kts`, then verify Central resolution and
+compilation from `android/` with the same resolver-backed JDK selection:
+
+```sh
+JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
+  ./gradlew :app:assembleDebug
+```
 
 ## Design-system theme
 

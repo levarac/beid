@@ -24,11 +24,14 @@ patch -p1 < compile-fixtures/stale-swift-module.patch
 cd ios
 xcodegen generate
 cd ..
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
-  xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
   -destination 'platform=iOS Simulator,id=5638ACA8-5A90-4931-AB47-9F472D95B7E1' \
   build
 ```
+
+The current local host has only Xcode 27 beta installed, so that is where this
+diagnostic was observed. This is a host property, not a project requirement;
+stable Xcode in Xcode Cloud is the authority if local beta behavior differs.
 
 Expected on Xcode 27: compilation fails with `Unable to resolve module
 dependency: 'BeidShared'` after the always-run Swift Export phase has generated

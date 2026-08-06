@@ -763,7 +763,8 @@ Enforcement layers:
    violations is FORBIDDEN; it may only be regenerated to *shrink* after
    a migration lands. Lint fixtures proving pass/fail behavior live in
    `lint-fixtures/` (see its README for the proof-run procedure).
-   (Config + script only for now; CI wiring is a follow-up.)
+   `.github/workflows/pr-ci.yml` runs this contract in its SwiftLint job for
+   every pull request and push to `main`.
 
    The lint layer intentionally catches the common ~80% of violations —
    direct call-site literals. The long tail is **review-level MUST**, not

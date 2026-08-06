@@ -7,9 +7,18 @@ This repository was restarted from an empty history on 2026-07-09 for the
 native rebuild (team ruling, MTG 2026-07-09). The previous Flutter
 implementation is preserved in full on the [`archive/flutter`](../../tree/archive/flutter) branch.
 
-## Layout (planned)
+## Layout
 
+Read [`AGENTS.md`](AGENTS.md) before changing the repository. It summarizes
+the current architecture and the required development and delivery contracts;
+the detailed KMP procedure lives in
+[`docs/kmp-shared-foundation.md`](docs/kmp-shared-foundation.md).
+
+- `shared/` — project-internal Kotlin Multiplatform module built from the same checkout by both native apps
 - `ios/` — native iOS app (SwiftUI, consumes the [barnard](https://github.com/levarac/barnard) SwiftPM package)
-- `android/` — native Android app (Kotlin, consumes the barnard Gradle library)
-- `backend/` — event/anchoring backend (batched on-chain commitment writes)
-- `docs/` — design notes and operational flow
+- `android/` — native Android app (Kotlin/Compose, consumes the barnard Gradle library)
+- `docs/` — implementation contracts, design notes, and operational flow
+- `scripts/` — repository checks and local/CI toolchain helpers
+- `compile-fixtures/` — negative compile proofs for stale platform bindings
+- `lint/` and `lint-fixtures/` — the portable lint baseline and its behavior fixtures
+- `DESIGN.md` — cross-platform product design and copy contract

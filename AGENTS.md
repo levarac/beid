@@ -28,6 +28,11 @@ its oracle or invariant, record RED evidence, implement the shared decision,
 add thin native adapters and production callers, then pass every ownership
 and build gate before moving on. Start at section 1 and work downward.
 
+This file summarizes the ownership boundary and repository-wide constraints;
+the foundation manual is authoritative for detailed KMP procedure. If the two
+disagree on a KMP step, follow the manual and correct this summary in the same
+change. Repository-wide safety and delivery rules in this file still apply.
+
 At the verification point above, `origin/main` wires only the KMP walking
 skeleton into both apps. The families listed in the foundation manual are a
 migration inventory, not proof that those features work in production. A
@@ -102,10 +107,13 @@ the same name shadows them.
   the host is arm64. If a link error names an architecture that no simulator
   on the host actually uses, inspect the destination before changing code or
   dependency symbols. See `ios/README.md` for the command form.
-- **Use Android Studio's JDK for local Gradle.** The ambient system Java 25
-  breaks this build. On macOS the stable local default is
-  `/Applications/Android Studio.app/Contents/jbr/Contents/Home`; CI selects
-  its own pinned JDK 17.
+- **Resolve a supported local JDK through
+  `scripts/resolve_kmp_java_home.sh`.** Canonical commands must not hardcode a
+  machine path. The resolver accepts a supported `KMP_JAVA_HOME`, then tries
+  Android Studio JBR 21 (commonly
+  `/Applications/Android Studio.app/Contents/jbr/Contents/Home`), Homebrew
+  JDK 17, and macOS's Java 17 resolver. The ambient system Java 25 breaks this
+  build; CI selects its own pinned JDK 17.
 - **Read Gradle task outcomes, not only the final green line.** `NO-SOURCE`
   means that task executed zero sources or tests. For every test task that
   was expected to run, require a non-`NO-SOURCE` outcome and report the test
@@ -139,8 +147,12 @@ the same name shadows them.
 
 **A review arranged by the author of the work does not satisfy the review
 gate. The gate requires a reviewer dispatched independently of the author.**
-An author-arranged review is still a useful self-check; report the two
-artifacts separately.
+Request the independent review from the repository maintainer by opening the
+PR, then wait for the maintainer's assignment. The author must not select,
+invite, or otherwise arrange the reviewer. How the maintainer handles that
+request is a maintainer-side operation outside this document. An
+author-arranged review is still a useful self-check; report the two artifacts
+separately.
 
 This train produced the same distinction twice. On the walking-skeleton
 slice, an author-arranged audit found no blockers, while the independently

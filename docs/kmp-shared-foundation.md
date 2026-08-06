@@ -8,6 +8,8 @@
 
 この文書は、beid に Kotlin Multiplatform の `shared/` module を導入し、iOS と Android の共通判断を一つずつ移すための手順書です。設計案を並べる文書ではありません。作業者は上から順に実施し、各 gate を満たしてから次へ進んでください。
 
+`AGENTS.md` の KMP section は ownership boundary と repository-wide constraints の要約であり、本書は詳細な KMP 作業手順の正本です。両者が KMP の詳細手順で食い違う場合は本書を優先し、同じ変更で `AGENTS.md` の要約も直します。`AGENTS.md` の repository-wide safety / delivery rules は引き続き適用します。
+
 基礎にした方法は ShiokazeHD/umidori の v0.10.0 KMP 切替です。ただし、beid は greenfield、Umidori は既存の Swift shared runtime からの切替でした。Umidori の構造と証明方法を使い、Umidori 固有の runner・一括置換・旧 runtime 削除はコピーしません。
 
 上の照合時点で `origin/main` に production 接続されている KMP 実装は walking skeleton だけです。以下の family 一覧は移行台帳であり、実装済み機能の一覧ではありません。各 family の code、両 platform の production caller、test が揃うまで「動いている」と扱いません。
@@ -229,11 +231,11 @@ native persistence adapter は shared codec が返した bytes を tmp file + at
 
 ### local Gradle
 
-macOS の local build は Android Studio 同梱 JDK を使います。system Java 25 はこの Gradle / Kotlin 構成を起動できません。
+macOS の local build は repository の resolver で対応 JDK を選びます。resolver は対応する `KMP_JAVA_HOME`、Android Studio JBR 21、Homebrew JDK 17、macOS の Java 17 resolver の順に確認します。system Java 25 はこの Gradle / Kotlin 構成を起動できません。
 
 ```bash
 cd android
-JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew :shared:testAndroidHostTest \
   :app:testDebugUnitTest \
   :app:assembleDebug \
@@ -247,11 +249,12 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
 build 先は、`xcrun simctl list devices available` で得た concrete Simulator UDID を指定します。複数の simulator が同じ名前を持つため name-based destination は使いません。`generic/platform=iOS Simulator` は x86_64 も build 対象に含めることがあり、arm64-only binary dependency の link に失敗します。
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
-  xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
   -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
   build-for-testing
 ```
+
+現在の local host には beta Xcode しか入っていないため、この command も active な beta toolchain で動きます。これは host の性質であり project requirement ではありません。local beta と Xcode Cloud の stable Xcode で結果が異なる場合、project compatibility の基準は Xcode Cloud の stable lane です。
 
 link error が、この host の simulator に存在しない architecture を名指ししたら、symbol 名から自分の code を疑う前に destination を確認します。dependency が変わっても使える signal は error に出た architecture です。
 
@@ -301,7 +304,7 @@ metered な CI の費用は、local で反復して push をまとめる理由�
 
 ### review gate
 
-作者が手配した review は有用な self-check ですが、独立 review gate を満たしません。gate には、作者から独立して dispatch された reviewer が必要です。self-check と independent gate は別の evidence として報告します。
+作者が手配した review は有用な self-check ですが、独立 review gate を満たしません。独立 review は repository maintainer に依頼します。具体的には PR を開き、maintainer が reviewer を割り当てるまで待ちます。作者は reviewer を選定・招待・手配しません。maintainer が依頼をどう処理するかは maintainer-side operation であり、本書の範囲外です。self-check と independent gate は別の evidence として報告します。
 
 この train では二度、違いが具体化しました。walking-skeleton slice の maker-arranged audit は blocker なしでしたが、independent review は app-local class が shared type を置き換えても既存 check が green のままになる ownership hole を見つけました。ledger slice でも maker-arranged audit の後、independent review が二つの blocker を見つけ、その一つは shipped App Review path の regression と durable record の重複でした。どちらの self-check も不誠実ではなく、実装者の落ち度を示す事例でもありません。作者が review の範囲と入口を選ぶ構造と、独立した gate の構造が違うためです。
 
@@ -334,7 +337,8 @@ Barnard など published dependency を変更した claim、または clean chec
 
 ```bash
 cd android
-./gradlew :app:dependencyInsight \
+JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
+  ./gradlew :app:dependencyInsight \
   --dependency org.levarac:barnard \
   --configuration debugRuntimeClasspath
 ```
@@ -376,7 +380,7 @@ source branch で通った結果を destination branch の証拠として使い�
 - [ ] 変更した各 file を覆う full covering suite を実行した。個別 test だけに絞った場合は、その下の code を変更していないことを確認した
 - [ ] Xcode Cloud が fresh Swift Export から app/test を build した
 - [ ] 自動 Xcode Cloud workflow では exact head SHA に iOS check が存在し、green であることを確認した。manual workflow なら exact head を対象に起動した run を記録した
-- [ ] 作者から独立して dispatch された reviewer が gate を実施した。maker-arranged review は self-check として別に記録した
+- [ ] PR を開いた後、repository maintainer が割り当てた独立 reviewer が gate を実施した。作者は reviewer を選定・手配せず、maker-arranged review は self-check として別に記録した
 - [ ] exact head SHA と SHA-filtered CI run ID を記録した
 - [ ] published dependency を変更した場合、resolved version と取得経路を記録した
 - [ ] forward-port がある場合、destination branch の graph で再検証した
