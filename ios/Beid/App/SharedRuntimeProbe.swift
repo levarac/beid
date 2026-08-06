@@ -1,3 +1,7 @@
+// CI ownership contract: this explicit module import is intentionally
+// load-bearing. The stale-Swift compile fixture mutates this line to prove
+// that CI rejects an obsolete Swift Export module. Do not remove this
+// caller-free probe until real shared API callers exist on both Android and iOS.
 import BeidSharedKit
 
 struct SharedIdentitySnapshot {
