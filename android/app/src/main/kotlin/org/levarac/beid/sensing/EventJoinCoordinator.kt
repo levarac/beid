@@ -4,8 +4,8 @@ import android.app.Activity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import network.greeting.barnard.BarnardEngine
-import network.greeting.barnard.BarnardPermissionResult
+import org.levarac.barnard.BarnardEngine
+import org.levarac.barnard.BarnardPermissionResult
 
 /**
  * UI-facing state for [EventJoinCoordinator]. Mirrors the shape of iOS's
