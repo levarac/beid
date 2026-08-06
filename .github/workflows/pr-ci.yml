@@ -14,6 +14,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  android:
+    name: Android build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Build and test Android app
+        working-directory: android
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon
+
   lint:
     name: SwiftLint
     runs-on: ubuntu-latest
