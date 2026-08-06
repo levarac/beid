@@ -58,7 +58,10 @@ executable):
   install and commit the resulting `Beid.xcodeproj` diff in the same PR —
   otherwise the guard fails on the very next Xcode Cloud run for the "right"
   reason (real drift between the pinned generator's output and what's
-  committed).
+  committed). For the Kotlin Multiplatform shared module, this hook also
+  installs Homebrew OpenJDK 17 when it is absent and logs the selected Java
+  version. The resolver accepts only the fixed Homebrew JDK 17 path in Xcode
+  Cloud; it never falls through to an ambient `JAVA_HOME` or JDK 25.
 - **`ci_post_xcodebuild.sh`** — runs after the archive build. Picks
   `release_notes.json` when `$CI_BRANCH` matches `release/*`, otherwise
   `what_to_test.json`, and converts it (via
@@ -74,6 +77,12 @@ scope is intentionally just "get a TestFlight build out with the right
 notes." Pushing `release_notes.json` into an actual App Store version's
 "What's New" text (via an ASC API script) is out of scope
 until beid has real App Store submissions to automate.
+
+The generated Beid target also has an always-run pre-build phase that invokes
+Gradle's `:shared:embedSwiftExportForXcode` task before Swift compilation. It
+recreates and copies the `BeidSharedKit` Swift module and static library into
+the current Xcode build products directory, so a clean Xcode Cloud runner does
+not depend on generated Swift artifacts being committed to the repository.
 
 ## Workflow configuration in ASC
 

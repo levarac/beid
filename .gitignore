@@ -4,6 +4,7 @@ xcuserdata/
 build/
 DerivedData/
 .gradle/
+.kotlin/
 local.properties
 *.keystore
 .env

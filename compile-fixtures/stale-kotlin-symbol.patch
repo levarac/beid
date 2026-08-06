@@ -1,0 +1,5 @@
+--- a/android/app/src/main/kotlin/org/levarac/beid/sharedbridge/SharedRuntimeProbe.kt
++++ b/android/app/src/main/kotlin/org/levarac/beid/sharedbridge/SharedRuntimeProbe.kt
+@@ -3 +3 @@
+-import org.levarac.beid.shared.SharedModuleIdentity
++import org.levarac.beid.shared.RemovedSharedModuleIdentityIssue107

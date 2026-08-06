@@ -57,6 +57,15 @@ fi
 
 echo "Using XcodeGen: $(xcodegen --version)"
 
+if ! "$CI_PRIMARY_REPOSITORY_PATH/scripts/resolve_kmp_java_home.sh" >/dev/null 2>&1; then
+  echo "Installing pinned OpenJDK 17 for Kotlin Multiplatform..."
+  brew install openjdk@17
+fi
+
+KMP_JAVA_HOME="$("$CI_PRIMARY_REPOSITORY_PATH/scripts/resolve_kmp_java_home.sh")"
+echo "Using KMP JDK: $KMP_JAVA_HOME"
+"$KMP_JAVA_HOME/bin/java" -version
+
 echo "Regenerating Beid.xcodeproj from project.yml..."
 xcodegen generate
 

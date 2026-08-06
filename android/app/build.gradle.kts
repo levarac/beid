@@ -1,7 +1,7 @@
 plugins {
-    id("com.android.application") version "8.11.1"
-    id("org.jetbrains.kotlin.android") version "2.2.20"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.2.20"
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -43,6 +43,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared"))
+
     // Native (Flutter-free) BLE mutual-observation SDK published to Maven Central.
     implementation("org.levarac:barnard:0.3.0")
 
@@ -56,4 +58,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation(kotlin("test"))
 }
