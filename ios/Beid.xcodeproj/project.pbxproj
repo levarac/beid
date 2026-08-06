@@ -50,6 +50,7 @@
 		8FDC27D2283A74EB215D9DE0 /* BindingRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = E065C15C72E249BC341A101C /* BindingRecord.swift */; };
 		903C47844113AADA5701273B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */; };
 		905D529AD4D49A99A809159C /* QRCodeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */; };
+		90D18555A4C059568D9201EA /* WindowReportFinalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */; };
 		95A3A750404DCA7A584953FC /* BeidConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C29C55477E4B93296A630 /* BeidConfig.swift */; };
 		98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */; };
 		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
@@ -129,6 +130,7 @@
 		29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingView.swift; sourceTree = "<group>"; };
 		29E157C35B263F222E1DBDD5 /* ProofSignature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignature.swift; sourceTree = "<group>"; };
 		394E6F2E97311572D2BAED89 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
+		3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportFinalizationTests.swift; sourceTree = "<group>"; };
 		4649A0DA5850F0EA17519B40 /* MetaMaskDebugSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskDebugSupport.swift; sourceTree = "<group>"; };
 		49BA528F084158430D34C634 /* BeidTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BeidTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanPhase.swift; sourceTree = "<group>"; };
@@ -363,6 +365,7 @@
 				BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */,
 				EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */,
 				FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */,
+				3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */,
 			);
 			path = BeidTests;
 			sourceTree = "<group>";
@@ -645,6 +648,7 @@
 				ACCA8EA1D39994F420C779BA /* SelfProofTests.swift in Sources */,
 				4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */,
 				F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */,
+				90D18555A4C059568D9201EA /* WindowReportFinalizationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

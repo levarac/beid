@@ -44,7 +44,7 @@ final class SensingCoordinator: ObservableObject {
   private let identity = BarnardIdentity()
   private let ownerKeyProvider = OwnerKeyProvider()
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
-  private let windowReportStore = WindowReportStore()
+  private let windowReportStore: WindowReportStore
   private let bindingRecordStore = BindingRecordStore()
   private let selfProofStore = SelfProofStore()
   private var demoTask: Task<Void, Never>?
@@ -115,7 +115,17 @@ final class SensingCoordinator: ObservableObject {
   }
   #endif
 
-  init() {
+  convenience init() {
+    self.init(windowReportStore: WindowReportStore())
+  }
+
+  /// Test-only entry point: `WindowReportStore()`'s default file-backed
+  /// initializer is `@MainActor`-isolated, and a default-argument
+  /// expression referencing it is evaluated in a nonisolated context by
+  /// the compiler — so the injectable overload can't carry its own default
+  /// value; `init()` above supplies it instead.
+  init(windowReportStore: WindowReportStore) {
+    self.windowReportStore = windowReportStore
     engine.onEvent = { [weak self] event in
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
@@ -128,23 +138,30 @@ final class SensingCoordinator: ObservableObject {
       isScanning = state.isScanning
       isAdvertising = state.isAdvertising
     case .detection(let detection):
-      handleDetection(detection)
+      handleDetection(enin: detection.enin, rpid: detection.rpid)
     default:
       break
     }
   }
 
-  private func handleDetection(_ detection: BarnardDetectionEvent) {
+  /// Not `private`: `BarnardDetectionEvent` has no public initializer
+  /// (Barnard module boundary), so `BeidTests` cannot construct one to
+  /// drive this path — taking the two fields it actually needs as plain
+  /// arguments instead lets tests exercise the real (non-demo) detection
+  /// path directly. Production code only ever reaches this via `handle(_:)`
+  /// above, already MainActor-isolated via `engine.onEvent`'s
+  /// `Task { @MainActor in }`.
+  func handleDetection(enin: Int, rpid: String) {
     switch phase {
     case .sensing:
       let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
       let session = EventSession(id: eventCode, name: eventCode, venue: nil)
       beginEventFound(session)
-      observe(detection, for: session)
+      observe(enin: enin, rpid: rpid, for: session)
     case .eventFound(let session):
-      observe(detection, for: session)
+      observe(enin: enin, rpid: rpid, for: session)
     case .recording(let session, _):
-      observe(detection, for: session)
+      observe(enin: enin, rpid: rpid, for: session)
     case .idle, .signalLost:
       // `.signalLost` is frozen — real signal-loss *detection* doesn't
       // exist yet (only the demo-only manual trigger does), so this branch
@@ -154,16 +171,12 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Records `detection` against the running peer count and window, then
-  /// applies whatever phase transition that observation implies. Called
-  /// from the real detection path only — `handleDetection`'s isolation
-  /// context is already MainActor via `engine.onEvent`'s `Task { @MainActor
-  /// in }`, so no `await` is needed here or in the phase-transition helpers
-  /// it calls.
-  private func observe(_ detection: BarnardDetectionEvent, for session: EventSession) {
-    advanceWindowIfNeeded(enin: detection.enin, eventCode: session.id)
-    currentWindowRpids.insert(detection.rpid)
-    guard distinctPeerRpids.insert(detection.rpid).inserted else { return }
+  /// Records the detection against the running peer count and window, then
+  /// applies whatever phase transition that observation implies.
+  private func observe(enin: Int, rpid: String, for session: EventSession) {
+    advanceWindowIfNeeded(enin: enin, eventCode: session.id)
+    currentWindowRpids.insert(rpid)
+    guard distinctPeerRpids.insert(rpid).inserted else { return }
 
     let peersVerified = distinctPeerRpids.count
     switch phase {
@@ -211,6 +224,7 @@ final class SensingCoordinator: ObservableObject {
   @discardableResult
   func stopSensing() -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
+    closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
     engine.stopAuto()
@@ -253,6 +267,7 @@ final class SensingCoordinator: ObservableObject {
   @discardableResult
   func reset() -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
+    closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
     resetSessionState()
@@ -327,6 +342,23 @@ final class SensingCoordinator: ObservableObject {
     case .recording(let event, _), .signalLost(let event, _):
       return event
     case .idle, .sensing, .eventFound:
+      return nil
+    }
+  }
+
+  /// Broader than `currentBindingEvent`: also covers `.eventFound`, which
+  /// has no `Proof` yet (self-proof correctly stays gated on
+  /// `currentBindingEvent`) but can still have a real open window
+  /// (`currentWindowEnin`/`currentWindowRpids`) worth reporting at session
+  /// end — a session that observes peers below the confirm threshold and
+  /// never reaches `.recording` still has a real window-observed-chunk
+  /// (`docs/specs/session-end-finalization.md` §3.2). Used only by the
+  /// window-close path below.
+  private var currentSessionEventCode: String? {
+    switch phase {
+    case .eventFound(let session), .recording(let session, _), .signalLost(let session, _):
+      return session.id
+    case .idle, .sensing:
       return nil
     }
   }
@@ -455,13 +487,36 @@ final class SensingCoordinator: ObservableObject {
   private func advanceWindowIfNeeded(enin: Int, eventCode: String) {
     guard let openEnin = currentWindowEnin else {
       currentWindowEnin = enin
-      firstWindowEnin = enin
+      // Not unconditional: once a mid-session checkpoint can nil
+      // `currentWindowEnin` without ending the session (backgrounding,
+      // `docs/specs/session-end-finalization.md` §3.4), this branch can be
+      // re-entered more than once per session — `firstWindowEnin` must
+      // still only ever be set once, at the session's true first window.
+      if firstWindowEnin == nil {
+        firstWindowEnin = enin
+      }
       return
     }
     guard openEnin != enin else { return }
     closeWindow(enin: openEnin, eventCode: eventCode)
     currentWindowRpids = []
     currentWindowEnin = enin
+  }
+
+  /// Closes whatever window is still open at explicit-stop time
+  /// (`stopSensing()`/`reset()`), before `resetSessionState()` clears the
+  /// state this reads — mirroring exactly where `finalizeSelfProofIfNeeded()`
+  /// already sits in both functions
+  /// (`docs/specs/session-end-finalization.md` §3.3). A no-op if no window
+  /// is open (`currentWindowEnin == nil`) — true both for a session that
+  /// never observed a peer, and, once this is called a second time in a
+  /// row, for the case right after the first call already closed the
+  /// window and `resetSessionState()` nil'd `currentWindowEnin` — the same
+  /// guard covers both, so no separate idempotency mechanism is needed
+  /// (§3.6).
+  private func closeFinalWindowIfNeeded() {
+    guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
+    closeWindow(enin: enin, eventCode: eventCode)
   }
 
   /// Signs the closing window's observations with the event signing key
