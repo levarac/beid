@@ -83,6 +83,7 @@
 		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
 		EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25F9B71C531690F799D13498 /* EventBindingTests.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
+		F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */; };
 		FBB92DC557CD10D7B999A416 /* EventCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000D4B43F2D5A1703701E95 /* EventCardView.swift */; };
 		FD7E9D9913C3E0B56B054233 /* ScanPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */; };
 /* End PBXBuildFile section */
@@ -141,6 +142,7 @@
 		6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectSecrets.swift; sourceTree = "<group>"; };
 		7209389876A87B83EB5B49B9 /* EventCommitment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCommitment.swift; sourceTree = "<group>"; };
 		745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeRenderer.swift; sourceTree = "<group>"; };
+		761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundingCheckpointTests.swift; sourceTree = "<group>"; };
 		7A1EACAE869F3E0B456C222A /* WindowReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReport.swift; sourceTree = "<group>"; };
 		7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignatureTests.swift; sourceTree = "<group>"; };
 		7F17F48A8733EF3CE98885F4 /* NativeCryptoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCryptoProvider.swift; sourceTree = "<group>"; };
@@ -354,6 +356,7 @@
 		DA293E8A0771B440603690A0 /* BeidTests */ = {
 			isa = PBXGroup;
 			children = (
+				761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */,
 				0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */,
 				25F9B71C531690F799D13498 /* EventBindingTests.swift */,
 				E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */,
@@ -637,6 +640,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */,
 				5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */,
 				EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */,
 				CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */,
