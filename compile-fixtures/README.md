@@ -5,7 +5,7 @@ current shared API and module name. Apply each patch in a disposable checkout,
 run the command below, and require the named diagnostic. Reverse the patch
 before continuing.
 
-## Kotlin stale symbol
+## Kotlin stale shared import
 
 ```sh
 patch -p1 < compile-fixtures/stale-kotlin-symbol.patch
@@ -14,8 +14,8 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew :app:compileDebugKotlin --no-daemon --rerun-tasks
 ```
 
-Expected: compilation fails with `Unresolved reference
-'RemovedSharedModuleIdentityIssue107'`.
+Expected: compilation fails while resolving the app's explicit shared-module
+import, with `Unresolved reference 'RemovedSharedModuleIdentityIssue107'`.
 
 ## Swift stale module import
 
@@ -26,7 +26,8 @@ xcodegen generate
 cd ..
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
   xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
-  -destination 'generic/platform=iOS Simulator' build
+  -destination 'platform=iOS Simulator,id=5638ACA8-5A90-4931-AB47-9F472D95B7E1' \
+  build
 ```
 
 Expected on Xcode 27: compilation fails with `Unable to resolve module

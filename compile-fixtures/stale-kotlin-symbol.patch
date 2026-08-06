@@ -1,7 +1,5 @@
---- a/android/app/src/main/kotlin/org/levarac/beid/shared/SharedRuntimeProbe.kt
-+++ b/android/app/src/main/kotlin/org/levarac/beid/shared/SharedRuntimeProbe.kt
-@@ -4,3 +4,3 @@
- internal object SharedRuntimeProbe {
--    fun identity(): SharedModuleIdentity = SharedModuleIdentity()
-+    fun identity(): SharedModuleIdentity = RemovedSharedModuleIdentityIssue107()
- }
+--- a/android/app/src/main/kotlin/org/levarac/beid/sharedbridge/SharedRuntimeProbe.kt
++++ b/android/app/src/main/kotlin/org/levarac/beid/sharedbridge/SharedRuntimeProbe.kt
+@@ -3 +3 @@
+-import org.levarac.beid.shared.SharedModuleIdentity
++import org.levarac.beid.shared.RemovedSharedModuleIdentityIssue107

@@ -6,9 +6,6 @@ plugins {
     id("com.android.kotlin.multiplatform.library")
 }
 
-group = "org.levarac.beid"
-version = "0.1.0"
-
 kotlin {
     androidLibrary {
         namespace = "org.levarac.beid.shared"
@@ -32,15 +29,10 @@ kotlin {
     }
 
     sourceSets {
-        commonMain {}
         commonTest {
             dependencies {
                 implementation(kotlin("test"))
             }
         }
-        androidMain {}
-        getByName("androidHostTest") {}
-        iosMain {}
-        iosTest {}
     }
 }
