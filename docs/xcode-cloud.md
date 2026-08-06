@@ -114,24 +114,24 @@ The other two workflows:
   macOS build. Background: before 2026-08-02 this workflow had no files
   rule at all, and a one-line docs PR burned a full macOS build+test.
 
-  **⚠️ The rule does NOT behave as described above. Observed
-  2026-08-03 — do not trust the intended reading until someone fixes the
-  workflow in ASC:**
+  **⚠️ 2026-08-03 の「docs ファイルが diff に居る時だけ起動する」説は、
+  2026-08-04 に #93 のコメントで反証済み (このブロックは 2026-08-06 訂正)。**
 
-  | PR | Changed files | macOS build |
-  |---|---|---|
-  | #87 | docs only | skipped (intended) |
-  | #89 | docs + code | ran |
-  | #90 | docs + code | ran |
-  | **#92** | **code only** | **skipped — WRONG** |
+  経緯: 上の表 (#92 が code-only でスキップ) から「docs/.github/.md の
+  存在がトリガー」という逆転説が立ったが、docs ファイルを含む #94 が
+  起動せずその説は死に、続いて #94 への**空 commit** (ファイル変更ゼロ)
+  で build が起動した。つまり **diff の内容はトリガーと無関係**。
 
-  A code-only PR gets **no macOS build and no test run at all**, silently:
-  no failed check, no pending check, nothing on the commit — the PR simply
-  shows green from the two Ubuntu checks and looks ready to merge. In
-  effect the workflow currently starts only when a `docs/`/`.github/`/`.md`
-  file is present, which is close to the inverse of the intent. #92 was
-  the first code-only PR after the 2026-08-02 rule change, which is why
-  this went unnoticed for a day.
+  現時点で最も支持される記述: **PR 作成直後の初回評価が、時々、無言で
+  行われない**。その後に何かを push すれば (内容不問、空 commit で足りる)
+  評価は回復する。トリガー条件そのものは repo 側からは説明が付かず、
+  ASC 側の調査が必要 (#93 が open で追跡中)。
+
+  実害の形はこう読む: 起動しなかった PR は **失敗でも pending でもなく、
+  チェックが「存在しない」**。Ubuntu 系 3 つの green だけで merge 可能に
+  見える。したがってレビュー/マージ時の確認は「Test - iOS が green か」
+  ではなく **「Test - iOS が exact head に存在し、かつ green か」**。
+  不在なら空 commit を push して再評価させる。
 
   This directly contradicts the "fails open" claim this section used to
   make (that a misconfiguration "can waste compute but never silently skip
