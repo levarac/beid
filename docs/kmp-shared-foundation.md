@@ -298,20 +298,7 @@ link error が、この host の simulator に存在しない architecture を�
 
 ### GitHub-hosted Ubuntu
 
-beid は ShiokazeHD の self-hosted-only 制約の対象ではありません。軽量な required check は `ubuntu-latest` で構いません。
-
-`shared/**`、Android Gradle 設定、KMP integration script が変わった時は、最低でも次を走らせます。
-
-```bash
-# repository root から開始する
-cd android
-./gradlew :shared:testAndroidHostTest \
-  :app:testDebugUnitTest \
-  :app:assembleDebug \
-  --no-daemon --no-parallel
-```
-
-iOS native test は GitHub-hosted macOS で走らせません。
+beid は ShiokazeHD の self-hosted-only 制約の対象ではありません。現在の hosted job set と GitHub Actions / Xcode Cloud の分担は、repository の正本である [`AGENTS.md` の PR CI contract](../AGENTS.md#pr-ci) と実行定義 `.github/workflows/pr-ci.yml` を確認します。本書では task list を複製しません。KMP change は、上の local gate に加えてその PR CI contract を満たします。
 
 toolchain は checkout だけから再現できるよう repo 内で pin します。Kotlin plugin version、Gradle wrapper と distribution checksum、CI の JDK version を暗黙の latest にしません。
 
@@ -355,7 +342,7 @@ source を先に開くと、reader は既に知った答えの確認資料とし
 
 ### path filter
 
-`shared/**` の変更は Android と iOS の両 lane の対象です。`android/settings.gradle.kts`、Gradle wrapper/plugin version、JDK selector の変更も同じです。module build の前提が変わるためです。GitHub Actions の Android lane は repository workflow から確認できます。Xcode Cloud の自動 PR workflow でも start condition 上の対象ですが、無言で欠落する既知事象があるため、実際に exact head に存在することまで確認します。
+current PR CI の job set と lane 分担は [`AGENTS.md` の PR CI contract](../AGENTS.md#pr-ci) を正本とし、ここでは複製しません。path 上の要点は、`shared/**`、`android/settings.gradle.kts`、Gradle wrapper/plugin version、JDK selector の変更が module build の前提を変えることです。repository の GitHub Actions workflow は PR に path filter を設けていません。Xcode Cloud の自動 PR workflow でも `shared/**` は start condition の対象ですが、無言で欠落する既知事象があるため、実際に exact head に存在することまで確認します。
 
 ## 7. build 成功を報告する時の証拠
 

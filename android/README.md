@@ -141,6 +141,7 @@ translations in this PR is safe.
   = false` for debug and release, matching barnard's own example app — real
   release signing/minification is a pre-launch concern, not scaffold scope).
 - No instrumentation or device E2E tests yet. JVM unit tests currently cover
-  the app-to-`shared/` bridge and the native unsent-window ledger store, and
-  `.github/workflows/pr-ci.yml` runs those tests, the shared Android host
-  tests, and `:app:assembleDebug` on PRs.
+  the app-to-`shared/` bridge and the native unsent-window ledger store. For
+  the current hosted job set and the GitHub Actions / Xcode Cloud division,
+  use the repository's authoritative [PR CI contract](../AGENTS.md#pr-ci)
+  together with its executable workflow, `.github/workflows/pr-ci.yml`.

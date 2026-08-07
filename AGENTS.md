@@ -326,9 +326,17 @@ delivery files:
 
 ### PR CI
 
-- `pr-ci` はすべての PR で Ubuntu 上の lint と sanity を実行する。macOS
-  でのビルドとテストは Xcode Cloud が担当するため、この workflow には
-  含めない。
+- **この subsection が repository の PR CI lane 分担の正本。** 実行定義は
+  `.github/workflows/pr-ci.yml` にある。現在の `pr-ci` はすべての PR と
+  `main` への push で、Ubuntu 上に次の 3 job を実行する。
+  - Android build: `:shared:testAndroidHostTest`、
+    `:app:testDebugUnitTest`、`:app:assembleDebug`
+  - SwiftLint: `scripts/lint.sh`
+  - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証
+
+  native iOS の build / test はこの GitHub Actions workflow では実行せず、
+  Xcode Cloud が担当する。他の文書はこの分担を複製せず、この subsection
+  と実行定義を参照する。
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、
   上の KMP review gate を免除しない。KMP の independent review は作業上の
