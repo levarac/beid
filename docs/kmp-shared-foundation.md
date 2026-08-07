@@ -347,7 +347,39 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
 
 Gradle cache があっても構いませんが、source checkout、dependency graph、local substitution が曖昧な build を証拠にしません。
 
-## 8. release branch へ forward-port する時
+## 8. squash merge 後に branch を rebase する時
+
+前の slice が squash merge され、その commit 群を自分の履歴にも含む branch では、素の `git rebase <新しい base>` を使いません。`git rebase --onto <新しい base> <本当の分岐点> <branch 名>` を使います。
+
+squash merge は N 個の commit を 1 個にまとめて main に載せます。自分の branch に残る元の N 個と main 側の 1 個は同じ commit ではないため、git は patch-id の一致で元の commit を適用済みと判定できません。素の rebase は、それらを自分の未着地 commit と一緒に replay します。結果は conflict が増えるだけとは限らず、取り消したはずの変更が復活することがあります。
+
+実例として、2026-08-07 の kmp/03 では、前の kmp/02 が squash merge され、main には 1 個の commit として入りました。kmp/03 は kmp/02 系列の 9 個目の commit から分岐していました。素の `git rebase origin/main` は 10 個の commit を replay しようとし、その中には review で誤りと判断されて全面 revert 済みの commit も含まれていました。そのまま進めると、削除済みの不具合が、rebase した実装者の変更として復活するところでした。
+
+### rebase の手順
+
+```bash
+git fetch origin
+git rebase --onto origin/main <本当の分岐点のSHA> <自分のbranch名>
+```
+
+`<本当の分岐点のSHA>` は、rebase 前に `git merge-base <前のsliceのbranch> <自分のbranch>` で求めます。rebase 前の HEAD も記録しておきます。
+
+### rebase 後の確認
+
+次の 4 点を必ず確認します。
+
+```bash
+git range-diff <分岐点>..<元のHEAD> origin/main..HEAD   # 自分の commit だけで patch が同一（= 印）
+git rev-list --left-right --count origin/main...HEAD    # 0 behind であること
+git log --oneline origin/main..HEAD                     # 自分の commit だけ載っていること
+git diff origin/main HEAD -- <自分が触っていない領域>  # 空であること
+```
+
+4 番目の空 diff は、消したものが戻っていないことの**直接の証拠**です。他の 3 点が green だから大丈夫だろう、という推論の代わりにはなりません。
+
+この規則の trigger は main が進んだことではなく、**自分の branch の履歴に、squash されて main に入った commit が含まれていること**です。main から直接分岐し、自分の commit だけを持つ clean branch では、素の `git rebase origin/main` を使います。
+
+## 9. release branch へ forward-port する時
 
 source branch で通った結果を destination branch の証拠として使いません。release branch では Kotlin、Gradle、Barnard、SwiftPM の resolved set が異なる場合があります。
 
@@ -361,7 +393,7 @@ source branch で通った結果を destination branch の証拠として使い�
 
 この簡略化が成立するのは `shared/` が project-internal module の間だけです。将来 published artifact として配布するなら、clean checkout だけでは版を特定できないため、resolved-version capture を必須へ変更します。
 
-## 9. PR checklist
+## 10. PR checklist
 
 - [ ] 台帳の family / class / oracle または invariant が埋まっている
 - [ ] RED の falsifier を確認した
@@ -385,7 +417,7 @@ source branch で通った結果を destination branch の証拠として使い�
 - [ ] published dependency を変更した場合、resolved version と取得経路を記録した
 - [ ] forward-port がある場合、destination branch の graph で再検証した
 
-## 10. 参照した一次資料
+## 11. 参照した一次資料
 
 - ShiokazeHD/umidori Issue #693: v0.10.0 shared runtime 置換の受け入れ条件と A/B/C 台帳
 - ShiokazeHD/umidori Issue #780: iOS family ごとの stacked runtime-authority 切替
