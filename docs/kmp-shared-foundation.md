@@ -1,5 +1,13 @@
 # beid KMP shared foundation 作業マニュアル
 
+> **English preface — navigation only.** This is the authoritative, ordered
+> implementation manual for moving beid decisions into `shared/`; the Japanese
+> body is the single source of truth. On detailed KMP procedure, it overrides
+> `AGENTS.md` when they conflict (repository-wide safety and delivery rules in
+> `AGENTS.md` still apply). Section map: shared/native ownership boundary §2;
+> walking-skeleton completion conditions §3; build commands §6; stacked-branch
+> rebase rule §8. This signpost is not a second summary of those rules.
+
 最終更新: 2026-08-08
 
 実装照合: `origin/main` @
@@ -96,6 +104,8 @@ shared/
 │   └── iosTest/kotlin/...
 └── testdata/vectors/
 ```
+
+次の「`commonMain` に置くもの」と「`shared/` に置かないもの」は、family を移す時の ownership 契約です。現在 production に配線済みの実装一覧ではありません。現在の配線状態は本書冒頭の実装照合だけで判断します。
 
 `commonMain` に置くもの:
 
@@ -333,6 +343,12 @@ metered な CI の費用は、local で反復して push をまとめる理由�
 作者が手配した review は有用な self-check ですが、独立 review gate を満たしません。独立 review は repository maintainer に依頼します。具体的には PR を開き、maintainer が reviewer を割り当てるまで待ちます。作者は reviewer を選定・招待・手配しません。maintainer が依頼をどう処理するかは maintainer-side operation であり、本書の範囲外です。self-check と independent gate は別の evidence として報告します。
 
 この train では二度、違いが具体化しました。walking-skeleton slice の maker-arranged audit は blocker なしでしたが、independent review は app-local class が shared type を置き換えても既存 check が green のままになる ownership hole を見つけました。ledger slice でも maker-arranged audit の後、independent review が二つの blocker を見つけ、その一つは shipped App Review path の regression と durable record の重複でした。どちらの self-check も不誠実ではなく、実装者の落ち度を示す事例でもありません。作者が review の範囲と入口を選ぶ構造と、独立した gate の構造が違うためです。
+
+#### documentation audit の標準手順
+
+将来の文書監査は **ANSWER-FROM-DOCS-THEN-VERIFY-AGAINST-CODE** の順で行います。reader は最初に文書だけを読み、具体的な質問へ回答し、各回答の確信度も明記して内容を固定します。その後で初めて source code と照合し、誤答・不足・過剰な確信が生まれた文書箇所を defect として記録します。
+
+source を先に開くと、reader は既に知った答えの確認資料として文書を読み、文書だけから別の答えへ誘導される欠陥を見逃します。注意深い reader が文書だけで誤答した事実は、通常の accuracy pass では作れない evidence です。実際に wallet proof 署名を「未実装」とした本書群の P0 誤記は、両 platform を build した cold read と別の accuracy check の後にも残り、この順序の監査で初めて発見されました。
 
 ### path filter
 
