@@ -7,13 +7,24 @@ before continuing.
 
 Here, a disposable checkout means a detached worktree created only for these
 destructive fixtures. Create it from the repository root and keep the same
-shell open so `$repo_root` and `$fixture_dir` remain available:
+shell open so `$repo_root` and `$fixture_dir` remain available. A detached
+worktree does not inherit gitignored `android/local.properties`, and every
+fixture below either invokes Gradle directly or reaches it through Xcode's
+Swift Export build phase. On the host checked for this guide (2026-08-08),
+all three beid checkouts had no such file and the successful setup relied on
+`ANDROID_HOME`; `ANDROID_SDK_ROOT` was unset. Require one SDK environment
+variable that names an existing directory, without printing its value:
 
 ```sh
 # Start in the repository root.
 repo_root="$(git rev-parse --show-toplevel)"
 fixture_parent="$(mktemp -d)"
 fixture_dir="$fixture_parent/beid"
+if { [ -z "${ANDROID_HOME:-}" ] || [ ! -d "$ANDROID_HOME" ]; } && \
+   { [ -z "${ANDROID_SDK_ROOT:-}" ] || [ ! -d "$ANDROID_SDK_ROOT" ]; }; then
+  echo "Set ANDROID_HOME or ANDROID_SDK_ROOT to an existing SDK directory before running a fixture." >&2
+  exit 1
+fi
 git -C "$repo_root" worktree add --detach "$fixture_dir" HEAD
 cd "$fixture_dir"
 ```

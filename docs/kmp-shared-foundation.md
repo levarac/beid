@@ -410,7 +410,9 @@ branch_name="$(git branch --show-current)"
 old_head="$(git rev-parse HEAD)"
 ```
 
-本当の分岐点は、まず自分の branch の reflog から確認します。reflog は新しい順なので、最古の `branch: Created from ...` entry（通常は出力の最後）を探します。message が `Created from HEAD` でも、その行の先頭 SHA が branch 作成時の commit です。その SHA が現在の履歴でも「前 slice の最後と、この branch 自身の最初の commit の境界」になっていることを確認してから使います。
+本当の分岐点は、まず自分の branch の reflog から確認します。reflog は新しい順なので、最古の `branch: Created from ...` entry（通常は出力の最後）を探します。message が `Created from HEAD` でも、その行の先頭 SHA が branch 作成時の commit です。
+
+ただし `branch: Created from refs/remotes/origin/<branch>` の entry は要注意です。その行の SHA は remote-tracking branch の**作成時の tip**であり、branch の fork point ではありません。見た目がもっともらしくても分岐点としてそのまま採用せず、どの creation message でも、その SHA が現在の履歴で「前 slice の最後と、この branch 自身の最初の commit の境界」になっていることを確認してから使います。
 
 ```bash
 # 同じ shell session・repository root で続ける
