@@ -373,9 +373,16 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
 
 Gradle cache があっても構いませんが、source checkout、dependency graph、local substitution が曖昧な build を証拠にしません。
 
-## 8. squash merge 後に branch を rebase する時
+## 8. 自分の branch の履歴に squash 済み commit が含まれる場合の rebase
 
-前の slice が squash merge され、その commit 群を自分の履歴にも含む branch では、素の `git rebase <新しい base>` を使いません。`git rebase --onto <新しい base> <本当の分岐点> <branch 名>` を使います。
+最初に適用条件を判定します。前の slice が squash merge され、その squash 前の commit 群を自分の branch も履歴に含む場合だけ、この section の `--onto` 手順を使います。
+
+```bash
+git fetch origin
+git log --oneline origin/main..HEAD
+```
+
+表示がすべて「現在の branch 自身の未着地作業として意図した commit」なら、この section は適用せず、素の `git rebase origin/main` を使います。前 slice など、現在の branch 自身の未着地作業として意図していない commit が含まれ、その slice が main では squash 済みなら、以下を適用します。
 
 squash merge は N 個の commit を 1 個にまとめて main に載せます。自分の branch に残る元の N 個と main 側の 1 個は同じ commit ではないため、git は patch-id の一致で元の commit を適用済みと判定できません。素の rebase は、それらを自分の未着地 commit と一緒に replay します。結果は conflict が増えるだけとは限らず、取り消したはずの変更が復活することがあります。
 
@@ -383,27 +390,46 @@ squash merge は N 個の commit を 1 個にまとめて main に載せます�
 
 ### rebase の手順
 
+まず branch 名と rebase 前の HEAD を記録します。
+
 ```bash
-git fetch origin
-git rebase --onto origin/main <本当の分岐点のSHA> <自分のbranch名>
+branch_name="$(git branch --show-current)"
+old_head="$(git rev-parse HEAD)"
 ```
 
-`<本当の分岐点のSHA>` は、rebase 前に `git merge-base <前のsliceのbranch> <自分のbranch>` で求めます。rebase 前の HEAD も記録しておきます。
+本当の分岐点は、まず自分の branch の reflog から確認します。reflog は新しい順なので、最古の `branch: Created from ...` entry（通常は出力の最後）を探します。message が `Created from HEAD` でも、その行の先頭 SHA が branch 作成時の commit です。その SHA が現在の履歴でも「前 slice の最後と、この branch 自身の最初の commit の境界」になっていることを確認してから使います。
+
+```bash
+git reflog show --format='%H %gs' "$branch_name"
+```
+
+reflog は local かつ期限付きなので、作成 entry が残っていない場合があります。その時は履歴を古い順に並べ、現在の branch 自身の最初の commit の直前にある、前 slice 最後の commit を選びます。
+
+```bash
+git log --reverse --oneline origin/main..HEAD
+```
+
+どちらからも由来を確定できなければ SHA を推測せず停止します。stacked branch で `git merge-base origin/main "$branch_name"` を使ってはいけません。それが返すのは多くの場合、stack を作る前の古い main 上の共通祖先であり、本当の branch 作成点ではありません。その SHA を使うと前 slice の commit まで再び replay します。
+
+分岐点を `fork_point` に記録してから rebase します。
+
+```bash
+fork_point="<本当の分岐点のSHA>"
+git rebase --onto origin/main "$fork_point" "$branch_name"
+```
 
 ### rebase 後の確認
 
 次の 4 点を必ず確認します。
 
 ```bash
-git range-diff <分岐点>..<元のHEAD> origin/main..HEAD   # 自分の commit だけで patch が同一（= 印）
+git range-diff "$fork_point..$old_head" origin/main..HEAD  # 自分の commit だけで patch が同一（= 印）
 git rev-list --left-right --count origin/main...HEAD    # 0 behind であること
 git log --oneline origin/main..HEAD                     # 自分の commit だけ載っていること
 git diff origin/main HEAD -- <自分が触っていない領域>  # 空であること
 ```
 
 4 番目の空 diff は、消したものが戻っていないことの**直接の証拠**です。他の 3 点が green だから大丈夫だろう、という推論の代わりにはなりません。
-
-この規則の trigger は main が進んだことではなく、**自分の branch の履歴に、squash されて main に入った commit が含まれていること**です。main から直接分岐し、自分の commit だけを持つ clean branch では、素の `git rebase origin/main` を使います。
 
 ## 9. release branch へ forward-port する時
 
