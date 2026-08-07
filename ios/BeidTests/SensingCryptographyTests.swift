@@ -50,6 +50,33 @@ final class SensingCryptographyTests: XCTestCase {
     )
   }
 
+  func testBarnardFacadeForwardsWalletAcknowledgementInputs() throws {
+    let cryptography = BarnardSensingCryptography()
+    let ownerPublicKey = cryptography.ownerPublicKey()
+    let walletAddress = Data((0x20...0x33).map(UInt8.init))
+    let walletSignature = Data((0x40...0x80).map(UInt8.init))
+
+    let signature = try XCTUnwrap(
+      cryptography.signWalletAcknowledgement(
+        walletAddress: walletAddress,
+        walletSignature: walletSignature
+      )
+    )
+
+    XCTAssertTrue(
+      BarnardCoreSigning.verifyWalletAcknowledgement(
+        ownerPublicKey: Array(ownerPublicKey),
+        walletAddress: Array(walletAddress),
+        walletSignature: Array(walletSignature),
+        signature: BarnardCoreRecoverableSignature(
+          r: Array(signature.r),
+          s: Array(signature.s),
+          v: signature.v
+        )
+      )
+    )
+  }
+
   @MainActor
   func testCoordinatorOwnsOnlyTheSensingCryptographyFacade() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
