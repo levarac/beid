@@ -147,6 +147,39 @@ final class OwnerKeyProviderSelfProofTests: XCTestCase {
       )
     )
   }
+
+  func testSignWalletAcknowledgementProducesABarnardVerifiableSignature() throws {
+    let provider = OwnerKeyProvider(
+      keyStorage: FixedSeedKeyStorage(seed: Data((0..<32).map(UInt8.init))),
+      randomSource: NeverCalledRandomSource()
+    )
+    let walletAddress = Data((0x20...0x33).map(UInt8.init))
+    let walletSignature = Data((0x40...0x80).map(UInt8.init))
+
+    let signature = try XCTUnwrap(
+      provider.signWalletAcknowledgement(
+        walletAddress: walletAddress,
+        walletSignature: walletSignature
+      )
+    )
+
+    XCTAssertTrue(
+      BarnardCoreSigning.verifyWalletAcknowledgement(
+        ownerPublicKey: ownerPublicKey,
+        walletAddress: Array(walletAddress),
+        walletSignature: Array(walletSignature),
+        signature: signature
+      )
+    )
+    XCTAssertFalse(
+      BarnardCoreSigning.verifyWalletAcknowledgement(
+        ownerPublicKey: ownerPublicKey,
+        walletAddress: [UInt8](repeating: 0, count: 20),
+        walletSignature: Array(walletSignature),
+        signature: signature
+      )
+    )
+  }
 }
 
 final class SelfProofRecordTests: XCTestCase {
