@@ -132,7 +132,7 @@ feature を追加または shared へ移す PR は、Android と iOS の product
 
 ## 3. walking skeleton を作る
 
-最初の PR は product rule を移しません。module boundary と build path だけを作ります。
+最初の PR は product rule を移しません。module boundary と build path だけを作ります。以下の 1–10 は walking skeleton を新設する時の一回限りの authoring 手順です。既存 checkout では作り直さず、その後の「完了条件」にある command を再実行して現在の配線を確認します。
 
 1. root に `shared/` を作る。
 2. `android/settings.gradle.kts` に `:shared` を追加し、`projectDir` を `../shared` へ向ける。
@@ -151,12 +151,35 @@ Kotlin の package 配置は Swift source API の一部です。package を移�
 
 ### walking skeleton の完了条件
 
-- Android app が `project(":shared")` を使って compile する。
-- `:shared:testAndroidHostTest` が通る。
-- `:shared:iosSimulatorArm64Test` が通る。
-- Xcode build が build phase で Swift Export を新規生成し、iOS app と tests がそれを import する。
-- generated output を消した状態からでも Xcode build が復元できる。
-- `compile-fixtures/` の one-shot patch を disposable checkout へ適用し、存在しない shared symbol、古い module 名、古い import が compile error になることを手動で確認する。negative fixture の定期 CI gate 化は Issue #110 へ意図的に延期されており、現行 CI はこの確認を実行しない。
+repository root や `shared/` には Gradle wrapper がありません。Android app と shared の全 Gradle task（iOS target の Kotlin test を含む）は `android/gradlew` から実行します。
+
+```bash
+# repository root から開始する
+cd android
+JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
+  ./gradlew :app:compileDebugKotlin \
+  :shared:testAndroidHostTest \
+  :shared:iosSimulatorArm64Test \
+  --no-daemon
+```
+
+この command で Android app が `project(":shared")` を使って compile し、Android host test と iOS Simulator arm64 向け Kotlin test が実行されます。
+
+Swift Export の復元確認では、derived output の `shared/build/SwiftExport` だけを消し、concrete Simulator UDID で app と tests を再 build します。
+
+```bash
+# repository root から開始する
+rm -rf shared/build/SwiftExport
+xcrun simctl list devices available
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  build-for-testing
+test -d shared/build/SwiftExport
+```
+
+Xcode build が **Build BeidSharedKit** phase で Swift Export を新規生成し、iOS app と tests が `BeidSharedKit` を import できれば完了です。
+
+`compile-fixtures/` は walking-skeleton authoring の完了条件ではなく、該当する shared/native 境界を変更する PR で実行する手動 gate です。存在しない shared symbol、古い module 名、production の shared caller を壊す one-shot patch を disposable checkout へ適用し、各 fixture が指定する diagnostic を確認します。negative fixture の定期 CI gate 化は Issue #110 へ意図的に延期されており、現行 CI はこれらを実行しません。
 
 ## 4. 一つの family を移す
 
