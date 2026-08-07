@@ -88,6 +88,10 @@ beid `shared/` が Barnard 境界で確認してよいのは null、byte length�
 
 候補イベントの時間 window filter と deterministic ranking は、両 OS で同じ候補順を出すため shared の pure function 候補です。候補を実際に採用する操作と表示は Issue #100 が所有します。この family は Issue #100 担当者が interface を ACK するまで移行台帳へ入れません。
 
+以下は family の移行先を示す**目標 layout**です。directory は対応する
+family を実装する時にだけ作り、現在の file inventory として読まないで
+ください。
+
 ```text
 shared/
 ├── build.gradle.kts

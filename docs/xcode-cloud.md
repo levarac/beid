@@ -158,9 +158,10 @@ The other two workflows:
   tested and it is false. Per `AGENTS.md`, ASC is the source of truth over
   this doc — the fix belongs in the ASC GUI, not here.
 
-  **Until it is fixed**, a code-only PR's green checks mean only that
-  Ubuntu lint and sanity passed. Nothing was built or tested on macOS.
-  Tracked as gh#93.
+  **Until it is fixed**, a code-only PR's green Ubuntu checks prove only the
+  hosted jobs named in the repository's authoritative
+  [PR CI contract](../AGENTS.md#pr-ci). They do not prove that anything was
+  built or tested on macOS. Tracked as gh#93.
 - **Default** — the leftover initial-setup workflow (branch `main`, no
   files rule). Disable-or-delete candidate; kept only until the
   maintainer rules on it.

@@ -2,9 +2,9 @@
 
 First slice of the native (Flutter-free) beid Android app. Kotlin, Jetpack
 Compose, consumes the [levarac/barnard](https://github.com/levarac/barnard)
-BLE SDK. This mirrors `ios/`'s scaffold slice (13-screen SwiftUI scaffold,
-`ios/README.md`) at the same "first cut, not feature parity" scope — one
-screen, the design-system theme, and a compiling SDK dependency.
+BLE SDK. This mirrors the native host shape described in `ios/README.md` at
+the same "first cut, not feature parity" scope — one screen, the
+design-system theme, and a compiling SDK dependency.
 
 ## Build & run
 
@@ -79,7 +79,7 @@ animation specs are a follow-up once a motion-bearing screen lands) and
 
 ## One working screen: Join an event
 
-`ui/screens/EventJoinScreen.kt` is the scaffold's proof that the vendored SDK
+`ui/screens/EventJoinScreen.kt` is the scaffold's proof that the published SDK
 resolves, compiles, and runs: enter an event code → tap "Join event" →
 `EventJoinCoordinator` calls `BarnardEngine.requestPermissions` → the real
 Android BLE runtime-permission dialog appears → on grant, `joinEvent(code)` +
@@ -95,9 +95,9 @@ iOS's `SensingCoordinator` — no BLE-off/signal-lost recovery states, no
 production persistence flow. A native
 `persistence/UnsentWindowLedgerStore.kt` exists and its JVM tests exercise the
 shared snapshot codec, but wiring it into an Android sensing lifecycle remains
-deferred to Issue #121. That wiring, plus the rest of iOS's 13-screen flow
-(sensing → event found → verifying → verified → proof collected → collection
-home, etc.), remains follow-up work.
+deferred to Issue #121. That wiring, plus the rest of iOS's post-join flow
+(sensing → event found → recording with a one-time proof entrance, plus
+signal-loss recovery and collection home), remains follow-up work.
 
 **Why `BarnardEngine` is owned by `MainActivity`, not the composable**:
 `requestPermissions` is Activity-driven — the hosting `Activity` must forward

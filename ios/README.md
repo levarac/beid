@@ -117,7 +117,8 @@ behind a single flag so `walletFirst` stays flippable for demos:
 static let current: OnboardingMode = .guestFirst  // or .walletFirst
 ```
 
-- `.walletFirst`: Welcome → Connect Wallet (stub) → Bluetooth permission → home.
+- `.walletFirst`: Welcome → Connect Wallet → Bluetooth permission → home,
+  with manual event-code entry as the wallet-optional secondary path.
 - `.guestFirst` (default): Welcome → Bluetooth permission → home, with wallet
   connect deferred to the Account sheet.
 
@@ -377,27 +378,36 @@ Issue #121.
 01 Welcome, 02 Bluetooth permission guide, 03 Bluetooth-off, 04 Collection
 home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording
 (including the one-time "Proof Collected" entrance ceremony), 06d Signal
-Lost, 08 Item Detail, 09 Account sheet — plus a Connect Wallet stub screen
-for the `.walletFirst` onboarding order (not in the original 9-screen list,
-added because the onboarding-flag requirement needs a screen to flip to).
+Lost, 08 Item Detail, 09 Account sheet — plus Connect Wallet and manual Enter
+Event Code screens for the `.walletFirst` onboarding order (not in the
+original 9-screen list).
 
-All screens are plain modern SwiftUI with a blue accent, deliberately not
-pixel-polished per the brief.
+All screens use the repository design-system tokens, adaptive layouts, and
+current custom artwork documented in `DESIGN.md`; the original blue-accent
+scaffold is historical, not a current implementation guide.
 
 ## Project layout
 
 ```
 ios/
   project.yml              # XcodeGen spec
+  Beid.xcodeproj/          # generated project, committed for local convenience
   README.md                # this file
   Secrets.example.plist    # WalletConnect credential template, see above
   Beid/
-    App/                    # @main entry point, Info.plist, Beid.entitlements
-    Models/                 # Proof, OnboardingMode, DemoEvent
+    App/                    # @main entry point, Info.plist, shared-runtime probe
+    Assets.xcassets/        # app icon catalog
+    DesignSystem.swift      # reusable SwiftUI components
+    DesignSystem/           # tokens, adaptive layout, colors, illustrations
+    Localizable.xcstrings   # source strings and target-locale translations
+    Models/                 # proof, event, onboarding, and signature models
     Persistence/            # proof/window stores and shared-ledger runtime/store
     Sensing/                # SensingCoordinator, SensingCryptography, BLE state
-    Onboarding/              # WalletConnect (Reown) client + adapters, see above
-    Navigation/              # AppCoordinator, AppScreen, RootView
-    Views/                   # all 13 screens
+    Onboarding/             # wallet clients and platform adapters, see above
+    Navigation/             # AppCoordinator, AppScreen, RootView
+    Views/                  # current onboarding, collection, scan, and detail views
+  BeidMetaMaskDebug/        # DEBUG-only MetaMask package isolation target
   BeidTests/                # coordinator, persistence/ledger, cryptography, and UI contract tests
+  BeidUITests/              # iPad layout UI tests
+  ci_scripts/               # Xcode Cloud hooks and pinned XcodeGen version
 ```

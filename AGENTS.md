@@ -45,9 +45,10 @@ the iOS production `SensingCoordinator`; native snapshot stores exist on both
 platforms, while Android production wiring remains deferred to Issue #121.
 Android currently has only the Event Join screen, and
 `EventJoinCoordinator` stops at `Idle`, `RequestingPermission`, `Sensing`, or
-`PermissionDenied`. The entire post-join screen flow—event found, verifying,
-verified, proof collected, and collection home—is absent on Android today;
-the gap is broader than ledger persistence alone.
+`PermissionDenied`. The entire post-join screen flow—event found, recording
+(including the one-time proof entrance), signal-loss recovery, and collection
+home—is absent on Android today; the gap is broader than ledger persistence
+alone.
 The iOS coordinator owns one native `SensingCryptography` facade, with
 `BarnardSensingCryptography` as its production implementation, instead of
 retaining `BarnardIdentity` directly. That facade is a native testability
