@@ -17,6 +17,8 @@ import org.levarac.beid.shared.report.decodeUnsentWindowLedgerSnapshot
  *
  * This class decides only filesystem ordering and atomic replacement. Ledger
  * transitions, snapshot syntax, and report eligibility remain in `shared`.
+ * Production wiring is deferred to beid#121, where Android persistence and
+ * listing first consume the shared snapshot codec.
  */
 internal class UnsentWindowLedgerStore(
     private val file: File,

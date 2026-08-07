@@ -7,6 +7,11 @@ enum WindowReportStoreError: Error {
   case conflictingReportId
 }
 
+struct WindowReportStoreRecovery {
+  let store: WindowReportStore
+  let quarantinedReportsURL: URL?
+}
+
 /// On-device JSON store for locally signed window reports — same pattern
 /// as `ProofStore` (flat JSON, no server call). See `WindowReport`.
 @MainActor
@@ -24,6 +29,39 @@ final class WindowReportStore: ObservableObject {
   private static func defaultFileURL() -> URL {
     let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     return dir.appendingPathComponent("window-reports.json")
+  }
+
+  /// Production startup policy for a report file that cannot be decoded.
+  /// Strict `init` and report access remain fail-closed; this opt-in path
+  /// preserves the corrupt bytes under a timestamped sibling name and opens
+  /// an empty store at the canonical path so future reports can be persisted.
+  /// Other I/O errors are not treated as corruption and still propagate.
+  static func recoveringCorruptReports(
+    fileURL: URL? = nil,
+    now: Date = Date()
+  ) throws -> WindowReportStoreRecovery {
+    let resolvedFileURL = fileURL ?? defaultFileURL()
+    let store = WindowReportStore(fileURL: resolvedFileURL)
+    guard let loadError = store.loadError else {
+      return WindowReportStoreRecovery(
+        store: store,
+        quarantinedReportsURL: nil
+      )
+    }
+    guard loadError is DecodingError else {
+      throw loadError
+    }
+
+    let timestampMilliseconds = Int64(
+      (now.timeIntervalSince1970 * 1_000).rounded(.down)
+    )
+    let suffix = "corrupt-\(timestampMilliseconds)-\(UUID().uuidString.lowercased())"
+    let quarantinedURL = resolvedFileURL.appendingPathExtension(suffix)
+    try FileManager.default.moveItem(at: resolvedFileURL, to: quarantinedURL)
+    return WindowReportStoreRecovery(
+      store: WindowReportStore(fileURL: resolvedFileURL),
+      quarantinedReportsURL: quarantinedURL
+    )
   }
 
   @discardableResult

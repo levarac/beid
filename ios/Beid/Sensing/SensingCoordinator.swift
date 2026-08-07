@@ -139,6 +139,18 @@ final class SensingCoordinator: ObservableObject {
   #endif
 
   convenience init() {
+    let windowReportStore: WindowReportStore
+    do {
+      let recovery = try WindowReportStore.recoveringCorruptReports()
+      if let quarantinedURL = recovery.quarantinedReportsURL {
+        print("Quarantined corrupt window reports at \(quarantinedURL.path)")
+      }
+      windowReportStore = recovery.store
+    } catch {
+      windowReportStore = WindowReportStore()
+      print("Unable to recover the window report store: \(error)")
+    }
+
     let runtime: UnsentWindowLedgerRuntime?
     do {
       let recovery = try UnsentWindowLedgerStore.recoveringCorruptSnapshot()
@@ -153,7 +165,7 @@ final class SensingCoordinator: ObservableObject {
       print("Unable to load the shared unsent-window ledger: \(error)")
     }
     self.init(
-      windowReportStore: WindowReportStore(),
+      windowReportStore: windowReportStore,
       selfProofStore: SelfProofStore(),
       unsentWindowLedgerRuntime: runtime
     )
@@ -191,7 +203,7 @@ final class SensingCoordinator: ObservableObject {
         // TODO: Construction currently performs relaunch reconciliation even
         // for same-process coordinator replacement. Introduce an explicit
         // process-relaunch signal before narrowing this without weakening
-        // crash-gap recovery.
+        // crash-gap recovery. See beid#134.
         let durableReports = try windowReportStore.persistedReportsForLedgerRecovery()
         let persistedObservations = durableReports.map { report in
           let reference = report.id.uuidString.lowercased()
@@ -304,7 +316,7 @@ final class SensingCoordinator: ObservableObject {
 
   @discardableResult
   func stopSensing() -> SelfProofRecord? {
-    endSensing()
+    endSensing(stopEngine: true)
   }
 
   /// Manual trigger so the Signal Lost screen is reachable from the demo
@@ -340,15 +352,17 @@ final class SensingCoordinator: ObservableObject {
 
   @discardableResult
   func reset() -> SelfProofRecord? {
-    endSensing()
+    endSensing(stopEngine: false)
   }
 
-  private func endSensing() -> SelfProofRecord? {
+  private func endSensing(stopEngine: Bool) -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
     closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
-    engine.stopAuto()
+    if stopEngine {
+      engine.stopAuto()
+    }
     resetSessionState()
     phase = .idle
     return selfProof
@@ -695,7 +709,7 @@ final class SensingCoordinator: ObservableObject {
         // TODO: This and the shared snapshot write below synchronously
         // rewrite whole files on the MainActor BLE path. Move the I/O off
         // actor in a follow-up while preserving report-before-ledger-close
-        // durability ordering.
+        // durability ordering. See beid#134.
         observationReference = try windowReportStore.add(report)
         currentWindowObservationReference = observationReference
       }

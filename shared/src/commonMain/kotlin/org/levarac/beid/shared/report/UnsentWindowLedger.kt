@@ -34,7 +34,8 @@ public class UnsentWindowLedgerTransition internal constructor(
  * A durable submission instruction.
  *
  * Canonical report payload construction is deferred to its facilitator-spec
- * slice; this ledger neither defines those bytes nor makes native authoritative.
+ * slice (beid#108); this ledger neither defines those bytes nor makes native
+ * authoritative.
  */
 public class UnsentWindowSubmission internal constructor(
     public val submissionKey: String,
