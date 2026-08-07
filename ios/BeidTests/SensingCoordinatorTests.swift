@@ -5,10 +5,33 @@ import XCTest
 @testable import Beid
 
 @MainActor
+func makeIsolatedSensingCoordinator(for testCase: XCTestCase) -> SensingCoordinator {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent("sensing-coordinator-test-\(UUID().uuidString)", isDirectory: true)
+  do {
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  } catch {
+    preconditionFailure("Unable to create isolated sensing test directory: \(error)")
+  }
+  testCase.addTeardownBlock {
+    try? FileManager.default.removeItem(at: directory)
+  }
+  return SensingCoordinator(
+    windowReportStore: WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    ),
+    selfProofStore: SelfProofStore(
+      fileURL: directory.appendingPathComponent("self-proofs.json")
+    ),
+    unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot")
+  )
+}
+
+@MainActor
 final class SensingCoordinatorTests: XCTestCase {
   func testDemoEventModeRemainsOverridableInDebugSimulator() throws {
     #if DEBUG && targetEnvironment(simulator)
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     XCTAssertTrue(coordinator.useDemoEventMode)
 
     coordinator.useDemoEventMode = false
@@ -25,7 +48,7 @@ final class SensingCoordinatorTests: XCTestCase {
     #if DEBUG
     throw XCTSkip("only applicable to Release-configured builds")
     #else
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.useDemoEventMode = false
     XCTAssertFalse(coordinator.useDemoEventMode)
 
@@ -37,12 +60,12 @@ final class SensingCoordinatorTests: XCTestCase {
   func testEngineOnEventIsWired() {
     // Smoke test: constructing the coordinator wires BarnardEngine's
     // onEvent callback without crashing (barnard#56 engine integration).
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     XCTAssertEqual(coordinator.phase, .idle)
   }
 
   func testDemoSequenceReachesRecordingPhaseAtThreshold() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-EVENT", name: "Test Event", venue: nil)
     var collectedProof: Proof?
     coordinator.onProofCollected = { collectedProof = $0 }
@@ -62,7 +85,7 @@ final class SensingCoordinatorTests: XCTestCase {
   }
 
   func testDemoSequenceKeepsSensingDuringItsInitialDelay() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.startSensing(demoEvent: .demoSample)
 
     try? await Task.sleep(nanoseconds: 10_000_000)
@@ -72,7 +95,7 @@ final class SensingCoordinatorTests: XCTestCase {
   }
 
   func testDemoSequenceStepsThroughRecordingCounts() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-EVENT", name: "Test Event", venue: nil)
     var observedPeerCounts: [Int] = []
     let threshold = BeidConfig.eventConfirmThreshold
@@ -98,13 +121,13 @@ final class SensingCoordinatorTests: XCTestCase {
   }
 
   func testSimulateSignalLostOnlyAppliesDuringRecording() {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.simulateSignalLost()
     XCTAssertEqual(coordinator.phase, .idle, "no-op outside .recording")
   }
 
   func testResumeSensingPreservesPeersVerifiedAcrossSignalLostCycle() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-EVENT", name: "Test Event", venue: nil)
 
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
@@ -133,11 +156,42 @@ final class SensingCoordinatorTests: XCTestCase {
   }
 
   func testResetReturnsToIdle() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
     coordinator.reset()
     XCTAssertEqual(coordinator.phase, .idle)
+  }
+
+  func testCancelingDemoWhileItsContinuationWaitsForMainActorDoesNotResurrectSession() async {
+    for usesReset in [false, true] {
+      let coordinator = makeIsolatedSensingCoordinator(for: self)
+      let stepDelayNanos: UInt64 = 100_000_000
+      coordinator.runDemoSequence(
+        demoEvent: .demoSample,
+        stepDelayNanos: stepDelayNanos
+      )
+
+      // Let the demo task enter its nonisolated delay, then hold MainActor
+      // past that delay. Its successful continuation is now queued behind
+      // this test when the session-ending action cancels the task.
+      try? await Task.sleep(nanoseconds: 10_000_000)
+      Thread.sleep(forTimeInterval: 0.15)
+      if usesReset {
+        coordinator.reset()
+      } else {
+        coordinator.stopSensing()
+      }
+
+      // Give the queued, now-cancelled continuation a chance to run. It
+      // must exit instead of restoring eventFound/recording state.
+      try? await Task.sleep(nanoseconds: 10_000_000)
+      XCTAssertEqual(
+        coordinator.phase,
+        .idle,
+        usesReset ? "reset" : "stopSensing"
+      )
+    }
   }
 
   func testStartSensingTwiceInARowOnTheSameCoordinatorBothReachRecording() async {
@@ -146,7 +200,7 @@ final class SensingCoordinatorTests: XCTestCase {
     // across `startScan()`/`finishScan()` calls) — per-session state
     // (`distinctPeerRpids`, `activeCommit`, `activeProofId`, ...) must not
     // leak from the first session into the second.
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
 
     coordinator.startSensing(demoEvent: .demoSample)
     await coordinator.waitForDemoSequenceToFinish()

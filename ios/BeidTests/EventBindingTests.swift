@@ -11,13 +11,13 @@ final class EventBindingTests: XCTestCase {
   private let testWalletSignatureHex = "0x" + String(repeating: "ab", count: 65)
 
   func testBeginBindingReturnsNilWhenNotRecording() {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     XCTAssertNil(coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId))
     XCTAssertEqual(coordinator.bindingState, .none)
   }
 
   func testDemoSequenceReachesPendingConnectAtThreshold() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
 
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
@@ -27,7 +27,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testBeginBindingMovesToConnectingAndReturnsMessageHex() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
@@ -39,7 +39,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testBeginBindingReturnsNilForMalformedWalletAddress() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
@@ -48,7 +48,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testBeginBindingReturnsNilForMalformedChainId() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
@@ -63,7 +63,7 @@ final class EventBindingTests: XCTestCase {
     // `nil` return (as the two tests above do) would not catch that, since
     // `beginBinding` still returns `nil` correctly either way. This asserts
     // on `bindingState` itself after each failed call.
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
@@ -88,7 +88,7 @@ final class EventBindingTests: XCTestCase {
     // later owner-key wallet-ack must reference identical nonce/issuedAt,
     // so a second `beginBinding()` call for the same attempt must not
     // regenerate either.
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
@@ -99,7 +99,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testMarkBindingAwaitingApprovalOnlyAppliesWhileConnecting() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
@@ -112,12 +112,12 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testCompleteBindingWithNoInFlightAttemptReturnsNil() {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     XCTAssertNil(coordinator.completeBinding(walletAddress: "0xABC", walletSignatureHex: "0xSIG"))
   }
 
   func testCompleteBindingBuildsAndPersistsBindingRecord() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     var collectedProof: Proof?
     coordinator.onProofCollected = { collectedProof = $0 }
@@ -160,7 +160,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testCompleteBindingReturnsNilForMalformedWalletSignatureHex() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
@@ -169,7 +169,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testBindingRecordRoundTripsThroughCodable() async throws {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
@@ -189,7 +189,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testFailBindingSetsFailedReasonAndClearsInFlightMessage() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
@@ -204,7 +204,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testDeclineBindingRevertsToPendingConnectAndClearsInFlightMessage() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
@@ -220,7 +220,7 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testDeclineBindingFromFailedRevertsToPendingConnect() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
@@ -235,13 +235,13 @@ final class EventBindingTests: XCTestCase {
   func testDeclineBindingWithoutAnAttemptIsSafe() {
     // Decline can fire from the sheet's onDisappear even if the user never
     // started a round trip (dismissed straight from `.pendingConnect`).
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.declineBinding()
     XCTAssertEqual(coordinator.bindingState, .none, "no-op when not recording")
   }
 
   func testResetClearsBindingStateAfterASuccessfulBinding() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
@@ -261,7 +261,7 @@ final class EventBindingTests: XCTestCase {
     // coordinator (as `AppCoordinator` reuses one `SensingCoordinator`
     // across `startScan()`/`finishScan()`) must not leak the previous
     // event's binding state into the new one.
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.startSensing(demoEvent: .demoSample)
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)

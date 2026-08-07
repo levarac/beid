@@ -9,7 +9,7 @@ import Foundation
 /// key (`BarnardIdentity.sign(eventCode:bytes:)`), queued on-device — no
 /// network transport or batch/anchor pipeline exists yet; that is separate
 /// downstream work (`docs/specs/scan-protocol-model.md` §9).
-struct WindowReport: Identifiable, Codable {
+struct WindowReport: Identifiable, Codable, Equatable {
   let id: UUID
   let eventCode: String
   let enin: Int
@@ -24,6 +24,7 @@ struct WindowReport: Identifiable, Codable {
   let signedAt: Date
 
   init(
+    id: UUID = UUID(),
     eventCode: String,
     enin: Int,
     peerCount: Int,
@@ -31,7 +32,7 @@ struct WindowReport: Identifiable, Codable {
     signature: BarnardRecoverableSignature,
     signedAt: Date = Date()
   ) {
-    self.id = UUID()
+    self.id = id
     self.eventCode = eventCode
     self.enin = enin
     self.peerCount = peerCount

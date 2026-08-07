@@ -44,7 +44,7 @@ final class EventCodeJoinTests: XCTestCase {
   }
 
   func testSensingCoordinatorJoinEventCallsBarnardSDKAndReportsSuccess() {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
 
     let joined = coordinator.joinEvent("beid-test-event")
 
@@ -57,7 +57,7 @@ final class EventCodeJoinTests: XCTestCase {
     // (falling back to joinedEventCode, then the demo default) to carry a
     // manually joined code through to sensing — this must not disturb the
     // DemoEvent path the simulator relies on.
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.joinEvent("beid-test-event")
 
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)

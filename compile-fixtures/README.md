@@ -37,3 +37,24 @@ dependency: 'BeidShared'` after the always-run Swift Export phase has generated
 
 Recurring CI automation for negative fixtures belongs to Issue 110. These
 fixtures remain deliberately one-shot for Issue 107.
+
+## Swift ledger runtime-authority mutation
+
+```sh
+patch -p1 < compile-fixtures/removed-swift-ledger-call.patch
+cd ios
+xcodegen generate
+cd ..
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
+  xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=5638ACA8-5A90-4931-AB47-9F472D95B7E1' \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -only-testing:BeidTests/UnsentWindowLedgerRuntimeTests/testSharedReducerOwnsDuplicateCloseForRepeatedNativeInputs \
+  test
+```
+
+Expected: the test fails because the production runtime no longer forwards a
+close input to `BeidSharedKit.report.closeUnsentWindow`; the durable window
+remains open and cannot become the single expected submission. Reverse the
+patch before continuing. This is a runtime mutation gate, not a stale-symbol
+compile gate.

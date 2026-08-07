@@ -15,10 +15,24 @@ import XCTest
 @MainActor
 final class WindowReportFinalizationTests: XCTestCase {
   private func makeCoordinator() -> (SensingCoordinator, WindowReportStore) {
-    let fileURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("window-reports-test-\(UUID().uuidString).json")
-    let store = WindowReportStore(fileURL: fileURL)
-    let coordinator = SensingCoordinator(windowReportStore: store)
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("window-finalization-test-\(UUID().uuidString)", isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    } catch {
+      preconditionFailure("Unable to create test directory: \(error)")
+    }
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+    let store = WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    )
+    let coordinator = SensingCoordinator(
+      windowReportStore: store,
+      selfProofStore: SelfProofStore(
+        fileURL: directory.appendingPathComponent("self-proofs.json")
+      ),
+      unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot")
+    )
     // Real (non-demo) path: avoids racing runDemoSequence's own phase
     // transitions against this test's manual handleDetection(_:_:) calls.
     coordinator.useDemoEventMode = false

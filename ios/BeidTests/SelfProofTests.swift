@@ -183,12 +183,12 @@ final class SelfProofRecordTests: XCTestCase {
 @MainActor
 final class SensingCoordinatorSelfProofTests: XCTestCase {
   func testStopSensingReturnsNilWhenNoSessionEverStarted() {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     XCTAssertNil(coordinator.stopSensing(), "no Proof, no ENIN window — nothing to attest")
   }
 
   func testSelfProofIsProducedOnlyWhenSessionEndsAfterRecordingBegan() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-SELF-PROOF", name: "Test Self Proof", venue: nil)
     var collectedProof: Proof?
     coordinator.onProofCollected = { collectedProof = $0 }
@@ -217,7 +217,7 @@ final class SensingCoordinatorSelfProofTests: XCTestCase {
   }
 
   func testResetAfterASelfProofIsProducedDoesNotProduceASecondOne() async {
-    let coordinator = SensingCoordinator()
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
