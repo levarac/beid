@@ -139,7 +139,7 @@ The other two workflows:
   ASC 側の調査が必要 (#93 が open で追跡中)。
 
   実害の形はこう読む: 起動しなかった PR は **失敗でも pending でもなく、
-  チェックが「存在しない」**。Ubuntu 系 3 つの green だけで merge 可能に
+  チェックが「存在しない」**。Ubuntu 系の checks だけが green のままでも merge 可能に
   見える。したがってレビュー/マージ時の確認は「Test - iOS が green か」
   ではなく **「Test - iOS が exact head に存在し、かつ green か」**。
   不在なら空 commit を push して再評価させる。
