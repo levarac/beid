@@ -271,8 +271,16 @@ Lost" button on the Verifying screen while in DemoEvent mode, and covered by
 - **Wallet**: real WalletConnect (Reown) pairing is wired (see
   "WalletConnect" above), but no real pairing has been completed end-to-end
   — that needs Ken's Reown Cloud Project ID plus a second device running a
-  wallet app. No signing with an actual wallet key anywhere in this slice
-  (WalletConnect connects an address; it doesn't sign proofs yet).
+  wallet app. Once a wallet is connected, Item Detail's
+  `ProofSignatureControlsView` calls `AppCoordinator.signProof(_:)`, which
+  builds a `SignaturePayload`, hashes its canonical JSON with
+  `signingDigestHex()`, requests `personal_sign` through the selected
+  `WalletConnector`, and persists the returned `SignatureRecord` in the
+  proof's `signatureState`. This is the **PROVISIONAL local convenience
+  signature** defined in `ProofSignature.swift`: it is not the protocol's
+  self-proof, does not prove physical attendance by itself, and no backend or
+  verifier may depend on its payload. A real-device connect → sign → return
+  round trip is still unverified, as described above.
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
   is available in the barnard SDK but not called from the app in this
   slice).
