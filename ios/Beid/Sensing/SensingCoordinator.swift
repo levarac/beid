@@ -18,7 +18,10 @@ struct WindowReportRedeliveryBuffer {
   mutating func enqueue(_ report: WindowReport) -> WindowReport? {
     // Preserve the earlier session prefix: older artifacts are closer to
     // submission, and a full queue should not evict recoverable work already
-    // waiting behind the same storage outage.
+    // waiting behind the same storage outage. This relies on ledger-side
+    // terminal rejection being the only permanent head failure; revisit the
+    // policy if WindowReportStore gains another permanent add failure, since
+    // a stuck full head would then reject every later artifact indefinitely.
     guard reports.count < capacity else { return report }
     reports.append(report)
     return nil
