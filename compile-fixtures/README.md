@@ -27,20 +27,21 @@ else
   fixture_parent="$(mktemp -d)"
   fixture_dir="$fixture_parent/beid"
   git -C "$repo_root" worktree add --detach "$fixture_dir" HEAD
-  cd "$fixture_dir"
+  cd "${fixture_dir:?run the setup block first}"
 fi
 ```
 
 ## Kotlin stale shared import
 
 ```sh
-cd "$fixture_dir"
-patch -p1 < compile-fixtures/stale-kotlin-symbol.patch
-cd android
-JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
-  ./gradlew :app:compileDebugKotlin --no-daemon --rerun-tasks
-cd "$fixture_dir"
-patch -R -p1 < compile-fixtures/stale-kotlin-symbol.patch
+if cd "${fixture_dir:?run the setup block first}"; then
+  patch -p1 < compile-fixtures/stale-kotlin-symbol.patch
+  cd android
+  JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
+    ./gradlew :app:compileDebugKotlin --no-daemon --rerun-tasks
+  cd "${fixture_dir:?run the setup block first}"
+  patch -R -p1 < compile-fixtures/stale-kotlin-symbol.patch
+fi
 ```
 
 Expected: compilation fails while resolving the app's explicit shared-module
@@ -49,13 +50,14 @@ import, with `Unresolved reference 'RemovedSharedModuleIdentityIssue107'`.
 ## Swift stale module import
 
 ```sh
-cd "$fixture_dir"
-patch -p1 < compile-fixtures/stale-swift-module.patch
-xcrun simctl list devices available
-xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
-  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
-  build
-patch -R -p1 < compile-fixtures/stale-swift-module.patch
+if cd "${fixture_dir:?run the setup block first}"; then
+  patch -p1 < compile-fixtures/stale-swift-module.patch
+  xcrun simctl list devices available
+  xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+    -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+    build
+  patch -R -p1 < compile-fixtures/stale-swift-module.patch
+fi
 ```
 
 The current local host has only Xcode 27 beta installed, so that is where this
@@ -74,15 +76,16 @@ fixtures belongs to Issue 110.
 ## Swift ledger runtime-authority mutation
 
 ```sh
-cd "$fixture_dir"
-patch -p1 < compile-fixtures/removed-swift-ledger-call.patch
-xcrun simctl list devices available
-xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
-  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
-  -parallel-testing-enabled NO -collect-test-diagnostics never \
-  -only-testing:BeidTests/UnsentWindowLedgerRuntimeTests/testSharedReducerOwnsDuplicateCloseForRepeatedNativeInputs \
-  test
-patch -R -p1 < compile-fixtures/removed-swift-ledger-call.patch
+if cd "${fixture_dir:?run the setup block first}"; then
+  patch -p1 < compile-fixtures/removed-swift-ledger-call.patch
+  xcrun simctl list devices available
+  xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+    -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+    -parallel-testing-enabled NO -collect-test-diagnostics never \
+    -only-testing:BeidTests/UnsentWindowLedgerRuntimeTests/testSharedReducerOwnsDuplicateCloseForRepeatedNativeInputs \
+    test
+  patch -R -p1 < compile-fixtures/removed-swift-ledger-call.patch
+fi
 ```
 
 Expected: the test fails because the production runtime no longer forwards a
