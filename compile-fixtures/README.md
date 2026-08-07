@@ -13,20 +13,22 @@ fixture below either invokes Gradle directly or reaches it through Xcode's
 Swift Export build phase. On the host checked for this guide (2026-08-08),
 all three beid checkouts had no such file and the successful setup relied on
 `ANDROID_HOME`; `ANDROID_SDK_ROOT` was unset. Require one SDK environment
-variable that names an existing directory, without printing its value:
+variable that names an existing directory, without printing its value. A
+pasted shell block in this guide may report a problem, but it must not end the
+reader-owned shell session:
 
 ```sh
 # Start in the repository root.
 repo_root="$(git rev-parse --show-toplevel)"
-fixture_parent="$(mktemp -d)"
-fixture_dir="$fixture_parent/beid"
 if { [ -z "${ANDROID_HOME:-}" ] || [ ! -d "$ANDROID_HOME" ]; } && \
    { [ -z "${ANDROID_SDK_ROOT:-}" ] || [ ! -d "$ANDROID_SDK_ROOT" ]; }; then
-  echo "Set ANDROID_HOME or ANDROID_SDK_ROOT to an existing SDK directory before running a fixture." >&2
-  exit 1
+  echo "Set ANDROID_HOME or ANDROID_SDK_ROOT to an existing SDK directory, then rerun this setup block." >&2
+else
+  fixture_parent="$(mktemp -d)"
+  fixture_dir="$fixture_parent/beid"
+  git -C "$repo_root" worktree add --detach "$fixture_dir" HEAD
+  cd "$fixture_dir"
 fi
-git -C "$repo_root" worktree add --detach "$fixture_dir" HEAD
-cd "$fixture_dir"
 ```
 
 ## Kotlin stale shared import
