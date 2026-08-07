@@ -69,7 +69,7 @@ final class SensingCoordinator: ObservableObject {
   private let ownerKeyProvider = OwnerKeyProvider()
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private let windowReportStore: WindowReportStore
-  private let unsentWindowLedgerRuntime: UnsentWindowLedgerRuntime?
+  private let unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
   private let bindingRecordStore = BindingRecordStore()
   private let selfProofStore: SelfProofStore
   private var demoTask: Task<Void, Never>?
@@ -95,6 +95,14 @@ final class SensingCoordinator: ObservableObject {
   /// Test seam for pre-seeding an already-durable observation artifact so
   /// ledger lifecycle tests do not benchmark the out-of-scope Barnard signer.
   var currentWindowIdForTesting: UUID? { currentWindowId }
+
+  func enqueueWindowReportForRedeliveryForTesting(_ report: WindowReport) {
+    _ = windowReportRedeliveryBuffer.enqueue(report)
+  }
+
+  func redeliverPendingWindowReportsForTesting() {
+    redeliverPendingWindowReports()
+  }
   #endif
   /// The session's first observed ENIN window — `eninStart` for the
   /// self-proof layer (§2.2). Set once, the first time `currentWindowEnin`
@@ -223,7 +231,7 @@ final class SensingCoordinator: ObservableObject {
   init(
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
-    unsentWindowLedgerRuntime: UnsentWindowLedgerRuntime?
+    unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     if let runtime = recoveredRuntime {

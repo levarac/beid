@@ -11,12 +11,23 @@ enum UnsentWindowLedgerRuntimeError: Error {
   case stalePersistence(expected: Int64, actual: Int64)
 }
 
+protocol UnsentWindowLedgerRuntimeProtocol: AnyObject {
+  func openWindow(windowId: String) throws
+  func closeWindow(
+    windowId: String,
+    persistedObservationReference: String
+  ) throws
+  func reconcileAfterRelaunch(
+    persistedObservations: [(windowId: String, reference: String)]
+  ) throws
+}
+
 /// Production caller for the shared ledger reducer.
 ///
 /// Native lifecycle code supplies explicit open/close inputs. This adapter
 /// performs only the shared call and write-ahead persistence handshake; it
 /// does not interpret ledger states or choose report membership.
-final class UnsentWindowLedgerRuntime {
+final class UnsentWindowLedgerRuntime: UnsentWindowLedgerRuntimeProtocol {
   private let store: UnsentWindowLedgerStore
   private var ledger: BeidSharedKit.report.UnsentWindowLedger
 

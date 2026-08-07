@@ -367,6 +367,45 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     )
   }
 
+  func testTransientLedgerCloseRejectionRetainsRedeliveryHeadForLaterRetry() throws {
+    let directory = temporaryDirectory(named: "transient-ledger-close-redelivery")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let reportStore = WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    )
+    let runtime = TransientCloseRejectionLedgerRuntime()
+    let coordinator = SensingCoordinator(
+      windowReportStore: reportStore,
+      selfProofStore: SelfProofStore(
+        fileURL: directory.appendingPathComponent("self-proofs.json")
+      ),
+      unsentWindowLedgerRuntime: runtime
+    )
+    let queuedReport = try makeReport(
+      id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
+    )
+    let queuedWindowId = queuedReport.id.uuidString.lowercased()
+    coordinator.enqueueWindowReportForRedeliveryForTesting(queuedReport)
+
+    runtime.rejectNextClose(windowId: queuedWindowId)
+    coordinator.redeliverPendingWindowReportsForTesting()
+
+    XCTAssertEqual(runtime.closeAttempts[queuedWindowId], 1)
+    XCTAssertFalse(runtime.closedWindowIds.contains(queuedWindowId))
+    XCTAssertNotNil(reportStore.reports.first { report in
+      report.id.uuidString.lowercased() == queuedWindowId
+    })
+
+    coordinator.redeliverPendingWindowReportsForTesting()
+
+    XCTAssertEqual(
+      runtime.closeAttempts[queuedWindowId],
+      2,
+      "a non-terminal ledger rejection must retain the head for a later retry"
+    )
+    XCTAssertTrue(runtime.closedWindowIds.contains(queuedWindowId))
+  }
+
   func testReportWriteFailureAtStopStillTearsDownAndRedeliversOnLaterDetection() throws {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-stop")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -697,4 +736,36 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     case stop
     case reset
   }
+}
+
+private final class TransientCloseRejectionLedgerRuntime:
+  UnsentWindowLedgerRuntimeProtocol
+{
+  private(set) var closeAttempts: [String: Int] = [:]
+  private(set) var closedWindowIds: Set<String> = []
+  private var rejectedWindowId: String?
+
+  func rejectNextClose(windowId: String) {
+    rejectedWindowId = windowId
+  }
+
+  func openWindow(windowId: String) throws {}
+
+  func closeWindow(
+    windowId: String,
+    persistedObservationReference: String
+  ) throws {
+    closeAttempts[windowId, default: 0] += 1
+    if rejectedWindowId == windowId {
+      rejectedWindowId = nil
+      throw UnsentWindowLedgerRuntimeError.rejectedTransition(
+        "transient_close_failure"
+      )
+    }
+    closedWindowIds.insert(windowId)
+  }
+
+  func reconcileAfterRelaunch(
+    persistedObservations: [(windowId: String, reference: String)]
+  ) throws {}
 }
