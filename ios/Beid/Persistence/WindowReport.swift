@@ -1,7 +1,6 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-import Barnard
 import Foundation
 
 /// A locally signed per-ENIN-window sensing report (Q9,
@@ -29,7 +28,7 @@ struct WindowReport: Identifiable, Codable, Equatable {
     enin: Int,
     peerCount: Int,
     commit: Data,
-    signature: BarnardRecoverableSignature,
+    signature: SensingRecoverableSignature,
     signedAt: Date = Date()
   ) {
     self.id = id

@@ -77,11 +77,10 @@ final class SelfProofMessageLayoutTests: XCTestCase {
   }
 }
 
-/// Proves `OwnerKeyProvider.signSelfProof` (beid's own code, already shipped
-/// in sub-slice A) produces a signature Barnard's own `verifySelfProof`
-/// accepts — not a beid-only round trip (`verifySelfProof` is Barnard's
-/// implementation, called directly, never beid's re-derivation of
-/// verification logic).
+/// Proves `OwnerKeyProvider`'s owner-key signature wrappers (beid's own code,
+/// already shipped in sub-slice A) produce signatures Barnard's corresponding
+/// verifiers accept — not beid-only round trips (the Barnard verifiers are
+/// called directly, never beid's re-derivation of verification logic).
 final class OwnerKeyProviderSelfProofTests: XCTestCase {
   /// Same sequential-byte seed `OwnerKeyProviderTests` already pins against
   /// Barnard's `deriveOwnerKeyPair` golden vector — public key
@@ -143,6 +142,39 @@ final class OwnerKeyProviderSelfProofTests: XCTestCase {
         eninStart: 100,
         eninEnd: 201,
         ownerPublicKey: ownerPublicKey,
+        signature: signature
+      )
+    )
+  }
+
+  func testSignWalletAcknowledgementProducesABarnardVerifiableSignature() throws {
+    let provider = OwnerKeyProvider(
+      keyStorage: FixedSeedKeyStorage(seed: Data((0..<32).map(UInt8.init))),
+      randomSource: NeverCalledRandomSource()
+    )
+    let walletAddress = Data((0x20...0x33).map(UInt8.init))
+    let walletSignature = Data((0x40...0x80).map(UInt8.init))
+
+    let signature = try XCTUnwrap(
+      provider.signWalletAcknowledgement(
+        walletAddress: walletAddress,
+        walletSignature: walletSignature
+      )
+    )
+
+    XCTAssertTrue(
+      BarnardCoreSigning.verifyWalletAcknowledgement(
+        ownerPublicKey: ownerPublicKey,
+        walletAddress: Array(walletAddress),
+        walletSignature: Array(walletSignature),
+        signature: signature
+      )
+    )
+    XCTAssertFalse(
+      BarnardCoreSigning.verifyWalletAcknowledgement(
+        ownerPublicKey: ownerPublicKey,
+        walletAddress: [UInt8](repeating: 0, count: 20),
+        walletSignature: Array(walletSignature),
         signature: signature
       )
     )

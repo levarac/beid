@@ -1,0 +1,95 @@
+// Copyright 2024-2026 The Greeting Inc. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+import Foundation
+@testable import Beid
+
+/// Fast test double for sensing behavior tests that do not own secp256k1 correctness.
+final class DeterministicSensingCryptography: SensingCryptography {
+  enum Call: Equatable {
+    case eventSigningPublicKey(eventCode: String)
+    case ownerPublicKey
+    case signWindowReport(eventCode: String, bytes: Data)
+    case signSelfProof(
+      eventIdHash: Data,
+      eventSigningPublicKey: Data,
+      eninStart: UInt64,
+      eninEnd: UInt64
+    )
+    case signWalletAcknowledgement(walletAddress: Data, walletSignature: Data)
+  }
+
+  let eventSigningPublicKeyResult: Data
+  let ownerPublicKeyResult: Data
+  let windowReportSignatureResult: SensingRecoverableSignature
+  let selfProofSignatureResult: SensingRecoverableSignature?
+  let walletAcknowledgementSignatureResult: SensingRecoverableSignature?
+  private(set) var calls: [Call] = []
+
+  init(
+    eventSigningPublicKey: Data = Data([0x02] + [UInt8](repeating: 0x33, count: 32)),
+    ownerPublicKey: Data = Data([0x03] + [UInt8](repeating: 0x44, count: 32)),
+    windowReportSignature: SensingRecoverableSignature = SensingRecoverableSignature(
+      r: Data(repeating: 0x11, count: 32),
+      s: Data(repeating: 0x22, count: 32),
+      v: 0
+    ),
+    selfProofSignature: SensingRecoverableSignature? = SensingRecoverableSignature(
+      r: Data(repeating: 0x55, count: 32),
+      s: Data(repeating: 0x66, count: 32),
+      v: 1
+    ),
+    walletAcknowledgementSignature: SensingRecoverableSignature? = SensingRecoverableSignature(
+      r: Data(repeating: 0x77, count: 32),
+      s: Data(repeating: 0x88, count: 32),
+      v: 0
+    )
+  ) {
+    eventSigningPublicKeyResult = eventSigningPublicKey
+    ownerPublicKeyResult = ownerPublicKey
+    windowReportSignatureResult = windowReportSignature
+    selfProofSignatureResult = selfProofSignature
+    walletAcknowledgementSignatureResult = walletAcknowledgementSignature
+  }
+
+  func eventSigningPublicKey(eventCode: String) -> Data {
+    calls.append(.eventSigningPublicKey(eventCode: eventCode))
+    return eventSigningPublicKeyResult
+  }
+
+  func ownerPublicKey() -> Data {
+    calls.append(.ownerPublicKey)
+    return ownerPublicKeyResult
+  }
+
+  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
+    calls.append(.signWindowReport(eventCode: eventCode, bytes: bytes))
+    return windowReportSignatureResult
+  }
+
+  func signSelfProof(
+    eventIdHash: Data,
+    eventSigningPublicKey: Data,
+    eninStart: UInt64,
+    eninEnd: UInt64
+  ) -> SensingRecoverableSignature? {
+    calls.append(.signSelfProof(
+      eventIdHash: eventIdHash,
+      eventSigningPublicKey: eventSigningPublicKey,
+      eninStart: eninStart,
+      eninEnd: eninEnd
+    ))
+    return selfProofSignatureResult
+  }
+
+  func signWalletAcknowledgement(
+    walletAddress: Data,
+    walletSignature: Data
+  ) -> SensingRecoverableSignature? {
+    calls.append(.signWalletAcknowledgement(
+      walletAddress: walletAddress,
+      walletSignature: walletSignature
+    ))
+    return walletAcknowledgementSignatureResult
+  }
+}

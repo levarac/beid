@@ -14,7 +14,9 @@ import XCTest
 /// comment).
 @MainActor
 final class WindowReportFinalizationTests: XCTestCase {
-  private func makeCoordinator() -> (SensingCoordinator, WindowReportStore) {
+  private func makeCoordinator(
+    sensingCryptography: any SensingCryptography = DeterministicSensingCryptography()
+  ) -> (SensingCoordinator, WindowReportStore) {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("window-finalization-test-\(UUID().uuidString)", isDirectory: true)
     do {
@@ -31,12 +33,46 @@ final class WindowReportFinalizationTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
-      unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot")
+      unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
+      sensingCryptography: sensingCryptography
     )
     // Real (non-demo) path: avoids racing runDemoSequence's own phase
     // transitions against this test's manual handleDetection(_:_:) calls.
     coordinator.useDemoEventMode = false
     return (coordinator, store)
+  }
+
+  func testFinalWindowUsesInjectedSignatureWithoutChangingItsBytesOrRecoveryID() {
+    let signature = SensingRecoverableSignature(
+      r: Data([0x00] + [UInt8](repeating: 0xa1, count: 31)),
+      s: Data([0x00, 0x00] + [UInt8](repeating: 0xb2, count: 30)),
+      v: 3
+    )
+    let cryptography = DeterministicSensingCryptography(windowReportSignature: signature)
+    let (coordinator, store) = makeCoordinator(sensingCryptography: cryptography)
+    coordinator.startSensing(eventCode: "TEST-WINDOW-FACADE")
+    coordinator.handleDetection(enin: 7, rpid: "peer-0")
+
+    coordinator.reset()
+
+    let report = store.reports.first
+    XCTAssertEqual(
+      report?.signatureRHex,
+      signature.r.map { String(format: "%02x", $0) }.joined()
+    )
+    XCTAssertEqual(
+      report?.signatureSHex,
+      signature.s.map { String(format: "%02x", $0) }.joined()
+    )
+    XCTAssertEqual(report?.signatureV, signature.v)
+    XCTAssertEqual(
+      cryptography.calls.filter {
+        if case .signWindowReport = $0 { return true }
+        return false
+      }.count,
+      1,
+      "the final window must be signed exactly once through the injected facade"
+    )
   }
 
   func testSessionThatReachesRecordingWithoutCrossingAWindowBoundaryReportsExactlyOneWindowOnReset() {
