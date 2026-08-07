@@ -415,6 +415,7 @@ source branch で通った結果を destination branch の証拠として使い�
 - [ ] PR を開いた後、repository maintainer が割り当てた独立 reviewer が gate を実施した。作者は reviewer を選定・手配せず、maker-arranged review は self-check として別に記録した
 - [ ] exact head SHA と SHA-filtered CI run ID を記録した
 - [ ] published dependency を変更した場合、resolved version と取得経路を記録した
+- [ ] squash merge 済みの commit を履歴に含む branch を rebase した場合、rebase 後の 4 点をすべて確認した
 - [ ] forward-port がある場合、destination branch の graph で再検証した
 
 ## 11. 参照した一次資料
