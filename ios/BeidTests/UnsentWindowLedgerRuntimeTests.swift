@@ -8,6 +8,24 @@ import XCTest
 
 @MainActor
 final class UnsentWindowLedgerRuntimeTests: XCTestCase {
+  func testReportRedeliveryBufferDropsOldestArtifactAtCapacity() throws {
+    let first = try makeReport(
+      id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+    )
+    let second = try makeReport(
+      id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000002"))
+    )
+    let third = try makeReport(
+      id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000003"))
+    )
+    var buffer = WindowReportRedeliveryBuffer(capacity: 2)
+
+    XCTAssertNil(buffer.enqueue(first))
+    XCTAssertNil(buffer.enqueue(second))
+    XCTAssertEqual(buffer.enqueue(third), first)
+    XCTAssertEqual(buffer.reports, [second, third])
+  }
+
   func testSharedReducerOwnsDuplicateCloseForRepeatedNativeInputs() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-ledger-runtime-\(UUID().uuidString)", isDirectory: true)
@@ -260,6 +278,120 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     }
   }
 
+  func testReportWriteFailureAtRolloverRedeliversFrozenWindowWithoutNextEninPeers() throws {
+    let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-rollover")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-ROLLOVER")
+    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-enin-1")
+    let firstWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    try fixture.blockReportWrites()
+
+    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-enin-2")
+
+    let secondWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    XCTAssertNotEqual(secondWindowId, firstWindowId)
+    XCTAssertTrue(fixture.reportStore.reports.isEmpty)
+
+    try fixture.restoreReportWrites()
+    fixture.coordinator.checkpointOpenWindowForBackgrounding()
+
+    let firstReport = try XCTUnwrap(
+      fixture.reportStore.reports.first { $0.id == firstWindowId }
+    )
+    let secondReport = try XCTUnwrap(
+      fixture.reportStore.reports.first { $0.id == secondWindowId }
+    )
+    XCTAssertEqual(firstReport.enin, 1)
+    XCTAssertEqual(
+      firstReport.peerCount,
+      1,
+      "the frozen ENIN-1 report must exclude the RPID first seen in ENIN 2"
+    )
+    XCTAssertEqual(secondReport.enin, 2)
+    XCTAssertEqual(secondReport.peerCount, 1)
+
+    let durable = try XCTUnwrap(try fixture.ledgerStore.load())
+    for report in fixture.reportStore.reports {
+      let duplicateClose = BeidSharedKit.report.closeUnsentWindow(
+        ledger: try XCTUnwrap(durable.ledger),
+        windowId: report.id.uuidString.lowercased(),
+        persistedObservationReference: report.id.uuidString.lowercased()
+      )
+      XCTAssertTrue(duplicateClose.isSuccess)
+      XCTAssertFalse(duplicateClose.changed, "redelivery must already have ledger-closed each report")
+    }
+  }
+
+  func testReportWriteFailureAtStopStillTearsDownAndRedeliversOnLaterDetection() throws {
+    let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-stop")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-STOP")
+    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-before-stop")
+    let stoppedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    try fixture.blockReportWrites()
+
+    fixture.coordinator.stopSensing()
+
+    XCTAssertEqual(fixture.coordinator.phase, .idle)
+    XCTAssertNil(fixture.coordinator.currentWindowIdForTesting)
+    XCTAssertTrue(fixture.reportStore.reports.isEmpty)
+
+    try fixture.restoreReportWrites()
+    fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-STOP-LATER")
+    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-later")
+
+    let report = try XCTUnwrap(
+      fixture.reportStore.reports.first { $0.id == stoppedWindowId }
+    )
+    let durable = try XCTUnwrap(try fixture.ledgerStore.load())
+    let duplicateClose = BeidSharedKit.report.closeUnsentWindow(
+      ledger: try XCTUnwrap(durable.ledger),
+      windowId: stoppedWindowId.uuidString.lowercased(),
+      persistedObservationReference: report.id.uuidString.lowercased()
+    )
+    XCTAssertTrue(duplicateClose.isSuccess)
+    XCTAssertFalse(duplicateClose.changed, "the later detection must redeliver the parked report")
+  }
+
+  func testReportWriteFailureUntilProcessDeathDiscardsOpenWindowWithoutOrphanSubmission() throws {
+    let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-process-death")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-PROCESS-DEATH")
+    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-before-death")
+    let lostWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    try fixture.blockReportWrites()
+    fixture.coordinator.stopSensing()
+    XCTAssertTrue(fixture.reportStore.reports.isEmpty)
+
+    try fixture.restoreReportWrites()
+    let relaunchedReports = WindowReportStore(fileURL: fixture.reportFileURL)
+    let relaunchedLedgerStore = try UnsentWindowLedgerStore(fileURL: fixture.ledgerFileURL)
+    _ = SensingCoordinator(
+      windowReportStore: relaunchedReports,
+      selfProofStore: SelfProofStore(
+        fileURL: fixture.directory.appendingPathComponent("relaunched-self-proofs.json")
+      ),
+      unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore)
+    )
+
+    let reconciled = try XCTUnwrap(try relaunchedLedgerStore.load())
+    let impossibleClose = BeidSharedKit.report.closeUnsentWindow(
+      ledger: try XCTUnwrap(reconciled.ledger),
+      windowId: lostWindowId.uuidString.lowercased(),
+      persistedObservationReference: "missing-after-process-death"
+    )
+    XCTAssertFalse(impossibleClose.isSuccess)
+    XCTAssertEqual(impossibleClose.errorCode, "unknown_window_id")
+
+    let prepared = BeidSharedKit.report.prepareNextUnsentWindowSubmission(
+      ledger: try XCTUnwrap(reconciled.ledger),
+      maximumWindowCount: 10,
+      nowEpochMilliseconds: 0
+    )
+    XCTAssertFalse(prepared.changed)
+    XCTAssertNil(prepared.submission)
+  }
+
   func testRelaunchRecoversAReportWrittenBeforeLedgerCloseAndDiscardsAnEmptyOpenWindow() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-ledger-crash-gap-\(UUID().uuidString)", isDirectory: true)
@@ -415,6 +547,37 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     )
   }
 
+  private func makeRecoverableReportFailureFixture(
+    named name: String
+  ) throws -> RecoverableReportFailureFixture {
+    let directory = temporaryDirectory(named: name)
+    let reportParentURL = directory.appendingPathComponent("report-parent", isDirectory: true)
+    let reportFileURL = reportParentURL.appendingPathComponent("window-reports.json")
+    let ledgerFileURL = directory.appendingPathComponent("ledger.snapshot")
+    let reportStore = WindowReportStore(fileURL: reportFileURL)
+    let ledgerStore = try UnsentWindowLedgerStore(fileURL: ledgerFileURL)
+    let coordinator = SensingCoordinator(
+      windowReportStore: reportStore,
+      selfProofStore: SelfProofStore(
+        fileURL: directory.appendingPathComponent("self-proofs.json")
+      ),
+      unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(
+        store: ledgerStore,
+        ledgerInstanceIdHex: "000102030405060708090a0b0c0d0e0f"
+      )
+    )
+    coordinator.useDemoEventMode = false
+    return RecoverableReportFailureFixture(
+      directory: directory,
+      reportParentURL: reportParentURL,
+      reportFileURL: reportFileURL,
+      ledgerFileURL: ledgerFileURL,
+      reportStore: reportStore,
+      ledgerStore: ledgerStore,
+      coordinator: coordinator
+    )
+  }
+
   private func apply(_ trigger: CloseTrigger, to coordinator: SensingCoordinator) {
     switch trigger {
     case .enin:
@@ -440,6 +603,28 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let ledgerFileURL: URL
     let reportStore: WindowReportStore
     let coordinator: SensingCoordinator
+  }
+
+  private struct RecoverableReportFailureFixture {
+    let directory: URL
+    let reportParentURL: URL
+    let reportFileURL: URL
+    let ledgerFileURL: URL
+    let reportStore: WindowReportStore
+    let ledgerStore: UnsentWindowLedgerStore
+    let coordinator: SensingCoordinator
+
+    func blockReportWrites() throws {
+      try Data([0x01]).write(to: reportParentURL)
+    }
+
+    func restoreReportWrites() throws {
+      try FileManager.default.removeItem(at: reportParentURL)
+      try FileManager.default.createDirectory(
+        at: reportParentURL,
+        withIntermediateDirectories: true
+      )
+    }
   }
 
   private enum CloseTrigger: String {

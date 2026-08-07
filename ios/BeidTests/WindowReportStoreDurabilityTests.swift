@@ -38,7 +38,7 @@ final class WindowReportStoreDurabilityTests: XCTestCase {
     XCTAssertEqual(WindowReportStore(fileURL: fileURL).reports, [report])
   }
 
-  func testFailedAtomicWriteDoesNotPublishAnUndurableReport() throws {
+  func testDirectoryCreationFailureDoesNotPublishAnUndurableReport() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-window-report-store-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -70,6 +70,37 @@ final class WindowReportStoreDurabilityTests: XCTestCase {
     XCTAssertTrue(store.reports.isEmpty)
   }
 
+  func testAtomicReplacementFailureLeavesDurableAndPublishedReportsUnchanged() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-window-report-replacement-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let fileURL = directory.appendingPathComponent("window-reports.json")
+    let first = try makeReport(id: "00000000-0000-0000-0000-000000000001")
+    let second = try makeReport(id: "00000000-0000-0000-0000-000000000002")
+    try JSONEncoder().encode([first]).write(to: fileURL)
+    var replacementAttempted = false
+    let store = WindowReportStore(
+      fileURL: fileURL,
+      replacePersistedFile: { destinationURL, stagedURL in
+        replacementAttempted = true
+        XCTAssertEqual(destinationURL, fileURL)
+        XCTAssertEqual(
+          try JSONDecoder().decode([WindowReport].self, from: Data(contentsOf: stagedURL)),
+          [first, second]
+        )
+        throw InjectedReplacementError.expected
+      }
+    )
+
+    XCTAssertEqual(store.reports, [first])
+    XCTAssertThrowsError(try store.add(second))
+    XCTAssertTrue(replacementAttempted)
+    XCTAssertEqual(store.reports, [first])
+    XCTAssertEqual(WindowReportStore(fileURL: fileURL).reports, [first])
+  }
+
   private func makeReport(id: String) throws -> WindowReport {
     let reportData = Data(
       """
@@ -87,5 +118,9 @@ final class WindowReportStoreDurabilityTests: XCTestCase {
       """.utf8
     )
     return try JSONDecoder().decode(WindowReport.self, from: reportData)
+  }
+
+  private enum InjectedReplacementError: Error {
+    case expected
   }
 }

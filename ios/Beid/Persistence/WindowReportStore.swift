@@ -19,10 +19,20 @@ final class WindowReportStore: ObservableObject {
   @Published private(set) var reports: [WindowReport] = []
 
   private let fileURL: URL
+  private let replacePersistedFile: (URL, URL) throws -> Void
   private var loadError: Error?
 
-  init(fileURL: URL? = nil) {
+  init(
+    fileURL: URL? = nil,
+    replacePersistedFile: @escaping (URL, URL) throws -> Void = { destinationURL, stagedURL in
+      _ = try FileManager.default.replaceItemAt(
+        destinationURL,
+        withItemAt: stagedURL
+      )
+    }
+  ) {
     self.fileURL = fileURL ?? Self.defaultFileURL()
+    self.replacePersistedFile = replacePersistedFile
     load()
   }
 
@@ -82,7 +92,16 @@ final class WindowReportStore: ObservableObject {
       at: fileURL.deletingLastPathComponent(),
       withIntermediateDirectories: true
     )
-    try data.write(to: fileURL, options: .atomic)
+    let stagedURL = fileURL.deletingLastPathComponent().appendingPathComponent(
+      ".window-reports-\(UUID().uuidString.lowercased()).tmp"
+    )
+    defer { try? FileManager.default.removeItem(at: stagedURL) }
+    try data.write(to: stagedURL)
+    if FileManager.default.fileExists(atPath: fileURL.path) {
+      try replacePersistedFile(fileURL, stagedURL)
+    } else {
+      try FileManager.default.moveItem(at: stagedURL, to: fileURL)
+    }
     reports = updatedReports
     return report.id.uuidString.lowercased()
   }

@@ -133,6 +133,8 @@ private fun parseSnapshot(encoded: String): LedgerState {
         name = "next-report-sequence",
         minimum = 1L,
     )
+    require(nextWindowSequence - 1L <= revision)
+    require(nextReportSequence - 1L <= revision)
 
     val windowCount = reader.readCountField("windows")
     val windows = buildList(windowCount) {

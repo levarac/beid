@@ -5,6 +5,27 @@ import Barnard
 import BarnardCore
 import Foundation
 
+struct WindowReportRedeliveryBuffer {
+  private(set) var reports: [WindowReport] = []
+  private let capacity: Int
+
+  init(capacity: Int = 64) {
+    precondition(capacity > 0)
+    self.capacity = capacity
+  }
+
+  @discardableResult
+  mutating func enqueue(_ report: WindowReport) -> WindowReport? {
+    let dropped = reports.count == capacity ? reports.removeFirst() : nil
+    reports.append(report)
+    return dropped
+  }
+
+  mutating func removeFirst() {
+    reports.removeFirst()
+  }
+}
+
 /// Wraps `BarnardEngine` (scan+advertise) and `BarnardIdentity` (per-event
 /// signing) behind the app's `ScanPhase` state machine.
 ///
@@ -93,6 +114,10 @@ final class SensingCoordinator: ObservableObject {
   /// the range.
   private var lastWindowEnin: Int?
   private var currentWindowRpids: Set<String> = []
+  /// Policy-free, process-local redelivery of already-signed artifacts whose
+  /// native durable write did not complete. Shared remains the sole owner of
+  /// window/report status; this buffer stores no attempts, expiry, or backoff.
+  private var windowReportRedeliveryBuffer = WindowReportRedeliveryBuffer()
   /// `commit = H(event signing key ‖ owner key ‖ salt)`, fixed once per
   /// event at the instant it's found (§5 — the owner key is a cross-event
   /// anchor "fixed at event time"). Carried on every window report signed
@@ -579,6 +604,7 @@ final class SensingCoordinator: ObservableObject {
   // MARK: - Per-window report signing (Q9, §4.5)
 
   private func advanceWindowIfNeeded(enin: Int, eventCode: String) {
+    redeliverPendingWindowReports()
     guard let openEnin = currentWindowEnin else {
       openWindow(enin: enin)
       return
@@ -587,7 +613,6 @@ final class SensingCoordinator: ObservableObject {
       return
     }
     closeWindow(enin: openEnin, eventCode: eventCode)
-    clearCurrentWindowState()
     openWindow(enin: enin)
   }
 
@@ -625,6 +650,7 @@ final class SensingCoordinator: ObservableObject {
   /// guard only says there is no lifecycle input to forward; shared remains
   /// authoritative if duplicate close inputs race (§3.6).
   private func closeFinalWindowIfNeeded() {
+    redeliverPendingWindowReports()
     guard let enin = currentWindowEnin else { return }
     // DemoEvent updates ENIN bookkeeping for self-proof coverage but never
     // opens a real native report window.
@@ -634,7 +660,6 @@ final class SensingCoordinator: ObservableObject {
       return
     }
     closeWindow(enin: enin, eventCode: eventCode)
-    clearCurrentWindowState()
   }
 
   /// Checkpoints (does not end) an in-progress session when the app
@@ -656,10 +681,10 @@ final class SensingCoordinator: ObservableObject {
   /// `stopSensing()`/`reset()` has no stale lifecycle input to forward.
   /// Shared still owns duplicate-close handling if callbacks race (§3.6).
   func checkpointOpenWindowForBackgrounding() {
+    redeliverPendingWindowReports()
     guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
     guard currentWindowId != nil else { return }
     closeWindow(enin: enin, eventCode: eventCode)
-    clearCurrentWindowState()
   }
 
   private func clearCurrentWindowState() {
@@ -680,52 +705,77 @@ final class SensingCoordinator: ObservableObject {
       let currentWindowId
     else {
       print("Unable to close a native window without its commitment and identifier")
+      clearCurrentWindowState()
       return
     }
 
     let observationReference: String
-    do {
-      if let currentWindowObservationReference {
-        observationReference = currentWindowObservationReference
-      } else if let persisted = windowReportStore.report(id: currentWindowId) {
-        observationReference = persisted.id.uuidString.lowercased()
-        currentWindowObservationReference = observationReference
-      } else {
-        let payload = windowReportPayload(
-          eventCode: eventCode,
-          enin: enin,
-          peerRpids: currentWindowRpids,
-          commit: commit
-        )
-        let signature = identity.sign(eventCode: eventCode, bytes: payload)
-        let report = WindowReport(
-          id: currentWindowId,
-          eventCode: eventCode,
-          enin: enin,
-          peerCount: currentWindowRpids.count,
-          commit: commit,
-          signature: signature
-        )
-        // TODO: This and the shared snapshot write below synchronously
-        // rewrite whole files on the MainActor BLE path. Move the I/O off
-        // actor in a follow-up while preserving report-before-ledger-close
-        // durability ordering. See beid#134.
+    if let currentWindowObservationReference {
+      observationReference = currentWindowObservationReference
+    } else if let persisted = windowReportStore.report(id: currentWindowId) {
+      observationReference = persisted.id.uuidString.lowercased()
+      currentWindowObservationReference = observationReference
+    } else {
+      let payload = windowReportPayload(
+        eventCode: eventCode,
+        enin: enin,
+        peerRpids: currentWindowRpids,
+        commit: commit
+      )
+      let signature = identity.sign(eventCode: eventCode, bytes: payload)
+      let report = WindowReport(
+        id: currentWindowId,
+        eventCode: eventCode,
+        enin: enin,
+        peerCount: currentWindowRpids.count,
+        commit: commit,
+        signature: signature
+      )
+      // TODO: This and the shared snapshot write below synchronously
+      // rewrite whole files on the MainActor BLE path. Move the I/O off
+      // actor in a follow-up while preserving report-before-ledger-close
+      // durability ordering. See beid#134.
+      do {
         observationReference = try windowReportStore.add(report)
         currentWindowObservationReference = observationReference
+      } catch {
+        if let dropped = windowReportRedeliveryBuffer.enqueue(report) {
+          print("Dropped the oldest pending window report after reaching redelivery capacity: \(dropped.id)")
+        }
+        print("Parked a native window report for redelivery after persistence failed: \(error)")
+        clearCurrentWindowState()
+        return
       }
-    } catch {
-      print("Unable to persist a native window report: \(error)")
-      return
     }
 
-    guard let unsentWindowLedgerRuntime else { return }
-    do {
-      try unsentWindowLedgerRuntime.closeWindow(
-        windowId: currentWindowId.uuidString.lowercased(),
-        persistedObservationReference: observationReference
-      )
-    } catch {
-      print("Unable to persist a closed shared-ledger window: \(error)")
+    if let unsentWindowLedgerRuntime {
+      do {
+        try unsentWindowLedgerRuntime.closeWindow(
+          windowId: currentWindowId.uuidString.lowercased(),
+          persistedObservationReference: observationReference
+        )
+      } catch {
+        print("Unable to persist a closed shared-ledger window: \(error)")
+      }
+    }
+    clearCurrentWindowState()
+  }
+
+  private func redeliverPendingWindowReports() {
+    while let report = windowReportRedeliveryBuffer.reports.first {
+      do {
+        let observationReference = try windowReportStore.add(report)
+        if let unsentWindowLedgerRuntime {
+          try unsentWindowLedgerRuntime.closeWindow(
+            windowId: report.id.uuidString.lowercased(),
+            persistedObservationReference: observationReference
+          )
+        }
+        windowReportRedeliveryBuffer.removeFirst()
+      } catch {
+        print("Unable to redeliver a pending native window report: \(error)")
+        return
+      }
     }
   }
 
