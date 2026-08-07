@@ -15,9 +15,11 @@ dependency").
 
 ## KMP shared/native development contract
 
-Verified 2026-08-07 against `origin/main` at
-`11e33f5ce0f110f6083ae4a9a1b5cd90c33f1edf`, `ios/project.yml`,
-`Package.resolved`, the Android Gradle graph, and the current CI files.
+Verified 2026-08-08 against `origin/main` at
+`f3714c36b24952ad760d9e5a6ff927de8d2b09e1`, `shared/src/`, the iOS
+sensing and persistence implementations, the Android shared bridge and native
+ledger store, `ios/project.yml`, `Package.resolved`, the Android Gradle graph,
+and the current CI files.
 This is a last-checked record, not a substitute for refreshing the target ref
 before new work.
 
@@ -33,11 +35,17 @@ the foundation manual is authoritative for detailed KMP procedure. If the two
 disagree on a KMP step, follow the manual and correct this summary in the same
 change. Repository-wide safety and delivery rules in this file still apply.
 
-At the verification point above, `origin/main` wires only the KMP walking
-skeleton into both apps. The families listed in the foundation manual are a
-migration inventory, not proof that those features work in production. A
-family is wired only when its current code, platform callers, and tests show
-that it is.
+At the verification point above, the walking skeleton is wired into both apps.
+The shared unsent-window ledger reducer and snapshot codec are also wired into
+the iOS production `SensingCoordinator`; native snapshot stores exist on both
+platforms, while Android production wiring remains deferred to Issue #121.
+The iOS coordinator owns one native `SensingCryptography` facade, with
+`BarnardSensingCryptography` as its production implementation, instead of
+retaining `BarnardIdentity` directly. That facade is a native testability
+boundary, not another shared decision. The other families listed in the
+foundation manual remain a migration inventory rather than proof that those
+features work in production. A family is wired only when its current code,
+platform callers, and tests show that it is.
 
 ### Ownership boundary
 

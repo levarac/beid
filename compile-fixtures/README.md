@@ -1,4 +1,4 @@
-# KMP walking-skeleton compile fixtures
+# KMP compile fixtures
 
 These one-shot patches prove that the platform hosts compile against the
 current shared API and module name. Apply each patch in a disposable checkout,

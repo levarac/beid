@@ -89,9 +89,12 @@ This mirrors the manual event-code-entry slice landing on iOS in parallel
 a placeholder for missing work). `EventJoinCoordinator`
 (`sensing/EventJoinCoordinator.kt`) is a thin wrapper, not a full port of
 iOS's `SensingCoordinator` — no BLE-off/signal-lost recovery states, no
-persistence. Those, plus the rest of iOS's 13-screen flow (sensing → event
-found → verifying → verified → proof collected → collection home, etc.), are
-follow-up slices.
+production persistence flow. A native
+`persistence/UnsentWindowLedgerStore.kt` exists and its JVM tests exercise the
+shared snapshot codec, but wiring it into an Android sensing lifecycle remains
+deferred to Issue #121. That wiring, plus the rest of iOS's 13-screen flow
+(sensing → event found → verifying → verified → proof collected → collection
+home, etc.), remains follow-up work.
 
 **Why `BarnardEngine` is owned by `MainActivity`, not the composable**:
 `requestPermissions` is Activity-driven — the hosting `Activity` must forward
@@ -135,5 +138,6 @@ translations in this PR is safe.
   = false` for debug and release, matching barnard's own example app — real
   release signing/minification is a pre-launch concern, not scaffold scope).
 - No instrumentation or device E2E tests yet. JVM unit tests currently cover
-  the app-to-`shared/` bridge, and `.github/workflows/pr-ci.yml` runs those
-  tests, the shared Android host tests, and `:app:assembleDebug` on PRs.
+  the app-to-`shared/` bridge and the native unsent-window ledger store, and
+  `.github/workflows/pr-ci.yml` runs those tests, the shared Android host
+  tests, and `:app:assembleDebug` on PRs.

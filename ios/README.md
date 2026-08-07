@@ -248,11 +248,17 @@ the shipping sensing path.
 
 When demo mode is off — including in every Release build — `startSensing()`
 instead calls `BarnardEngine.requestPermissions` → `configure(eventCode:)` →
-`startAuto()`, and a `BarnardIdentity` per-event signing key is derived via
-`signingPublicKey(eventCode:)`. Real BLE detections currently just transition
-`.sensing → .eventFound` on the first detection (a real verifying/consensus
-policy — counting distinct peers, requiring N to agree — is not implemented
-in this slice; see "What's stubbed").
+`startAuto()`. `SensingCoordinator` holds one `SensingCryptography` facade,
+not a `BarnardIdentity`; the production initializer injects
+`BarnardSensingCryptography`. When an event is found, the coordinator obtains
+the per-event signing public key through `eventSigningPublicKey(eventCode:)`,
+whose production adapter forwards to
+`BarnardIdentity.signingPublicKey(eventCode:)`. Real BLE detections currently
+transition `.sensing → .eventFound` on the first detection, count distinct
+RPIDs, and move to `.recording` when
+`BeidConfig.eventConfirmThreshold` is reached. That threshold is an app-wide
+constant today rather than an organizer-provided event setting; see "What's
+stubbed".
 
 The 06d Signal Lost screen isn't on the golden DemoEvent path (which always
 completes successfully) but is fully wired — reachable via
@@ -271,10 +277,12 @@ Lost" button on the Verifying screen while in DemoEvent mode, and covered by
   is available in the barnard SDK but not called from the app in this
   slice).
 - **Server**: no backend calls. Proofs are local-only.
-- **Real BLE verification policy**: on-device, `.eventFound` fires on the
-  first detection rather than implementing the "N peers verified" consensus
-  policy the design implies; the DemoEvent path is what demonstrates the
-  intended UX today.
+- **Event-specific verification policy**: distinct-RPID counting and the
+  app-wide `BeidConfig.eventConfirmThreshold` gate run on-device, but an
+  organizer-provided per-event threshold is not wired yet.
+- **Real BLE signal-loss detection**: 06d can be driven by the demo-only
+  manual trigger, but the real sensing path does not yet detect a lost signal
+  and enter that phase automatically.
 - **Bluetooth-off screen (03)**: implemented and code-reachable
   (`BluetoothMonitor` watches `CBCentralManager.state`), but not exercised
   in the DemoEvent walkthrough since the simulator always reports Bluetooth
@@ -287,6 +295,16 @@ Proofs persist to a JSON file in the app's Documents directory
 array with no relationships or migrations yet, so JSON is the simplest thing
 that works for this slice — revisit SwiftData once proofs need
 querying/relationships beyond "show them all, newest first".
+
+Window observations are separately persisted in `window-reports.json` before
+the shared unsent-window ledger is told that a window closed. The ledger's
+state transitions and canonical snapshot text live in `shared/`; the native
+`UnsentWindowLedgerRuntime` calls that reducer, and
+`UnsentWindowLedgerStore` atomically writes its exact bytes to
+`unsent-window-ledger.snapshot` in the Documents directory. The iOS
+production `SensingCoordinator` uses this runtime. Android has a matching
+native snapshot store and portable-codec tests, but its production flow is
+still deferred to Issue #121.
 
 ## Screens
 
@@ -310,14 +328,10 @@ ios/
   Beid/
     App/                    # @main entry point, Info.plist, Beid.entitlements
     Models/                 # Proof, OnboardingMode, DemoEvent
-    Persistence/            # ProofStore (JSON)
-    Sensing/                # SensingCoordinator, ScanPhase, BluetoothMonitor
+    Persistence/            # proof/window stores and shared-ledger runtime/store
+    Sensing/                # SensingCoordinator, SensingCryptography, BLE state
     Onboarding/              # WalletConnect (Reown) client + adapters, see above
     Navigation/              # AppCoordinator, AppScreen, RootView
     Views/                   # all 13 screens
-  BeidTests/
-    SensingCoordinatorTests.swift
-    ProofStoreTests.swift
-    OnboardingFlagTests.swift
-    WalletConnectTests.swift
+  BeidTests/                # coordinator, persistence/ledger, cryptography, and UI contract tests
 ```

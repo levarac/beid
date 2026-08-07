@@ -1,10 +1,11 @@
 # beid KMP shared foundation 作業マニュアル
 
-最終更新: 2026-08-07
+最終更新: 2026-08-08
 
 実装照合: `origin/main` @
-`11e33f5ce0f110f6083ae4a9a1b5cd90c33f1edf`、`ios/project.yml`、
-`Package.resolved`、Android Gradle graph、`.github/workflows/pr-ci.yml`。
+`f3714c36b24952ad760d9e5a6ff927de8d2b09e1`、`shared/src/`、
+`ios/Beid/Sensing/`、`ios/Beid/Persistence/`、Android の shared bridge / native store、
+`ios/project.yml`、`Package.resolved`、Android Gradle graph、`.github/workflows/pr-ci.yml`。
 
 この文書は、beid に Kotlin Multiplatform の `shared/` module を導入し、iOS と Android の共通判断を一つずつ移すための手順書です。設計案を並べる文書ではありません。作業者は上から順に実施し、各 gate を満たしてから次へ進んでください。
 
@@ -12,7 +13,9 @@
 
 基礎にした方法は ShiokazeHD/umidori の v0.10.0 KMP 切替です。ただし、beid は greenfield、Umidori は既存の Swift shared runtime からの切替でした。Umidori の構造と証明方法を使い、Umidori 固有の runner・一括置換・旧 runtime 削除はコピーしません。
 
-上の照合時点で `origin/main` に production 接続されている KMP 実装は walking skeleton だけです。以下の family 一覧は移行台帳であり、実装済み機能の一覧ではありません。各 family の code、両 platform の production caller、test が揃うまで「動いている」と扱いません。
+上の照合時点で walking skeleton は両 app に接続済みです。未送信 window ledger の reducer と snapshot codec は `shared/` にあり、iOS の production `SensingCoordinator` が shared runtime を使用します。iOS と Android には snapshot bytes を保存する native store がありますが、Android store の production 接続は Issue #121 へ残っています。iOS の `SensingCoordinator` は `BarnardIdentity` を直接保持せず、native 境界の `SensingCryptography` を一つ保持し、production では `BarnardSensingCryptography` を注入します。これは署名器を交換可能にする native facade であり、新しい shared 判断ではありません。
+
+以下の family 一覧は移行台帳であり、この current-state 要約だけを根拠に他の family まで実装済みと扱いません。各 family の code、両 platform の production caller、test が揃うまで「動いている」と扱いません。
 
 ## 1. 最初に決めること
 
