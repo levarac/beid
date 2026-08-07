@@ -59,6 +59,39 @@ final class UnsentWindowLedgerStoreTests: XCTestCase {
     XCTAssertEqual(try XCTUnwrap(try recovery.store.load()).persistenceRevision, 1)
   }
 
+  func testRecoveringStoreQuarantinesTerminalSequenceSnapshot() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-ledger-recover-terminal-counter-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let fileURL = directory.appendingPathComponent("ledger.snapshot")
+    let terminalSnapshot = """
+      beid-ledger-snapshot\t1
+      revision\t9223372036854775806
+      ledger-id\t000102030405060708090a0b0c0d0e0f
+      next-window-sequence\t9223372036854775807
+      next-report-sequence\t1
+      windows\t0
+      reports\t0
+      end
+
+      """
+    let terminalBytes = Data(terminalSnapshot.utf8)
+    try terminalBytes.write(to: fileURL, options: .atomic)
+
+    let recovery = try UnsentWindowLedgerStore.recoveringCorruptSnapshot(
+      fileURL: fileURL,
+      now: Date(timeIntervalSince1970: 1_234.567)
+    )
+
+    let quarantinedURL = try XCTUnwrap(recovery.quarantinedSnapshotURL)
+    XCTAssertTrue(quarantinedURL.lastPathComponent.contains(".corrupt-1234567-"))
+    XCTAssertEqual(try Data(contentsOf: quarantinedURL), terminalBytes)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+    XCTAssertNil(try recovery.store.load())
+  }
+
   func testRecoveringStoreLeavesValidSnapshotInPlace() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-ledger-recover-valid-\(UUID().uuidString)", isDirectory: true)
