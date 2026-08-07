@@ -270,6 +270,7 @@ native persistence adapter は shared codec が返した bytes を tmp file + at
 macOS の local build は repository の resolver で対応 JDK を選びます。resolver は対応する `KMP_JAVA_HOME`、Android Studio JBR 21、Homebrew JDK 17、macOS の Java 17 resolver の順に確認します。system Java 25 はこの Gradle / Kotlin 構成を起動できません。
 
 ```bash
+# repository root から開始する
 cd android
 JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew :shared:testAndroidHostTest \
@@ -285,6 +286,7 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
 build 先は、`xcrun simctl list devices available` で得た concrete Simulator UDID を指定します。複数の simulator が同じ名前を持つため name-based destination は使いません。`generic/platform=iOS Simulator` は x86_64 も build 対象に含めることがあり、arm64-only binary dependency の link に失敗します。
 
 ```bash
+# repository root から開始する
 xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
   -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
   build-for-testing
@@ -301,6 +303,7 @@ beid は ShiokazeHD の self-hosted-only 制約の対象ではありません。
 `shared/**`、Android Gradle 設定、KMP integration script が変わった時は、最低でも次を走らせます。
 
 ```bash
+# repository root から開始する
 cd android
 ./gradlew :shared:testAndroidHostTest \
   :app:testDebugUnitTest \
@@ -378,6 +381,7 @@ build 報告には次を必ず含めます。
 Barnard など published dependency を変更した claim、または clean checkout でない local Android claim を出す時は、build と同じ checkout で少なくとも次も保存します。
 
 ```bash
+# repository root から開始する
 cd android
 JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew :app:dependencyInsight \
@@ -394,6 +398,7 @@ Gradle cache があっても構いませんが、source checkout、dependency gr
 最初に適用条件を判定します。前の slice が squash merge され、その squash 前の commit 群を自分の branch も履歴に含む場合だけ、この section の `--onto` 手順を使います。
 
 ```bash
+# repository root から同じ shell session で開始する
 git fetch origin
 git log --oneline origin/main..HEAD
 ```
@@ -409,6 +414,7 @@ squash merge は N 個の commit を 1 個にまとめて main に載せます�
 まず branch 名と rebase 前の HEAD を記録します。
 
 ```bash
+# 同じ shell session・repository root で続ける
 branch_name="$(git branch --show-current)"
 old_head="$(git rev-parse HEAD)"
 ```
@@ -416,12 +422,14 @@ old_head="$(git rev-parse HEAD)"
 本当の分岐点は、まず自分の branch の reflog から確認します。reflog は新しい順なので、最古の `branch: Created from ...` entry（通常は出力の最後）を探します。message が `Created from HEAD` でも、その行の先頭 SHA が branch 作成時の commit です。その SHA が現在の履歴でも「前 slice の最後と、この branch 自身の最初の commit の境界」になっていることを確認してから使います。
 
 ```bash
+# 同じ shell session・repository root で続ける
 git reflog show --format='%H %gs' "$branch_name"
 ```
 
 reflog は local かつ期限付きなので、作成 entry が残っていない場合があります。その時は履歴を古い順に並べ、現在の branch 自身の最初の commit の直前にある、前 slice 最後の commit を選びます。
 
 ```bash
+# 同じ shell session・repository root で続ける
 git log --reverse --oneline origin/main..HEAD
 ```
 
@@ -430,6 +438,7 @@ git log --reverse --oneline origin/main..HEAD
 分岐点を `fork_point` に記録してから rebase します。
 
 ```bash
+# 同じ shell session・repository root で続ける
 fork_point="<本当の分岐点のSHA>"
 git rebase --onto origin/main "$fork_point" "$branch_name"
 ```
@@ -439,6 +448,7 @@ git rebase --onto origin/main "$fork_point" "$branch_name"
 次の 4 点を必ず確認します。
 
 ```bash
+# 同じ shell session・repository root で続ける
 git range-diff "$fork_point..$old_head" origin/main..HEAD  # 自分の commit だけで patch が同一（= 印）
 git rev-list --left-right --count origin/main...HEAD    # 0 behind であること
 git log --oneline origin/main..HEAD                     # 自分の commit だけ載っていること

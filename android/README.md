@@ -16,6 +16,7 @@ ambient system Java 25 with an opaque `BUILD FAILED … What went wrong:
 25.0.3` error (no stack trace), so do not rely on the shell default:
 
 ```sh
+# Start in the repository root.
 cd android
 JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew assembleDebug
@@ -27,6 +28,7 @@ Gradle configuration merely to accommodate an unsupported ambient JDK.
 APK lands at `app/build/outputs/apk/debug/app-debug.apk`. To run it:
 
 ```sh
+# Start in android/.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n org.levarac.beid/.MainActivity
 ```
@@ -46,6 +48,7 @@ version in `app/build.gradle.kts`, then verify Central resolution and
 compilation from `android/` with the same resolver-backed JDK selection:
 
 ```sh
+# Start in android/.
 JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew :app:assembleDebug
 ```

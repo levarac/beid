@@ -241,6 +241,7 @@ reverse `/v1/builds/{id}/betaGroups` relationship, which is empty for
 internal groups even when delivery is working.
 
 ```sh
+# This read-only ASC block may run from any directory.
 # 1. Confirm the Dev group's actual hasAccessToAllBuilds state and app linkage
 asc api get "/v1/betaGroups/5422706d-fbf9-41dc-9f6e-60e6e6fda8e4?include=app"
 # or raw REST if you don't have `asc`'s api passthrough:
@@ -297,6 +298,7 @@ the current workflow.
 ### Local equivalent of what CI does
 
 ```sh
+# Start in the repository root.
 cd ios
 xcodegen --version                    # should match ci_scripts/XCODEGEN_VERSION
 xcodegen generate                     # must leave Beid.xcodeproj clean (git status --porcelain)
