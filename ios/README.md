@@ -5,16 +5,35 @@ consumes the [levarac/barnard](https://github.com/levarac/barnard) BLE SDK.
 
 ## Build & run
 
+Use the exact XcodeGen release pinned for Xcode Cloud, not Homebrew's
+always-latest formula. From the repository root, the following downloads a
+session-local copy and uses it to generate the project:
+
 ```sh
-brew install xcodegen   # if you don't have it
+# Start in the repository root.
+XCODEGEN_VERSION="$(cat ios/ci_scripts/XCODEGEN_VERSION)"
+XCODEGEN_TMP="$(mktemp -d)"
+curl -sSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
+  -o "$XCODEGEN_TMP/xcodegen.zip" \
+  "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+unzip -q "$XCODEGEN_TMP/xcodegen.zip" -d "$XCODEGEN_TMP"
+export PATH="$XCODEGEN_TMP/xcodegen/bin:$PATH"
+test "$(xcodegen --version | awk '{print $2}')" = "$XCODEGEN_VERSION"
 cd ios
 xcodegen generate
 open Beid.xcodeproj
 ```
 
+`project.yml` is the source of truth, but `Beid.xcodeproj` is committed for
+local-development convenience. Xcode Cloud regenerates it with the version in
+`ci_scripts/XCODEGEN_VERSION` and fails if the committed project drifts, so
+regenerate and commit `Beid.xcodeproj` whenever `project.yml` changes. Never
+hand-edit the generated project.
+
 Or from the CLI:
 
 ```sh
+# Start in the repository root.
 xcrun simctl list devices available
 
 xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
@@ -31,6 +50,39 @@ also build x86_64, while one binary dependency currently provides only an
 arm64 Simulator slice. If a link error names an architecture that no usable
 simulator on the host actually has, check the destination before changing
 code or chasing the error's symbol names.
+
+Every Xcode build runs the always-run **Build BeidSharedKit** pre-build phase.
+That phase resolves a supported JDK through
+`scripts/resolve_kmp_java_home.sh`, enters `android/` (the repository's Gradle
+entry point), and invokes `./gradlew :shared:embedSwiftExportForXcode` before
+Swift compilation. If no supported JDK is available, expand **Build
+BeidSharedKit** in the Xcode build log and read its JDK/Gradle output; changing
+Swift code or the generated module will not fix that toolchain failure.
+
+On the current local host, the full `Beid` test action has taken about 27
+minutes. For iteration, compile the app and tests once, then rerun a focused
+test without rebuilding:
+
+```sh
+# Start in the repository root.
+xcrun simctl list devices available
+
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  build-for-testing
+
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  -only-testing:BeidTests/<TestClass>/<testMethod> \
+  test-without-building
+```
+
+`build-for-testing` compiles the app and test bundle but does not run tests.
+`test-without-building` reuses those exact products, so rerun
+`build-for-testing` after changing source. `-only-testing` shortens an
+iteration by selecting a suite or method; it is not the final regression gate
+for modified production code. Run the full covering suite after the focused
+loop.
 
 Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 `navigationDestination(item:)` for the item-detail push requires it).
@@ -298,21 +350,25 @@ Lost" button on the Verifying screen while in DemoEvent mode, and covered by
 
 ## Local persistence
 
-Proofs persist to a JSON file in the app's Documents directory
-(`ProofStore`), not SwiftData. The data model is a single flat, unordered
-array with no relationships or migrations yet, so JSON is the simplest thing
-that works for this slice — revisit SwiftData once proofs need
-querying/relationships beyond "show them all, newest first".
+The iOS app currently has five on-disk stores in its Documents directory:
 
-Window observations are separately persisted in `window-reports.json` before
-the shared unsent-window ledger is told that a window closed. The ledger's
-state transitions and canonical snapshot text live in `shared/`; the native
-`UnsentWindowLedgerRuntime` calls that reducer, and
-`UnsentWindowLedgerStore` atomically writes its exact bytes to
-`unsent-window-ledger.snapshot` in the Documents directory. The iOS
-production `SensingCoordinator` uses this runtime. Android has a matching
-native snapshot store and portable-codec tests, but its production flow is
-still deferred to Issue #121.
+- `proofs.json` — collected `Proof` values (`ProofStore`).
+- `window-reports.json` — durable native observations written before a
+  window is closed in the shared ledger (`WindowReportStore`).
+- `unsent-window-ledger.snapshot` — the shared ledger's exact canonical
+  snapshot bytes, written atomically by `UnsentWindowLedgerStore`.
+- `binding-records-v2.json` — wallet/event binding records
+  (`BindingRecordStore`).
+- `self-proofs.json` — owner-key-signed self-proofs (`SelfProofStore`).
+
+These flat files are used instead of SwiftData. The proof model is still a
+single unordered array with no relationships or migrations; revisit SwiftData
+when queries or relationships grow beyond "show them all, newest first".
+The shared ledger owns its state transitions and snapshot format, while native
+iOS owns the file location and atomic write. The production
+`SensingCoordinator` uses this runtime. Android has a matching native snapshot
+store and portable-codec tests, but its production flow is still deferred to
+Issue #121.
 
 ## Screens
 
