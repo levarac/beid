@@ -287,9 +287,11 @@ container survives installing a TestFlight build over the dev build —
 delete the app between a demo E2E session and any real-sensing or
 TestFlight evaluation.
 
-`05 Sensing → 06a Event Found → 06b Verifying (peer count ramps to
-totalPeersToVerify) → 06c Verified → 07 Proof Collected → back to 04 home`,
-and the new proof lands in `ProofStore`.
+`05 Sensing → 06a Event Found → 06b Recording`. The proof lands in
+`ProofStore` when recording starts. `RecordingView` first shows the
+one-time "Proof Collected" entrance ceremony, then the steady event card as
+the peer count grows. The demo remains in recording until the user closes
+the scan flow, which returns to 04 home.
 
 Release configurations, including TestFlight and App Store archives, always
 report `useDemoEventMode == false` and ignore attempts to enable it. A future
@@ -315,8 +317,8 @@ stubbed".
 The 06d Signal Lost screen isn't on the golden DemoEvent path (which always
 completes successfully) but is fully wired — reachable via
 `SensingCoordinator.simulateSignalLost()`, exposed as a "Simulate Signal
-Lost" button on the Verifying screen while in DemoEvent mode, and covered by
-`testSimulateSignalLostOnlyAppliesDuringVerifying`.
+Lost" button on the Recording screen while in DemoEvent mode, and covered by
+`testSimulateSignalLostOnlyAppliesDuringRecording`.
 
 ## What's stubbed / out of scope for this slice
 
@@ -373,11 +375,11 @@ Issue #121.
 ## Screens
 
 01 Welcome, 02 Bluetooth permission guide, 03 Bluetooth-off, 04 Collection
-home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Verifying,
-06c Verified, 06d Signal Lost, 07 Proof Collected, 08 Item Detail, 09
-Account sheet — plus a Connect Wallet stub screen for the `.walletFirst`
-onboarding order (not in the original 9-screen list, added because the
-onboarding-flag requirement needs a screen to flip to).
+home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording
+(including the one-time "Proof Collected" entrance ceremony), 06d Signal
+Lost, 08 Item Detail, 09 Account sheet — plus a Connect Wallet stub screen
+for the `.walletFirst` onboarding order (not in the original 9-screen list,
+added because the onboarding-flag requirement needs a screen to flip to).
 
 All screens are plain modern SwiftUI with a blue accent, deliberately not
 pixel-polished per the brief.
