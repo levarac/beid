@@ -16,9 +16,12 @@ struct WindowReportRedeliveryBuffer {
 
   @discardableResult
   mutating func enqueue(_ report: WindowReport) -> WindowReport? {
-    let dropped = reports.count == capacity ? reports.removeFirst() : nil
+    // Preserve the earlier session prefix: older artifacts are closer to
+    // submission, and a full queue should not evict recoverable work already
+    // waiting behind the same storage outage.
+    guard reports.count < capacity else { return report }
     reports.append(report)
-    return dropped
+    return nil
   }
 
   mutating func removeFirst() {
@@ -740,9 +743,10 @@ final class SensingCoordinator: ObservableObject {
         currentWindowObservationReference = observationReference
       } catch {
         if let dropped = windowReportRedeliveryBuffer.enqueue(report) {
-          print("Dropped the oldest pending window report after reaching redelivery capacity: \(dropped.id)")
+          print("Dropped the newest pending window report after reaching redelivery capacity: \(dropped.id)")
+        } else {
+          print("Parked a native window report for redelivery after persistence failed: \(error)")
         }
-        print("Parked a native window report for redelivery after persistence failed: \(error)")
         clearCurrentWindowState()
         return
       }
@@ -772,6 +776,13 @@ final class SensingCoordinator: ObservableObject {
           )
         }
         windowReportRedeliveryBuffer.removeFirst()
+      } catch UnsentWindowLedgerRuntimeError.rejectedTransition(let errorCode)
+        where errorCode == "unknown_window_id" {
+        // The native artifact is durable but cannot ever enter a submission
+        // because shared has no corresponding window. Remove only this
+        // terminal rejection so later recoverable artifacts can still drain.
+        windowReportRedeliveryBuffer.removeFirst()
+        print("Discarded a pending native window report absent from the shared ledger: \(report.id)")
       } catch {
         print("Unable to redeliver a pending native window report: \(error)")
         return

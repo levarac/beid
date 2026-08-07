@@ -8,7 +8,7 @@ import XCTest
 
 @MainActor
 final class UnsentWindowLedgerRuntimeTests: XCTestCase {
-  func testReportRedeliveryBufferDropsOldestArtifactAtCapacity() throws {
+  func testReportRedeliveryBufferDropsNewestArtifactAtCapacity() throws {
     let first = try makeReport(
       id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
     )
@@ -22,8 +22,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     XCTAssertNil(buffer.enqueue(first))
     XCTAssertNil(buffer.enqueue(second))
-    XCTAssertEqual(buffer.enqueue(third), first)
-    XCTAssertEqual(buffer.reports, [second, third])
+    XCTAssertEqual(buffer.enqueue(third), third)
+    XCTAssertEqual(buffer.reports, [first, second])
   }
 
   func testSharedReducerOwnsDuplicateCloseForRepeatedNativeInputs() throws {
@@ -322,6 +322,51 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     }
   }
 
+  func testUnknownWindowAtRedeliveryHeadIsDiscardedBeforeLaterArtifact() throws {
+    let fixture = try makeRecoverableReportFailureFixture(named: "unknown-window-redelivery-head")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    fixture.coordinator.startSensing(eventCode: "TEST-UNKNOWN-WINDOW-REDELIVERY")
+    try fixture.blockLedgerWrites()
+    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-orphaned")
+    let orphanedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+
+    try fixture.restoreLedgerWrites()
+    try fixture.blockReportWrites()
+    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-recoverable")
+    let recoverableWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    fixture.coordinator.handleDetection(enin: 3, rpid: "peer-after-queue")
+    XCTAssertTrue(fixture.reportStore.reports.isEmpty)
+
+    try fixture.restoreReportWrites()
+    fixture.coordinator.handleDetection(enin: 4, rpid: "peer-drain-trigger")
+
+    let orphanedReport = try XCTUnwrap(
+      fixture.reportStore.reports.first { $0.id == orphanedWindowId }
+    )
+    let recoverableReport = try XCTUnwrap(
+      fixture.reportStore.reports.first { $0.id == recoverableWindowId }
+    )
+    let durable = try XCTUnwrap(try fixture.ledgerStore.load())
+    let orphanedClose = BeidSharedKit.report.closeUnsentWindow(
+      ledger: try XCTUnwrap(durable.ledger),
+      windowId: orphanedWindowId.uuidString.lowercased(),
+      persistedObservationReference: orphanedReport.id.uuidString.lowercased()
+    )
+    XCTAssertFalse(orphanedClose.isSuccess)
+    XCTAssertEqual(orphanedClose.errorCode, "unknown_window_id")
+
+    let recoverableClose = BeidSharedKit.report.closeUnsentWindow(
+      ledger: try XCTUnwrap(durable.ledger),
+      windowId: recoverableWindowId.uuidString.lowercased(),
+      persistedObservationReference: recoverableReport.id.uuidString.lowercased()
+    )
+    XCTAssertTrue(recoverableClose.isSuccess)
+    XCTAssertFalse(
+      recoverableClose.changed,
+      "an unknown head must not block the later recoverable artifact from ledger close"
+    )
+  }
+
   func testReportWriteFailureAtStopStillTearsDownAndRedeliversOnLaterDetection() throws {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-stop")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -553,7 +598,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let directory = temporaryDirectory(named: name)
     let reportParentURL = directory.appendingPathComponent("report-parent", isDirectory: true)
     let reportFileURL = reportParentURL.appendingPathComponent("window-reports.json")
-    let ledgerFileURL = directory.appendingPathComponent("ledger.snapshot")
+    let ledgerParentURL = directory.appendingPathComponent("ledger-parent", isDirectory: true)
+    let ledgerFileURL = ledgerParentURL.appendingPathComponent("ledger.snapshot")
     let reportStore = WindowReportStore(fileURL: reportFileURL)
     let ledgerStore = try UnsentWindowLedgerStore(fileURL: ledgerFileURL)
     let coordinator = SensingCoordinator(
@@ -571,6 +617,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       directory: directory,
       reportParentURL: reportParentURL,
       reportFileURL: reportFileURL,
+      ledgerParentURL: ledgerParentURL,
       ledgerFileURL: ledgerFileURL,
       reportStore: reportStore,
       ledgerStore: ledgerStore,
@@ -609,6 +656,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let directory: URL
     let reportParentURL: URL
     let reportFileURL: URL
+    let ledgerParentURL: URL
     let ledgerFileURL: URL
     let reportStore: WindowReportStore
     let ledgerStore: UnsentWindowLedgerStore
@@ -622,6 +670,18 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       try FileManager.default.removeItem(at: reportParentURL)
       try FileManager.default.createDirectory(
         at: reportParentURL,
+        withIntermediateDirectories: true
+      )
+    }
+
+    func blockLedgerWrites() throws {
+      try Data([0x01]).write(to: ledgerParentURL)
+    }
+
+    func restoreLedgerWrites() throws {
+      try FileManager.default.removeItem(at: ledgerParentURL)
+      try FileManager.default.createDirectory(
+        at: ledgerParentURL,
         withIntermediateDirectories: true
       )
     }
