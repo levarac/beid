@@ -442,7 +442,8 @@ git rebase --onto origin/main "$fork_point" "$branch_name"
 git range-diff "$fork_point..$old_head" origin/main..HEAD  # 自分の commit だけで patch が同一（= 印）
 git rev-list --left-right --count origin/main...HEAD    # 0 behind であること
 git log --oneline origin/main..HEAD                     # 自分の commit だけ載っていること
-git diff origin/main HEAD -- <自分が触っていない領域>  # 空であること
+untouched_path="<自分が触っていない領域>"
+git diff origin/main HEAD -- "$untouched_path"         # 空であること
 ```
 
 4 番目の空 diff は、消したものが戻っていないことの**直接の証拠**です。他の 3 点が green だから大丈夫だろう、という推論の代わりにはなりません。
