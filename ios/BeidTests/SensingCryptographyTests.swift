@@ -11,6 +11,45 @@ final class SensingCryptographyTests: XCTestCase {
     data.map { String(format: "%02x", $0) }.joined()
   }
 
+  func testBarnardFacadeForwardsDistinctSelfProofRange() throws {
+    let cryptography = BarnardSensingCryptography()
+    let eventCode = "FACADE-SELF-PROOF"
+    let eventIdHash = EventIdHash.compute(eventCode: eventCode)
+    let eventSigningPublicKey = Data([
+      0x02, 0xc6, 0x04, 0x7f, 0x94, 0x41, 0xed, 0x7d,
+      0x6d, 0x30, 0x45, 0x40, 0x6e, 0x95, 0xc0, 0x7c,
+      0xd8, 0x5c, 0x77, 0x8e, 0x4b, 0x8c, 0xef, 0x3c,
+      0xa7, 0xab, 0xac, 0x09, 0xb9, 0x5c, 0x70, 0x9e, 0xe5,
+    ])
+    let ownerPublicKey = cryptography.ownerPublicKey()
+    let eninStart: UInt64 = 1
+    let eninEnd = UInt64(BeidConfig.eventConfirmThreshold + 1)
+
+    let signature = try XCTUnwrap(
+      cryptography.signSelfProof(
+        eventIdHash: eventIdHash,
+        eventSigningPublicKey: eventSigningPublicKey,
+        eninStart: eninStart,
+        eninEnd: eninEnd
+      )
+    )
+
+    XCTAssertTrue(
+      BarnardCoreSigning.verifySelfProof(
+        eventIdHash: Array(eventIdHash),
+        eventSigningPublicKey: Array(eventSigningPublicKey),
+        eninStart: eninStart,
+        eninEnd: eninEnd,
+        ownerPublicKey: Array(ownerPublicKey),
+        signature: BarnardCoreRecoverableSignature(
+          r: Array(signature.r),
+          s: Array(signature.s),
+          v: signature.v
+        )
+      )
+    )
+  }
+
   @MainActor
   func testCoordinatorOwnsOnlyTheSensingCryptographyFacade() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)

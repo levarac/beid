@@ -77,11 +77,10 @@ final class SelfProofMessageLayoutTests: XCTestCase {
   }
 }
 
-/// Proves `OwnerKeyProvider.signSelfProof` (beid's own code, already shipped
-/// in sub-slice A) produces a signature Barnard's own `verifySelfProof`
-/// accepts — not a beid-only round trip (`verifySelfProof` is Barnard's
-/// implementation, called directly, never beid's re-derivation of
-/// verification logic).
+/// Proves `OwnerKeyProvider`'s owner-key signature wrappers (beid's own code,
+/// already shipped in sub-slice A) produce signatures Barnard's corresponding
+/// verifiers accept — not beid-only round trips (the Barnard verifiers are
+/// called directly, never beid's re-derivation of verification logic).
 final class OwnerKeyProviderSelfProofTests: XCTestCase {
   /// Same sequential-byte seed `OwnerKeyProviderTests` already pins against
   /// Barnard's `deriveOwnerKeyPair` golden vector — public key
