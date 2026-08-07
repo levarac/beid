@@ -5,7 +5,10 @@ import XCTest
 @testable import Beid
 
 @MainActor
-func makeIsolatedSensingCoordinator(for testCase: XCTestCase) -> SensingCoordinator {
+func makeIsolatedSensingCoordinator(
+  for testCase: XCTestCase,
+  sensingCryptography: any SensingCryptography = DeterministicSensingCryptography()
+) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
     .appendingPathComponent("sensing-coordinator-test-\(UUID().uuidString)", isDirectory: true)
   do {
@@ -23,7 +26,8 @@ func makeIsolatedSensingCoordinator(for testCase: XCTestCase) -> SensingCoordina
     selfProofStore: SelfProofStore(
       fileURL: directory.appendingPathComponent("self-proofs.json")
     ),
-    unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot")
+    unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
+    sensingCryptography: sensingCryptography
   )
 }
 

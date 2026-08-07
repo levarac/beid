@@ -117,7 +117,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       let coordinator = SensingCoordinator(
         windowReportStore: reportStore,
         selfProofStore: selfProofStore,
-        unsentWindowLedgerRuntime: runtime
+        unsentWindowLedgerRuntime: runtime,
+        sensingCryptography: DeterministicSensingCryptography()
       )
       coordinator.useDemoEventMode = false
       coordinator.startSensing(eventCode: "TEST-SHARED-ORDERING")
@@ -187,7 +188,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
-      unsentWindowLedgerRuntime: nil
+      unsentWindowLedgerRuntime: nil,
+      sensingCryptography: DeterministicSensingCryptography()
     )
     coordinator.useDemoEventMode = false
     coordinator.startSensing(eventCode: "TEST-LEDGER-UNAVAILABLE")
@@ -379,7 +381,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
-      unsentWindowLedgerRuntime: runtime
+      unsentWindowLedgerRuntime: runtime,
+      sensingCryptography: DeterministicSensingCryptography()
     )
     let queuedReport = try makeReport(
       id: XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000004"))
@@ -455,7 +458,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: fixture.directory.appendingPathComponent("relaunched-self-proofs.json")
       ),
-      unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore)
+      unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
+      sensingCryptography: DeterministicSensingCryptography()
     )
 
     let reconciled = try XCTUnwrap(try relaunchedLedgerStore.load())
@@ -509,7 +513,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
-      unsentWindowLedgerRuntime: relaunchedRuntime
+      unsentWindowLedgerRuntime: relaunchedRuntime,
+      sensingCryptography: DeterministicSensingCryptography()
     )
 
     let recovered = try XCTUnwrap(try relaunchedLedgerStore.load())
@@ -562,7 +567,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
-      unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore)
+      unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
+      sensingCryptography: DeterministicSensingCryptography()
     )
 
     let stillOpen = try XCTUnwrap(try relaunchedLedgerStore.load())
@@ -620,7 +626,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
-      unsentWindowLedgerRuntime: runtime
+      unsentWindowLedgerRuntime: runtime,
+      sensingCryptography: DeterministicSensingCryptography()
     )
     coordinator.useDemoEventMode = false
     return RuntimeFixture(
@@ -649,7 +656,8 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(
         store: ledgerStore,
         ledgerInstanceIdHex: "000102030405060708090a0b0c0d0e0f"
-      )
+      ),
+      sensingCryptography: DeterministicSensingCryptography()
     )
     coordinator.useDemoEventMode = false
     return RecoverableReportFailureFixture(

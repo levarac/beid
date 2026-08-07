@@ -68,8 +68,7 @@ final class SensingCoordinator: ObservableObject {
   var onPeersVerifiedChanged: ((UUID, Int) -> Void)?
 
   private let engine = BarnardEngine()
-  private let identity = BarnardIdentity()
-  private let ownerKeyProvider = OwnerKeyProvider()
+  private let sensingCryptography: any SensingCryptography
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private let windowReportStore: WindowReportStore
   private let unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
@@ -206,7 +205,8 @@ final class SensingCoordinator: ObservableObject {
     self.init(
       windowReportStore: windowReportStore,
       selfProofStore: SelfProofStore(),
-      unsentWindowLedgerRuntime: runtime
+      unsentWindowLedgerRuntime: runtime,
+      sensingCryptography: BarnardSensingCryptography()
     )
   }
 
@@ -216,7 +216,8 @@ final class SensingCoordinator: ObservableObject {
   convenience init(
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
-    unsentWindowLedgerFileURL: URL
+    unsentWindowLedgerFileURL: URL,
+    sensingCryptography: any SensingCryptography
   ) {
     guard
       let store = try? UnsentWindowLedgerStore(fileURL: unsentWindowLedgerFileURL),
@@ -227,14 +228,16 @@ final class SensingCoordinator: ObservableObject {
     self.init(
       windowReportStore: windowReportStore,
       selfProofStore: selfProofStore,
-      unsentWindowLedgerRuntime: runtime
+      unsentWindowLedgerRuntime: runtime,
+      sensingCryptography: sensingCryptography
     )
   }
 
   init(
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
-    unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
+    unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
+    sensingCryptography: any SensingCryptography
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     if let runtime = recoveredRuntime {
@@ -258,6 +261,7 @@ final class SensingCoordinator: ObservableObject {
     self.windowReportStore = windowReportStore
     self.selfProofStore = selfProofStore
     self.unsentWindowLedgerRuntime = recoveredRuntime
+    self.sensingCryptography = sensingCryptography
     engine.onEvent = { [weak self] event in
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
@@ -433,8 +437,8 @@ final class SensingCoordinator: ObservableObject {
   /// first so nothing leaks across events.
   private func beginEventFound(_ session: EventSession) {
     resetSessionState()
-    let eventSigningKey = identity.signingPublicKey(eventCode: session.id)
-    let ownerKey = ownerKeyProvider.publicKeyCompressed()
+    let eventSigningKey = sensingCryptography.eventSigningPublicKey(eventCode: session.id)
+    let ownerKey = sensingCryptography.ownerPublicKey()
     let salt = Data(randomSource.randomBytes(count: 16))
     activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
     phase = .eventFound(session)
@@ -522,7 +526,7 @@ final class SensingCoordinator: ObservableObject {
       }
       message = BindingMessage(
         walletAddress: walletAddressBytes,
-        ownerPublicKey: ownerKeyProvider.publicKeyCompressed(),
+        ownerPublicKey: sensingCryptography.ownerPublicKey(),
         chainId: numericChainId,
         nonce: Data(randomSource.randomBytes(count: 16)),
         issuedAt: BindingMessage.canonicalIssuedAt(Date())
@@ -567,7 +571,7 @@ final class SensingCoordinator: ObservableObject {
       let proofId = activeProofId,
       let event = currentBindingEvent,
       let walletSignatureBytes = Data(hexEncoded: walletSignatureHex),
-      let ackSignature = ownerKeyProvider.signWalletAcknowledgement(
+      let ackSignature = sensingCryptography.signWalletAcknowledgement(
         walletAddress: message.walletAddress,
         walletSignature: walletSignatureBytes
       )
@@ -579,13 +583,17 @@ final class SensingCoordinator: ObservableObject {
       proofId: proofId,
       eventCode: event.id,
       walletAddress: walletAddress,
-      eventSigningPublicKey: identity.signingPublicKey(eventCode: event.id),
+      eventSigningPublicKey: sensingCryptography.eventSigningPublicKey(eventCode: event.id),
       ownerPublicKey: message.ownerPublicKey,
       chainId: message.chainId,
       nonce: message.nonce,
       issuedAt: message.issuedAt,
       walletSignatureHex: walletSignatureHex,
-      deviceSignature: ackSignature
+      deviceSignature: BarnardCoreRecoverableSignature(
+        r: Array(ackSignature.r),
+        s: Array(ackSignature.s),
+        v: ackSignature.v
+      )
     )
     bindingRecordStore.add(record)
     bindingState = .bound(record)
@@ -736,7 +744,7 @@ final class SensingCoordinator: ObservableObject {
         peerRpids: currentWindowRpids,
         commit: commit
       )
-      let signature = identity.sign(eventCode: eventCode, bytes: payload)
+      let signature = sensingCryptography.signWindowReport(eventCode: eventCode, bytes: payload)
       let report = WindowReport(
         id: currentWindowId,
         eventCode: eventCode,
@@ -851,10 +859,10 @@ final class SensingCoordinator: ObservableObject {
     }
 
     let eventIdHash = EventIdHash.compute(eventCode: eventCode)
-    let eventSigningPublicKey = identity.signingPublicKey(eventCode: eventCode)
-    let ownerPublicKey = ownerKeyProvider.publicKeyCompressed()
+    let eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
+    let ownerPublicKey = sensingCryptography.ownerPublicKey()
     guard
-      let signature = ownerKeyProvider.signSelfProof(
+      let signature = sensingCryptography.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: eventSigningPublicKey,
         eninStart: UInt64(start),
@@ -872,7 +880,11 @@ final class SensingCoordinator: ObservableObject {
       eninStart: UInt64(start),
       eninEnd: UInt64(end),
       ownerPublicKey: ownerPublicKey,
-      signature: signature
+      signature: BarnardCoreRecoverableSignature(
+        r: Array(signature.r),
+        s: Array(signature.s),
+        v: signature.v
+      )
     )
     selfProofStore.add(record)
     return record
