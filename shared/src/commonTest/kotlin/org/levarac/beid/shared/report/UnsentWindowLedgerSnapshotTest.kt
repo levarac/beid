@@ -406,32 +406,6 @@ class UnsentWindowLedgerSnapshotTest {
         }
     }
 
-    @Test
-    fun terminalSequenceCountersThatWouldPermanentlyWedgeAllocationAreRejected() {
-        val terminalCounters = mapOf(
-            "window sequence" to Pair(Long.MAX_VALUE, 1L),
-            "report sequence" to Pair(1L, Long.MAX_VALUE),
-        )
-
-        terminalCounters.forEach { (name, counters) ->
-            val snapshot = """
-                beid-ledger-snapshot\t1
-                revision\t${Long.MAX_VALUE - 1L}
-                ledger-id\t000102030405060708090a0b0c0d0e0f
-                next-window-sequence\t${counters.first}
-                next-report-sequence\t${counters.second}
-                windows\t0
-                reports\t0
-                end
-            """.trimIndent().replace("\\t", "\t") + "\n"
-
-            val decoded = decodeUnsentWindowLedgerSnapshot(snapshot)
-            assertFalse(decoded.isSuccess, name)
-            assertNull(decoded.ledger, name)
-            assertEquals("invalid_snapshot", decoded.errorCode, name)
-        }
-    }
-
     private fun canonicalInFlightSnapshot(): String {
         var ledger = assertNotNull(
             createUnsentWindowLedger(

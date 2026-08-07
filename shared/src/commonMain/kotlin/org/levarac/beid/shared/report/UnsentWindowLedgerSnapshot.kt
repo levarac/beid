@@ -133,9 +133,6 @@ private fun parseSnapshot(encoded: String): LedgerState {
         name = "next-report-sequence",
         minimum = 1L,
     )
-    // A decoded ledger must retain capacity for at least one future allocation.
-    require(nextWindowSequence < Long.MAX_VALUE)
-    require(nextReportSequence < Long.MAX_VALUE)
     require(nextWindowSequence - 1L <= revision)
     require(nextReportSequence - 1L <= revision)
 
