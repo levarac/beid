@@ -175,6 +175,7 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   :shared:testAndroidHostTest \
   :shared:iosSimulatorArm64Test \
   --no-daemon
+cd ..
 ```
 
 この command で Android app が `project(":shared")` を使って compile し、Android host test と iOS Simulator arm64 向け Kotlin test が実行されます。
@@ -281,6 +282,7 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   :app:testDebugUnitTest \
   :app:assembleDebug \
   --no-daemon --no-parallel
+cd ..
 ```
 
 最後の `BUILD SUCCESSFUL` だけでは test 実行の証拠になりません。実行を期待した task に `NO-SOURCE` が出たら、その task は source / test を 0 件処理したという意味です。対象 task が `NO-SOURCE` でないことと、test report の件数を確認します。beid では空の test task が長く green に見えていたため、これは形式的な注意ではありません。
@@ -378,6 +380,7 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
   ./gradlew :app:dependencyInsight \
   --dependency org.levarac:barnard \
   --configuration debugRuntimeClasspath
+cd ..
 ```
 
 最終的な merge gate は clean checkout の hosted-Ubuntu CI と Xcode Cloud に置きます。PR CI は `refs/pull/<N>/merge` の merge ref を build し、実際に着地する tree を検証します。報告は `CI green on <exact head SHA>, run <run id>` の形にし、PR checks の集約表示ではなく SHA で filter した run を確認します。集約表示は古い attempt を見せる場合があるためです。

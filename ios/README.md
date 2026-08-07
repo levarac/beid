@@ -22,6 +22,7 @@ test "$(xcodegen --version | awk '{print $2}')" = "$XCODEGEN_VERSION"
 cd ios
 xcodegen generate
 open Beid.xcodeproj
+cd ..
 ```
 
 `project.yml` is the source of truth, but `Beid.xcodeproj` is committed for

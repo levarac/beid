@@ -17,6 +17,7 @@ the detailed KMP procedure lives in
 - `shared/` — project-internal Kotlin Multiplatform module built from the same checkout by both native apps
 - `ios/` — native iOS app (SwiftUI, consumes the [barnard](https://github.com/levarac/barnard) SwiftPM package)
 - `android/` — native Android app (Kotlin/Compose, consumes the barnard Gradle library)
+- `.github/` — GitHub Actions workflow definitions governed by the PR CI contract in `AGENTS.md`
 - `docs/` — implementation contracts, design notes, and operational flow
 - `scripts/` — repository checks and local/CI toolchain helpers
 - `compile-fixtures/` — negative compile proofs for stale platform bindings
