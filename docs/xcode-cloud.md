@@ -115,8 +115,10 @@ The other two workflows:
 
 - **PR Build & Test** (id `a465d6ac-e3b5-4fe0-b586-db7285435990`) — the PR
   CI gate: build + test on pull requests targeting `main` (created
-  2026-07-27; CI required, reviews optional per the maintainer decision in
-  `AGENTS.md`). Its start condition carries a files-and-folders rule
+  2026-07-27; CI required, GitHub branch protection does not require an
+  approving review). That repository setting does not waive the separate
+  independent KMP review gate documented in `AGENTS.md`. Its start condition
+  carries a files-and-folders rule
   intended to read `DO_NOT_START_IF_ALL_FILES_MATCH` with matchers
   `docs/` (directory), `.github/` (directory), and `md` (file extension),
   so that a PR whose every changed file matches one of those starts no
@@ -137,10 +139,17 @@ The other two workflows:
   ASC 側の調査が必要 (#93 が open で追跡中)。
 
   実害の形はこう読む: 起動しなかった PR は **失敗でも pending でもなく、
-  チェックが「存在しない」**。Ubuntu 系 3 つの green だけで merge 可能に
+  チェックが「存在しない」**。Ubuntu 系の checks だけが green のままでも merge 可能に
   見える。したがってレビュー/マージ時の確認は「Test - iOS が green か」
   ではなく **「Test - iOS が exact head に存在し、かつ green か」**。
   不在なら空 commit を push して再評価させる。
+
+  Xcode Cloud は metered であり、open PR の branch への push は実費の
+  ある build を起動し得る。反復は local build で行い、push はまとめる。
+  この存在確認は workflow が自動起動する現在の形に対する規則である。
+  将来 manual trigger に切り替えた場合、trigger 前の不在は正常なので、
+  意図して起動した run が exact head を対象にし、green になったことを
+  evidence とする。
 
   This directly contradicts the "fails open" claim this section used to
   make (that a misconfiguration "can waste compute but never silently skip
@@ -149,9 +158,10 @@ The other two workflows:
   tested and it is false. Per `AGENTS.md`, ASC is the source of truth over
   this doc — the fix belongs in the ASC GUI, not here.
 
-  **Until it is fixed**, a code-only PR's green checks mean only that
-  Ubuntu lint and sanity passed. Nothing was built or tested on macOS.
-  Tracked as gh#93.
+  **Until it is fixed**, a code-only PR's green Ubuntu checks prove only the
+  hosted jobs named in the repository's authoritative
+  [PR CI contract](../AGENTS.md#pr-ci). They do not prove that anything was
+  built or tested on macOS. Tracked as gh#93.
 - **Default** — the leftover initial-setup workflow (branch `main`, no
   files rule). Disable-or-delete candidate; kept only until the
   maintainer rules on it.
@@ -172,7 +182,7 @@ repository grant/OAuth handshake) is interactive-only — there's no ASC API
 for it. That has to happen before either workflow above can be created. See
 the approval-package message for the exact click path.
 
-## TestFlight beta-group auto-linking — investigation
+## TestFlight beta-group auto-linking — resolved history
 
 **Status: RESOLVED 2026-07-23.** Root cause: the workflows were created via
 the ASC API, which cannot express the GUI-only "TestFlight Internal
@@ -185,17 +195,17 @@ builds 8 and 9 then auto-delivered to Dev with no manual `add-groups`
 `GET /v1/betaGroups/{id}/builds` — the reverse direction
 (`GET /v1/builds/{id}/betaGroups`) reads empty for internal groups even
 when linked, and misled the first diagnosis. Historical investigation
-trail follows (kept for the ci_post_xcodebuild timing analysis, which
-remains true).
+trail follows because the `ci_post_xcodebuild` timing constraint remains
+true. It describes the state before the GUI fix and is not a current action
+list.
 
-Builds are not auto-linking to the "Dev" internal beta group
+Before the GUI fix, builds did not auto-link to the "Dev" internal beta group
 (`5422706d-fbf9-41dc-9f6e-60e6e6fda8e4`, app `6789376188`) despite that group
-having `hasAccessToAllBuilds=true`, which per Apple's model should make every
-processed build available to it with no explicit per-build action. Build 3
-was linked as a one-off manual workaround via `asc builds add-groups`, which
-is not durable — this section is the investigation trail for a real fix.
+having `hasAccessToAllBuilds=true`. Build 3 was linked as a one-off manual
+workaround via `asc builds add-groups`; later builds proved that workaround
+was unnecessary once the workflow's GUI post-action was configured.
 
-### Why the fix can't live in `ci_post_xcodebuild.sh`
+### Historical constraint: why the fix could not live in `ci_post_xcodebuild.sh`
 
 The obvious-looking fix — add a step to `ci_post_xcodebuild.sh` that calls
 the App Store Connect API to link the just-archived build to the Dev group —
@@ -215,23 +225,24 @@ resource — there is no build ID to poll for: the very thing a poll would
 wait for cannot be created until the polling script has already finished. A
 bounded or unbounded poll
 inside this hook is a deadlock by construction, not a slow/expensive
-tradeoff — no timeout tuning fixes it. There is currently no other
-repo-scriptable Xcode Cloud hook that runs *after* the TestFlight
-post-action completes.
+tradeoff — no timeout tuning fixes it. At the time, there was no other
+repo-scriptable Xcode Cloud hook that ran *after* the TestFlight post-action
+completed.
 
 (Confirmed against Apple's
 [Configuring your Xcode Cloud workflow's actions](https://developer.apple.com/documentation/xcode/configuring-your-xcode-cloud-workflow-s-actions)
 and cross-checked against community documentation of the same ordering,
 e.g. [polpiella.dev — Deploying beta versions via Xcode Cloud](https://www.polpiella.dev/how-to-deploy-beta-versions-of-your-app-to-testflight-and-appcenter-with-xcode-cloud).)
 
-### Diagnose before building anything
+### Historical diagnosis (using the correct relationship direction)
 
-Before building a fix, confirm there is actually a bug to fix, and that
-explicit build-group linking is even the right shape. Run this first
-(needs an ASC API key with App Manager or Developer role; the `asc` CLI
-config on this machine currently points at the Levarac key `76FJ56SHXV`):
+During the investigation, these were the useful read-only checks. The third
+query deliberately reads builds from the group. Do not replace it with the
+reverse `/v1/builds/{id}/betaGroups` relationship, which is empty for
+internal groups even when delivery is working.
 
 ```sh
+# This read-only ASC block may run from any directory.
 # 1. Confirm the Dev group's actual hasAccessToAllBuilds state and app linkage
 asc api get "/v1/betaGroups/5422706d-fbf9-41dc-9f6e-60e6e6fda8e4?include=app"
 # or raw REST if you don't have `asc`'s api passthrough:
@@ -240,21 +251,17 @@ asc api get "/v1/betaGroups/5422706d-fbf9-41dc-9f6e-60e6e6fda8e4?include=app"
 # 2. List recent VALID (fully processed) builds for the app
 asc api get "/v1/builds?filter[app]=6789376188&filter[processingState]=VALID&sort=-uploadedDate&limit=10"
 
-# 3. For each recent VALID build, check whether it's actually available to the Dev group
-asc api get "/v1/builds/<BUILD_ID>/betaGroups"
+# 3. List the builds actually available to the Dev group, then compare IDs
+asc api get "/v1/betaGroups/5422706d-fbf9-41dc-9f6e-60e6e6fda8e4/builds"
 ```
 
-What this should tell us:
-- If `hasAccessToAllBuilds` reads `true` and recent VALID builds already show
-  up under `betaGroups` for that build without ever having been explicitly
-  linked, then build 3's failure to auto-link may have been a one-off
-  (e.g. still `PROCESSING` at the time it was checked, or checked before
-  ASC's internal propagation caught up) rather than a systemic bug — in
-  which case no automation is needed at all, just patience or a documented
-  "processing can take up to ~60 minutes" expectation.
-- If `hasAccessToAllBuilds` is `true` but recent VALID builds are still not
-  showing as available to the group, that's a real ASC-side inconsistency
-  worth a support case, separate from anything this repo can script around.
+What these checks were intended to distinguish:
+- If `hasAccessToAllBuilds` read `true` and recent VALID build IDs appeared in
+  the group's build list, no explicit linking automation was needed.
+- If `hasAccessToAllBuilds` read `true` but recent VALID build IDs stayed
+  absent from the group's build list after processing, that indicated an
+  ASC-side inconsistency rather than something this repo could repair in the
+  Xcode Cloud hook.
 - **409 risk**: the `POST /v1/betaGroups/{id}/relationships/builds`
   endpoint (explicit build-to-group linking) is designed for curated
   (non-all-access) groups. If `hasAccessToAllBuilds` is genuinely `true` for
@@ -262,43 +269,44 @@ What this should tell us:
   assume "add an explicit link step" is the fix without first confirming
   the group's real state and whether the API will even accept the call.
 
-### If diagnosis confirms explicit linking is genuinely needed
+### Historical rejected alternative: an explicit-link reconciler
 
-Do not attempt this in `ci_post_xcodebuild.sh` (see above). The durable
-shape is an out-of-band, idempotent reconciler outside Xcode Cloud's build
-machine entirely — proposed, not implemented:
+Before the GUI root cause was found, an out-of-band reconciler was proposed
+as the only viable scripted shape. It was never implemented and is not a
+current recommendation. If a future workflow loses its GUI post-action,
+restore that setting first rather than building this machinery.
 
-- A new GitHub Actions workflow (e.g. `.github/workflows/testflight-beta-link.yml`)
-  triggered on a `schedule` cron (e.g. every 15 minutes) plus
-  `workflow_dispatch` for manual runs.
-- Each run: `GET /v1/builds?filter[app]=6789376188&filter[processingState]=VALID`
-  for a recent window, diff against builds already linked to the Dev group,
-  and `POST .../relationships/builds` for any that are missing. Reconciling
-  the full unlinked set (rather than tracking "the one build from this CI
-  run") avoids needing to hand a build ID from Xcode Cloud to GitHub Actions,
-  and is self-healing across ASC outages or long processing delays.
-- Log-and-continue on a per-build 409 rather than failing the whole run, so
-  a `hasAccessToAllBuilds` semantics mismatch shows up as a visible log line
-  instead of a red workflow.
-- Testers see a new build up to `(processing time + cron interval)` after
-  archive — that latency is inherent to Apple's own processing pipeline,
-  not something this reconciler can shorten; don't "fix" it later by moving
-  the poll back into `ci_post_xcodebuild.sh`.
+The archived proposal was:
 
-**Ken action needed if this path is taken:** a new ASC API key scoped to
-Xcode-Cloud/TestFlight read + beta-group-write only (not the broader Levarac
-key already in use), added as GitHub Actions repository secrets — see the PR
-description for the exact key name, permission scope, and where to paste it.
+- A new GitHub Actions workflow (for example,
+  `.github/workflows/testflight-beta-link.yml`) would have run on a schedule
+  and by manual dispatch.
+- Each run would have listed recent VALID builds, compared them with
+  `GET /v1/betaGroups/{id}/builds`, and explicitly linked missing IDs. That
+  reconciliation shape would have been self-healing across ASC outages or
+  long processing delays.
+- A per-build 409 would have been logged without failing the entire run, so a
+  `hasAccessToAllBuilds` semantics mismatch stayed visible.
+- Testers would have seen a new build after Apple's processing time plus the
+  schedule interval. Moving the poll back into `ci_post_xcodebuild.sh` could
+  not have shortened that delay.
+
+**Historical prerequisite:** this proposal would have required a narrowly
+scoped ASC API key in GitHub Actions. Because the GUI post-action fixed the
+root cause, that additional automation and credential are not required by
+the current workflow.
 
 ### Local equivalent of what CI does
 
 ```sh
+# Start in the repository root.
 cd ios
 xcodegen --version                    # should match ci_scripts/XCODEGEN_VERSION
 xcodegen generate                     # must leave Beid.xcodeproj clean (git status --porcelain)
 git status --porcelain -- Beid.xcodeproj
+xcrun simctl list devices available
 xcodebuild -project Beid.xcodeproj -scheme Beid \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' build
 cd ..
 python3 scripts/prepare_testflight_notes.py \
   --source what_to_test.json --output-dir /tmp/testflight-notes-check

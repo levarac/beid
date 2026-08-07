@@ -32,14 +32,15 @@ DESIGN.md documents **rules**; repo artifacts hold **values**.
 | `ios/Beid/DesignSystem/Colors.xcassets` | Adaptive (light + dark) color values |
 | `.swiftlint.yml` (repo root) | Enforcement rules for banned raw values |
 | DESIGN.md (this file) | Semantics, usage rules, tone, review criteria |
-| Figma "Minimal v4" board | Visual *reference* for screen layouts (01–09), not a value source |
+| Figma "Minimal v4" board | Historical visual input for screen layouts; ratified redesign specs and current components supersede it where they differ |
 
 Note on the Figma board: the mock (branded "SenseProof", an earlier name)
 anchors a light minimal look with a blue, Bluetooth-centric accent. This
 document's palette (§5) deviates from that blue deliberately; Ken resolved
 the tension **against** blue on 2026-07-10 (deep ink + quiet teal + violet
-seal adopted). Layout and flow in the Figma are authoritative reference;
-its colors are not tokens.
+seal adopted). Figma remains historical visual input, not authority for the
+current flow: ratified `docs/specs/` redesigns and the component/screen
+inventory in §§10–11 govern when they differ. Its colors are not tokens.
 
 - MUST: When this document and `Tokens.swift` disagree on a value, the code
   is right and this document has drifted — fix the document, and treat the
@@ -115,7 +116,7 @@ as-is.
 | Motif | Meaning | UI use | Avoid |
 | --- | --- | --- | --- |
 | **Encounter Field** | Nearby people sensed over time | `SensingView` pulse rings, proximity/sensing states, scan-flow backgrounds | Radar/sonar clichés, sci-fi neon, spinning sweeps |
-| **Proof Seal** | An encounter became durable | `ProofCollectedView` seal moment, `VerifiedView` resolve, proof card artwork | Generic checkmark-only success, confetti |
+| **Proof Seal** | An encounter became durable | `RecordingView` entrance ceremony, proof card/detail artwork | Generic checkmark-only success, confetti |
 | **Ledger Trace** | A verifiable record exists behind this artifact | Metadata rows in `ItemDetailView`, address row in `AccountSheetView`, monospaced identifiers | Blockchain jargon, wallet chrome, explorer-link prominence |
 | **Event Artifact** | A proof is a collectible memory of a real event | `ProofCardView` cards, `CollectionHomeView` grid, event recap | NFT-marketplace aesthetics, price/rarity framing |
 
@@ -123,14 +124,14 @@ Concrete do/don't pair (the empty state of `CollectionHomeView`):
 
 ```
 DO:
-Empty state uses Encounter Field artwork (custom asset, once it exists),
+Empty state uses the `encounter-field-empty` Encounter Field asset,
 title "No proofs yet",
 body "Start sensing at an event to collect your first proof.",
 CTA "Sense Event",
 background DS.Color.surfaceCanvas.
 
 DON'T:
-Image(systemName: "tray") at 48 pt,           // the current scaffold does this
+Image(systemName: "tray") at 48 pt,
 generic title "No data",
 system blue accent,
 or any wallet/crypto iconography.
@@ -138,11 +139,12 @@ or any wallet/crypto iconography.
 
 Voice registers by moment:
 
-- **Sensing** (`SensingView`, `VerifyingView`): calm, factual, present tense.
+- **Sensing** (`SensingView`, `EventFoundView`): calm, factual, present tense.
   "Sensing automatically." No exclamation marks.
-- **Ceremony** (`VerifiedView`, `ProofCollectedView`): short, declarative,
-  slightly formal. "Proof collected." One quiet moment of weight, not a
-  celebration.
+- **Recording and proof entrance** (`RecordingView`): one short,
+  declarative, slightly formal entrance moment ("Proof collected."), then
+  calm factual recording status. Give the entrance one quiet moment of
+  weight, not a celebration.
 - **Recovery** (`SignalLostView`, `BluetoothOffView`): plain instructions,
   no blame, always a way forward.
 
@@ -185,13 +187,13 @@ resolved **against**. Exact secondary hex values (surfaces, text, hairline,
 | `DS.Color.textPrimary` | `#1A1C1E` | `#ECEDEE` | Primary text | Titles, body | Decorative fills |
 | `DS.Color.textSecondary` | `#5C6165` | `#9BA1A6` | Supporting text | Subtitles, metadata | Primary CTAs |
 | `DS.Color.actionPrimary` | `#2A2E33` | `#E8EAEC` | Neutral primary action | CTA tint on screens with no motif accent; app-level accent | Motif moments (sensing/ceremony/recovery) |
-| `DS.Color.signalActive` | `#18C7A7` | `#62E8D0` | Live sensing signal | Sensing pulse, verifying progress, one key accent per scan screen | Body text, large fills |
+| `DS.Color.signalActive` | `#18C7A7` | `#62E8D0` | Live sensing signal | Sensing pulse, event-found state, one key accent per sensing screen | Body text, large fills |
 | `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
-| `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Seal artwork, seal/verified moments, proof accents | Generic links, nav tint |
+| `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Recording/proof entrance, seal artwork, proof accents | Generic links, nav tint |
 | `DS.Color.labelOnWarning` | `#1A1C1E` | `#111315` | CTA label on `signalWarning` fill | Prominent-button labels on recovery screens | Anything except labels sitting on a `signalWarning` fill |
 | `DS.Color.labelOnSeal` | `#FFFFFF` | `#111315` | CTA label on `proofSeal` fill | Prominent-button labels at ceremony moments | Anything except labels sitting on a `proofSeal` fill |
 | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
-| `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView`, `ProofCollectedView` signature controls) | BLE signal issues (use `signalWarning` instead) |
+| `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView` signature controls) | BLE signal issues (use `signalWarning` instead) |
 | `DS.Color.statusOn` | `#1E7E34` | `#30D158` | Binary on/off status, "on" | Bluetooth-active badge (`AccountSheetView`) | BLE signal quality (use `signalWarning`), wallet-signature status (use `statusCaution`), sensing-screen accent (use `signalActive`) |
 | `DS.Color.statusOff` | `#6B7075` | `#83898F` | Binary on/off status, "off" | Bluetooth-off badge (`AccountSheetView`) | Same as `statusOn`'s forbidden uses — this pair is for a neutral toggle state only, not an alarm |
 
@@ -201,16 +203,15 @@ Rules:
   through `DS.Color.*`. High-contrast variants SHOULD be added to the same
   colorsets when the palette is ratified.
 - MUST: Exactly **one** motif accent per screen, mapped by moment:
-  `signalActive` on sensing screens (`SensingView`, `EventFoundView`,
-  `VerifyingView`), `proofSeal` at ceremony moments (`VerifiedView`,
-  `ProofCollectedView`, proof artwork), `signalWarning` on recovery screens
-  (`SignalLostView`, `BluetoothOffView`). Screens outside these moments
+  `signalActive` on sensing screens (`SensingView`, `EventFoundView`),
+  `proofSeal` on `RecordingView` and proof artwork, `signalWarning` on
+  recovery screens (`SignalLostView`, `BluetoothOffView`). Screens outside these moments
   (onboarding, home, account) have **no** motif accent — their CTAs and
   controls tint with `DS.Color.actionPrimary`.
 - MUST NOT: System default blue as an *implicit fallback* — every tintable
-  control gets an explicit `DS.Color.*` tint, and at migration the
-  app-level accent is set to `actionPrimary`. FORBIDDEN: `.tint(.blue)`
-  (the current scaffold's pattern; it is migration debt, not precedent).
+  control gets an explicit `DS.Color.*` tint, and the app-level accent is
+  `actionPrimary`. FORBIDDEN: `.tint(.blue)` (a retired scaffold pattern,
+  not precedent).
 - MAY: System semantic colors (`.primary`, `.secondary`, `Color(.systemRed)`)
   inside `DesignSystem/` as implementation details of a token — never
   directly in Views.
@@ -226,8 +227,8 @@ Rules:
 - The per-proof generated gradient is a *data-driven* artwork generator,
   not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
   its canonical home and the only sanctioned source of `Color(hue:)`.
-  `ProofCardView`'s current local copy of the same math is scaffold debt;
-  the phase-2 migration replaces it with the `DS.Artwork` call.
+  `ProofCardView` and `ItemDetailView` call that generator directly; a local
+  copy of the same math would reintroduce the retired scaffold debt.
 
 ## 6. Typography
 
@@ -239,7 +240,7 @@ Ramp (all Dynamic Type text styles, defined in `DS.Font`):
 | Token | Style | Role | Constraint |
 | --- | --- | --- | --- |
 | `DS.Font.screenTitle` | `.largeTitle` bold | Screen title | Max one per screen |
-| `DS.Font.ceremonyTitle` | `.title` bold | "Verified", "Proof Collected" | Ceremony moments only |
+| `DS.Font.ceremonyTitle` | `.title` bold | "Proof Collected" entrance in `RecordingView` | Ceremony moments only |
 | `DS.Font.sectionTitle` | `.title3` semibold | State/section titles | |
 | `DS.Font.cardTitle` | `.subheadline` semibold | Card titles | `lineLimit(1)` + truncation on cards |
 | `DS.Font.body` | `.body` | Body copy | |
@@ -255,8 +256,9 @@ Rules:
   fixed-height containers around text are FORBIDDEN.
 - SHOULD: Long event names truncate with `lineLimit` on cards, wrap on
   detail screens.
-- FORBIDDEN: `.font(.system(size: N))` — the current scaffold uses this for
-  oversized SF Symbols; it disappears with the §12 migration.
+- FORBIDDEN in Views: `.font(.system(size: N))`. A system-symbol fallback
+  may size itself inside `DesignSystem/`, but it must still respect §12's
+  32 pt decorative-symbol cap.
 
 ## 7. Spacing, Layout, Safe Areas
 
@@ -266,7 +268,7 @@ plus `DS.Space.pageMargin` (32) for full-width content and bottom CTAs.
 - MUST: All padding/spacing values come from `DS.Space.*` (exceptions: `0`, `1`).
 - MUST: On state screens in compact width, full-width primary CTAs sit at
   the bottom with horizontal padding `DS.Space.pageMargin` (the pattern in
-  `WelcomeView`, `SignalLostView`, `ProofCollectedView`). Sheets, regular-
+  `WelcomeView` and `SignalLostView`). Sheets, regular-
   width layouts, and secondary actions MAY deviate with a stated reason.
 - MUST: Respect safe areas; content never hides behind home indicator or
   notch. Keyboard avoidance uses standard SwiftUI behavior.
@@ -408,8 +410,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   `ItemDetailView` only. Per-proof wallet-signature states
   (`notRequested` / `connecting` / `awaitingApproval` / `signed` /
   `deferred` / `rejected` / `failed`) exist as of 2026-07-12 but are
-  surfaced in `ItemDetailView` and `ProofCollectedView`, not on the grid
-  card itself — keeps the card dense and avoids a second status affordance.
+  surfaced in `ItemDetailView`, not on the grid card itself — keeps the card
+  dense and avoids a second status affordance.
   Revisit if a future design pass wants a compact card-level signature
   badge; it MUST pair color with a symbol per §2.9.
 - Accessibility: entire card one element; label "Proof of {eventName},
@@ -421,13 +423,11 @@ Real components in this codebase. Each entry is the contract for reuse.
   `signatureState` from `AppCoordinator.proofStore` (never a point-in-time
   snapshot, since a sign attempt mutates state while this view is on
   screen).
-- Use when: A screen needs to show/offer proof signing. Currently
-  `ItemDetailView` (Screen 08, persistent) and `ProofCollectedView`
-  (Screen 07, ceremony moment) — chosen because 08 is the durable place a
-  user manages a proof over time, and 07 is the moment signing is most
-  top-of-mind right after collection.
-- Don't use when: `ProofCardView` (grid density) or `VerifiedView` (no
-  `Proof` exists yet at that point in the flow).
+- Use when: A persistent screen needs to show or offer proof signing.
+  Currently this is `ItemDetailView` (Screen 08), the durable place where a
+  user manages a proof over time.
+- Don't use when: `ProofCardView` (grid density) or `RecordingView` (the
+  one-time proof entrance is scan progress, not a wallet-management surface).
 - API: `ProofSignatureControlsView(proofId: UUID)`, requires
   `AppCoordinator` in the environment.
 - Required tokens: `DS.Color.actionPrimary` (sign/connect CTA tint — no
@@ -442,7 +442,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 - Purpose: Full-screen cover hosting the sensing flow, switching on
   `SensingCoordinator.phase` (`ScanPhase`: idle/sensing → eventFound →
-  verifying → verified → collected, with signalLost branch).
+  recording, with signalLost branch).
 - Use when: The single entry point to sensing; presented via
   `fullScreenCover` from `RootView`.
 - Don't use when: Anything else — there is exactly one scan flow.
@@ -475,8 +475,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   `DS.Color.textSecondary` (label, both states), `DS.Color.signalActive` /
   `DS.Color.signalWarning` (dot).
 - States: `.sensingAutomatically` (active, `signalActive` dot) /
-  `.sensingPaused` (warning, `signalWarning` dot; defined for future reuse,
-  not yet rendered anywhere). Label color never changes with state — only
+  `.sensingPaused` (warning, `signalWarning` dot; rendered in
+  `SignalLostView`). Label color never changes with state — only
   the dot does, and the label text itself names the state, so color is
   never the only signal (§2.9).
 - Accessibility: dot is `.accessibilityHidden(true)` (decorative — state is
@@ -524,17 +524,18 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Accessibility: badge + step text read as one line per row; no separate
   accessibility grouping needed since nothing is interactive.
 
-### Component: State screen (pattern shared by 01/02/03/06c/06d/07)
+### Component: State screen (pattern shared by 01/02/03/06d)
 
 - Purpose: Icon/artwork → title → supporting text → optional bottom CTA.
   Used by `WelcomeView`, `BluetoothPermissionView`, `BluetoothOffView`,
-  `VerifiedView`, `SignalLostView`, `ProofCollectedView`.
+  and `SignalLostView`.
 - Required tokens: `DS.Space.l` stack spacing, `DS.Space.pageMargin`
   margins, `DS.Font.sectionTitle`/`ceremonyTitle` + `DS.Font.supporting`,
   bottom CTA with `DS.Font.cta`.
-- Rules: SHOULD be extracted into a shared `StateScreen` container when the
-  UI worker migrates views (phase 2); until then new state screens match the
-  required slots and tokens above (not pixel-copying existing views).
+- Rules: This is a conceptual pattern, not a missing phase-2 task. Extract a
+  shared `StateScreen` container only when a new reuse case justifies it;
+  until then new state screens match the required slots and tokens above
+  without pixel-copying an existing view.
 
 ### Component: Detail meta row (detailRow in ItemDetailView)
 
@@ -577,7 +578,8 @@ Real components in this codebase. Each entry is the contract for reuse.
 The app's navigation shape (all real, from `ios/Beid/Navigation/`):
 
 - **Root switch**: `RootView` switches on `AppScreen`
-  (welcome / walletConnect / bluetoothPermission / bluetoothOff / home).
+  (welcome / walletConnect / eventCodeEntry / bluetoothPermission /
+  bluetoothOff / home).
   Onboarding order depends on `OnboardingMode` (walletFirst | guestFirst).
   MUST: both orders stay coherent; no screen may assume a wallet exists.
 - **Onboarding screens (01–03)**: state-screen pattern (§10), one CTA,
@@ -586,7 +588,7 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
 - **Collection home (04)**: `NavigationStack` + adaptive `LazyVGrid` of
   `ProofCardView`; account entry top-trailing; "Sense Event" CTA in the
   bottom bar. Empty state (04b) follows the §3 do/don't.
-- **Scan flow (05–07)**: `fullScreenCover` — sensing is a modal session with
+- **Scan flow (05–06d)**: `fullScreenCover` — sensing is a modal session with
   a clear exit (a trailing close (X) button). Phase progression is linear;
   `SignalLostView` (06d) is the recovery branch and MUST always offer "Try
   Again".
@@ -594,9 +596,12 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
 - **Account (09)**: `.sheet` with `List` + inline title; wallet
   connect/disconnect lives here in guest-first mode. Destructive actions
   (`Disconnect Wallet`) use `role: .destructive` and MUST confirm via
-  `.confirmationDialog` once real wallets exist.
-- Loading: indeterminate work shows calm progress (`VerifyingView`'s
-  circular progress with peer count), never blocking spinners without copy.
+  `.confirmationDialog`. The current `AccountSheetView` performs the
+  disconnect directly; that review-level violation is migration debt, not
+  precedent.
+- Loading: indeterminate work shows calm progress (`RecordingView`'s
+  activity indicator with cumulative peer count), never blocking spinners
+  without copy or an invented denominator.
 - Errors: recovery screens state what happened, why, and one action —
   the `SignalLostView` formula.
 
@@ -605,9 +610,11 @@ Organizer-side comments on the Minimal v4 board name surfaces that do not
 exist in this codebase yet: an organizer mode (主催者モード), organizer-set
 verification thresholds, a manual event-code check-in as a rescue path when
 sensing fails, and richer pre-check-in status transitions before the scan
-flow. Agents MUST NOT improvise these; when they land, they are designed
-against this contract (the event-code rescue path, for example, is a
-Recovery-register screen per §3, not a new visual language).
+flow. The current `EventCodeEntryView` is a wallet-optional onboarding
+fallback, not that sensing-recovery surface. Agents MUST NOT improvise these;
+when they land, they are designed against this contract (the event-code
+rescue path, for example, is a Recovery-register screen per §3, not a new
+visual language).
 
 ## 12. Iconography and Illustration
 
@@ -616,37 +623,34 @@ Policy split:
 | SF Symbols (keep) | Custom assets (required) |
 | --- | --- |
 | System actions: close, back, share, settings, person/account | Proof seals, encounter/sensing artwork, empty states |
-| Toolbar and tab affordances | Ceremony moments (`ProofCollectedView` seal) |
-| Small inline symbols beside text (≤ 32 pt) | Any brand moment currently faked by an oversized SF Symbol |
+| Toolbar and tab affordances | Ceremony moments (`RecordingView` entrance seal) |
+| Small inline symbols beside text (≤ 32 pt) | Any brand moment that lacks suitable custom artwork |
 
-- FORBIDDEN: Decorative `Image(systemName:)` larger than 32 pt. Current
-  violations are migration debt, explicitly *not* precedent:
-  `WelcomeView` ("checkmark.seal.fill" 72 pt), `ProofCollectedView`
-  ("seal.fill" 48 pt), `VerifiedView` ("checkmark.circle.fill" 64 pt),
-  `SignalLostView` ("exclamationmark.triangle.fill" 56 pt),
-  `BluetoothOffView`, `BluetoothPermissionView`, `WalletConnectView`.
-  `CollectionHomeView`'s empty-state icon was brought into compliance
-  (32 pt + `TODO(asset)`) by the 04 Collection Home redesign.
+- FORBIDDEN: Decorative `Image(systemName:)` larger than 32 pt. There are no
+  known current violations: hero headers route through `BeidGlyph`, whose
+  default 72 pt container renders a 27.36 pt system-symbol fallback, and
+  available brand moments use custom assets. Treat this as a continuing cap,
+  not permission to grow the fallback.
 - Two distinct custom-asset pipelines — do not mix them:
   1. **Illustrations** (proof artwork, empty states, sensing scenes):
-     vector assets in an `Illustrations.xcassets` (to be added with the
-     first real asset), rendering `Original`, light/dark variants when
-     colors are embedded.
+     vector assets in `Illustrations.xcassets`, rendering `Original`, with
+     light/dark variants when colors are embedded.
   2. **Custom symbols** (small reusable glyphs that behave like SF
      Symbols): authored from an SF Symbols app template as SVG symbol
      sets, validated in the SF Symbols app, added to the asset catalog —
      this preserves weights, scales, text alignment, and accessibility
      behavior. Single-color template glyphs are tinted only via
      `DS.Color.*`.
-- Temporary path until assets exist: a new surface that *needs* a brand
-  moment MAY ship with a placeholder (small SF Symbol ≤ 32 pt or plain
-  layout) plus a `TODO(asset): <asset-name>` comment and a checklist note —
-  never with an oversized decorative SF Symbol.
+- Temporary path when a required asset does not yet exist: a new surface
+  that *needs* a brand moment MAY ship with a placeholder (small SF Symbol
+  ≤ 32 pt or plain layout) plus a `TODO(asset): <asset-name>` comment and a
+  checklist note. Remove that TODO when the named asset lands; never use an
+  oversized decorative SF Symbol.
 - MUST: Decorative images use `.accessibilityHidden(true)`.
 - MUST: Symbols paired with text scale with Dynamic Type (`@ScaledMetric`
   or font-relative sizing).
 - Asset naming: kebab-case, motif-prefixed — e.g. `encounter-field-empty`,
-  `proof-seal-collected`.
+  `encounter-field-pulse`, `proof-seal-mark`.
 
 ## 13. Accessibility
 
@@ -661,10 +665,11 @@ Acceptance criteria for every component and screen, not post-hoc QA:
   "Account").
 - MUST: Reduce Motion honored (§9); Reduce Transparency degrades materials
   to solid `surfaceRaised`.
-- MUST: State never by color alone; `VerifyingView` progress announces
-  "{n} of {total} peers verified" as text, which VoiceOver reads.
+- MUST: State never by color alone; `RecordingView` exposes the cumulative
+  "Recording your attendance automatically · {n} peers verified" text for
+  VoiceOver, without inventing a total.
 - SHOULD: The sensing session posts meaningful VoiceOver announcements on
-  phase changes (event found, verified, collected).
+  phase changes (event found, recording, signal lost, resumed).
 
 ## 14. Dark Mode and High Contrast
 
@@ -763,7 +768,10 @@ Enforcement layers:
    violations is FORBIDDEN; it may only be regenerated to *shrink* after
    a migration lands. Lint fixtures proving pass/fail behavior live in
    `lint-fixtures/` (see its README for the proof-run procedure).
-   (Config + script only for now; CI wiring is a follow-up.)
+   Hosted enforcement and lane ownership follow the repository's
+   authoritative [PR CI contract](AGENTS.md#pr-ci) and its executable
+   workflow, `.github/workflows/pr-ci.yml`; this document does not duplicate
+   that job list.
 
    The lint layer intentionally catches the common ~80% of violations —
    direct call-site literals. The long tail is **review-level MUST**, not
@@ -779,10 +787,11 @@ Enforcement layers:
    `DesignException: <reason>` in its description and links the decision;
    silent deviations are rejected.
 
-Known pre-existing violations: the current scaffold (all 13 screens)
-predates this contract and violates §2.1/2.2/2.3 and §12 broadly. Migration
-is the UI worker's phase 2; agents MUST NOT copy scaffold patterns into new
-code, and MUST NOT "fix" scaffold views in unrelated PRs.
+Known pre-existing lint debt is the exact eight-entry set recorded in
+`lint/baseline.template.json`, all in `ios/Beid/DesignSystem.swift` at the
+last verification point. The screen-level phase-2 migration has landed;
+do not describe every screen as scaffold debt or use the baseline as
+permission to add another violation.
 
 ## 17. Appendices
 
@@ -811,14 +820,22 @@ code, and MUST NOT "fix" scaffold views in unrelated PRs.
 | `color.status.on` | `DS.Color.statusOn` | L `#1E7E34` / D `#30D158` | Binary on/off status, "on" (Bluetooth active) |
 | `color.status.off` | `DS.Color.statusOff` | L `#6B7075` / D `#83898F` | Binary on/off status, "off" (Bluetooth off) |
 
-(Full set: 14 color tokens, 7 space, 4 radius, 5 size, 9 font, 5 motion,
-plus 1 artwork generator — see `ios/Beid/DesignSystem/Tokens.swift`.)
+(Full set: 14 color tokens, 7 space, 4 radius, 6 size, 4 layout, 9 font,
+6 motion, plus 1 artwork generator — see
+`ios/Beid/DesignSystem/Tokens.swift`.)
 
 ### B. Asset inventory
 
-Currently empty — no custom assets exist yet. First assets to produce
-(priority order): `encounter-field-empty` (04b), `proof-seal-collected`
-(07), `encounter-field-sensing` (05). Naming per §12.
+`Illustrations.xcassets` currently contains four original-rendering SVG image
+sets, each with light and dark variants:
+
+- `welcome-mark` — `WelcomeView`
+- `encounter-field-empty` — the `CollectionHomeView` empty state
+- `encounter-field-pulse` — `SensingView`
+- `proof-seal-mark` — the one-time `RecordingView` entrance ceremony
+
+The image-set directories and the four `assetImage:` call sites are the
+inventory evidence. Naming remains governed by §12.
 
 ### C. Decision log
 
@@ -832,13 +849,14 @@ Currently empty — no custom assets exist yet. First assets to produce
 | 2026-07-10 | **Ken ratification**: (1) palette direction — deep ink + quiet teal (`#18C7A7` family) + violet proof seal; Figma Minimal v4 blue resolved against; (2) tone thesis "quiet field instrument" + all four motifs (Encounter Field / Proof Seal / Ledger Trace / Event Artifact) as-is; (3) locale set `en` + `ja`/`zh-Hans`/`es`/`fr`; (4) Japanese UI terms 検知 (Sensing) / 証明 (Proof), not team-internal センシング/証 | Ratified — PROPOSAL tags removed on these four areas; exact secondary hexes, type ramp, CTA sentence-case grandfathering remain PROPOSAL |
 | 2026-07-10 | Revision round 2 (GPT-Pro re-audit, final): TEMP-DEBT path exclusions replaced by checked-in violation-level baseline (`.swiftlint-baseline.json`); regex FP fixes (blanket `.shadow(color:)` scoped, `minLength:` scoped to `Spacer(`, bare `duration:` branch dropped) and FN fixes (`Font.custom`, `.font(Font.…)`); long-tail patterns explicitly demoted to review-level MUST (§16); pinned SwiftLint + `lint-fixtures/` proof pair; `abs(seed)` → `seed.magnitude`; `DS.Motion.sensingPulse` sanctioned token; §2 lint claim scoped to common surface forms | Adopted (enforcement) |
 | 2026-07-10 | Revision round 3 (Fable audit): SwiftLint 0.65 baselines store absolute paths, so the checked-in baseline is replaced by a portable template (`lint/baseline.template.json`, `__REPO_ROOT__` placeholder) + `scripts/lint.sh` that materializes the gitignored per-checkout `.swiftlint-baseline.json` and runs swiftlint; shrink-only policy governs the template | Adopted (enforcement) |
-| 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView`/`ProofCollectedView` carrying the new signature states instead of the card itself | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
+| 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView` and the then-current Screen 07 carrying the new signature states instead of the card itself. Scan Slice-2 later retired separate Screen 07; `ItemDetailView` is the current signing-control surface. | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
 | 2026-07-27 | Account sheet reskin (Figma `104:463`, `docs/specs/account-redesign.md`) adds `DS.Color.statusOn`/`DS.Color.statusOff` (binary Bluetooth on/off status pair, deliberately separate from `signalWarning`'s BLE-signal-*quality*-only scope, `statusCaution`'s signature-failure-only scope, and `signalActive`'s reserved sensing-screen-accent scope), replacing `AccountSheetView`'s raw `.orange`/`.green` (Non-Negotiable #1 fix). `statusOn`'s hue is sourced from Figma's Bluetooth badge (`#34C759`) but darkened for light mode to clear WCAG AA text contrast (the raw Figma value measures ~2:1 on white, well under the 4.5:1 text minimum); `statusOff` has no Figma reference (Figma's mock never draws the "off" state) and uses a neutral gray pair instead of an alarm hue, since Bluetooth-off in the Account sheet is a neutral toggle state, not the degraded-signal alarm `signalWarning` already owns | PROPOSAL — Ken ratification pending for the exact `statusOn`/`statusOff` hex values, same as other secondary hexes |
 | 2026-07-28 | Collection Home reskin (Figma `104:300`, `docs/specs/collection-redesign.md`) adds `DS.Size.proofCardArtwork` (76 pt) and wires the previously-unused `DS.Artwork.proofCardGradient(seed:)` into `ProofCardView` as a centered circular avatar, replacing the seal icon/checkmark/divider/Peers-verified row (peers count stays on `ItemDetailView`). Bottom "Sense Event" CTA becomes icon-only once proofs exist (labeled CTA retained on the 04b empty state per §3's first-run-discoverability rule); the existing localized "Sense Event" string is retained as the icon button's `.accessibilityLabel`, not removed. `CollectionHomeView`'s empty-state icon fixed to the 32 pt cap (see §12) | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 | 2026-07-28 | Item Detail reskin (Figma `104:407`, `docs/specs/itemdetail-redesign.md`) adds `DS.Size.itemDetailArtwork` (190 pt) and reuses `DS.Artwork.proofCardGradient(seed:)` in `ItemDetailView` at detail scale, replacing the former seal-glyph + "Verified"-label header. The Method/Peers-verified/Status panel drops its plain "Proof" section title and pairs the Status row with a `checkmark.circle.fill` glyph; Status stays a fixed, unconditional "Verified" deliberately decoupled from `Proof.signatureState` (that state has its own distinct readout in `ProofSignatureControlsView` directly below), and Figma's "on-chain" qualifier is dropped as unmodeled and forbidden copy (§15). Figma's venue text ("Tokyo Big Sight") is not rendered — no backing `Proof` field — and the date caption drops to date-only (medium style, no time), matching `ProofCardView`. Figma's custom back/share nav pills are not adopted (standard back button kept; no share action exists in the app). `ProofSignatureControlsView`/`ProofSignatureState`/`Proof`/`ProofStore` are untouched — reskin is display-chrome only, pending Option C | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 
 ### D. Deprecated patterns
 
-Everything the scaffold does that new code must not repeat: `.tint(.blue)`
-as brand accent, oversized decorative SF Symbols, `.font(.system(size:))`,
-raw padding literals, `Color(hue:)` outside a designated artwork generator.
+Patterns new code must not introduce: `.tint(.blue)` as brand accent,
+oversized decorative SF Symbols, `.font(.system(size:))` in Views, raw
+padding literals, and `Color(hue:)` outside the designated artwork
+generator.

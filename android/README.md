@@ -2,28 +2,33 @@
 
 First slice of the native (Flutter-free) beid Android app. Kotlin, Jetpack
 Compose, consumes the [levarac/barnard](https://github.com/levarac/barnard)
-BLE SDK. This mirrors `ios/`'s scaffold slice (13-screen SwiftUI scaffold,
-`ios/README.md`) at the same "first cut, not feature parity" scope — one
-screen, the design-system theme, and a compiling SDK dependency.
+BLE SDK. This mirrors the native host shape described in `ios/README.md` at
+the same "first cut, not feature parity" scope — one screen, the
+design-system theme, and a compiling SDK dependency.
 
 ## Build & run
 
-Requires **JDK 17** — AGP 8.11.1 fails to run under JDK 25 with an opaque
-`BUILD FAILED … What went wrong: 25.0.3` error (no stack trace). If your
-default `JAVA_HOME` is newer, point Gradle at 17 explicitly:
+For local macOS builds, resolve a supported JDK through the repository helper.
+It accepts a supported `KMP_JAVA_HOME`, then tries Android Studio JBR 21
+(commonly `/Applications/Android Studio.app/Contents/jbr/Contents/Home`),
+Homebrew JDK 17, and macOS's Java 17 resolver. AGP 8.11.1 fails under the
+ambient system Java 25 with an opaque `BUILD FAILED … What went wrong:
+25.0.3` error (no stack trace), so do not rely on the shell default:
 
 ```sh
-brew install openjdk@17   # if you don't have it
+# Start in the repository root.
 cd android
-JAVA_HOME=$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
+JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
+  ./gradlew assembleDebug
 ```
 
-Or set `org.gradle.java.home` in `gradle.properties` / your global Gradle
-config if you'd rather not pass `JAVA_HOME` per invocation.
+CI selects its pinned JDK 17 separately. Do not change the repository's
+Gradle configuration merely to accommodate an unsupported ambient JDK.
 
 APK lands at `app/build/outputs/apk/debug/app-debug.apk`. To run it:
 
 ```sh
+# Start in android/.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n org.levarac.beid/.MainActivity
 ```
@@ -32,14 +37,21 @@ adb shell am start -n org.levarac.beid/.MainActivity
 
 beid consumes [levarac/barnard](https://github.com/levarac/barnard) from
 Maven Central with the exact coordinate
-`implementation("org.levarac:barnard:0.2.0")`. Both the Android application
+`implementation("org.levarac:barnard:0.3.0")`. Both the Android application
 and the SDK therefore resolve from published, reproducible artifacts; no
-submodule or Gradle composite build is required.
+submodule or Gradle composite build is required. Verified 2026-08-07 against
+`app/build.gradle.kts`.
 
 `settings.gradle.kts` provides `mavenCentral()` through
 `dependencyResolutionManagement.repositories`. To update the SDK, change the
-version in `app/build.gradle.kts`, then run `./gradlew :app:assembleDebug` to
-verify Central resolution and compilation.
+version in `app/build.gradle.kts`, then verify Central resolution and
+compilation from `android/` with the same resolver-backed JDK selection:
+
+```sh
+# Start in android/.
+JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
+  ./gradlew :app:assembleDebug
+```
 
 ## Design-system theme
 
@@ -67,7 +79,7 @@ animation specs are a follow-up once a motion-bearing screen lands) and
 
 ## One working screen: Join an event
 
-`ui/screens/EventJoinScreen.kt` is the scaffold's proof that the vendored SDK
+`ui/screens/EventJoinScreen.kt` is the scaffold's proof that the published SDK
 resolves, compiles, and runs: enter an event code → tap "Join event" →
 `EventJoinCoordinator` calls `BarnardEngine.requestPermissions` → the real
 Android BLE runtime-permission dialog appears → on grant, `joinEvent(code)` +
@@ -80,9 +92,12 @@ This mirrors the manual event-code-entry slice landing on iOS in parallel
 a placeholder for missing work). `EventJoinCoordinator`
 (`sensing/EventJoinCoordinator.kt`) is a thin wrapper, not a full port of
 iOS's `SensingCoordinator` — no BLE-off/signal-lost recovery states, no
-persistence. Those, plus the rest of iOS's 13-screen flow (sensing → event
-found → verifying → verified → proof collected → collection home, etc.), are
-follow-up slices.
+production persistence flow. A native
+`persistence/UnsentWindowLedgerStore.kt` exists and its JVM tests exercise the
+shared snapshot codec, but wiring it into an Android sensing lifecycle remains
+deferred to Issue #121. That wiring, plus the rest of iOS's post-join flow
+(sensing → event found → recording with a one-time proof entrance, plus
+signal-loss recovery and collection home), remains follow-up work.
 
 **Why `BarnardEngine` is owned by `MainActivity`, not the composable**:
 `requestPermissions` is Activity-driven — the hosting `Activity` must forward
@@ -122,12 +137,11 @@ translations in this PR is safe.
 
 ## What's deliberately not here
 
-- No CI workflow wiring (task scope: prove `./gradlew assembleDebug`
-  succeeds locally; CI wiring is a stated follow-up).
 - No ProGuard/R8 minification config beyond Gradle defaults (`isMinifyEnabled
   = false` for debug and release, matching barnard's own example app — real
   release signing/minification is a pre-launch concern, not scaffold scope).
-- No unit/instrumentation tests yet (iOS's scaffold PR landed
-  `BeidNativeTests` alongside its views; the Android equivalent is a
-  reasonable immediate follow-up rather than bundling it into an
-  already-broad first slice).
+- No instrumentation or device E2E tests yet. JVM unit tests currently cover
+  the app-to-`shared/` bridge and the native unsent-window ledger store. For
+  the current hosted job set and the GitHub Actions / Xcode Cloud division,
+  use the repository's authoritative [PR CI contract](../AGENTS.md#pr-ci)
+  together with its executable workflow, `.github/workflows/pr-ci.yml`.

@@ -5,22 +5,85 @@ consumes the [levarac/barnard](https://github.com/levarac/barnard) BLE SDK.
 
 ## Build & run
 
+Use the exact XcodeGen release pinned for Xcode Cloud, not Homebrew's
+always-latest formula. From the repository root, the following downloads a
+session-local copy and uses it to generate the project:
+
 ```sh
-brew install xcodegen   # if you don't have it
+# Start in the repository root.
+XCODEGEN_VERSION="$(cat ios/ci_scripts/XCODEGEN_VERSION)"
+XCODEGEN_TMP="$(mktemp -d)"
+curl -sSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
+  -o "$XCODEGEN_TMP/xcodegen.zip" \
+  "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+unzip -q "$XCODEGEN_TMP/xcodegen.zip" -d "$XCODEGEN_TMP"
+export PATH="$XCODEGEN_TMP/xcodegen/bin:$PATH"
+test "$(xcodegen --version | awk '{print $2}')" = "$XCODEGEN_VERSION"
 cd ios
 xcodegen generate
 open Beid.xcodeproj
+cd ..
 ```
+
+`project.yml` is the source of truth, but `Beid.xcodeproj` is committed for
+local-development convenience. Xcode Cloud regenerates it with the version in
+`ci_scripts/XCODEGEN_VERSION` and fails if the committed project drifts, so
+regenerate and commit `Beid.xcodeproj` whenever `project.yml` changes. Never
+hand-edit the generated project.
 
 Or from the CLI:
 
 ```sh
-xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+# Start in the repository root.
+xcrun simctl list devices available
 
 xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' build
+
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' test
 ```
+
+Use a concrete UDID from the first command. Several installed simulators can
+share a name, so `name=...` is ambiguous on this host. Do not replace the
+destination with `generic/platform=iOS Simulator`: a generic destination can
+also build x86_64, while one binary dependency currently provides only an
+arm64 Simulator slice. If a link error names an architecture that no usable
+simulator on the host actually has, check the destination before changing
+code or chasing the error's symbol names.
+
+Every Xcode build runs the always-run **Build BeidSharedKit** pre-build phase.
+That phase resolves a supported JDK through
+`scripts/resolve_kmp_java_home.sh`, enters `android/` (the repository's Gradle
+entry point), and invokes `./gradlew :shared:embedSwiftExportForXcode` before
+Swift compilation. If no supported JDK is available, expand **Build
+BeidSharedKit** in the Xcode build log and read its JDK/Gradle output; changing
+Swift code or the generated module will not fix that toolchain failure.
+
+On the current local host, the full `Beid` test action has taken about 27
+minutes. For iteration, compile the app and tests once, then rerun a focused
+test without rebuilding:
+
+```sh
+# Start in the repository root.
+xcrun simctl list devices available
+
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  build-for-testing
+
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+  '-only-testing:BeidTests/<TestClass>/<testMethod>' \
+  test-without-building
+```
+
+`build-for-testing` compiles the app and test bundle but does not run tests.
+`test-without-building` reuses those exact products, so rerun
+`build-for-testing` after changing source. `-only-testing` shortens an
+iteration by selecting a suite or method; it is not the final regression gate
+for modified production code. Run the full covering suite after the focused
+loop.
 
 Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 `navigationDestination(item:)` for the item-detail push requires it).
@@ -29,9 +92,9 @@ Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 
 `project.yml` consumes
 [`levarac/barnard`](https://github.com/levarac/barnard) as a remote SwiftPM
-package pinned to the exact `0.2.0` release. The committed
+package pinned to the exact `0.3.0` release. The committed
 `Package.resolved` records the release's precise revision for reproducible
-builds.
+builds. Verified 2026-08-07 against `project.yml` and `Package.resolved`.
 
 Historically, beid copied barnard's Swift package into the repository because
 barnard did not have a root `Package.swift`, which SwiftPM requires for a
@@ -55,7 +118,8 @@ behind a single flag so `walletFirst` stays flippable for demos:
 static let current: OnboardingMode = .guestFirst  // or .walletFirst
 ```
 
-- `.walletFirst`: Welcome → Connect Wallet (stub) → Bluetooth permission → home.
+- `.walletFirst`: Welcome → Connect Wallet → Bluetooth permission → home,
+  with manual event-code entry as the wallet-optional secondary path.
 - `.guestFirst` (default): Welcome → Bluetooth permission → home, with wallet
   connect deferred to the Account sheet.
 
@@ -217,7 +281,7 @@ same `ScanPhase` state machine a real detection would, without touching
 `BarnardEngine`'s scan/advertise calls:
 
 On a real device (DEBUG builds), launch with the `-beid-demo-event`
-argument (e.g. `xcrun devicectl device process launch --device <id>
+argument (e.g. `xcrun devicectl device process launch --device '<DEVICE_ID>'
 org.levarac.beid -- -beid-demo-event`) to run the scripted demo without a
 second BLE device. Caveat: demo proofs persist in the app container
 (`Documents/proofs.json`) indistinguishably from real proofs, and the
@@ -225,9 +289,11 @@ container survives installing a TestFlight build over the dev build —
 delete the app between a demo E2E session and any real-sensing or
 TestFlight evaluation.
 
-`05 Sensing → 06a Event Found → 06b Verifying (peer count ramps to
-totalPeersToVerify) → 06c Verified → 07 Proof Collected → back to 04 home`,
-and the new proof lands in `ProofStore`.
+`05 Sensing → 06a Event Found → 06b Recording`. The proof lands in
+`ProofStore` when recording starts. `RecordingView` first shows the
+one-time "Proof Collected" entrance ceremony, then the steady event card as
+the peer count grows. The demo remains in recording until the user closes
+the scan flow, which returns to 04 home.
 
 Release configurations, including TestFlight and App Store archives, always
 report `useDemoEventMode == false` and ignore attempts to enable it. A future
@@ -238,33 +304,49 @@ the shipping sensing path.
 
 When demo mode is off — including in every Release build — `startSensing()`
 instead calls `BarnardEngine.requestPermissions` → `configure(eventCode:)` →
-`startAuto()`, and a `BarnardIdentity` per-event signing key is derived via
-`signingPublicKey(eventCode:)`. Real BLE detections currently just transition
-`.sensing → .eventFound` on the first detection (a real verifying/consensus
-policy — counting distinct peers, requiring N to agree — is not implemented
-in this slice; see "What's stubbed").
+`startAuto()`. `SensingCoordinator` holds one `SensingCryptography` facade,
+not a `BarnardIdentity`; the production initializer injects
+`BarnardSensingCryptography`. When an event is found, the coordinator obtains
+the per-event signing public key through `eventSigningPublicKey(eventCode:)`,
+whose production adapter forwards to
+`BarnardIdentity.signingPublicKey(eventCode:)`. Real BLE detections currently
+transition `.sensing → .eventFound` on the first detection, count distinct
+RPIDs, and move to `.recording` when
+`BeidConfig.eventConfirmThreshold` is reached. That threshold is an app-wide
+constant today rather than an organizer-provided event setting; see "What's
+stubbed".
 
 The 06d Signal Lost screen isn't on the golden DemoEvent path (which always
 completes successfully) but is fully wired — reachable via
 `SensingCoordinator.simulateSignalLost()`, exposed as a "Simulate Signal
-Lost" button on the Verifying screen while in DemoEvent mode, and covered by
-`testSimulateSignalLostOnlyAppliesDuringVerifying`.
+Lost" button on the Recording screen while in DemoEvent mode, and covered by
+`testSimulateSignalLostOnlyAppliesDuringRecording`.
 
 ## What's stubbed / out of scope for this slice
 
 - **Wallet**: real WalletConnect (Reown) pairing is wired (see
   "WalletConnect" above), but no real pairing has been completed end-to-end
   — that needs Ken's Reown Cloud Project ID plus a second device running a
-  wallet app. No signing with an actual wallet key anywhere in this slice
-  (WalletConnect connects an address; it doesn't sign proofs yet).
+  wallet app. Once a wallet is connected, Item Detail's
+  `ProofSignatureControlsView` calls `AppCoordinator.signProof(_:)`, which
+  builds a `SignaturePayload`, hashes its canonical JSON with
+  `signingDigestHex()`, requests `personal_sign` through the selected
+  `WalletConnector`, and persists the returned `SignatureRecord` in the
+  proof's `signatureState`. This is the **PROVISIONAL local convenience
+  signature** defined in `ProofSignature.swift`: it is not the protocol's
+  self-proof, does not prove physical attendance by itself, and no backend or
+  verifier may depend on its payload. A real-device connect → sign → return
+  round trip is still unverified, as described above.
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
   is available in the barnard SDK but not called from the app in this
   slice).
 - **Server**: no backend calls. Proofs are local-only.
-- **Real BLE verification policy**: on-device, `.eventFound` fires on the
-  first detection rather than implementing the "N peers verified" consensus
-  policy the design implies; the DemoEvent path is what demonstrates the
-  intended UX today.
+- **Event-specific verification policy**: distinct-RPID counting and the
+  app-wide `BeidConfig.eventConfirmThreshold` gate run on-device, but an
+  organizer-provided per-event threshold is not wired yet.
+- **Real BLE signal-loss detection**: 06d can be driven by the demo-only
+  manual trigger, but the real sensing path does not yet detect a lost signal
+  and enter that phase automatically.
 - **Bluetooth-off screen (03)**: implemented and code-reachable
   (`BluetoothMonitor` watches `CBCentralManager.state`), but not exercised
   in the DemoEvent walkthrough since the simulator always reports Bluetooth
@@ -272,42 +354,61 @@ Lost" button on the Verifying screen while in DemoEvent mode, and covered by
 
 ## Local persistence
 
-Proofs persist to a JSON file in the app's Documents directory
-(`ProofStore`), not SwiftData. The data model is a single flat, unordered
-array with no relationships or migrations yet, so JSON is the simplest thing
-that works for this slice — revisit SwiftData once proofs need
-querying/relationships beyond "show them all, newest first".
+The iOS app currently has five on-disk stores in its Documents directory:
+
+- `proofs.json` — collected `Proof` values (`ProofStore`).
+- `window-reports.json` — durable native observations written before a
+  window is closed in the shared ledger (`WindowReportStore`).
+- `unsent-window-ledger.snapshot` — the shared ledger's exact canonical
+  snapshot bytes, written atomically by `UnsentWindowLedgerStore`.
+- `binding-records-v2.json` — wallet/event binding records
+  (`BindingRecordStore`).
+- `self-proofs.json` — owner-key-signed self-proofs (`SelfProofStore`).
+
+These flat files are used instead of SwiftData. The proof model is still a
+single unordered array with no relationships or migrations; revisit SwiftData
+when queries or relationships grow beyond "show them all, newest first".
+The shared ledger owns its state transitions and snapshot format, while native
+iOS owns the file location and atomic write. The production
+`SensingCoordinator` uses this runtime. Android has a matching native snapshot
+store and portable-codec tests, but its production flow is still deferred to
+Issue #121.
 
 ## Screens
 
 01 Welcome, 02 Bluetooth permission guide, 03 Bluetooth-off, 04 Collection
-home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Verifying,
-06c Verified, 06d Signal Lost, 07 Proof Collected, 08 Item Detail, 09
-Account sheet — plus a Connect Wallet stub screen for the `.walletFirst`
-onboarding order (not in the original 9-screen list, added because the
-onboarding-flag requirement needs a screen to flip to).
+home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording
+(including the one-time "Proof Collected" entrance ceremony), 06d Signal
+Lost, 08 Item Detail, 09 Account sheet — plus Connect Wallet and manual Enter
+Event Code screens for the `.walletFirst` onboarding order (not in the
+original 9-screen list).
 
-All screens are plain modern SwiftUI with a blue accent, deliberately not
-pixel-polished per the brief.
+All screens use the repository design-system tokens, adaptive layouts, and
+current custom artwork documented in `DESIGN.md`; the original blue-accent
+scaffold is historical, not a current implementation guide.
 
 ## Project layout
 
 ```
 ios/
   project.yml              # XcodeGen spec
+  Beid.xcodeproj/          # generated project, committed for local convenience
   README.md                # this file
   Secrets.example.plist    # WalletConnect credential template, see above
   Beid/
-    App/                    # @main entry point, Info.plist, Beid.entitlements
-    Models/                 # Proof, OnboardingMode, DemoEvent
-    Persistence/            # ProofStore (JSON)
-    Sensing/                # SensingCoordinator, ScanPhase, BluetoothMonitor
-    Onboarding/              # WalletConnect (Reown) client + adapters, see above
-    Navigation/              # AppCoordinator, AppScreen, RootView
-    Views/                   # all 13 screens
-  BeidTests/
-    SensingCoordinatorTests.swift
-    ProofStoreTests.swift
-    OnboardingFlagTests.swift
-    WalletConnectTests.swift
+    App/                    # @main entry point, Info.plist, shared-runtime probe
+    Assets.xcassets/        # app icon catalog
+    DesignSystem.swift      # reusable SwiftUI components
+    DesignSystem/           # tokens, adaptive layout, colors, illustrations
+    Localizable.xcstrings   # source strings and target-locale translations
+    Models/                 # proof, event, onboarding, and signature models
+    Persistence/            # proof/window stores and shared-ledger runtime/store
+    Sensing/                # SensingCoordinator, SensingCryptography, BLE state
+    Onboarding/             # wallet clients and platform adapters, see above
+    Navigation/             # AppCoordinator, AppScreen, RootView
+    Views/                  # current onboarding, collection, scan, and detail views
+  BeidMetaMaskDebug/        # DEBUG-only MetaMask package isolation target
+  BeidTests/                # coordinator, persistence/ledger, cryptography, and UI contract tests
+  BeidUITests/              # iPad layout UI tests
+  ci_scripts/               # Xcode Cloud hooks and pinned XcodeGen version
 ```
