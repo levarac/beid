@@ -73,7 +73,7 @@ xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
 
 xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
   -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
-  -only-testing:BeidTests/<TestClass>/<testMethod> \
+  '-only-testing:BeidTests/<TestClass>/<testMethod>' \
   test-without-building
 ```
 
@@ -279,7 +279,7 @@ same `ScanPhase` state machine a real detection would, without touching
 `BarnardEngine`'s scan/advertise calls:
 
 On a real device (DEBUG builds), launch with the `-beid-demo-event`
-argument (e.g. `xcrun devicectl device process launch --device <id>
+argument (e.g. `xcrun devicectl device process launch --device '<DEVICE_ID>'
 org.levarac.beid -- -beid-demo-event`) to run the scripted demo without a
 second BLE device. Caveat: demo proofs persist in the app container
 (`Documents/proofs.json`) indistinguishably from real proofs, and the
