@@ -202,7 +202,7 @@ final class SensingCoordinatorTests: XCTestCase {
     // Regression check for re-entering the scan flow within one app
     // session (AppCoordinator reuses one long-lived SensingCoordinator
     // across `startScan()`/`finishScan()` calls) — per-session state
-    // (`distinctPeerRpids`, `activeCommit`, `activeProofId`, ...) must not
+    // (`distinctPeerDisplayIds`, `activeCommit`, `activeProofId`, ...) must not
     // leak from the first session into the second.
     let coordinator = makeIsolatedSensingCoordinator(for: self)
 

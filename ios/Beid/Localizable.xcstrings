@@ -14,7 +14,7 @@
     },
     "Account": {},
     "scan.verifying.peersVerifiedCount": {
-      "comment": "Cumulative count of distinct peers who have mutually sensed this device at the event; no fixed target.",
+      "comment": "Cumulative count of distinct nearby devices sensed at the event, each counted once however long it stayed; no fixed target. Do NOT translate this as mutual, two-way, or reciprocal confirmation: this device cannot tell whether a peer also observed it, so any such wording would overclaim.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2919,7 +2919,7 @@
       }
     },
     "scan.recording.caption": {
-      "comment": "Cumulative count of distinct peers who have mutually sensed this device at the event; no fixed target.",
+      "comment": "Cumulative count of distinct nearby devices sensed at the event, each counted once however long it stayed; no fixed target. Do NOT translate this as mutual, two-way, or reciprocal confirmation: this device cannot tell whether a peer also observed it, so any such wording would overclaim.",
       "localizations": {
         "en": {
           "stringUnit": {

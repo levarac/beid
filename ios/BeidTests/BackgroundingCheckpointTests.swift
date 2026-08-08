@@ -104,15 +104,15 @@ final class BackgroundingCheckpointTests: XCTestCase {
     )
   }
 
-  /// `distinctPeerRpids`/`activeProofId` are private, so this asserts their
-  /// preservation indirectly: `distinctPeerRpids` still containing
+  /// `distinctPeerDisplayIds`/`activeProofId` are private, so this asserts
+  /// their preservation indirectly: `distinctPeerDisplayIds` still containing
   /// already-seen peers is provable because re-observing one after the
   /// checkpoint must NOT be treated as a new distinct peer (no
   /// `onPeersVerifiedChanged` firing, no phase change); `activeProofId`
   /// still being set is provable because the eventual self-proof at real
   /// session end still carries the same `proofId` the original `Proof` was
   /// created with.
-  func testCheckpointPreservesDistinctPeerRpidsAndActiveProofIdAcrossTheCheckpoint() {
+  func testCheckpointPreservesDistinctPeerDisplayIdsAndActiveProofIdAcrossTheCheckpoint() {
     let (coordinator, store) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-CHECKPOINT-IDENTITY")
 
@@ -139,7 +139,7 @@ final class BackgroundingCheckpointTests: XCTestCase {
     let phaseAfterCheckpoint = coordinator.phase
 
     // Re-observing an already-seen peer, in a new window (enin=2, since the
-    // checkpoint nil'd currentWindowEnin) — if distinctPeerRpids had been
+    // checkpoint nil'd currentWindowEnin) — if distinctPeerDisplayIds had been
     // reset by the checkpoint, this would be (incorrectly) treated as a
     // brand-new distinct peer, bumping peersVerified and firing
     // onPeersVerifiedChanged.
@@ -151,7 +151,7 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     XCTAssertTrue(
       peersVerifiedChanges.isEmpty,
-      "re-observing an already-seen peer after a checkpoint must not look like a new distinct peer — distinctPeerRpids must survive the checkpoint"
+      "re-observing an already-seen device after a checkpoint must not look like a new distinct device — distinctPeerDisplayIds must survive the checkpoint"
     )
     XCTAssertEqual(
       coordinator.phase, phaseAfterCheckpoint,
