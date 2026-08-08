@@ -122,7 +122,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       )
       coordinator.useDemoEventMode = false
       coordinator.startSensing(eventCode: "TEST-SHARED-ORDERING")
-      coordinator.handleDetection(enin: 1, rpid: "peer-original")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-original",
+        detectedDisplayId: DetectionFixture.displayId(device: 1)
+      )
 
       for trigger in ordering {
         apply(trigger, to: coordinator)
@@ -195,7 +199,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     coordinator.startSensing(eventCode: "TEST-LEDGER-UNAVAILABLE")
 
     for index in 0..<BeidConfig.eventConfirmThreshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     guard case .recording(_, let peersVerified) = coordinator.phase else {
@@ -212,12 +220,24 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     let peersBeforeBoundary = max(1, BeidConfig.eventConfirmThreshold - 1)
     for index in 0..<peersBeforeBoundary {
-      fixture.coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
     let originalWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
 
-    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-at-boundary")
+    fixture.coordinator.handleDetection(
+
+      enin: 2,
+
+      rpid: "peer-at-boundary",
+
+      detectedDisplayId: DetectionFixture.displayId(device: 90)
+
+    )
 
     XCTAssertEqual(fixture.reportStore.reports.count, 1)
     XCTAssertEqual(fixture.reportStore.reports.first?.enin, 1)
@@ -229,7 +249,15 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     }
     XCTAssertEqual(peersAtBoundary, peersBeforeBoundary + 1)
 
-    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-after-boundary")
+    fixture.coordinator.handleDetection(
+
+      enin: 2,
+
+      rpid: "peer-after-boundary",
+
+      detectedDisplayId: DetectionFixture.displayId(device: 91)
+
+    )
     guard case .recording(_, let peersAfterBoundary) = fixture.coordinator.phase else {
       XCTFail("same-ENIN intake must continue after ledger failure")
       return
@@ -241,7 +269,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRuntimeFixture(named: "failed-checkpoint-close")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-FAILED-CHECKPOINT-CLOSE")
-    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-0")
+    fixture.coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
     let originalWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
 
@@ -250,7 +282,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertEqual(fixture.reportStore.reports.count, 1)
     XCTAssertNil(fixture.coordinator.currentWindowIdForTesting)
     for index in 1..<BeidConfig.eventConfirmThreshold {
-      fixture.coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     XCTAssertNotNil(fixture.coordinator.currentWindowIdForTesting)
@@ -267,7 +303,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       let fixture = try makeRuntimeFixture(named: "failed-\(action.rawValue)")
       defer { try? FileManager.default.removeItem(at: fixture.directory) }
       fixture.coordinator.startSensing(eventCode: "TEST-FAILED-\(action.rawValue)")
-      fixture.coordinator.handleDetection(enin: 1, rpid: "peer-1")
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-1",
+        detectedDisplayId: DetectionFixture.displayId(device: 1)
+      )
       try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
 
       apply(action, to: fixture.coordinator)
@@ -284,11 +324,23 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-rollover")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-ROLLOVER")
-    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-enin-1")
+    fixture.coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-enin-1",
+      detectedDisplayId: DetectionFixture.displayId(device: 10)
+    )
     let firstWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try fixture.blockReportWrites()
 
-    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-enin-2")
+    fixture.coordinator.handleDetection(
+
+      enin: 2,
+
+      rpid: "peer-enin-2",
+
+      detectedDisplayId: DetectionFixture.displayId(device: 11)
+
+    )
 
     let secondWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     XCTAssertNotEqual(secondWindowId, firstWindowId)
@@ -329,18 +381,34 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-UNKNOWN-WINDOW-REDELIVERY")
     try fixture.blockLedgerWrites()
-    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-orphaned")
+    fixture.coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-orphaned",
+      detectedDisplayId: DetectionFixture.displayId(device: 20)
+    )
     let orphanedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
 
     try fixture.restoreLedgerWrites()
     try fixture.blockReportWrites()
-    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-recoverable")
+    fixture.coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-recoverable",
+      detectedDisplayId: DetectionFixture.displayId(device: 21)
+    )
     let recoverableWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
-    fixture.coordinator.handleDetection(enin: 3, rpid: "peer-after-queue")
+    fixture.coordinator.handleDetection(
+      enin: 3,
+      rpid: "peer-after-queue",
+      detectedDisplayId: DetectionFixture.displayId(device: 22)
+    )
     XCTAssertTrue(fixture.reportStore.reports.isEmpty)
 
     try fixture.restoreReportWrites()
-    fixture.coordinator.handleDetection(enin: 4, rpid: "peer-drain-trigger")
+    fixture.coordinator.handleDetection(
+      enin: 4,
+      rpid: "peer-drain-trigger",
+      detectedDisplayId: DetectionFixture.displayId(device: 23)
+    )
 
     let orphanedReport = try XCTUnwrap(
       fixture.reportStore.reports.first { $0.id == orphanedWindowId }
@@ -413,7 +481,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-stop")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-STOP")
-    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-before-stop")
+    fixture.coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-before-stop",
+      detectedDisplayId: DetectionFixture.displayId(device: 30)
+    )
     let stoppedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try fixture.blockReportWrites()
 
@@ -425,7 +497,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     try fixture.restoreReportWrites()
     fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-STOP-LATER")
-    fixture.coordinator.handleDetection(enin: 2, rpid: "peer-later")
+    fixture.coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-later",
+      detectedDisplayId: DetectionFixture.displayId(device: 31)
+    )
 
     let report = try XCTUnwrap(
       fixture.reportStore.reports.first { $0.id == stoppedWindowId }
@@ -444,7 +520,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-process-death")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-PROCESS-DEATH")
-    fixture.coordinator.handleDetection(enin: 1, rpid: "peer-before-death")
+    fixture.coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-before-death",
+      detectedDisplayId: DetectionFixture.displayId(device: 32)
+    )
     let lostWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try fixture.blockReportWrites()
     fixture.coordinator.stopSensing()
@@ -675,7 +755,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
   private func apply(_ trigger: CloseTrigger, to coordinator: SensingCoordinator) {
     switch trigger {
     case .enin:
-      coordinator.handleDetection(enin: 2, rpid: "peer-new-enin")
+      coordinator.handleDetection(
+        enin: 2,
+        rpid: "peer-new-enin",
+        detectedDisplayId: DetectionFixture.displayId(device: 33)
+      )
     case .stop:
       coordinator.stopSensing()
     case .background:

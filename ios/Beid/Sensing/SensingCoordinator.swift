@@ -274,7 +274,11 @@ final class SensingCoordinator: ObservableObject {
       isScanning = state.isScanning
       isAdvertising = state.isAdvertising
     case .detection(let detection):
-      handleDetection(enin: detection.enin, rpid: detection.rpid)
+      handleDetection(
+        enin: detection.enin,
+        rpid: detection.rpid,
+        detectedDisplayId: detection.detectedDisplayId
+      )
     default:
       break
     }
@@ -282,22 +286,27 @@ final class SensingCoordinator: ObservableObject {
 
   /// Not `private`: `BarnardDetectionEvent` has no public initializer
   /// (Barnard module boundary), so `BeidTests` cannot construct one to
-  /// drive this path — taking the two fields it actually needs as plain
+  /// drive this path — taking the fields it actually needs as plain
   /// arguments instead lets tests exercise the real (non-demo) detection
   /// path directly. Production code only ever reaches this via `handle(_:)`
   /// above, already MainActor-isolated via `engine.onEvent`'s
   /// `Task { @MainActor in }`.
-  func handleDetection(enin: Int, rpid: String) {
+  ///
+  /// `detectedDisplayId` has no default on purpose: it is optional data, and
+  /// a caller that omitted it would silently produce an observation that
+  /// cannot be attributed to a device. Every caller must say what it
+  /// observed.
+  func handleDetection(enin: Int, rpid: String, detectedDisplayId: String?) {
     switch phase {
     case .sensing:
       let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
       let session = EventSession(id: eventCode, name: eventCode, venue: nil)
       beginEventFound(session)
-      observe(enin: enin, rpid: rpid, for: session)
+      observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
     case .eventFound(let session):
-      observe(enin: enin, rpid: rpid, for: session)
+      observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
     case .recording(let session, _):
-      observe(enin: enin, rpid: rpid, for: session)
+      observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
     case .idle, .signalLost:
       // `.signalLost` is frozen — real signal-loss *detection* doesn't
       // exist yet (only the demo-only manual trigger does), so this branch
@@ -309,7 +318,7 @@ final class SensingCoordinator: ObservableObject {
 
   /// Records the detection against the running peer count and window, then
   /// applies whatever phase transition that observation implies.
-  private func observe(enin: Int, rpid: String, for session: EventSession) {
+  private func observe(enin: Int, rpid: String, detectedDisplayId: String?, for session: EventSession) {
     advanceWindowIfNeeded(enin: enin, eventCode: session.id)
     currentWindowRpids.insert(rpid)
     guard distinctPeerRpids.insert(rpid).inserted else { return }

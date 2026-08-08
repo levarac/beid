@@ -7,7 +7,7 @@ import XCTest
 /// `SensingCoordinator.checkpointOpenWindowForBackgrounding()`
 /// (`docs/specs/session-end-finalization.md` §3.4/§3.6, sub-slice 2, §8.2).
 /// Drives the real (non-demo) detection path via
-/// `handleDetection(enin:rpid:)`, same rationale as
+/// `handleDetection(enin:rpid:detectedDisplayId:)`, same rationale as
 /// `WindowReportFinalizationTests` (sub-slice 1's own test file): demo mode
 /// never produces `WindowReport`s, so a demo-driven test could not observe
 /// this method's effect on `WindowReportStore`.
@@ -75,7 +75,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     guard case .recording = coordinator.phase else {
@@ -119,7 +123,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
     guard case .recording = coordinator.phase else {
       XCTFail("expected .recording phase before checkpoint, got \(coordinator.phase)")
@@ -135,7 +143,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
     // reset by the checkpoint, this would be (incorrectly) treated as a
     // brand-new distinct peer, bumping peersVerified and firing
     // onPeersVerifiedChanged.
-    coordinator.handleDetection(enin: 2, rpid: "peer-0")
+    coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
 
     XCTAssertTrue(
       peersVerifiedChanges.isEmpty,
@@ -160,7 +172,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
     guard case .recording = coordinator.phase else {
       XCTFail("expected .recording phase before checkpoint, got \(coordinator.phase)")
@@ -183,7 +199,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     coordinator.checkpointOpenWindowForBackgrounding()
@@ -212,7 +232,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     coordinator.checkpointOpenWindowForBackgrounding()
@@ -234,7 +258,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     coordinator.checkpointOpenWindowForBackgrounding()
@@ -243,7 +271,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
     // Background sensing observes a new peer in a new window (enin=2) —
     // e.g. the app resumed background BLE activity before the user
     // eventually stopped.
-    coordinator.handleDetection(enin: 2, rpid: "peer-after-checkpoint")
+    coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-after-checkpoint",
+      detectedDisplayId: DetectionFixture.displayId(device: 99)
+    )
 
     coordinator.stopSensing()
 
@@ -263,7 +295,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     coordinator.checkpointOpenWindowForBackgrounding()
@@ -294,7 +330,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
     guard case .recording = coordinator.phase else {
       XCTFail("expected .recording phase before checkpoint, got \(coordinator.phase)")
@@ -306,7 +346,11 @@ final class BackgroundingCheckpointTests: XCTestCase {
     // Re-enters advanceWindowIfNeeded's nil-branch (currentWindowEnin was
     // nil'd by the checkpoint) — with the old unconditional assignment this
     // would overwrite firstWindowEnin from 1 to 2.
-    coordinator.handleDetection(enin: 2, rpid: "peer-after-checkpoint")
+    coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-after-checkpoint",
+      detectedDisplayId: DetectionFixture.displayId(device: 99)
+    )
 
     let record = coordinator.stopSensing()
     guard let record else {
