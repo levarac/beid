@@ -70,6 +70,11 @@ public class EventInfoStore internal constructor(
  * exist yet; this type is the four fields this slice consumes, so that #108 can
  * later supply them without either side renaming a Swift-exported symbol.
  *
+ * The narrow name is the point. Swift Export package names and type names are
+ * public API here, so claiming `EventDefinition` for a four-field subset would
+ * force beid#108 into either a rename or a collision when it defines the real
+ * one. This slice does not need the general name, so it does not take it.
+ *
  * `eninStart` and `eninEnd` are ENIN **window indices**, not epoch seconds. The
  * registry payload encodes them as unsigned 64-bit; this type holds them as
  * signed [Long] and [createEventDefinitionFacts] rejects negatives. Values above
@@ -273,6 +278,12 @@ public fun addEventDefinition(
  * definition may be retrieved long after the event was first heard, and pinning
  * the match at receive time would leave an event permanently unmatched for no
  * reason other than arrival order.
+ *
+ * Keeping the two apart also keeps the store honest about what it witnessed. An
+ * observed fact is something the radio told this device; a definition is
+ * something someone else asserted. Because the assertion is never written into
+ * the observation record, a wrong, stale or hostile definition can change what a
+ * candidate is judged to be but can never corrupt what was actually heard.
  *
  * Candidates whose hash matched no definition are still returned, with a null
  * definition. Dropping them here would silently implement beid#141's "do not

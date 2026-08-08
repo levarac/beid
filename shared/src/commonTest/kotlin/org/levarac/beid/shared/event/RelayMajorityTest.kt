@@ -237,6 +237,21 @@ class RelayMajorityTest {
         assertNull(verdict.leadingEventCodeHashHex)
     }
 
+    /** The lead test multiplies, so it must not overflow at implausible counts. */
+    @Test
+    fun leadTestSurvivesCountsLargeEnoughToOverflowIntMultiplication() {
+        val verdict = evaluateRelayMajority(
+            inputOf(
+                Triple(EVENT_A, 10L, Int.MAX_VALUE),
+                Triple(EVENT_B, 10L, Int.MAX_VALUE / 2),
+            ),
+            parameters(),
+            atWindowIndex = 10L,
+        )
+        assertTrue(verdict.isMajorityClear)
+        assertEquals(EVENT_A, verdict.leadingEventCodeHashHex)
+    }
+
     @Test
     fun unusableParametersAreRejected() {
         assertNull(createRelayMajorityParameters(0, 3, 200))
