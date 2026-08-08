@@ -126,7 +126,7 @@ public fun addRelayObservation(
     if (windowIndex < 0L || relayCount < 0) {
         return false
     }
-    val key = eventCodeHashHex.normalizedRelayEventHashOrNull() ?: return false
+    val key = eventCodeHashHex.normalizedEventCodeHashHexOrNull() ?: return false
 
     val perWindow = input.counts.getOrPut(key) { mutableMapOf() }
     val existing = perWindow[windowIndex]
@@ -153,10 +153,22 @@ public fun addRelayObservation(
  * already documents for its per-window peer count, and it is settled the same
  * way here rather than answered a second, different way.
  *
- * A majority is clear when the leader meets the floor and beats the runner-up by
- * at least the lead percentage. An exact tie needs no branch of its own: two
- * equal scores cannot satisfy a lead percentage of 100 or more unless both are
- * zero, and zero cannot meet the floor.
+ * A majority is clear when the leader meets the floor, is **strictly ahead** of
+ * the runner-up, and beats it by at least the lead percentage.
+ *
+ * The strictly-ahead test is not redundant with the lead percentage, and an
+ * earlier version of this code wrongly claimed it was. At the lowest admitted
+ * `minimumLeadPercent` of 100 the lead test reduces to
+ * `leading * 100 >= runnerUp * 100`, which every tie satisfies — so a dead tie
+ * above the relay floor was reported as a clear majority, with the winner
+ * decided by the hash-ascending sort that exists only to make ordering
+ * deterministic. An arbitrary tiebreak was deciding whether the app starts
+ * recording without asking the user.
+ *
+ * A tie is the definition of a majority that is not clear, so it is rejected
+ * here explicitly rather than left to a parameter value to prevent. Relying on a
+ * parameter to uphold an invariant means the invariant holds only for the
+ * parameters someone happened to test.
  *
  * A negative [atWindowIndex] fails the call whole rather than returning "not
  * clear", because "we cannot evaluate this" and "the crowd is ambiguous" lead a
@@ -195,6 +207,7 @@ public fun evaluateRelayMajority(
     val runnerUpCount = scored.getOrNull(1)?.second ?: 0
 
     val meetsFloor = leadingCount >= parameters.minimumLeadingRelayCount
+    val isStrictlyAhead = leadingCount > runnerUpCount
     // Long arithmetic: both sides are a product of two Ints, which overflows Int
     // for large counts and would silently invert the comparison.
     val meetsLead =
@@ -203,7 +216,7 @@ public fun evaluateRelayMajority(
     return RelayMajorityVerdict(
         isSuccess = true,
         errorCode = null,
-        isMajorityClear = meetsFloor && meetsLead,
+        isMajorityClear = meetsFloor && isStrictlyAhead && meetsLead,
         leadingEventCodeHashHex = leading?.first,
         leadingRelayCount = leadingCount,
         runnerUpRelayCount = runnerUpCount,
@@ -211,14 +224,3 @@ public fun evaluateRelayMajority(
 }
 
 private fun Int?.orZero(): Int = this ?: 0
-
-private fun String.normalizedRelayEventHashOrNull(): String? {
-    if (length != EVENT_CODE_HASH_HEX_LENGTH) {
-        return null
-    }
-    val lowercase = lowercase()
-    if (!lowercase.all { it in '0'..'9' || it in 'a'..'f' }) {
-        return null
-    }
-    return lowercase
-}

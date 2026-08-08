@@ -1,9 +1,16 @@
 package org.levarac.beid.shared.event
 
 /**
- * Mirrors the retention cap Barnard's own `BarnardEventInfoDiscoverySession`
- * applies (32 distinct event code hashes). Retaining more than the SDK can
- * deliver would only ever hold events this store can no longer be told about.
+ * Matches the 32 distinct event code hashes Barnard's own
+ * `BarnardEventInfoDiscoverySession` retains.
+ *
+ * **Barnard caps at 32 *and* clears its entire retention set every 300
+ * seconds** (verified through the pinned revision on both platforms). It
+ * therefore keeps reporting events indefinitely, including ones it had already
+ * counted, so a store that treats its own cap as final does not "hold everything
+ * the SDK can still tell it about" — it stops listening while the SDK keeps
+ * talking. That is why reaching this cap evicts rather than refuses; see
+ * [recordEventInfoHint].
  */
 internal const val MAX_RETAINED_EVENT_COUNT = 32
 
@@ -74,10 +81,13 @@ public class EventInfoStore internal constructor(
         get() = records.size
 
     /**
-     * True once a hint for a 33rd distinct event was rejected for capacity.
+     * True once capacity pressure has dropped at least one event from retention.
      *
-     * Surfaced rather than silently swallowed so a caller can tell "these are
-     * all the nearby events" apart from "these are the first 32 of them".
+     * Surfaced rather than silently swallowed so a caller can tell "these are all
+     * the nearby events" apart from "these are the 32 most recently heard". It
+     * latches until [resetEventInfoStore], because it reports that the retained
+     * set has been lossy at some point in this store's life, not that it is
+     * losing anything right now.
      */
     public val hasEvictedEvents: Boolean
         get() = evictedEventObserved
@@ -121,6 +131,20 @@ public class EventCandidate internal constructor(
     public val eventCodeHashHex: String,
     public val firstSeenWindowIndex: Long,
     public val lastSeenWindowIndex: Long,
+    /**
+     * How many hints were received, and **never a crowd size**.
+     *
+     * This is a running sum across every reception, so it inflates with dwell
+     * time and with advertising density: one device sitting nearby for an hour
+     * outscores ten devices passing through. It says how much was heard, not how
+     * many were heard from.
+     *
+     * Do not rank candidates by it and do not present it as "how busy this event
+     * is". That is the dwell-inflation trap beid#154 exists to fix, and this is
+     * the most obvious-looking number on the candidate, which is exactly why it
+     * needs the warning. The crowd question is [RelayCount]'s, and that is
+     * absent until levarac/barnard#128 lands.
+     */
     public val observationCount: Int,
     public val definition: EventDefinitionFacts?,
     public val relayCount: RelayCount?,
@@ -181,19 +205,42 @@ public class EventDefinitionInput internal constructor(
 
 public fun createEventInfoStore(): EventInfoStore = EventInfoStore()
 
-// RED STEP — no-op stub so the reset vectors fail on an assertion rather than a
-// compile error. Replaced with the real implementation in the GREEN commit.
+/**
+ * Drops everything retained and clears [EventInfoStore.hasEvictedEvents].
+ *
+ * Exists so a caller can scope a store to a discovery session the way Barnard
+ * scopes its own retention to 300 seconds, instead of carrying every event ever
+ * heard for the lifetime of the process. This store deliberately keeps no clock
+ * of its own — it counts in ENIN window indices and has no opinion about
+ * wall-clock time — so the decision of when a session ends belongs to the
+ * caller, which is the layer that already owns lifecycle.
+ */
 public fun resetEventInfoStore(store: EventInfoStore) {
+    store.records.clear()
+    store.evictedEventObserved = false
 }
 
 /**
  * Records that a B005 hint for [eventCodeHashHex] was heard in [windowIndex].
  *
- * Returns false when the observation is rejected at the boundary: a hash that is
- * not 16 hex characters, a negative window index, or a new event beyond
- * [MAX_RETAINED_EVENT_COUNT] (which also sets [EventInfoStore.hasEvictedEvents]).
- * Hex input is lowercased before use, so two platforms that hexify with
- * different case cannot split one event into two candidates.
+ * Returns false only when the observation is malformed: a hash that is not 16 hex
+ * characters, or a negative window index. Hex input is lowercased before use, so
+ * two platforms that hexify with different case cannot split one event into two
+ * candidates.
+ *
+ * **A new event is never refused for capacity.** At [MAX_RETAINED_EVENT_COUNT]
+ * the least recently seen event is evicted to make room, and
+ * [EventInfoStore.hasEvictedEvents] is set. Refusing instead would wedge the
+ * store permanently, because Barnard clears its own retention every 300 seconds
+ * and keeps reporting: someone who crosses a busy area fills the set with events
+ * they walked past, and the event they actually came for is then the one dropped
+ * — silently, with the candidate list still looking healthy.
+ *
+ * Eviction picks the smallest `lastSeenWindowIndex`, breaking ties by event code
+ * hash ascending so both platforms evict the same event from the same state. An
+ * evicted event that is heard again is recorded as new, so its first-seen window
+ * is when it came back rather than when it was first heard — the store reports
+ * what it currently retains, and it does not pretend to remember what it dropped.
  *
  * Barnard's overflow marker — an empty display name with an empty event code
  * hash — is rejected by the hash shape check alone, so it never becomes a
@@ -222,8 +269,11 @@ public fun recordEventInfoHint(
     val existing = store.records[key]
     if (existing == null) {
         if (store.records.size >= MAX_RETAINED_EVENT_COUNT) {
+            val evicted = store.records.values
+                .sortedWith(compareBy({ it.lastSeenWindowIndex }, { it.eventCodeHashHex }))
+                .first()
+            store.records.remove(evicted.eventCodeHashHex)
             store.evictedEventObserved = true
-            return false
         }
         store.records[key] = EventObservationRecord(
             eventCodeHashHex = key,
@@ -341,7 +391,16 @@ public fun eventInfoCandidates(
         },
     )
 
-private fun String.normalizedEventCodeHashHexOrNull(): String? {
+/**
+ * The single event-code-hash boundary check for this package.
+ *
+ * Shared by the store and by the majority input on purpose. Two private copies
+ * were identical when written and nothing kept them so, and a divergence would
+ * be near-invisible: one surface would accept a hash the other rejected, or
+ * normalise it differently, silently splitting one event across the observation
+ * record and the relay counts that are supposed to describe it.
+ */
+internal fun String.normalizedEventCodeHashHexOrNull(): String? {
     if (length != EVENT_CODE_HASH_HEX_LENGTH) {
         return null
     }

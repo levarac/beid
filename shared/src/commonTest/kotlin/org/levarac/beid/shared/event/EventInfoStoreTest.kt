@@ -87,6 +87,13 @@ class EventInfoStoreTest {
         val facts = assertNotNull(candidate.definition)
         assertEquals(100L, facts.eninStart)
         assertEquals(110L, facts.eninEnd)
+
+        // Re-assert the observed fields a corrupting join would move. Asserting
+        // only the definition fields would let a join that overwrites the
+        // observation record pass unnoticed, which is the hole this line closes.
+        assertEquals(3L, candidate.firstSeenWindowIndex)
+        assertEquals(3L, candidate.lastSeenWindowIndex)
+        assertEquals(1, candidate.observationCount)
     }
 
     @Test
