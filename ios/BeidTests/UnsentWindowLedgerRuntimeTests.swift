@@ -230,39 +230,34 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
 
     fixture.coordinator.handleDetection(
-
       enin: 2,
-
       rpid: "peer-at-boundary",
-
       detectedDisplayId: DetectionFixture.displayId(device: 90)
-
     )
 
     XCTAssertEqual(fixture.reportStore.reports.count, 1)
     XCTAssertEqual(fixture.reportStore.reports.first?.enin, 1)
     XCTAssertEqual(fixture.reportStore.reports.first?.peerCount, peersBeforeBoundary)
     XCTAssertNotEqual(fixture.coordinator.currentWindowIdForTesting, originalWindowId)
-    guard case .recording(_, let peersAtBoundary) = fixture.coordinator.phase else {
-      XCTFail("the boundary observation must still reach recording, got \(fixture.coordinator.phase)")
-      return
-    }
-    XCTAssertEqual(peersAtBoundary, peersBeforeBoundary + 1)
+    // Acceptance is asserted on the device count directly rather than through
+    // a `.recording` transition. This test is about the ledger failure not
+    // dropping an observation; it used the phase as a proxy for that, and
+    // beid#154's threshold split deliberately decoupled the phase from the
+    // device count — confirmation now asks whether enough devices were
+    // co-present in ONE window, and these peers are spread across two. The
+    // count is the direct measure of "the observation was accepted", and it
+    // carries the same numbers the phase payload used to.
+    XCTAssertEqual(fixture.coordinator.devicesVerified, peersBeforeBoundary + 1)
 
     fixture.coordinator.handleDetection(
-
       enin: 2,
-
       rpid: "peer-after-boundary",
-
       detectedDisplayId: DetectionFixture.displayId(device: 91)
-
     )
-    guard case .recording(_, let peersAfterBoundary) = fixture.coordinator.phase else {
-      XCTFail("same-ENIN intake must continue after ledger failure")
-      return
-    }
-    XCTAssertEqual(peersAfterBoundary, peersBeforeBoundary + 2)
+    XCTAssertEqual(
+      fixture.coordinator.devicesVerified, peersBeforeBoundary + 2,
+      "same-ENIN intake must continue after ledger failure"
+    )
   }
 
   func testFailedCheckpointCloseDoesNotDropLaterSameEninObservations() throws {
@@ -291,11 +286,16 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     XCTAssertNotNil(fixture.coordinator.currentWindowIdForTesting)
     XCTAssertNotEqual(fixture.coordinator.currentWindowIdForTesting, originalWindowId)
-    guard case .recording(_, let peersVerified) = fixture.coordinator.phase else {
-      XCTFail("post-checkpoint observations must continue after ledger failure")
-      return
-    }
-    XCTAssertEqual(peersVerified, BeidConfig.eventConfirmThreshold)
+    // Same substitution as the ENIN-boundary test above, for a second reason
+    // specific to this one: the checkpoint clears the current window's
+    // identifier set along with the rest of the window state, so the
+    // co-presence gate legitimately restarts from empty here. The subject of
+    // this test is that the post-checkpoint observations are still taken in
+    // after a ledger failure, which the device count states directly.
+    XCTAssertEqual(
+      fixture.coordinator.devicesVerified, BeidConfig.eventConfirmThreshold,
+      "post-checkpoint observations must continue after ledger failure"
+    )
   }
 
   func testSessionEndAlwaysTearsDownAfterLedgerCloseFailure() throws {
@@ -333,13 +333,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     try fixture.blockReportWrites()
 
     fixture.coordinator.handleDetection(
-
       enin: 2,
-
       rpid: "peer-enin-2",
-
       detectedDisplayId: DetectionFixture.displayId(device: 11)
-
     )
 
     let secondWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)

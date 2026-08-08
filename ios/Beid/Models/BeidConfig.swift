@@ -6,9 +6,23 @@ import Foundation
 /// Centralized, app-wide protocol/UX constants — see
 /// `docs/specs/scan-slice2-redesign.md` §4.4.
 enum BeidConfig {
-  /// Distinct mutual-sensing peer observations required before
+  /// Distinct devices that must be present **in one ENIN window** before
   /// `SensingCoordinator` auto-transitions `.eventFound → .recording`
-  /// (D3, background-capable, zero-tap). A single named constant so the
+  /// (D3, background-capable, zero-tap).
+  ///
+  /// Counted from the window's proximity identifiers, which do not rotate
+  /// inside a window, so this needs no display id and survives a total
+  /// Barnard B003 outage — see
+  /// `SensingCoordinator.hasEnoughCoPresentDevicesToConfirm`. It asks whether
+  /// enough devices were here *at once*, which is a stricter question than a
+  /// session-wide device total, and a different one from the
+  /// `devicesVerified` figure that lands in the signed proof.
+  ///
+  /// The old wording here said "mutual-sensing peer observations". None of
+  /// those three words survived: the app cannot tell whether a peer sensed it
+  /// back, and this counts devices rather than observations (beid#154).
+  ///
+  /// A single named constant so the
   /// later rework to a per-event, organizer-configurable value
   /// (`event.confirmThreshold ?? BeidConfig.eventConfirmThreshold`) is a
   /// one-line, one-call-site change.

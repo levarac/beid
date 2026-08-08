@@ -4,6 +4,7 @@
 import Barnard
 import BarnardCore
 import Foundation
+import os
 
 struct WindowReportRedeliveryBuffer {
   private(set) var reports: [WindowReport] = []
@@ -63,8 +64,16 @@ final class SensingCoordinator: ObservableObject {
   /// `resetSessionState()`.
   @Published private(set) var recordingCeremonyShown = false
   /// Distinct devices observed so far this session — the value carried as
-  /// `peersVerified` into `.recording`, the stored `Proof`, and the
-  /// confirm-threshold check.
+  /// `peersVerified` into `.recording` and the stored `Proof`, and so the
+  /// number that ends up inside a signed artifact.
+  ///
+  /// It does **not** gate `.recording`. That is
+  /// `hasEnoughCoPresentDevicesToConfirm`, which reads the current window's
+  /// proximity identifiers instead, so a total display-id outage cannot stop a
+  /// real event from being recorded. The two answer different questions and
+  /// are allowed to disagree: a session whose B003 reads all fail records with
+  /// this at 0 and `unidentifiedRpidCount` above 0, which is the honest pair
+  /// rather than a single number that would have to lie.
   ///
   /// Keyed on `detectedDisplayId`, not on the proximity identifier. The
   /// proximity identifier rotates every ENIN window by design, so a set of
@@ -75,7 +84,7 @@ final class SensingCoordinator: ObservableObject {
   /// lasts. See beid#154.
   ///
   /// Observations that arrive without a display id are never folded in here —
-  /// they land in `unidentifiedObservationCount` instead.
+  /// they land in `unidentifiedRpidCount` instead.
   @Published private(set) var devicesVerified = 0
   /// Distinct proximity identifiers observed this session that never arrived
   /// with a `detectedDisplayId`, and so could not be attributed to a device.
@@ -89,10 +98,26 @@ final class SensingCoordinator: ObservableObject {
   ///
   /// This is a coverage signal, **not** a second device count: it dedupes by
   /// the rotating identifier, so it carries exactly the (device × window)
-  /// inflation that `devicesVerified` no longer does. An identifier that later
-  /// does arrive with a display id leaves this count — it turned out to be
-  /// covered after all.
-  @Published private(set) var unidentifiedObservationCount = 0
+  /// inflation that `devicesVerified` no longer does. One device that never
+  /// yields a display id therefore adds a fresh entry every window, so this
+  /// number climbs with dwell time — alarming-looking for a reason that is not
+  /// alarming. An identifier that later does arrive with a display id leaves
+  /// this count; it turned out to be covered after all.
+  ///
+  /// **Deliberately not the same quantity as shared's
+  /// `observationsWithoutDisplayIdCount`** (`ObservationAggregation.kt`, added
+  /// in #109), which is a raw `count { displayId == null }` over persisted
+  /// rows. Feed both the same traffic and they return different numbers, by
+  /// design and at different layers. Shared aggregates a stored row set, where
+  /// one row is one observation and a raw tally is meaningful. This counter
+  /// sits on the live BLE callback path, where a raw tally would be dominated
+  /// by advertisement rate — it would measure how chatty the radio is, not how
+  /// much of the session the device count covers, which is the one question it
+  /// exists to answer. Aligning it to shared's definition would make it
+  /// useless rather than consistent. It is named apart from the shared field
+  /// so the difference is visible at the call site rather than discovered by
+  /// whoever first wires #109 to iOS.
+  @Published private(set) var unidentifiedRpidCount = 0
 
   /// Fired once, the instant `.recording` begins and a `Proof` is created.
   var onProofCollected: ((Proof) -> Void)?
@@ -100,6 +125,14 @@ final class SensingCoordinator: ObservableObject {
   /// `.recording`, so the caller can update the same `Proof` in place
   /// (`ProofStore.updatePeersVerified(for:to:)`) rather than re-creating it.
   var onPeersVerifiedChanged: ((UUID, Int) -> Void)?
+
+  /// Field diagnostics for the counting split (beid#154). `os.Logger` rather
+  /// than `print` on purpose: these lines have to be readable from a real
+  /// device during a field run — Console.app, or a sysdiagnose collected after
+  /// the fact — and `print` reaches neither. Every interpolation is
+  /// `.public` because none of it is personal data: they are small integers,
+  /// and no identifier is ever logged.
+  private static let log = Logger(subsystem: "org.levarac.beid", category: "sensing")
 
   private let engine = BarnardEngine()
   private let sensingCryptography: any SensingCryptography
@@ -132,7 +165,7 @@ final class SensingCoordinator: ObservableObject {
   /// available here is the one that rotates, and undercounting by a collision
   /// is a far smaller error than multiplying every device by its dwell time.
   private var distinctPeerDisplayIds: Set<String> = []
-  /// Backs `unidentifiedObservationCount`. Holds proximity identifiers seen
+  /// Backs `unidentifiedRpidCount`. Holds proximity identifiers seen
   /// without a display id; an identifier is removed once it does arrive with
   /// one.
   private var rpidsAwaitingDisplayId: Set<String> = []
@@ -373,31 +406,91 @@ final class SensingCoordinator: ObservableObject {
     advanceWindowIfNeeded(enin: enin, eventCode: session.id)
     currentWindowRpids.insert(rpid)
 
+    let deviceCountChanged = recordDeviceIdentity(rpid: rpid, detectedDisplayId: detectedDisplayId)
+
+    switch phase {
+    case .eventFound:
+      // Threshold reads the window, not the session. See
+      // `hasEnoughCoPresentDevicesToConfirm`.
+      if hasEnoughCoPresentDevicesToConfirm {
+        Self.log.notice(
+          """
+          Event confirmed: \(self.currentWindowRpids.count, privacy: .public) co-present devices in one window; \
+          \(self.devicesVerified, privacy: .public) identified, \
+          \(self.unidentifiedRpidCount, privacy: .public) unidentified
+          """
+        )
+        beginRecording(event: session, peersVerified: devicesVerified)
+      }
+    case .recording:
+      // Only the identified-device count moves the recorded value; crossing
+      // the threshold again in a later window is not new information.
+      if deviceCountChanged {
+        updateRecording(event: session, peersVerified: devicesVerified)
+      }
+    default:
+      break
+    }
+  }
+
+  /// Files this observation against the session's device identity accounting
+  /// and reports whether `devicesVerified` moved.
+  ///
+  /// This is the display and signed-payload half of the split: it is keyed on
+  /// the stable display id and is deliberately **not** what gates
+  /// `.recording`.
+  private func recordDeviceIdentity(rpid: String, detectedDisplayId: String?) -> Bool {
     // Barnard emits lowercase hex today; normalize so an upstream change of
     // case could not split one device into two.
     guard let displayId = detectedDisplayId?.lowercased() else {
       if rpidsAwaitingDisplayId.insert(rpid).inserted {
-        unidentifiedObservationCount = rpidsAwaitingDisplayId.count
+        unidentifiedRpidCount = rpidsAwaitingDisplayId.count
+        Self.log.notice(
+          """
+          Observation with no display id (Barnard B003 unavailable): \
+          \(self.unidentifiedRpidCount, privacy: .public) unidentified so far, \
+          \(self.devicesVerified, privacy: .public) identified devices
+          """
+        )
       }
-      return
+      return false
     }
     if rpidsAwaitingDisplayId.remove(rpid) != nil {
-      unidentifiedObservationCount = rpidsAwaitingDisplayId.count
+      unidentifiedRpidCount = rpidsAwaitingDisplayId.count
     }
-    guard distinctPeerDisplayIds.insert(displayId).inserted else { return }
+    guard distinctPeerDisplayIds.insert(displayId).inserted else { return false }
+    devicesVerified = distinctPeerDisplayIds.count
+    return true
+  }
 
-    let peersVerified = distinctPeerDisplayIds.count
-    devicesVerified = peersVerified
-    switch phase {
-    case .eventFound:
-      if peersVerified >= BeidConfig.eventConfirmThreshold {
-        beginRecording(event: session, peersVerified: peersVerified)
-      }
-    case .recording:
-      updateRecording(event: session, peersVerified: peersVerified)
-    default:
-      break
-    }
+  /// Whether this session has seen enough **simultaneously present** devices
+  /// to confirm the event (`BeidConfig.eventConfirmThreshold`).
+  ///
+  /// Counts distinct proximity identifiers **within the current ENIN window**,
+  /// and so does not consult the display id at all. Two properties make that
+  /// the right input for this particular question:
+  ///
+  /// - **It is sound.** The proximity identifier does not rotate inside a
+  ///   window, so within one window distinct identifier *is* distinct device.
+  ///   This is emphatically not the cross-window identifier counting beid#154
+  ///   removed: nothing accumulates across windows here, so a single device
+  ///   lingering contributes exactly 1 to every window forever and can never
+  ///   confirm an event on its own. That is the defect, and it stays fixed.
+  /// - **It survives a display id outage.** The display id comes from a GATT
+  ///   read that can fail for every peer. Gating `.recording` on it would mean
+  ///   a session that senses a crowded room all evening never records
+  ///   anything. Confirmation asks "were enough devices here at once", which
+  ///   the identifier answers on its own.
+  ///
+  /// The phase transition latches, so this is effectively a max over windows:
+  /// once any window has had enough co-present devices, the event stays
+  /// confirmed even as later windows go quiet.
+  ///
+  /// Note this asks a **stricter** question than a session-wide device total
+  /// would: it requires the devices to overlap in one window rather than merely
+  /// to have been present at some point during the session.
+  private var hasEnoughCoPresentDevicesToConfirm: Bool {
+    currentWindowRpids.count >= BeidConfig.eventConfirmThreshold
   }
 
   /// Calls the Barnard SDK's join API (`BarnardEngine.joinEvent`)
@@ -488,7 +581,7 @@ final class SensingCoordinator: ObservableObject {
     distinctPeerDisplayIds = []
     rpidsAwaitingDisplayId = []
     devicesVerified = 0
-    unidentifiedObservationCount = 0
+    unidentifiedRpidCount = 0
     currentWindowEnin = nil
     currentWindowId = nil
     currentWindowObservationReference = nil

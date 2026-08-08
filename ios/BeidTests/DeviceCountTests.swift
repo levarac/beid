@@ -101,6 +101,12 @@ final class DeviceCountTests: XCTestCase {
   /// must never satisfy the "this event is real" threshold on its own. Before
   /// the fix this reached `.recording` on the third window with no second
   /// device ever present.
+  ///
+  /// This is also the load-bearing test for the threshold split. The threshold
+  /// reads proximity identifiers, which is what the original defect did too —
+  /// the difference is that it reads them **within one window** and never
+  /// accumulates. If that boundary were ever blurred back into a cross-window
+  /// tally, this test is the one that would fail.
   func testOneLingeringDeviceNeverSatisfiesTheConfirmThresholdOnItsOwn() {
     let (coordinator, _) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-DEVICE-COUNT-THRESHOLD")
@@ -218,7 +224,7 @@ final class DeviceCountTests: XCTestCase {
     }
 
     XCTAssertEqual(
-      coordinator.unidentifiedObservationCount, 5,
+      coordinator.unidentifiedRpidCount, 5,
       "five distinct rpids arrived with no display id — itself window-inflated, which is why it is not a device count"
     )
   }
@@ -231,7 +237,7 @@ final class DeviceCountTests: XCTestCase {
 
     let rpid = DetectionFixture.rotatingRpid(device: 0, enin: 1)
     coordinator.handleDetection(enin: 1, rpid: rpid, detectedDisplayId: nil)
-    XCTAssertEqual(coordinator.unidentifiedObservationCount, 1)
+    XCTAssertEqual(coordinator.unidentifiedRpidCount, 1)
 
     coordinator.handleDetection(
       enin: 1,
@@ -241,7 +247,7 @@ final class DeviceCountTests: XCTestCase {
 
     XCTAssertEqual(coordinator.devicesVerified, 1)
     XCTAssertEqual(
-      coordinator.unidentifiedObservationCount, 0,
+      coordinator.unidentifiedRpidCount, 0,
       "the same rpid did resolve to a device — it is no longer a coverage gap"
     )
   }
@@ -262,7 +268,129 @@ final class DeviceCountTests: XCTestCase {
     }
 
     XCTAssertEqual(coordinator.devicesVerified, 1)
-    XCTAssertEqual(coordinator.unidentifiedObservationCount, 3)
+    XCTAssertEqual(coordinator.unidentifiedRpidCount, 3)
+  }
+
+  // MARK: - The threshold split: confirmation must survive a B003 outage
+
+  /// The point of the split. If every display-id read fails, the session must
+  /// still record: three devices in one window is three devices, because the
+  /// proximity identifier does not rotate inside a window.
+  ///
+  /// Before the split this session sat on `.eventFound` forever, sensing a
+  /// crowded room and recording nothing.
+  func testCoPresentDevicesConfirmTheEventEvenWhenEveryDisplayIdReadFails() {
+    let (coordinator, _) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-SPLIT-B003-OUTAGE")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for device in 0..<threshold {
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: DetectionFixture.rotatingRpid(device: device, enin: 1),
+        detectedDisplayId: nil
+      )
+    }
+
+    guard case .recording = coordinator.phase else {
+      XCTFail(
+        "co-present devices must confirm the event without any display id, got \(coordinator.phase)"
+      )
+      return
+    }
+  }
+
+  /// The claim shape the recorded proof must carry under that outage: N
+  /// identified devices plus M unidentified observations, never one number
+  /// pretending to be both.
+  func testProofUnderADisplayIdOutageClaimsZeroIdentifiedDevicesNotAFabricatedCount() {
+    let (coordinator, _) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-SPLIT-CLAIM-SHAPE")
+
+    var collectedProof: Proof?
+    coordinator.onProofCollected = { collectedProof = $0 }
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for device in 0..<threshold {
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: DetectionFixture.rotatingRpid(device: device, enin: 1),
+        detectedDisplayId: nil
+      )
+    }
+
+    XCTAssertEqual(
+      collectedProof?.peersVerified, 0,
+      "no device was identified, so the signed value must say zero rather than borrow the threshold's count"
+    )
+    XCTAssertEqual(
+      coordinator.unidentifiedRpidCount, threshold,
+      "the residue is what carries the evidence that something was there"
+    )
+  }
+
+  /// The split must not hand the defect back through the identifier path. One
+  /// device that never yields a display id rotates its identifier every
+  /// window, which is exactly the sequence that used to inflate — and it must
+  /// still confirm nothing.
+  func testOneUnidentifiedDeviceLingeringAcrossWindowsStillConfirmsNothing() {
+    let (coordinator, _) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-SPLIT-LINGERING-UNIDENTIFIED")
+
+    let windowCount = BeidConfig.eventConfirmThreshold + 5
+    for enin in 1...windowCount {
+      coordinator.handleDetection(
+        enin: enin,
+        rpid: DetectionFixture.rotatingRpid(device: 0, enin: enin),
+        detectedDisplayId: nil
+      )
+    }
+
+    guard case .eventFound = coordinator.phase else {
+      XCTFail(
+        "one device across many windows is one device, however its identifier rotates, got \(coordinator.phase)"
+      )
+      return
+    }
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+    XCTAssertEqual(
+      coordinator.unidentifiedRpidCount, windowCount,
+      "the coverage signal is window-inflated by construction — that is why it is not the device count"
+    )
+  }
+
+  /// Documents a real consequence of the split rather than asserting it is
+  /// desirable: confirmation now requires the devices to overlap in one
+  /// window. Devices that pass by one at a time never confirm, even though the
+  /// session did see three distinct devices and `devicesVerified` says so.
+  ///
+  /// A session-wide total would confirm here. The threshold deliberately asks
+  /// the narrower question. If that trade is ever revisited, this test is the
+  /// statement of what was traded away.
+  func testDevicesSeenOneAtATimeInSeparateWindowsDoNotConfirm() {
+    let (coordinator, _) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-SPLIT-NO-CO-PRESENCE")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for device in 0..<threshold {
+      let enin = device + 1
+      coordinator.handleDetection(
+        enin: enin,
+        rpid: DetectionFixture.rotatingRpid(device: device, enin: enin),
+        detectedDisplayId: DetectionFixture.displayId(device: device)
+      )
+    }
+
+    XCTAssertEqual(
+      coordinator.devicesVerified, threshold,
+      "the session really did see three distinct devices"
+    )
+    guard case .eventFound = coordinator.phase else {
+      XCTFail(
+        "they were never co-present, so the event is not confirmed, got \(coordinator.phase)"
+      )
+      return
+    }
   }
 
   // MARK: - Display id normalization
@@ -328,11 +456,11 @@ final class DeviceCountTests: XCTestCase {
       detectedDisplayId: nil
     )
     XCTAssertEqual(coordinator.devicesVerified, 1)
-    XCTAssertEqual(coordinator.unidentifiedObservationCount, 1)
+    XCTAssertEqual(coordinator.unidentifiedRpidCount, 1)
 
     coordinator.reset()
 
     XCTAssertEqual(coordinator.devicesVerified, 0)
-    XCTAssertEqual(coordinator.unidentifiedObservationCount, 0)
+    XCTAssertEqual(coordinator.unidentifiedRpidCount, 0)
   }
 }
