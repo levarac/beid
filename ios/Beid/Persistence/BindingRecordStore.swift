@@ -10,6 +10,20 @@ import Foundation
 final class BindingRecordStore: ObservableObject {
   @Published private(set) var records: [BindingRecord] = []
 
+  /// Set when `load()` preserved a file that failed to decode, so the event
+  /// is not invisible. Broader observability is beid#131's job.
+  private(set) var quarantinedFileURL: URL?
+
+  /// Set when the existing file could neither be read nor preserved.
+  /// Saving would destroy bytes that were never captured, so this instance
+  /// stops writing and keeps its records in memory only. Readable for the
+  /// same reason `quarantinedFileURL` is: a `print` is invisible in a
+  /// shipped build, and a store that silently stops persisting is the shape
+  /// of the defect this file exists to fix.
+  private(set) var persistenceSuspensionReason: Error?
+
+  var isPersistenceSuspended: Bool { persistenceSuspensionReason != nil }
+
   private let fileURL: URL
 
   init(fileURL: URL? = nil) {
@@ -40,11 +54,26 @@ final class BindingRecordStore: ObservableObject {
   }
 
   private func load() {
-    guard let data = try? Data(contentsOf: fileURL) else { return }
-    records = (try? JSONDecoder().decode([BindingRecord].self, from: data)) ?? []
+    guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+    do {
+      let data = try Data(contentsOf: fileURL)
+      records = try JSONDecoder().decode([BindingRecord].self, from: data)
+    } catch {
+      // A file that fails to decode used to be discarded silently and then
+      // destroyed by the next save, taking every binding record with it
+      // (beid#135). Preserve it first, then continue empty.
+      let outcome = CorruptStoreQuarantine.resolve(
+        loadFailure: error,
+        fileURL: fileURL,
+        storeDescription: "binding record store"
+      )
+      quarantinedFileURL = outcome.quarantinedFileURL
+      persistenceSuspensionReason = outcome.persistenceSuspensionReason
+    }
   }
 
   private func save() {
+    guard !isPersistenceSuspended else { return }
     guard let data = try? JSONEncoder().encode(records) else { return }
     try? data.write(to: fileURL, options: .atomic)
   }
