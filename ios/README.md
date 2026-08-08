@@ -311,10 +311,29 @@ the per-event signing public key through `eventSigningPublicKey(eventCode:)`,
 whose production adapter forwards to
 `BarnardIdentity.signingPublicKey(eventCode:)`. Real BLE detections currently
 transition `.sensing → .eventFound` on the first detection, count distinct
-RPIDs, and move to `.recording` when
+**devices**, and move to `.recording` when
 `BeidConfig.eventConfirmThreshold` is reached. That threshold is an app-wide
 constant today rather than an organizer-provided event setting; see "What's
 stubbed".
+
+Devices are counted by `detectedDisplayId`, not by the proximity identifier
+the detection also carries. The proximity identifier rotates every ENIN
+window by design, so accumulating those across a session counts (device ×
+window) pairs — at the 300-second default, one device present for an hour
+would read as twelve. `detectedDisplayId` derives from the per-event key and
+does not rotate. Within a single window the two are equivalent, so
+`WindowReport.peerCount` still counts proximity identifiers (beid#154).
+
+`detectedDisplayId` arrives from a GATT characteristic read that can fail;
+Barnard still emits the detection with a null display id. Such an observation
+cannot be attributed to a device, so it never enters the count and is
+surfaced separately as `SensingCoordinator.unidentifiedObservationCount`.
+**A consequence worth knowing before field-testing: if that read fails for
+every peer, the device count stays at zero and the session never
+auto-confirms into `.recording`, however many detections arrive.** This is
+deliberate — the alternative is a threshold that a single lingering device
+can satisfy alone — but it makes B003 read success a prerequisite for
+auto-confirm on the real sensing path.
 
 The 06d Signal Lost screen isn't on the golden DemoEvent path (which always
 completes successfully) but is fully wired — reachable via
@@ -341,7 +360,7 @@ Lost" button on the Recording screen while in DemoEvent mode, and covered by
   is available in the barnard SDK but not called from the app in this
   slice).
 - **Server**: no backend calls. Proofs are local-only.
-- **Event-specific verification policy**: distinct-RPID counting and the
+- **Event-specific verification policy**: distinct-device counting and the
   app-wide `BeidConfig.eventConfirmThreshold` gate run on-device, but an
   organizer-provided per-event threshold is not wired yet.
 - **Real BLE signal-loss detection**: 06d can be driven by the demo-only

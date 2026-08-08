@@ -32,8 +32,11 @@ struct WindowReportRedeliveryBuffer {
   }
 }
 
-/// Wraps `BarnardEngine` (scan+advertise) and `BarnardIdentity` (per-event
-/// signing) behind the app's `ScanPhase` state machine.
+/// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
+/// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
+/// state machine. The facade — not `BarnardIdentity` directly — is what this
+/// type holds, so tests can inject a deterministic signer; production injects
+/// `BarnardSensingCryptography`.
 ///
 /// In Debug builds, `useDemoEventMode` can drive a simulated peer sequence
 /// (event found → recording) instead of real detections. Release builds
@@ -59,6 +62,37 @@ final class SensingCoordinator: ObservableObject {
   /// resume. Reset alongside the rest of per-session state in
   /// `resetSessionState()`.
   @Published private(set) var recordingCeremonyShown = false
+  /// Distinct devices observed so far this session — the value carried as
+  /// `peersVerified` into `.recording`, the stored `Proof`, and the
+  /// confirm-threshold check.
+  ///
+  /// Keyed on `detectedDisplayId`, not on the proximity identifier. The
+  /// proximity identifier rotates every ENIN window by design, so a set of
+  /// them counts (device × window) pairs: at the 300-second default, two
+  /// people together for an hour would read as twelve. `detectedDisplayId`
+  /// derives from the per-event key (`BarnardCoreCrypto.displayId4(from:tek:)`,
+  /// which takes no `enin`) and is therefore stable for as long as the event
+  /// lasts. See beid#154.
+  ///
+  /// Observations that arrive without a display id are never folded in here —
+  /// they land in `unidentifiedObservationCount` instead.
+  @Published private(set) var devicesVerified = 0
+  /// Distinct proximity identifiers observed this session that never arrived
+  /// with a `detectedDisplayId`, and so could not be attributed to a device.
+  ///
+  /// The display id comes from a GATT characteristic read (Barnard B003) that
+  /// can fail; Barnard still emits the detection, with a null display id.
+  /// Silently dropping those understates what was around; silently counting
+  /// them re-inflates the count this type exists to deflate. Neither is
+  /// acceptable, so they are surfaced here for a caller that needs to judge
+  /// coverage.
+  ///
+  /// This is a coverage signal, **not** a second device count: it dedupes by
+  /// the rotating identifier, so it carries exactly the (device × window)
+  /// inflation that `devicesVerified` no longer does. An identifier that later
+  /// does arrive with a display id leaves this count — it turned out to be
+  /// covered after all.
+  @Published private(set) var unidentifiedObservationCount = 0
 
   /// Fired once, the instant `.recording` begins and a `Proof` is created.
   var onProofCollected: ((Proof) -> Void)?
@@ -86,10 +120,22 @@ final class SensingCoordinator: ObservableObject {
   // Reset at the start of every new event (`beginEventFound`) and on
   // `stopSensing()`/`reset()` so nothing leaks into the next session.
 
-  /// Distinct peer RPIDs observed so far this session — the real-path
+  /// Distinct device display ids observed so far this session — the real-path
   /// equivalent of the demo sequence's loop counter, and the source of
-  /// `peersVerified` (§4.3).
-  private var distinctPeerRpids: Set<String> = []
+  /// `peersVerified` (§4.3). Backs `devicesVerified`; see its doc comment for
+  /// why this is keyed on the display id rather than the rotating proximity
+  /// identifier (beid#154).
+  ///
+  /// A display id is 4 bytes, so two devices at one event can in principle
+  /// collide and be counted once. At event scale that is negligible and this
+  /// deliberately does not defend against it: the alternative identifier
+  /// available here is the one that rotates, and undercounting by a collision
+  /// is a far smaller error than multiplying every device by its dwell time.
+  private var distinctPeerDisplayIds: Set<String> = []
+  /// Backs `unidentifiedObservationCount`. Holds proximity identifiers seen
+  /// without a display id; an identifier is removed once it does arrive with
+  /// one.
+  private var rpidsAwaitingDisplayId: Set<String> = []
   private var currentWindowEnin: Int?
   private var currentWindowId: UUID?
   private var currentWindowObservationReference: String?
@@ -316,14 +362,32 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Records the detection against the running peer count and window, then
+  /// Records the detection against the running device count and window, then
   /// applies whatever phase transition that observation implies.
+  ///
+  /// The within-window set (`currentWindowRpids`, which feeds
+  /// `WindowReport.peerCount`) stays keyed on the proximity identifier and is
+  /// deliberately untouched by beid#154: identifiers do not rotate *inside* a
+  /// window, so counting them there already yields devices.
   private func observe(enin: Int, rpid: String, detectedDisplayId: String?, for session: EventSession) {
     advanceWindowIfNeeded(enin: enin, eventCode: session.id)
     currentWindowRpids.insert(rpid)
-    guard distinctPeerRpids.insert(rpid).inserted else { return }
 
-    let peersVerified = distinctPeerRpids.count
+    // Barnard emits lowercase hex today; normalize so an upstream change of
+    // case could not split one device into two.
+    guard let displayId = detectedDisplayId?.lowercased() else {
+      if rpidsAwaitingDisplayId.insert(rpid).inserted {
+        unidentifiedObservationCount = rpidsAwaitingDisplayId.count
+      }
+      return
+    }
+    if rpidsAwaitingDisplayId.remove(rpid) != nil {
+      unidentifiedObservationCount = rpidsAwaitingDisplayId.count
+    }
+    guard distinctPeerDisplayIds.insert(displayId).inserted else { return }
+
+    let peersVerified = distinctPeerDisplayIds.count
+    devicesVerified = peersVerified
     switch phase {
     case .eventFound:
       if peersVerified >= BeidConfig.eventConfirmThreshold {
@@ -421,7 +485,10 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func resetSessionState() {
-    distinctPeerRpids = []
+    distinctPeerDisplayIds = []
+    rpidsAwaitingDisplayId = []
+    devicesVerified = 0
+    unidentifiedObservationCount = 0
     currentWindowEnin = nil
     currentWindowId = nil
     currentWindowObservationReference = nil

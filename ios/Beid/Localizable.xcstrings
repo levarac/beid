@@ -647,6 +647,35 @@
       }
     },
     "Detected event": {},
+    "Devices verified": {
+      "comment" : "Metric row label on Proof Detail, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Use your language's word for a phone or handset, not a word for a person or a peer.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Dispositivos verificados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Appareils vérifiés"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "確認済みの端末"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "已验证设备"
+          }
+        }
+      }
+    },
     "Disconnect Wallet": {},
     "Done": {},
     "Enable Bluetooth": {
