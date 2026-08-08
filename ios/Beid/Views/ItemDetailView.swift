@@ -23,7 +23,10 @@ struct ItemDetailView: View {
             BeidPanel {
               VStack(alignment: .leading, spacing: DS.Space.m) {
                 BeidMetricRow(label: "Method", verbatimValue: proof.method)
-                BeidMetricRow(label: "Peers verified", verbatimValue: "\(proof.peersVerified)")
+                // "Devices", not "Peers": the number counts distinct nearby
+                // devices, and only those whose identity could be read. See
+                // beid#154 and `SensingCoordinator.devicesVerified`.
+                BeidMetricRow(label: "Devices verified", verbatimValue: "\(proof.peersVerified)")
                 statusRow
               }
             }

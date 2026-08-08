@@ -20,7 +20,9 @@ struct SignalLostView: View {
       VStack(spacing: BeidDesign.Spacing.content) {
         BeidStatusPill(state: .sensingPaused)
         EventCardView(event: event, badge: .paused) {
-          BeidMetricRow(label: "Peers verified", verbatimValue: "\(peersVerified)")
+          // Same corrected count and same label as Proof Detail — one number
+          // must not carry two labels. See beid#154.
+          BeidMetricRow(label: "Devices verified", verbatimValue: "\(peersVerified)")
         }
       }
       },

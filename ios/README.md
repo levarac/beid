@@ -311,10 +311,56 @@ the per-event signing public key through `eventSigningPublicKey(eventCode:)`,
 whose production adapter forwards to
 `BarnardIdentity.signingPublicKey(eventCode:)`. Real BLE detections currently
 transition `.sensing → .eventFound` on the first detection, count distinct
-RPIDs, and move to `.recording` when
+**devices**, and move to `.recording` when
 `BeidConfig.eventConfirmThreshold` is reached. That threshold is an app-wide
 constant today rather than an organizer-provided event setting; see "What's
 stubbed".
+
+Devices are counted by `detectedDisplayId`, not by the proximity identifier
+the detection also carries. The proximity identifier rotates every ENIN
+window by design, so accumulating those across a session counts (device ×
+window) pairs — at the 300-second default, one device present for an hour
+would read as twelve. `detectedDisplayId` derives from the per-event key and
+does not rotate. Within a single window the two are equivalent, so
+`WindowReport.peerCount` still counts proximity identifiers (beid#154).
+
+`detectedDisplayId` arrives from a GATT characteristic read that can fail;
+Barnard still emits the detection with a null display id. Such an observation
+cannot be attributed to a device, so it never enters the device count and is
+surfaced separately as `SensingCoordinator.unidentifiedRpidCount`.
+
+**Confirming an event and counting devices are deliberately two different
+questions.** `eventConfirmThreshold` decides only whether to *start
+recording*; it asserts nothing. The assertions live in the per-window
+reports, each of which records exactly who was present together in that
+window, independently of how confirmation was reached. That separation is
+what makes the gate safe to satisfy two ways:
+
+- **Co-presence** — enough distinct proximity identifiers **within the
+  current ENIN window**. Needs no display id, so a total B003 outage cannot
+  stop a real event from being recorded. Sound for the same reason
+  `WindowReport.peerCount` is: identifiers do not rotate inside a window.
+- **Distinct devices** — `devicesVerified` reaching the threshold. Covers
+  sparse-but-real settings the first arm alone would decline to record: a
+  hallway, a booth, an arrival trickle, where three real devices pass by one
+  at a time and never overlap.
+
+Neither arm accumulates: the window set is cleared at every boundary, and the
+device count is keyed on the non-rotating display id. **A single lingering
+device satisfies neither**, however long it stays — that is the property this
+whole change exists to establish.
+
+If every display-id read fails, the session still records, with
+`devicesVerified` at 0 and `unidentifiedRpidCount` above 0. The proof then
+claims what is actually true — no identified devices, this many unidentified
+observations — rather than a single number that would have to invent one of
+the two.
+
+Field measurement of the real B003 read success rate attaches to issue #147
+and is non-gating for this behavior. `SensingCoordinator` emits `os.Logger`
+lines (subsystem `org.levarac.beid`, category `sensing`) when an observation
+arrives with no display id and when an event confirms, so a real-device run
+is readable in Console.app or a sysdiagnose without a debug build.
 
 The 06d Signal Lost screen isn't on the golden DemoEvent path (which always
 completes successfully) but is fully wired — reachable via
@@ -341,7 +387,7 @@ Lost" button on the Recording screen while in DemoEvent mode, and covered by
   is available in the barnard SDK but not called from the app in this
   slice).
 - **Server**: no backend calls. Proofs are local-only.
-- **Event-specific verification policy**: distinct-RPID counting and the
+- **Event-specific verification policy**: distinct-device counting and the
   app-wide `BeidConfig.eventConfirmThreshold` gate run on-device, but an
   organizer-provided per-event threshold is not wired yet.
 - **Real BLE signal-loss detection**: 06d can be driven by the demo-only

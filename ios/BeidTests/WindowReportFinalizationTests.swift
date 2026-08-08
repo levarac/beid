@@ -7,7 +7,7 @@ import XCTest
 /// `SensingCoordinator`'s explicit-stop window-close fix
 /// (`docs/specs/session-end-finalization.md` §3.3/§3.5, sub-slice 1, §8.1).
 /// Drives the real (non-demo) detection path via
-/// `handleDetection(enin:rpid:)` — a test seam, since `BarnardDetectionEvent`
+/// `handleDetection(enin:rpid:detectedDisplayId:)` — a test seam, since `BarnardDetectionEvent`
 /// has no public initializer outside the Barnard module — rather than
 /// `runDemoSequence`, since demo mode deliberately never produces
 /// `WindowReport`s (`SensingCoordinator.advanceDemoWindow()`'s own doc
@@ -37,7 +37,7 @@ final class WindowReportFinalizationTests: XCTestCase {
       sensingCryptography: sensingCryptography
     )
     // Real (non-demo) path: avoids racing runDemoSequence's own phase
-    // transitions against this test's manual handleDetection(_:_:) calls.
+    // transitions against this test's manual handleDetection calls.
     coordinator.useDemoEventMode = false
     return (coordinator, store)
   }
@@ -51,7 +51,11 @@ final class WindowReportFinalizationTests: XCTestCase {
     let cryptography = DeterministicSensingCryptography(windowReportSignature: signature)
     let (coordinator, store) = makeCoordinator(sensingCryptography: cryptography)
     coordinator.startSensing(eventCode: "TEST-WINDOW-FACADE")
-    coordinator.handleDetection(enin: 7, rpid: "peer-0")
+    coordinator.handleDetection(
+      enin: 7,
+      rpid: "peer-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
 
     coordinator.reset()
 
@@ -81,7 +85,11 @@ final class WindowReportFinalizationTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     guard case .recording = coordinator.phase else {
@@ -108,7 +116,11 @@ final class WindowReportFinalizationTests: XCTestCase {
     // (§3.2), not just the stop-time wiring the prior test already covers:
     // currentBindingEvent alone would return nil here and silently drop
     // this report.
-    coordinator.handleDetection(enin: 1, rpid: "peer-0")
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
 
     guard case .eventFound = coordinator.phase else {
       XCTFail("expected .eventFound phase, got \(coordinator.phase)")
@@ -130,7 +142,11 @@ final class WindowReportFinalizationTests: XCTestCase {
 
     let threshold = BeidConfig.eventConfirmThreshold
     for index in 0..<threshold {
-      coordinator.handleDetection(enin: 1, rpid: "peer-\(index)")
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
     }
 
     coordinator.stopSensing()

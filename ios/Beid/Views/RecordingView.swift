@@ -106,8 +106,14 @@ struct RecordingView: View {
   private var recordingCaption: String {
     String(
       localized: "scan.recording.caption",
+      // The displayed English is deliberately unchanged by beid#154: the fix
+      // makes "distinct peers" true where it was not (the value was
+      // (device × window) before, distinct devices now), so editing it would
+      // invalidate four populated translations for no accuracy gain. The
+      // mutual-sensing half of the old comment, by contrast, was never true
+      // and is struck here.
       defaultValue: "Recording your attendance automatically · \(peersVerified) peers verified",
-      comment: "Cumulative count of distinct peers who have mutually sensed this device at the event; no fixed target."
+      comment: "Cumulative count of distinct nearby devices sensed at the event, each counted once however long it stayed; no fixed target. Do NOT translate this as mutual, two-way, or reciprocal confirmation: this device cannot tell whether a peer also observed it, so any such wording would overclaim."
     )
   }
 }

@@ -37,6 +37,7 @@
 		4A72C7558566E489D5A8DA65 /* CorruptStoreQuarantine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F32BB88D92DB86709083B1E /* CorruptStoreQuarantine.swift */; };
 		4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */; };
 		516EB6C209C600A66F08EFF1 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2A0822EAE8F243702AA4F1C /* Tokens.swift */; };
+		5A5BD6CD875999D8E6C36A8C /* DetectionFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C31D39275DE0F8E68D2F0E9 /* DetectionFixtures.swift */; };
 		5B3DAEF2A80374F87F5836F2 /* NativeWebSocketFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 910158074CF21A3B7DD559AE /* NativeWebSocketFactory.swift */; };
 		5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBBF900C092346BBFDF6BA96 /* RecordingView.swift */; };
 		5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */; };
@@ -94,6 +95,7 @@
 		F1D63DC71DAF25FD71813162 /* SensingCryptographyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0A3B3879ACAFE05FB7C4A7A /* SensingCryptographyTests.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
 		F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */; };
+		F8EEF80F16E6515536765320 /* DeviceCountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5703915F87566D192896C7B /* DeviceCountTests.swift */; };
 		FBB92DC557CD10D7B999A416 /* EventCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000D4B43F2D5A1703701E95 /* EventCardView.swift */; };
 		FC20C47D8577650AFC7B8FB6 /* SharedRuntimeProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD20AA979B50E95A1823BDB5 /* SharedRuntimeProbeTests.swift */; };
 		FD7E9D9913C3E0B56B054233 /* ScanPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */; };
@@ -145,6 +147,7 @@
 		25F9B71C531690F799D13498 /* EventBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventBindingTests.swift; sourceTree = "<group>"; };
 		29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingView.swift; sourceTree = "<group>"; };
 		29E157C35B263F222E1DBDD5 /* ProofSignature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignature.swift; sourceTree = "<group>"; };
+		2C31D39275DE0F8E68D2F0E9 /* DetectionFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionFixtures.swift; sourceTree = "<group>"; };
 		32DAC007552E0BB965748B79 /* DeterministicSensingCryptography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeterministicSensingCryptography.swift; sourceTree = "<group>"; };
 		394E6F2E97311572D2BAED89 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
 		3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportFinalizationTests.swift; sourceTree = "<group>"; };
@@ -178,6 +181,7 @@
 		A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidIPadLayoutTests.swift; sourceTree = "<group>"; };
 		A156A80B8C8B96AD33133358 /* ReownWalletConnectClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReownWalletConnectClient.swift; sourceTree = "<group>"; };
 		A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidApp.swift; sourceTree = "<group>"; };
+		A5703915F87566D192896C7B /* DeviceCountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceCountTests.swift; sourceTree = "<group>"; };
 		A80A94378B0116CC976961AC /* BluetoothOffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothOffView.swift; sourceTree = "<group>"; };
 		AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothMonitor.swift; sourceTree = "<group>"; };
 		B0333AAF8319263B67E8FE36 /* EventSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSession.swift; sourceTree = "<group>"; };
@@ -343,6 +347,7 @@
 		6B6C5103558AE125EDE55925 /* Support */ = {
 			isa = PBXGroup;
 			children = (
+				2C31D39275DE0F8E68D2F0E9 /* DetectionFixtures.swift */,
 				32DAC007552E0BB965748B79 /* DeterministicSensingCryptography.swift */,
 			);
 			path = Support;
@@ -396,6 +401,7 @@
 				761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */,
 				0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */,
 				23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */,
+				A5703915F87566D192896C7B /* DeviceCountTests.swift */,
 				25F9B71C531690F799D13498 /* EventBindingTests.swift */,
 				E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */,
 				C637EA719C58481853B15B91 /* LocalizationContractTests.swift */,
@@ -712,7 +718,9 @@
 				F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */,
 				5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */,
 				AAA084FCDB8DD4558C438B58 /* CorruptStoreQuarantineTests.swift in Sources */,
+				5A5BD6CD875999D8E6C36A8C /* DetectionFixtures.swift in Sources */,
 				D1620A2C2A2333B61408ACD0 /* DeterministicSensingCryptography.swift in Sources */,
+				F8EEF80F16E6515536765320 /* DeviceCountTests.swift in Sources */,
 				EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */,
 				CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */,
 				388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */,

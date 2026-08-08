@@ -13,9 +13,16 @@ enum ScanPhase: Equatable {
   case idle
   case sensing
   case eventFound(EventSession)
-  /// `peersVerified` is a cumulative, no-denominator count — the same
-  /// counter used internally for the threshold-confirm check
+  /// `peersVerified` is a cumulative, no-denominator count of **distinct
+  /// devices** (`SensingCoordinator.devicesVerified`) — the same counter used
+  /// internally for the threshold-confirm check
   /// (`BeidConfig.eventConfirmThreshold`) and displayed as-is in the UI.
+  ///
+  /// It counts devices, not observations and not ENIN windows: a device that
+  /// stays nearby for an hour contributes exactly one, however many times its
+  /// proximity identifier rotates (beid#154). Observations whose device could
+  /// not be identified are excluded and counted separately, so this is a lower
+  /// bound on what was actually nearby.
   case recording(event: EventSession, peersVerified: Int)
   /// Frozen count, resumable via `SensingCoordinator.resumeSensing()` —
   /// not a restart. Nothing already recorded is lost.
