@@ -43,6 +43,27 @@ internal class EventObservationRecord(
  *    permanently wrong for an event first heard before its own start window.
  *    The window bounds are carried as facts and the predicate is evaluated at
  *    read time by [isEventWindowOpen].
+ *
+ * ## Single-threaded by contract — nothing enforces this
+ *
+ * One store belongs to one thread, and the caller owns that guarantee. On iOS
+ * that means confining a store to the queue Barnard delivers engine events on,
+ * and hopping to the main actor with the *result* of [eventInfoCandidates]
+ * rather than sharing the store itself with the UI.
+ *
+ * Violating it is not a degraded answer, it is undefined behaviour.
+ * [recordEventInfoHint] mutates a record's fields in place while
+ * [eventInfoCandidates] iterates the map and reads them, so a concurrent caller
+ * can take a `ConcurrentModificationException` on the JVM, hit an unsynchronised
+ * race under Kotlin/Native's current memory model, or read a candidate whose
+ * first-seen and last-seen come from two different moments.
+ *
+ * No lock is added here on purpose. Choosing a synchronisation mechanism at a
+ * Swift Export boundary is a decision for the whole shared layer, not one a
+ * single store slice should make on everyone's behalf. This type is documented
+ * rather than defended so the assumption is written down before anything relies
+ * on it — an unstated single-thread assumption is precisely the defect shape
+ * that costs review rounds elsewhere in this train.
  */
 public class EventInfoStore internal constructor(
     internal val records: MutableMap<String, EventObservationRecord> = mutableMapOf(),

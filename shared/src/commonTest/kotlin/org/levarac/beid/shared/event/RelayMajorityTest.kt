@@ -237,19 +237,39 @@ class RelayMajorityTest {
         assertNull(verdict.leadingEventCodeHashHex)
     }
 
-    /** The lead test multiplies, so it must not overflow at implausible counts. */
+    /**
+     * The lead test multiplies, and in [Int] arithmetic it would wrap and invert.
+     *
+     * These two counts are chosen so the three implementations disagree:
+     *
+     * - `Long`: `21474835 * 100 = 2147483500` is not `>= 10737419 * 200 =
+     *   2147483800`, so the majority is **not** clear. The leader is ahead but
+     *   short of twice the runner-up.
+     * - `Int`: the leader's product still fits, the runner-up's wraps to
+     *   `-2147483496`, and a positive is trivially `>=` a negative — so an `Int`
+     *   implementation calls it clear. It fails this test.
+     * - The red implementation, which only asks whether the leader is ahead,
+     *   also calls it clear. It fails this test too.
+     *
+     * The earlier version of this test used `Int.MAX_VALUE` against half of it,
+     * which all three implementations answered the same way, so it asserted
+     * nothing. Values that merely look extreme do not exercise an overflow; the
+     * wrap has to change the answer.
+     */
     @Test
-    fun leadTestSurvivesCountsLargeEnoughToOverflowIntMultiplication() {
+    fun intMultiplicationWouldWrapAndInvertTheLeadTest() {
         val verdict = evaluateRelayMajority(
             inputOf(
-                Triple(EVENT_A, 10L, Int.MAX_VALUE),
-                Triple(EVENT_B, 10L, Int.MAX_VALUE / 2),
+                Triple(EVENT_A, 10L, 21_474_835),
+                Triple(EVENT_B, 10L, 10_737_419),
             ),
             parameters(),
             atWindowIndex = 10L,
         )
-        assertTrue(verdict.isMajorityClear)
         assertEquals(EVENT_A, verdict.leadingEventCodeHashHex)
+        assertEquals(21_474_835, verdict.leadingRelayCount)
+        assertEquals(10_737_419, verdict.runnerUpRelayCount)
+        assertFalse(verdict.isMajorityClear)
     }
 
     @Test
