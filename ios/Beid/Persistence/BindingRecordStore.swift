@@ -14,11 +14,17 @@ final class BindingRecordStore: ObservableObject {
   /// is not invisible. Broader observability is beid#131's job.
   private(set) var quarantinedFileURL: URL?
 
-  private let fileURL: URL
   /// Set when the existing file could neither be read nor preserved.
   /// Saving would destroy bytes that were never captured, so this instance
-  /// stops writing and keeps its records in memory only.
-  private var isPersistenceSuspended = false
+  /// stops writing and keeps its records in memory only. Readable for the
+  /// same reason `quarantinedFileURL` is: a `print` is invisible in a
+  /// shipped build, and a store that silently stops persisting is the shape
+  /// of the defect this file exists to fix.
+  private(set) var persistenceSuspensionReason: Error?
+
+  var isPersistenceSuspended: Bool { persistenceSuspensionReason != nil }
+
+  private let fileURL: URL
 
   init(fileURL: URL? = nil) {
     self.fileURL = fileURL ?? Self.defaultFileURL()
@@ -62,7 +68,7 @@ final class BindingRecordStore: ObservableObject {
         storeDescription: "binding record store"
       )
       quarantinedFileURL = outcome.quarantinedFileURL
-      isPersistenceSuspended = outcome.suspendsPersistence
+      persistenceSuspensionReason = outcome.persistenceSuspensionReason
     }
   }
 

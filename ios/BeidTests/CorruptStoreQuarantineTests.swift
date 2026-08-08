@@ -97,16 +97,23 @@ final class CorruptStoreQuarantineTests: XCTestCase {
       try corruptBytes.write(to: fileURL, options: .atomic)
     }
 
-    let reported = [
-      ProofStore(fileURL: proofsURL).quarantinedFileURL,
-      BindingRecordStore(fileURL: bindingURL).quarantinedFileURL,
-      SelfProofStore(fileURL: selfProofsURL).quarantinedFileURL,
+    let proofStore = ProofStore(fileURL: proofsURL)
+    let bindingStore = BindingRecordStore(fileURL: bindingURL)
+    let selfProofStore = SelfProofStore(fileURL: selfProofsURL)
+    let reported: [(URL?, Bool)] = [
+      (proofStore.quarantinedFileURL, proofStore.isPersistenceSuspended),
+      (bindingStore.quarantinedFileURL, bindingStore.isPersistenceSuspended),
+      (selfProofStore.quarantinedFileURL, selfProofStore.isPersistenceSuspended),
     ]
 
-    for quarantinedFileURL in reported {
+    for (quarantinedFileURL, isPersistenceSuspended) in reported {
       let url = try XCTUnwrap(quarantinedFileURL, "the store did not report its quarantine")
       XCTAssertTrue(url.lastPathComponent.contains(".corrupt-"))
       XCTAssertEqual(try Data(contentsOf: url), corruptBytes)
+      XCTAssertFalse(
+        isPersistenceSuspended,
+        "the bytes were preserved, so the store may keep writing"
+      )
     }
   }
 
@@ -115,6 +122,10 @@ final class CorruptStoreQuarantineTests: XCTestCase {
   /// like this, and quarantining there would move a perfectly good file
   /// aside. The store must instead leave the bytes alone and stop writing,
   /// which keeps the same guarantee: nothing overwrites them.
+  ///
+  /// That silence has to be readable too. A store that stops persisting
+  /// with no observable state is the same shape as the defect this file
+  /// exists to fix, and `print` does not survive into a shipped build.
   func testUnreadableExistingFileIsNeitherQuarantinedNorOverwritten() throws {
     let directory = try makeIsolatedDirectory(named: "beid-quarantine-unreadable")
     let fileURL = directory.appendingPathComponent("proofs.json")
@@ -126,6 +137,14 @@ final class CorruptStoreQuarantineTests: XCTestCase {
     let store = ProofStore(fileURL: fileURL)
     XCTAssertNil(store.quarantinedFileURL)
     XCTAssertTrue(store.proofs.isEmpty)
+    XCTAssertTrue(
+      store.isPersistenceSuspended,
+      "a store that stopped writing must say so in readable state, not only in a print"
+    )
+    XCTAssertNotNil(
+      store.persistenceSuspensionReason,
+      "the reason it stopped writing must be readable too"
+    )
 
     store.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
 
@@ -144,6 +163,42 @@ final class CorruptStoreQuarantineTests: XCTestCase {
       siblings.filter { $0.lastPathComponent.contains(".corrupt-") }.isEmpty,
       "an unreadable file is not corruption and must not be quarantined"
     )
+
+    // The other two stores take the same branch through the same policy;
+    // assert they surface it too rather than trusting that they share code.
+    let bindingURL = directory.appendingPathComponent("binding-records-v2.json")
+    let selfProofsURL = directory.appendingPathComponent("self-proofs.json")
+    for unreadableURL in [bindingURL, selfProofsURL] {
+      try FileManager.default.createDirectory(
+        at: unreadableURL,
+        withIntermediateDirectories: false
+      )
+    }
+
+    let bindingStore = BindingRecordStore(fileURL: bindingURL)
+    bindingStore.add(makeBindingRecord())
+    XCTAssertTrue(bindingStore.isPersistenceSuspended)
+    XCTAssertNotNil(bindingStore.persistenceSuspensionReason)
+    XCTAssertNil(bindingStore.quarantinedFileURL)
+    XCTAssertEqual(bindingStore.records.count, 1)
+
+    let selfProofStore = SelfProofStore(fileURL: selfProofsURL)
+    selfProofStore.add(makeSelfProofRecord())
+    XCTAssertTrue(selfProofStore.isPersistenceSuspended)
+    XCTAssertNotNil(selfProofStore.persistenceSuspensionReason)
+    XCTAssertNil(selfProofStore.quarantinedFileURL)
+    XCTAssertEqual(selfProofStore.records.count, 1)
+
+    for unreadableURL in [bindingURL, selfProofsURL] {
+      var isStillADirectory: ObjCBool = false
+      XCTAssertTrue(
+        FileManager.default.fileExists(
+          atPath: unreadableURL.path,
+          isDirectory: &isStillADirectory
+        )
+      )
+      XCTAssertTrue(isStillADirectory.boolValue, "the store must not have replaced them")
+    }
   }
 
   // MARK: - Helpers

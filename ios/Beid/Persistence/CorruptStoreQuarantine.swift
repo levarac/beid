@@ -35,9 +35,14 @@ enum CorruptStoreQuarantine {
       return url
     }
 
-    var suspendsPersistence: Bool {
-      guard case .unpreserved = self else { return false }
-      return true
+    /// Why this store must stop writing, or `nil` when it may continue.
+    /// Carried as the error rather than a flag so the store can expose the
+    /// reason: a `print` alone is invisible in a shipped build, and a store
+    /// that silently stops persisting is the same shape as the defect this
+    /// type exists to fix.
+    var persistenceSuspensionReason: Error? {
+      guard case let .unpreserved(error) = self else { return nil }
+      return error
     }
   }
 
