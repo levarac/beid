@@ -240,13 +240,13 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertEqual(fixture.reportStore.reports.first?.peerCount, peersBeforeBoundary)
     XCTAssertNotEqual(fixture.coordinator.currentWindowIdForTesting, originalWindowId)
     // Acceptance is asserted on the device count directly rather than through
-    // a `.recording` transition. This test is about the ledger failure not
-    // dropping an observation; it used the phase as a proxy for that, and
-    // beid#154's threshold split deliberately decoupled the phase from the
-    // device count — confirmation now asks whether enough devices were
-    // co-present in ONE window, and these peers are spread across two. The
-    // count is the direct measure of "the observation was accepted", and it
-    // carries the same numbers the phase payload used to.
+    // a `.recording` transition. This test is about a ledger failure not
+    // dropping an observation, and it used the phase as a proxy for that.
+    // beid#154 made the confirm gate a policy decision with two arms and an
+    // open product default, so the phase now depends on something this test
+    // does not care about. The device count is the direct measure of "the
+    // observation was accepted", carries the same numbers the phase payload
+    // did, and stays correct whichever way that policy lands.
     XCTAssertEqual(fixture.coordinator.devicesVerified, peersBeforeBoundary + 1)
 
     fixture.coordinator.handleDetection(
@@ -286,12 +286,12 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     XCTAssertNotNil(fixture.coordinator.currentWindowIdForTesting)
     XCTAssertNotEqual(fixture.coordinator.currentWindowIdForTesting, originalWindowId)
-    // Same substitution as the ENIN-boundary test above, for a second reason
-    // specific to this one: the checkpoint clears the current window's
+    // Same substitution as the ENIN-boundary test above, and this one has a
+    // second reason of its own: the checkpoint clears the current window's
     // identifier set along with the rest of the window state, so the
-    // co-presence gate legitimately restarts from empty here. The subject of
-    // this test is that the post-checkpoint observations are still taken in
-    // after a ledger failure, which the device count states directly.
+    // co-presence arm legitimately restarts from empty here. The subject of
+    // this test is that post-checkpoint observations are still taken in after
+    // a ledger failure, which the device count states directly.
     XCTAssertEqual(
       fixture.coordinator.devicesVerified, BeidConfig.eventConfirmThreshold,
       "post-checkpoint observations must continue after ledger failure"

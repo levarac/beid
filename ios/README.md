@@ -329,29 +329,32 @@ Barnard still emits the detection with a null display id. Such an observation
 cannot be attributed to a device, so it never enters the device count and is
 surfaced separately as `SensingCoordinator.unidentifiedRpidCount`.
 
-**Confirmation and the device count are deliberately two different
-questions, on two different inputs.** The `eventConfirmThreshold` gate asks
-whether enough devices were present *at the same time*, and counts distinct
-proximity identifiers **within the current ENIN window**. It does not consult
-the display id at all, so a total B003 outage cannot stop a real event from
-being recorded. That is sound for the same reason `WindowReport.peerCount`
-is: identifiers do not rotate inside a window. Nothing accumulates across
-windows there, so a single device lingering contributes 1 to every window and
-can never confirm an event alone.
+**Confirming an event and counting devices are deliberately two different
+questions.** `eventConfirmThreshold` decides only whether to *start
+recording*; it asserts nothing. The assertions live in the per-window
+reports, each of which records exactly who was present together in that
+window, independently of how confirmation was reached. That separation is
+what makes the gate safe to satisfy two ways:
 
-Two consequences of that split are worth knowing before field-testing:
+- **Co-presence** — enough distinct proximity identifiers **within the
+  current ENIN window**. Needs no display id, so a total B003 outage cannot
+  stop a real event from being recorded. Sound for the same reason
+  `WindowReport.peerCount` is: identifiers do not rotate inside a window.
+- **Distinct devices** — `devicesVerified` reaching the threshold. Covers
+  sparse-but-real settings the first arm alone would decline to record: a
+  hallway, a booth, an arrival trickle, where three real devices pass by one
+  at a time and never overlap.
 
-- If every display-id read fails, the session **still records**, with
-  `devicesVerified` at 0 and `unidentifiedRpidCount` above 0. The proof then
-  claims what is actually true — no identified devices, this many
-  unidentified observations — rather than a single number that would have to
-  invent one of the two.
-- Confirmation now requires **co-presence**. Three devices that pass by one
-  at a time, never overlapping in a window, do not confirm the event even
-  though `devicesVerified` reaches 3. A session-wide total would have
-  confirmed there. This is a narrower question than "did three devices attend
-  at some point", chosen because it is the one the identifier can answer
-  without the display id.
+Neither arm accumulates: the window set is cleared at every boundary, and the
+device count is keyed on the non-rotating display id. **A single lingering
+device satisfies neither**, however long it stays — that is the property this
+whole change exists to establish.
+
+If every display-id read fails, the session still records, with
+`devicesVerified` at 0 and `unidentifiedRpidCount` above 0. The proof then
+claims what is actually true — no identified devices, this many unidentified
+observations — rather than a single number that would have to invent one of
+the two.
 
 Field measurement of the real B003 read success rate attaches to issue #147
 and is non-gating for this behavior. `SensingCoordinator` emits `os.Logger`

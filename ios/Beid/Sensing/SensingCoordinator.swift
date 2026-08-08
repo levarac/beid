@@ -67,13 +67,14 @@ final class SensingCoordinator: ObservableObject {
   /// `peersVerified` into `.recording` and the stored `Proof`, and so the
   /// number that ends up inside a signed artifact.
   ///
-  /// It does **not** gate `.recording`. That is
-  /// `hasEnoughCoPresentDevicesToConfirm`, which reads the current window's
-  /// proximity identifiers instead, so a total display-id outage cannot stop a
-  /// real event from being recorded. The two answer different questions and
-  /// are allowed to disagree: a session whose B003 reads all fail records with
-  /// this at 0 and `unidentifiedRpidCount` above 0, which is the honest pair
-  /// rather than a single number that would have to lie.
+  /// It is **one of two** independent ways to confirm an event
+  /// (`hasEnoughDistinctDevicesToConfirm`), never the only one: the other arm
+  /// reads the current window's proximity identifiers, so a total display-id
+  /// outage cannot stop a real event from being recorded. Confirmation and
+  /// this value are therefore allowed to disagree — a session whose B003 reads
+  /// all fail records with this at 0 and `unidentifiedRpidCount` above 0,
+  /// which is the honest pair rather than a single number that would have to
+  /// lie.
   ///
   /// Keyed on `detectedDisplayId`, not on the proximity identifier. The
   /// proximity identifier rotates every ENIN window by design, so a set of
@@ -410,13 +411,12 @@ final class SensingCoordinator: ObservableObject {
 
     switch phase {
     case .eventFound:
-      // Threshold reads the window, not the session. See
-      // `hasEnoughCoPresentDevicesToConfirm`.
-      if hasEnoughCoPresentDevicesToConfirm {
+      if shouldConfirmEvent {
         Self.log.notice(
           """
-          Event confirmed: \(self.currentWindowRpids.count, privacy: .public) co-present devices in one window; \
-          \(self.devicesVerified, privacy: .public) identified, \
+          Event confirmed via \(self.hasEnoughCoPresentDevicesToConfirm ? "co-presence" : "distinct devices", privacy: .public): \
+          \(self.currentWindowRpids.count, privacy: .public) co-present this window, \
+          \(self.devicesVerified, privacy: .public) identified this session, \
           \(self.unidentifiedRpidCount, privacy: .public) unidentified
           """
         )
@@ -463,34 +463,68 @@ final class SensingCoordinator: ObservableObject {
     return true
   }
 
-  /// Whether this session has seen enough **simultaneously present** devices
-  /// to confirm the event (`BeidConfig.eventConfirmThreshold`).
+  /// Whether to confirm the event and start recording — either arm suffices.
   ///
-  /// Counts distinct proximity identifiers **within the current ENIN window**,
-  /// and so does not consult the display id at all. Two properties make that
-  /// the right input for this particular question:
+  /// **The gate and the proof are different things, and that is what makes a
+  /// disjunction safe here.** This decides only whether to *start recording*:
+  /// is there a real, multi-device event around me. It asserts nothing. The
+  /// co-presence facts are carried by the per-window reports, each of which
+  /// records exactly who was present together in that window, and those are
+  /// unaffected by how confirmation was reached. So confirming on devices seen
+  /// one after another loosens no claim the proof makes — it only stops the
+  /// app refusing to observe at real but sparse settings (a hallway, a booth,
+  /// an arrival trickle), which are ordinary shapes rather than corner cases.
   ///
-  /// - **It is sound.** The proximity identifier does not rotate inside a
-  ///   window, so within one window distinct identifier *is* distinct device.
-  ///   This is emphatically not the cross-window identifier counting beid#154
-  ///   removed: nothing accumulates across windows here, so a single device
-  ///   lingering contributes exactly 1 to every window forever and can never
-  ///   confirm an event on its own. That is the defect, and it stays fixed.
-  /// - **It survives a display id outage.** The display id comes from a GATT
-  ///   read that can fail for every peer. Gating `.recording` on it would mean
-  ///   a session that senses a crowded room all evening never records
-  ///   anything. Confirmation asks "were enough devices here at once", which
-  ///   the identifier answers on its own.
+  /// Safety rests on two properties, both of which must survive any edit here:
+  ///
+  /// - **Neither arm accumulates.** The window arm is cleared at every window
+  ///   boundary; the device arm is keyed on the non-rotating display id.
+  ///   Neither grows with dwell time.
+  /// - **A single lingering device satisfies neither.** It contributes 1 to
+  ///   every window and 1 to the device count, forever. That is the property
+  ///   this whole slice exists to establish, and
+  ///   `testOneLingeringDeviceNeverSatisfiesTheConfirmThresholdOnItsOwn` fails
+  ///   if a change ever weakens it.
+  ///
+  /// The two arms are kept as separate properties on purpose: the product
+  /// default is still open, and dropping back to co-presence only is deleting
+  /// one operand here, with nothing else entangled.
+  private var shouldConfirmEvent: Bool {
+    hasEnoughCoPresentDevicesToConfirm || hasEnoughDistinctDevicesToConfirm
+  }
+
+  /// Enough devices present **at the same time** — distinct proximity
+  /// identifiers in the current ENIN window.
+  ///
+  /// Survives a total display-id outage, which is the reason this arm exists:
+  /// gating solely on the display id meant a session that sensed a crowded
+  /// room all evening recorded nothing.
+  ///
+  /// It does not consult the display id at all, and it is sound because the
+  /// proximity identifier does not rotate inside a window — within one window,
+  /// distinct identifier *is* distinct device. This is emphatically not the
+  /// cross-window identifier counting beid#154 removed. The difference is
+  /// accumulation, not the identifier: this set is cleared at every window
+  /// boundary, so a lingering device contributes exactly 1 to every window
+  /// forever.
   ///
   /// The phase transition latches, so this is effectively a max over windows:
   /// once any window has had enough co-present devices, the event stays
   /// confirmed even as later windows go quiet.
-  ///
-  /// Note this asks a **stricter** question than a session-wide device total
-  /// would: it requires the devices to overlap in one window rather than merely
-  /// to have been present at some point during the session.
   private var hasEnoughCoPresentDevicesToConfirm: Bool {
     currentWindowRpids.count >= BeidConfig.eventConfirmThreshold
+  }
+
+  /// Enough distinct devices **at any point this session** — the display-id
+  /// count, which does not grow with dwell time.
+  ///
+  /// Covers the sparse settings the co-presence arm alone would decline to
+  /// record: people arriving one at a time, a booth with a steady trickle, a
+  /// hallway. Three devices that never overlap are still three devices, and
+  /// the per-window reports keep saying truthfully that each was alone in its
+  /// own window.
+  private var hasEnoughDistinctDevicesToConfirm: Bool {
+    devicesVerified >= BeidConfig.eventConfirmThreshold
   }
 
   /// Calls the Barnard SDK's join API (`BarnardEngine.joinEvent`)

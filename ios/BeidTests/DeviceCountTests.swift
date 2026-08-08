@@ -102,11 +102,18 @@ final class DeviceCountTests: XCTestCase {
   /// the fix this reached `.recording` on the third window with no second
   /// device ever present.
   ///
-  /// This is also the load-bearing test for the threshold split. The threshold
-  /// reads proximity identifiers, which is what the original defect did too —
-  /// the difference is that it reads them **within one window** and never
-  /// accumulates. If that boundary were ever blurred back into a cross-window
-  /// tally, this test is the one that would fail.
+  /// This is the load-bearing test for the whole slice, and under the
+  /// disjunctive gate it proves a strictly stronger claim than it used to: the
+  /// lingerer must satisfy **neither** arm.
+  ///
+  /// Confirmation is `co-present || distinct devices`, so the phase staying at
+  /// `.eventFound` after many windows is itself proof that both arms are
+  /// false. The explicit `devicesVerified` assertion names the device arm's
+  /// value so a future reader can see which arm each claim belongs to.
+  ///
+  /// Either arm could in principle be broken back into a cross-window tally —
+  /// the window arm by not clearing at boundaries, the device arm by keying on
+  /// the rotating identifier. This test fails in both cases.
   func testOneLingeringDeviceNeverSatisfiesTheConfirmThresholdOnItsOwn() {
     let (coordinator, _) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-DEVICE-COUNT-THRESHOLD")
@@ -118,9 +125,13 @@ final class DeviceCountTests: XCTestCase {
       windowCount: BeidConfig.eventConfirmThreshold + 3
     )
 
+    XCTAssertEqual(
+      coordinator.devicesVerified, 1,
+      "distinct-device arm: one device is one device, however many windows it stays for"
+    )
     guard case .eventFound = coordinator.phase else {
       XCTFail(
-        "one device lingering across windows must not confirm the event, got \(coordinator.phase)"
+        "one device lingering across windows must satisfy neither arm, got \(coordinator.phase)"
       )
       return
     }
@@ -273,12 +284,15 @@ final class DeviceCountTests: XCTestCase {
 
   // MARK: - The threshold split: confirmation must survive a B003 outage
 
-  /// The point of the split. If every display-id read fails, the session must
-  /// still record: three devices in one window is three devices, because the
-  /// proximity identifier does not rotate inside a window.
+  /// The co-presence arm, isolated. If every display-id read fails,
+  /// `devicesVerified` stays 0, so the distinct-device arm cannot fire and
+  /// this can only pass through the window arm — which is exactly what makes
+  /// it that arm's dedicated test.
   ///
-  /// Before the split this session sat on `.eventFound` forever, sensing a
-  /// crowded room and recording nothing.
+  /// Three devices in one window is three devices, because the proximity
+  /// identifier does not rotate inside a window. Before the split this session
+  /// sat on `.eventFound` forever, sensing a crowded room and recording
+  /// nothing.
   func testCoPresentDevicesConfirmTheEventEvenWhenEveryDisplayIdReadFails() {
     let (coordinator, _) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-SPLIT-B003-OUTAGE")
@@ -333,6 +347,13 @@ final class DeviceCountTests: XCTestCase {
   /// device that never yields a display id rotates its identifier every
   /// window, which is exactly the sequence that used to inflate — and it must
   /// still confirm nothing.
+  ///
+  /// Under the disjunctive gate this too proves **neither** arm fires: the
+  /// device arm sits at 0 because nothing was ever identified, and the window
+  /// arm sits at 1 because the lingerer is alone in every window. The
+  /// unidentified residue climbing to one-per-window while confirming nothing
+  /// is the clearest statement that this counter is a coverage signal and not
+  /// an input to any decision.
   func testOneUnidentifiedDeviceLingeringAcrossWindowsStillConfirmsNothing() {
     let (coordinator, _) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-SPLIT-LINGERING-UNIDENTIFIED")
@@ -359,17 +380,17 @@ final class DeviceCountTests: XCTestCase {
     )
   }
 
-  /// Documents a real consequence of the split rather than asserting it is
-  /// desirable: confirmation now requires the devices to overlap in one
-  /// window. Devices that pass by one at a time never confirm, even though the
-  /// session did see three distinct devices and `devicesVerified` says so.
+  /// The distinct-device arm, and the reason it exists. Devices seen one at a
+  /// time — an arrival trickle, a hallway, a booth — never overlap in a
+  /// window, so the co-presence arm alone would decline to record a real
+  /// event that the app can plainly see three distinct devices at.
   ///
-  /// A session-wide total would confirm here. The threshold deliberately asks
-  /// the narrower question. If that trade is ever revisited, this test is the
-  /// statement of what was traded away.
-  func testDevicesSeenOneAtATimeInSeparateWindowsDoNotConfirm() {
+  /// This confirming loosens no claim: the per-window reports still say
+  /// truthfully that each device was alone in its own window. The gate decides
+  /// whether to observe; the reports carry what was observed.
+  func testDevicesSeenOneAtATimeInSeparateWindowsConfirmViaTheDistinctDeviceArm() {
     let (coordinator, _) = makeCoordinator()
-    coordinator.startSensing(eventCode: "TEST-SPLIT-NO-CO-PRESENCE")
+    coordinator.startSensing(eventCode: "TEST-SPLIT-SEQUENTIAL-DEVICES")
 
     let threshold = BeidConfig.eventConfirmThreshold
     for device in 0..<threshold {
@@ -381,16 +402,39 @@ final class DeviceCountTests: XCTestCase {
       )
     }
 
-    XCTAssertEqual(
-      coordinator.devicesVerified, threshold,
-      "the session really did see three distinct devices"
-    )
-    guard case .eventFound = coordinator.phase else {
+    XCTAssertEqual(coordinator.devicesVerified, threshold)
+    guard case .recording(_, let peersVerified) = coordinator.phase else {
       XCTFail(
-        "they were never co-present, so the event is not confirmed, got \(coordinator.phase)"
+        "three distinct devices confirm the event even without ever overlapping, got \(coordinator.phase)"
       )
       return
     }
+    XCTAssertEqual(peersVerified, threshold)
+  }
+
+  /// The window at which the sequential case confirms carries exactly one
+  /// device, which is the point of the gate/proof separation: a sparse event
+  /// gets recorded, and the record does not pretend the room was full.
+  func testTheWindowReportAtASequentialConfirmationStillShowsOneDevicePerWindow() {
+    let (coordinator, store) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-SPLIT-SEQUENTIAL-REPORTS")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for device in 0..<threshold {
+      let enin = device + 1
+      coordinator.handleDetection(
+        enin: enin,
+        rpid: DetectionFixture.rotatingRpid(device: device, enin: enin),
+        detectedDisplayId: DetectionFixture.displayId(device: device)
+      )
+    }
+    coordinator.reset()
+
+    XCTAssertEqual(store.reports.count, threshold)
+    XCTAssertEqual(
+      store.reports.map(\.peerCount), Array(repeating: 1, count: threshold),
+      "each window saw exactly one device, and says so, however the event came to be confirmed"
+    )
   }
 
   // MARK: - Display id normalization
