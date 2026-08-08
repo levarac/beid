@@ -68,7 +68,7 @@ internal class EventObservationRecord(
 public class EventInfoStore internal constructor(
     internal val records: MutableMap<String, EventObservationRecord> = mutableMapOf(),
 ) {
-    internal var omittedEventObserved: Boolean = false
+    internal var evictedEventObserved: Boolean = false
 
     public val retainedEventCount: Int
         get() = records.size
@@ -79,8 +79,8 @@ public class EventInfoStore internal constructor(
      * Surfaced rather than silently swallowed so a caller can tell "these are
      * all the nearby events" apart from "these are the first 32 of them".
      */
-    public val hasOmittedEvents: Boolean
-        get() = omittedEventObserved
+    public val hasEvictedEvents: Boolean
+        get() = evictedEventObserved
 }
 
 /**
@@ -181,12 +181,17 @@ public class EventDefinitionInput internal constructor(
 
 public fun createEventInfoStore(): EventInfoStore = EventInfoStore()
 
+// RED STEP — no-op stub so the reset vectors fail on an assertion rather than a
+// compile error. Replaced with the real implementation in the GREEN commit.
+public fun resetEventInfoStore(store: EventInfoStore) {
+}
+
 /**
  * Records that a B005 hint for [eventCodeHashHex] was heard in [windowIndex].
  *
  * Returns false when the observation is rejected at the boundary: a hash that is
  * not 16 hex characters, a negative window index, or a new event beyond
- * [MAX_RETAINED_EVENT_COUNT] (which also sets [EventInfoStore.hasOmittedEvents]).
+ * [MAX_RETAINED_EVENT_COUNT] (which also sets [EventInfoStore.hasEvictedEvents]).
  * Hex input is lowercased before use, so two platforms that hexify with
  * different case cannot split one event into two candidates.
  *
@@ -217,7 +222,7 @@ public fun recordEventInfoHint(
     val existing = store.records[key]
     if (existing == null) {
         if (store.records.size >= MAX_RETAINED_EVENT_COUNT) {
-            store.omittedEventObserved = true
+            store.evictedEventObserved = true
             return false
         }
         store.records[key] = EventObservationRecord(

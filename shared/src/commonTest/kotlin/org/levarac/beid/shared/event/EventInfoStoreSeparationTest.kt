@@ -107,7 +107,7 @@ class EventInfoStoreSeparationTest {
         repeat(5) { eventInfoCandidates(store, definitions) }
 
         assertEquals(2, store.retainedEventCount)
-        assertFalse(store.hasOmittedEvents)
+        assertFalse(store.hasEvictedEvents)
         val candidate = assertNotNull(eventInfoCandidates(store, definitions).candidateAt(0))
         assertEquals(2, candidate.observationCount)
         assertEquals(4L, candidate.firstSeenWindowIndex)
@@ -155,9 +155,14 @@ class EventInfoStoreSeparationTest {
         }
 
         assertEquals(MAX_RETAINED_EVENT_COUNT, store.retainedEventCount)
-        assertTrue(store.hasOmittedEvents)
+        assertTrue(store.hasEvictedEvents)
         assertEquals(
             MAX_RETAINED_EVENT_COUNT,
+            eventInfoCandidates(store, definitions).candidateCount,
+        )
+        // Having a definition must not buy an event a place in the retained set.
+        assertEquals(
+            eventInfoCandidates(store, createEventDefinitionInput()).candidateCount,
             eventInfoCandidates(store, definitions).candidateCount,
         )
     }

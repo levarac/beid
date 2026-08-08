@@ -115,6 +115,42 @@ class RelayMajorityTest {
         assertEquals(4, verdict.runnerUpRelayCount)
     }
 
+    /**
+     * The lead percentage's own admitted floor is where the tie rule was wrong.
+     *
+     * `createRelayMajorityParameters` rejects only *below* 100, so 100 is an
+     * accepted setting. At 100 the lead test reduces to `leading * 100 >=
+     * runnerUp * 100`, which any tie satisfies — so a dead tie above the relay
+     * floor returned a clear majority with the winner picked by hash ascending.
+     * An arbitrary tiebreak was deciding whether the app records without asking.
+     *
+     * A tie is the definition of a majority that is not clear, so it is rejected
+     * explicitly rather than left to a parameter value to prevent.
+     */
+    @Test
+    fun exactTieIsNotClearAtTheAdmittedLeadPercentFloor() {
+        val verdict = evaluateRelayMajority(
+            inputOf(Triple(EVENT_A, 10L, 5), Triple(EVENT_B, 10L, 5)),
+            parameters(minimumLeadPercent = 100),
+            atWindowIndex = 10L,
+        )
+        assertFalse(verdict.isMajorityClear)
+        assertEquals(5, verdict.leadingRelayCount)
+        assertEquals(5, verdict.runnerUpRelayCount)
+    }
+
+    /** The tie rule must not swallow a genuine one-relay lead at the same floor. */
+    @Test
+    fun strictlyAheadIsClearAtTheAdmittedLeadPercentFloor() {
+        val verdict = evaluateRelayMajority(
+            inputOf(Triple(EVENT_A, 10L, 6), Triple(EVENT_B, 10L, 5)),
+            parameters(minimumLeadPercent = 100),
+            atWindowIndex = 10L,
+        )
+        assertTrue(verdict.isMajorityClear)
+        assertEquals(EVENT_A, verdict.leadingEventCodeHashHex)
+    }
+
     @Test
     fun runnerUpAtZeroNeedsNoSpecialCase() {
         val verdict = evaluateRelayMajority(

@@ -17,7 +17,7 @@ class EventInfoStoreTest {
     fun newStoreRetainsNothingAndOmitsNothing() {
         val store = createEventInfoStore()
         assertEquals(0, store.retainedEventCount)
-        assertFalse(store.hasOmittedEvents)
+        assertFalse(store.hasEvictedEvents)
         assertEquals(0, eventInfoCandidates(store, createEventDefinitionInput()).candidateCount)
     }
 
@@ -165,37 +165,123 @@ class EventInfoStoreTest {
         val store = createEventInfoStore()
         assertFalse(recordEventInfoHint(store, "", windowIndex = 1L))
         assertEquals(0, store.retainedEventCount)
-        assertFalse(store.hasOmittedEvents)
+        assertFalse(store.hasEvictedEvents)
+    }
+
+    private fun retainedHashes(store: EventInfoStore): Set<String> {
+        val candidates = eventInfoCandidates(store, createEventDefinitionInput())
+        return (0 until candidates.candidateCount)
+            .map { assertNotNull(candidates.candidateAt(it)).eventCodeHashHex }
+            .toSet()
     }
 
     @Test
-    fun retentionStopsAtThirtyTwoEventsAndSaysSo() {
+    fun capacityEvictsTheLeastRecentlySeenEventRatherThanRefusingTheNewOne() {
         val store = createEventInfoStore()
         repeat(MAX_RETAINED_EVENT_COUNT) {
-            assertTrue(recordEventInfoHint(store, hashForIndex(it), windowIndex = 1L))
+            assertTrue(recordEventInfoHint(store, hashForIndex(it), windowIndex = it.toLong()))
         }
         assertEquals(MAX_RETAINED_EVENT_COUNT, store.retainedEventCount)
-        assertFalse(store.hasOmittedEvents)
+        assertFalse(store.hasEvictedEvents)
 
-        assertFalse(recordEventInfoHint(store, hashForIndex(MAX_RETAINED_EVENT_COUNT), windowIndex = 1L))
+        val newcomer = hashForIndex(999)
+        assertTrue(recordEventInfoHint(store, newcomer, windowIndex = 500L))
+
         assertEquals(MAX_RETAINED_EVENT_COUNT, store.retainedEventCount)
-        assertTrue(store.hasOmittedEvents)
+        assertTrue(store.hasEvictedEvents)
+
+        val retained = retainedHashes(store)
+        assertTrue(retained.contains(newcomer))
+        // hashForIndex(0) had the smallest lastSeenWindowIndex, so it goes first.
+        assertFalse(retained.contains(hashForIndex(0)))
+        assertTrue(retained.contains(hashForIndex(1)))
     }
 
     @Test
-    fun retainedEventsKeepAccumulatingAfterCapacityIsReached() {
+    fun evictionTiebreakIsDeterministicWhenLastSeenWindowsAreEqual() {
         val store = createEventInfoStore()
         repeat(MAX_RETAINED_EVENT_COUNT) {
-            assertTrue(recordEventInfoHint(store, hashForIndex(it), windowIndex = 1L))
+            assertTrue(recordEventInfoHint(store, hashForIndex(it), windowIndex = 5L))
         }
-        assertFalse(recordEventInfoHint(store, hashForIndex(999), windowIndex = 1L))
-        assertTrue(recordEventInfoHint(store, hashForIndex(0), windowIndex = 5L))
+        assertTrue(recordEventInfoHint(store, hashForIndex(999), windowIndex = 5L))
 
+        val retained = retainedHashes(store)
+        assertFalse(retained.contains(hashForIndex(0)))
+        assertTrue(retained.contains(hashForIndex(1)))
+        assertTrue(retained.contains(hashForIndex(999)))
+    }
+
+    /**
+     * The failure this eviction policy exists to prevent, as a vector.
+     *
+     * Barnard caps at 32 **and clears its whole retention set every 300 seconds**,
+     * so it keeps reporting events indefinitely. A store that refuses at capacity
+     * therefore goes permanently deaf: someone crosses a busy area, fills the
+     * retention set with events they walked past, arrives at the event they came
+     * for, and that one is the one silently dropped — while the candidate list
+     * still looks perfectly healthy.
+     */
+    @Test
+    fun theEventTheUserCameForSurvivesCrossingABusyArea() {
+        val store = createEventInfoStore()
+        repeat(MAX_RETAINED_EVENT_COUNT) {
+            assertTrue(recordEventInfoHint(store, hashForIndex(it), windowIndex = it.toLong()))
+        }
+
+        val intended = "00000000000000ff"
+        assertTrue(recordEventInfoHint(store, intended, windowIndex = 500L))
+
+        val definitions = createEventDefinitionInput()
+        assertTrue(addEventDefinition(definitions, intended, "ETHTokyo 2026", 400L, 600L))
+
+        val candidates = eventInfoCandidates(store, definitions)
+        val match = (0 until candidates.candidateCount)
+            .map { assertNotNull(candidates.candidateAt(it)) }
+            .single { it.eventCodeHashHex == intended }
+        assertTrue(match.isDefinitionMatched)
+        assertEquals("ETHTokyo 2026", match.displayName)
+        assertTrue(isEventWindowOpen(assertNotNull(match.definition), atWindowIndex = 500L))
+    }
+
+    @Test
+    fun resetClearsRetentionAndTheEvictionFlag() {
+        val store = createEventInfoStore()
+        repeat(MAX_RETAINED_EVENT_COUNT + 1) {
+            assertTrue(recordEventInfoHint(store, hashForIndex(it), windowIndex = it.toLong()))
+        }
+        assertTrue(store.hasEvictedEvents)
+
+        resetEventInfoStore(store)
+
+        assertEquals(0, store.retainedEventCount)
+        assertFalse(store.hasEvictedEvents)
+        assertEquals(0, eventInfoCandidates(store, createEventDefinitionInput()).candidateCount)
+
+        assertTrue(recordEventInfoHint(store, EVENT_A, windowIndex = 3L))
+        assertEquals(1, store.retainedEventCount)
         val candidate = assertNotNull(
             eventInfoCandidates(store, createEventDefinitionInput()).candidateAt(0),
         )
-        assertEquals(2, candidate.observationCount)
-        assertEquals(5L, candidate.lastSeenWindowIndex)
+        assertEquals(3L, candidate.firstSeenWindowIndex)
+        assertEquals(1, candidate.observationCount)
+    }
+
+    @Test
+    fun anEvictedEventReturningIsRecordedAfreshRatherThanResumingOldFacts() {
+        val store = createEventInfoStore()
+        repeat(MAX_RETAINED_EVENT_COUNT) {
+            assertTrue(recordEventInfoHint(store, hashForIndex(it), windowIndex = it.toLong()))
+        }
+        assertTrue(recordEventInfoHint(store, hashForIndex(999), windowIndex = 500L))
+        assertFalse(retainedHashes(store).contains(hashForIndex(0)))
+
+        assertTrue(recordEventInfoHint(store, hashForIndex(0), windowIndex = 501L))
+        val candidates = eventInfoCandidates(store, createEventDefinitionInput())
+        val returned = (0 until candidates.candidateCount)
+            .map { assertNotNull(candidates.candidateAt(it)) }
+            .single { it.eventCodeHashHex == hashForIndex(0) }
+        assertEquals(501L, returned.firstSeenWindowIndex)
+        assertEquals(1, returned.observationCount)
     }
 
     @Test
