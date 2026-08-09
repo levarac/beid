@@ -26,8 +26,25 @@ enum BeidConfig {
   /// later rework to a per-event, organizer-configurable value
   /// (`event.confirmThreshold ?? BeidConfig.eventConfirmThreshold`) is a
   /// one-line, one-call-site change.
+  #if DEBUG
+  /// Test-only override, checked ahead of the `-beid-threshold-override`
+  /// launch argument below. Exists because some threshold values (e.g. `1`,
+  /// the edge case where `SENSING` moves straight through `EVENT_FOUND` to
+  /// `RECORDING` in a single detection) are otherwise reachable only by
+  /// relaunching the process with that launch argument, which a single
+  /// `XCTestCase` sharing a process with every other test cannot do. `nil`
+  /// (the default) defers to the launch-argument/`3` resolution below. This
+  /// is process-global mutable state — a test that sets it must reset it to
+  /// `nil` in `addTeardownBlock`, or it leaks into every test that runs
+  /// afterward in the same process.
+  static var eventConfirmThresholdOverrideForTesting: Int?
+  #endif
+
   static var eventConfirmThreshold: Int {
     #if DEBUG
+    if let override = eventConfirmThresholdOverrideForTesting {
+      return override
+    }
     let args = ProcessInfo.processInfo.arguments
     if let flagIndex = args.firstIndex(of: "-beid-threshold-override"),
        args.indices.contains(flagIndex + 1),

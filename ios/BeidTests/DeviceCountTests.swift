@@ -143,6 +143,58 @@ final class DeviceCountTests: XCTestCase {
     }
   }
 
+  /// ★ beid#114 regression vector (`docs/specs/eventfound-window-signing.md`
+  /// §6's SUPERSEDED correction). Guards against the specific bug shape a
+  /// naive fix for #114 would reintroduce: wrapping the *entire*
+  /// `advanceWindowIfNeeded` call — including `currentWindowRpids`'
+  /// per-window clearing — in a `phase == .recording` gate, instead of only
+  /// gating the ledger sign/persist half.
+  ///
+  /// If that clearing stopped running before confirmation, this solo
+  /// lingering device's rotated rpid (beid#154 — the proximity identifier
+  /// rotates every ENIN window by design) would accumulate into a
+  /// `currentWindowRpids` nothing ever emptied, one fresh entry per
+  /// pre-confirmation window — exactly beid#154's (device × window)
+  /// inflation shape, reproduced inside the co-presence arm instead of the
+  /// distinct-device count beid#154 fixed. At
+  /// `BeidConfig.eventConfirmThreshold + 5` pre-confirmation windows, a
+  /// naive implementation would have already falsely confirmed via
+  /// co-presence long before this test's final assertion.
+  ///
+  /// Distinct from `testOneLingeringDeviceNeverSatisfiesTheConfirmThresholdOnItsOwn`
+  /// above only in what it makes explicit: that test already fails under this
+  /// exact regression (a false `.recording` also satisfies "must satisfy
+  /// neither arm"), but does not name the co-presence arm or the ledger
+  /// consequence directly. This test asserts both: the phase never moves,
+  /// and — the more direct statement of the accepted trade-off in §4 — not
+  /// a single `WindowReport` is ever produced, which a naive fix would have
+  /// signed and persisted the moment the false confirm fired.
+  func testOneLingeringDeviceAcrossManyPreConfirmationWindowsNeverInflatesCoPresenceCount() {
+    let (coordinator, store) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-DEVICE-COUNT-CO-PRESENCE-REGRESSION")
+
+    let windowCount = BeidConfig.eventConfirmThreshold + 5
+    observeOneDeviceAcrossWindows(coordinator, device: 0, windowCount: windowCount)
+
+    guard case .eventFound = coordinator.phase else {
+      XCTFail(
+        "a solo lingering device across \(windowCount) pre-confirmation windows must never confirm via co-presence, got \(coordinator.phase)"
+      )
+      return
+    }
+    XCTAssertEqual(
+      coordinator.devicesVerified, 1,
+      "the distinct-device arm must also stay at exactly one device"
+    )
+
+    coordinator.reset()
+
+    XCTAssertTrue(
+      store.reports.isEmpty,
+      "no window ever confirmed, so no WindowReport may exist for any of the \(windowCount) windows observed"
+    )
+  }
+
   /// The threshold still fires for genuinely distinct devices, in a single
   /// window — the fix must not make auto-confirm unreachable.
   func testDistinctDevicesInOneWindowStillReachRecording() {
@@ -421,6 +473,15 @@ final class DeviceCountTests: XCTestCase {
   /// The window at which the sequential case confirms carries exactly one
   /// device, which is the point of the gate/proof separation: a sparse event
   /// gets recorded, and the record does not pretend the room was full.
+  ///
+  /// beid#114: every window before the confirming one (devices 0..<threshold-1,
+  /// each alone in its own window, none of them ever crossing the threshold)
+  /// is strictly pre-confirmation and now produces **no** report at all
+  /// (`docs/specs/eventfound-window-signing.md` §4's accepted trade-off) —
+  /// only the window open when the threshold-th device confirms the event
+  /// (via the distinct-device arm) is ever signed and persisted. Before this
+  /// fix, this test asserted `threshold` reports, one per pre-confirmation
+  /// window; that was exactly the over-reporting bug #114 closes.
   func testTheWindowReportAtASequentialConfirmationStillShowsOneDevicePerWindow() {
     let (coordinator, store) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-SPLIT-SEQUENTIAL-REPORTS")
@@ -436,10 +497,13 @@ final class DeviceCountTests: XCTestCase {
     }
     coordinator.reset()
 
-    XCTAssertEqual(store.reports.count, threshold)
     XCTAssertEqual(
-      store.reports.map(\.peerCount), Array(repeating: 1, count: threshold),
-      "each window saw exactly one device, and says so, however the event came to be confirmed"
+      store.reports.count, 1,
+      "only the confirming window (the last one, where the threshold-th device pushed the distinct-device arm over) is ever signed — every earlier, pre-confirmation window produces nothing"
+    )
+    XCTAssertEqual(
+      store.reports.map(\.peerCount), [1],
+      "the one reported window saw exactly one device, and says so"
     )
   }
 

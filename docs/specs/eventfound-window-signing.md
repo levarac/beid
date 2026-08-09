@@ -131,6 +131,50 @@ beid#116's `ScanDetectionResult` (or equivalent) and applies a plain `if
 resultingPhase == .recording` guard around the existing window-management
 call — no threshold comparison is re-implemented in the adapter.
 
+**SUPERSEDED — 2026-08-09.** The paragraph above undersold the real risk
+and, read on its own, would lead an implementer straight into a
+regression shaped exactly like beid#154's (device × window) inflation —
+this time inside the co-presence threshold arm instead of the
+distinct-device count beid#154 originally fixed.
+
+The mechanism: `currentWindowRpids` (the co-presence arm's own input,
+`hasEnoughCoPresentDevicesToConfirm`) is cleared at every ENIN window
+boundary — that clearing is what keeps a single lingering device
+contributing exactly 1 to every window, forever. The proximity identifier
+(`rpid`) rotates every ENIN window by design (beid#154). If the *entire*
+`advanceWindowIfNeeded` call — including the boundary-crossing clear of
+`currentWindowRpids` — were wrapped in the naive `if resultingPhase ==
+.recording` guard this section originally described, that clear would
+stop running for every detection before the event first confirms. A
+single lingering device, observed across several pre-confirmation
+windows, would then insert a *fresh, rotated* `rpid` into
+`currentWindowRpids` every window, into a set nothing ever empties —
+reproducing beid#154's device-times-window inflation shape, but inside
+the co-presence arm this time, and potentially satisfying
+`hasEnoughCoPresentDevicesToConfirm` from one real device alone.
+
+**Corrected native adapter shape**: the two side effects §4 describes as
+one must be split. `currentWindowRpids`' per-window clearing (and the
+rest of ENIN-boundary bookkeeping — `currentWindowEnin`/`firstWindowEnin`/
+`lastWindowEnin`/the self-proof checkpoint) stays **unconditional**,
+running on every detection exactly as it does today, regardless of
+`phase`. Only the ledger-touching half — signing and durably persisting a
+`WindowReport`, and the corresponding `unsentWindowLedgerRuntime`
+open/close calls — defers to `phase == .recording` (read from
+`resultingPhase`, as this section already said). Because the
+unconditional half keeps `currentWindowRpids` correctly scoped to "just
+this window's peers" at all times, the first window the ledger half ever
+opens — whether that happens exactly at a window boundary or mid-window —
+is already seeded with an accurate, correctly-scoped peer set, with no
+special-casing needed for the confirming detection itself.
+
+Implemented in beid#114's landing PR as `advanceWindowBookkeepingIfNeeded`
+(concern 1, unconditional) and `ensureLedgerWindowOpen`/the
+`currentWindowLedgerOpened`-gated close inside the same function
+(concern 2, `.recording`-gated) in `SensingCoordinator.swift`. The
+regression this correction exists to prevent is exercised directly by
+`DeviceCountTests.testOneLingeringDeviceAcrossManyPreConfirmationWindowsNeverInflatesCoPresenceCount`.
+
 ## 7. Cross-reference
 
 Superseding note added to `docs/specs/scan-slice2-redesign.md` §4.3 (same

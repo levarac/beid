@@ -301,8 +301,9 @@ final class SensingCoordinator: ObservableObject {
   private var demoTask: Task<Void, Never>?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
-  /// `advanceWindowIfNeeded`-derived `firstWindowEnin`/`currentWindowEnin`
-  /// so the self-proof layer (§2.2) is exercisable under demo mode too.
+  /// `advanceWindowBookkeepingIfNeeded`-derived `firstWindowEnin`/
+  /// `currentWindowEnin` so the self-proof layer (§2.2) is exercisable
+  /// under demo mode too.
   private var demoWindowEnin = 0
 
   // MARK: - Per-session protocol state
@@ -351,7 +352,7 @@ final class SensingCoordinator: ObservableObject {
   #endif
   /// The session's first observed ENIN window — `eninStart` for the
   /// self-proof layer (§2.2). Set once, the first time `currentWindowEnin`
-  /// is set (real path: `advanceWindowIfNeeded`; demo path:
+  /// is set (real path: `advanceWindowBookkeepingIfNeeded`; demo path:
   /// `advanceDemoWindow()`), and not touched again until the next session.
   private var firstWindowEnin: Int?
   /// The session's most recently observed ENIN window — `eninEnd` for the
@@ -370,6 +371,29 @@ final class SensingCoordinator: ObservableObject {
   /// the range.
   private var lastWindowEnin: Int?
   private var currentWindowRpids: Set<String> = []
+  /// beid#114: whether the currently tracked window (`currentWindowId`) has
+  /// had its ledger-runtime `openWindow` effect run yet — i.e. whether this
+  /// window is eligible to be signed and durably persisted (via
+  /// `windowReportStore.add`/`unsentWindowLedgerRuntime.closeWindow`) when it
+  /// eventually closes. Reset `false` every time a new window starts
+  /// (`openNewWindowState(enin:)`), set `true` by `ensureLedgerWindowOpen()`
+  /// the moment `phase` first reaches `.recording` — which may be on the same
+  /// detection that opened this window (confirming exactly at a boundary) or
+  /// any later detection while this same window is still open (confirming
+  /// mid-window). A window that closes with this still `false` produces no
+  /// `WindowReport` and no ledger call at all: per
+  /// `docs/specs/eventfound-window-signing.md` §4's accepted trade-off,
+  /// windows observed before the mutual-sensing threshold is first crossed
+  /// are withheld entirely, not retroactively signed.
+  ///
+  /// Deliberately independent of `phase` itself at close time: `phase` only
+  /// ever moves forward (never back out of `.recording`), so gating window
+  /// bookkeeping's own boundary-crossing logic
+  /// (`advanceWindowBookkeepingIfNeeded(enin:eventCode:)`) on this flag,
+  /// rather than re-reading `phase`, keeps that function decidable from
+  /// purely local state without re-deriving what `phase` was at the moment
+  /// the now-closing window opened.
+  private var currentWindowLedgerOpened = false
   /// Policy-free, process-local redelivery of already-signed artifacts whose
   /// native durable write did not complete. Shared remains the sole owner of
   /// window/report status; this buffer stores no attempts, expiry, or backoff.
@@ -750,8 +774,27 @@ final class SensingCoordinator: ObservableObject {
   /// `WindowReport.peerCount`) stays keyed on the proximity identifier and is
   /// deliberately untouched by beid#154: identifiers do not rotate *inside* a
   /// window, so counting them there already yields devices.
+  ///
+  /// beid#114: `advanceWindowBookkeepingIfNeeded(enin:eventCode:)` — the
+  /// ENIN-boundary tracking that clears `currentWindowRpids` and feeds the
+  /// co-presence threshold arm below — runs first and unconditionally,
+  /// exactly like the pre-#114 `advanceWindowIfNeeded` did, regardless of
+  /// `phase`. That ordering is required, not incidental: this call's own
+  /// `coPresentDeviceCount` argument reads `currentWindowRpids.count` right
+  /// after, so a boundary crossing must already have cleared it for *this*
+  /// window before the threshold is evaluated, or a lingering device's
+  /// rotated rpid from a previous window would still be counted (see
+  /// `currentWindowLedgerOpened`'s doc comment and the shared reducer's own
+  /// "cleared at every window boundary" invariant). Only the ledger-touching
+  /// sign/persist side of window management
+  /// (`ensureLedgerWindowOpen()`/the close half inside
+  /// `advanceWindowBookkeepingIfNeeded`) is deferred to `.recording`, gated
+  /// below on `result.resultingPhase` — which must be read from the
+  /// reducer's *result* for this same detection, not from `phase` before the
+  /// call, so the very detection that confirms the event is also the one
+  /// allowed to open/use its own window immediately.
   private func observe(enin: Int, rpid: String, detectedDisplayId: String?, for session: EventSession) {
-    advanceWindowIfNeeded(enin: enin, eventCode: session.id)
+    advanceWindowBookkeepingIfNeeded(enin: enin, eventCode: session.id)
     currentWindowRpids.insert(rpid)
 
     let deviceCountChanged = recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
@@ -763,6 +806,10 @@ final class SensingCoordinator: ObservableObject {
       distinctDeviceCountChanged: deviceCountChanged,
       eventConfirmThreshold: Int32(BeidConfig.eventConfirmThreshold)
     )
+
+    if result.resultingPhase == .RECORDING {
+      ensureLedgerWindowOpen()
+    }
 
     // `result.confirmedEvent` is checked first, ahead of
     // `transitionedToEventFound`: when both are true (the DEBUG
@@ -984,6 +1031,7 @@ final class SensingCoordinator: ObservableObject {
     lastWindowEnin = nil
     demoWindowEnin = 0
     currentWindowRpids = []
+    currentWindowLedgerOpened = false
     activeCommit = nil
     activeProofId = nil
     pendingBindingMessage = nil
@@ -1205,22 +1253,70 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  // MARK: - Per-window report signing (Q9, §4.5)
+  // MARK: - Per-window report signing (Q9, §4.5; deferred to `.recording`,
+  // beid#114 / `docs/specs/eventfound-window-signing.md`)
+  //
+  // Two concerns that used to be fused into one unconditional
+  // `advanceWindowIfNeeded` are now deliberately split:
+  //
+  // 1. Window-boundary *bookkeeping* — `advanceWindowBookkeepingIfNeeded`,
+  //    `openNewWindowState` below — tracks ENIN boundaries, clears
+  //    `currentWindowRpids`, and maintains `firstWindowEnin`/`lastWindowEnin`
+  //    for the self-proof layer. Runs on every detection, unconditionally,
+  //    regardless of `phase`, exactly as before beid#114. This must stay
+  //    unconditional: `currentWindowRpids` is the co-presence threshold arm's
+  //    own input (`hasEnoughCoPresentDevicesToConfirm`), and that arm's
+  //    invariant — cleared at every window boundary, so a lingering device
+  //    contributes exactly 1 to every window forever — depends on this
+  //    clearing never being skipped. The proximity identifier rotates every
+  //    ENIN window by design (beid#154), so if this bookkeeping were instead
+  //    gated on `.recording`, a single lingering device observed across
+  //    several pre-confirmation windows would insert a fresh rotated rpid
+  //    into a `currentWindowRpids` that nothing ever emptied, reproducing
+  //    beid#154's (device × window) inflation shape inside the co-presence
+  //    arm — see `testOneLingeringDeviceAcrossManyPreConfirmationWindowsNeverInflatesCoPresenceCount`.
+  //
+  // 2. The ledger/report window *lifecycle* — signing and durably persisting
+  //    a `WindowReport`, and the corresponding `unsentWindowLedgerRuntime`
+  //    open/close calls — only runs once `phase` has reached `.recording`.
+  //    `currentWindowLedgerOpened` tracks, per currently-tracked window,
+  //    whether that lifecycle has started; `ensureLedgerWindowOpen()` starts
+  //    it (called from `observe(_:)` the instant `result.resultingPhase ==
+  //    .RECORDING`, which may be mid-window), and
+  //    `advanceWindowBookkeepingIfNeeded`'s boundary-crossing branch finishes
+  //    it (signs + persists) only for a window that was actually started.
+  //    Because concern 1 keeps `currentWindowRpids` correctly scoped to
+  //    "just this window's peers" at all times, the first ledger window
+  //    concern 2 ever opens is already seeded with an accurate, correctly
+  //    scoped peer set — no special-casing needed for the confirming
+  //    detection itself.
 
-  private func advanceWindowIfNeeded(enin: Int, eventCode: String) {
+  /// Concern 1 (see above): ENIN-boundary bookkeeping, unconditional on
+  /// `phase`. Closes the outgoing window's ledger lifecycle
+  /// (sign + persist) only if it was ever started
+  /// (`currentWindowLedgerOpened`); otherwise the outgoing window is
+  /// discarded with no report, per §4's accepted trade-off.
+  private func advanceWindowBookkeepingIfNeeded(enin: Int, eventCode: String) {
     redeliverPendingWindowReports()
     guard let openEnin = currentWindowEnin else {
-      openWindow(enin: enin)
+      openNewWindowState(enin: enin)
       return
     }
     guard openEnin != enin else {
       return
     }
-    closeWindow(enin: openEnin, eventCode: eventCode)
-    openWindow(enin: enin)
+    if currentWindowLedgerOpened {
+      closeWindow(enin: openEnin, eventCode: eventCode)
+    } else {
+      clearCurrentWindowState()
+    }
+    openNewWindowState(enin: enin)
   }
 
-  private func openWindow(enin: Int) {
+  /// Starts tracking a new window natively — self-proof bookkeeping only;
+  /// never touches the ledger runtime or `WindowReportStore`. See
+  /// `ensureLedgerWindowOpen()` for the ledger-lifecycle half.
+  private func openNewWindowState(enin: Int) {
     let windowId = UUID()
     currentWindowId = windowId
     currentWindowEnin = enin
@@ -1230,8 +1326,22 @@ final class SensingCoordinator: ObservableObject {
     if firstWindowEnin == nil {
       firstWindowEnin = enin
     }
+    currentWindowLedgerOpened = false
     checkpointSelfProofStateIfNeeded()
+  }
 
+  /// Concern 2 (see above): starts the ledger lifecycle for the currently
+  /// tracked window, if it has not already started. No-op if already
+  /// started (every detection while already `.recording` calls this
+  /// idempotently) or if no window is currently tracked (shouldn't happen —
+  /// `observe(_:)` always runs bookkeeping first — but defensive rather than
+  /// force-unwrapped). A ledger-runtime failure here still marks the window
+  /// started: `unsentWindowLedgerRuntime` degradation is best-effort
+  /// bookkeeping, not a gate on whether `WindowReportStore` signs and
+  /// persists at close time (mirrors `closeWindow`'s own best-effort
+  /// ledger-runtime handling below).
+  private func ensureLedgerWindowOpen() {
+    guard !currentWindowLedgerOpened, let windowId = currentWindowId else { return }
     if let unsentWindowLedgerRuntime {
       do {
         try unsentWindowLedgerRuntime.openWindow(
@@ -1242,6 +1352,7 @@ final class SensingCoordinator: ObservableObject {
         recordLedgerDegradation(error)
       }
     }
+    currentWindowLedgerOpened = true
   }
 
   /// Closes whatever window is still open at explicit-stop time
@@ -1255,12 +1366,21 @@ final class SensingCoordinator: ObservableObject {
   /// window and `resetSessionState()` nil'd `currentWindowEnin`. This native
   /// guard only says there is no lifecycle input to forward; shared remains
   /// authoritative if duplicate close inputs race (§3.6).
+  ///
+  /// beid#114: if the open window's ledger lifecycle never started
+  /// (`currentWindowLedgerOpened == false` — the session never reached
+  /// `.recording`), this clears native state without ever calling
+  /// `closeWindow`, so no report is signed or persisted for it.
   private func closeFinalWindowIfNeeded() {
     redeliverPendingWindowReports()
     guard let enin = currentWindowEnin else { return }
     // DemoEvent updates ENIN bookkeeping for self-proof coverage but never
     // opens a real native report window.
     guard currentWindowId != nil else { return }
+    guard currentWindowLedgerOpened else {
+      clearCurrentWindowState()
+      return
+    }
     guard let eventCode = currentSessionEventCode else {
       Self.ledgerLog.error("Unable to close the native window without an active event code")
       return
@@ -1286,10 +1406,20 @@ final class SensingCoordinator: ObservableObject {
   /// reusing the closed one, and (2) so a following
   /// `stopSensing()`/`reset()` has no stale lifecycle input to forward.
   /// Shared still owns duplicate-close handling if callbacks race (§3.6).
+  ///
+  /// beid#114: same `currentWindowLedgerOpened` gate as
+  /// `closeFinalWindowIfNeeded()` — a checkpoint that lands before the
+  /// session ever reached `.recording` still clears native window state
+  /// (so the next detection starts a genuinely new window), but signs and
+  /// persists nothing.
   func checkpointOpenWindowForBackgrounding() {
     redeliverPendingWindowReports()
     guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
     guard currentWindowId != nil else { return }
+    guard currentWindowLedgerOpened else {
+      clearCurrentWindowState()
+      return
+    }
     closeWindow(enin: enin, eventCode: eventCode)
   }
 
@@ -1525,18 +1655,18 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// Persists this session's current `eninStart`/`eninEnd` on every real
-  /// window rotation (`openWindow`, called from `advanceWindowIfNeeded`),
-  /// so a device kill after binding completes but before session end can
-  /// still be reconciled into a real `SelfProofRecord` on next launch
-  /// (`reconcileSelfProofCheckpointIfNeeded()`, §7.1 Option B, §8.3). Gated
-  /// on `activeProofId`/`currentBindingEvent` exactly like
-  /// `finalizeSelfProofIfNeeded()` itself — there is nothing to checkpoint
-  /// before `.recording` begins.
+  /// window rotation (`openNewWindowState`, called from
+  /// `advanceWindowBookkeepingIfNeeded`), so a device kill after binding
+  /// completes but before session end can still be reconciled into a real
+  /// `SelfProofRecord` on next launch (`reconcileSelfProofCheckpointIfNeeded()`,
+  /// §7.1 Option B, §8.3). Gated on `activeProofId`/`currentBindingEvent`
+  /// exactly like `finalizeSelfProofIfNeeded()` itself — there is nothing to
+  /// checkpoint before `.recording` begins.
   ///
   /// Demo mode never reaches this: `advanceDemoWindow()` deliberately never
-  /// calls `openWindow` (its own doc comment — demo mode produces no window
-  /// reports), so a demo session's self-proof stays reachable only through
-  /// the graceful `stopSensing()`/`reset()` path, unchanged by this
+  /// calls `openNewWindowState` (its own doc comment — demo mode produces no
+  /// window reports), so a demo session's self-proof stays reachable only
+  /// through the graceful `stopSensing()`/`reset()` path, unchanged by this
   /// sub-slice.
   private func checkpointSelfProofStateIfNeeded() {
     guard
@@ -1664,7 +1794,7 @@ final class SensingCoordinator: ObservableObject {
     _ = recordDeviceIdentity(enin: demoWindowEnin, rpid: syntheticId, detectedDisplayId: syntheticId)
   }
 
-  /// Demo-only stand-in for the real path's `advanceWindowIfNeeded` —
+  /// Demo-only stand-in for the real path's `advanceWindowBookkeepingIfNeeded` —
   /// advances just enough ENIN-window state
   /// (`firstWindowEnin`/`currentWindowEnin`/`lastWindowEnin`) for the
   /// self-proof layer (§2.2) to be exercisable under demo mode, since there

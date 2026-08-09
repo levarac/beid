@@ -77,8 +77,8 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
 
       // Rotate into a second window so eninEnd advances past eninStart —
       // this is the write this test is really about: it happens from
-      // inside advanceWindowIfNeeded/openWindow, on the real detection
-      // path, with no new lifecycle hook.
+      // inside advanceWindowBookkeepingIfNeeded/openNewWindowState, on the
+      // real detection path, with no new lifecycle hook.
       coordinator.handleDetection(
         enin: 2,
         rpid: "peer-late",

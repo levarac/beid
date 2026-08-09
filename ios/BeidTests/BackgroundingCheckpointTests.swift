@@ -329,8 +329,9 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
   // MARK: - Regression: firstWindowEnin guard (sub-slice 1, §3.5)
 
-  /// Would fail if `advanceWindowIfNeeded`'s nil-branch guard were reverted
-  /// to the old unconditional `firstWindowEnin = enin` — a backgrounding
+  /// Would fail if `advanceWindowBookkeepingIfNeeded`'s nil-branch guard
+  /// were reverted to the old unconditional `firstWindowEnin = enin` — a
+  /// backgrounding
   /// checkpoint nils `currentWindowEnin` mid-session without ending the
   /// session, so the next detection re-enters that nil-branch a second time
   /// per session, which is exactly the case sub-slice 1's guard fix exists
@@ -354,8 +355,9 @@ final class BackgroundingCheckpointTests: XCTestCase {
 
     coordinator.checkpointOpenWindowForBackgrounding()
 
-    // Re-enters advanceWindowIfNeeded's nil-branch (currentWindowEnin was
-    // nil'd by the checkpoint) — with the old unconditional assignment this
+    // Re-enters advanceWindowBookkeepingIfNeeded's nil-branch
+    // (currentWindowEnin was nil'd by the checkpoint) — with the old
+    // unconditional assignment this
     // would overwrite firstWindowEnin from 1 to 2.
     coordinator.handleDetection(
       enin: 2,
