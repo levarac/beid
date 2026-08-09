@@ -127,6 +127,19 @@ final class SensingCoordinator: ObservableObject {
   /// (`ProofStore.updatePeersVerified(for:to:)`) rather than re-creating it.
   var onPeersVerifiedChanged: ((UUID, Int) -> Void)?
 
+  /// The number of ENIN windows locally signed and stored for one event
+  /// (beid#137's Transparency screen, "Recorded on device" row —
+  /// `docs/specs/visibility-aggregation-ui.md` §5.1). Filters
+  /// `WindowReportStore.reports` by `eventCode`, which is `WindowReport`'s
+  /// own stable per-event field — not the shared unsent-window ledger,
+  /// which has no event scoping (`openWindow` takes only an opaque UUID)
+  /// and never drains today (no report-submission path exists yet), so a
+  /// ledger-derived count would be lifetime-cumulative across every
+  /// session ever run rather than scoped to this event.
+  func recordedWindowCount(forEventCode eventCode: String) -> Int {
+    windowReportStore.reports.filter { $0.eventCode == eventCode }.count
+  }
+
   /// Field diagnostics for the counting split (beid#154). `os.Logger` rather
   /// than `print` on purpose: these lines have to be readable from a real
   /// device during a field run — Console.app, or a sysdiagnose collected after
@@ -655,7 +668,7 @@ final class SensingCoordinator: ObservableObject {
     phase = .recording(event: event, peersVerified: peersVerified)
     let proofId = UUID()
     activeProofId = proofId
-    let proof = Proof(id: proofId, eventName: event.name, date: Date(), peersVerified: peersVerified)
+    let proof = Proof(id: proofId, eventName: event.name, date: Date(), peersVerified: peersVerified, eventCode: event.id)
     onProofCollected?(proof)
     bindingState = .pendingConnect(event)
   }

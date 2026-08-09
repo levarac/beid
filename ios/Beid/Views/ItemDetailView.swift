@@ -5,6 +5,7 @@ import SwiftUI
 
 /// Screen 08: Item Detail — method, peers verified, status.
 struct ItemDetailView: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
   let proof: Proof
 
   private static let dateFormatter: DateFormatter = {
@@ -33,6 +34,10 @@ struct ItemDetailView: View {
 
             BeidPanel {
               ProofSignatureControlsView(proofId: proof.id)
+            }
+
+            BeidPanel {
+              transparencyRow
             }
           }
           .padding(BeidDesign.Spacing.screenHorizontal)
@@ -81,6 +86,49 @@ struct ItemDetailView: View {
         .font(DS.Font.cardTitle)
         .foregroundStyle(DS.Color.proofSeal)
     }
+  }
+
+  /// Entry point for beid#137's Transparency screen — the only "check the
+  /// status of your data" surface this app has today, so it hangs off the
+  /// durable per-proof screen rather than a not-yet-existing History/tab
+  /// bar IA (DECISIONS 2026-08-09 "#137 は履歴スコープを採り...").
+  private var transparencyRow: some View {
+    NavigationLink {
+      TransparencyView(
+        eventName: proof.eventName,
+        // A stored `Proof` only ever exists once `.recording` has begun,
+        // which itself only happens after the join action — see
+        // `ScanPhase`'s doc comment. Reaching this row therefore always
+        // implies "joined."
+        hasJoined: true,
+        recordedOnDeviceCount: recordedOnDeviceCount
+      )
+    } label: {
+      HStack {
+        Text(
+          "Transparency",
+          comment: "Row label on Proof Detail linking to the Transparency screen, which shows the participant the status of their own data (recorded/sent/published/verified). Noun referring to open, checkable data status — not visual/window transparency or opacity."
+        )
+        .font(DS.Font.cardTitle)
+        .foregroundStyle(DS.Color.textPrimary)
+        Spacer(minLength: DS.Space.m)
+        Image(systemName: "chevron.right")
+          .font(DS.Font.meta)
+          .foregroundStyle(DS.Color.textSecondary)
+          .accessibilityHidden(true)
+      }
+      .frame(minHeight: DS.Size.minHitTarget)
+    }
+  }
+
+  /// `nil` when `proof.eventCode` is absent — a proof persisted before
+  /// beid#137 added that field (see `Proof.eventCode`'s doc comment).
+  /// Renders as "not yet available" on `TransparencyView`, the same
+  /// honest-gap treatment as the rows with no data source at all, never a
+  /// false zero.
+  private var recordedOnDeviceCount: Int? {
+    guard let eventCode = proof.eventCode else { return nil }
+    return coordinator.sensingCoordinator.recordedWindowCount(forEventCode: eventCode)
   }
 }
 
