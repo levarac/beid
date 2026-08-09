@@ -567,15 +567,219 @@ class UnsentWindowLedgerReducerTest {
         assertFalse(discardedWindowCannotBeClosed.isSuccess)
         assertEquals("unknown_window_id", discardedWindowCannotBeClosed.errorCode)
 
+        // The orphaned artifact (no LedgerWindow row ever existed for it) must
+        // now be adopted as an already-closed window rather than staying
+        // permanently invisible to every reducer function that only traverses
+        // ledger.state.windows.
+        val orphanNowCloseable = closeUnsentWindow(
+            ledger,
+            "not-in-this-ledger",
+            "old-observation",
+        )
+        assertTrue(orphanNowCloseable.isSuccess)
+        assertFalse(
+            orphanNowCloseable.changed,
+            "reconciliation already adopted the orphan as closed with this exact reference",
+        )
+
+        val orphanReferenceConflict = closeUnsentWindow(
+            ledger,
+            "not-in-this-ledger",
+            "different-observation",
+        )
+        assertFalse(orphanReferenceConflict.isSuccess)
+        assertEquals("observation_reference_conflict", orphanReferenceConflict.errorCode)
+
         val prepared = prepareNextUnsentWindowSubmission(ledger, 10, 0L)
         val persisted = confirmUnsentWindowLedgerPersistence(
             prepared.ledger,
             prepared.persistenceRevision,
         )
         val submission = assertNotNull(persisted.submission)
-        assertEquals(1, submission.windowCount)
-        assertEquals("window-with-artifact", submission.windowIdAt(0))
-        assertEquals("observation-1", submission.observationReferenceAt(0))
+        assertEquals(2, submission.windowCount)
+        assertEquals("not-in-this-ledger", submission.windowIdAt(0))
+        assertEquals("old-observation", submission.observationReferenceAt(0))
+        assertEquals("window-with-artifact", submission.windowIdAt(1))
+        assertEquals("observation-1", submission.observationReferenceAt(1))
+    }
+
+    @Test
+    fun orphanArrivingAtExactWindowCapacityFailsClosedRatherThanExceedingIt() {
+        val instanceId = "000102030405060708090a0b0c0d0e0f"
+        val windows = (1L..MAX_LEDGER_RECORD_COUNT.toLong()).map { sequence ->
+            LedgerWindow(
+                windowId = "window-$sequence",
+                openedSequence = sequence,
+                closedRevision = 1L,
+                observationReference = "observation-$sequence",
+            )
+        }
+        val ledger = UnsentWindowLedger(
+            LedgerState(
+                ledgerInstanceIdHex = instanceId,
+                revision = 1L,
+                durableRevision = 1L,
+                nextWindowSequence = MAX_LEDGER_RECORD_COUNT.toLong() + 1L,
+                nextReportSequence = 1L,
+                windows = windows,
+            ),
+        )
+
+        val recoveryInput = createUnsentWindowObservationRecoveryInput()
+        assertTrue(
+            addPersistedUnsentWindowObservationForRecovery(
+                recoveryInput = recoveryInput,
+                windowId = "orphan-over-capacity",
+                persistedObservationReference = "orphan-observation",
+            ),
+        )
+
+        val reconciled = reconcileUnsentWindowLedgerAfterRelaunch(
+            ledger = ledger,
+            recoveryInput = recoveryInput,
+        )
+        assertFalse(reconciled.isSuccess)
+        assertFalse(reconciled.changed)
+        assertEquals("ledger_capacity_exceeded", reconciled.errorCode)
+        assertNull(reconciled.snapshotText)
+    }
+
+    @Test
+    fun multipleOrphansGetDeterministicOrderingAndReconciliationIsIdempotent() {
+        var ledger = assertNotNull(
+            createUnsentWindowLedger(
+                ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
+            ).ledger,
+        )
+
+        val recoveryInput = createUnsentWindowObservationRecoveryInput()
+        assertTrue(
+            addPersistedUnsentWindowObservationForRecovery(
+                recoveryInput = recoveryInput,
+                windowId = "orphan-b",
+                persistedObservationReference = "observation-b",
+            ),
+        )
+        assertTrue(
+            addPersistedUnsentWindowObservationForRecovery(
+                recoveryInput = recoveryInput,
+                windowId = "orphan-a",
+                persistedObservationReference = "observation-a",
+            ),
+        )
+
+        val firstReconciliation = reconcileUnsentWindowLedgerAfterRelaunch(ledger, recoveryInput)
+        assertTrue(firstReconciliation.isSuccess)
+        assertTrue(firstReconciliation.changed)
+        // Native never recorded an openedSequence for either orphan (openUnsentWindow
+        // never ran), so ordering has no real chronology to preserve — it must
+        // still be assigned deterministically, here by windowId, not by
+        // insertion order into recoveryInput ("orphan-b" was added first above).
+        val orderedIds = firstReconciliation.ledger.state.windows
+            .sortedBy { it.openedSequence }
+            .map { it.windowId }
+        assertEquals(listOf("orphan-a", "orphan-b"), orderedIds)
+
+        ledger = confirmUnsentWindowLedgerPersistence(
+            firstReconciliation.ledger,
+            firstReconciliation.persistenceRevision,
+        ).ledger
+
+        val secondReconciliation = reconcileUnsentWindowLedgerAfterRelaunch(ledger, recoveryInput)
+        assertTrue(secondReconciliation.isSuccess)
+        assertFalse(
+            secondReconciliation.changed,
+            "repeated reconciliation of the same recovery input must be idempotent",
+        )
+        assertEquals(
+            firstReconciliation.ledger.state.windows.map { it.windowId to it.openedSequence },
+            secondReconciliation.ledger.state.windows.map { it.windowId to it.openedSequence },
+        )
+
+        val prepared = prepareNextUnsentWindowSubmission(ledger, 10, 0L)
+        val persisted = confirmUnsentWindowLedgerPersistence(
+            prepared.ledger,
+            prepared.persistenceRevision,
+        )
+        val submission = assertNotNull(persisted.submission)
+        assertEquals(2, submission.windowCount)
+        assertEquals("orphan-a", submission.windowIdAt(0))
+        assertEquals("orphan-b", submission.windowIdAt(1))
+    }
+
+    @Test
+    fun recoveryEntryMatchingACurrentlyOpenWindowClosesItRatherThanSynthesizingADuplicateRow() {
+        var ledger = assertNotNull(
+            createUnsentWindowLedger(
+                ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
+            ).ledger,
+        )
+        val opened = openUnsentWindow(ledger, "shared-window-id")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            opened.ledger,
+            opened.persistenceRevision,
+        ).ledger
+
+        // Native always mints a fresh UUID per window, so this exact
+        // shape — a recovery-input key equal to a currently-open window's ID —
+        // should not be reachable in practice. The reducer cannot assume that
+        // native invariant, so this proves the outcome is still safe: the
+        // existing "matched, currently-open" path takes it, and no duplicate
+        // LedgerWindow row is ever synthesized for the same ID.
+        val recoveryInput = createUnsentWindowObservationRecoveryInput()
+        assertTrue(
+            addPersistedUnsentWindowObservationForRecovery(
+                recoveryInput = recoveryInput,
+                windowId = "shared-window-id",
+                persistedObservationReference = "observation-1",
+            ),
+        )
+
+        val reconciled = reconcileUnsentWindowLedgerAfterRelaunch(ledger, recoveryInput)
+        assertTrue(reconciled.isSuccess)
+        assertTrue(reconciled.changed)
+
+        val matchingWindows = reconciled.ledger.state.windows.filter {
+            it.windowId == "shared-window-id"
+        }
+        assertEquals(
+            1,
+            matchingWindows.size,
+            "a recovery entry matching an existing open window must close it, " +
+                "not also synthesize a duplicate row",
+        )
+        assertEquals(reconciled.persistenceRevision, matchingWindows.single().closedRevision)
+        assertEquals("observation-1", matchingWindows.single().observationReference)
+    }
+
+    @Test
+    fun emptyRecoveryInputStillDiscardsUnmatchedOpenWindowsExactlyAsBeforeThisFix() {
+        var ledger = assertNotNull(
+            createUnsentWindowLedger(
+                ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
+            ).ledger,
+        )
+        val opened = openUnsentWindow(ledger, "window-lost-with-process")
+        ledger = confirmUnsentWindowLedgerPersistence(
+            opened.ledger,
+            opened.persistenceRevision,
+        ).ledger
+
+        val emptyRecoveryInput = createUnsentWindowObservationRecoveryInput()
+        assertEquals(0, emptyRecoveryInput.observationCount)
+
+        val reconciled = reconcileUnsentWindowLedgerAfterRelaunch(ledger, emptyRecoveryInput)
+        assertTrue(reconciled.isSuccess)
+        assertTrue(reconciled.changed)
+        assertTrue(reconciled.ledger.state.windows.isEmpty())
+
+        val discardedWindowCannotBeClosed = closeUnsentWindow(
+            reconciled.ledger,
+            "window-lost-with-process",
+            "impossible-observation",
+        )
+        assertFalse(discardedWindowCannotBeClosed.isSuccess)
+        assertEquals("unknown_window_id", discardedWindowCannotBeClosed.errorCode)
     }
 
     private fun createDurableSubmission(windowId: String): DurableSubmission {
