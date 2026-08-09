@@ -4,6 +4,14 @@ Status: **APPROVED** (user, 2026-08-06). §9's two open decisions are both
 resolved, each in favour of this document's own recommendation — see the
 RESOLVED blocks in §9.a and §9.b, and `DECISIONS.md` 2026-08-06.
 
+**Superseded in part, 2026-08-09.** `DECISIONS.md`'s 2026-08-09 entry ("#138
+会場端末モードの運営者 UI を作る(2026-08-06 §9.a/§9.b を上書き)") overrides
+both §9.a's and §9.b's 2026-08-06 resolutions below — the sentence above no
+longer holds for either. See the SUPERSEDED blocks inside §9.a and §9.b for
+the current resolution and its reasoning; the original RESOLVED blocks stay
+in place as the historical record, not as current guidance. §6 carries a
+matching superseding note where it restates the old §9.a conclusion.
+
 Implementation has **not** started. One prerequisite landed as a separate
 issue after this spec was written: the join path is currently unreachable
 in shipped builds, so every real device falls back to the literal event
@@ -380,6 +388,17 @@ hint would be wrong).
 
 ## 6. Serving side
 
+**Superseded, 2026-08-09 — this is no longer "no serving at all."**
+`DECISIONS.md`'s 2026-08-09 entry overrides §9.a's original resolution:
+beid does now ship real, end-user-facing B005 serving, via #138's
+venue-device organizer UI (see §9.a's SUPERSEDED block for the resolution
+and its carried-forward constraints, and §9.b's SUPERSEDED block for the
+validity-period design that goes with it). The reasoning immediately below
+is kept as the historical record of why the 2026-08-06 decision was made
+the way it was; it is no longer current guidance about whether beid ships
+serving at all — only about why *this section's* debug-toggle
+recommendation made sense under the resolution that held at the time.
+
 **This slice does not ship end-user-facing serving.** Reasoning:
 
 - `configureEventInfoServing(organizerDesignated:eventActiveForDiscovery:eventDisplayName:)`
@@ -452,6 +471,12 @@ an absent line rather than a placeholder — stays `nil` on the real path
 under this spec, exactly as today, unless and until the organizer-metadata
 feature in §9.b ships. This spec does not propose reading venue from B005
 because there is nothing there to read.
+
+**Note, 2026-08-09**: §9.b's 2026-08-06 resolution was later overridden —
+see §9.b's SUPERSEDED block. The override adds a label (→
+`eventDisplayName`, i.e. `EventSession.name`) and a validity period, not a
+venue field. This paragraph's "hard wall" finding is unaffected by that
+override, and `venue` stays `nil` on the real path regardless of it.
 
 ## 8. What stays out of scope
 
@@ -562,6 +587,31 @@ would have beid assert something the protocol itself does not, and the
 protocol deliberately exposes these hints as unauthenticated. Recorded in
 `DECISIONS.md` 2026-08-06.
 
+**SUPERSEDED — 2026-08-09.** `DECISIONS.md`'s 2026-08-09 entry ("#138 会場
+端末モードの運営者 UI を作る(2026-08-06 §9.a/§9.b を上書き)") overrides the
+2026-08-06 resolution above. New resolution: beid ships real,
+end-user-facing B005 serving via #138's venue-device organizer UI — label
+required, validity period required, reassignment history retained — gated
+to a low-visibility place in the app, per #138's own text ("アプリの奥まっ
+た場所に置く"). §6's `DEBUG`-only dogfood toggle is unaffected and remains
+useful for testing independent of the real UI.
+
+Reason (`DECISIONS.md` 2026-08-09): the UX source-of-truth (ranked above
+Figma since the 2026-08-08 source-of-truth hierarchy update) presupposes
+venue-side event-info presentation, and gh#141's event-card experience does
+not work with a `DEBUG`-only toggle. Decided directly by the user; the PM's
+recommendation — keep this section's original resolution (a), rescope to
+`DEBUG` dogfood — was not adopted.
+
+Carried-forward constraint (not superseded — still binding on the eventual
+UI design): the reasoning above against option (b) (a self-serve toggle
+implicitly asserts a trust claim the protocol does not warrant) still
+holds; the override does not retract it, it adds a mitigation instead.
+Quoting `DECISIONS.md` 2026-08-09 verbatim: 「運営者 UI には『beid はこの
+broadcast を保証しない』ことが利用者から見て分かる表現を設計に含める」— the
+organizer UI's design must make this disclaimer visible to end users. This
+is a hard requirement on the eventual implementation, not a suggestion.
+
 ### 9.b Should beid build organizer-supplied event name/venue metadata, independent of whether B005 is present?
 
 **Background**: today, real events on the real path have never had a human
@@ -615,6 +665,85 @@ record types (`0x01 eventDisplayName`, `0x02 eventCodeHash`), so venue
 cannot ever arrive over B005 — only an organizer-metadata feature could
 supply it, and that is now explicitly deferred. Recorded in `DECISIONS.md`
 2026-08-06.
+
+**SUPERSEDED — 2026-08-09.** `DECISIONS.md`'s 2026-08-09 entry ("#138 会場
+端末モードの運営者 UI を作る(2026-08-06 §9.a/§9.b を上書き)") overrides the
+2026-08-06 resolution above. New resolution: #138's venue-device label and
+validity period **are** organizer-authored metadata beid will build — this
+reverses "no organizer-metadata feature."
+
+**Scope of what's now real, precisely.** #138 authors two things per
+device — a **label** and a **validity period**. Label maps onto the
+existing `eventDisplayName` TLV (`0x01`, spec lines 265-270) — the same
+field §7 already describes populating `EventSession.name` from once a hint
+is confirmed; this is not a new wire capability, only a new class of
+author (a real operator UI instead of a `DEBUG` toggle). **This does not
+reopen §7's venue finding.** `EventSession.venue: String?` still has no TLV
+to populate it from — B005's registry still defines only
+`eventDisplayName` and `eventCodeHash` (§7); #138 adds a label (→ name) and
+an operational validity period (below), not a venue field. §7's "hard
+wall" is unaffected by this override, and `EventSession.venue` stays `nil`
+on the real path regardless of it.
+
+**Validity period — the design decision this revision settles, rather than
+leaving open.** Two designs were possible:
+
+- **Sender-enforced**: the venue device simply stops calling
+  `configureEventInfoServing` (or flips `eventActiveForDiscovery` to
+  `false`) once its validity period ends. Nothing new travels over the
+  air; the existing v1 B005 wire format (`eventDisplayName` +
+  `eventCodeHash` only) is unchanged and sufficient.
+- **Receiver-verified**: a receiving device checks the advertised validity
+  window itself before showing/auto-selecting a card. This requires
+  carrying the validity period in the payload — a new TLV, which B005 v1
+  does not have (§7) — and would put `levarac/barnard#122`/`#123` (both
+  currently Backlog, no adoption decision, no assignee, no timeline —
+  confirmed independently by the PM, `DECISIONS.md` 2026-08-09 "#138 の
+  Barnard 依存は誤認だった") back on this feature's critical path.
+
+**Adopted: sender-enforced**, for the 8/20 target. This is what keeps
+`DECISIONS.md` 2026-08-09's conclusion true that #138/#141 do not depend on
+`barnard#122`/`#123` — that conclusion is conditional on this specific
+design choice, not free-standing, and this spec is where the condition
+gets discharged.
+
+**Confirmed gap: gh#139's landed time-window filter does not already cover
+this.** `EventWindowFilter.kt`'s `isEventWindowOpen(definition,
+atWindowIndex)` (landed in PR #161) checks `atWindowIndex >=
+definition.eninStart && atWindowIndex <= definition.eninEnd` — verified
+directly against the shipped source. That is the **event's own registered
+window** from the `EventDefinition` registry (external canonical source,
+gh#108), not any specific venue device's operational validity period. #138
+itself frames validity period as a **booth-level** concept ("ブース用途の
+要件") — e.g. a reception desk open 09:00–12:00 inside an event that runs
+all day — which is categorically narrower than, and independent of, the
+event's own `eninStart`/`eninEnd`. gh#139's filter answers "is the event as
+a whole still running," not "did this specific booth's shift end." These
+are two different questions; the shared filter answers only the first one.
+
+**Residual risk this leaves, stated plainly.** Under sender-enforced, a
+venue device that keeps broadcasting past its own intended validity period
+is **not detectable as stale by receivers** — nothing in the wire format
+and nothing in gh#139's landed filter catches it, since the event itself is
+presumably still inside its own registered window even if this one booth's
+shift ended. None of the following are a substitute for real technical
+detection of an overrunning device — they are the mitigations that exist
+today, stated as what they are and no more:
+
+- (a) gh#139's event-level filter still catches the coarser case of an
+  entirely-over *event* being rebroadcast, even though it cannot catch an
+  overrunning *booth* inside a still-open event.
+- (b) The trust-disclaimer UI carried forward in §9.a's SUPERSEDED block
+  above already tells users not to treat any broadcast as vouched-for by
+  beid; an overrunning booth is a subset of that same "don't trust this
+  blindly" posture, not a new exposure class it creates.
+- (c) #138's required reassignment history gives organizers an operational
+  audit trail to notice and fix a device that was not turned off — a
+  human/process mitigation, not a technical one.
+
+**Receiver-verified stays explicitly deferred future work**, contingent on
+`barnard#122`/`#123` (or an equivalent TLV extension) actually landing.
+This spec does not design it now.
 
 ## 10. Acceptance criteria and sub-slicing
 
