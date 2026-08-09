@@ -3262,6 +3262,124 @@
           }
         }
       }
+    },
+    "scan.recording.mutualCount": {
+      "comment": "Count of mutually-confirmed (two-way) observations — a distinct metric from the devices-sensed count in the line above it, not a synonym or a related total. This currently always displays as 0 because the on-device protocol has no way to detect when a nearby device also observed this device back; establishing that is a separate, later, off-device verification step. Do not translate this as if it always grows together with the devices-sensed count, and do not omit it or fold it into that line.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mutual confirmations: %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "相互確認: %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "相互确认：%lld"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Confirmaciones mutuas: %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Confirmations mutuelles : %lld"
+          }
+        }
+      }
+    },
+    "scan.recording.windowBuildup": {
+      "comment": "Count of ENIN time-windows recorded for this session so far, shown as a simple running total. This is a coverage/buildup indicator, not a device or confirmation count — a window is \"recorded\" once its time interval has been observed and closed, independent of how many devices were present in it.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld window recorded"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld windows recorded"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld 件の観測窓を記録済み"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "已记录 %lld 个观测窗口"
+                }
+              }
+            }
+          }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld ventana registrada"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld ventanas registradas"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld fenêtre enregistrée"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld fenêtres enregistrées"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "version": "1.0"

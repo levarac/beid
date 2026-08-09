@@ -79,6 +79,7 @@
 		BF333C1DDD4F41914CE56A1A /* BarnardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 49E0DF602DDE12EC7E201301 /* BarnardCore */; };
 		BFCBDC766B167C57D8FDC606 /* ReownWalletConnectClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A156A80B8C8B96AD33133358 /* ReownWalletConnectClient.swift */; };
 		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
+		CB158153C98D8C18CBAFFEF8 /* SessionAggregateExposureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EAEB0CA3E864A05492129FB /* SessionAggregateExposureTests.swift */; };
 		CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */; };
 		CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */; };
 		D1620A2C2A2333B61408ACD0 /* DeterministicSensingCryptography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32DAC007552E0BB965748B79 /* DeterministicSensingCryptography.swift */; };
@@ -180,6 +181,7 @@
 		7FAD458D67D1864749F00726 /* SensingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinator.swift; sourceTree = "<group>"; };
 		8812C170544758548D2A4DCC /* AppScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScreen.swift; sourceTree = "<group>"; };
 		8D7E4363D6595156BB5B3C21 /* BeidUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BeidUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8EAEB0CA3E864A05492129FB /* SessionAggregateExposureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateExposureTests.swift; sourceTree = "<group>"; };
 		8F32BB88D92DB86709083B1E /* CorruptStoreQuarantine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorruptStoreQuarantine.swift; sourceTree = "<group>"; };
 		9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStoreTests.swift; sourceTree = "<group>"; };
 		910158074CF21A3B7DD559AE /* NativeWebSocketFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeWebSocketFactory.swift; sourceTree = "<group>"; };
@@ -429,6 +431,7 @@
 				BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */,
 				EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */,
 				E0A3B3879ACAFE05FB7C4A7A /* SensingCryptographyTests.swift */,
+				8EAEB0CA3E864A05492129FB /* SessionAggregateExposureTests.swift */,
 				5459592F237296DD025E2E77 /* SessionAggregateSnapshotStoreTests.swift */,
 				DD20AA979B50E95A1823BDB5 /* SharedRuntimeProbeTests.swift */,
 				073343A772343404F8CB63FC /* UnsentWindowLedgerRuntimeTests.swift */,
@@ -754,6 +757,7 @@
 				ACCA8EA1D39994F420C779BA /* SelfProofTests.swift in Sources */,
 				4AB017A303671343C07ED507 /* SensingCoordinatorTests.swift in Sources */,
 				F1D63DC71DAF25FD71813162 /* SensingCryptographyTests.swift in Sources */,
+				CB158153C98D8C18CBAFFEF8 /* SessionAggregateExposureTests.swift in Sources */,
 				F5F7A3F981CD58049736AE04 /* SessionAggregateSnapshotStoreTests.swift in Sources */,
 				FC20C47D8577650AFC7B8FB6 /* SharedRuntimeProbeTests.swift in Sources */,
 				FE97778E6153557B7BC06582 /* UnsentWindowLedgerRuntimeTests.swift in Sources */,
