@@ -2,52 +2,7 @@
   "sourceLanguage": "en",
   "strings": {
     "%lld": {},
-    "%lld of %lld peers verified": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$lld of %2$lld peers verified"
-          }
-        }
-      }
-    },
     "Account": {},
-    "scan.verifying.peersVerifiedCount": {
-      "comment": "Cumulative count of distinct nearby devices sensed at the event, each counted once however long it stayed; no fixed target. Do NOT translate this as mutual, two-way, or reciprocal confirmation: this device cannot tell whether a peer also observed it, so any such wording would overclaim.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld peers verified"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "%lld人のピアを確認済み"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "已验证 %lld 位对等设备"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "%lld pares verificados"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "%lld pairs vérifiés"
-          }
-        }
-      }
-    },
     "Active": {
       "comment": "Status label shown next to a colored dot when Bluetooth is powered on.",
       "localizations": {
@@ -647,31 +602,37 @@
       }
     },
     "Detected event": {},
-    "Devices verified": {
-      "comment" : "Metric row label on Proof Detail, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Use your language's word for a phone or handset, not a word for a person or a peer.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Dispositivos verificados"
+    "detail.devicesSensed.label": {
+      "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a phone or handset, not a word for a person or a peer.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices sensed"
           }
         },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Appareils vérifiés"
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Dispositivos detectados"
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "確認済みの端末"
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Appareils détectés"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "已验证设备"
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "検知した端末数"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已检测到的设备"
           }
         }
       }
@@ -1306,7 +1267,6 @@
       }
     },
     "Peers": {},
-    "Peers verified": {},
     "Privacy": {
       "localizations": {
         "es": {
@@ -2924,31 +2884,31 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recording your attendance automatically · %lld peers verified"
+            "value": "Recording your attendance automatically · %lld devices sensed"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "出席を自動的に記録中 · %lld人のピアを確認済み"
+            "value": "出席を自動的に記録中 · %lld台の端末を検知"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "正在自动记录您的出席 · 已验证 %lld 位对等设备"
+            "value": "正在自动记录您的出席 · 已检测到 %lld 台设备"
           }
         },
         "es": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "Registrando tu asistencia automáticamente · %lld pares verificados"
+            "value": "Registrando tu asistencia automáticamente · %lld dispositivos detectados"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "needs_review",
-            "value": "Enregistrement automatique de votre présence · %lld pairs vérifiés"
+            "value": "Enregistrement automatique de votre présence · %lld appareils détectés"
           }
         }
       }

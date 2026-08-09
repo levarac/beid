@@ -101,7 +101,7 @@ struct EventCardView<Caption: View>: View {
 
 #Preview("Recording") {
   EventCardView(event: .demoSample, badge: .recording) {
-    Text("Recording your attendance automatically · 7 peers verified")
+    Text("Recording your attendance automatically · 7 devices sensed")
       .font(DS.Font.meta)
       .foregroundStyle(DS.Color.textSecondary)
   }
@@ -111,7 +111,7 @@ struct EventCardView<Caption: View>: View {
 
 #Preview("Paused (Dark)") {
   EventCardView(event: .demoSample, badge: .paused) {
-    BeidMetricRow(label: "Peers verified", verbatimValue: "5")
+    BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "5")
   }
   .padding()
   .tint(DS.Color.signalWarning)
@@ -123,7 +123,7 @@ struct EventCardView<Caption: View>: View {
     event: EventSession(id: "X", name: "A Very Long Conference Name That Should Wrap Gracefully", venue: nil),
     badge: .recording
   ) {
-    Text("Recording your attendance automatically · 12 peers verified")
+    Text("Recording your attendance automatically · 12 devices sensed")
       .font(DS.Font.meta)
       .foregroundStyle(DS.Color.textSecondary)
   }

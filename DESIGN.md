@@ -539,7 +539,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Component: Detail meta row (detailRow in ItemDetailView)
 
-- Purpose: Ledger Trace metadata (`Method`, `Peers verified`, `Status`), in
+- Purpose: Ledger Trace metadata (`Method`, `Devices sensed`, `Status`), in
   a `BeidPanel` with no section title — the panel goes straight into rows
   (as of the 08 Item Detail redesign, `docs/specs/itemdetail-redesign.md`).
 - Required tokens: `DS.Font.supporting`, `DS.Color.textSecondary` label,
@@ -666,7 +666,7 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 - MUST: Reduce Motion honored (§9); Reduce Transparency degrades materials
   to solid `surfaceRaised`.
 - MUST: State never by color alone; `RecordingView` exposes the cumulative
-  "Recording your attendance automatically · {n} peers verified" text for
+  "Recording your attendance automatically · {n} devices sensed" text for
   VoiceOver, without inventing a total.
 - SHOULD: The sensing session posts meaningful VoiceOver announcements on
   phase changes (event found, recording, signal lost, resumed).

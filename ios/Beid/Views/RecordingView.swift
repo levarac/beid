@@ -106,13 +106,13 @@ struct RecordingView: View {
   private var recordingCaption: String {
     String(
       localized: "scan.recording.caption",
-      // The displayed English is deliberately unchanged by beid#154: the fix
-      // makes "distinct peers" true where it was not (the value was
-      // (device × window) before, distinct devices now), so editing it would
-      // invalidate four populated translations for no accuracy gain. The
-      // mutual-sensing half of the old comment, by contrast, was never true
-      // and is struck here.
-      defaultValue: "Recording your attendance automatically · \(peersVerified) peers verified",
+      // beid#158: unlike beid#154 (which fixed the count without touching
+      // English because the noun stayed accurate), "verified" itself is
+      // wrong — the protocol never exposes reciprocal confirmation, so this
+      // device can only claim it sensed a peer, never that the peer sensed
+      // it back. The verb-level meaning change forces real re-translation of
+      // all four locales rather than a re-review pass.
+      defaultValue: "Recording your attendance automatically · \(peersVerified) devices sensed",
       comment: "Cumulative count of distinct nearby devices sensed at the event, each counted once however long it stayed; no fixed target. Do NOT translate this as mutual, two-way, or reciprocal confirmation: this device cannot tell whether a peer also observed it, so any such wording would overclaim."
     )
   }
