@@ -1,11 +1,13 @@
 # Spec — beid#114: defer window signing/persistence to `.recording`
 
-Status: **APPROVED** (PM ruling, 2026-08-09 — Option B below). Recorded in
-`DECISIONS.md`: *"2026-08-09 #114 は Option B — フェーズ遷移は据え置き、署名・
-永続化を .recording 以降に限定する"*.
+Status: **APPROVED** (PM ruling, 2026-08-09 — Option B below, §1-§7).
+**Amended 2026-08-09** (§8 — venue-device threshold-counting, Option A):
+also approved. Recorded in `DECISIONS.md`: *"2026-08-09 #114 は Option B —
+フェーズ遷移は据え置き、署名・永続化を .recording 以降に限定する"*.
 Owner: SubPM a-20260809-003 (Track D), for PM a-20260808-020.
 Builds on: beid#116 (shared `ScanPhase`/`applyScanDetection` family,
-`shared/src/commonMain/kotlin/org/levarac/beid/shared/sensing/ScanPhase.kt`).
+`shared/src/commonMain/kotlin/org/levarac/beid/shared/sensing/ScanPhase.kt`,
+merged as PR #188).
 **Implementation is sequenced strictly after #116 merges**, and #116 is
 itself sequenced after beid#162 (device-count source move) per PM's
 2026-08-09 coordination notice. This spec documents the approved design;
@@ -135,3 +137,82 @@ Superseding note added to `docs/specs/scan-slice2-redesign.md` §4.3 (same
 PR) citing this spec and the DECISIONS 2026-08-09 entry: the first-
 detection `.eventFound` choice §4.3 made still stands: its scope is
 narrower than originally shipped (window signing no longer starts there).
+
+## 8. Amendment (2026-08-09): what the threshold counts — venue-device inflation
+
+**Status: APPROVED (Option A below).** PM ruling, DECISIONS 2026-08-09.
+Sequenced the same as the rest of this spec: documentation only, no
+behavior change, implementation still waits on beid#116.
+
+### 8.1 Problem
+
+`#138`'s venue-device organizer mode broadcasts Barnard's B005 event-info
+hint. Tracing the pinned Barnard 0.3.0 source confirms B005 cannot be
+served in isolation: `startAdvertiseInternal()` unconditionally builds one
+GATT service exposing all four characteristics — B002 (RPID), B003
+(displayId), B004 (EventCodeHash), and B005 (eventInfo) — with no
+B005-only path. A venue device serving B005 therefore also advertises a
+real RPID, displayId, and EventCodeHash, and **is detected by nearby
+participants exactly like a genuine peer.** It lands in
+`distinctPeerDisplayIds` (the shared aggregation family, beid#109/#162)
+and contributes to `devicesVerified`, which is one of `#116`'s two
+threshold arms (`eventConfirmThreshold`, fixed at 3 per DECISIONS
+2026-07-30).
+
+Concretely: **a room with 2 real attendees plus 1 active venue device can
+still cross a threshold of 3 and start recording/signing**, because
+nothing on the receiving side can distinguish the kiosk's B002-004 output
+from a genuine peer's. Filed upstream as `levarac/barnard#132` (not
+blocking — the fix, if it lands, is a future Barnard capability, not
+something this spec waits on).
+
+### 8.2 What was considered and rejected
+
+- **Dwell-time/temporal heuristics** (a stationary kiosk is present in
+  every window for its entire broadcast period) — **rejected**: beid#154
+  deliberately established that neither existing threshold arm may be
+  sensitive to dwell time — a person who arrives early and stays the whole
+  event must count identically to one who doesn't. A heuristic here would
+  cut against that already-settled principle rather than extend it, and a
+  genuine long-staying attendee produces the identical signal shape to a
+  kiosk, so it would not even reliably distinguish the two.
+- **A beid-curated venue-device registry** the receiving app could consult
+  to exclude known-active kiosk identities — **rejected on trust-model
+  grounds**: DECISIONS 2026-08-09's `#138` ruling already attaches the
+  constraint that beid must not assert it vouches for a given broadcast's
+  authenticity. A registry beid itself curated and every client consulted
+  would be a step toward exactly that kind of vouching, not a neutral
+  technical filter.
+- **A native correlation between "this device also sent me a B005 hint"
+  and its B002-004 identity** — **rejected as unavailable**:
+  `levarac/barnard#132`'s own text confirms the receive API does not
+  expose whether a detected peer is currently serving event info (the same
+  shape as the relay-identity gap in `levarac/barnard#128`). There is no
+  protocol-level signal to build this on today.
+
+### 8.3 Decision: Option A — accept the inflation as a documented v1 limitation
+
+No native mitigation is attempted. The threshold counts every detected
+device exactly as `#116` already ships it, kiosk or human, because nothing
+available today can tell them apart. **Quantified**: while a venue device
+is actively broadcasting and in range, the real-human bar to cross
+`eventConfirmThreshold` is reduced by up to 1 per active venue device —
+the threshold *value* itself stays unchanged at 3 (DECISIONS 2026-07-30
+still governs the value and its config mechanism; this amendment touches
+neither).
+
+**Why this is bounded rather than open-ended, and therefore defensible
+rather than merely cheap**: the gate loosening does not corrupt any
+individual signed artifact, and — this is the reason the limitation stays
+bounded — **it cannot create a false mutual observation at the verifier
+either, because the kiosk never reports.** A venue device signs nothing;
+it only broadcasts. `#144`'s cross-matching stage (two independently
+signed observations → one mutual observation) has nothing from the kiosk
+to match against, so no fabricated mutual-observation record can ever
+result from this gap. What loosens is purely the local gate that decides
+*when* to start recording; the accuracy of every per-observation claim
+that does get signed is untouched.
+
+Cross-reference `levarac/barnard#132` as the eventual real fix, should
+Barnard ever add a B005-only serving mode.
+
