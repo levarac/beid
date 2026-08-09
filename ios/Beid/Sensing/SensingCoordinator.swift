@@ -86,6 +86,11 @@ final class SensingCoordinator: ObservableObject {
   ///
   /// Observations that arrive without a display id are never folded in here —
   /// they land in `unidentifiedRpidCount` instead.
+  ///
+  /// Sourced from `aggregationRuntime.deviceCount`
+  /// (`BeidSharedKit.aggregation.SessionAggregate.deviceCount`, all-observation
+  /// scope, beid#109/#162) rather than computed natively — this property is
+  /// projected from that shared decision, not recomputed here.
   @Published private(set) var devicesVerified = 0
   /// Distinct proximity identifiers observed this session that never arrived
   /// with a `detectedDisplayId`, and so could not be attributed to a device.
@@ -154,18 +159,25 @@ final class SensingCoordinator: ObservableObject {
   // Reset at the start of every new event (`beginEventFound`) and on
   // `stopSensing()`/`reset()` so nothing leaks into the next session.
 
-  /// Distinct device display ids observed so far this session — the real-path
-  /// equivalent of the demo sequence's loop counter, and the source of
-  /// `peersVerified` (§4.3). Backs `devicesVerified`; see its doc comment for
-  /// why this is keyed on the display id rather than the rotating proximity
-  /// identifier (beid#154).
+  /// Accumulates this session's observations and derives the device count
+  /// from `BeidSharedKit.aggregation` (beid#109/#162) — the source of
+  /// `peersVerified` (§4.3) on both the real path and, via
+  /// `observeOneDemoDevice()`, the demo path. Backs `devicesVerified`; see
+  /// its doc comment for why the underlying count is keyed on the display id
+  /// rather than the rotating proximity identifier (beid#154).
   ///
   /// A display id is 4 bytes, so two devices at one event can in principle
-  /// collide and be counted once. At event scale that is negligible and this
-  /// deliberately does not defend against it: the alternative identifier
-  /// available here is the one that rotates, and undercounting by a collision
-  /// is a far smaller error than multiplying every device by its dwell time.
-  private var distinctPeerDisplayIds: Set<String> = []
+  /// collide and be counted once. At event scale that is negligible and
+  /// `BeidSharedKit.aggregation` deliberately does not defend against it: the
+  /// alternative identifier available here is the one that rotates, and
+  /// undercounting by a collision is a far smaller error than multiplying
+  /// every device by its dwell time.
+  private var aggregationRuntime = AggregationRuntime()
+  /// Demo-only synthetic device counter backing `observeOneDemoDevice()`.
+  /// Monotonically increasing so every call synthesizes a never-repeated
+  /// rpid/displayId pair, guaranteeing each call grows the shared device
+  /// count by exactly one.
+  private var demoDeviceSequence = 0
   /// Backs `unidentifiedRpidCount`. Holds proximity identifiers seen
   /// without a display id; an identifier is removed once it does arrive with
   /// one.
@@ -407,7 +419,7 @@ final class SensingCoordinator: ObservableObject {
     advanceWindowIfNeeded(enin: enin, eventCode: session.id)
     currentWindowRpids.insert(rpid)
 
-    let deviceCountChanged = recordDeviceIdentity(rpid: rpid, detectedDisplayId: detectedDisplayId)
+    let deviceCountChanged = recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
 
     switch phase {
     case .eventFound:
@@ -439,10 +451,19 @@ final class SensingCoordinator: ObservableObject {
   /// This is the display and signed-payload half of the split: it is keyed on
   /// the stable display id and is deliberately **not** what gates
   /// `.recording`.
-  private func recordDeviceIdentity(rpid: String, detectedDisplayId: String?) -> Bool {
+  ///
+  /// Every observation is recorded into `aggregationRuntime` — including one
+  /// with no display id — so shared's accumulated input stays a complete row
+  /// set. `unidentifiedRpidCount`/`rpidsAwaitingDisplayId` bookkeeping below
+  /// is untouched from before beid#109/#162: it is a deliberately different
+  /// quantity from anything `BeidSharedKit.aggregation` reports (see
+  /// `unidentifiedRpidCount`'s doc comment), so it stays purely native.
+  private func recordDeviceIdentity(enin: Int, rpid: String, detectedDisplayId: String?) -> Bool {
     // Barnard emits lowercase hex today; normalize so an upstream change of
     // case could not split one device into two.
-    guard let displayId = detectedDisplayId?.lowercased() else {
+    let displayId = detectedDisplayId?.lowercased()
+
+    if displayId == nil {
       if rpidsAwaitingDisplayId.insert(rpid).inserted {
         unidentifiedRpidCount = rpidsAwaitingDisplayId.count
         Self.log.notice(
@@ -453,13 +474,14 @@ final class SensingCoordinator: ObservableObject {
           """
         )
       }
-      return false
-    }
-    if rpidsAwaitingDisplayId.remove(rpid) != nil {
+    } else if rpidsAwaitingDisplayId.remove(rpid) != nil {
       unidentifiedRpidCount = rpidsAwaitingDisplayId.count
     }
-    guard distinctPeerDisplayIds.insert(displayId).inserted else { return false }
-    devicesVerified = distinctPeerDisplayIds.count
+
+    aggregationRuntime.recordObservation(windowIndex: enin, peerKey: rpid, displayId: displayId)
+    let updatedDeviceCount = aggregationRuntime.deviceCount
+    guard updatedDeviceCount != devicesVerified else { return false }
+    devicesVerified = updatedDeviceCount
     return true
   }
 
@@ -581,7 +603,7 @@ final class SensingCoordinator: ObservableObject {
     guard case .signalLost(let event, let peersVerified) = phase else { return }
     phase = .recording(event: event, peersVerified: peersVerified)
     if useDemoEventMode {
-      continueDemoRecording(event: event, from: peersVerified, stepDelayNanos: demoStepDelayNanos)
+      continueDemoRecording(event: event, stepDelayNanos: demoStepDelayNanos)
     }
   }
 
@@ -612,7 +634,8 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func resetSessionState() {
-    distinctPeerDisplayIds = []
+    aggregationRuntime = AggregationRuntime()
+    demoDeviceSequence = 0
     rpidsAwaitingDisplayId = []
     devicesVerified = 0
     unidentifiedRpidCount = 0
@@ -1100,7 +1123,14 @@ final class SensingCoordinator: ObservableObject {
   // `waitForDemoSequenceToFinish()`. Demo mode has no real `BarnardEvent`
   // stream, so it drives the same shared phase-transition helpers directly
   // instead of going through `observe(_:for:)`; it does not produce window
-  // reports (those depend on real `.detection` ENIN boundaries).
+  // reports (those depend on real `.detection` ENIN boundaries). Device
+  // growth, however, goes through `observeOneDemoDevice()` ->
+  // `recordDeviceIdentity(enin:rpid:detectedDisplayId:)`, the same
+  // `aggregationRuntime` accumulator the real path uses (beid#109/#162):
+  // DemoEvent is App Review's demo path (see `ios/README.md` "DemoEvent
+  // mode") and the only path exercisable on the Simulator, so its
+  // `devicesVerified` growth comes from the same source a real session uses
+  // rather than a bare loop counter.
 
   func runDemoSequence(demoEvent: EventSession, stepDelayNanos: UInt64 = 700_000_000) {
     demoTask?.cancel()
@@ -1112,29 +1142,50 @@ final class SensingCoordinator: ObservableObject {
       guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
 
       let threshold = BeidConfig.eventConfirmThreshold
-      self.beginRecording(event: demoEvent, peersVerified: threshold)
+      for _ in 0..<threshold {
+        self.observeOneDemoDevice()
+      }
+      self.beginRecording(event: demoEvent, peersVerified: self.devicesVerified)
       self.advanceDemoWindow()
 
-      for peersVerified in (threshold + 1)...(threshold + 2) {
+      for _ in 0..<2 {
         guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-        self.updateRecording(event: demoEvent, peersVerified: peersVerified)
+        self.observeOneDemoDevice()
+        self.updateRecording(event: demoEvent, peersVerified: self.devicesVerified)
         self.advanceDemoWindow()
       }
     }
   }
 
-  /// Continues the demo growth loop from a frozen (post-signal-lost) count
-  /// — `resumeSensing()`'s demo-mode counterpart to `runDemoSequence`.
-  private func continueDemoRecording(event: EventSession, from peersVerified: Int, stepDelayNanos: UInt64) {
+  /// Continues the demo growth loop from where `devicesVerified` was frozen
+  /// at signal-loss — `resumeSensing()`'s demo-mode counterpart to
+  /// `runDemoSequence`. Reads `devicesVerified` rather than taking a
+  /// `peersVerified` parameter: `observeOneDemoDevice()` already keeps it and
+  /// the frozen `phase` value in lockstep, so a separate starting point would
+  /// be a second copy of the same number.
+  private func continueDemoRecording(event: EventSession, stepDelayNanos: UInt64) {
     demoTask?.cancel()
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
-      for next in (peersVerified + 1)...(peersVerified + 2) {
+      for _ in 0..<2 {
         guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-        self.updateRecording(event: event, peersVerified: next)
+        self.observeOneDemoDevice()
+        self.updateRecording(event: event, peersVerified: self.devicesVerified)
         self.advanceDemoWindow()
       }
     }
+  }
+
+  /// Synthesizes one new demo device observation through the exact same
+  /// `recordDeviceIdentity`/`aggregationRuntime` path the real detection path
+  /// uses, so demo growth and real growth share one source of truth for
+  /// `devicesVerified` (beid#109/#162's iOS wiring). Each call uses a
+  /// never-repeated synthetic id, so it always grows the shared device count
+  /// by exactly one.
+  private func observeOneDemoDevice() {
+    demoDeviceSequence += 1
+    let syntheticId = "demo-device-\(demoDeviceSequence)"
+    _ = recordDeviceIdentity(enin: demoWindowEnin, rpid: syntheticId, detectedDisplayId: syntheticId)
   }
 
   /// Demo-only stand-in for the real path's `advanceWindowIfNeeded` —
