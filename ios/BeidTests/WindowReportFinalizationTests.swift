@@ -162,6 +162,50 @@ final class WindowReportFinalizationTests: XCTestCase {
     )
   }
 
+  /// beid#134 Decision 1 (`docs/specs/ledger-async-io.md` §4, §7 AC4):
+  /// `stopSensing()`/`reset()`/`checkpointOpenWindowForBackgrounding()`
+  /// called during the loading window, before any detection has been
+  /// queued, must remain safe no-ops — the same nil-state guards
+  /// (`currentWindowEnin == nil`, `activeProofId == nil`, ...) these
+  /// functions already have for "nothing observed yet" hold unchanged,
+  /// since no detection has been processed to populate that state.
+  func testExplicitStopAndBackgroundingCheckpointRemainNoOpsDuringLoadingWindow() async {
+    for trigger in ["stopSensing", "reset", "checkpointOpenWindowForBackgrounding"] {
+      let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("window-finalization-loading-test-\(UUID().uuidString)", isDirectory: true)
+      try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+      let coordinator = SensingCoordinator(
+        loadingFromDirectory: directory,
+        sensingCryptography: DeterministicSensingCryptography()
+      )
+      coordinator.useDemoEventMode = false
+
+      // No `await` yet: the background load task is guaranteed not to have
+      // run, and no detection has been queued or processed.
+      XCTAssertTrue(coordinator.isLedgerLoading, "\(trigger): loading must still be in progress immediately after construction")
+
+      switch trigger {
+      case "stopSensing":
+        coordinator.stopSensing()
+      case "reset":
+        coordinator.reset()
+      case "checkpointOpenWindowForBackgrounding":
+        coordinator.checkpointOpenWindowForBackgrounding()
+      default:
+        XCTFail("unknown trigger \(trigger)")
+      }
+
+      XCTAssertEqual(coordinator.phase, .idle, "\(trigger) during the loading window must not crash or leave a non-idle phase")
+
+      await coordinator.waitForLedgerLoadToFinish()
+
+      XCTAssertFalse(coordinator.isLedgerLoading, "\(trigger): loading must still complete normally afterward")
+      XCTAssertEqual(coordinator.phase, .idle, "\(trigger): phase must remain idle once loading finishes")
+    }
+  }
+
   func testSessionThatNeverObservesAnyPeerReportsNothing() {
     let (coordinator, store) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-WINDOW-NO-PEERS")
