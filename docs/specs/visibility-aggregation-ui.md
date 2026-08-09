@@ -370,19 +370,44 @@ surface**, three-tier vocabulary:
   `joinedEventCode` presence and/or `ScanPhase != .idle`, or simply the
   existence of a `Proof` for the event. No aggregation involved; this tier
   is a plain native state read, not a `shared` output.
-- Tier 2 (参加記録), sub-state "端末内に記録済み" (recorded on-device): the
-  **shared unsent-window ledger** is the correct source per
+- Tier 2 (参加記録), sub-state "端末内に記録済み" (recorded on-device):
+  **CORRECTION (2026-08-09, discovered during #137's implementation —
+  DECISIONS.md "#137 は履歴スコープを採り、Proof に eventCode を optional で追加
+  する"), superseding the paragraph below rather than silently replacing
+  it.** The original guidance (kept for the record, immediately below)
+  turned out not to survive contact with the live source: the shared
+  unsent-window ledger has **no per-event scoping** —
+  `UnsentWindowLedgerRuntime.openWindow(windowId:)` is called with a fresh
+  opaque `UUID()` per window (`SensingCoordinator.swift`), never an
+  eventCode — and it **never drains**, since no report-submission path
+  exists yet to remove closed windows once sent. A "closed window count"
+  read off the ledger would therefore be **lifetime-cumulative across
+  every session ever run on the device**, not scoped to one event — the
+  same false-signal problem §5.2 argues against, just from a different
+  source. The actual per-event source is
+  **`WindowReportStore.reports.filter { $0.eventCode == proof.eventCode }`**,
+  since `WindowReport` already carries a stable `eventCode` field per
+  report; this requires `Proof` to also carry an `eventCode` (now
+  `Proof.eventCode: String?`, added for exactly this purpose — optional,
+  `decodeIfPresent`, no enum-case addition, per the DECISIONS entry
+  above). The unsent-window ledger read accessor discussed below is not
+  removed by this correction, but its use is narrowed: it stays
+  **informational/whole-ledger only**, never Tier 2's primary source.
+  ~~Original guidance, superseded by the correction above~~: <del>the
+  shared unsent-window ledger is the correct source per
   `docs/kmp-shared-foundation.md`'s ownership table ("未送信台帳の状態と純粋な
   reducer" is a `shared` responsibility) — read the ledger's own closed/
-  pending-window counts through `UnsentWindowLedgerRuntime`, **not** a
-  native re-count of `WindowReportStore.reports` (which duplicates
-  information the ledger already tracks and risks disagreeing with it).
+  pending-window counts through `UnsentWindowLedgerRuntime`, not a native
+  re-count of `WindowReportStore.reports` (which duplicates information
+  the ledger already tracks and risks disagreeing with it).</del>
   **Flagged as TBD-confirm-with-adapter**: whether `UnsentWindowLedgerRuntime`
   currently exposes a queryable "closed window count" or only imperative
   open/close/reconcile calls (`UnsentWindowLedgerRuntime.swift:14-23`
   shows only `openWindow`/`closeWindow`/`reconcileAfterRelaunch` — no
-  read accessor). If it doesn't yet, exposing one is small additive scope
-  for whichever PR implements this tier, not a redesign of the ledger.
+  read accessor). If it doesn't yet, exposing one remains small additive
+  scope for whoever needs whole-ledger informational state, not a
+  redesign of the ledger — but it is no longer required for Tier 2 itself,
+  which reads `WindowReportStore` instead per the correction above.
 - Tier 2, sub-states "送信済み" (sent) / "収録済み" (included in published
   data): see §5.2 — **no data source exists for either today.**
 - Tier 3 (検証済みの参加証明): "third-party verification passed," including

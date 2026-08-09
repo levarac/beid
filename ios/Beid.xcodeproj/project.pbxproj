@@ -96,6 +96,7 @@
 		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
 		EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25F9B71C531690F799D13498 /* EventBindingTests.swift */; };
 		F1D63DC71DAF25FD71813162 /* SensingCryptographyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0A3B3879ACAFE05FB7C4A7A /* SensingCryptographyTests.swift */; };
+		F23D870545BBEFF8C0585E4C /* TransparencyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
 		F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */; };
 		F5F7A3F981CD58049736AE04 /* SessionAggregateSnapshotStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5459592F237296DD025E2E77 /* SessionAggregateSnapshotStoreTests.swift */; };
@@ -158,6 +159,7 @@
 		394E6F2E97311572D2BAED89 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
 		3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportFinalizationTests.swift; sourceTree = "<group>"; };
 		4649A0DA5850F0EA17519B40 /* MetaMaskDebugSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskDebugSupport.swift; sourceTree = "<group>"; };
+		480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransparencyView.swift; sourceTree = "<group>"; };
 		49BA528F084158430D34C634 /* BeidTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BeidTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanPhase.swift; sourceTree = "<group>"; };
 		5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEvent.swift; sourceTree = "<group>"; };
@@ -384,6 +386,7 @@
 				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
 				29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */,
 				912FC62DE59B0394056CF446 /* SignalLostView.swift */,
+				480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */,
 				7F95B2F947E49234FCD1421B /* WalletConnectView.swift */,
 				10807372081AA25A74942BE3 /* WelcomeView.swift */,
 			);
@@ -718,6 +721,7 @@
 				64645438E8897AC3115D5188 /* SharedRuntimeProbe.swift in Sources */,
 				4900D74D47E774AF213395BC /* SignalLostView.swift in Sources */,
 				516EB6C209C600A66F08EFF1 /* Tokens.swift in Sources */,
+				F23D870545BBEFF8C0585E4C /* TransparencyView.swift in Sources */,
 				3F4F7436CE946FC446816422 /* UnsentWindowLedgerRuntime.swift in Sources */,
 				44014CB908EB5E90A24769BE /* UnsentWindowLedgerStore.swift in Sources */,
 				2F6282D16C15B8EBCA2669DC /* WalletConnectSecrets.swift in Sources */,
