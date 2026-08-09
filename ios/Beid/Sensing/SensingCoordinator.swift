@@ -3,6 +3,7 @@
 
 import Barnard
 import BarnardCore
+import BeidSharedKit
 import Foundation
 import os
 
@@ -128,11 +129,23 @@ final class SensingCoordinator: ObservableObject {
   /// Observations that arrive without a display id are never folded in here —
   /// they land in `unidentifiedRpidCount` instead.
   ///
-  /// Sourced from `aggregationRuntime.deviceCount`
+  /// Sourced from `sessionAggregate?.deviceCount`
   /// (`BeidSharedKit.aggregation.SessionAggregate.deviceCount`, all-observation
   /// scope, beid#109/#162) rather than computed natively — this property is
   /// projected from that shared decision, not recomputed here.
   @Published private(set) var devicesVerified = 0
+  /// The full shared session aggregate as of the most recent observation —
+  /// all-observation and mutual scopes, plus the window series
+  /// (`BeidSharedKit.aggregation.SessionAggregate`, beid#109/#142/#162).
+  /// `devicesVerified` above is this aggregate's `deviceCount` projected to a
+  /// plain `Int` for the confirmation-threshold arithmetic; UI that wants the
+  /// mutual counts or the window-by-window buildup (`RecordingView`, #142)
+  /// reads this property directly instead of a second native re-projection,
+  /// so those values are provably shared-sourced by their own type. `nil`
+  /// until the first observation of a session; recomputed and republished on
+  /// every new observation (#109's "no subscription API, caller recomputes"
+  /// contract — see `AggregationRuntime.sessionAggregate`).
+  @Published private(set) var sessionAggregate: BeidSharedKit.aggregation.SessionAggregate?
   /// Distinct proximity identifiers observed this session that never arrived
   /// with a `detectedDisplayId`, and so could not be attributed to a device.
   ///
@@ -558,7 +571,9 @@ final class SensingCoordinator: ObservableObject {
     }
 
     aggregationRuntime.recordObservation(windowIndex: enin, peerKey: rpid, displayId: displayId)
-    let updatedDeviceCount = aggregationRuntime.deviceCount
+    let aggregate = aggregationRuntime.sessionAggregate
+    sessionAggregate = aggregate
+    let updatedDeviceCount = Int(aggregate.deviceCount)
     guard updatedDeviceCount != devicesVerified else { return false }
     devicesVerified = updatedDeviceCount
     return true
@@ -714,6 +729,7 @@ final class SensingCoordinator: ObservableObject {
 
   private func resetSessionState() {
     aggregationRuntime = AggregationRuntime()
+    sessionAggregate = nil
     demoDeviceSequence = 0
     rpidsAwaitingDisplayId = []
     devicesVerified = 0

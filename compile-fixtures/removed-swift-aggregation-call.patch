@@ -1,22 +1,19 @@
 diff --git a/ios/Beid/Sensing/AggregationRuntime.swift b/ios/Beid/Sensing/AggregationRuntime.swift
-index cb3b037..62a4072 100644
+index 963e126..f1f7371 100644
 --- a/ios/Beid/Sensing/AggregationRuntime.swift
 +++ b/ios/Beid/Sensing/AggregationRuntime.swift
-@@ -49,16 +49,6 @@ final class AggregationRuntime {
-   /// limitation, since a 4-byte display id can in principle collide across
-   /// two real devices.
-   var deviceCount: Int {
--    // `windowsPerBand` only affects the band series, which this adapter does
--    // not read; any valid (>= 1) width works, so a fixed 1 keeps this call
--    // unconditional. `Int(...)` normalizes shared's Kotlin `Int` result to
--    // Swift's native `Int` width regardless of the exact Swift Export
--    // integer mapping.
--    Int(
--      BeidSharedKit.aggregation.aggregateObservationsForSession(
--        input: input,
--        windowsPerBand: 1
--      ).deviceCount
+@@ -39,13 +39,7 @@ final class AggregationRuntime {
+   /// expected to see `false`.
+   @discardableResult
+   func recordObservation(windowIndex: Int, peerKey: String, displayId: String?) -> Bool {
+-    BeidSharedKit.aggregation.addAggregationObservation(
+-      input: input,
+-      windowIndex: Int64(windowIndex),
+-      peerKey: peerKey,
+-      displayId: displayId,
+-      mutual: false
 -    )
-+    0
++    false
    }
- }
+ 
+   /// The current session aggregate, recomputed fresh over every observation

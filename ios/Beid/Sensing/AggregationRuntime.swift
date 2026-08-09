@@ -5,20 +5,24 @@ import BeidSharedKit
 import Foundation
 
 /// Thin adapter over shared's observation-aggregation API
-/// (`BeidSharedKit.aggregation`, beid#109/#162). Accumulates one observation
-/// per detection and projects the shared session aggregate's
-/// all-observation device count back to a native-facing value.
+/// (`BeidSharedKit.aggregation`, beid#109/#162/#142). Accumulates one
+/// observation per detection and hands back the shared session aggregate —
+/// device counts (all-observation and mutual scope) plus the window series —
+/// as shared's own type, not a re-projection into new native properties.
 ///
 /// Carries no counting logic of its own: `SensingCoordinator` supplies raw
 /// observations (window index, per-window peer key, optional stable display
 /// id), and shared decides distinctness. Follows the same shape as
 /// `UnsentWindowLedgerRuntime`: translate native input, call shared once,
-/// project the result back.
+/// project the result back. Handing back `BeidSharedKit.aggregation
+/// .SessionAggregate` itself (rather than unpacking every field into a
+/// parallel native struct) keeps native callers reading values whose type
+/// alone proves they are shared-sourced.
 ///
 /// `mutual` is always passed as `false` today — no reciprocity signal exists
 /// on-device yet (documented limitation carried from beid#109, not solved
-/// here). This type reads only the all-observation scope; it never surfaces
-/// the `mutual*` fields.
+/// here). Every mutual-scope field on the returned aggregate is therefore
+/// `0` for as long as that remains true.
 final class AggregationRuntime {
   private var input: BeidSharedKit.aggregation.AggregationObservationInput
 
@@ -44,21 +48,16 @@ final class AggregationRuntime {
     )
   }
 
-  /// The session-wide device count observed so far, at all-observation
-  /// scope. A lower bound, not an exact figure — shared's own documented
-  /// limitation, since a 4-byte display id can in principle collide across
-  /// two real devices.
-  var deviceCount: Int {
-    // `windowsPerBand` only affects the band series, which this adapter does
-    // not read; any valid (>= 1) width works, so a fixed 1 keeps this call
-    // unconditional. `Int(...)` normalizes shared's Kotlin `Int` result to
-    // Swift's native `Int` width regardless of the exact Swift Export
-    // integer mapping.
-    Int(
-      BeidSharedKit.aggregation.aggregateObservationsForSession(
-        input: input,
-        windowsPerBand: 1
-      ).deviceCount
+  /// The current session aggregate, recomputed fresh over every observation
+  /// recorded so far — matches #109's "no subscription API, caller
+  /// recomputes" contract (a session's observation count is small, so
+  /// recomputing on every new observation is cheap). `windowsPerBand` is
+  /// fixed at 1: nothing reads the band series yet, only the window series
+  /// and the session-wide totals (#142).
+  var sessionAggregate: BeidSharedKit.aggregation.SessionAggregate {
+    BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input,
+      windowsPerBand: 1
     )
   }
 }
