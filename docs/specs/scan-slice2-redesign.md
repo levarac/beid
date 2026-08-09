@@ -173,6 +173,18 @@ leaves a real, if smaller, `Proof` behind.
 
 ### 4.3 Threshold-confirm (D3)
 
+> **Superseded in part, 2026-08-09** (DECISIONS.md: *"#114 は Option B —
+> フェーズ遷移は据え置き、署名・永続化を .recording 以降に限定する"*;
+> `docs/specs/eventfound-window-signing.md`). The first-detection choice
+> for `.sensing → .eventFound` below still stands, unchanged — but its
+> scope is now narrower than when this section was written: window
+> open/sign/persist side effects (`WindowReportStore` + the unsent-window
+> ledger) no longer start at `.eventFound`. They are deferred to
+> `.recording`, so a single unconfirmed detection no longer produces a
+> durably-stored signed artifact. See `eventfound-window-signing.md` for
+> the full rationale and the accepted trade-off (windows observed before
+> the threshold is first crossed produce no report at all).
+
 - `SensingCoordinator` maintains a running `peersVerified` count of distinct
   mutual-sensing observations for the current event (already partially
   present as the demo sequence's loop variable; needs a real-path
