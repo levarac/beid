@@ -33,6 +33,47 @@ struct WindowReportRedeliveryBuffer {
   }
 }
 
+/// The shared unsent-window ledger's operating state: whether
+/// `unsentWindowLedgerRuntime` and the window-report/redelivery pipeline
+/// feeding it can currently record — and if not, why and since when
+/// (beid#131).
+///
+/// Exists because `unsentWindowLedgerRuntime` is a `let`: once construction
+/// or relaunch reconciliation fails, it stays `nil` for the rest of the
+/// process with no recovery path and, before this type, no record of when
+/// or why. A later persistence failure on an otherwise-live runtime is the
+/// same shape of invisible problem. Neither case previously left anything
+/// queryable outside a device console log.
+///
+/// Same principle as `CorruptStoreQuarantine.Outcome`/
+/// `persistenceSuspensionReason` on the proof-family stores: surface *why*
+/// a store can't be trusted right now as a typed fact, not just a `print`.
+enum LedgerHealth {
+  case healthy
+  /// `since` latches to the *first* observed failure and never moves once
+  /// set — this process has no ledger recovery path, so a device that
+  /// degrades once stays degraded for the rest of its life, and knowing how
+  /// long that has been true matters more than the timestamp of whichever
+  /// failure ran most recently. `reason` still reflects the most recent
+  /// failure.
+  case degraded(reason: Error, since: Date)
+
+  var isDegraded: Bool {
+    if case .degraded = self { return true }
+    return false
+  }
+
+  var degradationReason: Error? {
+    guard case let .degraded(reason, _) = self else { return nil }
+    return reason
+  }
+
+  var degradedSince: Date? {
+    guard case let .degraded(_, since) = self else { return nil }
+    return since
+  }
+}
+
 /// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
 /// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
 /// state machine. The facade — not `BarnardIdentity` directly — is what this
@@ -152,12 +193,26 @@ final class SensingCoordinator: ObservableObject {
   /// `.public` because none of it is personal data: they are small integers,
   /// and no identifier is ever logged.
   private static let log = Logger(subsystem: "org.levarac.beid", category: "sensing")
+  /// Ledger/window-report/redelivery failure diagnostics (beid#131). A
+  /// separate category (`"ledger"`, not `"sensing"`) so this failure family
+  /// filters on its own in Console.app/sysdiagnose, apart from `Self.log`'s
+  /// device-counting diagnostics above. Every interpolation below is
+  /// `.public` for the same reason `Self.log`'s are: none of it is personal
+  /// data — sandbox-local file paths, session-scoped UUIDs, and error
+  /// descriptions — and a `.private` interpolation would render as
+  /// `<private>` in exactly the shipping-build device log this exists to
+  /// populate.
+  private static let ledgerLog = Logger(subsystem: "org.levarac.beid", category: "ledger")
 
   private let engine = BarnardEngine()
   private let sensingCryptography: any SensingCryptography
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private let windowReportStore: WindowReportStore
   private let unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
+  /// Whether `unsentWindowLedgerRuntime` (and the window-report/redelivery
+  /// pipeline feeding it) can currently record — and if not, why and since
+  /// when. See `LedgerHealth`.
+  private(set) var ledgerHealth: LedgerHealth = .healthy
   private let bindingRecordStore = BindingRecordStore()
   private let selfProofStore: SelfProofStore
   private var demoTask: Task<Void, Never>?
@@ -282,36 +337,41 @@ final class SensingCoordinator: ObservableObject {
   #endif
 
   convenience init() {
+    var initialLedgerFailure: Error?
+
     let windowReportStore: WindowReportStore
     do {
       let recovery = try WindowReportStore.recoveringCorruptReports()
       if let quarantinedURL = recovery.quarantinedReportsURL {
-        print("Quarantined corrupt window reports at \(quarantinedURL.path)")
+        Self.ledgerLog.error("Quarantined corrupt window reports at \(quarantinedURL.path, privacy: .public)")
       }
       windowReportStore = recovery.store
     } catch {
       windowReportStore = WindowReportStore()
-      print("Unable to recover the window report store: \(error)")
+      initialLedgerFailure = error
+      Self.ledgerLog.error("Unable to recover the window report store: \(error, privacy: .public)")
     }
 
     let runtime: UnsentWindowLedgerRuntime?
     do {
       let recovery = try UnsentWindowLedgerStore.recoveringCorruptSnapshot()
       if let quarantinedURL = recovery.quarantinedSnapshotURL {
-        print("Quarantined a corrupt shared unsent-window ledger at \(quarantinedURL.path)")
+        Self.ledgerLog.error("Quarantined a corrupt shared unsent-window ledger at \(quarantinedURL.path, privacy: .public)")
       }
       runtime = try UnsentWindowLedgerRuntime(
         store: recovery.store
       )
     } catch {
       runtime = nil
-      print("Unable to load the shared unsent-window ledger: \(error)")
+      initialLedgerFailure = error
+      Self.ledgerLog.error("Unable to load the shared unsent-window ledger: \(error, privacy: .public)")
     }
     self.init(
       windowReportStore: windowReportStore,
       selfProofStore: SelfProofStore(),
       unsentWindowLedgerRuntime: runtime,
-      sensingCryptography: BarnardSensingCryptography()
+      sensingCryptography: BarnardSensingCryptography(),
+      initialLedgerFailure: initialLedgerFailure
     )
   }
 
@@ -342,9 +402,11 @@ final class SensingCoordinator: ObservableObject {
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
-    sensingCryptography: any SensingCryptography
+    sensingCryptography: any SensingCryptography,
+    initialLedgerFailure: Error? = nil
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
+    var ledgerFailure = initialLedgerFailure
     if let runtime = recoveredRuntime {
       do {
         // TODO: Construction currently performs relaunch reconciliation even
@@ -359,7 +421,8 @@ final class SensingCoordinator: ObservableObject {
         try runtime.reconcileAfterRelaunch(persistedObservations: persistedObservations)
       } catch {
         recoveredRuntime = nil
-        print("Unable to reconcile the shared unsent-window ledger: \(error)")
+        ledgerFailure = error
+        Self.ledgerLog.error("Unable to reconcile the shared unsent-window ledger: \(error, privacy: .public)")
       }
     }
 
@@ -367,6 +430,9 @@ final class SensingCoordinator: ObservableObject {
     self.selfProofStore = selfProofStore
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
+    if let ledgerFailure {
+      ledgerHealth = .degraded(reason: ledgerFailure, since: Date())
+    }
     engine.onEvent = { [weak self] event in
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
@@ -894,7 +960,8 @@ final class SensingCoordinator: ObservableObject {
           windowId: windowId.uuidString.lowercased()
         )
       } catch {
-        print("Unable to persist an open shared-ledger window: \(error)")
+        Self.ledgerLog.error("Unable to persist an open shared-ledger window: \(error, privacy: .public)")
+        recordLedgerDegradation(error)
       }
     }
   }
@@ -917,7 +984,7 @@ final class SensingCoordinator: ObservableObject {
     // opens a real native report window.
     guard currentWindowId != nil else { return }
     guard let eventCode = currentSessionEventCode else {
-      print("Unable to close the native window without an active event code")
+      Self.ledgerLog.error("Unable to close the native window without an active event code")
       return
     }
     closeWindow(enin: enin, eventCode: eventCode)
@@ -948,6 +1015,18 @@ final class SensingCoordinator: ObservableObject {
     closeWindow(enin: enin, eventCode: eventCode)
   }
 
+  /// Marks `ledgerHealth` degraded for an operational persist failure (as
+  /// opposed to the construction-time failure `init` threads in directly).
+  /// See `LedgerHealth.since` for why this latches to the first failure
+  /// rather than overwriting it on every subsequent one.
+  private func recordLedgerDegradation(_ error: Error) {
+    if case let .degraded(_, since) = ledgerHealth {
+      ledgerHealth = .degraded(reason: error, since: since)
+    } else {
+      ledgerHealth = .degraded(reason: error, since: Date())
+    }
+  }
+
   private func clearCurrentWindowState() {
     currentWindowRpids = []
     currentWindowEnin = nil
@@ -965,7 +1044,7 @@ final class SensingCoordinator: ObservableObject {
       let commit = activeCommit,
       let currentWindowId
     else {
-      print("Unable to close a native window without its commitment and identifier")
+      Self.ledgerLog.error("Unable to close a native window without its commitment and identifier")
       clearCurrentWindowState()
       return
     }
@@ -1001,10 +1080,11 @@ final class SensingCoordinator: ObservableObject {
         currentWindowObservationReference = observationReference
       } catch {
         if let dropped = windowReportRedeliveryBuffer.enqueue(report) {
-          print("Dropped the newest pending window report after reaching redelivery capacity: \(dropped.id)")
+          Self.ledgerLog.error("Dropped the newest pending window report after reaching redelivery capacity: \(dropped.id, privacy: .public)")
         } else {
-          print("Parked a native window report for redelivery after persistence failed: \(error)")
+          Self.ledgerLog.error("Parked a native window report for redelivery after persistence failed: \(error, privacy: .public)")
         }
+        recordLedgerDegradation(error)
         clearCurrentWindowState()
         return
       }
@@ -1017,7 +1097,8 @@ final class SensingCoordinator: ObservableObject {
           persistedObservationReference: observationReference
         )
       } catch {
-        print("Unable to persist a closed shared-ledger window: \(error)")
+        Self.ledgerLog.error("Unable to persist a closed shared-ledger window: \(error, privacy: .public)")
+        recordLedgerDegradation(error)
       }
     }
     clearCurrentWindowState()
@@ -1040,9 +1121,10 @@ final class SensingCoordinator: ObservableObject {
         // because shared has no corresponding window. Remove only this
         // terminal rejection so later recoverable artifacts can still drain.
         windowReportRedeliveryBuffer.removeFirst()
-        print("Discarded a pending native window report absent from the shared ledger: \(report.id)")
+        Self.ledgerLog.error("Discarded a pending native window report absent from the shared ledger: \(report.id, privacy: .public)")
       } catch {
-        print("Unable to redeliver a pending native window report: \(error)")
+        Self.ledgerLog.error("Unable to redeliver a pending native window report: \(error, privacy: .public)")
+        recordLedgerDegradation(error)
         return
       }
     }
