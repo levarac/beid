@@ -213,6 +213,74 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertEqual(peersVerified, BeidConfig.eventConfirmThreshold)
   }
 
+  // beid#131: `unsentWindowLedgerRuntime` is a `let` — once construction
+  // fails it stays `nil` for the rest of the process with nothing queryable
+  // recording when or why. This asserts `ledgerHealth` is degraded from the
+  // instant a construction failure is threaded in, before any operation
+  // runs.
+  func testLedgerHealthReflectsConstructionFailureFromTheStart() {
+    let directory = temporaryDirectory(named: "ledger-health-construction-failure")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let reportStore = WindowReportStore(
+      fileURL: directory.appendingPathComponent("window-reports.json")
+    )
+    let constructionFailure = UnsentWindowLedgerRuntimeError.rejectedTransition(
+      "simulated_construction_failure"
+    )
+
+    let coordinator = SensingCoordinator(
+      windowReportStore: reportStore,
+      selfProofStore: SelfProofStore(
+        fileURL: directory.appendingPathComponent("self-proofs.json")
+      ),
+      unsentWindowLedgerRuntime: nil,
+      sensingCryptography: DeterministicSensingCryptography(),
+      initialLedgerFailure: constructionFailure
+    )
+
+    XCTAssertTrue(coordinator.ledgerHealth.isDegraded)
+    XCTAssertNotNil(coordinator.ledgerHealth.degradationReason)
+    XCTAssertNotNil(coordinator.ledgerHealth.degradedSince)
+  }
+
+  // beid#131: an operational persist failure on an otherwise-live runtime
+  // (as opposed to a construction failure) must also surface as degraded,
+  // and a device that degrades once must not have that fact overwritten by
+  // a later, unrelated failure — `since` has to stay pinned to the first
+  // occurrence so "how long has this been broken" survives.
+  func testLedgerHealthReflectsOperationalPersistFailureAndLatchesSinceTheFirstOccurrence() throws {
+    let fixture = try makeRecoverableReportFailureFixture(named: "ledger-health-operational-failure")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    XCTAssertFalse(fixture.coordinator.ledgerHealth.isDegraded)
+
+    fixture.coordinator.startSensing(eventCode: "TEST-LEDGER-HEALTH-OPEN-FAILURE")
+    try fixture.blockLedgerWrites()
+
+    fixture.coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-triggering-open-window-failure",
+      detectedDisplayId: DetectionFixture.displayId(device: 1)
+    )
+
+    XCTAssertTrue(fixture.coordinator.ledgerHealth.isDegraded)
+    XCTAssertNotNil(fixture.coordinator.ledgerHealth.degradationReason)
+    let firstFailureSince = try XCTUnwrap(fixture.coordinator.ledgerHealth.degradedSince)
+
+    Thread.sleep(forTimeInterval: 0.05)
+    fixture.coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-triggering-a-second-later-failure",
+      detectedDisplayId: DetectionFixture.displayId(device: 2)
+    )
+
+    XCTAssertTrue(fixture.coordinator.ledgerHealth.isDegraded)
+    XCTAssertEqual(
+      fixture.coordinator.ledgerHealth.degradedSince,
+      firstFailureSince,
+      "since must latch to the first failure, not move on a later one"
+    )
+  }
+
   func testFailedLedgerCloseAtEninBoundaryStillAcceptsTheTriggeringObservation() throws {
     let fixture = try makeRuntimeFixture(named: "failed-enin-close")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
