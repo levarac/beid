@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BarnardCore
 import BeidSharedKit
 import XCTest
 @testable import Beid
@@ -29,6 +30,9 @@ func makeIsolatedSensingCoordinator(
     ),
     selfProofCheckpointStore: SelfProofCheckpointStore(
       fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
+    ),
+    bindingRecordStore: BindingRecordStore(
+      fileURL: directory.appendingPathComponent("binding-records.json")
     ),
     unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
     sensingCryptography: sensingCryptography
@@ -319,6 +323,79 @@ final class SensingCoordinatorTests: XCTestCase {
       crypto.calls,
       [.ownerPublicKey, .eventSigningPublicKey(eventCode: "Unknown Event"), .ownerPublicKey],
       "the mismatch check's ownerPublicKey() call must be the first recorded call — strictly before the queued detection's beginEventFound(_:) commit computation calls eventSigningPublicKey/ownerPublicKey again"
+    )
+  }
+
+  /// beid#186 — `bindingRecordStore` was the one store on `SensingCoordinator`
+  /// never threaded through `loadingFromDirectory:`/the explicit-storage
+  /// seam: every other store (`windowReportStore`/`selfProofStore`/
+  /// `selfProofCheckpointStore`/the ledger file) was already injectable, but
+  /// this one silently kept resolving `BindingRecordStore`'s own default
+  /// on-device path regardless of what directory a test passed in. Because
+  /// `ownerPublicKeyMismatchDetected` (gh#156 Signal B) reads
+  /// `bindingRecordStore.records`, a coordinator built for an "isolated"
+  /// test could still see whatever real binding records happened to already
+  /// exist on the machine running the test — a harness bug that would read
+  /// as a product bug, discovered empirically during beid#134's own test
+  /// development. This seeds the real on-device default store with a
+  /// deliberately owner-key-mismatching record, then proves an isolated
+  /// coordinator constructed via `loadingFromDirectory:` — pointed at an
+  /// empty temp directory, never at that default path — does not see it.
+  func testIsolatedCoordinatorDoesNotSeeOnDeviceBindingRecords() async throws {
+    // `BindingRecordStore`'s own default filename
+    // (`ios/Beid/Persistence/BindingRecordStore.swift`'s `defaultFileURL()`)
+    // — deliberately stable per that file's own doc comment, so hardcoding
+    // it here is safe. Snapshot-and-restore rather than "delete on
+    // teardown": this file may legitimately already hold real records from
+    // other activity on this machine, and this test must not destroy them.
+    let onDeviceFileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("binding-records-v2.json")
+    let originalOnDeviceBytes = try? Data(contentsOf: onDeviceFileURL)
+    addTeardownBlock {
+      if let originalOnDeviceBytes {
+        try? originalOnDeviceBytes.write(to: onDeviceFileURL, options: .atomic)
+      } else {
+        try? FileManager.default.removeItem(at: onDeviceFileURL)
+      }
+    }
+
+    let mismatchingRecord = BindingRecord(
+      proofId: UUID(),
+      eventCode: "TEST-ON-DEVICE-POLLUTION",
+      walletAddress: "0x0000000000000000000000000000000000000001",
+      eventSigningPublicKey: Data(repeating: 0x02, count: 33),
+      ownerPublicKey: Data(repeating: 0xAA, count: 33),
+      chainId: 1,
+      nonce: Data(repeating: 0x04, count: 16),
+      issuedAt: "2026-01-01T00:00:00Z",
+      walletSignatureHex: String(repeating: "0a", count: 65),
+      deviceSignature: BarnardCoreRecoverableSignature(
+        r: [UInt8](repeating: 1, count: 32),
+        s: [UInt8](repeating: 2, count: 32),
+        v: 0
+      )
+    )
+    // `BindingRecordStore()` with no `fileURL` resolves to the same
+    // real on-device default path `SensingCoordinator`'s own production
+    // `convenience init()` would use — the exact path an isolated test
+    // coordinator must never read from.
+    BindingRecordStore().add(mismatchingRecord)
+
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("sensing-coordinator-binding-isolation-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: DeterministicSensingCryptography()
+    )
+    coordinator.useDemoEventMode = false
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertFalse(
+      coordinator.ownerPublicKeyMismatchDetected,
+      "an isolated coordinator must not see a mismatching record seeded directly into the real on-device binding-record store"
     )
   }
 
