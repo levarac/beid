@@ -219,8 +219,10 @@ public fun addPersistedUnsentWindowObservationForRecovery(
 /**
  * Atomically reconciles the complete durable artifact set after relaunch.
  * Matching open windows close, unmatched open windows are discarded because
- * their in-memory observations died with the process, unrelated old artifacts
- * are ignored, and conflicts with already-closed windows fail closed.
+ * their in-memory observations died with the process, artifacts with no
+ * matching `LedgerWindow` at all are adopted as already-closed windows
+ * instead of being ignored, and conflicts with already-closed windows fail
+ * closed.
  */
 public fun reconcileUnsentWindowLedgerAfterRelaunch(
     ledger: UnsentWindowLedger,
@@ -235,29 +237,54 @@ public fun reconcileUnsentWindowLedgerAfterRelaunch(
     if (conflict != null) {
         return ledger.failure("observation_reference_conflict")
     }
-    if (ledger.state.windows.none { it.closedRevision == null }) {
+    val existingIds = ledger.state.windows.map { it.windowId }.toHashSet()
+    val orphanIds = recoveryInput.observations.keys.filter { it !in existingIds }.sorted()
+    if (ledger.state.windows.none { it.closedRevision == null } && orphanIds.isEmpty()) {
         return ledger.unchanged()
     }
     val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
-    if (!ledger.reconciledSnapshotFits(recoveryInput, revision)) {
+
+    val matchedWindows = ledger.state.windows.mapNotNull { window ->
+        if (window.closedRevision != null) {
+            window
+        } else {
+            recoveryInput.observations[window.windowId]?.let { reference ->
+                window.copy(
+                    closedRevision = revision,
+                    observationReference = reference,
+                )
+            }
+        }
+    }
+    if (matchedWindows.size + orphanIds.size > MAX_LEDGER_RECORD_COUNT) {
+        return ledger.failure("ledger_capacity_exceeded")
+    }
+    val synthesizedWindows = orphanIds.mapIndexed { offset, windowId ->
+        LedgerWindow(
+            windowId = windowId,
+            openedSequence = ledger.state.nextWindowSequence + offset,
+            closedRevision = revision,
+            observationReference = recoveryInput.observations.getValue(windowId),
+        )
+    }
+    val mergedWindows = matchedWindows + synthesizedWindows
+    if (mergedWindows.map { it.windowId }.toHashSet().size != mergedWindows.size) {
+        // Unreachable given orphanIds is filtered against existingIds above,
+        // which itself is built from every existing window (open and
+        // closed); kept as an explicit failure rather than assuming the
+        // reducer's own invariant holds, per the same discipline as
+        // openUnsentWindow's duplicate_window_id check.
+        return ledger.failure("duplicate_window_id")
+    }
+    if (!ledger.reconciledSnapshotFits(recoveryInput, revision, orphanIds)) {
         return ledger.failure("ledger_capacity_exceeded")
     }
     return ledger.persistenceRequired(
         ledger.state.copy(
             revision = revision,
-            windows = ledger.state.windows.mapNotNull { window ->
-                if (window.closedRevision != null) {
-                    window
-                } else {
-                    recoveryInput.observations[window.windowId]?.let { reference ->
-                        window.copy(
-                            closedRevision = revision,
-                            observationReference = reference,
-                        )
-                    }
-                }
-            },
+            nextWindowSequence = ledger.state.nextWindowSequence + synthesizedWindows.size,
+            windows = mergedWindows,
         ),
     )
 }
@@ -611,12 +638,13 @@ private fun String.isValidLedgerTextField(): Boolean {
 private fun UnsentWindowLedger.reconciledSnapshotFits(
     recoveryInput: UnsentWindowObservationRecoveryInput,
     revision: Long,
+    orphanIds: List<String>,
 ): Boolean {
     var encodedSize = encodeUnsentWindowLedgerSnapshot(this).length.toLong()
     encodedSize += revision.toString().length - state.revision.toString().length
     val resultingWindowCount = state.windows.count { window ->
         window.closedRevision != null || recoveryInput.observations.containsKey(window.windowId)
-    }
+    } + orphanIds.size
     encodedSize +=
         resultingWindowCount.toString().length - state.windows.size.toString().length
     val closedRevisionLength = revision.toString().length.toLong()
@@ -647,6 +675,30 @@ private fun UnsentWindowLedger.reconciledSnapshotFits(
                 .toLong()
             encodedSize += (closedRevisionLength - 1L) + (referenceBytes * 2L - 1L)
         }
+    }
+    // Synthesized rows have no prior line to diff against — each is a whole
+    // new "window\t..." line appended to the snapshot, always already closed
+    // (never a bare "-"/"-" tail like a still-open row would encode).
+    orphanIds.forEachIndexed { offset, windowId ->
+        val windowIdBytes = windowId
+            .encodeToByteArray(throwOnInvalidSequence = true)
+            .size
+            .toLong()
+        val openedSequenceLength = (state.nextWindowSequence + offset).toString().length
+        val referenceBytes = recoveryInput.observations.getValue(windowId)
+            .encodeToByteArray(throwOnInvalidSequence = true)
+            .size
+            .toLong()
+        encodedSize +=
+            "window\t".length +
+            (windowIdBytes * 2L) +
+            1L +
+            openedSequenceLength +
+            1L +
+            closedRevisionLength +
+            1L +
+            (referenceBytes * 2L) +
+            1L
     }
     return encodedSize <= MAX_LEDGER_SNAPSHOT_BYTES.toLong()
 }

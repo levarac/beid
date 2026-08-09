@@ -384,6 +384,41 @@ class UnsentWindowLedgerSnapshotTest {
     }
 
     @Test
+    fun bulkOrphanAdoptionAlsoRejectsAnOversizedSnapshotBeforeEncodingIt() {
+        // Same scale as bulkRelaunchRecoveryRejectsAnOversizedSnapshotBeforeEncodingIt
+        // above, but every entry is a genuine orphan (no matching LedgerWindow
+        // row at all) rather than a matched, previously-open one — this
+        // exercises reconciledSnapshotFits's synthesized-row accounting
+        // instead of its existing matched-window accounting.
+        val ledger = assertNotNull(
+            createUnsentWindowLedger(
+                ledgerInstanceIdHex = "000102030405060708090a0b0c0d0e0f",
+            ).ledger,
+        )
+
+        val maximumReference = "r".repeat(MAX_LEDGER_TEXT_FIELD_BYTES)
+        val recoveryInput = createUnsentWindowObservationRecoveryInput()
+        (1L..1_100L).forEach { sequence ->
+            assertTrue(
+                addPersistedUnsentWindowObservationForRecovery(
+                    recoveryInput = recoveryInput,
+                    windowId = "orphan-window-$sequence",
+                    persistedObservationReference = maximumReference,
+                ),
+            )
+        }
+
+        val recovered = reconcileUnsentWindowLedgerAfterRelaunch(
+            ledger = ledger,
+            recoveryInput = recoveryInput,
+        )
+        assertFalse(recovered.isSuccess)
+        assertFalse(recovered.changed)
+        assertEquals("ledger_capacity_exceeded", recovered.errorCode)
+        assertNull(recovered.snapshotText)
+    }
+
+    @Test
     fun corruptOrNoncanonicalSnapshotsAreRejectedInsteadOfBecomingEmptyLedgers() {
         val canonical = canonicalInFlightSnapshot()
         val corruptions = mapOf(

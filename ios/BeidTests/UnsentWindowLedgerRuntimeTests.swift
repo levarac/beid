@@ -688,6 +688,118 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertEqual(submission.observationReferenceAt(index: 0), expectedReference)
   }
 
+  func testRelaunchAdoptsAnArtifactWhoseLedgerOpenHadFailed() throws {
+    // Combines two existing patterns: blockLedgerWrites() from
+    // testUnknownWindowAtRedeliveryHeadIsDiscardedBeforeLaterArtifact to
+    // reproduce gh#132's exact mechanism (a failed openWindow leaves
+    // currentWindowId set, so the later close durably writes the report but
+    // the ledger close is rejected "unknown_window_id"), then the fresh
+    // SensingCoordinator/UnsentWindowLedgerRuntime relaunch pattern from
+    // testRelaunchRecoversAReportWrittenBeforeLedgerCloseAndDiscardsAnEmptyOpenWindow
+    // to prove the orphaned artifact is adopted rather than staying lost.
+    let fixture = try makeRecoverableReportFailureFixture(
+      named: "open-failure-relaunch-adoption"
+    )
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    fixture.coordinator.startSensing(eventCode: "TEST-OPEN-FAILURE-RELAUNCH-ADOPTION")
+
+    // blockLedgerWrites() writes a plain file at the ledger parent path, so
+    // it only works before anything has ever created that path as a real
+    // directory — it must run first, before any window has successfully
+    // opened or closed.
+    try fixture.blockLedgerWrites()
+    fixture.coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-open-failed",
+      detectedDisplayId: DetectionFixture.displayId(device: 50)
+    )
+    let orphanedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+
+    try fixture.restoreLedgerWrites()
+    fixture.coordinator.checkpointOpenWindowForBackgrounding()
+    XCTAssertNil(fixture.coordinator.currentWindowIdForTesting)
+
+    // A second, ordinary window opens and closes normally after ledger
+    // writes are restored — this is what actually creates the ledger file
+    // for the first time, so the "before relaunch" check below has a real
+    // durable snapshot to load and query. (A session containing only the
+    // failed window would never have written anything to disk at all.)
+    fixture.coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-establishing-ledger",
+      detectedDisplayId: DetectionFixture.displayId(device: 51)
+    )
+    let establishedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
+    XCTAssertNotEqual(establishedWindowId, orphanedWindowId)
+    fixture.coordinator.checkpointOpenWindowForBackgrounding()
+
+    let orphanedReport = try XCTUnwrap(
+      fixture.reportStore.reports.first { $0.id == orphanedWindowId }
+    )
+    let durableBeforeRelaunch = try XCTUnwrap(try fixture.ledgerStore.load())
+    let orphanedCloseBeforeRelaunch = BeidSharedKit.report.closeUnsentWindow(
+      ledger: try XCTUnwrap(durableBeforeRelaunch.ledger),
+      windowId: orphanedWindowId.uuidString.lowercased(),
+      persistedObservationReference: orphanedReport.id.uuidString.lowercased()
+    )
+    XCTAssertFalse(
+      orphanedCloseBeforeRelaunch.isSuccess,
+      "pre-relaunch, this ledger has never gone through reconcileAfterRelaunch"
+    )
+    XCTAssertEqual(orphanedCloseBeforeRelaunch.errorCode, "unknown_window_id")
+
+    // Simulate relaunch: a fresh SensingCoordinator/UnsentWindowLedgerRuntime
+    // pair against the same durable files reconciles the ledger on construction.
+    let relaunchedReports = WindowReportStore(fileURL: fixture.reportFileURL)
+    let relaunchedLedgerStore = try UnsentWindowLedgerStore(fileURL: fixture.ledgerFileURL)
+    _ = SensingCoordinator(
+      windowReportStore: relaunchedReports,
+      selfProofStore: SelfProofStore(
+        fileURL: fixture.directory.appendingPathComponent("relaunched-self-proofs.json")
+      ),
+      unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
+      sensingCryptography: DeterministicSensingCryptography()
+    )
+
+    let reconciled = try XCTUnwrap(try relaunchedLedgerStore.load())
+    let orphanedCloseAfterRelaunch = BeidSharedKit.report.closeUnsentWindow(
+      ledger: try XCTUnwrap(reconciled.ledger),
+      windowId: orphanedWindowId.uuidString.lowercased(),
+      persistedObservationReference: orphanedReport.id.uuidString.lowercased()
+    )
+    XCTAssertTrue(
+      orphanedCloseAfterRelaunch.isSuccess,
+      "a previously-orphaned artifact must become closeable once a relaunch reconciles it"
+    )
+    XCTAssertFalse(
+      orphanedCloseAfterRelaunch.changed,
+      "reconciliation already adopted the window as closed with this exact reference"
+    )
+
+    let prepared = BeidSharedKit.report.prepareNextUnsentWindowSubmission(
+      ledger: try XCTUnwrap(reconciled.ledger),
+      maximumWindowCount: 10,
+      nowEpochMilliseconds: 0
+    )
+    try relaunchedLedgerStore.persist(prepared)
+    let inFlight = try XCTUnwrap(try relaunchedLedgerStore.load())
+    let submission = try XCTUnwrap(
+      BeidSharedKit.report.resumeUnsentWindowSubmissionAfterRestore(
+        ledger: try XCTUnwrap(inFlight.ledger)
+      ).submission
+    )
+    // Both the normally-closed window and the newly-adopted orphan must be
+    // in the eventual send set; sorted by closedRevision, so the earlier,
+    // normally-closed window sorts first.
+    let establishedReference = establishedWindowId.uuidString.lowercased()
+    let orphanedReference = orphanedWindowId.uuidString.lowercased()
+    XCTAssertEqual(submission.windowCount, 2)
+    XCTAssertEqual(submission.windowIdAt(index: 0), establishedReference)
+    XCTAssertEqual(submission.observationReferenceAt(index: 0), establishedReference)
+    XCTAssertEqual(submission.windowIdAt(index: 1), orphanedReference)
+    XCTAssertEqual(submission.observationReferenceAt(index: 1), orphanedReference)
+  }
+
   func testCorruptObservationStoreCannotMasqueradeAsAnEmptyRecoverySet() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-ledger-corrupt-artifacts-\(UUID().uuidString)", isDirectory: true)
