@@ -110,9 +110,10 @@ final class SensingCoordinator: ObservableObject {
   /// number that ends up inside a signed artifact.
   ///
   /// It is **one of two** independent ways to confirm an event
-  /// (`hasEnoughDistinctDevicesToConfirm`), never the only one: the other arm
-  /// reads the current window's proximity identifiers, so a total display-id
-  /// outage cannot stop a real event from being recorded. Confirmation and
+  /// (`BeidSharedKit.sensing.hasEnoughDistinctDevicesToConfirmScanEvent`),
+  /// never the only one: the other arm reads the current window's proximity
+  /// identifiers, so a total display-id outage cannot stop a real event from
+  /// being recorded. Confirmation and
   /// this value are therefore allowed to disagree — a session whose B003 reads
   /// all fail records with this at 0 and `unidentifiedRpidCount` above 0,
   /// which is the honest pair rather than a single number that would have to
@@ -710,7 +711,7 @@ final class SensingCoordinator: ObservableObject {
     case .sensing:
       let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
       let session = EventSession(id: eventCode, name: eventCode, venue: nil)
-      beginEventFound(session)
+      beginEventFoundSessionState(session)
       observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
     case .eventFound(let session):
       observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
@@ -720,13 +721,21 @@ final class SensingCoordinator: ObservableObject {
       // `.signalLost` is frozen — real signal-loss *detection* doesn't
       // exist yet (only the demo-only manual trigger does), so this branch
       // is unreached today, but resuming is an explicit user action
-      // (`resumeSensing()`), never automatic on the next detection.
+      // (`resumeSensing()`), never automatic on the next detection. This
+      // native-side gate decides only whether to run the side-effecting
+      // window/device accounting below at all — the phase decision itself
+      // (`BeidSharedKit.sensing.applyScanDetection` would also report these
+      // two phases as "ignored") is not duplicated here.
       break
     }
   }
 
   /// Records the detection against the running device count and window, then
-  /// applies whatever phase transition that observation implies.
+  /// asks `BeidSharedKit.sensing` (beid#116) what phase transition, if any,
+  /// that observation implies, and projects its answer onto `phase` and the
+  /// existing UI-facing callbacks. This adapter holds no threshold or
+  /// transition-graph logic of its own — see `applyScanDetection`'s doc
+  /// comment in `shared/.../sensing/ScanPhase.kt` for the full rule set.
   ///
   /// The within-window set (`currentWindowRpids`, which feeds
   /// `WindowReport.peerCount`) stays keyed on the proximity identifier and is
@@ -738,28 +747,70 @@ final class SensingCoordinator: ObservableObject {
 
     let deviceCountChanged = recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
 
-    switch phase {
-    case .eventFound:
-      if shouldConfirmEvent {
-        Self.log.notice(
-          """
-          Event confirmed via \(self.hasEnoughCoPresentDevicesToConfirm ? "co-presence" : "distinct devices", privacy: .public): \
-          \(self.currentWindowRpids.count, privacy: .public) co-present this window, \
-          \(self.devicesVerified, privacy: .public) identified this session, \
-          \(self.unidentifiedRpidCount, privacy: .public) unidentified
-          """
-        )
-        beginRecording(event: session, peersVerified: devicesVerified)
-      }
-    case .recording:
-      // Only the identified-device count moves the recorded value; crossing
-      // the threshold again in a later window is not new information.
-      if deviceCountChanged {
-        updateRecording(event: session, peersVerified: devicesVerified)
-      }
-    default:
-      break
+    let result = BeidSharedKit.sensing.applyScanDetection(
+      currentPhase: currentPhaseKind,
+      coPresentDeviceCount: Int32(currentWindowRpids.count),
+      distinctDeviceCount: Int32(devicesVerified),
+      distinctDeviceCountChanged: deviceCountChanged,
+      eventConfirmThreshold: Int32(BeidConfig.eventConfirmThreshold)
+    )
+
+    // `result.confirmedEvent` is checked first, ahead of
+    // `transitionedToEventFound`: when both are true (the DEBUG
+    // `-beid-threshold-override 1` edge case — see `ScanDetectionResult`'s
+    // doc comment), `phase` moves straight from `.sensing` to `.recording`
+    // and is never published as `.eventFound` in between. Pre-#116, native
+    // code published the intermediate `.eventFound` value first (via the
+    // old `beginEventFound` setting `phase` directly) before immediately
+    // overwriting it with `.recording` in the same call — an artifact of
+    // native's call sequence, not a documented behavior any test observed.
+    // The final phase and every observable side effect (Proof creation,
+    // callbacks) are identical either way.
+    if result.confirmedEvent {
+      Self.log.notice(
+        """
+        Event confirmed via \(self.hasEnoughCoPresentDevicesToConfirm ? "co-presence" : "distinct devices", privacy: .public): \
+        \(self.currentWindowRpids.count, privacy: .public) co-present this window, \
+        \(self.devicesVerified, privacy: .public) identified this session, \
+        \(self.unidentifiedRpidCount, privacy: .public) unidentified
+        """
+      )
+      beginRecording(event: session, peersVerified: devicesVerified)
+    } else if result.transitionedToEventFound {
+      phase = .eventFound(session)
+    } else if result.updatedRecording {
+      updateRecording(event: session, peersVerified: devicesVerified)
     }
+  }
+
+  /// `BeidSharedKit.sensing.ScanPhaseKind` mirroring `phase`, without its
+  /// native-owned associated data (`EventSession`/`peersVerified`) — the
+  /// conversion half of the adapter contract for every call into
+  /// `BeidSharedKit.sensing`.
+  private var currentPhaseKind: BeidSharedKit.sensing.ScanPhaseKind {
+    switch phase {
+    case .idle: return .IDLE
+    case .sensing: return .SENSING
+    case .eventFound: return .EVENT_FOUND
+    case .recording: return .RECORDING
+    case .signalLost: return .SIGNAL_LOST
+    }
+  }
+
+  /// Maps a `BeidSharedKit.sensing.ScanPhaseKind` known to carry no payload
+  /// (only ever `.IDLE`/`.SENSING`, from `scanPhaseAfterStartSensing()`/
+  /// `scanPhaseAfterStopSensing()`) onto the matching native `ScanPhase`.
+  /// Swift Export represents this Kotlin enum as a class of static members,
+  /// not a native `enum`, so this compares by value (`==`) rather than
+  /// `switch`-pattern-matching on it.
+  private static func payloadlessNativePhase(_ kind: BeidSharedKit.sensing.ScanPhaseKind) -> ScanPhase {
+    if kind == .IDLE {
+      return .idle
+    }
+    if kind == .SENSING {
+      return .sensing
+    }
+    preconditionFailure("scanPhaseAfterStartSensing/scanPhaseAfterStopSensing only ever return .IDLE or .SENSING")
   }
 
   /// Files this observation against the session's device identity accounting
@@ -804,68 +855,19 @@ final class SensingCoordinator: ObservableObject {
     return true
   }
 
-  /// Whether to confirm the event and start recording — either arm suffices.
-  ///
-  /// **The gate and the proof are different things, and that is what makes a
-  /// disjunction safe here.** This decides only whether to *start recording*:
-  /// is there a real, multi-device event around me. It asserts nothing. The
-  /// co-presence facts are carried by the per-window reports, each of which
-  /// records exactly who was present together in that window, and those are
-  /// unaffected by how confirmation was reached. So confirming on devices seen
-  /// one after another loosens no claim the proof makes — it only stops the
-  /// app refusing to observe at real but sparse settings (a hallway, a booth,
-  /// an arrival trickle), which are ordinary shapes rather than corner cases.
-  ///
-  /// Safety rests on two properties, both of which must survive any edit here:
-  ///
-  /// - **Neither arm accumulates.** The window arm is cleared at every window
-  ///   boundary; the device arm is keyed on the non-rotating display id.
-  ///   Neither grows with dwell time.
-  /// - **A single lingering device satisfies neither.** It contributes 1 to
-  ///   every window and 1 to the device count, forever. That is the property
-  ///   this whole slice exists to establish, and
-  ///   `testOneLingeringDeviceNeverSatisfiesTheConfirmThresholdOnItsOwn` fails
-  ///   if a change ever weakens it.
-  ///
-  /// The two arms are kept as separate properties on purpose: the product
-  /// default is still open, and dropping back to co-presence only is deleting
-  /// one operand here, with nothing else entangled.
-  private var shouldConfirmEvent: Bool {
-    hasEnoughCoPresentDevicesToConfirm || hasEnoughDistinctDevicesToConfirm
-  }
-
-  /// Enough devices present **at the same time** — distinct proximity
-  /// identifiers in the current ENIN window.
-  ///
-  /// Survives a total display-id outage, which is the reason this arm exists:
-  /// gating solely on the display id meant a session that sensed a crowded
-  /// room all evening recorded nothing.
-  ///
-  /// It does not consult the display id at all, and it is sound because the
-  /// proximity identifier does not rotate inside a window — within one window,
-  /// distinct identifier *is* distinct device. This is emphatically not the
-  /// cross-window identifier counting beid#154 removed. The difference is
-  /// accumulation, not the identifier: this set is cleared at every window
-  /// boundary, so a lingering device contributes exactly 1 to every window
-  /// forever.
-  ///
-  /// The phase transition latches, so this is effectively a max over windows:
-  /// once any window has had enough co-present devices, the event stays
-  /// confirmed even as later windows go quiet.
+  /// Whether the co-presence arm is why an event just confirmed — used only
+  /// to pick the right word in the log line below. The confirm decision
+  /// itself (both arms, and their disjunction) is
+  /// `BeidSharedKit.sensing.shouldConfirmScanEvent` (beid#116); see that
+  /// function's doc comment in `shared/.../sensing/ScanPhase.kt` for why
+  /// each arm resists accumulation and why a single lingering device
+  /// satisfies neither — this adapter keeps no comparison of its own that
+  /// could drift from it.
   private var hasEnoughCoPresentDevicesToConfirm: Bool {
-    currentWindowRpids.count >= BeidConfig.eventConfirmThreshold
-  }
-
-  /// Enough distinct devices **at any point this session** — the display-id
-  /// count, which does not grow with dwell time.
-  ///
-  /// Covers the sparse settings the co-presence arm alone would decline to
-  /// record: people arriving one at a time, a booth with a steady trickle, a
-  /// hallway. Three devices that never overlap are still three devices, and
-  /// the per-window reports keep saying truthfully that each was alone in its
-  /// own window.
-  private var hasEnoughDistinctDevicesToConfirm: Bool {
-    devicesVerified >= BeidConfig.eventConfirmThreshold
+    BeidSharedKit.sensing.hasEnoughCoPresentDevicesToConfirmScanEvent(
+      coPresentDeviceCount: Int32(currentWindowRpids.count),
+      eventConfirmThreshold: Int32(BeidConfig.eventConfirmThreshold)
+    )
   }
 
   /// Calls the Barnard SDK's join API (`BarnardEngine.joinEvent`)
@@ -883,7 +885,7 @@ final class SensingCoordinator: ObservableObject {
   func startSensing(eventCode: String? = nil, demoEvent: EventSession = .demoSample) {
     let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
     resetSessionState()
-    phase = .sensing
+    phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
       runDemoSequence(demoEvent: demoEvent, stepDelayNanos: demoStepDelayNanos)
     } else {
@@ -905,9 +907,13 @@ final class SensingCoordinator: ObservableObject {
 
   /// Manual trigger so the Signal Lost screen is reachable from the demo
   /// flow (the golden EventSession path itself keeps recording
-  /// indefinitely otherwise).
+  /// indefinitely otherwise). `BeidSharedKit.sensing.scanPhaseAfterSignalLost`
+  /// (beid#116) is the sole authority on whether this applies; the
+  /// `case .recording` match below only extracts the payload it has already
+  /// confirmed is there, it does not re-decide.
   func simulateSignalLost() {
-    guard case .recording(let event, let peersVerified) = phase else { return }
+    let result = BeidSharedKit.sensing.scanPhaseAfterSignalLost(currentPhase: currentPhaseKind)
+    guard result.applied, case .recording(let event, let peersVerified) = phase else { return }
     demoTask?.cancel()
     phase = .signalLost(event: event, peersVerified: peersVerified)
   }
@@ -918,8 +924,11 @@ final class SensingCoordinator: ObservableObject {
   /// demo-only manual trigger) is still unimplemented, so on a real device
   /// this only clears the frozen UI state — scanning was never stopped, so
   /// `handle(_:)` keeps updating `peersVerified` in place regardless.
+  /// `BeidSharedKit.sensing.scanPhaseAfterResumeSensing` (beid#116) is the
+  /// sole authority on whether this applies.
   func resumeSensing() {
-    guard case .signalLost(let event, let peersVerified) = phase else { return }
+    let result = BeidSharedKit.sensing.scanPhaseAfterResumeSensing(currentPhase: currentPhaseKind)
+    guard result.applied, case .signalLost(let event, let peersVerified) = phase else { return }
     phase = .recording(event: event, peersVerified: peersVerified)
     if useDemoEventMode {
       continueDemoRecording(event: event, stepDelayNanos: demoStepDelayNanos)
@@ -948,7 +957,7 @@ final class SensingCoordinator: ObservableObject {
       engine.stopAuto()
     }
     resetSessionState()
-    phase = .idle
+    phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
     return selfProof
   }
 
@@ -979,14 +988,32 @@ final class SensingCoordinator: ObservableObject {
   // explicitly MainActor-isolated demo tasks below.
 
   /// Computes and fixes this session's `commit` (§5 — "fixed at event
-  /// time"), then transitions to `.eventFound`. Resets prior-session state
-  /// first so nothing leaks across events.
-  private func beginEventFound(_ session: EventSession) {
+  /// time") for a newly detected session and resets prior-session state
+  /// first so nothing leaks across events. Does not itself set `phase` —
+  /// used only by the real detection path (`handleDetection`'s `.sensing`
+  /// case), where `observe`, immediately after, asks
+  /// `BeidSharedKit.sensing.applyScanDetection` (beid#116) to decide (and
+  /// applies) the `.sensing -> .eventFound` transition for this same
+  /// detection. See `beginEventFound(_:)` below for the demo-only
+  /// counterpart that does set `phase` directly.
+  private func beginEventFoundSessionState(_ session: EventSession) {
     resetSessionState()
     let eventSigningKey = sensingCryptography.eventSigningPublicKey(eventCode: session.id)
     let ownerKey = sensingCryptography.ownerPublicKey()
     let salt = Data(randomSource.randomBytes(count: 16))
     activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
+  }
+
+  /// Demo-only: the scripted walkthrough's stand-in for a real first
+  /// detection — computes/fixes the commit exactly like
+  /// `beginEventFoundSessionState(_:)` above, then transitions straight to
+  /// `.eventFound`. Demo mode drives phase transitions directly rather than
+  /// through `BeidSharedKit.sensing.applyScanDetection` (see
+  /// `runDemoSequence`'s doc comment below): there is no real detection or
+  /// count for the shared reducer to evaluate, so this intentionally does
+  /// not consult it, exactly as before this family moved to `shared/`.
+  private func beginEventFound(_ session: EventSession) {
+    beginEventFoundSessionState(session)
     phase = .eventFound(session)
   }
 

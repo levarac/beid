@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import XCTest
 @testable import Beid
 
@@ -343,6 +344,131 @@ final class SensingCoordinatorTests: XCTestCase {
     await coordinator.waitForDemoSequenceToFinish()
     guard case .recording = coordinator.phase else {
       XCTFail("second session: expected .recording, got \(coordinator.phase)")
+      return
+    }
+  }
+
+  // MARK: - beid#116: BeidSharedKit.sensing ownership gates
+  //
+  // The phase machine and its threshold decision live in
+  // `BeidSharedKit.sensing` (`shared/.../sensing/ScanPhase.kt`); this
+  // coordinator only converts, calls, and projects. These tests are the
+  // "reverting to a native decision turns a test RED" mutation-gate: if a
+  // future edit reintroduces a native re-implementation of the confirm
+  // comparison, or a native-driven `.signalLost` recovery on the next
+  // detection, one of these goes RED without any change to shared itself.
+
+  /// A real (non-demo) detection arriving while `.signalLost` must be a
+  /// full no-op — not just the displayed phase, but the underlying device
+  /// count too. Recovery is only ever the explicit `resumeSensing()`
+  /// action; mirrors `applyScanDetection`'s `SIGNAL_LOST` branch in shared.
+  func testHandleDetectionIsANoOpWhileSignalLost() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "TEST-SIGNAL-LOST-DETECTION-NO-OP")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for device in 0..<threshold {
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: DetectionFixture.rotatingRpid(device: device, enin: 1),
+        detectedDisplayId: DetectionFixture.displayId(device: device)
+      )
+    }
+    guard case .recording(_, let peersVerifiedBeforeLoss) = coordinator.phase else {
+      XCTFail("expected .recording before signal loss, got \(coordinator.phase)")
+      return
+    }
+
+    coordinator.simulateSignalLost()
+    guard case .signalLost(_, let frozenPeersVerified) = coordinator.phase else {
+      XCTFail("expected .signalLost, got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(frozenPeersVerified, peersVerifiedBeforeLoss)
+
+    // A brand-new device — which would move both arms if processed — must
+    // be dropped entirely while `.signalLost`.
+    coordinator.handleDetection(
+      enin: 2,
+      rpid: DetectionFixture.rotatingRpid(device: threshold + 1, enin: 2),
+      detectedDisplayId: DetectionFixture.displayId(device: threshold + 1)
+    )
+
+    guard case .signalLost(_, let peersVerifiedAfterDetection) = coordinator.phase else {
+      XCTFail("a detection while .signalLost must not leave .signalLost, got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(
+      peersVerifiedAfterDetection, frozenPeersVerified,
+      "a detection while .signalLost must not move the frozen count — resumeSensing() is the only way out"
+    )
+    XCTAssertEqual(
+      coordinator.devicesVerified, peersVerifiedBeforeLoss,
+      "the underlying device count must not move either — this is a full no-op, not just a display freeze"
+    )
+  }
+
+  /// A real detection before `startSensing()` (`.idle`) must also be a
+  /// no-op — mirrors `applyScanDetection`'s `IDLE` branch in shared.
+  func testHandleDetectionIsANoOpWhileIdle() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.useDemoEventMode = false
+
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: DetectionFixture.rotatingRpid(device: 0, enin: 1),
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
+
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+  }
+
+  /// Runtime-authority gate: the coordinator's confirm decision, for the
+  /// counts it actually accumulated, must equal what
+  /// `BeidSharedKit.sensing.shouldConfirmScanEvent` computes for those same
+  /// counts — proving the phase the coordinator lands on isn't a native
+  /// value that merely happens to agree with shared today.
+  func testConfirmationDecisionMatchesBeidSharedKitForTheSameCounts() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "TEST-RUNTIME-AUTHORITY")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for device in 0..<(threshold - 1) {
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: DetectionFixture.rotatingRpid(device: device, enin: 1),
+        detectedDisplayId: DetectionFixture.displayId(device: device)
+      )
+    }
+    XCTAssertFalse(
+      BeidSharedKit.sensing.shouldConfirmScanEvent(
+        coPresentDeviceCount: Int32(threshold - 1),
+        distinctDeviceCount: Int32(threshold - 1),
+        eventConfirmThreshold: Int32(threshold)
+      )
+    )
+    guard case .eventFound = coordinator.phase else {
+      XCTFail("expected .eventFound below threshold, got \(coordinator.phase)")
+      return
+    }
+
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: DetectionFixture.rotatingRpid(device: threshold - 1, enin: 1),
+      detectedDisplayId: DetectionFixture.displayId(device: threshold - 1)
+    )
+    XCTAssertTrue(
+      BeidSharedKit.sensing.shouldConfirmScanEvent(
+        coPresentDeviceCount: Int32(threshold),
+        distinctDeviceCount: Int32(threshold),
+        eventConfirmThreshold: Int32(threshold)
+      )
+    )
+    guard case .recording = coordinator.phase else {
+      XCTFail("expected .recording at threshold, got \(coordinator.phase)")
       return
     }
   }
