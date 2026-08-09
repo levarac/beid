@@ -22,7 +22,7 @@ struct SignalLostView: View {
         EventCardView(event: event, badge: .paused) {
           // Same corrected count and same label as Proof Detail — one number
           // must not carry two labels. See beid#154.
-          BeidMetricRow(label: "Devices verified", verbatimValue: "\(peersVerified)")
+          BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(peersVerified)")
         }
       }
       },

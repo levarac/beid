@@ -3,7 +3,7 @@
 
 import SwiftUI
 
-/// Screen 08: Item Detail — method, peers verified, status.
+/// Screen 08: Item Detail — method, devices sensed, status.
 struct ItemDetailView: View {
   let proof: Proof
 
@@ -26,7 +26,7 @@ struct ItemDetailView: View {
                 // "Devices", not "Peers": the number counts distinct nearby
                 // devices, and only those whose identity could be read. See
                 // beid#154 and `SensingCoordinator.devicesVerified`.
-                BeidMetricRow(label: "Devices verified", verbatimValue: "\(proof.peersVerified)")
+                BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(proof.peersVerified)")
                 statusRow
               }
             }
