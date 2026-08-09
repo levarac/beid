@@ -52,6 +52,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
         windowReportStore: WindowReportStore(fileURL: windowReportFileURL),
         selfProofStore: SelfProofStore(fileURL: selfProofFileURL),
         selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
+        bindingRecordStore: BindingRecordStore(
+          fileURL: directory.appendingPathComponent("binding-records.json")
+        ),
         unsentWindowLedgerFileURL: ledgerFileURL,
         sensingCryptography: cryptography
       )
@@ -99,6 +102,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       windowReportStore: WindowReportStore(fileURL: windowReportFileURL),
       selfProofStore: SelfProofStore(fileURL: selfProofFileURL),
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerFileURL: ledgerFileURL,
       sensingCryptography: cryptography
     )
@@ -147,6 +153,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       ),
       selfProofStore: SelfProofStore(fileURL: selfProofFileURL),
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -198,6 +207,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       ),
       selfProofStore: SelfProofStore(fileURL: selfProofFileURL),
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -221,6 +233,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )

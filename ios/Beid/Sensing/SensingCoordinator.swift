@@ -250,7 +250,7 @@ final class SensingCoordinator: ObservableObject {
   /// once the real load/reconcile work finishes, at the same moment
   /// `ledgerHealth` is assigned.
   @Published private(set) var isLedgerLoading = false
-  private let bindingRecordStore = BindingRecordStore()
+  private let bindingRecordStore: BindingRecordStore
   private let selfProofStore: SelfProofStore
   private var selfProofCheckpointStore: SelfProofCheckpointStore
   /// gh#156 Signal A (`docs/specs/owner-key-seed-read-failure.md` §8):
@@ -424,6 +424,7 @@ final class SensingCoordinator: ObservableObject {
       windowReportFileURL: nil,
       selfProofFileURL: nil,
       selfProofCheckpointFileURL: nil,
+      bindingRecordFileURL: nil,
       unsentWindowLedgerFileURL: nil,
       sensingCryptography: BarnardSensingCryptography()
     )
@@ -448,6 +449,7 @@ final class SensingCoordinator: ObservableObject {
       windowReportFileURL: directory.appendingPathComponent("window-reports.json"),
       selfProofFileURL: directory.appendingPathComponent("self-proofs.json"),
       selfProofCheckpointFileURL: directory.appendingPathComponent("self-proof-checkpoint.json"),
+      bindingRecordFileURL: directory.appendingPathComponent("binding-records.json"),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography
     )
@@ -461,15 +463,17 @@ final class SensingCoordinator: ObservableObject {
   /// inside `beginLedgerLoad(...)` once the real stores are loaded), then
   /// kicks off Decision 1's background load. `nil` file URLs mean "use each
   /// store's own default on-device path" (the production shape); explicit
-  /// URLs are the isolated-directory test seam. `selfProofFileURL` is
-  /// loaded synchronously and for real, not deferred — Decision 1 does not
-  /// move `selfProofStore`'s own load off the critical path (only
+  /// URLs are the isolated-directory test seam. `selfProofFileURL` and
+  /// `bindingRecordFileURL` are both loaded synchronously and for real, not
+  /// deferred — Decision 1 does not move `selfProofStore`'s or
+  /// `bindingRecordStore`'s own load off the critical path (only
   /// `windowReportStore`/`unsentWindowLedgerRuntime`/
-  /// `selfProofCheckpointStore` do), so it never needs a placeholder.
+  /// `selfProofCheckpointStore` do), so neither ever needs a placeholder.
   private convenience init(
     windowReportFileURL: URL?,
     selfProofFileURL: URL?,
     selfProofCheckpointFileURL: URL?,
+    bindingRecordFileURL: URL?,
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography
   ) {
@@ -477,6 +481,7 @@ final class SensingCoordinator: ObservableObject {
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
       selfProofStore: SelfProofStore(fileURL: selfProofFileURL),
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: Self.unloadedPlaceholderFileURL()),
+      bindingRecordStore: BindingRecordStore(fileURL: bindingRecordFileURL),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
       initialLedgerFailure: nil
@@ -603,6 +608,7 @@ final class SensingCoordinator: ObservableObject {
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
     selfProofCheckpointStore: SelfProofCheckpointStore,
+    bindingRecordStore: BindingRecordStore,
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography
   ) {
@@ -616,6 +622,7 @@ final class SensingCoordinator: ObservableObject {
       windowReportStore: windowReportStore,
       selfProofStore: selfProofStore,
       selfProofCheckpointStore: selfProofCheckpointStore,
+      bindingRecordStore: bindingRecordStore,
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography
     )
@@ -625,6 +632,7 @@ final class SensingCoordinator: ObservableObject {
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
     selfProofCheckpointStore: SelfProofCheckpointStore,
+    bindingRecordStore: BindingRecordStore,
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     initialLedgerFailure: Error? = nil
@@ -653,6 +661,7 @@ final class SensingCoordinator: ObservableObject {
     self.windowReportStore = windowReportStore
     self.selfProofStore = selfProofStore
     self.selfProofCheckpointStore = selfProofCheckpointStore
+    self.bindingRecordStore = bindingRecordStore
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     if let ledgerFailure {

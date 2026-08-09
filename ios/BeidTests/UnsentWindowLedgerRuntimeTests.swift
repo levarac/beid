@@ -117,10 +117,14 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       let selfProofCheckpointStore = SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
       )
+      let bindingRecordStore = BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      )
       let coordinator = SensingCoordinator(
         windowReportStore: reportStore,
         selfProofStore: selfProofStore,
         selfProofCheckpointStore: selfProofCheckpointStore,
+        bindingRecordStore: bindingRecordStore,
         unsentWindowLedgerRuntime: runtime,
         sensingCryptography: DeterministicSensingCryptography()
       )
@@ -199,6 +203,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
       ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -242,6 +249,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       ),
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
+      ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
       ),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: DeterministicSensingCryptography(),
@@ -526,6 +536,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
       ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -618,6 +631,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: fixture.directory.appendingPathComponent("relaunched-self-proof-checkpoint.json")
       ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: fixture.directory.appendingPathComponent("relaunched-binding-records.json")
+      ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -675,6 +691,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       ),
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
+      ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
       ),
       unsentWindowLedgerRuntime: relaunchedRuntime,
       sensingCryptography: DeterministicSensingCryptography()
@@ -779,6 +798,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: fixture.directory.appendingPathComponent("relaunched-self-proof-checkpoint.json")
       ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: fixture.directory.appendingPathComponent("relaunched-binding-records.json")
+      ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -848,6 +870,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
       ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -910,6 +935,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
       ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -939,6 +967,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       ),
       selfProofCheckpointStore: SelfProofCheckpointStore(
         fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
+      ),
+      bindingRecordStore: BindingRecordStore(
+        fileURL: directory.appendingPathComponent("binding-records.json")
       ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(
         store: ledgerStore,
