@@ -31,23 +31,6 @@ final class AppCoordinator: ObservableObject {
     sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
     }
-    logOwnerKeyRegenerationSignalsIfNeeded()
-  }
-
-  /// gh#156 regeneration-detectability (`docs/specs/owner-key-seed-read-failure.md`
-  /// §8): checked once at startup, after `sensingCoordinator` (and the
-  /// stores/facade it owns) has finished constructing. Signal A/B are only
-  /// informative at this scope — no UI/UX response is designed yet (§11) —
-  /// so this only logs, the same posture `CorruptStoreQuarantine` and
-  /// `SensingCoordinator`'s own reconciliation failures already take for a
-  /// detected-but-unsurfaced condition.
-  private func logOwnerKeyRegenerationSignalsIfNeeded() {
-    if let quarantinedSeedKey = sensingCoordinator.quarantinedOwnerKeySeedKey {
-      print("Owner key seed was quarantined and regenerated this session at \(quarantinedSeedKey)")
-    }
-    if sensingCoordinator.ownerPublicKeyMismatchDetected {
-      print("Owner public key does not match some already-persisted self-proof/binding record")
-    }
   }
 
   // MARK: - Onboarding

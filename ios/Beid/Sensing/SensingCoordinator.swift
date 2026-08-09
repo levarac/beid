@@ -220,15 +220,38 @@ final class SensingCoordinator: ObservableObject {
   private let engine = BarnardEngine()
   private let sensingCryptography: any SensingCryptography
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
-  private let windowReportStore: WindowReportStore
-  private let unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
+  private var windowReportStore: WindowReportStore
+  private var unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
   /// Whether `unsentWindowLedgerRuntime` (and the window-report/redelivery
   /// pipeline feeding it) can currently record — and if not, why and since
   /// when. See `LedgerHealth`.
   private(set) var ledgerHealth: LedgerHealth = .healthy
+  /// Whether the background load Decision 1 introduced
+  /// (`docs/specs/ledger-async-io.md` §4) is still recovering
+  /// `windowReportStore`/`unsentWindowLedgerRuntime`/
+  /// `selfProofCheckpointStore` and reconciling crash-gap state. Deliberately
+  /// **separate** from `LedgerHealth`: that type is a binary,
+  /// permanent-once-degraded fact about the runtime specifically, while this
+  /// is a transient fact about construction as a whole (§4.3) — conflating
+  /// the two would force every consumer of `LedgerHealth` to also handle a
+  /// transient case in what is otherwise a stable, tested binary contract.
+  /// While this is `true`, `handleDetection` queues instead of processing —
+  /// see `queuedDetectionsWhileLoading`.
+  ///
+  /// Defaults `false`: the designated initializer below keeps its
+  /// synchronous, fully-loaded-stores contract unchanged, so any instance
+  /// built through it (directly, or via the explicit-storage-seam
+  /// convenience initializer `BeidTests` uses) is never "loading" by the
+  /// time it exists. Only the async-loading initializer chain — the
+  /// production `convenience init()` and the `loadingFromDirectory:` test
+  /// seam — sets this `true` immediately after that designated initializer
+  /// returns, then flips it back to `false` inside `beginLedgerLoad(...)`
+  /// once the real load/reconcile work finishes, at the same moment
+  /// `ledgerHealth` is assigned.
+  @Published private(set) var isLedgerLoading = false
   private let bindingRecordStore = BindingRecordStore()
   private let selfProofStore: SelfProofStore
-  private let selfProofCheckpointStore: SelfProofCheckpointStore
+  private var selfProofCheckpointStore: SelfProofCheckpointStore
   /// gh#156 Signal A (`docs/specs/owner-key-seed-read-failure.md` §8):
   /// non-nil once the owner key resolution behind `sensingCryptography` has
   /// quarantined an unreadable stored seed this session. `nil` both when
@@ -261,6 +284,19 @@ final class SensingCoordinator: ObservableObject {
       bindingRecords: bindingRecordStore.records
     )
   }
+  /// Detections `handleDetection` queued, in arrival order, instead of
+  /// processing while `isLedgerLoading` was `true` — drained by
+  /// `drainQueuedDetectionsAfterLoad()` the instant loading completes. See
+  /// `handleDetection`'s guard and `docs/specs/ledger-async-io.md` §4.2 for
+  /// why the whole raw detection is queued rather than only its
+  /// store-touching calls.
+  private var queuedDetectionsWhileLoading:
+    [(enin: Int, rpid: String, detectedDisplayId: String?)] = []
+  /// Decision 1's background load/reconcile task (`beginLedgerLoad(...)`).
+  /// Held so tests can deterministically await it
+  /// (`waitForLedgerLoadToFinish()`), mirroring `demoTask`/
+  /// `waitForDemoSequenceToFinish()` below.
+  private var ledgerLoadTask: Task<Void, Never>?
   private var demoTask: Task<Void, Never>?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
@@ -383,43 +419,180 @@ final class SensingCoordinator: ObservableObject {
   #endif
 
   convenience init() {
-    var initialLedgerFailure: Error?
-
-    let windowReportStore: WindowReportStore
-    do {
-      let recovery = try WindowReportStore.recoveringCorruptReports()
-      if let quarantinedURL = recovery.quarantinedReportsURL {
-        Self.ledgerLog.error("Quarantined corrupt window reports at \(quarantinedURL.path, privacy: .public)")
-      }
-      windowReportStore = recovery.store
-    } catch {
-      windowReportStore = WindowReportStore()
-      initialLedgerFailure = error
-      Self.ledgerLog.error("Unable to recover the window report store: \(error, privacy: .public)")
-    }
-
-    let runtime: UnsentWindowLedgerRuntime?
-    do {
-      let recovery = try UnsentWindowLedgerStore.recoveringCorruptSnapshot()
-      if let quarantinedURL = recovery.quarantinedSnapshotURL {
-        Self.ledgerLog.error("Quarantined a corrupt shared unsent-window ledger at \(quarantinedURL.path, privacy: .public)")
-      }
-      runtime = try UnsentWindowLedgerRuntime(
-        store: recovery.store
-      )
-    } catch {
-      runtime = nil
-      initialLedgerFailure = error
-      Self.ledgerLog.error("Unable to load the shared unsent-window ledger: \(error, privacy: .public)")
-    }
     self.init(
-      windowReportStore: windowReportStore,
-      selfProofStore: SelfProofStore(),
-      selfProofCheckpointStore: SelfProofCheckpointStore(),
-      unsentWindowLedgerRuntime: runtime,
-      sensingCryptography: BarnardSensingCryptography(),
-      initialLedgerFailure: initialLedgerFailure
+      windowReportFileURL: nil,
+      selfProofFileURL: nil,
+      selfProofCheckpointFileURL: nil,
+      unsentWindowLedgerFileURL: nil,
+      sensingCryptography: BarnardSensingCryptography()
     )
+  }
+
+  /// Test seam for beid#134 Decision 1 (`docs/specs/ledger-async-io.md` §4,
+  /// Option B): exercises the exact async queue-during-load path the
+  /// production `convenience init()` above uses — placeholder stores,
+  /// `isLedgerLoading`, a background load/reconcile task, and the
+  /// detection queue/drain — against an isolated directory instead of the
+  /// default on-device paths, so `BeidTests` can construct a coordinator
+  /// whose stores are still loading and exercise
+  /// `handleDetection`/`isLedgerLoading` during that window. Unlike the
+  /// explicit-storage-seam initializer below (which hands over
+  /// already-loaded stores and never sets `isLedgerLoading`), this is what
+  /// proves the queue/drain mechanism itself, not a stand-in for it.
+  convenience init(
+    loadingFromDirectory directory: URL,
+    sensingCryptography: any SensingCryptography
+  ) {
+    self.init(
+      windowReportFileURL: directory.appendingPathComponent("window-reports.json"),
+      selfProofFileURL: directory.appendingPathComponent("self-proofs.json"),
+      selfProofCheckpointFileURL: directory.appendingPathComponent("self-proof-checkpoint.json"),
+      unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
+      sensingCryptography: sensingCryptography
+    )
+  }
+
+  /// Shared by the production initializer and the loading-window test seam
+  /// above. Synchronously constructs `self` through the unchanged
+  /// designated initializer below using throwaway placeholder stores (so
+  /// that initializer's own crash-gap reconciliation runs against empty
+  /// placeholder data and is a no-op — the real reconciliation happens
+  /// inside `beginLedgerLoad(...)` once the real stores are loaded), then
+  /// kicks off Decision 1's background load. `nil` file URLs mean "use each
+  /// store's own default on-device path" (the production shape); explicit
+  /// URLs are the isolated-directory test seam. `selfProofFileURL` is
+  /// loaded synchronously and for real, not deferred — Decision 1 does not
+  /// move `selfProofStore`'s own load off the critical path (only
+  /// `windowReportStore`/`unsentWindowLedgerRuntime`/
+  /// `selfProofCheckpointStore` do), so it never needs a placeholder.
+  private convenience init(
+    windowReportFileURL: URL?,
+    selfProofFileURL: URL?,
+    selfProofCheckpointFileURL: URL?,
+    unsentWindowLedgerFileURL: URL?,
+    sensingCryptography: any SensingCryptography
+  ) {
+    self.init(
+      windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
+      selfProofStore: SelfProofStore(fileURL: selfProofFileURL),
+      selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: Self.unloadedPlaceholderFileURL()),
+      unsentWindowLedgerRuntime: nil,
+      sensingCryptography: sensingCryptography,
+      initialLedgerFailure: nil
+    )
+    // Only this initializer chain is actually loading — see
+    // `isLedgerLoading`'s doc comment for why the default is `false`.
+    isLedgerLoading = true
+    beginLedgerLoad(
+      windowReportFileURL: windowReportFileURL,
+      unsentWindowLedgerFileURL: unsentWindowLedgerFileURL,
+      selfProofCheckpointFileURL: selfProofCheckpointFileURL
+    )
+  }
+
+  /// A file location guaranteed not to exist, so a placeholder store's own
+  /// synchronous `load()` degenerates to a single `fileExists` check
+  /// instead of a real read. Used only for the brief window before
+  /// `beginLedgerLoad(...)` replaces the placeholder with the real,
+  /// recovered store.
+  private static func unloadedPlaceholderFileURL() -> URL {
+    FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-sensing-coordinator-loading-placeholder-\(UUID().uuidString).json")
+  }
+
+  /// Decision 1's background load (`docs/specs/ledger-async-io.md` §4.2):
+  /// reproduces today's production recovery work (`WindowReportStore`/
+  /// `UnsentWindowLedgerStore` recovery, `reconcileAfterRelaunch`,
+  /// `reconcileSelfProofCheckpointIfNeeded()`) off the `init()` critical
+  /// path — the designated initializer below still performs the identical
+  /// reconciliation sequence synchronously for its own (already-loaded,
+  /// non-placeholder) callers, so this duplicates that shape deliberately
+  /// rather than changing the designated initializer's contract, which
+  /// `BeidTests` relies on staying synchronous and unchanged. Hops back to
+  /// replace the placeholder stores with the real, recovered ones, sets
+  /// `ledgerHealth` at the same moment as today, flips `isLedgerLoading`
+  /// false, then drains whatever detections queued while it ran.
+  private func beginLedgerLoad(
+    windowReportFileURL: URL?,
+    unsentWindowLedgerFileURL: URL?,
+    selfProofCheckpointFileURL: URL?
+  ) {
+    ledgerLoadTask = Task {
+      var loadFailure: Error?
+
+      let recoveredWindowReportStore: WindowReportStore
+      do {
+        let recovery = try WindowReportStore.recoveringCorruptReports(fileURL: windowReportFileURL)
+        if let quarantinedURL = recovery.quarantinedReportsURL {
+          Self.ledgerLog.error("Quarantined corrupt window reports at \(quarantinedURL.path, privacy: .public)")
+        }
+        recoveredWindowReportStore = recovery.store
+      } catch {
+        recoveredWindowReportStore = WindowReportStore(fileURL: windowReportFileURL)
+        loadFailure = error
+        Self.ledgerLog.error("Unable to recover the window report store: \(error, privacy: .public)")
+      }
+
+      var recoveredRuntime: UnsentWindowLedgerRuntime?
+      do {
+        let recovery = try UnsentWindowLedgerStore.recoveringCorruptSnapshot(fileURL: unsentWindowLedgerFileURL)
+        if let quarantinedURL = recovery.quarantinedSnapshotURL {
+          Self.ledgerLog.error("Quarantined a corrupt shared unsent-window ledger at \(quarantinedURL.path, privacy: .public)")
+        }
+        recoveredRuntime = try UnsentWindowLedgerRuntime(store: recovery.store)
+      } catch {
+        recoveredRuntime = nil
+        loadFailure = error
+        Self.ledgerLog.error("Unable to load the shared unsent-window ledger: \(error, privacy: .public)")
+      }
+
+      if let runtime = recoveredRuntime {
+        do {
+          let durableReports = try recoveredWindowReportStore.persistedReportsForLedgerRecovery()
+          let persistedObservations = durableReports.map { report -> (windowId: String, reference: String) in
+            let reference = report.id.uuidString.lowercased()
+            return (windowId: reference, reference: reference)
+          }
+          try runtime.reconcileAfterRelaunch(persistedObservations: persistedObservations)
+        } catch {
+          recoveredRuntime = nil
+          loadFailure = error
+          Self.ledgerLog.error("Unable to reconcile the shared unsent-window ledger: \(error, privacy: .public)")
+        }
+      }
+
+      self.windowReportStore = recoveredWindowReportStore
+      self.unsentWindowLedgerRuntime = recoveredRuntime
+      self.selfProofCheckpointStore = SelfProofCheckpointStore(fileURL: selfProofCheckpointFileURL)
+      if let loadFailure {
+        self.ledgerHealth = .degraded(reason: loadFailure, since: Date())
+      }
+      self.reconcileSelfProofCheckpointIfNeeded()
+      self.logOwnerKeyRegenerationSignalsIfNeeded()
+      self.isLedgerLoading = false
+      self.drainQueuedDetectionsAfterLoad()
+    }
+  }
+
+  /// gh#156 regeneration-detectability (`docs/specs/owner-key-seed-read-failure.md`
+  /// §8): checked once per launch, from inside `beginLedgerLoad(...)`'s
+  /// background Task (beid#134 DECISIONS 2026-08-09 ruling) rather than
+  /// synchronously from `AppCoordinator.init()` — this is the same point
+  /// that already calls `reconcileSelfProofCheckpointIfNeeded()`, after the
+  /// real stores are assigned and before `isLedgerLoading` flips `false` or
+  /// the detection queue drains, so the check completes before any new
+  /// detection-driven record could be created. Signal A/B are only
+  /// informative at this scope — no UI/UX response is designed yet (§11) —
+  /// so this only logs, the same posture `CorruptStoreQuarantine` and this
+  /// type's own reconciliation failures already take for a
+  /// detected-but-unsurfaced condition.
+  private func logOwnerKeyRegenerationSignalsIfNeeded() {
+    if let quarantinedSeedKey = quarantinedOwnerKeySeedKey {
+      Self.ledgerLog.error("Owner key seed was quarantined and regenerated this session at \(quarantinedSeedKey, privacy: .public)")
+    }
+    if ownerPublicKeyMismatchDetected {
+      Self.ledgerLog.error("Owner public key does not match some already-persisted self-proof/binding record")
+    }
   }
 
   /// Explicit storage seam for tests and controlled hosts. Unlike the
@@ -520,6 +693,19 @@ final class SensingCoordinator: ObservableObject {
   /// cannot be attributed to a device. Every caller must say what it
   /// observed.
   func handleDetection(enin: Int, rpid: String, detectedDisplayId: String?) {
+    // beid#134 Decision 1: while the background load is still recovering
+    // stores, queue the whole raw detection instead of processing it —
+    // every ledger-relevant native state field this function's cases would
+    // otherwise set is only ever set as a *consequence* of processing one,
+    // so queuing whole keeps every other method's existing nil-state guard
+    // correct for free. See `queuedDetectionsWhileLoading` and
+    // `docs/specs/ledger-async-io.md` §4.2.
+    guard !isLedgerLoading else {
+      queuedDetectionsWhileLoading.append(
+        (enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
+      )
+      return
+    }
     switch phase {
     case .sensing:
       let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
@@ -1127,10 +1313,15 @@ final class SensingCoordinator: ObservableObject {
         commit: commit,
         signature: signature
       )
-      // TODO: This and the shared snapshot write below synchronously
-      // rewrite whole files on the MainActor BLE path. Move the I/O off
-      // actor in a follow-up while preserving report-before-ledger-close
-      // durability ordering. See beid#134.
+      // TODO: This and the shared snapshot write below still synchronously
+      // rewrite whole files on the MainActor BLE path on every real window
+      // close. Startup's synchronous I/O is resolved by beid#134 Decision 1
+      // (docs/specs/ledger-async-io.md §4); *this* per-close write's format
+      // and actor location are deferred, by design, to the pruning/
+      // send-path follow-up that will also decide WindowReportStore's
+      // eventual format (same document, §5.1/§5.2's stated revisit
+      // trigger) — not a broader "follow-up" left open-ended. See
+      // beid#134.
       do {
         observationReference = try windowReportStore.add(report)
         currentWindowObservationReference = observationReference
@@ -1456,6 +1647,34 @@ final class SensingCoordinator: ObservableObject {
 
   func waitForDemoSequenceToFinish() async {
     await demoTask?.value
+  }
+
+  /// Test seam mirroring `waitForDemoSequenceToFinish()` above: awaits
+  /// Decision 1's background load/reconcile task
+  /// (`docs/specs/ledger-async-io.md` §4) so tests can deterministically
+  /// observe post-load state without polling or sleeping. `nil` (an
+  /// immediate no-op) if this instance was built via the fully-synchronous
+  /// explicit-storage-seam initializer, which never sets `ledgerLoadTask`.
+  func waitForLedgerLoadToFinish() async {
+    await ledgerLoadTask?.value
+  }
+
+  /// Replays, in arrival order, every detection `handleDetection` queued
+  /// instead of processing while `isLedgerLoading` was `true` — called once,
+  /// immediately after `isLedgerLoading` flips `false`. See
+  /// `handleDetection`'s guard and `docs/specs/ledger-async-io.md` §4.2 for
+  /// why the whole raw detection was queued rather than only its
+  /// store-touching calls.
+  private func drainQueuedDetectionsAfterLoad() {
+    let queued = queuedDetectionsWhileLoading
+    queuedDetectionsWhileLoading = []
+    for detection in queued {
+      handleDetection(
+        enin: detection.enin,
+        rpid: detection.rpid,
+        detectedDisplayId: detection.detectedDisplayId
+      )
+    }
   }
 
   private nonisolated func delay(_ nanos: UInt64) async -> Bool {

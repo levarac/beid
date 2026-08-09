@@ -201,6 +201,126 @@ final class SensingCoordinatorTests: XCTestCase {
     }
   }
 
+  /// beid#134 Decision 1 (`docs/specs/ledger-async-io.md` §4, §7 AC3): a
+  /// detection arriving while `isLedgerLoading` is still `true` must be
+  /// queued, not lost, and must be processed in original arrival order once
+  /// loading completes — producing the same `phase`/window state as if
+  /// `handleDetection` had been called directly after construction, once
+  /// `isLedgerLoading` becomes `false`.
+  func testDetectionsArrivingDuringLoadingWindowAreQueuedAndReplayedInOrder() async {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("sensing-coordinator-loading-test-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: DeterministicSensingCryptography()
+    )
+    coordinator.useDemoEventMode = false
+
+    // No `await` has happened yet, so the background load task cannot have
+    // run any of its body — construction is guaranteed still mid-flight.
+    XCTAssertTrue(coordinator.isLedgerLoading, "loading must still be in progress immediately after construction")
+
+    // No `eventCode:` argument: `startSensing`'s real (non-demo) path only
+    // calls `engine.configure(eventCode:)` inside `engine.requestPermissions`'s
+    // completion, gated on `canScan`/`canAdvertise` — never satisfied on a
+    // BLE-less Simulator (AGENTS.md), so `engine.getCurrentEventCode()`
+    // stays `nil` and `handleDetection`'s `.sensing` case falls back to
+    // "Unknown Event" regardless of load timing. Matches every sibling test
+    // in `WindowReportFinalizationTests.swift` using this same real-path
+    // pattern, none of which assert an exact `eventCode`/session id either.
+    coordinator.startSensing()
+    // Two detections, queued in arrival order — the second alone would
+    // reach .recording at the configured threshold if replayed out of
+    // order or deduped incorrectly against the first.
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-1",
+      detectedDisplayId: DetectionFixture.displayId(device: 1)
+    )
+
+    // Still queued: no detection has been processed, so phase has not yet
+    // advanced past .sensing (set by startSensing above).
+    XCTAssertTrue(coordinator.isLedgerLoading, "still mid-load: queued detections must not be processed yet")
+    XCTAssertEqual(coordinator.phase, .sensing, "a queued detection must not advance phase before loading completes")
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertFalse(coordinator.isLedgerLoading, "loading must have completed")
+    guard case .eventFound = coordinator.phase else {
+      XCTFail("expected .eventFound after the queued detections drained, got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(coordinator.devicesVerified, 2, "both queued detections must have been replayed, in order, not lost or deduped")
+  }
+
+  /// beid#134/#156: gh#156's owner-key regeneration check (`quarantinedOwnerKeySeedKey`
+  /// / `ownerPublicKeyMismatchDetected`) was relocated from a synchronous
+  /// `AppCoordinator.init()` call into `beginLedgerLoad(...)`'s background
+  /// Task, at the same point that already calls
+  /// `reconcileSelfProofCheckpointIfNeeded()` — after the real stores are
+  /// assigned, before `isLedgerLoading` flips `false` and before the
+  /// detection queue drains. This proves both halves of that move: (1) the
+  /// owner-key resolution the check forces does not happen synchronously at
+  /// construction — `crypto.calls` is still empty immediately after
+  /// `init`, mid-load — and (2) it still completes strictly before any
+  /// queued detection is replayed, using `DeterministicSensingCryptography`
+  /// as a call-order spy: `ownerPublicKeyMismatchDetected` unconditionally
+  /// calls `sensingCryptography.ownerPublicKey()`, and replaying the queued
+  /// detection's `.sensing -> .eventFound` transition
+  /// (`beginEventFound(_:)`) independently calls
+  /// `eventSigningPublicKey(eventCode:)` then `ownerPublicKey()` again to
+  /// fix the session commit — so if the relocation ever reordered the
+  /// check after the drain, the first `.ownerPublicKey` call recorded would
+  /// no longer be the check's.
+  func testOwnerKeyMismatchCheckCompletesDuringBackgroundLoadBeforeQueuedDetectionDrains() async {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("sensing-coordinator-owner-key-loading-test-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+    let crypto = DeterministicSensingCryptography()
+    let coordinator = SensingCoordinator(loadingFromDirectory: directory, sensingCryptography: crypto)
+    coordinator.useDemoEventMode = false
+
+    // No `await` has happened yet, so the background load task cannot have
+    // run any of its body — the owner-key check has not resolved anything.
+    XCTAssertTrue(coordinator.isLedgerLoading, "loading must still be in progress immediately after construction")
+    XCTAssertTrue(crypto.calls.isEmpty, "owner key must not be resolved synchronously at/around construction")
+
+    coordinator.startSensing()
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
+
+    // Still queued: the detection must not have been replayed yet, so the
+    // commit-computation calls it would trigger have not happened either.
+    XCTAssertTrue(coordinator.isLedgerLoading, "still mid-load: the queued detection must not be processed yet")
+    XCTAssertTrue(crypto.calls.isEmpty, "the queued detection must not be replayed before loading completes")
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertFalse(coordinator.isLedgerLoading, "loading must have completed")
+    guard case .eventFound = coordinator.phase else {
+      XCTFail("expected .eventFound after the queued detection drained, got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(
+      crypto.calls,
+      [.ownerPublicKey, .eventSigningPublicKey(eventCode: "Unknown Event"), .ownerPublicKey],
+      "the mismatch check's ownerPublicKey() call must be the first recorded call — strictly before the queued detection's beginEventFound(_:) commit computation calls eventSigningPublicKey/ownerPublicKey again"
+    )
+  }
+
   func testStartSensingTwiceInARowOnTheSameCoordinatorBothReachRecording() async {
     // Regression check for re-entering the scan flow within one app
     // session (AppCoordinator reuses one long-lived SensingCoordinator
