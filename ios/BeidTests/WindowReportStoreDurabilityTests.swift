@@ -38,6 +38,38 @@ final class WindowReportStoreDurabilityTests: XCTestCase {
     XCTAssertEqual(WindowReportStore(fileURL: fileURL).reports, [report])
   }
 
+  func testRecoveringStorePrunesOldestQuarantineFilesBeyondRetentionCap() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-window-report-quarantine-retention-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let fileURL = directory.appendingPathComponent("window-reports.json")
+    var quarantinedURLs: [URL] = []
+    for index in 0..<6 {
+      try Data("not-window-report-json-\(index)".utf8).write(to: fileURL, options: .atomic)
+      let recovery = try WindowReportStore.recoveringCorruptReports(
+        fileURL: fileURL,
+        now: Date(timeIntervalSince1970: Double(1_000 + index))
+      )
+      quarantinedURLs.append(try XCTUnwrap(recovery.quarantinedReportsURL))
+    }
+
+    let siblings = try FileManager.default.contentsOfDirectory(
+      at: directory,
+      includingPropertiesForKeys: nil
+    )
+    let survivingQuarantineFiles = Set(
+      siblings.filter { $0.lastPathComponent.contains(".corrupt-") }
+    )
+
+    XCTAssertEqual(survivingQuarantineFiles.count, 5)
+    XCTAssertFalse(survivingQuarantineFiles.contains(quarantinedURLs[0]))
+    for keptURL in quarantinedURLs.suffix(5) {
+      XCTAssertTrue(survivingQuarantineFiles.contains(keptURL))
+    }
+  }
+
   func testDirectoryCreationFailureDoesNotPublishAnUndurableReport() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-window-report-store-\(UUID().uuidString)", isDirectory: true)
@@ -99,6 +131,32 @@ final class WindowReportStoreDurabilityTests: XCTestCase {
     XCTAssertTrue(replacementAttempted)
     XCTAssertEqual(store.reports, [first])
     XCTAssertEqual(WindowReportStore(fileURL: fileURL).reports, [first])
+  }
+
+  func testAddSynchronizesStagedFileBeforeAtomicSwap() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-window-report-fsync-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let fileURL = directory.appendingPathComponent("window-reports.json")
+    let report = try makeReport(id: "00000000-0000-0000-0000-000000000001")
+    var synchronizedURLs: [URL] = []
+    let store = WindowReportStore(
+      fileURL: fileURL,
+      synchronizeStagedFile: { stagedURL in
+        synchronizedURLs.append(stagedURL)
+        // The durable file must not yet reflect the new bytes: synchronizing
+        // the staged file must happen before the atomic swap, not after.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+      }
+    )
+
+    XCTAssertEqual(try store.add(report), "00000000-0000-0000-0000-000000000001")
+
+    XCTAssertEqual(synchronizedURLs.count, 1)
+    XCTAssertNotEqual(synchronizedURLs[0], fileURL)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
   }
 
   private func makeReport(id: String) throws -> WindowReport {
