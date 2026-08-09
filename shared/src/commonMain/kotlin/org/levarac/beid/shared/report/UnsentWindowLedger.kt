@@ -142,7 +142,7 @@ public fun openUnsentWindow(
         return ledger.failure("duplicate_window_id")
     }
 
-    val revision = ledger.state.revision.incrementOrNull()
+    val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
     val nextWindowSequence = ledger.state.nextWindowSequence.incrementOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
@@ -175,7 +175,7 @@ public fun closeUnsentWindow(
         }
     }
 
-    val revision = ledger.state.revision.incrementOrNull()
+    val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
     val updated = ledger.state.copy(
         revision = revision,
@@ -238,7 +238,7 @@ public fun reconcileUnsentWindowLedgerAfterRelaunch(
     if (ledger.state.windows.none { it.closedRevision == null }) {
         return ledger.unchanged()
     }
-    val revision = ledger.state.revision.incrementOrNull()
+    val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
     if (!ledger.reconciledSnapshotFits(recoveryInput, revision)) {
         return ledger.failure("ledger_capacity_exceeded")
@@ -291,7 +291,7 @@ public fun prepareNextUnsentWindowSubmission(
             return ledger.unchanged()
         }
 
-        val revision = ledger.state.revision.incrementOrNull()
+        val revision = ledger.state.revision.incrementRevisionOrNull()
             ?: return ledger.failure("ledger_capacity_exceeded")
         if (activeReport.attempt == Int.MAX_VALUE) {
             return ledger.failure("ledger_capacity_exceeded")
@@ -333,7 +333,7 @@ public fun prepareNextUnsentWindowSubmission(
         return ledger.failure("ledger_capacity_exceeded")
     }
 
-    val revision = ledger.state.revision.incrementOrNull()
+    val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
     val nextReportSequence = ledger.state.nextReportSequence.incrementOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
@@ -380,7 +380,7 @@ public fun markUnsentWindowSubmissionRetryable(
         return ledger.failure("submission_not_durable")
     }
 
-    val revision = ledger.state.revision.incrementOrNull()
+    val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
     val updated = ledger.state.copy(
         revision = revision,
@@ -422,7 +422,7 @@ public fun recordUnsentWindowSubmissionAcceptance(
         return ledger.failure("submission_not_durable")
     }
 
-    val revision = ledger.state.revision.incrementOrNull()
+    val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
     val updated = ledger.state.copy(
         revision = revision,
@@ -468,7 +468,7 @@ public fun recordUnsentWindowSubmissionInclusion(
         }
     }
 
-    val revision = ledger.state.revision.incrementOrNull()
+    val revision = ledger.state.revision.incrementRevisionOrNull()
         ?: return ledger.failure("ledger_capacity_exceeded")
     val updated = ledger.state.copy(
         revision = revision,
@@ -580,6 +580,17 @@ private fun UnsentWindowLedger.failure(errorCode: String): UnsentWindowLedgerTra
 
 private fun Long.incrementOrNull(): Long? =
     if (this == Long.MAX_VALUE) null else this + 1L
+
+/**
+ * The reducer never produces `revision == Long.MAX_VALUE`; every mutating
+ * transition uses this instead of the plain [incrementOrNull] for
+ * `revision` specifically, so `Long.MAX_VALUE` stays permanently unreachable
+ * via normal mutation. [decodeUnsentWindowLedgerSnapshot] relies on that and
+ * rejects any snapshot claiming `revision == Long.MAX_VALUE` as invalid —
+ * keep both in sync if either changes.
+ */
+private fun Long.incrementRevisionOrNull(): Long? =
+    if (this >= Long.MAX_VALUE - 1L) null else this + 1L
 
 private fun String.isValidLedgerTextField(): Boolean {
     if (isEmpty()) {
