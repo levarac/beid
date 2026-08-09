@@ -10,6 +10,7 @@
 		04FAF61220EF2EDF7B54F01F /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */; };
 		05FF89CD532B46703B2E9C8D /* Illustrations.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */; };
 		064174C3328B39801BB488FE /* SensingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAD458D67D1864749F00726 /* SensingCoordinator.swift */; };
+		06660B9355AB2A2301D47CA5 /* OwnerKeyRegenerationDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1CC0C132C9AE42C8C050B2 /* OwnerKeyRegenerationDetector.swift */; };
 		069813A870D327358882201A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
 		0ABD0998DA3A69A3CEAD5584 /* WalletConnect in Frameworks */ = {isa = PBXBuildFile; productRef = 44B73AA6A65E8F59682BC25A /* WalletConnect */; };
 		0EDB197705C554ECE54A12EA /* libBeidMetaMaskDebug.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */; };
@@ -217,6 +218,7 @@
 		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 		C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyProvider.swift; sourceTree = "<group>"; };
 		C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskConnector.swift; sourceTree = "<group>"; };
+		CA1CC0C132C9AE42C8C050B2 /* OwnerKeyRegenerationDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyRegenerationDetector.swift; sourceTree = "<group>"; };
 		CA4E3BC04874E00A36445CB8 /* SelfProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofStore.swift; sourceTree = "<group>"; };
 		CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCryptography.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -279,6 +281,7 @@
 				7209389876A87B83EB5B49B9 /* EventCommitment.swift */,
 				13AA21AD1DA667D20C77BD26 /* EventIdHash.swift */,
 				C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */,
+				CA1CC0C132C9AE42C8C050B2 /* OwnerKeyRegenerationDetector.swift */,
 				4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */,
 				7FAD458D67D1864749F00726 /* SensingCoordinator.swift */,
 				CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */,
@@ -712,6 +715,7 @@
 				5B3DAEF2A80374F87F5836F2 /* NativeWebSocketFactory.swift in Sources */,
 				CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */,
 				EBBF003BA24A47DD167584A5 /* OwnerKeyProvider.swift in Sources */,
+				06660B9355AB2A2301D47CA5 /* OwnerKeyRegenerationDetector.swift in Sources */,
 				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
 				ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */,

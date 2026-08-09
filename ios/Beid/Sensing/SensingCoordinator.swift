@@ -229,6 +229,38 @@ final class SensingCoordinator: ObservableObject {
   private let bindingRecordStore = BindingRecordStore()
   private let selfProofStore: SelfProofStore
   private let selfProofCheckpointStore: SelfProofCheckpointStore
+  /// gh#156 Signal A (`docs/specs/owner-key-seed-read-failure.md` §8):
+  /// non-nil once the owner key resolution behind `sensingCryptography` has
+  /// quarantined an unreadable stored seed this session. `nil` both when
+  /// nothing has been quarantined and when `sensingCryptography` isn't the
+  /// production `BarnardSensingCryptography` implementation (e.g. a test
+  /// fake) — mirrors `SelfProofStore.quarantinedFileURL`'s readable-property
+  /// pattern. Computed, not cached at construction: reading `ownerKeyProvider
+  /// .quarantinedSeedKey` here never itself calls into `sensingCryptography`
+  /// (unlike Signal B below), so there is no resolution-ordering cost to
+  /// evaluating this lazily, only to read after whatever already triggered
+  /// key resolution (any self-proof/binding/wallet-ack call, or Signal B).
+  var quarantinedOwnerKeySeedKey: String? {
+    (sensingCryptography as? BarnardSensingCryptography)?.ownerKeyProvider.quarantinedSeedKey
+  }
+  /// gh#156 Signal B (`docs/specs/owner-key-seed-read-failure.md` §8): true
+  /// when some self-proof/binding record already loaded by `selfProofStore`/
+  /// `bindingRecordStore` has an owner public key that differs from the one
+  /// currently active — evidence the owner key changed since that record
+  /// was created, regardless of cause. Computed on demand rather than
+  /// cached at construction: `sensingCryptography.ownerPublicKey()` forces
+  /// owner-key resolution, and every other call into the facade already
+  /// happens lazily, on first actual use — forcing it during `init` would
+  /// change resolution timing for every coordinator, production and test
+  /// alike, for a signal only meant to be checked once at startup by
+  /// whoever wires that check (an `AppCoordinator`-level concern, per §8).
+  var ownerPublicKeyMismatchDetected: Bool {
+    OwnerKeyRegenerationDetector.ownerPublicKeyMismatchDetected(
+      activeOwnerPublicKey: sensingCryptography.ownerPublicKey(),
+      selfProofRecords: selfProofStore.records,
+      bindingRecords: bindingRecordStore.records
+    )
+  }
   private var demoTask: Task<Void, Never>?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's

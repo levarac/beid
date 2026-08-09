@@ -58,7 +58,13 @@ protocol SensingCryptography: AnyObject {
 /// adding sensing decisions or re-checking Barnard semantics.
 final class BarnardSensingCryptography: SensingCryptography {
   private let identity = BarnardIdentity()
-  private let ownerKeyProvider = OwnerKeyProvider()
+  /// Not `private`: `SensingCoordinator` downcasts to this concrete type to
+  /// read `ownerKeyProvider.quarantinedSeedKey` (gh#156 Signal A,
+  /// `docs/specs/owner-key-seed-read-failure.md` §8) — a beid-only signal
+  /// with no place on the `SensingCryptography` protocol itself, since
+  /// every other implementation (test fakes) has no owner-key storage to
+  /// report on.
+  let ownerKeyProvider = OwnerKeyProvider()
 
   func eventSigningPublicKey(eventCode: String) -> Data {
     identity.signingPublicKey(eventCode: eventCode)
