@@ -74,6 +74,14 @@ struct AccountSheetView: View {
         }
 
         Section {
+          NavigationLink {
+            VenueDeviceOrganizerView(sensingCoordinator: coordinator.sensingCoordinator)
+          } label: {
+            Label("Venue Device", systemImage: "antenna.radiowaves.left.and.right")
+          }
+        }
+
+        Section {
           Button(role: .destructive) {
             BeidDesign.haptic(.medium)
             coordinator.disconnectWallet()
