@@ -41,6 +41,14 @@ final class SelfProofStore: ObservableObject {
     save()
   }
 
+  /// A `Proof` gets at most one self-proof (mirrors `BindingRecord`'s own
+  /// `proofId` linkage), so the first match is the only match. Used by
+  /// checkpoint reconciliation to tell whether a graceful session end
+  /// already produced the real record.
+  func record(forProofId proofId: UUID) -> SelfProofRecord? {
+    records.first { $0.proofId == proofId }
+  }
+
   private func load() {
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
     do {

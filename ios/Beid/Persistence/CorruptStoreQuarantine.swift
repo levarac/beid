@@ -4,7 +4,8 @@
 import Foundation
 
 /// Corrupt-file policy for the proof-bearing flat-JSON stores
-/// (`ProofStore`, `BindingRecordStore`, `SelfProofStore`).
+/// (`ProofStore`, `BindingRecordStore`, `SelfProofStore`,
+/// `SelfProofCheckpointStore`).
 ///
 /// The mechanism is the one `WindowReportStore.recoveringCorruptReports`
 /// and `UnsentWindowLedgerStore.recoveringCorruptSnapshot` already use: the
