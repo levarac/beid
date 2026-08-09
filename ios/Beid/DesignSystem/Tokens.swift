@@ -107,6 +107,10 @@ enum DS {
     /// `ItemDetailView`'s circular per-proof gradient avatar diameter —
     /// the same artwork generator as `proofCardArtwork`, at detail scale.
     static let itemDetailArtwork: CGFloat = 190
+    /// `WalletConnectPairingView`'s QR-code container width/height, shared
+    /// by onboarding (`WalletConnectView`) and the Account sheet's
+    /// "Connect Wallet" action.
+    static let qrCode: CGFloat = 220
   }
 
   // MARK: - Layout
