@@ -130,11 +130,22 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       )
       coordinator.useDemoEventMode = false
       coordinator.startSensing(eventCode: "TEST-SHARED-ORDERING")
-      coordinator.handleDetection(
-        enin: 1,
-        rpid: "peer-original",
-        detectedDisplayId: DetectionFixture.displayId(device: 1)
-      )
+      // beid#114: window 1 must be confirmed (reach `.recording`) before any
+      // of the three closing triggers below run, or its close would be
+      // silently skipped as unconfirmed rather than exercising the
+      // exactly-once-close race this test is actually about.
+      let threshold = BeidConfig.eventConfirmThreshold
+      for index in 0..<threshold {
+        coordinator.handleDetection(
+          enin: 1,
+          rpid: "peer-original-\(index)",
+          detectedDisplayId: DetectionFixture.displayId(device: index)
+        )
+      }
+      guard case .recording = coordinator.phase else {
+        XCTFail("expected .recording before the close-trigger ordering (\(ordering.description)), got \(coordinator.phase)")
+        continue
+      }
 
       for trigger in ordering {
         apply(trigger, to: coordinator)
@@ -269,17 +280,52 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
   // a later, unrelated failure — `since` has to stay pinned to the first
   // occurrence so "how long has this been broken" survives.
   func testLedgerHealthReflectsOperationalPersistFailureAndLatchesSinceTheFirstOccurrence() throws {
-    let fixture = try makeRecoverableReportFailureFixture(named: "ledger-health-operational-failure")
+    let fixture = try makeRuntimeFixture(named: "ledger-health-operational-failure")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     XCTAssertFalse(fixture.coordinator.ledgerHealth.isDegraded)
 
     fixture.coordinator.startSensing(eventCode: "TEST-LEDGER-HEALTH-OPEN-FAILURE")
-    try fixture.blockLedgerWrites()
 
+    // beid#114: the ledger lifecycle only starts once `.recording` begins,
+    // so reach that first — while the ledger is still healthy — before
+    // corrupting it. Otherwise window 1's `openWindow` is simply skipped as
+    // unconfirmed rather than attempted and failing.
+    //
+    // Corrupting the ledger snapshot file's bytes directly (rather than
+    // `RecoverableReportFailureFixture.blockLedgerWrites()`, which replaces
+    // the ledger's *parent directory* with a plain file) is required here:
+    // by the time confirmation succeeds, `ensureLedgerWindowOpen()` has
+    // already created that parent as a real directory containing a real
+    // snapshot, so `blockLedgerWrites()` would fail outright trying to
+    // overwrite a directory with a file, rather than simulating a write
+    // failure.
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-confirming-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before corrupting the ledger, got \(fixture.coordinator.phase)")
+      return
+    }
+    XCTAssertFalse(
+      fixture.coordinator.ledgerHealth.isDegraded,
+      "the ledger must still be healthy before it's corrupted"
+    )
+
+    try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
+
+    // Crossing an ENIN boundary now closes the already-confirmed window 1 —
+    // the ledger-runtime close (and window 2's own open, right after) both
+    // fail against the corrupt file, which is this test's "operational
+    // persist failure on an otherwise-live runtime".
     fixture.coordinator.handleDetection(
-      enin: 1,
-      rpid: "peer-triggering-open-window-failure",
-      detectedDisplayId: DetectionFixture.displayId(device: 1)
+      enin: 2,
+      rpid: "peer-triggering-close-failure",
+      detectedDisplayId: DetectionFixture.displayId(device: threshold)
     )
 
     XCTAssertTrue(fixture.coordinator.ledgerHealth.isDegraded)
@@ -288,9 +334,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     Thread.sleep(forTimeInterval: 0.05)
     fixture.coordinator.handleDetection(
-      enin: 2,
+      enin: 3,
       rpid: "peer-triggering-a-second-later-failure",
-      detectedDisplayId: DetectionFixture.displayId(device: 2)
+      detectedDisplayId: DetectionFixture.displayId(device: threshold + 1)
     )
 
     XCTAssertTrue(fixture.coordinator.ledgerHealth.isDegraded)
@@ -306,13 +352,21 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-FAILED-ENIN-CLOSE")
 
-    let peersBeforeBoundary = max(1, BeidConfig.eventConfirmThreshold - 1)
+    // beid#114: window 1 must be confirmed (reach `.recording`) before it
+    // crosses the ENIN boundary below, or its close would be silently
+    // skipped as unconfirmed rather than genuinely attempted and failing
+    // against the corrupt ledger — which is the scenario this test is about.
+    let peersBeforeBoundary = BeidConfig.eventConfirmThreshold
     for index in 0..<peersBeforeBoundary {
       fixture.coordinator.handleDetection(
         enin: 1,
         rpid: "peer-\(index)",
         detectedDisplayId: DetectionFixture.displayId(device: index)
       )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before corrupting the ledger, got \(fixture.coordinator.phase)")
+      return
     }
     let originalWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
@@ -352,11 +406,22 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRuntimeFixture(named: "failed-checkpoint-close")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-FAILED-CHECKPOINT-CLOSE")
-    fixture.coordinator.handleDetection(
-      enin: 1,
-      rpid: "peer-0",
-      detectedDisplayId: DetectionFixture.displayId(device: 0)
-    )
+
+    // beid#114: confirm first, so the checkpoint's close is genuinely
+    // attempted (and fails) against the corrupt ledger, rather than being
+    // silently skipped as unconfirmed.
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before corrupting the ledger, got \(fixture.coordinator.phase)")
+      return
+    }
     let originalWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
 
@@ -364,11 +429,11 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     XCTAssertEqual(fixture.reportStore.reports.count, 1)
     XCTAssertNil(fixture.coordinator.currentWindowIdForTesting)
-    for index in 1..<BeidConfig.eventConfirmThreshold {
+    for offset in 0..<threshold {
       fixture.coordinator.handleDetection(
         enin: 1,
-        rpid: "peer-\(index)",
-        detectedDisplayId: DetectionFixture.displayId(device: index)
+        rpid: "peer-post-checkpoint-\(offset)",
+        detectedDisplayId: DetectionFixture.displayId(device: threshold + offset)
       )
     }
 
@@ -381,7 +446,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     // this test is that post-checkpoint observations are still taken in after
     // a ledger failure, which the device count states directly.
     XCTAssertEqual(
-      fixture.coordinator.devicesVerified, BeidConfig.eventConfirmThreshold,
+      fixture.coordinator.devicesVerified, threshold * 2,
       "post-checkpoint observations must continue after ledger failure"
     )
   }
@@ -391,11 +456,22 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       let fixture = try makeRuntimeFixture(named: "failed-\(action.rawValue)")
       defer { try? FileManager.default.removeItem(at: fixture.directory) }
       fixture.coordinator.startSensing(eventCode: "TEST-FAILED-\(action.rawValue)")
-      fixture.coordinator.handleDetection(
-        enin: 1,
-        rpid: "peer-1",
-        detectedDisplayId: DetectionFixture.displayId(device: 1)
-      )
+
+      // beid#114: confirm first, so the session-end close is genuinely
+      // attempted (and fails) against the corrupt ledger, rather than being
+      // silently skipped as unconfirmed.
+      let threshold = BeidConfig.eventConfirmThreshold
+      for index in 0..<threshold {
+        fixture.coordinator.handleDetection(
+          enin: 1,
+          rpid: "peer-\(index)",
+          detectedDisplayId: DetectionFixture.displayId(device: index)
+        )
+      }
+      guard case .recording = fixture.coordinator.phase else {
+        XCTFail("expected .recording before corrupting the ledger (\(action.rawValue))")
+        continue
+      }
       try Data("corrupt-ledger".utf8).write(to: fixture.ledgerFileURL, options: .atomic)
 
       apply(action, to: fixture.coordinator)
@@ -412,18 +488,29 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-rollover")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-ROLLOVER")
-    fixture.coordinator.handleDetection(
-      enin: 1,
-      rpid: "peer-enin-1",
-      detectedDisplayId: DetectionFixture.displayId(device: 10)
-    )
+
+    // beid#114: confirm within window 1 before blocking report writes, or
+    // its close would be silently skipped as unconfirmed rather than
+    // genuinely attempted and failing to write.
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-enin-1-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before blocking report writes, got \(fixture.coordinator.phase)")
+      return
+    }
     let firstWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try fixture.blockReportWrites()
 
     fixture.coordinator.handleDetection(
       enin: 2,
       rpid: "peer-enin-2",
-      detectedDisplayId: DetectionFixture.displayId(device: 11)
+      detectedDisplayId: DetectionFixture.displayId(device: threshold)
     )
 
     let secondWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
@@ -442,7 +529,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertEqual(firstReport.enin, 1)
     XCTAssertEqual(
       firstReport.peerCount,
-      1,
+      threshold,
       "the frozen ENIN-1 report must exclude the RPID first seen in ENIN 2"
     )
     XCTAssertEqual(secondReport.enin, 2)
@@ -465,11 +552,23 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-UNKNOWN-WINDOW-REDELIVERY")
     try fixture.blockLedgerWrites()
-    fixture.coordinator.handleDetection(
-      enin: 1,
-      rpid: "peer-orphaned",
-      detectedDisplayId: DetectionFixture.displayId(device: 20)
-    )
+
+    // beid#114: confirm within window 1, with the ledger already blocked, so
+    // the confirming detection's own ledger-open attempt genuinely fails
+    // (reproducing "orphaned" — a window the ledger never learned was ever
+    // open) rather than being silently skipped as unconfirmed.
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-orphaned-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before restoring ledger writes, got \(fixture.coordinator.phase)")
+      return
+    }
     let orphanedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
 
     try fixture.restoreLedgerWrites()
@@ -477,13 +576,13 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     fixture.coordinator.handleDetection(
       enin: 2,
       rpid: "peer-recoverable",
-      detectedDisplayId: DetectionFixture.displayId(device: 21)
+      detectedDisplayId: DetectionFixture.displayId(device: threshold)
     )
     let recoverableWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     fixture.coordinator.handleDetection(
       enin: 3,
       rpid: "peer-after-queue",
-      detectedDisplayId: DetectionFixture.displayId(device: 22)
+      detectedDisplayId: DetectionFixture.displayId(device: threshold + 1)
     )
     XCTAssertTrue(fixture.reportStore.reports.isEmpty)
 
@@ -491,7 +590,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     fixture.coordinator.handleDetection(
       enin: 4,
       rpid: "peer-drain-trigger",
-      detectedDisplayId: DetectionFixture.displayId(device: 23)
+      detectedDisplayId: DetectionFixture.displayId(device: threshold + 2)
     )
 
     let orphanedReport = try XCTUnwrap(
@@ -571,11 +670,22 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-stop")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-STOP")
-    fixture.coordinator.handleDetection(
-      enin: 1,
-      rpid: "peer-before-stop",
-      detectedDisplayId: DetectionFixture.displayId(device: 30)
-    )
+
+    // beid#114: confirm first, so stopSensing()'s close is genuinely
+    // attempted (and fails to write) rather than being silently skipped as
+    // unconfirmed.
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-before-stop-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before blocking report writes, got \(fixture.coordinator.phase)")
+      return
+    }
     let stoppedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try fixture.blockReportWrites()
 
@@ -590,7 +700,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     fixture.coordinator.handleDetection(
       enin: 2,
       rpid: "peer-later",
-      detectedDisplayId: DetectionFixture.displayId(device: 31)
+      detectedDisplayId: DetectionFixture.displayId(device: threshold)
     )
 
     let report = try XCTUnwrap(
@@ -610,11 +720,22 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     let fixture = try makeRecoverableReportFailureFixture(named: "report-failure-process-death")
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     fixture.coordinator.startSensing(eventCode: "TEST-REPORT-FAILURE-PROCESS-DEATH")
-    fixture.coordinator.handleDetection(
-      enin: 1,
-      rpid: "peer-before-death",
-      detectedDisplayId: DetectionFixture.displayId(device: 32)
-    )
+
+    // beid#114: confirm first, so this genuinely exercises a report-write
+    // failure surviving to process death, rather than an unconfirmed window
+    // that was never known to the ledger for an unrelated reason.
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-before-death-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before blocking report writes, got \(fixture.coordinator.phase)")
+      return
+    }
     let lostWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     try fixture.blockReportWrites()
     fixture.coordinator.stopSensing()
@@ -745,12 +866,23 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     // it only works before anything has ever created that path as a real
     // directory — it must run first, before any window has successfully
     // opened or closed.
+    //
+    // beid#114: confirm within window 1, with the ledger already blocked, so
+    // the confirming detection's own ledger-open attempt genuinely fails
+    // (gh#132's exact mechanism) instead of never being attempted at all.
     try fixture.blockLedgerWrites()
-    fixture.coordinator.handleDetection(
-      enin: 1,
-      rpid: "peer-open-failed",
-      detectedDisplayId: DetectionFixture.displayId(device: 50)
-    )
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-open-failed-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording before restoring ledger writes, got \(fixture.coordinator.phase)")
+      return
+    }
     let orphanedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
 
     try fixture.restoreLedgerWrites()
@@ -758,14 +890,16 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertNil(fixture.coordinator.currentWindowIdForTesting)
 
     // A second, ordinary window opens and closes normally after ledger
-    // writes are restored — this is what actually creates the ledger file
-    // for the first time, so the "before relaunch" check below has a real
-    // durable snapshot to load and query. (A session containing only the
-    // failed window would never have written anything to disk at all.)
+    // writes are restored — already `.recording`, so one more distinct
+    // device is enough to open and sign it. This is what actually creates
+    // the ledger file for the first time, so the "before relaunch" check
+    // below has a real durable snapshot to load and query. (A session
+    // containing only the failed window would never have written anything
+    // to disk at all.)
     fixture.coordinator.handleDetection(
       enin: 2,
       rpid: "peer-establishing-ledger",
-      detectedDisplayId: DetectionFixture.displayId(device: 51)
+      detectedDisplayId: DetectionFixture.displayId(device: threshold)
     )
     let establishedWindowId = try XCTUnwrap(fixture.coordinator.currentWindowIdForTesting)
     XCTAssertNotEqual(establishedWindowId, orphanedWindowId)

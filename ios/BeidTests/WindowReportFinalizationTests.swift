@@ -57,11 +57,19 @@ final class WindowReportFinalizationTests: XCTestCase {
     let cryptography = DeterministicSensingCryptography(windowReportSignature: signature)
     let (coordinator, store) = makeCoordinator(sensingCryptography: cryptography)
     coordinator.startSensing(eventCode: "TEST-WINDOW-FACADE")
-    coordinator.handleDetection(
-      enin: 7,
-      rpid: "peer-0",
-      detectedDisplayId: DetectionFixture.displayId(device: 0)
-    )
+
+    // beid#114: a window only signs once the session reaches .recording, so
+    // this must cross the confirm threshold — a single peer, as before this
+    // fix, would leave the session at .eventFound and produce no report at
+    // all, defeating the point of this test.
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      coordinator.handleDetection(
+        enin: 7,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
 
     coordinator.reset()
 
@@ -113,15 +121,20 @@ final class WindowReportFinalizationTests: XCTestCase {
     XCTAssertEqual(store.reports.first?.peerCount, threshold)
   }
 
-  func testSessionThatOnlyReachesEventFoundReportsExactlyOneWindowOnReset() {
+  /// beid#114 (`docs/specs/eventfound-window-signing.md` §4): a session that
+  /// only ever reaches `.eventFound` — first detection, unconditional,
+  /// carries no confirmation — must never sign or persist a window. Before
+  /// this fix, `closeFinalWindowIfNeeded()`'s `currentSessionEventCode`
+  /// scoping (broader than `currentBindingEvent`, §3.2) let exactly this
+  /// scenario slip a real signed artifact out for a session
+  /// `shouldConfirmEvent`/`applyScanDetection` never blessed — this test
+  /// used to assert that (incorrect) behavior; it now asserts the fix.
+  func testSessionThatOnlyReachesEventFoundReportsNothingOnReset() {
     let (coordinator, store) = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-WINDOW-EVENTFOUND")
 
     // Strictly below the confirm threshold — stays in .eventFound, never
-    // reaches .recording. Proves the currentSessionEventCode scoping fix
-    // (§3.2), not just the stop-time wiring the prior test already covers:
-    // currentBindingEvent alone would return nil here and silently drop
-    // this report.
+    // reaches .recording.
     coordinator.handleDetection(
       enin: 1,
       rpid: "peer-0",
@@ -135,11 +148,10 @@ final class WindowReportFinalizationTests: XCTestCase {
 
     coordinator.reset()
 
-    XCTAssertEqual(
-      store.reports.count, 1,
-      "a session that observed a peer but never reached .recording must still report its one window"
+    XCTAssertTrue(
+      store.reports.isEmpty,
+      "a session that observed a peer but never reached .recording must produce no report at all"
     )
-    XCTAssertEqual(store.reports.first?.peerCount, 1)
   }
 
   func testStopSensingThenResetDoesNotDoubleCountTheFinalWindow() {
@@ -216,5 +228,156 @@ final class WindowReportFinalizationTests: XCTestCase {
     coordinator.reset()
 
     XCTAssertTrue(store.reports.isEmpty, "no window was ever open — nothing to report (§3.7)")
+  }
+
+  // MARK: - beid#114 vectors (`docs/specs/eventfound-window-signing.md` §5)
+
+  /// Crossing the confirm threshold *exactly at* an ENIN window boundary —
+  /// as opposed to mid-window, already covered by
+  /// `testSessionThatReachesRecordingWithoutCrossingAWindowBoundaryReportsExactlyOneWindowOnReset`
+  /// above. The confirming detection is also the one that opens a brand new
+  /// window; that new window, not the pre-confirmation one before it, must
+  /// be the one that ends up signed.
+  func testSessionThatCrossesTheThresholdExactlyAtAWindowBoundaryReportsOnlyTheCrossingWindow() {
+    let (coordinator, store) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-WINDOW-BOUNDARY-CONFIRM")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    // threshold - 1 devices in window 1 — never enough to confirm on their own.
+    for index in 0..<(threshold - 1) {
+      coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .eventFound = coordinator.phase else {
+      XCTFail("expected .eventFound before the boundary, got \(coordinator.phase)")
+      return
+    }
+
+    // The threshold-th device arrives in a NEW window (enin 2) — this single
+    // detection both crosses the ENIN boundary and confirms the event via
+    // the distinct-device arm.
+    coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-at-boundary",
+      detectedDisplayId: DetectionFixture.displayId(device: threshold - 1)
+    )
+    guard case .recording = coordinator.phase else {
+      XCTFail("expected .recording at the boundary-crossing detection, got \(coordinator.phase)")
+      return
+    }
+
+    coordinator.reset()
+
+    XCTAssertEqual(
+      store.reports.count, 1,
+      "window 1 (pre-confirmation) must report nothing; only window 2, the crossing window, is ever signed"
+    )
+    XCTAssertEqual(store.reports.first?.enin, 2)
+    XCTAssertEqual(
+      store.reports.first?.peerCount, 1,
+      "window 2 only ever saw the one boundary-crossing peer"
+    )
+  }
+
+  /// A `.signalLost` → `resumeSensing()` cycle occurring *after* the
+  /// threshold is first crossed must not retroactively sign windows
+  /// observed *before* the crossing — only windows from the crossing point
+  /// onward, threaded through the signal-lost/resume cycle, ever produce a
+  /// report.
+  func testSignalLostAndResumeAfterConfirmationNeverRetroactivelySignsPreConfirmationWindows() {
+    let (coordinator, store) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-WINDOW-SIGNAL-LOST-RESUME")
+
+    // Two pre-confirmation windows, one distinct device each — never crosses
+    // the threshold via either arm.
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: "peer-pre-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
+    coordinator.handleDetection(
+      enin: 2,
+      rpid: "peer-pre-1",
+      detectedDisplayId: DetectionFixture.displayId(device: 1)
+    )
+    guard case .eventFound = coordinator.phase else {
+      XCTFail("expected .eventFound before confirmation, got \(coordinator.phase)")
+      return
+    }
+
+    // The threshold-th distinct device, in a third window, confirms the
+    // event (default threshold 3).
+    coordinator.handleDetection(
+      enin: 3,
+      rpid: "peer-confirming",
+      detectedDisplayId: DetectionFixture.displayId(device: 2)
+    )
+    guard case .recording = coordinator.phase else {
+      XCTFail("expected .recording after the third distinct device, got \(coordinator.phase)")
+      return
+    }
+
+    coordinator.simulateSignalLost()
+    coordinator.resumeSensing()
+
+    // Cross one more boundary post-resume so the confirming window (3)
+    // closes and reports, and a fresh post-resume window (4) opens.
+    coordinator.handleDetection(
+      enin: 4,
+      rpid: "peer-post-resume",
+      detectedDisplayId: DetectionFixture.displayId(device: 3)
+    )
+
+    coordinator.reset()
+
+    XCTAssertEqual(
+      store.reports.count, 2,
+      "only the confirming window (3) and the post-resume window (4) report — the two pre-confirmation windows (1, 2) never do"
+    )
+    XCTAssertEqual(
+      Set(store.reports.map(\.enin)), [3, 4],
+      "the signal-lost/resume cycle must not retroactively sign windows 1 or 2"
+    )
+  }
+
+  /// The pre-existing threshold-of-1 edge case (reachable in production only
+  /// via DEBUG `-beid-threshold-override 1`; here via
+  /// `BeidConfig.eventConfirmThresholdOverrideForTesting`, since a single
+  /// `XCTestCase` cannot relaunch the process with a different launch
+  /// argument): `SENSING` can move straight through `EVENT_FOUND` to
+  /// `RECORDING` on the very first detection
+  /// (`BeidSharedKit.sensing.ScanDetectionResult`'s own doc comment).
+  /// Confirms the *same* detection that causes the double phase-move is the
+  /// one whose window is allowed to open and eventually sign — not a window
+  /// from before it (there is none) and not deferred to a later detection.
+  func testThresholdOfOneConfirmsOnTheFirstDetectionAndSignsThatSameWindow() {
+    BeidConfig.eventConfirmThresholdOverrideForTesting = 1
+    addTeardownBlock { BeidConfig.eventConfirmThresholdOverrideForTesting = nil }
+
+    let (coordinator, store) = makeCoordinator()
+    coordinator.startSensing(eventCode: "TEST-WINDOW-THRESHOLD-OF-ONE")
+
+    coordinator.handleDetection(
+      enin: 5,
+      rpid: "peer-0",
+      detectedDisplayId: DetectionFixture.displayId(device: 0)
+    )
+
+    guard case .recording = coordinator.phase else {
+      XCTFail("expected .recording on the very first detection at threshold 1, got \(coordinator.phase)")
+      return
+    }
+
+    coordinator.reset()
+
+    XCTAssertEqual(
+      store.reports.count, 1,
+      "the same detection that confirms the event must be the one whose window signs"
+    )
+    XCTAssertEqual(store.reports.first?.enin, 5)
+    XCTAssertEqual(store.reports.first?.peerCount, 1)
   }
 }
