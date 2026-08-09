@@ -217,11 +217,13 @@ class UnsentWindowLedgerSnapshotTest {
                 durableRevision = Long.MAX_VALUE,
             ),
         )
-        assertTrue(
-            decodeUnsentWindowLedgerSnapshot(
-                encodeUnsentWindowLedgerSnapshot(exhaustedRevision),
-            ).isSuccess,
+        val exhaustedRevisionDecoded = decodeUnsentWindowLedgerSnapshot(
+            encodeUnsentWindowLedgerSnapshot(exhaustedRevision),
         )
+        assertFalse(exhaustedRevisionDecoded.isSuccess)
+        assertNull(exhaustedRevisionDecoded.ledger)
+        assertEquals("invalid_snapshot", exhaustedRevisionDecoded.errorCode)
+
         val revisionOverflow = openUnsentWindow(exhaustedRevision, "window-1")
         assertFalse(revisionOverflow.isSuccess)
         assertFalse(revisionOverflow.changed)
@@ -301,6 +303,40 @@ class UnsentWindowLedgerSnapshotTest {
         )
         assertFalse(malformedObservation.isSuccess)
         assertEquals("invalid_observation_reference", malformedObservation.errorCode)
+    }
+
+    @Test
+    fun reducerNeverProducesTheRevisionThatDecodeRejects() {
+        val instanceId = "000102030405060708090a0b0c0d0e0f"
+        val nearCapacity = UnsentWindowLedger(
+            LedgerState(
+                ledgerInstanceIdHex = instanceId,
+                revision = Long.MAX_VALUE - 2L,
+                durableRevision = Long.MAX_VALUE - 2L,
+            ),
+        )
+
+        // MAX-2 -> MAX-1 is still a legitimate, fully usable snapshot: it
+        // must decode, round-trip, and remain mutable one more time.
+        val advanced = openUnsentWindow(nearCapacity, "window-1")
+        assertTrue(advanced.isSuccess)
+        assertEquals(Long.MAX_VALUE - 1L, advanced.persistenceRevision)
+        val advancedSnapshot = assertNotNull(advanced.snapshotText)
+        val decodedAdvanced = decodeUnsentWindowLedgerSnapshot(advancedSnapshot)
+        assertTrue(decodedAdvanced.isSuccess)
+        assertEquals(Long.MAX_VALUE - 1L, decodedAdvanced.persistenceRevision)
+        assertEquals(
+            advancedSnapshot,
+            encodeUnsentWindowLedgerSnapshot(assertNotNull(decodedAdvanced.ledger)),
+        )
+
+        // MAX-1 -> MAX would produce the terminal revision, so the reducer
+        // must fail explicitly here instead of ever emitting it.
+        val terminal = openUnsentWindow(advanced.ledger, "window-2")
+        assertFalse(terminal.isSuccess)
+        assertFalse(terminal.changed)
+        assertEquals("ledger_capacity_exceeded", terminal.errorCode)
+        assertNull(terminal.snapshotText)
     }
 
     @Test

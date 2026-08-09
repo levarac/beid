@@ -123,6 +123,13 @@ private fun parseSnapshot(encoded: String): LedgerState {
 
     require(reader.nextLine() == SNAPSHOT_HEADER)
     val revision = reader.readLongField("revision", minimum = 0L)
+    // The reducer never produces revision == Long.MAX_VALUE (see
+    // Long.incrementRevisionOrNull in UnsentWindowLedger.kt), so any
+    // snapshot claiming it is external/corrupted data, not legitimate
+    // reducer output. Rejecting it here routes it through the same
+    // invalid-snapshot path as ordinary corruption. Keep in sync with that
+    // guard if either changes.
+    require(revision < Long.MAX_VALUE)
     val ledgerInstanceIdHex = reader.readTextField("ledger-id")
     require(Regex("[0-9a-f]{32}").matches(ledgerInstanceIdHex))
     val nextWindowSequence = reader.readLongField(
