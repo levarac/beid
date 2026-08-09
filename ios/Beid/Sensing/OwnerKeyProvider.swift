@@ -44,6 +44,15 @@ final class OwnerKeyProvider {
     self.randomSource = randomSource
   }
 
+  /// Signal A of gh#156's regeneration-detectability mechanism
+  /// (`docs/specs/owner-key-seed-read-failure.md` §8): non-nil once this
+  /// session's key resolution has quarantined an unreadable stored seed.
+  /// `nil` both when nothing has been quarantined yet and when
+  /// `keyStorage` doesn't report quarantine at all (e.g. a plain test fake).
+  var quarantinedSeedKey: String? {
+    (keyStorage as? OwnerKeySeedQuarantineObserving)?.lastQuarantinedSeedKey
+  }
+
   /// Compressed secp256k1 public key — the only owner-key component that
   /// ever leaves the device (per the key roster, secrets never leave;
   /// only public keys, signatures, and commitment hashes do).
@@ -102,22 +111,73 @@ final class OwnerKeyProvider {
   }
 }
 
+/// Narrow channel `OwnerKeyProvider` optionally consults to learn whether
+/// its `keyStorage` quarantined an unreadable stored seed —
+/// `BarnardCoreKeyStorage.bytes(forKey:)`'s own `[UInt8]?` boundary carries
+/// no such signal (§3.2), so this is a beid-only addition layered outside
+/// Barnard's protocol. Mirrors `SelfProofStore.quarantinedFileURL`'s
+/// existing readable-property pattern
+/// (`docs/specs/owner-key-seed-read-failure.md` §8).
+protocol OwnerKeySeedQuarantineObserving: AnyObject {
+  var lastQuarantinedSeedKey: String? { get }
+}
+
 /// App-layer mirror of the SDK's internal `BarnardUserDefaultsKeyStorage`
 /// (not public from `Barnard`/`BarnardCore`) — same plain-`UserDefaults`
 /// storage level as `DeviceSecret`, per `OwnerKeyProvider`'s doc comment.
-struct BeidUserDefaultsKeyStorage: BarnardCoreKeyStorage {
+///
+/// A class, not a struct: quarantine detection (gh#156) needs
+/// `bytes(forKey:)` — a non-`mutating` `BarnardCoreKeyStorage` requirement
+/// — to record that it happened, so `OwnerKeyProvider` can read it back
+/// afterward via `OwnerKeySeedQuarantineObserving`.
+final class BeidUserDefaultsKeyStorage: BarnardCoreKeyStorage, OwnerKeySeedQuarantineObserving {
   let defaults: UserDefaults
+  private(set) var lastQuarantinedSeedKey: String?
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
   }
 
+  /// Distinguishes "never stored" from "stored but unreadable" before
+  /// `BarnardCoreKeyManager.loadOrCreate` ever sees this key
+  /// (`docs/specs/owner-key-seed-read-failure.md` §5) — `loadOrCreate`'s own
+  /// `[UInt8]?` boundary cannot make that distinction (§3.2), so it has to
+  /// happen here, on beid's side of the port. The validity test is
+  /// `count == 32`, not `loadOrCreate`'s own `>= minimumByteCount`:
+  /// `BarnardCoreSigning.deriveOwnerKeyPair` traps on anything other than
+  /// exactly 32 bytes, so a too-long stored value must be rejected here
+  /// too, not only a too-short one (§7).
   func bytes(forKey key: String) -> [UInt8]? {
-    defaults.data(forKey: key).map(Array.init)
+    guard defaults.object(forKey: key) != nil else { return nil }
+    guard let data = defaults.data(forKey: key), data.count == 32 else {
+      quarantine(key: key)
+      return nil
+    }
+    return Array(data)
   }
 
   func setBytes(_ bytes: [UInt8], forKey key: String) {
     defaults.set(Data(bytes), forKey: key)
+  }
+
+  /// Preserves whatever raw value is stored under `key` (wrong type or
+  /// wrong length — `bytes(forKey:)` above has already determined it is one
+  /// of the two) at a new key before clearing the canonical one, so
+  /// `loadOrCreate`'s subsequent generate-and-store call proceeds against a
+  /// genuinely, definitionally empty key rather than discarding the
+  /// original value unseen. Mirrors `CorruptStoreQuarantine`'s file-rename
+  /// principle adapted to `UserDefaults`, which has no rename primitive of
+  /// its own (§3.3, §6). `object(forKey:)`, not `data(forKey:)`, on
+  /// purpose: the raw value must be copied verbatim regardless of its
+  /// concrete type.
+  private func quarantine(key: String) {
+    let rawValue = defaults.object(forKey: key)
+    let timestampMilliseconds = Int64((Date().timeIntervalSince1970 * 1_000).rounded(.down))
+    let quarantineKey = "\(key).quarantine.\(timestampMilliseconds)-\(UUID().uuidString.lowercased())"
+    defaults.set(rawValue, forKey: quarantineKey)
+    defaults.removeObject(forKey: key)
+    lastQuarantinedSeedKey = quarantineKey
+    print("Quarantined an unreadable owner key seed at UserDefaults key \(quarantineKey)")
   }
 }
 
