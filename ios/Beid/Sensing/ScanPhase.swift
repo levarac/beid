@@ -9,6 +9,13 @@ import Foundation
 /// recording," and no "collected" moment distinct from either — a `Proof`
 /// exists in `ProofStore` from the instant `.recording` begins, not at a
 /// later terminal step. See `docs/specs/scan-slice2-redesign.md` §4.2.
+///
+/// The five cases and the rules for moving between them are owned by
+/// `BeidSharedKit.sensing` (beid#116; mirrored as `ScanPhaseKind` there,
+/// without this type's native-owned `EventSession`/`peersVerified`
+/// payload) — see `SensingCoordinator`'s use of `applyScanDetection`/
+/// `scanPhaseAfterStartSensing`/`scanPhaseAfterStopSensing`/
+/// `scanPhaseAfterSignalLost`/`scanPhaseAfterResumeSensing`.
 enum ScanPhase: Equatable {
   case idle
   case sensing
