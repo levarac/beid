@@ -17,6 +17,7 @@
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
 		1ECA910ABFBA80B5249DDA2B /* NativeCryptoProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F17F48A8733EF3CE98885F4 /* NativeCryptoProvider.swift */; };
 		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
+		263C863A858418EFF3DBD26D /* AggregationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */; };
 		2AAE343C266A4EF91A080FFD /* EventCodeEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */; };
 		2BE226469BAD8E51D02C60A2 /* WalletConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 957B35015FE66EA57458D691 /* WalletConnector.swift */; };
 		2F6282D16C15B8EBCA2669DC /* WalletConnectSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */; };
@@ -42,6 +43,7 @@
 		5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBBF900C092346BBFDF6BA96 /* RecordingView.swift */; };
 		5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */; };
 		64645438E8897AC3115D5188 /* SharedRuntimeProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C307E6ACEDA06F3CE4546F10 /* SharedRuntimeProbe.swift */; };
+		67D6643DEE67BF7E3D10D181 /* AggregationRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */; };
 		6A3EBE0C491228EBED4028E1 /* DemoWalletConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */; };
 		71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0333AAF8319263B67E8FE36 /* EventSession.swift */; };
 		77142B7104D24CD50E325988 /* EventBindingSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A0CFB332AC5A882931E08F /* EventBindingSheetView.swift */; };
@@ -183,6 +185,7 @@
 		A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidApp.swift; sourceTree = "<group>"; };
 		A5703915F87566D192896C7B /* DeviceCountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceCountTests.swift; sourceTree = "<group>"; };
 		A80A94378B0116CC976961AC /* BluetoothOffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothOffView.swift; sourceTree = "<group>"; };
+		A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregationRuntime.swift; sourceTree = "<group>"; };
 		AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothMonitor.swift; sourceTree = "<group>"; };
 		B0333AAF8319263B67E8FE36 /* EventSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSession.swift; sourceTree = "<group>"; };
 		B07FD0202575465DCF463745 /* EventFoundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventFoundView.swift; sourceTree = "<group>"; };
@@ -210,6 +213,7 @@
 		E1737F0C115BD86F89789893 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 		E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinTests.swift; sourceTree = "<group>"; };
 		E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlagTests.swift; sourceTree = "<group>"; };
+		E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregationRuntimeTests.swift; sourceTree = "<group>"; };
 		EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinatorTests.swift; sourceTree = "<group>"; };
 		F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libBeidMetaMaskDebug.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		F079463118A0C298F6C6BCEA /* Colors.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Colors.xcassets; sourceTree = "<group>"; };
@@ -251,6 +255,7 @@
 		1F78E1F8687E0FBBFF8AB06E /* Sensing */ = {
 			isa = PBXGroup;
 			children = (
+				A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */,
 				DE886DB77235ACE898E6D2CF /* BindingMessage.swift */,
 				AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */,
 				185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */,
@@ -398,6 +403,7 @@
 		DA293E8A0771B440603690A0 /* BeidTests */ = {
 			isa = PBXGroup;
 			children = (
+				E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */,
 				761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */,
 				0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */,
 				23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */,
@@ -649,6 +655,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				069813A870D327358882201A /* AccountSheetView.swift in Sources */,
+				263C863A858418EFF3DBD26D /* AggregationRuntime.swift in Sources */,
 				3EEA86E51D83334A77A2A6C9 /* AppCoordinator.swift in Sources */,
 				8BDF56249613D448E3FEB5EF /* AppScreen.swift in Sources */,
 				98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */,
@@ -715,6 +722,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				67D6643DEE67BF7E3D10D181 /* AggregationRuntimeTests.swift in Sources */,
 				F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */,
 				5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */,
 				AAA084FCDB8DD4558C438B58 /* CorruptStoreQuarantineTests.swift in Sources */,

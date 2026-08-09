@@ -94,6 +94,28 @@ remains open and cannot become the single expected submission. Reverse the
 patch before continuing. This is a runtime mutation gate, not a stale-symbol
 compile gate.
 
+## Swift aggregation runtime-authority mutation
+
+```sh
+if cd "${fixture_dir:?run the setup block first}"; then
+  patch -p1 < compile-fixtures/removed-swift-aggregation-call.patch
+  xcrun simctl list devices available
+  xcodebuild -project ios/Beid.xcodeproj -scheme Beid \
+    -destination 'platform=iOS Simulator,id=<SIMULATOR_UDID>' \
+    -parallel-testing-enabled NO -collect-test-diagnostics never \
+    -only-testing:BeidTests/AggregationRuntimeTests/testDeviceCountMatchesADirectSharedCallWithTheSameInputs \
+    test
+  patch -R -p1 < compile-fixtures/removed-swift-aggregation-call.patch
+fi
+```
+
+Expected: the test fails because `AggregationRuntime.deviceCount` no longer
+calls `BeidSharedKit.aggregation.aggregateObservationsForSession` and returns
+a hardcoded `0` instead, disagreeing with the independent direct-shared-call
+accumulator the test builds from the same recorded inputs. Reverse the patch
+before continuing. This is a runtime mutation gate (beid#109/#162), not a
+stale-symbol compile gate.
+
 After every applied patch has been reversed and the fixture checkout is
 clean, remove the disposable worktree:
 
