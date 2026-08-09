@@ -59,6 +59,38 @@ final class UnsentWindowLedgerStoreTests: XCTestCase {
     XCTAssertEqual(try XCTUnwrap(try recovery.store.load()).persistenceRevision, 1)
   }
 
+  func testRecoveringStorePrunesOldestQuarantineFilesBeyondRetentionCap() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-ledger-quarantine-retention-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let fileURL = directory.appendingPathComponent("ledger.snapshot")
+    var quarantinedURLs: [URL] = []
+    for index in 0..<6 {
+      try Data("not-a-ledger-\(index)".utf8).write(to: fileURL, options: .atomic)
+      let recovery = try UnsentWindowLedgerStore.recoveringCorruptSnapshot(
+        fileURL: fileURL,
+        now: Date(timeIntervalSince1970: Double(1_000 + index))
+      )
+      quarantinedURLs.append(try XCTUnwrap(recovery.quarantinedSnapshotURL))
+    }
+
+    let siblings = try FileManager.default.contentsOfDirectory(
+      at: directory,
+      includingPropertiesForKeys: nil
+    )
+    let survivingQuarantineFiles = Set(
+      siblings.filter { $0.lastPathComponent.contains(".corrupt-") }
+    )
+
+    XCTAssertEqual(survivingQuarantineFiles.count, 5)
+    XCTAssertFalse(survivingQuarantineFiles.contains(quarantinedURLs[0]))
+    for keptURL in quarantinedURLs.suffix(5) {
+      XCTAssertTrue(survivingQuarantineFiles.contains(keptURL))
+    }
+  }
+
   func testRecoveringStoreLeavesValidSnapshotInPlace() throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid-ledger-recover-valid-\(UUID().uuidString)", isDirectory: true)
@@ -82,6 +114,40 @@ final class UnsentWindowLedgerStoreTests: XCTestCase {
     XCTAssertNil(recovery.quarantinedSnapshotURL)
     XCTAssertEqual(try Data(contentsOf: fileURL), originalBytes)
     XCTAssertEqual(try XCTUnwrap(try recovery.store.load()).persistenceRevision, 1)
+  }
+
+  func testPersistSynchronizesStagedFileBeforeAtomicSwap() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("beid-ledger-fsync-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let fileURL = directory.appendingPathComponent("ledger.snapshot")
+    var synchronizedURLs: [URL] = []
+    let store = try UnsentWindowLedgerStore(
+      fileURL: fileURL,
+      synchronizeStagedFile: { stagedURL in
+        synchronizedURLs.append(stagedURL)
+        // The durable file must not yet reflect the new bytes: synchronizing
+        // the staged file must happen before the atomic swap, not after.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+      }
+    )
+    let ledger = try XCTUnwrap(
+      BeidSharedKit.report.createUnsentWindowLedger(
+        ledgerInstanceIdHex: "000102030405060708090a0b0c0d0e0f"
+      ).ledger
+    )
+    let opened = BeidSharedKit.report.openUnsentWindow(
+      ledger: ledger,
+      windowId: "window-1"
+    )
+
+    try store.persist(opened)
+
+    XCTAssertEqual(synchronizedURLs.count, 1)
+    XCTAssertNotEqual(synchronizedURLs[0], fileURL)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
   }
 
   func testLateOlderWriteFromAnotherStoreInstanceCannotReplaceNewerSnapshot() throws {

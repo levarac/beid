@@ -25,9 +25,15 @@ final class UnsentWindowLedgerStore {
   private static let persistenceLock = NSLock()
 
   private let fileURL: URL
+  private let synchronizeStagedFile: (URL) throws -> Void
 
-  init(fileURL: URL? = nil) throws {
+  init(
+    fileURL: URL? = nil,
+    synchronizeStagedFile: @escaping (URL) throws -> Void = UnsentWindowLedgerStore
+      .defaultSynchronizeStagedFile
+  ) throws {
     self.fileURL = fileURL ?? Self.defaultFileURL()
+    self.synchronizeStagedFile = synchronizeStagedFile
     _ = try withPersistenceLock {
       try durableRevision()
     }
@@ -46,7 +52,10 @@ final class UnsentWindowLedgerStore {
     persistenceLock.lock()
     defer { persistenceLock.unlock() }
 
-    let store = UnsentWindowLedgerStore(unvalidatedFileURL: resolvedFileURL)
+    let store = UnsentWindowLedgerStore(
+      unvalidatedFileURL: resolvedFileURL,
+      synchronizeStagedFile: UnsentWindowLedgerStore.defaultSynchronizeStagedFile
+    )
     do {
       _ = try store.durableRevision()
       return UnsentWindowLedgerStoreRecovery(
@@ -60,11 +69,64 @@ final class UnsentWindowLedgerStore {
       let suffix = "corrupt-\(timestampMilliseconds)-\(UUID().uuidString.lowercased())"
       let quarantinedURL = resolvedFileURL.appendingPathExtension(suffix)
       try FileManager.default.moveItem(at: resolvedFileURL, to: quarantinedURL)
+      pruneOldQuarantinedSnapshots(around: resolvedFileURL)
       return UnsentWindowLedgerStoreRecovery(
         store: store,
         quarantinedSnapshotURL: quarantinedURL
       )
     }
+  }
+
+  /// Quarantine files accumulate one per corruption event with nothing that
+  /// ever removes them. Cap how many survive: on a device that corrupts
+  /// repeatedly, this bounds worst-case disk usage to a small constant while
+  /// still keeping the most recent occurrences around for diagnosis. A count
+  /// cap is used rather than an age cutoff because this runs only when a new
+  /// quarantine event happens (not a background job), so an age check would
+  /// only ever fire relative to that same rare moment anyway — a count is
+  /// simpler and needs no extra clock reasoning.
+  private static let maxQuarantinedSnapshotCount = 5
+
+  private static func pruneOldQuarantinedSnapshots(around fileURL: URL) {
+    let directory = fileURL.deletingLastPathComponent()
+    let prefix = fileURL.lastPathComponent + ".corrupt-"
+    guard let siblings = try? FileManager.default.contentsOfDirectory(
+      at: directory,
+      includingPropertiesForKeys: nil
+    ) else {
+      return
+    }
+
+    let quarantined = siblings
+      .compactMap { url -> (url: URL, timestampMilliseconds: Int64)? in
+        guard let timestamp = quarantineTimestampMilliseconds(of: url, prefix: prefix) else {
+          return nil
+        }
+        return (url, timestamp)
+      }
+      .sorted { $0.timestampMilliseconds < $1.timestampMilliseconds }
+
+    guard quarantined.count > maxQuarantinedSnapshotCount else {
+      return
+    }
+    for entry in quarantined.prefix(quarantined.count - maxQuarantinedSnapshotCount) {
+      try? FileManager.default.removeItem(at: entry.url)
+    }
+  }
+
+  /// Parses the millisecond timestamp out of the existing
+  /// `corrupt-<milliseconds>-<uuid>` suffix convention, without introducing a
+  /// second naming or indexing scheme.
+  private static func quarantineTimestampMilliseconds(of url: URL, prefix: String) -> Int64? {
+    let name = url.lastPathComponent
+    guard name.hasPrefix(prefix) else {
+      return nil
+    }
+    let afterPrefix = name.dropFirst(prefix.count)
+    guard let dashIndex = afterPrefix.firstIndex(of: "-") else {
+      return nil
+    }
+    return Int64(afterPrefix[..<dashIndex])
   }
 
   @discardableResult
@@ -111,7 +173,21 @@ final class UnsentWindowLedgerStore {
         at: fileURL.deletingLastPathComponent(),
         withIntermediateDirectories: true
       )
-      try snapshotData.write(to: fileURL, options: .atomic)
+      // `Data.write(options: .atomic)` guarantees the rename is atomic but not
+      // that the bytes reached stable storage first — the same gap Android's
+      // store closes with `output.fd.sync()` before its `ATOMIC_MOVE`. Stage
+      // the write ourselves so we can fsync the descriptor before the swap.
+      let stagedURL = fileURL.deletingLastPathComponent().appendingPathComponent(
+        ".unsent-window-ledger-\(UUID().uuidString.lowercased()).tmp"
+      )
+      defer { try? FileManager.default.removeItem(at: stagedURL) }
+      try snapshotData.write(to: stagedURL)
+      try synchronizeStagedFile(stagedURL)
+      if FileManager.default.fileExists(atPath: fileURL.path) {
+        _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: stagedURL)
+      } else {
+        try FileManager.default.moveItem(at: stagedURL, to: fileURL)
+      }
       return transition.persistenceRevision
     }
   }
@@ -133,8 +209,26 @@ final class UnsentWindowLedgerStore {
     return directory.appendingPathComponent("unsent-window-ledger.snapshot")
   }
 
-  private init(unvalidatedFileURL: URL) {
+  private init(
+    unvalidatedFileURL: URL,
+    synchronizeStagedFile: @escaping (URL) throws -> Void
+  ) {
     fileURL = unvalidatedFileURL
+    self.synchronizeStagedFile = synchronizeStagedFile
+  }
+
+  /// Flushes the staged file's in-memory data to permanent storage before it
+  /// is atomically swapped into place. `FileHandle.synchronize()` wraps the
+  /// POSIX `fsync(2)` call — the same durability level Android's
+  /// `FileDescriptor.sync()` provides before its `ATOMIC_MOVE`. The stronger
+  /// `F_FULLFSYNC` fcntl is intentionally not used here: it forces a physical
+  /// media flush at a real latency cost meant for strict-ordering database
+  /// workloads, which exceeds what parity with Android's own guarantee
+  /// requires for this ledger.
+  private static func defaultSynchronizeStagedFile(_ url: URL) throws {
+    let handle = try FileHandle(forWritingTo: url)
+    defer { try? handle.close() }
+    try handle.synchronize()
   }
 
   private func durableRevision() throws -> Int64 {

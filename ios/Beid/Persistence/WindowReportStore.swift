@@ -20,6 +20,7 @@ final class WindowReportStore: ObservableObject {
 
   private let fileURL: URL
   private let replacePersistedFile: (URL, URL) throws -> Void
+  private let synchronizeStagedFile: (URL) throws -> Void
   private var loadError: Error?
 
   init(
@@ -29,11 +30,25 @@ final class WindowReportStore: ObservableObject {
         destinationURL,
         withItemAt: stagedURL
       )
-    }
+    },
+    synchronizeStagedFile: @escaping (URL) throws -> Void = WindowReportStore
+      .defaultSynchronizeStagedFile
   ) {
     self.fileURL = fileURL ?? Self.defaultFileURL()
     self.replacePersistedFile = replacePersistedFile
+    self.synchronizeStagedFile = synchronizeStagedFile
     load()
+  }
+
+  /// Flushes the staged file's in-memory data to permanent storage before it
+  /// is atomically swapped into place. See `UnsentWindowLedgerStore`'s
+  /// identical helper for why `FileHandle.synchronize()` (POSIX `fsync(2)`)
+  /// is the right level here, matching Android's `FileDescriptor.sync()`
+  /// rather than the costlier `F_FULLFSYNC`.
+  private static func defaultSynchronizeStagedFile(_ url: URL) throws {
+    let handle = try FileHandle(forWritingTo: url)
+    defer { try? handle.close() }
+    try handle.synchronize()
   }
 
   private static func defaultFileURL() -> URL {
@@ -68,10 +83,59 @@ final class WindowReportStore: ObservableObject {
     let suffix = "corrupt-\(timestampMilliseconds)-\(UUID().uuidString.lowercased())"
     let quarantinedURL = resolvedFileURL.appendingPathExtension(suffix)
     try FileManager.default.moveItem(at: resolvedFileURL, to: quarantinedURL)
+    pruneOldQuarantinedReports(around: resolvedFileURL)
     return WindowReportStoreRecovery(
       store: WindowReportStore(fileURL: resolvedFileURL),
       quarantinedReportsURL: quarantinedURL
     )
+  }
+
+  /// Quarantine files accumulate one per corruption event with nothing that
+  /// ever removes them. Cap how many survive: see `UnsentWindowLedgerStore`'s
+  /// identical helper for why a count cap (rather than an age cutoff) is used
+  /// here, applied synchronously as part of quarantining the next file.
+  private static let maxQuarantinedReportsCount = 5
+
+  private static func pruneOldQuarantinedReports(around fileURL: URL) {
+    let directory = fileURL.deletingLastPathComponent()
+    let prefix = fileURL.lastPathComponent + ".corrupt-"
+    guard let siblings = try? FileManager.default.contentsOfDirectory(
+      at: directory,
+      includingPropertiesForKeys: nil
+    ) else {
+      return
+    }
+
+    let quarantined = siblings
+      .compactMap { url -> (url: URL, timestampMilliseconds: Int64)? in
+        guard let timestamp = quarantineTimestampMilliseconds(of: url, prefix: prefix) else {
+          return nil
+        }
+        return (url, timestamp)
+      }
+      .sorted { $0.timestampMilliseconds < $1.timestampMilliseconds }
+
+    guard quarantined.count > maxQuarantinedReportsCount else {
+      return
+    }
+    for entry in quarantined.prefix(quarantined.count - maxQuarantinedReportsCount) {
+      try? FileManager.default.removeItem(at: entry.url)
+    }
+  }
+
+  /// Parses the millisecond timestamp out of the existing
+  /// `corrupt-<milliseconds>-<uuid>` suffix convention, without introducing a
+  /// second naming or indexing scheme.
+  private static func quarantineTimestampMilliseconds(of url: URL, prefix: String) -> Int64? {
+    let name = url.lastPathComponent
+    guard name.hasPrefix(prefix) else {
+      return nil
+    }
+    let afterPrefix = name.dropFirst(prefix.count)
+    guard let dashIndex = afterPrefix.firstIndex(of: "-") else {
+      return nil
+    }
+    return Int64(afterPrefix[..<dashIndex])
   }
 
   @discardableResult
@@ -97,6 +161,7 @@ final class WindowReportStore: ObservableObject {
     )
     defer { try? FileManager.default.removeItem(at: stagedURL) }
     try data.write(to: stagedURL)
+    try synchronizeStagedFile(stagedURL)
     if FileManager.default.fileExists(atPath: fileURL.path) {
       try replacePersistedFile(fileURL, stagedURL)
     } else {
