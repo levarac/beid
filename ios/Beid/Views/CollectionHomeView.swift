@@ -50,7 +50,7 @@ struct CollectionHomeView: View {
           }
         }
         .contentMargins(.horizontal, BeidDesign.Spacing.screenHorizontal, for: .scrollContent)
-        .contentMargins(.vertical, 18, for: .scrollContent)
+        .contentMargins(.vertical, DS.Space.m, for: .scrollContent)
       }
       .navigationTitle("Collection")
       .navigationBarTitleDisplayMode(.large)

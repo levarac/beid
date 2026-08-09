@@ -224,7 +224,7 @@ struct WalletConnectPairingView: View {
           .interpolation(.none)
           .resizable()
           .scaledToFit()
-          .frame(width: 220, height: 220)
+          .frame(width: DS.Size.qrCode, height: DS.Size.qrCode)
           .padding(DS.Space.s)
           .background(
             RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)

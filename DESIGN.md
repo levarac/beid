@@ -815,12 +815,13 @@ permission to add another violation.
 | `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center glyph (`SensingView`) |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
+| `size.qrCode` | `DS.Size.qrCode` | 220 pt | `WalletConnectPairingView` QR-code container width/height |
 | `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 | `color.status.on` | `DS.Color.statusOn` | L `#1E7E34` / D `#30D158` | Binary on/off status, "on" (Bluetooth active) |
 | `color.status.off` | `DS.Color.statusOff` | L `#6B7075` / D `#83898F` | Binary on/off status, "off" (Bluetooth off) |
 
-(Full set: 14 color tokens, 7 space, 4 radius, 6 size, 4 layout, 9 font,
+(Full set: 14 color tokens, 7 space, 4 radius, 7 size, 4 layout, 9 font,
 6 motion, plus 1 artwork generator — see
 `ios/Beid/DesignSystem/Tokens.swift`.)
 
