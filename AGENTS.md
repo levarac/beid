@@ -255,8 +255,16 @@ When an agent adds or changes user-facing copy:
 
 1. Write the English string in code (literal or explicit key, per the rule
    above), with a translator `comment:` if the meaning isn't self-evident.
-2. Build the target once (`xcodebuild build` or an Xcode build) so Xcode
-   syncs the new/changed key(s) into `Localizable.xcstrings`.
+2. Build the target once **in Xcode.app** so Xcode syncs the new/changed
+   key(s) into `Localizable.xcstrings`. **`xcodebuild` from the CLI does
+   not perform this sync** — verified 2026-08-09: the compiler emits
+   `.stringsdata` matching your source edits, but the step that merges
+   those keys back into the checked-in catalog does not run without
+   Xcode.app. The failure is quiet — the build succeeds and the catalog
+   silently lacks the key — so do not treat a green CLI build as evidence
+   the catalog is in sync. With CLI only, hand-edit
+   `Localizable.xcstrings` (it is plain JSON) to match your source edits,
+   then rebuild to confirm no regression.
 3. In the same PR, fill translations for all target locales in the
    catalog. A machine-drafted translation is acceptable as a starting
    point, but every machine-drafted entry MUST be left in (or set to) the
