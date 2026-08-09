@@ -36,6 +36,9 @@ final class DeviceCountTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
+      selfProofCheckpointStore: SelfProofCheckpointStore(
+        fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )

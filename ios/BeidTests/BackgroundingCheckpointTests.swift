@@ -23,6 +23,9 @@ final class BackgroundingCheckpointTests: XCTestCase {
       selfProofStore: SelfProofStore(
         fileURL: directory.appendingPathComponent("self-proofs.json")
       ),
+      selfProofCheckpointStore: SelfProofCheckpointStore(
+        fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -48,6 +51,9 @@ final class BackgroundingCheckpointTests: XCTestCase {
     let coordinator = SensingCoordinator(
       windowReportStore: windowReportStore,
       selfProofStore: selfProofStore,
+      selfProofCheckpointStore: SelfProofCheckpointStore(
+        fileURL: directory.appendingPathComponent("self-proof-checkpoint.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )

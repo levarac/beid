@@ -228,6 +228,7 @@ final class SensingCoordinator: ObservableObject {
   private(set) var ledgerHealth: LedgerHealth = .healthy
   private let bindingRecordStore = BindingRecordStore()
   private let selfProofStore: SelfProofStore
+  private let selfProofCheckpointStore: SelfProofCheckpointStore
   private var demoTask: Task<Void, Never>?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
@@ -382,6 +383,7 @@ final class SensingCoordinator: ObservableObject {
     self.init(
       windowReportStore: windowReportStore,
       selfProofStore: SelfProofStore(),
+      selfProofCheckpointStore: SelfProofCheckpointStore(),
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: BarnardSensingCryptography(),
       initialLedgerFailure: initialLedgerFailure
@@ -394,6 +396,7 @@ final class SensingCoordinator: ObservableObject {
   convenience init(
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
+    selfProofCheckpointStore: SelfProofCheckpointStore,
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography
   ) {
@@ -406,6 +409,7 @@ final class SensingCoordinator: ObservableObject {
     self.init(
       windowReportStore: windowReportStore,
       selfProofStore: selfProofStore,
+      selfProofCheckpointStore: selfProofCheckpointStore,
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography
     )
@@ -414,6 +418,7 @@ final class SensingCoordinator: ObservableObject {
   init(
     windowReportStore: WindowReportStore,
     selfProofStore: SelfProofStore,
+    selfProofCheckpointStore: SelfProofCheckpointStore,
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     initialLedgerFailure: Error? = nil
@@ -441,6 +446,7 @@ final class SensingCoordinator: ObservableObject {
 
     self.windowReportStore = windowReportStore
     self.selfProofStore = selfProofStore
+    self.selfProofCheckpointStore = selfProofCheckpointStore
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     if let ledgerFailure {
@@ -450,6 +456,7 @@ final class SensingCoordinator: ObservableObject {
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
     }
+    reconcileSelfProofCheckpointIfNeeded()
   }
 
   private func handle(_ event: BarnardEvent) {
@@ -969,6 +976,7 @@ final class SensingCoordinator: ObservableObject {
     if firstWindowEnin == nil {
       firstWindowEnin = enin
     }
+    checkpointSelfProofStateIfNeeded()
 
     if let unsentWindowLedgerRuntime {
       do {
@@ -1169,14 +1177,56 @@ final class SensingCoordinator: ObservableObject {
   // before `resetSessionState()` clears the state it reads), never at
   // `beginEventFound` (where only `activeCommit` is fixed).
 
-  /// Builds, signs (`OwnerKeyProvider.signSelfProof`), and persists this
-  /// session's self-proof, if one is due. `nil` if there is no `Proof` for
-  /// this session (`activeProofId` unset — never reached `.recording`) or no
-  /// ENIN window was ever observed (`firstWindowEnin`/`lastWindowEnin`
-  /// unset). A session gated on `activeProofId` mirrors `BindingRecord
-  /// .proofId`'s linkage: a session that stayed in `.eventFound` without
-  /// meeting the peer threshold produced no `Proof`, so there is nothing to
-  /// attest.
+  /// Builds and signs (`OwnerKeyProvider.signSelfProof`) one self-proof for
+  /// the given inputs, without persisting it — the persistence/checkpoint
+  /// decision differs at each caller (`finalizeSelfProofIfNeeded()` reads
+  /// live session state and clears the checkpoint; reconciliation reads a
+  /// durable checkpoint and clears it under different gating, §8.3), but the
+  /// build-and-sign step itself is identical. `nil` only if signing fails
+  /// (Barnard's own shape validation on `eventIdHash`/`eventSigningPublicKey`).
+  private func makeSelfProofRecord(
+    proofId: UUID,
+    eventCode: String,
+    eninStart: UInt64,
+    eninEnd: UInt64
+  ) -> SelfProofRecord? {
+    let eventIdHash = EventIdHash.compute(eventCode: eventCode)
+    let eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
+    let ownerPublicKey = sensingCryptography.ownerPublicKey()
+    guard
+      let signature = sensingCryptography.signSelfProof(
+        eventIdHash: eventIdHash,
+        eventSigningPublicKey: eventSigningPublicKey,
+        eninStart: eninStart,
+        eninEnd: eninEnd
+      )
+    else {
+      return nil
+    }
+
+    return SelfProofRecord(
+      proofId: proofId,
+      eventCode: eventCode,
+      eventIdHash: eventIdHash,
+      eventSigningPublicKey: eventSigningPublicKey,
+      eninStart: eninStart,
+      eninEnd: eninEnd,
+      ownerPublicKey: ownerPublicKey,
+      signature: BarnardCoreRecoverableSignature(
+        r: Array(signature.r),
+        s: Array(signature.s),
+        v: signature.v
+      )
+    )
+  }
+
+  /// Builds, signs, and persists this session's self-proof, if one is due.
+  /// `nil` if there is no `Proof` for this session (`activeProofId` unset —
+  /// never reached `.recording`) or no ENIN window was ever observed
+  /// (`firstWindowEnin`/`lastWindowEnin` unset). A session gated on
+  /// `activeProofId` mirrors `BindingRecord.proofId`'s linkage: a session
+  /// that stayed in `.eventFound` without meeting the peer threshold
+  /// produced no `Proof`, so there is nothing to attest.
   ///
   /// Reads `lastWindowEnin`, not `currentWindowEnin`, for `end`: the latter
   /// is nil'd mid-session by `checkpointOpenWindowForBackgrounding()`
@@ -1184,6 +1234,10 @@ final class SensingCoordinator: ObservableObject {
   /// session, so a stop that follows a checkpoint with no further detection
   /// would otherwise find `currentWindowEnin == nil` here and silently
   /// return `nil` for a session that was, in fact, complete and valid.
+  ///
+  /// Clears `selfProofCheckpointStore` on success (§7.1 Option B, §8.3): the
+  /// real record now exists, so the in-progress checkpoint standing in for
+  /// it is stale and must not be reconciled again on a later launch.
   @discardableResult
   private func finalizeSelfProofIfNeeded() -> SelfProofRecord? {
     guard
@@ -1195,13 +1249,10 @@ final class SensingCoordinator: ObservableObject {
       return nil
     }
 
-    let eventIdHash = EventIdHash.compute(eventCode: eventCode)
-    let eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
-    let ownerPublicKey = sensingCryptography.ownerPublicKey()
     guard
-      let signature = sensingCryptography.signSelfProof(
-        eventIdHash: eventIdHash,
-        eventSigningPublicKey: eventSigningPublicKey,
+      let record = makeSelfProofRecord(
+        proofId: proofId,
+        eventCode: eventCode,
         eninStart: UInt64(start),
         eninEnd: UInt64(end)
       )
@@ -1209,22 +1260,77 @@ final class SensingCoordinator: ObservableObject {
       return nil
     }
 
-    let record = SelfProofRecord(
-      proofId: proofId,
-      eventCode: eventCode,
-      eventIdHash: eventIdHash,
-      eventSigningPublicKey: eventSigningPublicKey,
-      eninStart: UInt64(start),
-      eninEnd: UInt64(end),
-      ownerPublicKey: ownerPublicKey,
-      signature: BarnardCoreRecoverableSignature(
-        r: Array(signature.r),
-        s: Array(signature.s),
-        v: signature.v
+    selfProofStore.add(record)
+    selfProofCheckpointStore.clear()
+    return record
+  }
+
+  /// Persists this session's current `eninStart`/`eninEnd` on every real
+  /// window rotation (`openWindow`, called from `advanceWindowIfNeeded`),
+  /// so a device kill after binding completes but before session end can
+  /// still be reconciled into a real `SelfProofRecord` on next launch
+  /// (`reconcileSelfProofCheckpointIfNeeded()`, §7.1 Option B, §8.3). Gated
+  /// on `activeProofId`/`currentBindingEvent` exactly like
+  /// `finalizeSelfProofIfNeeded()` itself — there is nothing to checkpoint
+  /// before `.recording` begins.
+  ///
+  /// Demo mode never reaches this: `advanceDemoWindow()` deliberately never
+  /// calls `openWindow` (its own doc comment — demo mode produces no window
+  /// reports), so a demo session's self-proof stays reachable only through
+  /// the graceful `stopSensing()`/`reset()` path, unchanged by this
+  /// sub-slice.
+  private func checkpointSelfProofStateIfNeeded() {
+    guard
+      let proofId = activeProofId,
+      let eventCode = currentBindingEvent?.id,
+      let start = firstWindowEnin,
+      let end = lastWindowEnin
+    else {
+      return
+    }
+    selfProofCheckpointStore.save(
+      SelfProofCheckpoint(
+        proofId: proofId,
+        eventCode: eventCode,
+        eninStart: UInt64(start),
+        eninEnd: UInt64(end)
       )
     )
+  }
+
+  /// Runs once, at the end of `init` — i.e. once per cold launch, on both
+  /// `AppCoordinator`'s production `SensingCoordinator` and any test-
+  /// constructed instance. If a checkpoint survived from a session that
+  /// never reached a graceful end (§7.1 Option B: a device kill after
+  /// binding completed but before `stopSensing()`/`reset()` ran), signs and
+  /// persists the missing `SelfProofRecord` from the checkpoint's
+  /// last-known `eninStart`/`eninEnd`, then clears the checkpoint.
+  ///
+  /// No-op if no checkpoint exists. Also a no-op (but still clears the
+  /// checkpoint) if `selfProofStore` already holds a record for the
+  /// checkpoint's `proofId` — a graceful session end already produced the
+  /// real record before the checkpoint's own clear could complete, so this
+  /// checkpoint is stale and must not be reconciled into a duplicate.
+  private func reconcileSelfProofCheckpointIfNeeded() {
+    guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
+    guard selfProofStore.record(forProofId: checkpoint.proofId) == nil else {
+      selfProofCheckpointStore.clear()
+      return
+    }
+
+    guard
+      let record = makeSelfProofRecord(
+        proofId: checkpoint.proofId,
+        eventCode: checkpoint.eventCode,
+        eninStart: checkpoint.eninStart,
+        eninEnd: checkpoint.eninEnd
+      )
+    else {
+      return
+    }
+
     selfProofStore.add(record)
-    return record
+    selfProofCheckpointStore.clear()
   }
 
   // MARK: - Demo sequence
