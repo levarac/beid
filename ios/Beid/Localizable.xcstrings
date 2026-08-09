@@ -4,7 +4,7 @@
     "%lld": {},
     "Account": {},
     "Active": {
-      "comment": "Status label shown next to a colored dot when Bluetooth is powered on.",
+      "comment": "Generic on/off status label shown next to a colored dot — used for the Bluetooth power state (Account sheet) and for the currently-broadcasting entry in the venue-device reassignment history (gh#138).",
       "localizations": {
         "ja": {
           "stringUnit": {
@@ -3377,6 +3377,447 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Venue Device": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "会場端末"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "会场设备"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Dispositivo del recinto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Appareil du lieu"
+          }
+        }
+      }
+    },
+    "Assignment": {
+      "comment": "Section header on the venue-device organizer screen (gh#138) for the label + validity-period fields — not a task/homework assignment.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "割り当て"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "分配"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Asignación"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Attribution"
+          }
+        }
+      }
+    },
+    "Label": {
+      "comment": "Text field on the venue-device organizer screen: the display name this device broadcasts to nearby attendees (Barnard B005 eventDisplayName), not a generic UI label element.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ラベル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "标签"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Etiqueta"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Libellé"
+          }
+        }
+      }
+    },
+    "e.g. Doorway A": {
+      "comment": "Placeholder example shown inside the empty venue-device label field.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "例: 入口A"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "例如:A 门"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "p. ej. Puerta A"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "p. ex. Entrée A"
+          }
+        }
+      }
+    },
+    "Starts": {
+      "comment": "Label for the validity-period start date/time picker on the venue-device organizer screen, not a verb describing an event beginning.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "開始"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "开始"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Inicio"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Début"
+          }
+        }
+      }
+    },
+    "Ends": {
+      "comment": "Label for the validity-period end date/time picker on the venue-device organizer screen.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "終了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "结束"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Fin"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Fin"
+          }
+        }
+      }
+    },
+    "Beid does not verify this broadcast. Anyone nearby with the app can see the name you set here.": {
+      "comment": "Organizer-facing trust disclaimer shown under the label field on the venue-device screen (PM-approved exact copy, docs/specs/participation-surface.md §3.2 — do not edit without new sign-off). \"This broadcast\" refers to the Bluetooth broadcast this screen's toggle turns on, not the app itself. \"The name you set here\" refers to the Label field on this same screen.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Beidはこのブロードキャストを保証しません。近くにいる人はアプリでここに設定した名前を見ることができます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Beid 不会验证此广播。附近使用该应用的任何人都能看到您在此设置的名称。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Beid no verifica esta transmisión. Cualquier persona cercana con la app puede ver el nombre que configuraste aquí."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Beid ne vérifie pas cette diffusion. Toute personne à proximité utilisant l'application peut voir le nom que vous avez défini ici."
+          }
+        }
+      }
+    },
+    "Enter a label to identify this device.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "この端末を識別するラベルを入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "请输入用于识别此设备的标签。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Introduce una etiqueta para identificar este dispositivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Saisissez un libellé pour identifier cet appareil."
+          }
+        }
+      }
+    },
+    "That label isn't valid. Try a shorter name using regular text.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "そのラベルは無効です。もっと短い、通常の文字だけの名前にしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "该标签无效。请使用更短的普通文本名称。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Esa etiqueta no es válida. Prueba con un nombre más corto usando texto normal."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Ce libellé n'est pas valide. Essayez un nom plus court avec du texte normal."
+          }
+        }
+      }
+    },
+    "End time must be after the start time.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "終了時刻は開始時刻より後にしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "结束时间必须晚于开始时间。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "La hora de finalización debe ser posterior a la hora de inicio."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "L'heure de fin doit être postérieure à l'heure de début."
+          }
+        }
+      }
+    },
+    "Join an event first, then come back to set up this device.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "先にイベントに参加してから、この端末を設定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "请先加入活动,然后再回来设置此设备。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Únete primero a un evento y luego vuelve para configurar este dispositivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Rejoignez d'abord un événement, puis revenez configurer cet appareil."
+          }
+        }
+      }
+    },
+    "History": {
+      "comment": "Section header on the venue-device organizer screen: a read-only list of past assignments (label + validity period), shown below the current assignment fields.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "履歴"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "历史记录"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Historial"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Historique"
+          }
+        }
+      }
+    },
+    "No assignments yet.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "まだ割り当てがありません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "尚无分配记录。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Aún no hay asignaciones."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Aucune attribution pour le moment."
+          }
+        }
+      }
+    },
+    "venueDevice.history.assignedAt": {
+      "comment": "Venue-device reassignment-history row: when this assignment was created. %@ is a pre-formatted, locale-aware date/time string.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assigned %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ に割り当て"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "分配于 %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Asignado el %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Attribué le %@"
+          }
+        }
+      }
+    },
+    "venueDevice.history.validityRange": {
+      "comment": "Venue-device reassignment-history row: the assignment's validity period. %1$@ is the pre-formatted start date/time, %2$@ the end date/time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valid %1$@ – %2$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "有効期間 %1$@ – %2$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "有效期 %1$@ – %2$@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Válido %1$@ – %2$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Valable du %1$@ au %2$@"
           }
         }
       }
