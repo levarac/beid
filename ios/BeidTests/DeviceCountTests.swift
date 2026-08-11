@@ -42,6 +42,9 @@ final class DeviceCountTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )

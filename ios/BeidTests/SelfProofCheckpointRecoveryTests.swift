@@ -55,6 +55,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
         bindingRecordStore: BindingRecordStore(
           fileURL: directory.appendingPathComponent("binding-records.json")
         ),
+        sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+          fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+        ),
         unsentWindowLedgerFileURL: ledgerFileURL,
         sensingCryptography: cryptography
       )
@@ -104,6 +107,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
       ),
       unsentWindowLedgerFileURL: ledgerFileURL,
       sensingCryptography: cryptography
@@ -155,6 +161,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
       ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
@@ -210,6 +219,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -235,6 +247,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointFileURL),
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
       ),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: DeterministicSensingCryptography()
