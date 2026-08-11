@@ -136,6 +136,9 @@ struct AccountSheetView: View {
     if connector is MetaMaskConnector {
       return "MetaMask"
     }
+    if connector is DemoWalletConnector {
+      return "Demo Wallet"
+    }
     #endif
     return "WalletConnect"
   }
