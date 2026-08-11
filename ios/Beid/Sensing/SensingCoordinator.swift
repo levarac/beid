@@ -1043,6 +1043,13 @@ final class SensingCoordinator: ObservableObject {
     return confirmed == code
   }
 
+  /// Calls the Barnard SDK's leave API (`BarnardEngine.leaveEvent`) to clear
+  /// a manually joined event code, symmetric with `joinEvent(_:)`.
+  func leaveEvent() {
+    engine.leaveEvent()
+    joinedEventCode = engine.getCurrentEventCode()
+  }
+
   func startSensing(eventCode: String? = nil, demoEvent: EventSession = .demoSample) {
     let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
     resetSessionState()

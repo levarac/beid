@@ -85,6 +85,11 @@ final class AppCoordinator: ObservableObject {
     return nil
   }
 
+  /// Clears a manually joined event code, mirroring `joinEvent(code:)`.
+  func leaveEvent() {
+    sensingCoordinator.leaveEvent()
+  }
+
   func requestBluetoothPermission() {
     bluetoothMonitor.start()
     // Give CoreBluetooth's delegate callback a beat to land before deciding.

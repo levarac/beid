@@ -90,6 +90,16 @@ struct AccountSheetView: View {
           }
           .disabled(coordinator.walletAddress == nil)
         }
+
+        Section {
+          Button(role: .destructive) {
+            BeidDesign.haptic(.medium)
+            coordinator.leaveEvent()
+          } label: {
+            Label("Leave Event", systemImage: "rectangle.portrait.and.arrow.right")
+          }
+          .disabled(coordinator.sensingCoordinator.joinedEventCode == nil)
+        }
       }
       .scrollContentBackground(.hidden)
       .background(DS.Color.surfaceCanvas)

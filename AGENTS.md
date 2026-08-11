@@ -17,6 +17,11 @@ real scanning (see `ios/README.md` "DemoEvent mode"). The Barnard BLE SDK is
 consumed through the platform-native dependency on each OS; see each host
 README for its exact pin and verification path.
 
+`DECISIONS.md`, the append-only decision record at the top of this repo's
+source-of-truth hierarchy, lives outside this repository at
+`/Users/ko/agent-workspace/projects/beid/DECISIONS.md` (the agent-workspace
+PMO project) — it is not checked into `thegreeting/beid`.
+
 ## KMP shared/native development contract
 
 Verified 2026-08-08 against `origin/main` at

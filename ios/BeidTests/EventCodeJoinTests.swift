@@ -52,6 +52,18 @@ final class EventCodeJoinTests: XCTestCase {
     XCTAssertEqual(coordinator.joinedEventCode, "beid-test-event")
   }
 
+  func testLeaveEventClearsJoinedEventCode() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    let joined = coordinator.joinEvent("beid-test-event")
+    XCTAssertTrue(joined)
+    XCTAssertEqual(coordinator.joinedEventCode, "beid-test-event")
+
+    coordinator.leaveEvent()
+
+    XCTAssertNil(coordinator.joinedEventCode)
+  }
+
   func testStartSensingStillWorksAfterJoiningAnEventManually() async {
     // Regression check: startSensing's eventCode parameter became optional
     // (falling back to joinedEventCode, then the demo default) to carry a
