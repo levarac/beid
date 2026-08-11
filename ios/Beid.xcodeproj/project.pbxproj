@@ -13,6 +13,7 @@
 		06660B9355AB2A2301D47CA5 /* OwnerKeyRegenerationDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1CC0C132C9AE42C8C050B2 /* OwnerKeyRegenerationDetector.swift */; };
 		069813A870D327358882201A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
 		0ABD0998DA3A69A3CEAD5584 /* WalletConnect in Frameworks */ = {isa = PBXBuildFile; productRef = 44B73AA6A65E8F59682BC25A /* WalletConnect */; };
+		0EC4037E7127223ED39102C2 /* ParticipationSummaryDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C199A4E7880D919E1D6F5B72 /* ParticipationSummaryDataTests.swift */; };
 		0EDB197705C554ECE54A12EA /* libBeidMetaMaskDebug.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F062684C663F4D09EE60A463 /* libBeidMetaMaskDebug.a */; };
 		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
@@ -99,6 +100,7 @@
 		D9C7575BA9CA4B5E9BC83F75 /* VenueDeviceAssignmentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */; };
 		DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */ = {isa = PBXBuildFile; productRef = 85120383F176FDA459C0D6E8 /* Barnard */; };
 		E374652864E3C6B1275E5DE6 /* SessionAggregateSnapshotPersistHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B8D5C627A0DB76BAA9A54B /* SessionAggregateSnapshotPersistHookTests.swift */; };
+		E8F1697483B2B3DF69D495CA /* ParticipationSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7726C4148C25E9309E34D1A8 /* ParticipationSummaryView.swift */; };
 		E95026757980944AB4C933FE /* EventFoundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07FD0202575465DCF463745 /* EventFoundView.swift */; };
 		E9736692F462A659CE323E75 /* ProofSignatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */; };
 		EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F95B2F947E49234FCD1421B /* WalletConnectView.swift */; };
@@ -192,6 +194,7 @@
 		7209389876A87B83EB5B49B9 /* EventCommitment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCommitment.swift; sourceTree = "<group>"; };
 		745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeRenderer.swift; sourceTree = "<group>"; };
 		761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundingCheckpointTests.swift; sourceTree = "<group>"; };
+		7726C4148C25E9309E34D1A8 /* ParticipationSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipationSummaryView.swift; sourceTree = "<group>"; };
 		79956B9713B57740F9E34243 /* VenueDeviceOrganizerViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceOrganizerViewModelTests.swift; sourceTree = "<group>"; };
 		7A1EACAE869F3E0B456C222A /* WindowReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReport.swift; sourceTree = "<group>"; };
 		7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignatureTests.swift; sourceTree = "<group>"; };
@@ -231,6 +234,7 @@
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofTests.swift; sourceTree = "<group>"; };
 		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
+		C199A4E7880D919E1D6F5B72 /* ParticipationSummaryDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipationSummaryDataTests.swift; sourceTree = "<group>"; };
 		C307E6ACEDA06F3CE4546F10 /* SharedRuntimeProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedRuntimeProbe.swift; sourceTree = "<group>"; };
 		C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinError.swift; sourceTree = "<group>"; };
 		C4B72321D5649C6DAE0C3B30 /* VenueDeviceBroadcastingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceBroadcastingTests.swift; sourceTree = "<group>"; };
@@ -418,6 +422,7 @@
 				FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */,
 				B07FD0202575465DCF463745 /* EventFoundView.swift */,
 				2169FFDF6767C427D481ED17 /* ItemDetailView.swift */,
+				7726C4148C25E9309E34D1A8 /* ParticipationSummaryView.swift */,
 				6660B6477CE489C244F95FED /* ProofCardView.swift */,
 				6921FE4135B616BF315A048C /* ProofSignatureControlsView.swift */,
 				DBBF900C092346BBFDF6BA96 /* RecordingView.swift */,
@@ -463,6 +468,7 @@
 				C637EA719C58481853B15B91 /* LocalizationContractTests.swift */,
 				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
 				0A10CCB8E5D80E54CF5B4291 /* OwnerKeyProviderTests.swift */,
+				C199A4E7880D919E1D6F5B72 /* ParticipationSummaryDataTests.swift */,
 				7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */,
 				9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */,
 				919973A9C0109AE49487AC11 /* SelfProofCheckpointRecoveryTests.swift */,
@@ -746,6 +752,7 @@
 				CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */,
 				EBBF003BA24A47DD167584A5 /* OwnerKeyProvider.swift in Sources */,
 				06660B9355AB2A2301D47CA5 /* OwnerKeyRegenerationDetector.swift in Sources */,
+				E8F1697483B2B3DF69D495CA /* ParticipationSummaryView.swift in Sources */,
 				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
 				ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */,
@@ -803,6 +810,7 @@
 				388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */,
 				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
 				BDE0B0D8E4FAB885CD25F9B8 /* OwnerKeyProviderTests.swift in Sources */,
+				0EC4037E7127223ED39102C2 /* ParticipationSummaryDataTests.swift in Sources */,
 				E9736692F462A659CE323E75 /* ProofSignatureTests.swift in Sources */,
 				ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */,
 				C1CFD69AC0A6474FD6149026 /* SelfProofCheckpointRecoveryTests.swift in Sources */,

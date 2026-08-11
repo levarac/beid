@@ -3821,6 +3821,250 @@
           }
         }
       }
+    },
+    "Devices mutually confirmed": {
+      "comment": "Headline metric label on the Participation summary screen, paired with a count. This is the mutually-confirmed (two-way) device count for the whole session, a different and currently-always-zero metric from any all-observation device count shown elsewhere in the app (see beid#142's \"Devices sensed\"/\"Mutual confirmations\" precedent) — the reciprocity signal this depends on does not exist on-device yet, so this count is honestly 0 today, not a bug. Do not translate this as if it always grows together with a devices-sensed count, and do not substitute an estimate for it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices mutually confirmed"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "相互確認された端末数"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "相互确认的设备数"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Dispositivos confirmados mutuamente"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Appareils confirmés mutuellement"
+          }
+        }
+      }
+    },
+    "No time bands recorded for this session": {
+      "comment": "Shown on the Participation summary screen instead of the time-band list when a session-aggregate snapshot exists for this proof but its band series is empty (an honest, real absence of recorded data for this session) — distinct from the screen's \"Not yet available\" state, which means no snapshot exists at all. Do not merge the wording of these two states.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No time bands recorded for this session"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "このセッションで記録された時間帯はありません"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "本次记录未包含任何时段"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "No se registraron franjas horarias para esta sesión"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Aucune tranche horaire enregistrée pour cette session"
+          }
+        }
+      }
+    },
+    "Participation summary": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Participation summary"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "参加記録サマリー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "参与记录摘要"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Resumen de participación"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Résumé de participation"
+          }
+        }
+      }
+    },
+    "participationSummary.bandBuildup.row": {
+      "comment": "One row in the time-band buildup list on the Participation summary screen. The first number is the band's absolute index — bands are anchored at an absolute origin, not the session start, and a band spans a fixed count of ENIN time-windows, never a duration in seconds or minutes, so do not translate it as a clock time or a duration. The second number is the distinct-device count sensed during that band, over the all-observation scope (not the mutually-confirmed scope shown in the headline metric above this list) — do not translate this as mutual/reciprocal confirmation. A gap between two consecutive rows' band index numbers means that time period was not recorded at all (for example a late arrival or a signal-loss interruption), not that it recorded zero devices — never phrase this row or the list around it as if every band number appears.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Band %1$lld: %2$lld devices sensed"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "バンド %1$lld: 検知端末 %2$lld 台"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "时段 %1$lld：检测到 %2$lld 台设备"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Banda %1$lld: %2$lld dispositivos detectados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Bande %1$lld : %2$lld appareils détectés"
+          }
+        }
+      }
+    },
+    "participationSummary.notYetAvailable": {
+      "comment": "Status shown on the Participation summary screen when no session-aggregate snapshot was ever persisted for this proof: the session ended before the snapshot-writing feature existed, the write failed (best-effort, can fail silently), or the session never reached the recording phase at all. This means the data was never captured, not that an attempt was made and failed — do not translate as an error, warning, or declined state, and do not confuse it with a real, present value of zero (this screen's headline metric can legitimately show a real 0, which is a different, available state).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet available"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "未対応"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "尚不可用"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Aún no disponible"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Pas encore disponible"
+          }
+        }
+      }
+    },
+    "Time-band buildup": {
+      "comment": "Section label on the Participation summary screen, above a list of time-band rows. Each row below this label covers a fixed span of ENIN time-windows, not a fixed duration in seconds or minutes. A gap in the list (a band index that does not appear) means that time period was not recorded at all — for example the participant arrived late or had a signal-loss interruption — never that it recorded zero devices; do not phrase this heading as if the list shows every time period end to end.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time-band buildup"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "時間帯ごとの積み上がり"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "分时段汇总"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Acumulación por franjas horarias"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Cumul par tranches horaires"
+          }
+        }
+      }
+    },
+    "View participation summary": {
+      "comment": "Row label on Proof Detail linking to the Participation summary screen, which shows a post-session summary (mutually-confirmed device count and a time-band buildup) for this proof's recording session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View participation summary"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "参加記録サマリーを見る"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "查看参与记录摘要"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Ver resumen de participación"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Voir le résumé de participation"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

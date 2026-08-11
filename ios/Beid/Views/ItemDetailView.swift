@@ -39,6 +39,10 @@ struct ItemDetailView: View {
             BeidPanel {
               transparencyRow
             }
+
+            BeidPanel {
+              participationSummaryRow
+            }
           }
           .padding(BeidDesign.Spacing.screenHorizontal)
         }
@@ -129,6 +133,42 @@ struct ItemDetailView: View {
   private var recordedOnDeviceCount: Int? {
     guard let eventCode = proof.eventCode else { return nil }
     return coordinator.sensingCoordinator.recordedWindowCount(forEventCode: eventCode)
+  }
+
+  /// Entry point for beid#143's Participation summary screen — sits
+  /// alongside (not replacing) the Transparency row above, per its own
+  /// `BeidPanel`, matching that row's `NavigationLink` push pattern.
+  private var participationSummaryRow: some View {
+    NavigationLink {
+      ParticipationSummaryView(
+        eventName: proof.eventName,
+        // `Proof.id`, not `eventCode`, is the snapshot store's key. Reads
+        // through `sensingCoordinator.sessionAggregateSnapshot(forProofId:)`
+        // (beid#166 Phase 2), not a separate store instance — that method
+        // forwards to the exact same coordinator-owned store the
+        // session-end hook writes, so a snapshot persisted moments ago in
+        // this same app run is visible immediately. `nil` here means no
+        // snapshot was ever persisted for this proof — the new screen
+        // renders that as an honest "not yet available" state, the same
+        // posture `TransparencyView` already established.
+        aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: proof.id)
+      )
+    } label: {
+      HStack {
+        Text(
+          "View participation summary",
+          comment: "Row label on Proof Detail linking to the Participation summary screen, which shows a post-session summary (mutually-confirmed device count and a time-band buildup) for this proof's recording session."
+        )
+        .font(DS.Font.cardTitle)
+        .foregroundStyle(DS.Color.textPrimary)
+        Spacer(minLength: DS.Space.m)
+        Image(systemName: "chevron.right")
+          .font(DS.Font.meta)
+          .foregroundStyle(DS.Color.textSecondary)
+          .accessibilityHidden(true)
+      }
+      .frame(minHeight: DS.Size.minHitTarget)
+    }
   }
 }
 
