@@ -217,6 +217,7 @@ private fun statusText(state: EventJoinUiState): String = when (state) {
     is EventJoinUiState.RequestingPermission -> stringResource(R.string.event_join_status_requesting_permission)
     is EventJoinUiState.Sensing -> stringResource(R.string.event_join_status_sensing)
     is EventJoinUiState.PermissionDenied -> stringResource(R.string.event_join_status_permission_denied)
+    is EventJoinUiState.JoinFailed -> stringResource(R.string.event_join_error_join_failed)
 }
 
 @Preview(name = "Idle", showBackground = true)
