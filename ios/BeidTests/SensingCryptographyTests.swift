@@ -25,6 +25,8 @@ final class SensingCryptographyTests: XCTestCase {
     let eninStart: UInt64 = 1
     let eninEnd = UInt64(BeidConfig.eventConfirmThreshold + 1)
 
+    XCTAssertNotEqual(eninStart, eninEnd, "This test's guarantee rests on these two values differing. If they're equal, a swap or duplication becomes a no-op and the test passes while verifying nothing.")
+
     let signature = try XCTUnwrap(
       cryptography.signSelfProof(
         eventIdHash: eventIdHash,
