@@ -68,12 +68,19 @@ with open(f"{root}/.swiftlint-baseline.json", "w") as f:
 PYEOF
 
 cd "$ROOT"
-# NOT `export DEVELOPER_DIR="$(resolve_developer_dir)"`: under set -e, a
-# failing command substitution inside an `export` assignment is masked by
-# export's own (successful) exit status, so a resolver failure would be
-# silently swallowed and the script would fall through to the crash this
-# resolver exists to prevent. Splitting the assignment from `export` lets
-# set -e see the command substitution's real exit status.
-DEVELOPER_DIR="$(resolve_developer_dir)"
-export DEVELOPER_DIR
+# The resolver's precondition (Xcode.app / sourcekitdInProc / xcode-select)
+# is macOS-only: SwiftLint on Linux (this repo's PR CI runs SwiftLint on
+# ubuntu-latest) uses the Linux Swift toolchain and never touches
+# sourcekitdInProc or DEVELOPER_DIR. Gate the whole mechanism on Darwin so
+# Linux keeps running exactly as it did before this resolver existed.
+if [ "$(uname -s)" = "Darwin" ]; then
+    # NOT `export DEVELOPER_DIR="$(resolve_developer_dir)"`: under set -e, a
+    # failing command substitution inside an `export` assignment is masked by
+    # export's own (successful) exit status, so a resolver failure would be
+    # silently swallowed and the script would fall through to the crash this
+    # resolver exists to prevent. Splitting the assignment from `export` lets
+    # set -e see the command substitution's real exit status.
+    DEVELOPER_DIR="$(resolve_developer_dir)"
+    export DEVELOPER_DIR
+fi
 exec swiftlint lint --config .swiftlint.yml --no-cache "$@"
