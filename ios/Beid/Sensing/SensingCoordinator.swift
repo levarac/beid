@@ -253,6 +253,16 @@ final class SensingCoordinator: ObservableObject {
   private let bindingRecordStore: BindingRecordStore
   private let selfProofStore: SelfProofStore
   private var selfProofCheckpointStore: SelfProofCheckpointStore
+  /// beid#166 Phase 2: on-device display-convenience store for computed
+  /// session-aggregate snapshots. Loaded synchronously, like
+  /// `selfProofStore`/`bindingRecordStore` and unlike
+  /// `windowReportStore`/`unsentWindowLedgerRuntime`/
+  /// `selfProofCheckpointStore` — it is never consulted during detection
+  /// processing or crash-gap reconciliation at `init`, only written once at
+  /// session end (`persistSessionAggregateSnapshotIfNeeded()`), so it has no
+  /// stake in `docs/specs/ledger-async-io.md` §4's startup-latency problem
+  /// and needs no placeholder/background-load treatment.
+  private let sessionAggregateSnapshotStore: SessionAggregateSnapshotStore
   /// gh#156 Signal A (`docs/specs/owner-key-seed-read-failure.md` §8):
   /// non-nil once the owner key resolution behind `sensingCryptography` has
   /// quarantined an unreadable stored seed this session. `nil` both when
@@ -449,6 +459,7 @@ final class SensingCoordinator: ObservableObject {
       selfProofFileURL: nil,
       selfProofCheckpointFileURL: nil,
       bindingRecordFileURL: nil,
+      sessionAggregateSnapshotFileURL: nil,
       unsentWindowLedgerFileURL: nil,
       sensingCryptography: BarnardSensingCryptography()
     )
@@ -474,6 +485,7 @@ final class SensingCoordinator: ObservableObject {
       selfProofFileURL: directory.appendingPathComponent("self-proofs.json"),
       selfProofCheckpointFileURL: directory.appendingPathComponent("self-proof-checkpoint.json"),
       bindingRecordFileURL: directory.appendingPathComponent("binding-records.json"),
+      sessionAggregateSnapshotFileURL: directory.appendingPathComponent("session-aggregate-snapshots.json"),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography
     )
@@ -487,17 +499,21 @@ final class SensingCoordinator: ObservableObject {
   /// inside `beginLedgerLoad(...)` once the real stores are loaded), then
   /// kicks off Decision 1's background load. `nil` file URLs mean "use each
   /// store's own default on-device path" (the production shape); explicit
-  /// URLs are the isolated-directory test seam. `selfProofFileURL` and
-  /// `bindingRecordFileURL` are both loaded synchronously and for real, not
-  /// deferred — Decision 1 does not move `selfProofStore`'s or
-  /// `bindingRecordStore`'s own load off the critical path (only
+  /// URLs are the isolated-directory test seam. `selfProofFileURL`,
+  /// `bindingRecordFileURL`, and `sessionAggregateSnapshotFileURL` are all
+  /// loaded synchronously and for real, not deferred — Decision 1 does not
+  /// move `selfProofStore`'s, `bindingRecordStore`'s, or
+  /// `sessionAggregateSnapshotStore`'s own load off the critical path (only
   /// `windowReportStore`/`unsentWindowLedgerRuntime`/
-  /// `selfProofCheckpointStore` do), so neither ever needs a placeholder.
+  /// `selfProofCheckpointStore` do — see `sessionAggregateSnapshotStore`'s
+  /// own doc comment for why beid#166 Phase 2 falls on this side of that
+  /// split), so none of the three ever needs a placeholder.
   private convenience init(
     windowReportFileURL: URL?,
     selfProofFileURL: URL?,
     selfProofCheckpointFileURL: URL?,
     bindingRecordFileURL: URL?,
+    sessionAggregateSnapshotFileURL: URL?,
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography
   ) {
@@ -506,6 +522,7 @@ final class SensingCoordinator: ObservableObject {
       selfProofStore: SelfProofStore(fileURL: selfProofFileURL),
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: Self.unloadedPlaceholderFileURL()),
       bindingRecordStore: BindingRecordStore(fileURL: bindingRecordFileURL),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: sessionAggregateSnapshotFileURL),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
       initialLedgerFailure: nil
@@ -633,6 +650,7 @@ final class SensingCoordinator: ObservableObject {
     selfProofStore: SelfProofStore,
     selfProofCheckpointStore: SelfProofCheckpointStore,
     bindingRecordStore: BindingRecordStore,
+    sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography
   ) {
@@ -647,6 +665,7 @@ final class SensingCoordinator: ObservableObject {
       selfProofStore: selfProofStore,
       selfProofCheckpointStore: selfProofCheckpointStore,
       bindingRecordStore: bindingRecordStore,
+      sessionAggregateSnapshotStore: sessionAggregateSnapshotStore,
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography
     )
@@ -657,6 +676,7 @@ final class SensingCoordinator: ObservableObject {
     selfProofStore: SelfProofStore,
     selfProofCheckpointStore: SelfProofCheckpointStore,
     bindingRecordStore: BindingRecordStore,
+    sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     initialLedgerFailure: Error? = nil
@@ -686,6 +706,7 @@ final class SensingCoordinator: ObservableObject {
     self.selfProofStore = selfProofStore
     self.selfProofCheckpointStore = selfProofCheckpointStore
     self.bindingRecordStore = bindingRecordStore
+    self.sessionAggregateSnapshotStore = sessionAggregateSnapshotStore
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     if let ledgerFailure {
@@ -1006,6 +1027,7 @@ final class SensingCoordinator: ObservableObject {
 
   private func endSensing(stopEngine: Bool) -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
+    persistSessionAggregateSnapshotIfNeeded()
     closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
@@ -1652,6 +1674,40 @@ final class SensingCoordinator: ObservableObject {
     selfProofStore.add(record)
     selfProofCheckpointStore.clear()
     return record
+  }
+
+  // MARK: - Session aggregate snapshot (beid#166 Phase 2)
+
+  /// Persists this session's final `sessionAggregate` for display later, if
+  /// one is due. Gated on `activeProofId`/`sessionAggregate` exactly like
+  /// `finalizeSelfProofIfNeeded()`'s own `activeProofId` gate, for the same
+  /// reason (beid#166's Class-C invariant: a snapshot is produced once, at
+  /// session end, only for sessions that produced a `Proof`) — a session
+  /// that stayed in `.eventFound` without meeting the peer threshold
+  /// produced no `Proof`, so there is nothing to snapshot. Must run before
+  /// `resetSessionState()` clears both gating properties to `nil`, in the
+  /// same position `finalizeSelfProofIfNeeded()` already occupies in
+  /// `endSensing(stopEngine:)`.
+  ///
+  /// `sessionAggregateSnapshotStore.persist(aggregate:proofId:)` is
+  /// best-effort, exactly like the ledger/window-report writes above: a
+  /// failure here must not interrupt session-end teardown, since this store
+  /// is a display convenience layer over already-durable evidence (`Proof`/
+  /// `WindowReport`/`SelfProofRecord`), never the evidence itself (see
+  /// `SessionAggregateSnapshotStore`'s own doc comment). Logged via
+  /// `Self.ledgerLog`, the same category `ensureLedgerWindowOpen()`/
+  /// `closeWindow(enin:eventCode:)` already use for other best-effort
+  /// store failures — this failure does not affect `ledgerHealth`
+  /// (`recordLedgerDegradation` is not called): that type is specifically
+  /// about `unsentWindowLedgerRuntime`'s own operating state, and this store
+  /// is unrelated to it.
+  private func persistSessionAggregateSnapshotIfNeeded() {
+    guard let proofId = activeProofId, let aggregate = sessionAggregate else { return }
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      Self.ledgerLog.error("Unable to persist the session aggregate snapshot: \(error, privacy: .public)")
+    }
   }
 
   /// Persists this session's current `eninStart`/`eninEnd` on every real

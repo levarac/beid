@@ -120,11 +120,15 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       let bindingRecordStore = BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
       )
+      let sessionAggregateSnapshotStore = SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+      )
       let coordinator = SensingCoordinator(
         windowReportStore: reportStore,
         selfProofStore: selfProofStore,
         selfProofCheckpointStore: selfProofCheckpointStore,
         bindingRecordStore: bindingRecordStore,
+        sessionAggregateSnapshotStore: sessionAggregateSnapshotStore,
         unsentWindowLedgerRuntime: runtime,
         sensingCryptography: DeterministicSensingCryptography()
       )
@@ -217,6 +221,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -263,6 +270,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       ),
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
       ),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: DeterministicSensingCryptography(),
@@ -638,6 +648,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -755,6 +768,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: fixture.directory.appendingPathComponent("relaunched-binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: fixture.directory.appendingPathComponent("relaunched-session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -815,6 +831,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       ),
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
       ),
       unsentWindowLedgerRuntime: relaunchedRuntime,
       sensingCryptography: DeterministicSensingCryptography()
@@ -935,6 +954,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: fixture.directory.appendingPathComponent("relaunched-binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: fixture.directory.appendingPathComponent("relaunched-session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -1007,6 +1029,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(store: relaunchedLedgerStore),
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -1072,6 +1097,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
       ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
+      ),
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: DeterministicSensingCryptography()
     )
@@ -1104,6 +1132,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
       ),
       bindingRecordStore: BindingRecordStore(
         fileURL: directory.appendingPathComponent("binding-records.json")
+      ),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("session-aggregate-snapshots.json")
       ),
       unsentWindowLedgerRuntime: try UnsentWindowLedgerRuntime(
         store: ledgerStore,
