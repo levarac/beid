@@ -40,8 +40,16 @@ struct WalletConnectView: View {
 /// hatch shown alongside the primary action (onboarding uses "Enter event
 /// code instead"; the Account sheet passes `nil` and relies on its own
 /// Cancel toolbar button instead).
-struct WalletConnectPairingView: View {
-  private enum Provider: Equatable {
+///
+/// Generic over the Reown/Coinbase connector types (defaulted to the real
+/// singletons below) purely so `#Preview` can inject a fake `WalletConnector`
+/// sitting in an arbitrary `state` — see `PreviewWalletConnector` at the
+/// bottom of this file. `metaMaskClient` stays a concrete, non-generic,
+/// `#if DEBUG`-only singleton as before: `#if` cannot appear inside a
+/// generic parameter list, and every state this restructure needs to
+/// preview is reachable through the `reownClient` slot already.
+struct WalletConnectPairingView<Reown: WalletConnector, Coinbase: WalletConnector>: View {
+  fileprivate enum Provider: Equatable {
     case reown
     case coinbase
     #if DEBUG
@@ -50,8 +58,8 @@ struct WalletConnectPairingView: View {
   }
 
   @Environment(\.openURL) private var openURL
-  @StateObject private var reownClient = ReownWalletConnectClient.shared
-  @StateObject private var coinbaseClient = CoinbaseWalletConnector.shared
+  @StateObject private var reownClient: Reown
+  @StateObject private var coinbaseClient: Coinbase
   #if DEBUG
   @StateObject private var metaMaskClient = MetaMaskConnector.shared
   #endif
@@ -60,12 +68,38 @@ struct WalletConnectPairingView: View {
   let secondaryAction: (title: LocalizedStringKey, action: () -> Void)?
 
   init(
+    reownClient: Reown = ReownWalletConnectClient.shared,
+    coinbaseClient: Coinbase = CoinbaseWalletConnector.shared,
     onConnected: @escaping (String, any WalletConnector) -> Void,
     secondaryAction: (title: LocalizedStringKey, action: () -> Void)? = nil
   ) {
+    _reownClient = StateObject(wrappedValue: reownClient)
+    _coinbaseClient = StateObject(wrappedValue: coinbaseClient)
     self.onConnected = onConnected
     self.secondaryAction = secondaryAction
   }
+
+  #if DEBUG
+  /// Preview-only: lets a `#Preview` start already on a given provider,
+  /// instead of every real call site's shared entrypoint at
+  /// `providerSelectionContent`. `fileprivate` (not the default `internal`)
+  /// because `Provider` itself is `fileprivate` — an initializer can't be
+  /// more visible than the types in its own signature — which is fine since
+  /// only the `#Preview` blocks below, in this same file, need it.
+  fileprivate init(
+    reownClient: Reown = ReownWalletConnectClient.shared,
+    coinbaseClient: Coinbase = CoinbaseWalletConnector.shared,
+    initialProvider: Provider,
+    onConnected: @escaping (String, any WalletConnector) -> Void,
+    secondaryAction: (title: LocalizedStringKey, action: () -> Void)? = nil
+  ) {
+    _reownClient = StateObject(wrappedValue: reownClient)
+    _coinbaseClient = StateObject(wrappedValue: coinbaseClient)
+    _selectedProvider = State(wrappedValue: initialProvider)
+    self.onConnected = onConnected
+    self.secondaryAction = secondaryAction
+  }
+  #endif
 
   var body: some View {
     VStack(spacing: DS.Space.l) {
@@ -409,6 +443,48 @@ struct WalletConnectPairingView: View {
   }
 }
 
+#if DEBUG
+/// Preview-only fake `WalletConnector` with a freely settable `state`, so
+/// the `#Preview` blocks below can exercise every `WalletConnectorState`
+/// case without a real wallet SDK. Not `DemoWalletConnector`: that one is
+/// reserved for `EventBindingSheetView`'s demo escape hatch, is a singleton
+/// with a `private(set)` state, and only ever transitions
+/// `.idle → .connecting → .connected` — insufficient for previewing
+/// `.awaitingApproval`, `.failed`, `.notConfigured`, or `.unavailable`.
+@MainActor
+private final class PreviewWalletConnector: ObservableObject, WalletConnector {
+  @Published var state: WalletConnectorState
+
+  init(state: WalletConnectorState) {
+    self.state = state
+  }
+
+  var address: String? {
+    if case .connected(let address) = state { return address }
+    return nil
+  }
+
+  var chainId: String { "eip155:8453" }
+
+  func configureIfNeeded() {}
+
+  func connect() async {}
+
+  func requestPersonalSign(
+    messageHex: String,
+    responseTimeout: TimeInterval,
+    onDispatched: (() -> Void)?
+  ) async -> Result<String, WalletConnectorError> {
+    .failure(.notConnected)
+  }
+
+  func disconnect() {}
+
+  @discardableResult
+  func handle(url: URL) -> Bool { false }
+}
+#endif
+
 #Preview {
   WalletConnectView().environmentObject(AppCoordinator())
 }
@@ -418,3 +494,50 @@ struct WalletConnectPairingView: View {
     .environmentObject(AppCoordinator())
     .preferredColorScheme(.dark)
 }
+
+#if DEBUG
+#Preview("Connecting") {
+  WalletConnectPairingView(
+    reownClient: PreviewWalletConnector(state: .connecting),
+    initialProvider: .reown,
+    onConnected: { _, _ in }
+  )
+  .padding(.horizontal, DS.Space.pageMargin)
+}
+
+#Preview("Awaiting Approval") {
+  WalletConnectPairingView(
+    reownClient: PreviewWalletConnector(
+      state: .awaitingApproval(
+        uri: "wc:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+          + "@2?relay-protocol=irn&symKey=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+      )
+    ),
+    initialProvider: .reown,
+    onConnected: { _, _ in }
+  )
+  .padding(.horizontal, DS.Space.pageMargin)
+}
+
+#Preview("Connected") {
+  WalletConnectPairingView(
+    reownClient: PreviewWalletConnector(
+      state: .connected(address: "0x1234567890abcdef1234567890abcdef12345678")
+    ),
+    initialProvider: .reown,
+    onConnected: { _, _ in }
+  )
+  .padding(.horizontal, DS.Space.pageMargin)
+}
+
+#Preview("Failed") {
+  WalletConnectPairingView(
+    reownClient: PreviewWalletConnector(
+      state: .failed("The wallet rejected the connection request.")
+    ),
+    initialProvider: .reown,
+    onConnected: { _, _ in }
+  )
+  .padding(.horizontal, DS.Space.pageMargin)
+}
+#endif
