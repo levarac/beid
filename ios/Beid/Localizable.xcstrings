@@ -3467,6 +3467,7 @@
         }
       }
     },
+    "Leave Event": {},
     "e.g. Doorway A": {
       "comment": "Placeholder example shown inside the empty venue-device label field.",
       "localizations": {
