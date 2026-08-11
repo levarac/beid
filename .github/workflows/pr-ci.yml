@@ -72,3 +72,5 @@ jobs:
           if [ -f release_notes.json ]; then
             python3 scripts/prepare_testflight_notes.py --source release_notes.json --output-dir /tmp/release-notes
           fi
+      - name: Check AGENTS.md PR CI section matches this workflow
+        run: python3 scripts/check_pr_ci_doc_drift.py
