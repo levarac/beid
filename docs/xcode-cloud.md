@@ -125,6 +125,28 @@ The other two workflows:
   macOS build. Background: before 2026-08-02 this workflow had no files
   rule at all, and a one-line docs PR burned a full macOS build+test.
 
+  **Test destination — gh#129.** Verified 2026-08-06 against build 34's
+  artifacts: the Test action's destination setting was "Recommended
+  iPhones", which fans out to 4 simulators — iPhone 16 Pro, iPhone 16 Pro
+  Max, iPhone 16, and iPhone SE (3rd generation) — each `test-without-building`
+  run billed separately. Over the trailing 30 days (34 runs), ASC Usage
+  showed ~23 compute-hours against ~8.7 actual summed action-hours, almost
+  entirely attributable to this 4x fan-out (compounding with the test-speed
+  issue tracked as gh#128). Judgment: the PR gate's suite is
+  unit-test-dominated — `BeidUITests`' `BeidIPadLayoutTests` is the only
+  device-shape-sensitive UI test in the repo, and it isn't why the
+  4-device matrix existed — so the PR gate does not benefit from 4-device
+  coverage. A device matrix, if ever needed for layout regression
+  coverage, belongs in a separate nightly or pre-release workflow, not
+  every PR push. Per gh#129's 2026-08-06 comment: with owner approval, the
+  `testDestinations` setting was changed via API `PATCH` from "Recommended
+  iPhones" to a single `iPhone 16 Pro` (default runtime) on 2026-08-07
+  07:0x JST, confirmed by an immediate follow-up `GET`, with a full backup
+  of the prior setting taken (rollback-capable). **Open**: confirming on a
+  subsequent real PR run's artifacts that "on 4 destinations" no longer
+  appears has not yet been done — this doc note records the judgment and
+  the change, not that confirmation.
+
   **⚠️ 2026-08-03 の「docs ファイルが diff に居る時だけ起動する」説は、
   2026-08-04 に #93 のコメントで反証済み (このブロックは 2026-08-06 訂正)。**
 
