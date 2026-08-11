@@ -33,10 +33,6 @@ struct ItemDetailView: View {
             }
 
             BeidPanel {
-              ProofSignatureControlsView(proofId: proof.id)
-            }
-
-            BeidPanel {
               transparencyRow
             }
 
@@ -77,9 +73,7 @@ struct ItemDetailView: View {
   }
 
   /// Fixed, unconditional "Verified" — deliberately not derived from
-  /// `proof.signatureState`, which already has its own distinct readout in
-  /// the `ProofSignatureControlsView` panel below. See
-  /// `docs/specs/itemdetail-redesign.md` §5.2.
+  /// `proof.signatureState`. See `docs/specs/itemdetail-redesign.md` §5.2.
   private var statusRow: some View {
     HStack(alignment: .firstTextBaseline) {
       Text("Status")

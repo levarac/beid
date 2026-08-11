@@ -417,27 +417,6 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Accessibility: entire card one element; label "Proof of {eventName},
   {date}".
 
-### Component: ProofSignatureControlsView
-
-- Purpose: Wallet-signing status + action for one `Proof` — reads live
-  `signatureState` from `AppCoordinator.proofStore` (never a point-in-time
-  snapshot, since a sign attempt mutates state while this view is on
-  screen).
-- Use when: A persistent screen needs to show or offer proof signing.
-  Currently this is `ItemDetailView` (Screen 08), the durable place where a
-  user manages a proof over time.
-- Don't use when: `ProofCardView` (grid density) or `RecordingView` (the
-  one-time proof entrance is scan progress, not a wallet-management surface).
-- API: `ProofSignatureControlsView(proofId: UUID)`, requires
-  `AppCoordinator` in the environment.
-- Required tokens: `DS.Color.actionPrimary` (sign/connect CTA tint — no
-  motif accent per the Primary CTA button rule, §10), `DS.Color.proofSeal`
-  (signed status), `DS.Color.statusCaution` (deferred/rejected/failed
-  status), `DS.Font.ledgerMono` (signer address).
-- Rules: state is never color alone (§2.9) — every non-default status pairs
-  its color with distinct status text. When no wallet is connected, shows a
-  "Connect Wallet" path instead of hiding the feature outright.
-
 ### Component: ScanFlowView (phase container)
 
 - Purpose: Full-screen cover hosting the sensing flow, switching on
@@ -547,10 +526,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Rules: status values pair text with color (`Verified` +
   `DS.Color.proofSeal`, plus a `checkmark.circle.fill` glyph as of the 08
   redesign), never color alone. `Status` is a fixed, unconditional
-  "Verified" — deliberately NOT derived from `Proof.signatureState`: that
-  state already has its own distinct readout in the
-  `ProofSignatureControlsView` panel below, and reusing it here would show
-  two overlapping status indicators for what looks like the same concern.
+  "Verified" — deliberately NOT derived from `Proof.signatureState`.
   "On-chain"/protocol-verification language is FORBIDDEN on this row (§15)
   — there is no such backing claim.
 - Header: above this panel, a centered `DS.Artwork.proofCardGradient(seed:)`
@@ -853,7 +829,8 @@ inventory evidence. Naming remains governed by §12.
 | 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView` and the then-current Screen 07 carrying the new signature states instead of the card itself. Scan Slice-2 later retired separate Screen 07; `ItemDetailView` is the current signing-control surface. | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
 | 2026-07-27 | Account sheet reskin (Figma `104:463`, `docs/specs/account-redesign.md`) adds `DS.Color.statusOn`/`DS.Color.statusOff` (binary Bluetooth on/off status pair, deliberately separate from `signalWarning`'s BLE-signal-*quality*-only scope, `statusCaution`'s signature-failure-only scope, and `signalActive`'s reserved sensing-screen-accent scope), replacing `AccountSheetView`'s raw `.orange`/`.green` (Non-Negotiable #1 fix). `statusOn`'s hue is sourced from Figma's Bluetooth badge (`#34C759`) but darkened for light mode to clear WCAG AA text contrast (the raw Figma value measures ~2:1 on white, well under the 4.5:1 text minimum); `statusOff` has no Figma reference (Figma's mock never draws the "off" state) and uses a neutral gray pair instead of an alarm hue, since Bluetooth-off in the Account sheet is a neutral toggle state, not the degraded-signal alarm `signalWarning` already owns | PROPOSAL — Ken ratification pending for the exact `statusOn`/`statusOff` hex values, same as other secondary hexes |
 | 2026-07-28 | Collection Home reskin (Figma `104:300`, `docs/specs/collection-redesign.md`) adds `DS.Size.proofCardArtwork` (76 pt) and wires the previously-unused `DS.Artwork.proofCardGradient(seed:)` into `ProofCardView` as a centered circular avatar, replacing the seal icon/checkmark/divider/Peers-verified row (peers count stays on `ItemDetailView`). Bottom "Sense Event" CTA becomes icon-only once proofs exist (labeled CTA retained on the 04b empty state per §3's first-run-discoverability rule); the existing localized "Sense Event" string is retained as the icon button's `.accessibilityLabel`, not removed. `CollectionHomeView`'s empty-state icon fixed to the 32 pt cap (see §12) | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
-| 2026-07-28 | Item Detail reskin (Figma `104:407`, `docs/specs/itemdetail-redesign.md`) adds `DS.Size.itemDetailArtwork` (190 pt) and reuses `DS.Artwork.proofCardGradient(seed:)` in `ItemDetailView` at detail scale, replacing the former seal-glyph + "Verified"-label header. The Method/Peers-verified/Status panel drops its plain "Proof" section title and pairs the Status row with a `checkmark.circle.fill` glyph; Status stays a fixed, unconditional "Verified" deliberately decoupled from `Proof.signatureState` (that state has its own distinct readout in `ProofSignatureControlsView` directly below), and Figma's "on-chain" qualifier is dropped as unmodeled and forbidden copy (§15). Figma's venue text ("Tokyo Big Sight") is not rendered — no backing `Proof` field — and the date caption drops to date-only (medium style, no time), matching `ProofCardView`. Figma's custom back/share nav pills are not adopted (standard back button kept; no share action exists in the app). `ProofSignatureControlsView`/`ProofSignatureState`/`Proof`/`ProofStore` are untouched — reskin is display-chrome only, pending Option C | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
+| 2026-07-28 | Item Detail reskin (Figma `104:407`, `docs/specs/itemdetail-redesign.md`) adds `DS.Size.itemDetailArtwork` (190 pt) and reuses `DS.Artwork.proofCardGradient(seed:)` in `ItemDetailView` at detail scale, replacing the former seal-glyph + "Verified"-label header. The Method/Peers-verified/Status panel drops its plain "Proof" section title and pairs the Status row with a `checkmark.circle.fill` glyph; Status stays a fixed, unconditional "Verified" deliberately decoupled from `Proof.signatureState` (that state has its own distinct readout in `ProofSignatureControlsView` directly below), and Figma's "on-chain" qualifier is dropped as unmodeled and forbidden copy (§15). Figma's venue text ("Tokyo Big Sight") is not rendered — no backing `Proof` field — and the date caption drops to date-only (medium style, no time), matching `ProofCardView`. Figma's custom back/share nav pills are not adopted (standard back button kept; no share action exists in the app). `ProofSignatureControlsView`/`ProofSignatureState`/`Proof`/`ProofStore` are untouched — reskin is display-chrome only, pending Option C. **Superseded (2026-08-11):** Option C landed (gh#88), and the provisional signing path this row names (`ProofSignatureControlsView`) was removed per gh#196 — see the 2026-08-11 row below | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
+| 2026-08-11 | AttendanceProof/v1 manual signing path removed (`docs/specs/attendance-proof-v1-removal.md`, gh#196): `ProofSignatureControlsView` (and its call site in `ItemDetailView`, and `AppCoordinator.signProof(_:)`) deleted outright. `Proof.signatureState`, `ProofSignatureState`, `SignatureRecord`, and `SignaturePayload` are kept as-is (Codable-compatibility for historical local data, per `DECISIONS.md`'s 2026-08-09 schema-migration ruling) — they simply never transition again. Item Detail gains no replacement control; the Barnard-conformant binding model (gh#88) is the real protocol-level self-proof mechanism now, surfaced during the connect+binding interstitial, not on this screen | Adopted |
 
 ### D. Deprecated patterns
 
