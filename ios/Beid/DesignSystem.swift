@@ -332,6 +332,7 @@ struct BeidNumberedStepList: View {
         }
         .padding(.horizontal, DS.Space.m)
         .padding(.vertical, DS.Space.s)
+        .accessibilityElement(children: .combine)
 
         if index < steps.count - 1 {
           Divider()
