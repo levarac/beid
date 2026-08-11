@@ -27,7 +27,6 @@
 		2C4CD8555EE587E369D6BF79 /* VenueDeviceOrganizerViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79956B9713B57740F9E34243 /* VenueDeviceOrganizerViewModelTests.swift */; };
 		2F6282D16C15B8EBCA2669DC /* WalletConnectSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
-		358E49BED52D55C3EFB92F25 /* ProofSignatureControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6921FE4135B616BF315A048C /* ProofSignatureControlsView.swift */; };
 		388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C637EA719C58481853B15B91 /* LocalizationContractTests.swift */; };
 		3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80A94378B0116CC976961AC /* BluetoothOffView.swift */; };
 		3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10807372081AA25A74942BE3 /* WelcomeView.swift */; };
@@ -187,7 +186,6 @@
 		596FC02E4F5386F9BC759C20 /* VenueDeviceOrganizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceOrganizerView.swift; sourceTree = "<group>"; };
 		5F76E12B71ED26CFB7AF316F /* UnsentWindowLedgerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsentWindowLedgerRuntime.swift; sourceTree = "<group>"; };
 		6660B6477CE489C244F95FED /* ProofCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCardView.swift; sourceTree = "<group>"; };
-		6921FE4135B616BF315A048C /* ProofSignatureControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignatureControlsView.swift; sourceTree = "<group>"; };
 		6B26B23A64184D96C012A5B6 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectSecrets.swift; sourceTree = "<group>"; };
 		709FBACC800E9850372F64D7 /* SessionAggregateSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateSnapshotStore.swift; sourceTree = "<group>"; };
@@ -424,7 +422,6 @@
 				2169FFDF6767C427D481ED17 /* ItemDetailView.swift */,
 				7726C4148C25E9309E34D1A8 /* ParticipationSummaryView.swift */,
 				6660B6477CE489C244F95FED /* ProofCardView.swift */,
-				6921FE4135B616BF315A048C /* ProofSignatureControlsView.swift */,
 				DBBF900C092346BBFDF6BA96 /* RecordingView.swift */,
 				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
 				29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */,
@@ -756,7 +753,6 @@
 				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
 				ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */,
-				358E49BED52D55C3EFB92F25 /* ProofSignatureControlsView.swift in Sources */,
 				AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */,
 				905D529AD4D49A99A809159C /* QRCodeRenderer.swift in Sources */,
 				5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */,
