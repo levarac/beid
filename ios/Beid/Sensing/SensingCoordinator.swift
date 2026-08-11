@@ -353,6 +353,22 @@ final class SensingCoordinator: ObservableObject {
   /// rpid/displayId pair, guaranteeing each call grows the shared device
   /// count by exactly one.
   private var demoDeviceSequence = 0
+  /// Demo-only stand-in for `currentWindowRpids` (beid#189), scoped to the
+  /// demo script's own window concept (`demoWindowEnin`/
+  /// `advanceDemoWindow()`) instead of a real ENIN boundary. Feeds
+  /// `applyPhaseDecision`'s `coPresentDeviceCount` argument with an
+  /// honestly-tracked value rather than a fabricated placeholder — see
+  /// `applyPhaseDecision`'s own doc comment for why a fabricated count
+  /// would itself violate DECISIONS 2026-08-01, not just an implementation
+  /// detail. Demo's own confirm timing is still always actually driven by
+  /// the distinct-device arm in practice (see `runDemoSequence`'s doc
+  /// comment), since `devicesVerified` grows monotonically across the
+  /// whole scripted session while this set resets every
+  /// `advanceDemoWindow()` call — but the reducer receives a real count
+  /// either way, never a stand-in chosen to force an outcome. Cleared by
+  /// `advanceDemoWindow()` and `resetSessionState()`; inserted into by
+  /// `observeOneDemoDevice()`.
+  private var demoWindowRpids: Set<String> = []
   /// Backs `unidentifiedRpidCount`. Holds proximity identifiers seen
   /// without a display id; an identifier is removed once it does arrive with
   /// one.
@@ -833,17 +849,61 @@ final class SensingCoordinator: ObservableObject {
 
     let deviceCountChanged = recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
 
-    let result = BeidSharedKit.sensing.applyScanDetection(
-      currentPhase: currentPhaseKind,
-      coPresentDeviceCount: Int32(currentWindowRpids.count),
-      distinctDeviceCount: Int32(devicesVerified),
+    let result = applyPhaseDecision(
+      coPresentDeviceCount: currentWindowRpids.count,
       distinctDeviceCountChanged: deviceCountChanged,
-      eventConfirmThreshold: Int32(BeidConfig.eventConfirmThreshold)
+      for: session
     )
 
     if result.resultingPhase == .RECORDING {
       ensureLedgerWindowOpen()
     }
+  }
+
+  /// Calls the shared phase reducer (`BeidSharedKit.sensing.applyScanDetection`,
+  /// beid#116) with the given counts for `session`'s current phase, and
+  /// applies its result to `phase` and the existing UI-facing callbacks —
+  /// the phase-decision half of what `observe(_:)` used to do entirely
+  /// inline. Shared by the real detection path (`observe(_:)` above, which
+  /// also runs the real ENIN-window/ledger-lifecycle half below it) and
+  /// demo mode (`runDemoSequence`/`continueDemoRecording`, beid#189).
+  ///
+  /// Deliberately does not call `ensureLedgerWindowOpen()` — only
+  /// `observe(_:)` does that, gated on `result.resultingPhase == .RECORDING`,
+  /// exactly as before this was extracted. Demo mode legitimately has no
+  /// ENIN window or ledger to open, and routing it through that half
+  /// instead of stopping here is not an available design choice: DECISIONS
+  /// 2026-08-01 ("Scan Slice-2 の検証は4台以上のグループセッションで行う") names this
+  /// file's own "Fabricated proof data must never enter a shipping build's
+  /// sensing path" comment as its reasoning for keeping demo paths out of
+  /// any path that produces real attestation artifacts — `closeWindow`'s
+  /// signed, persisted `WindowReport`s and `unsentWindowLedgerRuntime`'s
+  /// ledger rows are exactly that, so demo mode calling only this half,
+  /// never `observe(_:)` whole, is required by that decision, not a
+  /// preference weighed against it.
+  ///
+  /// Callers must supply an honestly-tracked `coPresentDeviceCount` — never
+  /// a stand-in value chosen to force a particular outcome. Feeding this
+  /// function (which calls the real, shared reducer) a fabricated count
+  /// would be its own form of the same violation the paragraph above
+  /// describes, one level removed: DECISIONS 2026-08-01's concern is
+  /// fabricated data reaching a real decision path, and this function *is*
+  /// that path for phase decisions, even though it touches no store. See
+  /// `demoWindowRpids`'s own doc comment for how the demo caller satisfies
+  /// this.
+  @discardableResult
+  private func applyPhaseDecision(
+    coPresentDeviceCount: Int,
+    distinctDeviceCountChanged: Bool,
+    for session: EventSession
+  ) -> BeidSharedKit.sensing.ScanDetectionResult {
+    let result = BeidSharedKit.sensing.applyScanDetection(
+      currentPhase: currentPhaseKind,
+      coPresentDeviceCount: Int32(coPresentDeviceCount),
+      distinctDeviceCount: Int32(devicesVerified),
+      distinctDeviceCountChanged: distinctDeviceCountChanged,
+      eventConfirmThreshold: Int32(BeidConfig.eventConfirmThreshold)
+    )
 
     // `result.confirmedEvent` is checked first, ahead of
     // `transitionedToEventFound`: when both are true (the DEBUG
@@ -855,12 +915,15 @@ final class SensingCoordinator: ObservableObject {
     // overwriting it with `.recording` in the same call — an artifact of
     // native's call sequence, not a documented behavior any test observed.
     // The final phase and every observable side effect (Proof creation,
-    // callbacks) are identical either way.
+    // callbacks) are identical either way. Demo mode reproduces this same
+    // edge case for free now, since it calls this same function — before
+    // this split it could not, since it always hardcoded a separate
+    // `.eventFound` step first.
     if result.confirmedEvent {
       Self.log.notice(
         """
-        Event confirmed via \(self.hasEnoughCoPresentDevicesToConfirm ? "co-presence" : "distinct devices", privacy: .public): \
-        \(self.currentWindowRpids.count, privacy: .public) co-present this window, \
+        Event confirmed via \(self.hasEnoughCoPresentDevicesToConfirm(coPresentDeviceCount) ? "co-presence" : "distinct devices", privacy: .public): \
+        \(coPresentDeviceCount, privacy: .public) co-present this window, \
         \(self.devicesVerified, privacy: .public) identified this session, \
         \(self.unidentifiedRpidCount, privacy: .public) unidentified
         """
@@ -871,6 +934,8 @@ final class SensingCoordinator: ObservableObject {
     } else if result.updatedRecording {
       updateRecording(event: session, peersVerified: devicesVerified)
     }
+
+    return result
   }
 
   /// `BeidSharedKit.sensing.ScanPhaseKind` mirroring `phase`, without its
@@ -946,16 +1011,22 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// Whether the co-presence arm is why an event just confirmed — used only
-  /// to pick the right word in the log line below. The confirm decision
-  /// itself (both arms, and their disjunction) is
+  /// to pick the right word in `applyPhaseDecision`'s log line. The confirm
+  /// decision itself (both arms, and their disjunction) is
   /// `BeidSharedKit.sensing.shouldConfirmScanEvent` (beid#116); see that
   /// function's doc comment in `shared/.../sensing/ScanPhase.kt` for why
   /// each arm resists accumulation and why a single lingering device
   /// satisfies neither — this adapter keeps no comparison of its own that
   /// could drift from it.
-  private var hasEnoughCoPresentDevicesToConfirm: Bool {
+  ///
+  /// Takes `coPresentDeviceCount` as a parameter (beid#189) rather than
+  /// reading `currentWindowRpids.count` directly, since `applyPhaseDecision`
+  /// — this function's only call site — is shared by both the real path
+  /// (whose co-presence count is `currentWindowRpids.count`) and demo mode
+  /// (whose count is `demoWindowRpids.count`).
+  private func hasEnoughCoPresentDevicesToConfirm(_ coPresentDeviceCount: Int) -> Bool {
     BeidSharedKit.sensing.hasEnoughCoPresentDevicesToConfirmScanEvent(
-      coPresentDeviceCount: Int32(currentWindowRpids.count),
+      coPresentDeviceCount: Int32(coPresentDeviceCount),
       eventConfirmThreshold: Int32(BeidConfig.eventConfirmThreshold)
     )
   }
@@ -1065,6 +1136,7 @@ final class SensingCoordinator: ObservableObject {
     firstWindowEnin = nil
     lastWindowEnin = nil
     demoWindowEnin = 0
+    demoWindowRpids = []
     currentWindowRpids = []
     currentWindowLedgerOpened = false
     activeCommit = nil
@@ -1082,31 +1154,19 @@ final class SensingCoordinator: ObservableObject {
   /// Computes and fixes this session's `commit` (§5 — "fixed at event
   /// time") for a newly detected session and resets prior-session state
   /// first so nothing leaks across events. Does not itself set `phase` —
-  /// used only by the real detection path (`handleDetection`'s `.sensing`
-  /// case), where `observe`, immediately after, asks
-  /// `BeidSharedKit.sensing.applyScanDetection` (beid#116) to decide (and
-  /// applies) the `.sensing -> .eventFound` transition for this same
-  /// detection. See `beginEventFound(_:)` below for the demo-only
-  /// counterpart that does set `phase` directly.
+  /// used by both the real detection path (`handleDetection`'s `.sensing`
+  /// case, where `observe`, immediately after, asks
+  /// `BeidSharedKit.sensing.applyScanDetection` (beid#116) to decide the
+  /// `.sensing -> .eventFound` transition for this same detection) and demo
+  /// mode (`runDemoSequence`, beid#189, whose first synthesized device
+  /// drives the same transition through the same shared reducer via
+  /// `applyPhaseDecision`).
   private func beginEventFoundSessionState(_ session: EventSession) {
     resetSessionState()
     let eventSigningKey = sensingCryptography.eventSigningPublicKey(eventCode: session.id)
     let ownerKey = sensingCryptography.ownerPublicKey()
     let salt = Data(randomSource.randomBytes(count: 16))
     activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
-  }
-
-  /// Demo-only: the scripted walkthrough's stand-in for a real first
-  /// detection — computes/fixes the commit exactly like
-  /// `beginEventFoundSessionState(_:)` above, then transitions straight to
-  /// `.eventFound`. Demo mode drives phase transitions directly rather than
-  /// through `BeidSharedKit.sensing.applyScanDetection` (see
-  /// `runDemoSequence`'s doc comment below): there is no real detection or
-  /// count for the shared reducer to evaluate, so this intentionally does
-  /// not consult it, exactly as before this family moved to `shared/`.
-  private func beginEventFound(_ session: EventSession) {
-    beginEventFoundSessionState(session)
-    phase = .eventFound(session)
   }
 
   /// Threshold-confirm (D3, §4.3): creates the `Proof` the instant
@@ -1796,37 +1856,118 @@ final class SensingCoordinator: ObservableObject {
   // Pure state advancement is separated from timing so tests can drive it
   // with a zero delay and await completion via
   // `waitForDemoSequenceToFinish()`. Demo mode has no real `BarnardEvent`
-  // stream, so it drives the same shared phase-transition helpers directly
-  // instead of going through `observe(_:for:)`; it does not produce window
-  // reports (those depend on real `.detection` ENIN boundaries). Device
-  // growth, however, goes through `observeOneDemoDevice()` ->
-  // `recordDeviceIdentity(enin:rpid:detectedDisplayId:)`, the same
-  // `aggregationRuntime` accumulator the real path uses (beid#109/#162):
-  // DemoEvent is App Review's demo path (see `ios/README.md` "DemoEvent
-  // mode") and the only path exercisable on the Simulator, so its
-  // `devicesVerified` growth comes from the same source a real session uses
-  // rather than a bare loop counter.
+  // stream, so it synthesizes its own detections and folds each one into
+  // `applyPhaseDecision(coPresentDeviceCount:distinctDeviceCountChanged:for:)`
+  // (beid#189) — the same shared-reducer-consuming half `observe(_:for:)`
+  // uses for the real path, so a future change to
+  // `BeidSharedKit.sensing.applyScanDetection`'s rules applies to demo mode
+  // automatically instead of silently drifting from a parallel hardcoded
+  // script. Demo mode never calls `observe(_:for:)` itself and so never
+  // reaches `advanceWindowBookkeepingIfNeeded`/`ensureLedgerWindowOpen`/
+  // `closeWindow` — the only functions that touch `windowReportStore`/
+  // `unsentWindowLedgerRuntime`, and the only functions `openNewWindowState`
+  // (which is what sets `currentWindowId` non-nil) is reachable from. Demo
+  // mode's own `advanceDemoWindow()` below never calls `openNewWindowState`
+  // either, so `currentWindowId` stays `nil` for a demo session's entire
+  // lifetime — this is not a coincidence to preserve carefully, it is
+  // required by DECISIONS 2026-08-01 ("Scan Slice-2 の検証は4台以上のグループ
+  // セッションで行う"), which names this file's own "Fabricated proof data
+  // must never enter a shipping build's sensing path" comment as its
+  // reasoning for keeping demo mode out of any path that produces real,
+  // signed attestation artifacts. Device growth goes through
+  // `observeOneDemoDevice()` -> `recordDeviceIdentity(enin:rpid:detectedDisplayId:)`,
+  // the same `aggregationRuntime` accumulator the real path uses
+  // (beid#109/#162): DemoEvent is App Review's demo path (see
+  // `ios/README.md` "DemoEvent mode") and the only path exercisable on the
+  // Simulator, so its `devicesVerified` growth comes from the same source a
+  // real session uses rather than a bare loop counter.
 
   func runDemoSequence(demoEvent: EventSession, stepDelayNanos: UInt64 = 700_000_000) {
     demoTask?.cancel()
+    // `applyPhaseDecision`'s shared reducer only transitions `.sensing ->
+    // .eventFound` (or straight through to `.recording`) when
+    // `currentPhaseKind` reads `.SENSING` — unlike the old direct-call
+    // `beginEventFound(_:)` this replaced, which set `phase` unconditionally
+    // regardless of its prior value. In production this is already true by
+    // the time this runs (`startSensing()` sets it immediately before
+    // calling this function), but this function is deliberately not
+    // `private` — several tests call it directly, bypassing
+    // `startSensing()`, and previously relied on the old unconditional-set
+    // behavior. Setting it explicitly here makes the precondition this
+    // function actually needs part of its own contract rather than an
+    // implicit assumption about caller state; harmless/idempotent from
+    // `startSensing()`'s own call site.
+    phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
       guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-      self.beginEventFound(demoEvent)
+      self.beginEventFoundSessionState(demoEvent)
+      // Device #1: `phase` is `.sensing` (set by `startSensing()` before
+      // this task was created), and this is the session's very first
+      // observation, so `distinctDeviceCountChanged` is always `true` —
+      // `applyPhaseDecision` moves `.sensing -> .eventFound` unconditionally
+      // on this call, exactly like the real path's first real detection,
+      // unless `BeidConfig.eventConfirmThreshold <= 1` (the DEBUG
+      // `-beid-threshold-override 1` case), in which case it goes straight
+      // to `.recording` in this same step — a real-path edge case demo mode
+      // could not previously reproduce, since it always hardcoded a
+      // separate `.eventFound` step first.
+      self.observeOneDemoDevice()
+      self.applyPhaseDecision(
+        coPresentDeviceCount: self.demoWindowRpids.count,
+        distinctDeviceCountChanged: true,
+        for: demoEvent
+      )
+      // Window boundary right after device #1, matching the exact
+      // `advanceDemoWindow()` call-site position the old
+      // `beginEventFound(demoEvent); advanceDemoWindow()` pair had —
+      // `firstWindowEnin`/`lastWindowEnin` (self-proof's `eninStart`/
+      // `eninEnd`) are set only by `advanceDemoWindow()`, never by
+      // `observeOneDemoDevice()`, so this call's exact position (not just
+      // its total count across the whole sequence) determines those
+      // values. Moving it would silently change a demo-generated
+      // self-proof's `eninEnd` by exactly the count of window boundaries
+      // shifted — caught by `SelfProofTests`/`SensingCryptographyTests`
+      // asserting exact `eninStart`/`eninEnd` values during this change's
+      // own evidence run, not found by inspection.
       self.advanceDemoWindow()
       guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
 
+      // Devices 2..<threshold: bunched with no window advance between them,
+      // so `demoWindowRpids` — and therefore the co-presence arm, not just
+      // the distinct-count arm — genuinely reflects however many of them
+      // land in this one still-open window (never `threshold` itself,
+      // since device #1 already closed its own window above). Confirmation
+      // is still always actually driven by the distinct-device arm
+      // crossing `threshold` in practice, since that count is cumulative
+      // across the whole scripted session; this is not a behavior change
+      // from before this split.
+      // `max(0, ...)`, not a bare `1..<threshold` range: `threshold` is a
+      // `#if DEBUG`-only overridable value (`-beid-threshold-override`),
+      // and a `1..<threshold` range traps at runtime for any override
+      // `<= 0` (`Range` requires `lowerBound <= upperBound`) — device #1
+      // above already covers threshold `<= 1` correctly on its own, so
+      // this loop degrading to zero iterations for those values is exactly
+      // right, not a special case to guard separately.
       let threshold = BeidConfig.eventConfirmThreshold
-      for _ in 0..<threshold {
-        self.observeOneDemoDevice()
+      for _ in 0..<max(0, threshold - 1) {
+        let changed = self.observeOneDemoDevice()
+        self.applyPhaseDecision(
+          coPresentDeviceCount: self.demoWindowRpids.count,
+          distinctDeviceCountChanged: changed,
+          for: demoEvent
+        )
       }
-      self.beginRecording(event: demoEvent, peersVerified: self.devicesVerified)
       self.advanceDemoWindow()
 
       for _ in 0..<2 {
         guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-        self.observeOneDemoDevice()
-        self.updateRecording(event: demoEvent, peersVerified: self.devicesVerified)
+        let changed = self.observeOneDemoDevice()
+        self.applyPhaseDecision(
+          coPresentDeviceCount: self.demoWindowRpids.count,
+          distinctDeviceCountChanged: changed,
+          for: demoEvent
+        )
         self.advanceDemoWindow()
       }
     }
@@ -1834,18 +1975,26 @@ final class SensingCoordinator: ObservableObject {
 
   /// Continues the demo growth loop from where `devicesVerified` was frozen
   /// at signal-loss — `resumeSensing()`'s demo-mode counterpart to
-  /// `runDemoSequence`. Reads `devicesVerified` rather than taking a
-  /// `peersVerified` parameter: `observeOneDemoDevice()` already keeps it and
-  /// the frozen `phase` value in lockstep, so a separate starting point would
-  /// be a second copy of the same number.
+  /// `runDemoSequence`. Reads `devicesVerified` (via `applyPhaseDecision`,
+  /// which reads it internally) rather than taking a `peersVerified`
+  /// parameter: `observeOneDemoDevice()` already keeps it and the frozen
+  /// `phase` value in lockstep, so a separate starting point would be a
+  /// second copy of the same number. `phase` is already `.recording` here
+  /// (set by `resumeSensing()` before this is called), so each
+  /// `applyPhaseDecision` call below only ever exercises
+  /// `ScanDetectionResult.updatedRecording`.
   private func continueDemoRecording(event: EventSession, stepDelayNanos: UInt64) {
     demoTask?.cancel()
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
       for _ in 0..<2 {
         guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-        self.observeOneDemoDevice()
-        self.updateRecording(event: event, peersVerified: self.devicesVerified)
+        let changed = self.observeOneDemoDevice()
+        self.applyPhaseDecision(
+          coPresentDeviceCount: self.demoWindowRpids.count,
+          distinctDeviceCountChanged: changed,
+          for: event
+        )
         self.advanceDemoWindow()
       }
     }
@@ -1856,21 +2005,28 @@ final class SensingCoordinator: ObservableObject {
   /// uses, so demo growth and real growth share one source of truth for
   /// `devicesVerified` (beid#109/#162's iOS wiring). Each call uses a
   /// never-repeated synthetic id, so it always grows the shared device count
-  /// by exactly one.
-  private func observeOneDemoDevice() {
+  /// by exactly one. Also inserts into `demoWindowRpids` (beid#189),
+  /// mirroring how `observe(_:for:)` inserts into `currentWindowRpids` for
+  /// the real path. Returns whether `devicesVerified` moved, so callers can
+  /// feed it into `applyPhaseDecision`'s `distinctDeviceCountChanged`.
+  @discardableResult
+  private func observeOneDemoDevice() -> Bool {
     demoDeviceSequence += 1
     let syntheticId = "demo-device-\(demoDeviceSequence)"
-    _ = recordDeviceIdentity(enin: demoWindowEnin, rpid: syntheticId, detectedDisplayId: syntheticId)
+    demoWindowRpids.insert(syntheticId)
+    return recordDeviceIdentity(enin: demoWindowEnin, rpid: syntheticId, detectedDisplayId: syntheticId)
   }
 
   /// Demo-only stand-in for the real path's `advanceWindowBookkeepingIfNeeded` —
   /// advances just enough ENIN-window state
   /// (`firstWindowEnin`/`currentWindowEnin`/`lastWindowEnin`) for the
   /// self-proof layer (§2.2) to be exercisable under demo mode, since there
-  /// is no real BLE path to drive it with on the simulator. Deliberately
-  /// never calls `closeWindow`/touches `WindowReportStore` — demo mode
-  /// intentionally produces no window reports (see this section's own doc
-  /// comment above), and this must not change that.
+  /// is no real BLE path to drive it with on the simulator, and clears
+  /// `demoWindowRpids` for the next demo window (beid#189). Deliberately
+  /// never calls `openNewWindowState`/`closeWindow`/touches
+  /// `WindowReportStore` — demo mode intentionally produces no window
+  /// reports (see this section's own doc comment above), and this must not
+  /// change that.
   private func advanceDemoWindow() {
     demoWindowEnin += 1
     if firstWindowEnin == nil {
@@ -1878,6 +2034,7 @@ final class SensingCoordinator: ObservableObject {
     }
     currentWindowEnin = demoWindowEnin
     lastWindowEnin = demoWindowEnin
+    demoWindowRpids = []
   }
 
   func waitForDemoSequenceToFinish() async {

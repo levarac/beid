@@ -283,11 +283,16 @@ final class SensingCoordinatorTests: XCTestCase {
   /// as a call-order spy: `ownerPublicKeyMismatchDetected` unconditionally
   /// calls `sensingCryptography.ownerPublicKey()`, and replaying the queued
   /// detection's `.sensing -> .eventFound` transition
-  /// (`beginEventFound(_:)`) independently calls
-  /// `eventSigningPublicKey(eventCode:)` then `ownerPublicKey()` again to
-  /// fix the session commit — so if the relocation ever reordered the
-  /// check after the drain, the first `.ownerPublicKey` call recorded would
-  /// no longer be the check's.
+  /// (`handleDetection`'s `.sensing` case, via `beginEventFoundSessionState(_:)`)
+  /// independently calls `eventSigningPublicKey(eventCode:)` then
+  /// `ownerPublicKey()` again to fix the session commit — so if the
+  /// relocation ever reordered the check after the drain, the first
+  /// `.ownerPublicKey` call recorded would no longer be the check's. This
+  /// test never uses demo mode (`useDemoEventMode = false` below), so it
+  /// only ever exercises the real detection path — this comment previously
+  /// misnamed the mechanism after `beginEventFound(_:)`, the demo-only
+  /// function beid#189 removed; fixed to name the function this test
+  /// actually exercises.
   func testOwnerKeyMismatchCheckCompletesDuringBackgroundLoadBeforeQueuedDetectionDrains() async {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("sensing-coordinator-owner-key-loading-test-\(UUID().uuidString)", isDirectory: true)
@@ -325,7 +330,7 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(
       crypto.calls,
       [.ownerPublicKey, .eventSigningPublicKey(eventCode: "Unknown Event"), .ownerPublicKey],
-      "the mismatch check's ownerPublicKey() call must be the first recorded call — strictly before the queued detection's beginEventFound(_:) commit computation calls eventSigningPublicKey/ownerPublicKey again"
+      "the mismatch check's ownerPublicKey() call must be the first recorded call — strictly before the queued detection's beginEventFoundSessionState(_:) commit computation calls eventSigningPublicKey/ownerPublicKey again"
     )
   }
 
