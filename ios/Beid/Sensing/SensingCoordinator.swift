@@ -200,6 +200,19 @@ final class SensingCoordinator: ObservableObject {
     windowReportStore.reports.filter { $0.eventCode == eventCode }.count
   }
 
+  /// beid#143's Participation summary screen entry point. Forwards to the
+  /// privately-owned `sessionAggregateSnapshotStore` that
+  /// `persistSessionAggregateSnapshotIfNeeded()` writes at session end
+  /// (beid#166 Phase 2) — the same coordinator-owned instance, not a second
+  /// copy, so a snapshot persisted moments ago in this same app run is
+  /// visible immediately rather than only after the next launch's on-disk
+  /// reload. `nil` means no snapshot was ever persisted for this proof —
+  /// see `SessionAggregateSnapshotStore.snapshot(proofId:)`'s own doc
+  /// comment for the three reasons that can happen.
+  func sessionAggregateSnapshot(forProofId proofId: UUID) -> BeidSharedKit.aggregation.SessionAggregate? {
+    sessionAggregateSnapshotStore.snapshot(proofId: proofId)
+  }
+
   /// Field diagnostics for the counting split (beid#154). `os.Logger` rather
   /// than `print` on purpose: these lines have to be readable from a real
   /// device during a field run — Console.app, or a sysdiagnose collected after
