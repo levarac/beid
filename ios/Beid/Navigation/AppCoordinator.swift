@@ -23,6 +23,8 @@ final class AppCoordinator: ObservableObject {
   let sensingCoordinator = SensingCoordinator()
   let bluetoothMonitor = BluetoothMonitor()
 
+  private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
+
   init(
     walletConnector: (any WalletConnector)? = nil,
     proofStore: ProofStore? = nil
@@ -32,9 +34,50 @@ final class AppCoordinator: ObservableObject {
     sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
     }
+    if hasCompletedOnboardingPersisted {
+      restoreAfterOnboarding()
+    }
   }
 
   // MARK: - Onboarding
+
+  /// Gates the restore *read* behind `-beid-ui-test` (mirroring
+  /// `SensingCoordinator.demoStepDelayNanos`'s existing use of the same
+  /// launch argument) so a UI test launch always starts at `.welcome`
+  /// regardless of what a prior launch left in `UserDefaults.standard` — see
+  /// #194's cross-UI-test pollution risk (`BeidIPadLayoutTests` reuses one
+  /// installed app's container across `testPrimaryFlowInPortrait` and
+  /// `testPrimaryFlowInLandscape`). Release builds never receive
+  /// `-beid-ui-test`, so the `#if DEBUG` split does not change Release
+  /// behavior.
+  private var hasCompletedOnboardingPersisted: Bool {
+    #if DEBUG
+    guard !ProcessInfo.processInfo.arguments.contains("-beid-ui-test") else { return false }
+    #endif
+    return UserDefaults.standard.bool(forKey: Self.hasCompletedOnboardingKey)
+  }
+
+  /// Restores a previously set-up device past `.welcome` on cold launch
+  /// (#194) by re-driving the same `beginOnboarding()` → (guestFirst)
+  /// `requestBluetoothPermission()` → `evaluateBluetoothState()` path a
+  /// first-run user takes, so a currently-powered-off radio still correctly
+  /// routes to `.bluetoothOff` instead of `.home` (the failure mode this
+  /// exists to prevent — a restored user must never be dropped onto `.home`
+  /// with a dead radio).
+  ///
+  /// `.walletFirst` restore is intentionally left exactly as
+  /// `beginOnboarding()`'s existing `.walletConnect` routing — i.e. it does
+  /// not skip wallet-connect. Deciding how a previously-connected wallet
+  /// should restore intersects #202 Q6 (wallet-unconnected guest handling),
+  /// which is explicitly out of scope here; `.walletFirst` isn't
+  /// `OnboardingMode.current` in production, so this is a documented,
+  /// accepted limitation, not a regression.
+  private func restoreAfterOnboarding() {
+    beginOnboarding()
+    if screen == .bluetoothPermission {
+      requestBluetoothPermission()
+    }
+  }
 
   func beginOnboarding() {
     switch onboardingMode {
@@ -128,6 +171,7 @@ final class AppCoordinator: ObservableObject {
   }
 
   func evaluateBluetoothState() {
+    UserDefaults.standard.set(true, forKey: Self.hasCompletedOnboardingKey)
     screen = bluetoothMonitor.isPoweredOff ? .bluetoothOff : .home
   }
 

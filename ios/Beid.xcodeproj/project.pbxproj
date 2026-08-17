@@ -82,6 +82,7 @@
 		ACCA8EA1D39994F420C779BA /* SelfProofTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */; };
 		ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E157C35B263F222E1DBDD5 /* ProofSignature.swift */; };
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
+		B3A230BA5775F3098FF6595B /* AppCoordinatorRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73260B2E5EA447B3E800555C /* AppCoordinatorRestoreTests.swift */; };
 		BD424B0B114CBB6F3FE6BA8E /* WindowReportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C453FB39D62870ECDBCBF0 /* WindowReportStore.swift */; };
 		BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00B88F37F569ED386AB057A8 /* Assets.xcassets */; };
 		BDE0B0D8E4FAB885CD25F9B8 /* OwnerKeyProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A10CCB8E5D80E54CF5B4291 /* OwnerKeyProviderTests.swift */; };
@@ -192,6 +193,7 @@
 		6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectSecrets.swift; sourceTree = "<group>"; };
 		709FBACC800E9850372F64D7 /* SessionAggregateSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateSnapshotStore.swift; sourceTree = "<group>"; };
 		7209389876A87B83EB5B49B9 /* EventCommitment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCommitment.swift; sourceTree = "<group>"; };
+		73260B2E5EA447B3E800555C /* AppCoordinatorRestoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinatorRestoreTests.swift; sourceTree = "<group>"; };
 		745C8C0BB1F1D517D03BEABE /* QRCodeRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeRenderer.swift; sourceTree = "<group>"; };
 		761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundingCheckpointTests.swift; sourceTree = "<group>"; };
 		7726C4148C25E9309E34D1A8 /* ParticipationSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipationSummaryView.swift; sourceTree = "<group>"; };
@@ -459,6 +461,7 @@
 			isa = PBXGroup;
 			children = (
 				E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */,
+				73260B2E5EA447B3E800555C /* AppCoordinatorRestoreTests.swift */,
 				761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */,
 				0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */,
 				23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */,
@@ -798,6 +801,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				67D6643DEE67BF7E3D10D181 /* AggregationRuntimeTests.swift in Sources */,
+				B3A230BA5775F3098FF6595B /* AppCoordinatorRestoreTests.swift in Sources */,
 				F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */,
 				5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */,
 				AAA084FCDB8DD4558C438B58 /* CorruptStoreQuarantineTests.swift in Sources */,
