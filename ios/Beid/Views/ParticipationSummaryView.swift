@@ -37,6 +37,20 @@ struct ParticipationSummaryView: View {
   /// `nil` when no session-aggregate snapshot exists for this proof — see
   /// the type doc comment above for the three reasons that can happen.
   let aggregate: BeidSharedKit.aggregation.SessionAggregate?
+  /// beid#217: additive, defaults to `nil` at every existing call site, so
+  /// this screen renders byte-for-byte as it does today whenever it is
+  /// absent (spec §6.3.1/§6.4). When non-`nil` — set only by
+  /// `SessionParticipationListView`'s per-row navigation — renders as a
+  /// small secondary line under the header, so tapping session row 1 vs.
+  /// row 2 of the same event does not land on two visually identical
+  /// screens with no way to tell which session is being viewed.
+  var sessionDate: Date? = nil
+
+  private static let dateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    return formatter
+  }()
 
   var body: some View {
     ScrollView {
@@ -57,9 +71,16 @@ struct ParticipationSummaryView: View {
   }
 
   private var header: some View {
-    Text(verbatim: eventName)
-      .font(DS.Font.sectionTitle)
-      .foregroundStyle(DS.Color.textPrimary)
+    VStack(alignment: .leading, spacing: DS.Space.xs) {
+      Text(verbatim: eventName)
+        .font(DS.Font.sectionTitle)
+        .foregroundStyle(DS.Color.textPrimary)
+      if let sessionDate {
+        Text(Self.dateFormatter.string(from: sessionDate))
+          .font(DS.Font.supporting)
+          .foregroundStyle(DS.Color.textSecondary)
+      }
+    }
   }
 
   // MARK: - Headline
@@ -187,6 +208,23 @@ struct ParticipationSummaryView: View {
 #Preview("No snapshot yet") {
   NavigationStack {
     ParticipationSummaryView(eventName: "ETHGlobal Tokyo", aggregate: nil)
+  }
+}
+
+/// beid#217: reached via `SessionParticipationListView`'s per-row
+/// navigation — the additive `sessionDate` line under the header.
+#Preview("Reached from session list") {
+  NavigationStack {
+    ParticipationSummaryView(
+      eventName: "ETHGlobal Tokyo",
+      aggregate: PreviewAggregateFactory.sessionAggregate(
+        observations: [
+          (windowIndex: 0, peerKey: "peer-1", displayId: "device-1"),
+        ],
+        windowsPerBand: 2
+      ),
+      sessionDate: Date().addingTimeInterval(-86400 * 5)
+    )
   }
 }
 

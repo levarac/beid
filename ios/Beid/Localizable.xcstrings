@@ -2337,6 +2337,89 @@
         }
       }
     },
+    "collection.eventCount": {
+      "comment": "Caption above the Collection Home grid: count of distinct events the user has collected a proof for (grouped by eventCode; each proof recorded before eventCode existed counts as its own event). \"Proof\" here is the mass-noun collected fact, per DESIGN.md §15’s vocabulary (a proof is collected — the object of \"collect\" is proof, never the event itself), and the number scopes how many events that applies across; it is not a raw count of recording sessions — a user who scanned the same event twice still counts as one event here, and this caption does not imply exactly one Proof record per event.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Proof collected from %lld event"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Proof collected from %lld events"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld件のイベントで証明を取得"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "已从 %lld 个活动中收集证明"
+                }
+              }
+            }
+          }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "Prueba recolectada de %lld evento"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "Prueba recolectada de %lld eventos"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "Preuve collectée pour %lld événement"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "Preuve collectée pour %lld événements"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "collection.proofCount": {
       "comment": "Caption above the Collection Home grid, showing how many proofs the user has collected so far.",
       "localizations": {
@@ -2448,8 +2531,91 @@
         }
       }
     },
+    "proofCard.sessionCount": {
+      "comment": "Caption on a Collection Home card for an event recorded more than once (the user re-scanned the same event in a separate app session). Count of distinct recorded sessions for this event, not devices or peers. Also reused, composed after a comma, inside proofCard.accessibilityLabel's VoiceOver text for the same fact when sessionCount > 1.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld session"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld sessions"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld回記録"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld 次记录"
+                }
+              }
+            }
+          }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld sesión"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld sesiones"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld session"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld sessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "proofCard.accessibilityLabel": {
-      "comment": "VoiceOver label for one proof card in the Collection Home grid — composed from the event name and collection date.",
+      "comment": "VoiceOver label for one proof card in the Collection Home grid — composed from the event name and collection date. When the event was recorded in more than one session, proofCard.sessionCount's own text (e.g. \"3 sessions\") is appended after a comma, so VoiceOver users get the same session-count fact sighted users see in the card's secondary caption.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3993,6 +4159,124 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "Bande %1$lld : %2$lld appareils détectés"
+          }
+        }
+      }
+    },
+    "participationSummary.sessionList.header": {
+      "comment": "Header above the per-session list on the Participation summary screen for an event recorded more than once. Count of distinct recording sessions for this event, not devices.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld session recorded for this event"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld sessions recorded for this event"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "このイベントで記録された%lld回のセッション"
+                }
+              }
+            }
+          }
+        },
+        "zh-Hans": {
+          "variations": {
+            "plural": {
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "该活动共记录了 %lld 次会话"
+                }
+              }
+            }
+          }
+        },
+        "es": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld sesión registrada para este evento"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld sesiones registradas para este evento"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld session enregistrée pour cet événement"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "needs_review",
+                  "value": "%lld sessions enregistrées pour cet événement"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "participationSummary.sessionList.row.mutualCount": {
+      "comment": "Trailing value on one row of the per-session list on the Participation summary screen: the mutually-confirmed device count for that one specific session, matching the scope of the headline metric shown on the single-session Participation summary screen. Not a duration, not an index, not the event-wide Transparency count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld confirmed"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld件確認済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "已确认 %lld 个"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld confirmados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld confirmés"
           }
         }
       }

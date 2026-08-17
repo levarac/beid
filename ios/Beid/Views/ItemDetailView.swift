@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import SwiftUI
 
 /// Screen 08: Item Detail — method, devices sensed, status.
@@ -13,6 +14,27 @@ struct ItemDetailView: View {
     formatter.dateStyle = .medium
     return formatter
   }()
+
+  /// Every session sharing `proof`'s event (beid#217, spec §2/§3), newest
+  /// first. `proof` is always this group's newest session by construction
+  /// (it is exactly the representative `CollectionHomeView` passed to
+  /// `openProof(_:)` per spec §5.1), so `groupSessions.first == proof`
+  /// always holds — title/date below use `proof` directly rather than
+  /// `groupSessions.first` for that reason, not by coincidence.
+  private var groupSessions: [Proof] {
+    EventGrouping.sessions(for: proof, in: coordinator.proofStore.proofs)
+  }
+
+  /// Artwork gradient seed, sourced from the group's *oldest* session
+  /// (`groupSessions.last`, since `groupSessions` is newest-first) so this
+  /// screen's artwork never changes across re-scans — mirrors
+  /// `ProofCardView`'s `artworkSeed` fix. For a single-session group
+  /// (including every `eventCode == nil` singleton), `groupSessions.last
+  /// == groupSessions.first == proof`, so this is identical to
+  /// `proof.gradientSeed` — see spec §6.1's degenerate-case check.
+  private var artworkSeed: Int {
+    groupSessions.last?.gradientSeed ?? proof.gradientSeed
+  }
 
   var body: some View {
     ScrollView {
@@ -27,7 +49,19 @@ struct ItemDetailView: View {
                 // "Devices", not "Peers": the number counts distinct nearby
                 // devices, and only those whose identity could be read. See
                 // beid#154 and `SensingCoordinator.devicesVerified`.
-                BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(proof.peersVerified)")
+                //
+                // Omitted entirely for a multi-session group (beid#217,
+                // spec §6.2): `proof.peersVerified` is session-scoped, and
+                // showing only the representative session's count here
+                // would carry the same false whole-event signal risk the
+                // ruling rejected for Participation summary — no
+                // fabricated event-scoped substitute exists (summing would
+                // double-count a device seen in more than one session).
+                // Each session's own count stays fully visible, correctly
+                // scoped, in the session list (§6.3) instead.
+                if groupSessions.count == 1 {
+                  BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(proof.peersVerified)")
+                }
                 statusRow
               }
             }
@@ -52,7 +86,7 @@ struct ItemDetailView: View {
   private var artworkHeader: some View {
     VStack(spacing: DS.Space.l) {
       Circle()
-        .fill(DS.Artwork.proofCardGradient(seed: proof.gradientSeed))
+        .fill(DS.Artwork.proofCardGradient(seed: artworkSeed))
         .frame(width: DS.Size.itemDetailArtwork, height: DS.Size.itemDetailArtwork)
         .accessibilityHidden(true)
         .frame(maxWidth: .infinity)
@@ -132,21 +166,32 @@ struct ItemDetailView: View {
   /// Entry point for beid#143's Participation summary screen — sits
   /// alongside (not replacing) the Transparency row above, per its own
   /// `BeidPanel`, matching that row's `NavigationLink` push pattern.
+  ///
+  /// beid#217, spec §6.3: for a multi-session group this must let the user
+  /// reach *every* session's own aggregate, each correctly scoped to its
+  /// own `proofId` — never one aggregate presented as if it covered the
+  /// whole event. `groupSessions.count == 1` (including every
+  /// `eventCode == nil` singleton) keeps today's direct push unchanged —
+  /// see §6.4's must-not-regress bar.
   private var participationSummaryRow: some View {
     NavigationLink {
-      ParticipationSummaryView(
-        eventName: proof.eventName,
-        // `Proof.id`, not `eventCode`, is the snapshot store's key. Reads
-        // through `sensingCoordinator.sessionAggregateSnapshot(forProofId:)`
-        // (beid#166 Phase 2), not a separate store instance — that method
-        // forwards to the exact same coordinator-owned store the
-        // session-end hook writes, so a snapshot persisted moments ago in
-        // this same app run is visible immediately. `nil` here means no
-        // snapshot was ever persisted for this proof — the new screen
-        // renders that as an honest "not yet available" state, the same
-        // posture `TransparencyView` already established.
-        aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: proof.id)
-      )
+      if groupSessions.count > 1 {
+        SessionParticipationListView(eventName: proof.eventName, sessions: sessionParticipationPairs)
+      } else {
+        ParticipationSummaryView(
+          eventName: proof.eventName,
+          // `Proof.id`, not `eventCode`, is the snapshot store's key. Reads
+          // through `sensingCoordinator.sessionAggregateSnapshot(forProofId:)`
+          // (beid#166 Phase 2), not a separate store instance — that method
+          // forwards to the exact same coordinator-owned store the
+          // session-end hook writes, so a snapshot persisted moments ago in
+          // this same app run is visible immediately. `nil` here means no
+          // snapshot was ever persisted for this proof — the new screen
+          // renders that as an honest "not yet available" state, the same
+          // posture `TransparencyView` already established.
+          aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: proof.id)
+        )
+      }
     } label: {
       HStack {
         Text(
@@ -162,6 +207,16 @@ struct ItemDetailView: View {
           .accessibilityHidden(true)
       }
       .frame(minHeight: DS.Size.minHitTarget)
+    }
+  }
+
+  /// `(proof, aggregate)` pairs for every session in this group, newest
+  /// first (matches `groupSessions`'s order — spec §6.3), resolved via the
+  /// same per-proof snapshot lookup `participationSummaryRow`'s
+  /// single-session branch already makes, just repeated per session.
+  private var sessionParticipationPairs: [(proof: Proof, aggregate: BeidSharedKit.aggregation.SessionAggregate?)] {
+    groupSessions.map { session in
+      (proof: session, aggregate: coordinator.sensingCoordinator.sessionAggregateSnapshot(forProofId: session.id))
     }
   }
 }
@@ -205,6 +260,48 @@ struct ItemDetailView: View {
   coordinator.proofStore.add(proof)
   return NavigationStack {
     ItemDetailView(proof: proof)
+  }
+  .environmentObject(coordinator)
+  .preferredColorScheme(.dark)
+}
+
+/// beid#217: a multi-session group — top panel omits "Devices sensed"
+/// (§6.2), and the newest session (passed to `ItemDetailView`) carries a
+/// deliberately different `gradientSeed` than the oldest, so a correct fix
+/// shows the *oldest* session's gradient here (§6.1's degenerate-case
+/// check only holds for single-session groups).
+#Preview("Multiple sessions") {
+  let coordinator = AppCoordinator()
+  let oldest = Proof(
+    eventName: "ETHGlobal Tokyo", date: Date().addingTimeInterval(-86400 * 5),
+    peersVerified: 3, gradientSeed: 111, eventCode: "ETHTOKYO"
+  )
+  let newest = Proof(
+    eventName: "ETHGlobal Tokyo", date: Date(),
+    peersVerified: 5, gradientSeed: 999, eventCode: "ETHTOKYO"
+  )
+  coordinator.proofStore.add(oldest)
+  coordinator.proofStore.add(newest)
+  return NavigationStack {
+    ItemDetailView(proof: newest)
+  }
+  .environmentObject(coordinator)
+}
+
+#Preview("Multiple sessions (Dark)") {
+  let coordinator = AppCoordinator()
+  let oldest = Proof(
+    eventName: "ETHGlobal Tokyo", date: Date().addingTimeInterval(-86400 * 5),
+    peersVerified: 3, gradientSeed: 111, eventCode: "ETHTOKYO"
+  )
+  let newest = Proof(
+    eventName: "ETHGlobal Tokyo", date: Date(),
+    peersVerified: 5, gradientSeed: 999, eventCode: "ETHTOKYO"
+  )
+  coordinator.proofStore.add(oldest)
+  coordinator.proofStore.add(newest)
+  return NavigationStack {
+    ItemDetailView(proof: newest)
   }
   .environmentObject(coordinator)
   .preferredColorScheme(.dark)
