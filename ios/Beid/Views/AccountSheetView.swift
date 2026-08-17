@@ -91,15 +91,7 @@ struct AccountSheetView: View {
           .disabled(coordinator.walletAddress == nil)
         }
 
-        Section {
-          Button(role: .destructive) {
-            BeidDesign.haptic(.medium)
-            coordinator.leaveEvent()
-          } label: {
-            Label("Leave Event", systemImage: "rectangle.portrait.and.arrow.right")
-          }
-          .disabled(coordinator.sensingCoordinator.joinedEventCode == nil)
-        }
+        EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
       }
       .scrollContentBackground(.hidden)
       .background(DS.Color.surfaceCanvas)
@@ -113,6 +105,9 @@ struct AccountSheetView: View {
     }
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()
+    }
+    .sheet(isPresented: $coordinator.eventCodeEntrySheetPresented) {
+      EventCodeEntrySheetView()
     }
   }
 
@@ -202,6 +197,77 @@ private struct WalletConnectSheetView: View {
     // so without this the toolbar Cancel button renders system blue — a
     // §5 MUST-NOT violation (see WalletConnectView's doc comment).
     .tint(DS.Color.actionPrimary)
+  }
+}
+
+/// Sheet wrapper around `EventCodeEntryView` (in `.accountSheet` mode) for
+/// the Account sheet's "Join Event" action. Unlike `EventCodeEntryView`'s
+/// onboarding usage, success here just dismisses the sheet — it does not
+/// advance `coordinator.screen`. No secondary action; Cancel in the toolbar
+/// is the escape hatch instead. No `navigationTitle`: the hero header inside
+/// `EventCodeEntryView` already states "Enter Event Code", so a nav bar
+/// title would just repeat it.
+private struct EventCodeEntrySheetView: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
+
+  var body: some View {
+    NavigationStack {
+      EventCodeEntryView(mode: .accountSheet)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel", role: .cancel) {
+              coordinator.eventCodeEntrySheetPresented = false
+            }
+          }
+        }
+    }
+    .tint(DS.Color.actionPrimary)
+  }
+}
+
+/// "Join Event" / "Leave Event" sections for `AccountSheetView`. `AppCoordinator`
+/// holds `sensingCoordinator` as a plain `let` and does not re-publish its
+/// `@Published` state, so `AccountSheetView` (which observes only
+/// `AppCoordinator`) never invalidates when `joinedEventCode` changes on
+/// `SensingCoordinator`. Observing `SensingCoordinator` directly here — the
+/// same pattern `VenueDeviceOrganizerView` already uses — fixes that without
+/// making `AppCoordinator` republish all of `SensingCoordinator`'s frequent
+/// sensing-state updates.
+private struct EventMembershipSections: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
+  @ObservedObject var sensingCoordinator: SensingCoordinator
+
+  var body: some View {
+    Group {
+      Section {
+        Button {
+          BeidDesign.haptic()
+          coordinator.openEventCodeEntryFromAccountSheet()
+        } label: {
+          Label { Text(joinEventLabel) } icon: { Image(systemName: "number") }
+        }
+        .disabled(sensingCoordinator.joinedEventCode != nil)
+      }
+
+      Section {
+        Button(role: .destructive) {
+          BeidDesign.haptic(.medium)
+          coordinator.leaveEvent()
+        } label: {
+          Label("Leave Event", systemImage: "rectangle.portrait.and.arrow.right")
+        }
+        .disabled(sensingCoordinator.joinedEventCode == nil)
+      }
+    }
+  }
+
+  private var joinEventLabel: String {
+    String(
+      localized: "account.joinEvent.label",
+      defaultValue: "Join Event",
+      comment: "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages."
+    )
   }
 }
 

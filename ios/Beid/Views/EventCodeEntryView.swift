@@ -9,17 +9,39 @@ import SwiftUI
 /// of connecting a wallet, then continues onboarding exactly where
 /// `completeWalletConnect()` does.
 struct EventCodeEntryView: View {
+  /// Where this view is being presented from, and therefore which
+  /// coordinator call `submit()` makes and whether the wallet-connect
+  /// secondary action applies. `.onboarding` reproduces the view's original
+  /// (and only, pre-#101-fix) behavior exactly.
+  enum Mode: Equatable {
+    /// Reached via `WalletConnectView`'s secondary action during onboarding.
+    /// `submit()` calls `coordinator.joinEvent(code:)`, which advances
+    /// `screen` to `.bluetoothPermission` on success. The "Connect wallet
+    /// instead" secondary button is shown.
+    case onboarding
+    /// Reached via the Account sheet's "Join Event" action, for a user
+    /// already past onboarding. `submit()` calls
+    /// `coordinator.joinEventFromAccountSheet(code:)`, which dismisses the
+    /// sheet on success without touching `screen`. The secondary button is
+    /// not shown — the presenting sheet's own Cancel toolbar button is the
+    /// escape hatch instead.
+    case accountSheet
+  }
+
   @EnvironmentObject private var coordinator: AppCoordinator
   @State private var code: String
   @State private var errorMessage: LocalizedStringKey?
   @FocusState private var codeFieldFocused: Bool
+  private let mode: Mode
 
   /// `code`/`errorMessage` defaults reproduce the view's normal empty
   /// starting state; the parameters exist so previews can seed the error
-  /// state without faking a `submit()` tap.
-  init(code: String = "", errorMessage: LocalizedStringKey? = nil) {
+  /// state without faking a `submit()` tap. `mode` defaults to `.onboarding`
+  /// so the existing onboarding call site needs no change.
+  init(code: String = "", errorMessage: LocalizedStringKey? = nil, mode: Mode = .onboarding) {
     _code = State(initialValue: code)
     _errorMessage = State(initialValue: errorMessage)
+    self.mode = mode
   }
 
   var body: some View {
@@ -76,10 +98,12 @@ struct EventCodeEntryView: View {
           BeidPrimaryButton("Join Event", systemImage: "checkmark.circle", action: submit)
             .tint(DS.Color.actionPrimary)
 
-          BeidSecondaryButton(title: "Connect wallet instead") {
-            coordinator.returnToWalletConnect()
+          if mode == .onboarding {
+            BeidSecondaryButton(title: "Connect wallet instead") {
+              coordinator.returnToWalletConnect()
+            }
+            .tint(DS.Color.actionPrimary)
           }
-          .tint(DS.Color.actionPrimary)
         }
         .padding(.horizontal, DS.Space.pageMargin)
         .padding(.bottom, DS.Space.xl)
@@ -89,7 +113,12 @@ struct EventCodeEntryView: View {
   }
 
   private func submit() {
-    errorMessage = message(for: coordinator.joinEvent(code: code))
+    switch mode {
+    case .onboarding:
+      errorMessage = message(for: coordinator.joinEvent(code: code))
+    case .accountSheet:
+      errorMessage = message(for: coordinator.joinEventFromAccountSheet(code: code))
+    }
   }
 
   private func message(for error: EventCodeJoinError?) -> LocalizedStringKey? {

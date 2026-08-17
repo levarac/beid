@@ -43,6 +43,43 @@ final class EventCodeJoinTests: XCTestCase {
     XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "ethtokyo2026")
   }
 
+  func testOpenEventCodeEntryFromAccountSheetPresentsSheet() {
+    let coordinator = AppCoordinator()
+
+    coordinator.openEventCodeEntryFromAccountSheet()
+
+    XCTAssertTrue(coordinator.eventCodeEntrySheetPresented)
+  }
+
+  func testJoinEventFromAccountSheetWithValidCodeDismissesSheetWithoutTouchingScreen() {
+    let coordinator = AppCoordinator()
+    coordinator.screen = .home
+    coordinator.eventCodeEntrySheetPresented = true
+
+    let error = coordinator.joinEventFromAccountSheet(code: "  ethtokyo2026  ")
+
+    XCTAssertNil(error)
+    XCTAssertEqual(
+      coordinator.screen, .home,
+      "the Account-sheet join path must never touch onboarding screen"
+    )
+    XCTAssertFalse(coordinator.eventCodeEntrySheetPresented)
+    XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "ethtokyo2026")
+  }
+
+  func testJoinEventFromAccountSheetWithEmptyCodeReturnsValidationErrorAndKeepsSheetPresented() {
+    let coordinator = AppCoordinator()
+    coordinator.screen = .home
+    coordinator.eventCodeEntrySheetPresented = true
+
+    let error = coordinator.joinEventFromAccountSheet(code: "   ")
+
+    XCTAssertEqual(error, .emptyCode)
+    XCTAssertEqual(coordinator.screen, .home)
+    XCTAssertTrue(coordinator.eventCodeEntrySheetPresented)
+    XCTAssertNil(coordinator.sensingCoordinator.joinedEventCode)
+  }
+
   func testSensingCoordinatorJoinEventCallsBarnardSDKAndReportsSuccess() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
 
