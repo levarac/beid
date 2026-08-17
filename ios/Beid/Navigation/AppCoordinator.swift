@@ -14,6 +14,7 @@ final class AppCoordinator: ObservableObject {
   @Published var selectedProof: Proof?
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
+  @Published var eventCodeEntrySheetPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
@@ -78,16 +79,43 @@ final class AppCoordinator: ObservableObject {
   /// `walletAddress`.
   @discardableResult
   func joinEvent(code rawCode: String) -> EventCodeJoinError? {
+    if let error = attemptJoinEvent(code: rawCode) { return error }
+    screen = .bluetoothPermission
+    return nil
+  }
+
+  /// Validates and joins the manually entered event code from
+  /// `EventCodeEntryView` presented as a sheet over the Account sheet (see
+  /// `AccountSheetView`'s `eventCodeEntrySheetPresented` binding). Unlike
+  /// `joinEvent(code:)`, success here just dismisses the sheet — it never
+  /// touches `screen`, since the user is already past onboarding.
+  @discardableResult
+  func joinEventFromAccountSheet(code rawCode: String) -> EventCodeJoinError? {
+    if let error = attemptJoinEvent(code: rawCode) { return error }
+    eventCodeEntrySheetPresented = false
+    return nil
+  }
+
+  /// Shared join attempt behind both `joinEvent(code:)` and
+  /// `joinEventFromAccountSheet(code:)` — validates and calls into
+  /// `SensingCoordinator`, without deciding what happens on success.
+  private func attemptJoinEvent(code rawCode: String) -> EventCodeJoinError? {
     let trimmed = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return .emptyCode }
     guard sensingCoordinator.joinEvent(trimmed) else { return .joinFailed }
-    screen = .bluetoothPermission
     return nil
   }
 
   /// Clears a manually joined event code, mirroring `joinEvent(code:)`.
   func leaveEvent() {
     sensingCoordinator.leaveEvent()
+  }
+
+  /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the
+  /// Account sheet — see `AccountSheetView`'s `eventCodeEntrySheetPresented`
+  /// binding, analogous to `connectWalletFromAccountSheet()`.
+  func openEventCodeEntryFromAccountSheet() {
+    eventCodeEntrySheetPresented = true
   }
 
   func requestBluetoothPermission() {
