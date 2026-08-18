@@ -1,22 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "イベントコードを自分で指定できるようになりました。ホーム右上のアカウントから「イベントに参加」を開き、全員で同じコードを入力してから4人以上でセンシングしてください。これまでは全員が同じ既定のイベントに乗っていたため、複数のイベントを実際に分けて試せるのは今回が初めてです。コードを打ち間違えたときは同じアカウント画面の「イベントから退出」で抜けて入れ直せるので、その往復もあわせて確認してください。もう一点、一度セットアップした端末は起動時に最初の案内画面へ戻らず、そのままコレクションから始まります。起動直後に Bluetooth の画面が一瞬見えることがありますが、これは想定どおりです。"
+    "text": "コレクションの並び方が変わりました。同じイベントは何回記録しても1枚にまとまります。これまでのビルドで同じイベントが何枚も並んでいた場合、今回のビルドではその分カードが減って見えますが、記録は失われていません。カードを開くと、そのイベントで記録した回数と、1回ごとの内訳を確認できます。同じイベントで2回以上記録している端末で、カードが1枚になっていること、開いた先で回数が合っていることを見てください。イベントコードの指定は前回のビルドから引き続き、ホーム右上のアカウントから行えます。"
   },
   {
     "language": "en-US",
-    "text": "You can now set the event code yourself. Open Account from the top right of Home, choose \"Join Event\", have everyone enter the same code, and then sense together with four or more people. Until now everyone shared one default event, so this is the first build where separate events can actually be tested apart. If you mistype a code, \"Leave Event\" on that same Account screen lets you exit and enter it again — please try that round trip too. Separately, a device you have already set up no longer returns to the intro screen on launch; it starts at your collection. You may briefly see the Bluetooth screen just after launch, which is expected."
+    "text": "The collection is now arranged by event. However many times you record the same event, it appears as one card. If an earlier build left you with several cards for the same event, you will see fewer cards now — nothing has been lost. Opening a card shows how many times you recorded that event, and the breakdown per recording. On a device that has recorded the same event twice or more, please check that it is now a single card and that the count inside matches what you did. Setting the event code still works as it did in the last build, from Account at the top right of Home."
   },
   {
     "language": "zh-Hans",
-    "text": "现在你可以自行设置活动代码了。请从首页右上角打开「账户」，选择「加入活动」，让所有人输入相同的代码，然后四人以上一起感应。此前所有人都共用同一个默认活动，因此这是第一个能真正分开测试不同活动的版本。如果代码输错了，可以在同一个账户界面用「退出活动」退出后重新输入，也请一并测试这个往返流程。另外，已完成设置的设备启动时不再回到最初的引导界面，而是直接从收藏页开始。启动后可能会短暂看到蓝牙界面，这是预期行为。"
+    "text": "收藏页现在按活动归类。同一个活动无论记录多少次，都只显示为一张卡片。如果之前的版本让你看到同一活动的多张卡片，现在卡片数量会减少，但记录并没有丢失。打开卡片可以看到你记录该活动的次数，以及每次记录的明细。请在记录过同一活动两次以上的设备上确认：现在是否合并为一张卡片，打开后的次数是否与实际相符。设置活动代码的方式与上一版本相同，仍在首页右上角的「账户」中。"
   },
   {
     "language": "es-ES",
-    "text": "Ahora puedes indicar tú mismo el código del evento. Abre Cuenta desde la parte superior derecha del inicio, elige «Unirse a un evento», que todos introduzcan el mismo código y después detectad juntos con cuatro personas o más. Hasta ahora todo el mundo compartía un único evento por defecto, así que esta es la primera versión en la que se pueden probar eventos distintos por separado. Si te equivocas al escribir el código, «Salir del evento» en esa misma pantalla de Cuenta te permite salir y volver a introducirlo; prueba también ese recorrido. Aparte, un dispositivo ya configurado deja de volver a la pantalla de introducción al arrancar y empieza en tu colección. Puede que veas brevemente la pantalla de Bluetooth justo tras el arranque: es lo esperado."
+    "text": "La colección ahora se organiza por evento. Por muchas veces que grabes el mismo evento, aparece como una sola tarjeta. Si una versión anterior te dejó varias tarjetas del mismo evento, ahora verás menos tarjetas: no se ha perdido nada. Al abrir una tarjeta verás cuántas veces grabaste ese evento y el desglose de cada grabación. En un dispositivo que haya grabado el mismo evento dos veces o más, comprueba que ahora sea una sola tarjeta y que el número que aparece dentro coincida con lo que hiciste. Indicar el código del evento sigue funcionando igual que en la versión anterior, desde Cuenta en la parte superior derecha del inicio."
   },
   {
     "language": "fr-FR",
-    "text": "Vous pouvez désormais saisir vous-même le code de l'événement. Ouvrez Compte en haut à droite de l'accueil, choisissez « Rejoindre un événement », faites saisir le même code à tout le monde, puis détectez ensemble à quatre personnes ou plus. Jusqu'ici tout le monde partageait un seul événement par défaut : c'est donc la première version où des événements distincts peuvent réellement être testés séparément. En cas d'erreur de saisie, « Quitter l'événement » sur ce même écran Compte permet de sortir et de ressaisir le code ; testez aussi cet aller-retour. Par ailleurs, un appareil déjà configuré ne revient plus à l'écran d'introduction au lancement : il démarre sur votre collection. Il se peut que l'écran Bluetooth apparaisse brièvement juste après le lancement, ce qui est normal."
+    "text": "La collection est désormais organisée par événement. Quel que soit le nombre de fois où vous enregistrez le même événement, il apparaît sous forme d'une seule carte. Si une version précédente vous a laissé plusieurs cartes pour le même événement, vous en verrez moins maintenant : rien n'a été perdu. En ouvrant une carte, vous voyez combien de fois vous avez enregistré cet événement, ainsi que le détail de chaque enregistrement. Sur un appareil ayant enregistré le même événement au moins deux fois, vérifiez qu'il n'y a plus qu'une seule carte et que le nombre affiché à l'intérieur correspond à ce que vous avez fait. La saisie du code de l'événement fonctionne comme dans la version précédente, depuis Compte en haut à droite de l'accueil."
   }
 ]
