@@ -8,6 +8,28 @@ struct CollectionHomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+  /// One card per distinct event (beid#217) — grouped by `EventGrouping`
+  /// (spec §3), not one card per raw `Proof`. Each group's oldest session
+  /// drives artwork (`artworkSeed`); its newest session (`representative`)
+  /// drives title/date and is what `openProof(_:)` navigates with (§5.1).
+  private struct EventCard: Identifiable {
+    let id: UUID
+    let representative: Proof
+    let artworkSeed: Int
+    let sessionCount: Int
+  }
+
+  private var eventCards: [EventCard] {
+    EventGrouping.groups(from: coordinator.proofStore.proofs).map { group in
+      EventCard(
+        id: group[0].id,
+        representative: group[0],
+        artworkSeed: group[group.count - 1].gradientSeed,
+        sessionCount: group.count
+      )
+    }
+  }
+
   private var columns: [GridItem] {
     [GridItem(
       .adaptive(minimum: horizontalSizeClass == .regular
@@ -34,12 +56,16 @@ struct CollectionHomeView: View {
                   .foregroundStyle(DS.Color.textSecondary)
                 BeidGlassGroup(spacing: DS.Space.m) {
                   LazyVGrid(columns: columns, spacing: DS.Space.m) {
-                    ForEach(coordinator.proofStore.proofs) { proof in
+                    ForEach(eventCards) { card in
                       Button {
                         BeidDesign.haptic()
-                        coordinator.openProof(proof)
+                        coordinator.openProof(card.representative)
                       } label: {
-                        ProofCardView(proof: proof)
+                        ProofCardView(
+                          proof: card.representative,
+                          artworkSeed: card.artworkSeed,
+                          sessionCount: card.sessionCount
+                        )
                       }
                       .buttonStyle(.plain)
                     }
@@ -128,9 +154,9 @@ struct CollectionHomeView: View {
 
   private var proofCountText: String {
     String(
-      localized: "collection.proofCount",
-      defaultValue: "\(coordinator.proofStore.proofs.count) proofs collected",
-      comment: "Caption above the Collection Home grid, showing how many proofs the user has collected so far."
+      localized: "collection.eventCount",
+      defaultValue: "Proof collected from ^[\(eventCards.count) events](inflect: true)",
+      comment: "Caption above the Collection Home grid: count of distinct events the user has collected a proof for (grouped by eventCode; each proof recorded before eventCode existed counts as its own event). \"Proof\" here is the mass-noun collected fact, per DESIGN.md §15's vocabulary (a proof is collected — the object of \"collect\" is proof, never the event itself), and the number scopes how many events that applies across; it is not a raw count of recording sessions — a user who scanned the same event twice still counts as one event here, and this caption does not imply exactly one Proof record per event."
     )
   }
 
@@ -175,6 +201,42 @@ struct CollectionHomeView: View {
 #Preview("Populated (Dark)") {
   let coordinator = AppCoordinator()
   coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
+  coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
+  return CollectionHomeView()
+    .environmentObject(coordinator)
+    .preferredColorScheme(.dark)
+}
+
+/// beid#217: a multi-session group (shared `eventCode`) alongside a
+/// single-session event, so the `N sessions` card caption (§5.2) and the
+/// stable-oldest-session artwork (§5.1) are both visible in preview. The
+/// two "ETHGlobal Tokyo" proofs carry deliberately different
+/// `gradientSeed`s (mirroring #219's real seed instability across app
+/// runs) to make artwork stability visually verifiable here too.
+#Preview("Populated with multi-session event") {
+  let coordinator = AppCoordinator()
+  coordinator.proofStore.add(Proof(
+    eventName: "ETHGlobal Tokyo", date: Date().addingTimeInterval(-86400 * 5),
+    peersVerified: 3, gradientSeed: 111, eventCode: "ETHTOKYO"
+  ))
+  coordinator.proofStore.add(Proof(
+    eventName: "ETHGlobal Tokyo", date: Date(),
+    peersVerified: 5, gradientSeed: 999, eventCode: "ETHTOKYO"
+  ))
+  coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
+  return CollectionHomeView().environmentObject(coordinator)
+}
+
+#Preview("Populated with multi-session event (Dark)") {
+  let coordinator = AppCoordinator()
+  coordinator.proofStore.add(Proof(
+    eventName: "ETHGlobal Tokyo", date: Date().addingTimeInterval(-86400 * 5),
+    peersVerified: 3, gradientSeed: 111, eventCode: "ETHTOKYO"
+  ))
+  coordinator.proofStore.add(Proof(
+    eventName: "ETHGlobal Tokyo", date: Date(),
+    peersVerified: 5, gradientSeed: 999, eventCode: "ETHTOKYO"
+  ))
   coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
   return CollectionHomeView()
     .environmentObject(coordinator)

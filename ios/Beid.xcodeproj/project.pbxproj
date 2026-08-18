@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		014EFF3C5268B71F222C207C /* SessionParticipationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80776036F593C26215147B46 /* SessionParticipationListView.swift */; };
 		04FAF61220EF2EDF7B54F01F /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */; };
 		05FF89CD532B46703B2E9C8D /* Illustrations.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */; };
 		064174C3328B39801BB488FE /* SensingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FAD458D67D1864749F00726 /* SensingCoordinator.swift */; };
@@ -27,6 +28,7 @@
 		2C4CD8555EE587E369D6BF79 /* VenueDeviceOrganizerViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79956B9713B57740F9E34243 /* VenueDeviceOrganizerViewModelTests.swift */; };
 		2F6282D16C15B8EBCA2669DC /* WalletConnectSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F579003F2DB47F70BA4E54E /* WalletConnectSecrets.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
+		38460E1F17ADDE4D3FCBEADF /* EventGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE9AB6A36B71BDF979C1435 /* EventGrouping.swift */; };
 		388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C637EA719C58481853B15B91 /* LocalizationContractTests.swift */; };
 		3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80A94378B0116CC976961AC /* BluetoothOffView.swift */; };
 		3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10807372081AA25A74942BE3 /* WelcomeView.swift */; };
@@ -74,6 +76,7 @@
 		9AF6D3FBAC122293464DBB8A /* CoinbaseWalletSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 8637F46B3A9B15C9CD8C2B63 /* CoinbaseWalletSDK */; };
 		A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */; };
 		A270412A7278D241A8A344C7 /* EventMembershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */; };
+		A66271E15694B6D548929589 /* EventGroupingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C51A1484068D01C6D1A967 /* EventGroupingTests.swift */; };
 		A80515ECEF55B20697AC3DF4 /* VenueDeviceOrganizerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B5D084B36D8B81C91BD987 /* VenueDeviceOrganizerViewModel.swift */; };
 		A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */; };
 		A9FCF4EEF2564227A009A346 /* WindowReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1EACAE869F3E0B456C222A /* WindowReport.swift */; };
@@ -170,6 +173,7 @@
 		2169FFDF6767C427D481ED17 /* ItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailView.swift; sourceTree = "<group>"; };
 		23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorruptStoreQuarantineTests.swift; sourceTree = "<group>"; };
 		23D891FA92885297F5C4D602 /* VenueDeviceAssignmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceAssignmentStoreTests.swift; sourceTree = "<group>"; };
+		25C51A1484068D01C6D1A967 /* EventGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventGroupingTests.swift; sourceTree = "<group>"; };
 		25F9B71C531690F799D13498 /* EventBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventBindingTests.swift; sourceTree = "<group>"; };
 		29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingView.swift; sourceTree = "<group>"; };
 		29E157C35B263F222E1DBDD5 /* ProofSignature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignature.swift; sourceTree = "<group>"; };
@@ -203,6 +207,7 @@
 		7F17F48A8733EF3CE98885F4 /* NativeCryptoProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCryptoProvider.swift; sourceTree = "<group>"; };
 		7F95B2F947E49234FCD1421B /* WalletConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectView.swift; sourceTree = "<group>"; };
 		7FAD458D67D1864749F00726 /* SensingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinator.swift; sourceTree = "<group>"; };
+		80776036F593C26215147B46 /* SessionParticipationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionParticipationListView.swift; sourceTree = "<group>"; };
 		831658C5506647E4B2DBFB48 /* FakeVenueDeviceBroadcasting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeVenueDeviceBroadcasting.swift; sourceTree = "<group>"; };
 		8812C170544758548D2A4DCC /* AppScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScreen.swift; sourceTree = "<group>"; };
 		884640A5A92A08B45287E2FE /* SelfProofCheckpointStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofCheckpointStore.swift; sourceTree = "<group>"; };
@@ -232,6 +237,7 @@
 		B2A0822EAE8F243702AA4F1C /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		B394137F6B9C4AEFC21E7266 /* CoinbaseWalletConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoinbaseWalletConnector.swift; sourceTree = "<group>"; };
 		B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingMode.swift; sourceTree = "<group>"; };
+		BAE9AB6A36B71BDF979C1435 /* EventGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventGrouping.swift; sourceTree = "<group>"; };
 		BB47871AF9ADE5CDBDBA2EA6 /* SelfProofRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofRecord.swift; sourceTree = "<group>"; };
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofTests.swift; sourceTree = "<group>"; };
@@ -384,6 +390,7 @@
 				9E9C29C55477E4B93296A630 /* BeidConfig.swift */,
 				5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */,
 				C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */,
+				BAE9AB6A36B71BDF979C1435 /* EventGrouping.swift */,
 				B0333AAF8319263B67E8FE36 /* EventSession.swift */,
 				B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */,
 				394E6F2E97311572D2BAED89 /* Proof.swift */,
@@ -430,6 +437,7 @@
 				DBBF900C092346BBFDF6BA96 /* RecordingView.swift */,
 				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
 				29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */,
+				80776036F593C26215147B46 /* SessionParticipationListView.swift */,
 				912FC62DE59B0394056CF446 /* SignalLostView.swift */,
 				480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */,
 				596FC02E4F5386F9BC759C20 /* VenueDeviceOrganizerView.swift */,
@@ -468,6 +476,7 @@
 				A5703915F87566D192896C7B /* DeviceCountTests.swift */,
 				25F9B71C531690F799D13498 /* EventBindingTests.swift */,
 				E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */,
+				25C51A1484068D01C6D1A967 /* EventGroupingTests.swift */,
 				C637EA719C58481853B15B91 /* LocalizationContractTests.swift */,
 				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
 				0A10CCB8E5D80E54CF5B4291 /* OwnerKeyProviderTests.swift */,
@@ -747,6 +756,7 @@
 				8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */,
 				8C4D4B90304963291F940D0E /* EventCommitment.swift in Sources */,
 				E95026757980944AB4C933FE /* EventFoundView.swift in Sources */,
+				38460E1F17ADDE4D3FCBEADF /* EventGrouping.swift in Sources */,
 				EB4452CC6433082A8A77269D /* EventIdHash.swift in Sources */,
 				71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */,
 				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
@@ -776,6 +786,7 @@
 				B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */,
 				FC0E1491101B6ECD2008E333 /* SessionAggregateSnapshotRecord.swift in Sources */,
 				4E6E29C5306F587703AD9FE4 /* SessionAggregateSnapshotStore.swift in Sources */,
+				014EFF3C5268B71F222C207C /* SessionParticipationListView.swift in Sources */,
 				64645438E8897AC3115D5188 /* SharedRuntimeProbe.swift in Sources */,
 				4900D74D47E774AF213395BC /* SignalLostView.swift in Sources */,
 				516EB6C209C600A66F08EFF1 /* Tokens.swift in Sources */,
@@ -810,6 +821,7 @@
 				F8EEF80F16E6515536765320 /* DeviceCountTests.swift in Sources */,
 				EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */,
 				CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */,
+				A66271E15694B6D548929589 /* EventGroupingTests.swift in Sources */,
 				ECD429DD4E52BAAED0CB39A2 /* FakeVenueDeviceBroadcasting.swift in Sources */,
 				388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */,
 				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
