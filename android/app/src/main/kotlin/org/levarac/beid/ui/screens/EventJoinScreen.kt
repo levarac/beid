@@ -5,11 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -23,11 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.R
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.ui.designsystem.BeidPrimaryButton
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidRadius
 import org.levarac.beid.ui.theme.BeidSpacing
@@ -136,18 +133,22 @@ fun EventJoinScreen(viewModel: EventJoinViewModel) {
 
             when (uiState.sessionState) {
                 is EventJoinUiState.PermissionDenied -> {
-                    BeidCtaButton(
+                    BeidPrimaryButton(
                         text = stringResource(R.string.event_join_open_settings),
+                        containerColor = BeidTheme.colors.actionPrimary,
+                        contentColor = BeidTheme.colors.surfaceCanvas,
                         onClick = { viewModel.openAppSettings() },
-                        testTag = EventJoinScreenTestTags.SUBMIT_BUTTON,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
                     )
                 }
                 else -> {
-                    BeidCtaButton(
+                    BeidPrimaryButton(
                         text = stringResource(R.string.event_join_button),
+                        containerColor = BeidTheme.colors.actionPrimary,
+                        contentColor = BeidTheme.colors.surfaceCanvas,
                         onClick = viewModel::submit,
                         enabled = uiState.sessionState !is EventJoinUiState.RequestingPermission,
-                        testTag = EventJoinScreenTestTags.SUBMIT_BUTTON,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
                     )
                 }
             }
@@ -166,40 +167,6 @@ fun EventJoinScreen(viewModel: EventJoinViewModel) {
 fun EventJoinRoute(session: EventJoinSession) {
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
     EventJoinScreen(viewModel)
-}
-
-/**
- * Primary-CTA button styling shared by this screen's two actions ("Join
- * event" and `PermissionDenied`'s "Open Settings") — mirrors iOS's
- * `BeidPrimaryButton` (`ios/Beid/DesignSystem.swift`): filled, full width,
- * [BeidRadius.control] corners, `DS.Font.cta`-equivalent label
- * ([MaterialTheme.typography.labelLarge], per `Type.kt`'s role mapping), and
- * `DS.Color.actionPrimary` tint — this screen has no sensing/ceremony/
- * recovery state per DESIGN.md §5's accent map, so the default tint applies
- * to both actions.
- */
-@Composable
-private fun BeidCtaButton(
-    text: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    testTag: String? = null,
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(BeidRadius.control),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = BeidTheme.colors.actionPrimary,
-            contentColor = BeidTheme.colors.surfaceCanvas,
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .let { if (testTag != null) it.testTag(testTag) else it },
-    ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
-    }
 }
 
 @Composable
@@ -281,6 +248,11 @@ private fun EventJoinFieldErrorPreview(error: EventJoinFieldError) {
             }
         }
 
-        BeidCtaButton(text = stringResource(R.string.event_join_button), onClick = {})
+        BeidPrimaryButton(
+            text = stringResource(R.string.event_join_button),
+            containerColor = BeidTheme.colors.actionPrimary,
+            contentColor = BeidTheme.colors.surfaceCanvas,
+            onClick = {},
+        )
     }
 }

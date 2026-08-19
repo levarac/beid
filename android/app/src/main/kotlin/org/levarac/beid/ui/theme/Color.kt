@@ -32,6 +32,12 @@ internal object BeidPalette {
     val ProofSealLight = Color(0xFF6E5AEF)
     val ProofSealDark = Color(0xFF9D8CFF)
 
+    val LabelOnWarningLight = Color(0xFF1A1C1E)
+    val LabelOnWarningDark = Color(0xFF111315)
+
+    val LabelOnSealLight = Color(0xFFFFFFFF)
+    val LabelOnSealDark = Color(0xFF111315)
+
     val StrokeHairlineLight = Color(0xFFE3DFD6)
     val StrokeHairlineDark = Color(0xFF2A2E31)
 }
@@ -51,6 +57,8 @@ data class BeidColorScheme(
     val signalActive: Color,
     val signalWarning: Color,
     val proofSeal: Color,
+    val labelOnWarning: Color,
+    val labelOnSeal: Color,
     val strokeHairline: Color,
 )
 
@@ -63,6 +71,8 @@ internal val LightBeidColors = BeidColorScheme(
     signalActive = BeidPalette.SignalActiveLight,
     signalWarning = BeidPalette.SignalWarningLight,
     proofSeal = BeidPalette.ProofSealLight,
+    labelOnWarning = BeidPalette.LabelOnWarningLight,
+    labelOnSeal = BeidPalette.LabelOnSealLight,
     strokeHairline = BeidPalette.StrokeHairlineLight,
 )
 
@@ -75,5 +85,7 @@ internal val DarkBeidColors = BeidColorScheme(
     signalActive = BeidPalette.SignalActiveDark,
     signalWarning = BeidPalette.SignalWarningDark,
     proofSeal = BeidPalette.ProofSealDark,
+    labelOnWarning = BeidPalette.LabelOnWarningDark,
+    labelOnSeal = BeidPalette.LabelOnSealDark,
     strokeHairline = BeidPalette.StrokeHairlineDark,
 )
