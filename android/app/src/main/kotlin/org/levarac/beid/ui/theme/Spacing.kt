@@ -22,4 +22,26 @@ object BeidRadius {
     val card: Dp = 16.dp
     val seal: Dp = 28.dp
     val pill: Dp = 999.dp
+
+    /** Icon-roundel corner radius (`BeidGlyph`), ported from iOS `BeidDesign.Radius.glyph`. */
+    val glyph: Dp = 24.dp
+}
+
+/**
+ * Fixed sizes ported from DESIGN.md §17's token table / iOS `DS.Size` and
+ * `BeidDesign.Size`. Component-scoped, unlike [BeidSpacing]/[BeidRadius]'s
+ * general-purpose scale.
+ */
+object BeidSize {
+    /** `BeidGlyph`'s default icon-roundel diameter. */
+    val glyph: Dp = 72.dp
+
+    /** `BeidStatusPill`'s indicator dot diameter. */
+    val statusDot: Dp = 8.dp
+
+    /** `BeidBulletRow`'s icon-roundel diameter. */
+    val bulletIcon: Dp = 32.dp
+
+    /** `BeidNumberedStepList`'s filled index-badge diameter. */
+    val stepBadge: Dp = 28.dp
 }
