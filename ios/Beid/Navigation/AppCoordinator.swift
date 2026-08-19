@@ -186,9 +186,9 @@ final class AppCoordinator: ObservableObject {
   func requestBluetoothPermission() {
     bluetoothMonitor.start()
     // Give CoreBluetooth's delegate callback a beat to land before deciding.
-    Task {
+    Task { [weak self] in
       try? await Task.sleep(nanoseconds: 300_000_000)
-      self.evaluateBluetoothState()
+      self?.evaluateBluetoothState()
     }
   }
 

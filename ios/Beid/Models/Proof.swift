@@ -51,9 +51,24 @@ struct Proof: Identifiable, Codable, Hashable {
     self.date = date
     self.method = method
     self.peersVerified = peersVerified
-    self.gradientSeed = gradientSeed ?? eventName.hashValue
+    self.gradientSeed = gradientSeed ?? Self.deterministicSeed(for: eventCode ?? eventName)
     self.signatureState = signatureState
     self.eventCode = eventCode
+  }
+
+  /// Fixed, non-process-seeded hash (FNV-1a, 64-bit, over UTF-8 bytes) for
+  /// the default `gradientSeed` derivation (beid#219). `String.hashValue`
+  /// and `Hasher` are seeded per process (SE-0206) and must never be used
+  /// here — that randomization is exactly what made pre-fix `gradientSeed`
+  /// values unstable across app launches for the same event.
+  private static func deterministicSeed(for input: String) -> Int {
+    var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+    let prime: UInt64 = 0x100_0000_01b3
+    for byte in input.utf8 {
+      hash ^= UInt64(byte)
+      hash = hash &* prime
+    }
+    return Int(bitPattern: UInt(hash))
   }
 
   private enum CodingKeys: String, CodingKey {
