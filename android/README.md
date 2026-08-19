@@ -25,6 +25,20 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
 CI selects its pinned JDK 17 separately. Do not change the repository's
 Gradle configuration merely to accommodate an unsupported ambient JDK.
 
+Gradle also needs to know where the Android SDK is. A fresh checkout has
+neither `ANDROID_HOME`/`ANDROID_SDK_ROOT` set nor an `android/local.properties`,
+so every task that touches the Android plugin — including
+`:app:testDebugUnitTest` and `:shared:testAndroidHostTest` — fails before
+running any test code with `SDK location not found`. Point it at a local SDK
+once, either by exporting `ANDROID_HOME` (a Homebrew
+`android-commandlinetools` install or Android Studio's bundled SDK both work)
+or by setting `sdk.dir` in `android/local.properties`, which is gitignored.
+
+**This is a local-only step. CI never hits it** — GitHub-hosted
+`ubuntu-latest` runners ship a preinstalled Android SDK with `ANDROID_HOME`
+already set. A local `SDK location not found` therefore says nothing about
+the state of the PR CI lane.
+
 APK lands at `app/build/outputs/apk/debug/app-debug.apk`. To run it:
 
 ```sh
