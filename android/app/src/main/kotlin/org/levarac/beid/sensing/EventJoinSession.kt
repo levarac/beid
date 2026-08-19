@@ -18,4 +18,21 @@ interface EventJoinSession {
     fun joinEvent(code: String)
 
     fun openAppSettings()
+
+    /**
+     * Manual trigger for `RECORDING -> SIGNAL_LOST` (beid#120) — Android has
+     * no real BLE signal-loss *detection* yet, only this explicit action,
+     * mirroring iOS's `SensingCoordinator.simulateSignalLost()`. A no-op
+     * unless the current [EventJoinUiState.Sensing] phase is
+     * [ScanPhase.Recording].
+     */
+    fun simulateSignalLost()
+
+    /**
+     * Resumes `SIGNAL_LOST -> RECORDING` in place — never a restart, so
+     * nothing already recorded is discarded. Mirrors iOS's
+     * `SensingCoordinator.resumeSensing()`. A no-op unless the current
+     * [EventJoinUiState.Sensing] phase is [ScanPhase.SignalLost].
+     */
+    fun resumeSensing()
 }

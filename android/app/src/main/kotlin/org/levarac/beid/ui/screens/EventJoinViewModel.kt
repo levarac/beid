@@ -71,6 +71,10 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun openAppSettings() = session.openAppSettings()
 
+    fun simulateSignalLost() = session.simulateSignalLost()
+
+    fun resumeSensing() = session.resumeSensing()
+
     class Factory(private val session: EventJoinSession) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = EventJoinViewModel(session) as T
