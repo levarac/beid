@@ -1,8 +1,26 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "%lld": {},
-    "Account": {},
+    "%lld": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld"
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "アカウント"
+          }
+        }
+      }
+    },
     "Active": {
       "comment": "Generic on/off status label shown next to a colored dot — used for the Bluetooth power state (Account sheet) and for the currently-broadcasting entry in the venue-device reassignment history (gh#138).",
       "localizations": {
@@ -14,8 +32,26 @@
         }
       }
     },
-    "Added to your collection.": {},
-    "Address": {},
+    "Added to your collection.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "コレクションに追加しました。"
+          }
+        }
+      }
+    },
+    "Address": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "アドレス"
+          }
+        }
+      }
+    },
     "Allow Bluetooth": {
       "localizations": {
         "ja": {
@@ -67,7 +103,16 @@
         }
       }
     },
-    "Bluetooth": {},
+    "Bluetooth": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Bluetooth"
+          }
+        }
+      }
+    },
     "Bluetooth is off": {
       "localizations": {
         "ja": {
@@ -223,7 +268,16 @@
         }
       }
     },
-    "Detected event": {},
+    "Detected event": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "検知したイベント"
+          }
+        }
+      }
+    },
     "detail.devicesSensed.label": {
       "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a phone or handset, not a word for a person or a peer.",
       "localizations": {
@@ -241,8 +295,26 @@
         }
       }
     },
-    "Disconnect Wallet": {},
-    "Done": {},
+    "Disconnect Wallet": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ウォレットを切断"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "完了"
+          }
+        }
+      }
+    },
     "Enable Bluetooth": {
       "localizations": {
         "ja": {
@@ -283,7 +355,16 @@
         }
       }
     },
-    "Event Found": {},
+    "Event Found": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "イベントを検知"
+          }
+        }
+      }
+    },
     "Event code": {
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join.",
       "localizations": {
@@ -377,7 +458,16 @@
         }
       }
     },
-    "Keep beid open nearby to collect proof of attendance.": {},
+    "Keep beid open nearby to collect proof of attendance.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid を開いたまま近くに置いておくと、出席の証明を集めます。"
+          }
+        }
+      }
+    },
     "MetaMask is not installed": {
       "localizations": {
         "ja": {
@@ -388,8 +478,26 @@
         }
       }
     },
-    "Method": {},
-    "My Proofs": {},
+    "Method": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "方式"
+          }
+        }
+      }
+    },
+    "My Proofs": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "自分の証明"
+          }
+        }
+      }
+    },
     "Nearby events": {
       "localizations": {
         "ja": {
@@ -410,8 +518,26 @@
         }
       }
     },
-    "Nearby peers are confirming your attendance automatically.": {},
-    "No proofs yet": {},
+    "Nearby peers are confirming your attendance automatically.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "近くの端末が自動で出席を確認しています。"
+          }
+        }
+      }
+    },
+    "No proofs yet": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "まだ証明がありません"
+          }
+        }
+      }
+    },
     "Not signed": {
       "localizations": {
         "ja": {
@@ -433,7 +559,16 @@
         }
       }
     },
-    "On": {},
+    "On": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "オン"
+          }
+        }
+      }
+    },
     "On-device first": {
       "localizations": {
         "ja": {
@@ -474,7 +609,16 @@
         }
       }
     },
-    "Peers": {},
+    "Peers": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "端末"
+          }
+        }
+      }
+    },
     "Privacy": {
       "localizations": {
         "ja": {
@@ -505,8 +649,26 @@
         }
       }
     },
-    "Proof Collected": {},
-    "Proof Detail": {},
+    "Proof Collected": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "証明を取得しました"
+          }
+        }
+      }
+    },
+    "Proof Detail": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "証明の詳細"
+          }
+        }
+      }
+    },
     "Prove you were there. Automatically.": {
       "localizations": {
         "ja": {
@@ -538,7 +700,16 @@
         }
       }
     },
-    "Sense Event": {},
+    "Sense Event": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "イベントをセンシング"
+          }
+        }
+      }
+    },
     "Sensing": {
       "localizations": {
         "ja": {
@@ -591,7 +762,16 @@
       },
       "comment": "Button: initiates a wallet-signature request for an already-collected proof."
     },
-    "Signal Lost": {},
+    "Signal Lost": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "信号が途切れました"
+          }
+        }
+      }
+    },
     "Signature": {
       "localizations": {
         "ja": {
@@ -643,9 +823,36 @@
         }
       }
     },
-    "Simulate Signal Lost": {},
-    "Status": {},
-    "Stored": {},
+    "Simulate Signal Lost": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "信号断をシミュレート"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "状態"
+          }
+        }
+      }
+    },
+    "Stored": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "保存済み"
+          }
+        }
+      }
+    },
     "Switch it on": {
       "localizations": {
         "ja": {
@@ -666,7 +873,16 @@
         }
       }
     },
-    "Tap Sense Event to start collecting proof of attendance automatically.": {},
+    "Tap Sense Event to start collecting proof of attendance automatically.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "「イベントをセンシング」を押すと、出席の証明を自動で集め始めます。"
+          }
+        }
+      }
+    },
     "The request timed out. Try again once your wallet is reachable.": {
       "localizations": {
         "ja": {
@@ -687,8 +903,26 @@
         }
       }
     },
-    "Verified": {},
-    "Verifying proof": {},
+    "Verified": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "検証済み"
+          }
+        }
+      }
+    },
+    "Verifying proof": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "証明を検証しています"
+          }
+        }
+      }
+    },
     "Waiting for wallet to approve…": {
       "localizations": {
         "ja": {
@@ -709,7 +943,16 @@
         }
       }
     },
-    "Wallet": {},
+    "Wallet": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ウォレット"
+          }
+        }
+      }
+    },
     "WalletConnect not configured": {
       "localizations": {
         "ja": {
@@ -740,7 +983,16 @@
         }
       }
     },
-    "Your attendance proof is ready to be added to your collection.": {},
+    "Your attendance proof is ready to be added to your collection.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "出席の証明をコレクションに追加できます。"
+          }
+        }
+      }
+    },
     "Zero effort": {
       "localizations": {
         "ja": {
@@ -825,8 +1077,26 @@
         }
       }
     },
-    "beid found a nearby event signal.": {},
-    "beid lost the connection to %@. Move closer and we'll pick it back up automatically.": {},
+    "beid found a nearby event signal.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid が近くのイベントの電波を検知しました。"
+          }
+        }
+      }
+    },
+    "beid lost the connection to %@. Move closer and we'll pick it back up automatically.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "beid が %@ との接続を失いました。近づくと自動的に再開します。"
+          }
+        }
+      }
+    },
     "beid needs a Reown Cloud project ID to connect a wallet. Copy ios/Secrets.example.plist to ios/Beid/Secrets.plist and fill in PROJECT_ID from dashboard.reown.com.": {
       "localizations": {
         "ja": {
@@ -1460,7 +1730,16 @@
         }
       }
     },
-    "Leave Event": {},
+    "Leave Event": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "イベントから退出"
+          }
+        }
+      }
+    },
     "e.g. Doorway A": {
       "comment": "Placeholder example shown inside the empty venue-device label field.",
       "localizations": {
