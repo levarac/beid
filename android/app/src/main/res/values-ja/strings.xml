@@ -7,6 +7,29 @@
 <resources>
     <string name="app_name">beid</string>
 
+    <string name="welcome_title">beid</string>
+    <string name="welcome_subtitle">そこにいたことを証明。自動的に。</string>
+    <string name="welcome_get_started">はじめる</string>
+
+    <string name="bluetooth_permission_title">Bluetoothを有効にする</string>
+    <string name="bluetooth_permission_subtitle">beidはBluetooth Low Energyで近くのイベントや人を検知します — これが「本当にそこにいた」ことを証明する仕組みです。</string>
+    <string name="bluetooth_permission_bullet_events_find_you_title">イベントがあなたを見つける</string>
+    <string name="bluetooth_permission_bullet_events_find_you_subtitle">近くのイベントが自動的に表示されます — コードも検索も不要です。</string>
+    <string name="bluetooth_permission_bullet_private_title">プライバシーに配慮した設計</string>
+    <string name="bluetooth_permission_bullet_private_subtitle">交換されるのは匿名の証明のみで、あなたの身元は含まれません。</string>
+    <string name="bluetooth_permission_bullet_zero_effort_title">手間いらず</string>
+    <string name="bluetooth_permission_bullet_zero_effort_subtitle">センシングはバックグラウンドで静かに実行されます。操作は不要です。</string>
+    <string name="bluetooth_permission_allow_button">Bluetoothを許可</string>
+    <string name="bluetooth_permission_settings_note">この設定はいつでも設定アプリで変更できます。</string>
+
+    <string name="bluetooth_off_title">Bluetoothがオフです</string>
+    <string name="bluetooth_off_message">Bluetoothがオフの間、beidはイベントの検知や証明の収集ができません。</string>
+    <string name="bluetooth_off_step_open_settings">設定を開く</string>
+    <string name="bluetooth_off_step_tap_bluetooth">Bluetoothをタップ</string>
+    <string name="bluetooth_off_step_switch_on">オンに切り替える</string>
+    <string name="bluetooth_off_open_settings_button">設定を開く</string>
+    <string name="bluetooth_off_turned_on_button">オンにしました</string>
+
     <string name="event_join_title">イベントに参加</string>
     <string name="event_join_code_label">イベントコード</string>
     <string name="event_join_button">イベントに参加</string>

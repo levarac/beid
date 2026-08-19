@@ -19,6 +19,8 @@ internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState
         private set
     var sensingResumed: Boolean = false
         private set
+    var permissionRequested: Boolean = false
+        private set
 
     override fun joinEvent(code: String) {
         joinedCode = code
@@ -26,6 +28,11 @@ internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState
 
     override fun openAppSettings() {
         openedAppSettings = true
+    }
+
+    override fun requestBluetoothPermission(onComplete: () -> Unit) {
+        permissionRequested = true
+        onComplete()
     }
 
     override fun simulateSignalLost() {
