@@ -107,4 +107,52 @@ final class EventGroupingTests: XCTestCase {
     XCTAssertEqual(group.first?.gradientSeed, secondScanSeed, "The newest session's own seed is unrelated to the artwork seed — only its title/date are used.")
     XCTAssertEqual(group.first?.date, newest.date, "Title/date must still track the newest session.")
   }
+
+  // MARK: - pastEvents(from:) — beid#230
+
+  func testPastEventsReturnsOneRepresentativePerDistinctEventCodeNewestFirst() {
+    let newestOfA = Proof(eventName: "Event A", date: Date(), peersVerified: 1, eventCode: "A")
+    let onlyOfB = Proof(eventName: "Event B", date: Date(), peersVerified: 1, eventCode: "B")
+    let oldestOfA = Proof(eventName: "Event A", date: Date(), peersVerified: 1, eventCode: "A")
+    // Newest-first input, matching ProofStore.proofs' real invariant.
+    let proofs = [onlyOfB, newestOfA, oldestOfA]
+
+    let past = EventGrouping.pastEvents(from: proofs)
+
+    XCTAssertEqual(past.map(\.id), [onlyOfB.id, newestOfA.id], "One representative per eventCode, ordered by that eventCode's first (newest) appearance.")
+  }
+
+  func testPastEventsRepresentativeIsTheNewestProofInEachGroup() {
+    let older = Proof(eventName: "Old Name", date: Date().addingTimeInterval(-3600), peersVerified: 1, eventCode: "A")
+    let newer = Proof(eventName: "New Name", date: Date(), peersVerified: 1, eventCode: "A")
+    let proofs = [newer, older] // newest-first
+
+    let past = EventGrouping.pastEvents(from: proofs)
+
+    XCTAssertEqual(past.count, 1)
+    XCTAssertEqual(past[0].id, newer.id, "The representative must be the group's newest proof, not its oldest.")
+  }
+
+  func testPastEventsOmitsNilEventCodeProofsEntirely() {
+    let legacy = Proof(eventName: "Legacy", date: Date(), peersVerified: 1, eventCode: nil)
+    let real = Proof(eventName: "Event A", date: Date(), peersVerified: 1, eventCode: "A")
+    let proofs = [legacy, real]
+
+    let past = EventGrouping.pastEvents(from: proofs)
+
+    XCTAssertEqual(past.map(\.id), [real.id], "A nil-eventCode proof must never appear in the past-events list, not even as a false/placeholder entry.")
+  }
+
+  func testPastEventsWithOnlyNilEventCodeProofsIsEmpty() {
+    let first = Proof(eventName: "Legacy 1", date: Date(), peersVerified: 1, eventCode: nil)
+    let second = Proof(eventName: "Legacy 2", date: Date(), peersVerified: 1, eventCode: nil)
+
+    let past = EventGrouping.pastEvents(from: [first, second])
+
+    XCTAssertTrue(past.isEmpty)
+  }
+
+  func testPastEventsWithNoProofsIsEmpty() {
+    XCTAssertTrue(EventGrouping.pastEvents(from: []).isEmpty)
+  }
 }

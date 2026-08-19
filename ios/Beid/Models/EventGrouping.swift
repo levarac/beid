@@ -38,4 +38,23 @@ enum EventGrouping {
     guard let eventCode = proof.eventCode else { return [proof] }
     return proofs.filter { $0.eventCode == eventCode }
   }
+
+  /// One representative `Proof` per distinct non-nil `eventCode` in
+  /// `proofs`, newest-first (beid#230). The representative is each group's
+  /// newest proof — `groups(from:)` already keeps every sub-array
+  /// newest-first, so `.first` is that proof. A `nil`-`eventCode` proof is
+  /// never a candidate: `groups(from:)`'s singleton rule already keeps it
+  /// out of any real `eventCode` group, and this filters the singleton
+  /// itself out too, so it never appears here at all — omission, not a
+  /// false entry (issue #230's explicit acceptance criterion). This is the
+  /// "events you've previously joined and recorded a Proof for" list; it
+  /// intentionally excludes a code that was typed and abandoned before a
+  /// `Proof` was ever recorded, since `Proof.eventCode` is the only
+  /// participation record this app keeps.
+  static func pastEvents(from proofs: [Proof]) -> [Proof] {
+    groups(from: proofs).compactMap { group in
+      guard let representative = group.first, representative.eventCode != nil else { return nil }
+      return representative
+    }
+  }
 }

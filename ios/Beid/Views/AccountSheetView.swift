@@ -251,6 +251,18 @@ private struct EventMembershipSections: View {
       }
 
       Section {
+        NavigationLink {
+          PastEventsView(
+            sensingCoordinator: sensingCoordinator,
+            proofStore: coordinator.proofStore,
+            onRejoin: { code in coordinator.rejoinPastEvent(code: code) }
+          )
+        } label: {
+          Label { Text(pastEventsLabel) } icon: { Image(systemName: "clock.arrow.circlepath") }
+        }
+      }
+
+      Section {
         Button(role: .destructive) {
           BeidDesign.haptic(.medium)
           coordinator.leaveEvent()
@@ -267,6 +279,14 @@ private struct EventMembershipSections: View {
       localized: "account.joinEvent.label",
       defaultValue: "Join Event",
       comment: "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages."
+    )
+  }
+
+  private var pastEventsLabel: String {
+    String(
+      localized: "account.pastEvents.label",
+      defaultValue: "Past Events",
+      comment: "Menu row in the Account sheet that opens the list of previously joined events (beid#230), for rejoining one without retyping its code."
     )
   }
 }

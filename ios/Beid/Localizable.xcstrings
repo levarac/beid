@@ -4385,6 +4385,56 @@
           }
         }
       }
+    },
+    "Current": {
+      "comment": "Trailing label on a Past Events row identifying the event this device is presently joined to. Refers to \"the event currently joined,\" not a generic adjective — distinct from any other use of the English word \"Current\" elsewhere in the app.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "参加中"
+          }
+        }
+      }
+    },
+    "No past events yet.": {
+      "comment": "Empty state on the Past Events screen, shown when this device has never recorded a Proof for any event.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "参加したイベントはまだありません。"
+          }
+        }
+      }
+    },
+    "Only events you've actually recorded a proof for are listed here.": {
+      "comment": "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear.",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "証明を記録できたイベントのみ表示されます。"
+          }
+        }
+      }
+    },
+    "account.pastEvents.label": {
+      "comment": "Menu row in the Account sheet that opens the list of previously joined events (beid#230), for rejoining one without retyping its code.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Past Events"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "過去に参加したイベント"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
