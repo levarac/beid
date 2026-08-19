@@ -54,6 +54,7 @@
 		67D6643DEE67BF7E3D10D181 /* AggregationRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */; };
 		6997A7F8099B9742B3F3EC17 /* SelfProofCheckpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C67609A206E5D182BCFECF3 /* SelfProofCheckpoint.swift */; };
 		6A3EBE0C491228EBED4028E1 /* DemoWalletConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */; };
+		6A599DE79B7D6BFF11C01F49 /* RecordingBindingSheetUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CADBE5E0B665DA97DF1CF7B6 /* RecordingBindingSheetUITests.swift */; };
 		71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0333AAF8319263B67E8FE36 /* EventSession.swift */; };
 		77142B7104D24CD50E325988 /* EventBindingSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A0CFB332AC5A882931E08F /* EventBindingSheetView.swift */; };
 		7751E6264525D31A67AB8F79 /* UnsentWindowLedgerStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B4FA5BD564665A2C992A91 /* UnsentWindowLedgerStoreTests.swift */; };
@@ -251,6 +252,7 @@
 		C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaMaskConnector.swift; sourceTree = "<group>"; };
 		CA1CC0C132C9AE42C8C050B2 /* OwnerKeyRegenerationDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyRegenerationDetector.swift; sourceTree = "<group>"; };
 		CA4E3BC04874E00A36445CB8 /* SelfProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofStore.swift; sourceTree = "<group>"; };
+		CADBE5E0B665DA97DF1CF7B6 /* RecordingBindingSheetUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingBindingSheetUITests.swift; sourceTree = "<group>"; };
 		CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCryptography.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D8F7094F03F3DA765492BFFC /* WindowReportStoreDurabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportStoreDurabilityTests.swift; sourceTree = "<group>"; };
@@ -380,6 +382,7 @@
 			children = (
 				A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */,
 				6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */,
+				CADBE5E0B665DA97DF1CF7B6 /* RecordingBindingSheetUITests.swift */,
 			);
 			path = BeidUITests;
 			sourceTree = "<group>";
@@ -723,6 +726,7 @@
 			files = (
 				48805AF863EF6409D14E5B2E /* BeidIPadLayoutTests.swift in Sources */,
 				A270412A7278D241A8A344C7 /* EventMembershipUITests.swift in Sources */,
+				6A599DE79B7D6BFF11C01F49 /* RecordingBindingSheetUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

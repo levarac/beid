@@ -105,6 +105,18 @@ final class SensingCoordinator: ObservableObject {
   /// resume. Reset alongside the rest of per-session state in
   /// `resetSessionState()`.
   @Published private(set) var recordingCeremonyShown = false
+  /// Whether `RecordingView`'s one-time entrance ceremony has finished
+  /// dwelling (or never needed to run at all — see
+  /// `markEntranceCeremonyFinished()`'s own doc comment) for the current
+  /// session. `ScanFlowView` (beid#222) chains the wallet-binding sheet's
+  /// auto-presentation to this rather than directly to `bindingState`
+  /// becoming `.pendingConnect`, so the ceremony and the binding prompt are
+  /// sequenced one after the other per §5.5, instead of the sheet's
+  /// presentation animation starting on top of the ceremony's — which also
+  /// closed a presentation-transaction race where a same-tick Close tap
+  /// left both the scan flow and the sheet stuck on screen. Reset alongside
+  /// the rest of per-session state in `resetSessionState()`.
+  @Published private(set) var entranceCeremonyFinished = false
   /// Distinct devices observed so far this session — the value carried as
   /// `peersVerified` into `.recording` and the stored `Proof`, and so the
   /// number that ends up inside a signed artifact.
@@ -1111,6 +1123,17 @@ final class SensingCoordinator: ObservableObject {
     recordingCeremonyShown = true
   }
 
+  /// Marks the entrance ceremony's on-screen dwell as over — called by
+  /// `RecordingView` either once its 2-second "Proof Collected" dwell
+  /// timer completes, or immediately if there was no ceremony to show at
+  /// all this time (`recordingCeremonyShown` already `true`, e.g. after a
+  /// `resumeSensing()` cycle). Both paths converge here because
+  /// `ScanFlowView` only cares whether the ceremony is done occupying the
+  /// screen, not which of the two reasons made that true right now.
+  func markEntranceCeremonyFinished() {
+    entranceCeremonyFinished = true
+  }
+
   @discardableResult
   func reset() -> SelfProofRecord? {
     endSensing(stopEngine: false)
@@ -1151,6 +1174,7 @@ final class SensingCoordinator: ObservableObject {
     pendingBindingMessage = nil
     bindingState = .none
     recordingCeremonyShown = false
+    entranceCeremonyFinished = false
   }
 
   // MARK: - Shared phase transitions

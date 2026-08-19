@@ -220,6 +220,17 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testDeclineBindingFromFailedRevertsToPendingConnect() async {
+    // beid#222: `ScanFlowView`'s auto-present/auto-dismiss `.onChange(of:
+    // sensing.bindingState)` presents on a fresh `.none -> .pendingConnect`
+    // and dismisses on any transition INTO `.none`. Both guards depend on
+    // this exact round trip (`.failed` -> Try Again's `declineBinding()`
+    // -> `.pendingConnect`) never observably landing on `.none` in
+    // between — if it did, the sheet would spuriously dismiss itself while
+    // the user is actively retrying a failed binding. `declineBinding()`'s
+    // `if let event = currentBindingEvent` branch is a single atomic
+    // assignment straight to `.pendingConnect(event)`, so there is no
+    // intermediate value to observe; this assertion makes that invariant
+    // explicit rather than only implicit in the equality check below.
     let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
@@ -229,6 +240,11 @@ final class EventBindingTests: XCTestCase {
 
     coordinator.declineBinding()
 
+    XCTAssertNotEqual(
+      coordinator.bindingState,
+      .none,
+      "must land directly on .pendingConnect, never transiently on .none, or ScanFlowView's sheet would dismiss mid-retry"
+    )
     XCTAssertEqual(coordinator.bindingState, .pendingConnect(event))
   }
 

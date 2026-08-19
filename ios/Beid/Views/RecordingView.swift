@@ -99,7 +99,19 @@ struct RecordingView: View {
     // is confirmed (§5.2).
     .tint(DS.Color.proofSeal)
     .onAppear {
-      guard showEntranceCeremony else { return }
+      // beid#222: `ScanFlowView` chains the wallet-binding sheet's
+      // auto-presentation to `sensing.entranceCeremonyFinished` rather than
+      // directly to `bindingState`, so the ceremony and the binding prompt
+      // stay sequenced (§5.5) instead of racing. Both branches below must
+      // eventually mark it — the ceremony-shown branch reaches it only
+      // after the real dwell completes; a `RecordingView` identity that
+      // never shows the ceremony at all (`recordingCeremonyShown` already
+      // `true`, e.g. after a signal-lost → resume cycle) has nothing to
+      // wait for, so it marks the ceremony finished immediately.
+      guard showEntranceCeremony else {
+        sensing.markEntranceCeremonyFinished()
+        return
+      }
       sensing.markRecordingCeremonyShown()
       Task {
         try? await Task.sleep(nanoseconds: ceremonyDwellNanos)
@@ -107,6 +119,7 @@ struct RecordingView: View {
         withAnimation(reduceMotion ? nil : DS.Motion.proofResolve) {
           showEntranceCeremony = false
         }
+        sensing.markEntranceCeremonyFinished()
       }
     }
   }
