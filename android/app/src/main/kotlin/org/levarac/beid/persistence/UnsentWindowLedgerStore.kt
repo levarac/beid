@@ -7,29 +7,48 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import org.levarac.beid.shared.report.UnsentWindowLedgerLoadResult
 import org.levarac.beid.shared.report.UnsentWindowLedgerTransition
 import org.levarac.beid.shared.report.decodeUnsentWindowLedgerSnapshot
+
+/** Distinguishes a snapshot whose bytes fail the shared decoder from any other I/O failure. */
+internal class InvalidUnsentWindowLedgerSnapshotException :
+    IOException("Invalid existing unsent-window ledger snapshot")
+
+/**
+ * Result of [UnsentWindowLedgerStore.recoveringCorruptSnapshot]: the opened
+ * store, plus the quarantined file if the existing snapshot failed to decode.
+ */
+internal data class UnsentWindowLedgerStoreRecovery(
+    val store: UnsentWindowLedgerStore,
+    val quarantinedFile: File?,
+)
 
 /**
  * Native storage boundary for the shared ledger's already-encoded snapshot.
  *
  * This class decides only filesystem ordering and atomic replacement. Ledger
  * transitions, snapshot syntax, and report eligibility remain in `shared`.
- * Production wiring is deferred to beid#121, where Android persistence and
- * listing first consume the shared snapshot codec.
+ * No production caller exists yet: beid#121 was reduced to proving byte parity
+ * against shared's golden vectors and porting corrupt-snapshot isolation, since
+ * Android has no ledger writer to wire this to. Wiring and listing move to the
+ * slice that adds a writer.
  */
-internal class UnsentWindowLedgerStore(
+internal class UnsentWindowLedgerStore private constructor(
     private val file: File,
+    validateOnConstruction: Boolean,
 ) {
-    private val persistenceLock = lockFor(
-        file.toPath().toAbsolutePath().normalize().toString(),
-    )
+    constructor(file: File) : this(file, validateOnConstruction = true)
+
+    private val persistenceLock = lockFor(canonicalPathKey(file))
 
     init {
-        synchronized(persistenceLock) {
-            durableRevision()
+        if (validateOnConstruction) {
+            synchronized(persistenceLock) {
+                durableRevision()
+            }
         }
     }
 
@@ -102,7 +121,7 @@ internal class UnsentWindowLedgerStore(
 
     private fun durableRevision(): Long = readFromDisk()?.let { decoded ->
         if (!decoded.isSuccess) {
-            throw IOException("Invalid existing unsent-window ledger snapshot")
+            throw InvalidUnsentWindowLedgerSnapshotException()
         }
         decoded.persistenceRevision
     } ?: 0L
@@ -116,9 +135,88 @@ internal class UnsentWindowLedgerStore(
         )
     }
 
-    private companion object {
-        val locksByPath = ConcurrentHashMap<String, Any>()
+    companion object {
+        private val locksByPath = ConcurrentHashMap<String, Any>()
+        private const val MAX_QUARANTINED_SNAPSHOT_COUNT = 5
+        private const val QUARANTINE_INFIX = ".corrupt-"
 
-        fun lockFor(path: String): Any = locksByPath.computeIfAbsent(path) { Any() }
+        private fun lockFor(path: String): Any = locksByPath.computeIfAbsent(path) { Any() }
+
+        private fun canonicalPathKey(file: File): String =
+            file.toPath().toAbsolutePath().normalize().toString()
+
+        /**
+         * Production startup policy for a snapshot whose shared decoder
+         * rejects its bytes. Strict [UnsentWindowLedgerStore] construction
+         * remains fail-closed; this opt-in path preserves the corrupt bytes
+         * under a timestamped sibling name and opens an empty store at the
+         * canonical path so future sensing can continue. Any other I/O error
+         * (a permission error, the path being a directory, and so on) is not
+         * treated as corruption and propagates unchanged, with nothing
+         * quarantined — isolating this recovery to decode failures only is
+         * the entire point: a transient read failure must never be mistaken
+         * for corrupt content.
+         */
+        fun recoveringCorruptSnapshot(file: File): UnsentWindowLedgerStoreRecovery {
+            val lock = lockFor(canonicalPathKey(file))
+            synchronized(lock) {
+                val store = UnsentWindowLedgerStore(file, validateOnConstruction = false)
+                return try {
+                    store.durableRevision()
+                    UnsentWindowLedgerStoreRecovery(store = store, quarantinedFile = null)
+                } catch (_: InvalidUnsentWindowLedgerSnapshotException) {
+                    val quarantined = quarantineFile(file)
+                    pruneOldQuarantinedSnapshots(file)
+                    UnsentWindowLedgerStoreRecovery(store = store, quarantinedFile = quarantined)
+                }
+            }
+        }
+
+        private fun quarantineFile(file: File): File {
+            val parent = requireNotNull(file.absoluteFile.parentFile)
+            val quarantined = File(
+                parent,
+                "${file.name}$QUARANTINE_INFIX${System.currentTimeMillis()}-${UUID.randomUUID()}",
+            )
+            Files.move(file.toPath(), quarantined.toPath())
+            return quarantined
+        }
+
+        /**
+         * Quarantine files accumulate one per corruption event with nothing
+         * that ever removes them. Cap how many survive: on a device that
+         * corrupts repeatedly, this bounds worst-case disk usage to a small
+         * constant while still keeping the most recent occurrences around
+         * for diagnosis. Mirrors iOS's `maxQuarantinedSnapshotCount` of 5.
+         */
+        private fun pruneOldQuarantinedSnapshots(file: File) {
+            val parent = file.absoluteFile.parentFile ?: return
+            val prefix = "${file.name}$QUARANTINE_INFIX"
+            val quarantined = (parent.listFiles() ?: return)
+                .mapNotNull { candidate ->
+                    quarantineTimestampMilliseconds(candidate.name, prefix)?.let { timestamp ->
+                        candidate to timestamp
+                    }
+                }
+                .sortedBy { (_, timestamp) -> timestamp }
+            if (quarantined.size <= MAX_QUARANTINED_SNAPSHOT_COUNT) {
+                return
+            }
+            quarantined
+                .take(quarantined.size - MAX_QUARANTINED_SNAPSHOT_COUNT)
+                .forEach { (candidate, _) -> candidate.delete() }
+        }
+
+        private fun quarantineTimestampMilliseconds(name: String, prefix: String): Long? {
+            if (!name.startsWith(prefix)) {
+                return null
+            }
+            val afterPrefix = name.substring(prefix.length)
+            val dashIndex = afterPrefix.indexOf('-')
+            if (dashIndex < 0) {
+                return null
+            }
+            return afterPrefix.substring(0, dashIndex).toLongOrNull()
+        }
     }
 }
