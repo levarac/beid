@@ -1,22 +1,22 @@
 [
   {
     "language": "ja",
-    "text": "コレクションの並び方が変わりました。同じイベントは何回記録しても1枚にまとまります。これまでのビルドで同じイベントが何枚も並んでいた場合、今回のビルドではその分カードが減って見えますが、記録は失われていません。カードを開くと、そのイベントで記録した回数と、1回ごとの内訳を確認できます。同じイベントで2回以上記録している端末で、カードが1枚になっていること、開いた先で回数が合っていることを見てください。イベントコードの指定は前回のビルドから引き続き、ホーム右上のアカウントから行えます。"
+    "text": "記録中の画面から「相互確認」の行がなくなりました。これは常に0のままで、端末だけでは判定できない値だったため、表示をやめています。記録中に見えるのは検知した端末数と記録の積み上がりだけになりますので、表示が欠けているように見えないかを見てください。あわせて、このビルドで一通り通して確認してほしいです。アカウントからイベントコードを入れ、4人以上で同じ場所でセンシングし、記録が始まったらスキャン画面を閉じ、コレクションに証明が並ぶところまでです。同じイベントを2回以上記録してもコレクションでは1枚にまとまります。"
   },
   {
     "language": "en-US",
-    "text": "The collection is now arranged by event. However many times you record the same event, it appears as one card. If an earlier build left you with several cards for the same event, you will see fewer cards now — nothing has been lost. Opening a card shows how many times you recorded that event, and the breakdown per recording. On a device that has recorded the same event twice or more, please check that it is now a single card and that the count inside matches what you did. Setting the event code still works as it did in the last build, from Account at the top right of Home."
+    "text": "The \"Mutual confirmations\" line is gone from the recording screen. It was always 0 — it is not something a device can determine on its own — so we stopped showing it rather than showing a number that was never measured. The recording screen now shows only the devices-sensed count and the recording buildup; please check that nothing looks like it is missing. Please also run one full pass on this build: set an event code from Account, sense together with four or more people in the same place, close the scan screen once recording starts, and check the proof appears in your collection. Recording the same event more than once still shows as a single card there."
   },
   {
     "language": "zh-Hans",
-    "text": "收藏页现在按活动归类。同一个活动无论记录多少次，都只显示为一张卡片。如果之前的版本让你看到同一活动的多张卡片，现在卡片数量会减少，但记录并没有丢失。打开卡片可以看到你记录该活动的次数，以及每次记录的明细。请在记录过同一活动两次以上的设备上确认：现在是否合并为一张卡片，打开后的次数是否与实际相符。设置活动代码的方式与上一版本相同，仍在首页右上角的「账户」中。"
+    "text": "记录中界面已移除「相互确认」这一行。该数值始终为 0——仅凭单台设备无法判断——因此我们不再显示这个从未被测量过的数字。记录中界面现在只显示检测到的设备数和记录的累积情况，请确认看起来没有缺失内容。另外请在本版本上完整走一遍流程：从「账户」输入活动代码，四人以上在同一地点一起感应，开始记录后关闭扫描界面，确认收藏页出现证明。同一活动记录多次，在收藏页仍只显示为一张卡片。"
   },
   {
     "language": "es-ES",
-    "text": "La colección ahora se organiza por evento. Por muchas veces que grabes el mismo evento, aparece como una sola tarjeta. Si una versión anterior te dejó varias tarjetas del mismo evento, ahora verás menos tarjetas: no se ha perdido nada. Al abrir una tarjeta verás cuántas veces grabaste ese evento y el desglose de cada grabación. En un dispositivo que haya grabado el mismo evento dos veces o más, comprueba que ahora sea una sola tarjeta y que el número que aparece dentro coincida con lo que hiciste. Indicar el código del evento sigue funcionando igual que en la versión anterior, desde Cuenta en la parte superior derecha del inicio."
+    "text": "La línea «Confirmaciones mutuas» ha desaparecido de la pantalla de grabación. Siempre era 0 — no es algo que un dispositivo pueda determinar por sí solo — así que hemos dejado de mostrar un número que nunca se llegó a medir. La pantalla de grabación ahora muestra solo el número de dispositivos detectados y la acumulación de la grabación; comprueba que no parezca que falte nada. Haz también una pasada completa en esta versión: indica un código de evento desde Cuenta, detectad juntos cuatro personas o más en el mismo lugar, cierra la pantalla de escaneo cuando empiece la grabación y comprueba que la prueba aparece en tu colección. Grabar el mismo evento más de una vez sigue mostrándose ahí como una sola tarjeta."
   },
   {
     "language": "fr-FR",
-    "text": "La collection est désormais organisée par événement. Quel que soit le nombre de fois où vous enregistrez le même événement, il apparaît sous forme d'une seule carte. Si une version précédente vous a laissé plusieurs cartes pour le même événement, vous en verrez moins maintenant : rien n'a été perdu. En ouvrant une carte, vous voyez combien de fois vous avez enregistré cet événement, ainsi que le détail de chaque enregistrement. Sur un appareil ayant enregistré le même événement au moins deux fois, vérifiez qu'il n'y a plus qu'une seule carte et que le nombre affiché à l'intérieur correspond à ce que vous avez fait. La saisie du code de l'événement fonctionne comme dans la version précédente, depuis Compte en haut à droite de l'accueil."
+    "text": "La ligne « Confirmations mutuelles » a disparu de l'écran d'enregistrement. Elle valait toujours 0 — ce n'est pas quelque chose qu'un appareil peut déterminer seul — nous avons donc cessé d'afficher un nombre qui n'a jamais été mesuré. L'écran d'enregistrement n'affiche plus que le nombre d'appareils détectés et la progression de l'enregistrement ; vérifiez que rien ne semble manquer. Faites aussi un passage complet sur cette version : saisissez un code d'événement depuis Compte, détectez ensemble à quatre personnes ou plus au même endroit, fermez l'écran de scan une fois l'enregistrement lancé, et vérifiez que la preuve apparaît dans votre collection. Enregistrer le même événement plusieurs fois n'y affiche toujours qu'une seule carte."
   }
 ]
