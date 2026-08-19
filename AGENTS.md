@@ -140,7 +140,11 @@ the same name shadows them.
   Android Studio JBR 21 (commonly
   `/Applications/Android Studio.app/Contents/jbr/Contents/Home`), Homebrew
   JDK 17, and macOS's Java 17 resolver. The ambient system Java 25 breaks this
-  build; CI selects its own pinned JDK 17.
+  build; CI selects its own pinned JDK 17. The symptom varies by machine — an
+  ambient Java 25 on `PATH` is one form, and a machine with no ambient JDK at
+  all is another (observed 2026-08-19). Both resolve the same way, so do not
+  conclude from a different error message that the trap does not apply and
+  start improvising a JDK.
 - **Read Gradle task outcomes, not only the final green line.** `NO-SOURCE`
   means that task executed zero sources or tests. For every test task that
   was expected to run, require a non-`NO-SOURCE` outcome and report the test
@@ -170,7 +174,29 @@ the same name shadows them.
   intentionally deferred to Issue #110; do not claim that CI currently runs
   them.
 
-### Review gate
+### Review gate — SUSPENDED as of 2026-08-19
+
+**The independent-review gate below is suspended. A PR may be merged once CI
+is green on its exact head SHA.** Owner decision, 2026-08-19; recorded in
+`DECISIONS.md`. The gate is documented rather than deleted so that what it
+caught, and what suspending it costs, stay legible — and so re-enabling it is
+a decision rather than a rediscovery.
+
+Why it was suspended: across three consecutive PRs (#216, #221, #223) no
+independently dispatched reviewer was ever assigned, while CI stayed green and
+mergeable. A gate that is documented but never runs is worse than no gate,
+because it gets cited as though it were in force.
+
+What suspension does **not** relax: the Xcode Cloud requirement below still
+stands in full — verify that the iOS check **exists on the exact head SHA and
+succeeded**, not merely that a green check exists somewhere. That check is the
+only automated gate left, so treat its absence as a hard stop.
+
+Re-enable when either becomes true: a way to dispatch reviewers independently
+of the author exists, or a defect reaches a shipped path that an author's own
+review missed.
+
+The description below is retained as the definition to restore.
 
 **A review arranged by the author of the work does not satisfy the review
 gate. The gate requires a reviewer dispatched independently of the author.**
@@ -197,12 +223,15 @@ selects the reviewer and frames the review, not a judgment about a person.
   in English in code; `ios/project.yml`'s `options.developmentLanguage` is
   `en` and is the single source of truth for the development region — do
   not set a development region anywhere else.
-- **Target locales**: `en` (source) + `ja`, `zh-Hans`, `es`, `fr` — 5 locales
-  total. **PROPOSAL — Ken ratification pending**: Ken's instruction was
-  "主要5ヶ国語くらい" (roughly 5 major languages), so this exact non-`en` set
-  (Japanese, Simplified Chinese, Spanish, French) may still change. Treat
-  the locale list in `Localizable.xcstrings` as the canonical current set;
-  this doc's list must match it.
+- **Target locales**: `en` (source) + `ja` — 2 locales total. Settled by owner
+  decision 2026-08-19 (`DECISIONS.md`); this replaces the earlier unratified
+  5-locale proposal (`zh-Hans`, `es`, `fr` are no longer targets). ASC notes
+  locales narrow to `en-US` and `ja` to match. Treat the locale list in
+  `Localizable.xcstrings` as the canonical current set; this doc's list must
+  match it.
+  - The removed `zh-Hans` / `es` / `fr` entries were machine drafts left at
+    `needs_review` and never given a human pass, so nothing reviewed was lost.
+    They are recoverable from git history if the target set ever widens again.
 
 ### Mechanism
 
@@ -241,8 +270,8 @@ selects the reviewer and frames the review, not a judgment about a person.
   variation keyed by `plural`), not manual `count == 1 ? ... : ...` string
   branching in Swift. Author the base string with a `%lld` (or `%d`)
   placeholder and let each locale supply its own plural rule in the
-  catalog — some target locales (e.g. `ja`, `zh-Hans`) have no plural forms
-  and just need the `other` variant filled.
+  catalog — `ja` has no plural forms and just needs the `other` variant
+  filled.
 - **Never concatenate localized fragments.** `Text(a) + Text(" ") + Text(b)`
   or string-concatenating two `String(localized:)` results breaks word
   order and grammar in most target locales. Compose one full sentence per
@@ -360,9 +389,8 @@ delivery files:
   root). Changing this file on any branch push both **triggers** the
   Internal Build workflow and becomes the tester-facing "What to Test"
   notes. Rewrite it wholesale each time — what to check in *this* build
-  only, 1-3 plain sentences per locale (ASC locales: `en-US`, `ja`,
-  `zh-Hans`, `es-ES`, `fr-FR`), no PR numbers, no internal jargon, no
-  accumulated history.
+  only, 1-3 plain sentences per locale (ASC locales: `en-US`, `ja`), no PR
+  numbers, no internal jargon, no accumulated history.
 - **`release_notes.json` is App Store "What's New" copy.** On non-release
   branches it is never delivered to testers and editing it neither
   triggers nor annotates test builds. Caveat: on `release/*` branches the
