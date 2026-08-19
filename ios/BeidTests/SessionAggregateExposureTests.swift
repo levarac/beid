@@ -6,11 +6,14 @@ import XCTest
 
 /// beid#142 — `SensingCoordinator.sessionAggregate` is the full shared
 /// `BeidSharedKit.aggregation.SessionAggregate` published alongside
-/// `devicesVerified`, so `RecordingView`'s mutual-confirmations line and
-/// window-buildup line can read `mutualDeviceCount`/`windowCount`/
-/// `windowAt(index:)` straight off shared's own type instead of a second
-/// native re-projection. `DeviceCountTests` covers `devicesVerified` itself
-/// in depth; this file covers the additional fields this property surfaces.
+/// `devicesVerified`, so `RecordingView`'s window-buildup line can read
+/// `mutualDeviceCount`/`windowCount`/`windowAt(index:)` straight off
+/// shared's own type instead of a second native re-projection (beid#222
+/// removed the corresponding mutual-confirmations line from `RecordingView`
+/// itself, but `mutualDeviceCount`/`mutualObservationCount` stay covered
+/// here at the coordinator level). `DeviceCountTests` covers
+/// `devicesVerified` itself in depth; this file covers the additional
+/// fields this property surfaces.
 @MainActor
 final class SessionAggregateExposureTests: XCTestCase {
   private func makeCoordinator() -> SensingCoordinator {

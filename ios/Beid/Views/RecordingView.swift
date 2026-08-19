@@ -71,16 +71,6 @@ struct RecordingView: View {
                 .font(DS.Font.meta)
                 .foregroundStyle(DS.Color.textSecondary)
             }
-            // #142 — mutual-observation buildup. Reads
-            // `sensing.sessionAggregate` (`BeidSharedKit.aggregation
-            // .SessionAggregate`) directly rather than a native
-            // re-projection, so its value is provably shared-sourced.
-            // Always displays a real `0` today (DECISIONS 2026-08-09
-            // "相互観測数は端末上では0のまま正直に表示する") — never
-            // estimated, never substituted with `devicesVerified`.
-            Text(mutualConfirmationsCaption)
-              .font(DS.Font.meta)
-              .foregroundStyle(DS.Color.proofSeal)
             // #142 — window-by-window buildup, plain-text fallback per the
             // PM's ruling on spec §3.4/§9-7 (the dot-row visualization is an
             // unratified component and out of scope here).
@@ -132,19 +122,6 @@ struct RecordingView: View {
       // all four locales rather than a re-review pass.
       defaultValue: "Recording your attendance automatically · \(peersVerified) devices sensed",
       comment: "Cumulative count of distinct nearby devices sensed at the event, each counted once however long it stayed; no fixed target. Do NOT translate this as mutual, two-way, or reciprocal confirmation: this device cannot tell whether a peer also observed it, so any such wording would overclaim."
-    )
-  }
-
-  /// #142's own subject: the mutual-scope buildup, distinct from
-  /// `recordingCaption`'s all-observation count above. Always `0` today —
-  /// see this property's localization comment and DECISIONS 2026-08-09 for
-  /// why that is honest, not a missing feature.
-  private var mutualConfirmationsCaption: String {
-    let mutualCount = Int(sensing.sessionAggregate?.mutualDeviceCount ?? 0)
-    return String(
-      localized: "scan.recording.mutualCount",
-      defaultValue: "Mutual confirmations: \(mutualCount)",
-      comment: "Count of mutually-confirmed (two-way) observations — a distinct metric from the devices-sensed count in the line above it, not a synonym or a related total. This currently always displays as 0 because the on-device protocol has no way to detect when a nearby device also observed this device back; establishing that is a separate, later, off-device verification step. Do not translate this as if it always grows together with the devices-sensed count, and do not omit it or fold it into that line."
     )
   }
 
