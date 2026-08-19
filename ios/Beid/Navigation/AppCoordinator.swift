@@ -154,6 +154,28 @@ final class AppCoordinator: ObservableObject {
     sensingCoordinator.leaveEvent()
   }
 
+  /// Rejoins a previously joined event by an already-known `Proof.eventCode`
+  /// (beid#230's past-events list), instead of retyping it through
+  /// `EventCodeEntryView`. A no-op while an event is already joined —
+  /// matches the single-slot invariant `EventMembershipUITests` already
+  /// covers for "Join Event"; the caller is expected to disable the row the
+  /// same way, but this does not rely on that as its only guard.
+  ///
+  /// Unlike `attemptJoinEvent(code:)`, `code` is passed to
+  /// `SensingCoordinator.joinEvent(_:)` verbatim, with no
+  /// `.trimmingCharacters` or other normalization. A stored `Proof.eventCode`
+  /// was already normalized once, at the moment it was first joined
+  /// (`attemptJoinEvent(code:)` trims before calling `sensingCoordinator
+  /// .joinEvent`, and that trimmed string is what `SensingCoordinator`
+  /// records onto the resulting `Proof`) — normalizing it a second time here
+  /// would be a second, undiscussed normalization rule layered on top of the
+  /// open cross-platform question beid#226 already tracks (iOS trims before
+  /// joining, Android does not), not this task's to introduce.
+  func rejoinPastEvent(code: String) {
+    guard sensingCoordinator.joinedEventCode == nil else { return }
+    sensingCoordinator.joinEvent(code)
+  }
+
   /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the
   /// Account sheet — see `AccountSheetView`'s `eventCodeEntrySheetPresented`
   /// binding, analogous to `connectWalletFromAccountSheet()`.
