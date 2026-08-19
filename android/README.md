@@ -137,9 +137,10 @@ Following the root `AGENTS.md` process, adapted for Android tooling: Android
 [string resources](https://developer.android.com/guide/topics/resources/string-resource)
 (`res/values*/strings.xml`) are this platform's equivalent of iOS's SwiftUI
 String Catalog, covering the same locale set — `en` (source, sentence-case,
-DESIGN.md §15 vocabulary/forbidden-term rules) + `ja`, `zh-Hans` (as
-`values-b+zh+Hans`, the modern BCP-47 qualifier), `es`, `fr`. All four
-translated locales are machine-drafted starting points.
+DESIGN.md §15 vocabulary/forbidden-term rules) + `ja`. That is the whole set:
+the owner narrowed the targets from five locales to two on 2026-08-19
+(`DECISIONS.md`), and `values-b+zh+Hans`, `values-es` and `values-fr` were
+removed in the same change. `ja` is a machine-drafted starting point.
 
 Android's resource format has no built-in `needs_review` state the way Xcode
 String Catalogs do; each translated file carries an explicit XML comment
