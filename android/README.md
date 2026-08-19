@@ -135,13 +135,70 @@ the default `values/` (English) at runtime, same graceful-degradation
 property as the iOS process describes, so shipping partial/needs-review
 translations in this PR is safe.
 
+## Testing
+
+**Decision: Compose UI tests run Robolectric-backed as JVM tests under
+`:app:testDebugUnitTest` (`src/test`), not as instrumented `androidTest`.**
+This is deliberate, not a placeholder pending emulator infrastructure:
+
+- CI's Android job (`.github/workflows/pr-ci.yml`, see the [PR CI
+  contract](../AGENTS.md#pr-ci)) only runs `:shared:testAndroidHostTest`,
+  `:app:testDebugUnitTest`, and `:app:assembleDebug` on Ubuntu — no emulator,
+  no `connectedAndroidTest` step. An instrumented `androidTest` would not run
+  in CI today without adding emulator infrastructure, which is a call bigger
+  than any single feature slice and not something to add incidentally.
+- Robolectric + Compose's JVM `createComposeRule()` gives real Compose
+  semantics-tree assertions (`onNodeWithTag`, `onNodeWithText`,
+  `performClick`, ...) inside a plain JVM unit test, so it runs wherever
+  `:app:testDebugUnitTest` already runs, CI included, with zero CI changes
+  required.
+
+Gradle wiring this needs in `app/build.gradle.kts` (current stable versions
+as of 2026-08-19 — reverify before reusing if this doc is old):
+- `android { testOptions { unitTests { isIncludeAndroidResources = true } } }`
+  — required because screens use `stringResource(...)`; without this,
+  Robolectric cannot resolve Android resources from a unit test.
+- `testImplementation(platform("androidx.compose:compose-bom:<version>"))` —
+  BOM alignment applied to `implementation` does not automatically cover
+  `testImplementation`; declare the same BOM platform in both configurations.
+- `testImplementation("androidx.compose.ui:ui-test-junit4")` for
+  `createComposeRule()` and the `onNodeWith*`/assertion API.
+- `debugImplementation("androidx.compose.ui:ui-test-manifest")` — **not**
+  `testImplementation`. Its bundled manifest (a launcher `ComponentActivity`
+  that `createComposeRule()` launches under the hood via `ActivityScenario`)
+  must merge into the **debug variant's** manifest, since that's the
+  manifest Robolectric resolves for `:app:testDebugUnitTest`.
+  `testImplementation` dependencies never contribute to a variant's own
+  manifest merge, so declaring it there compiles fine but fails at test
+  runtime with `Unable to resolve activity for Intent ... cmp=.../
+  androidx.activity.ComponentActivity`.
+- `testImplementation("org.robolectric:robolectric:<version>")` and
+  `testImplementation("androidx.test.ext:junit:<version>")` for the
+  `@RunWith(RobolectricTestRunner::class)` + `@Config(sdk = [...])` test
+  harness itself.
+- `testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:<version
+  matching kotlinx-coroutines-android>")` for `Dispatchers.setMain(...)` in
+  plain (non-Robolectric) ViewModel unit tests that use `viewModelScope` —
+  without a registered test Main dispatcher, `viewModelScope.launch { ... }`
+  throws `IllegalStateException: Module with the Main dispatcher had failed
+  to initialize` on a plain JVM test. Robolectric tests don't need this: its
+  shadowed `Looper.getMainLooper()` satisfies `Dispatchers.Main` on its own.
+- `compileSdk`/AGP pin note: `androidx.lifecycle:lifecycle-viewmodel-compose`
+  2.11.0+ requires `compileSdk 37` and AGP 9.1.0+; this project pins
+  `compileSdk = 36` / AGP 8.11.1 (see `app/build.gradle.kts`), so ViewModel
+  work here uses `lifecycle-viewmodel-compose:2.10.0`, the newest version
+  compatible with the current compileSdk/AGP pin. Bump both together if this
+  repo's compileSdk/AGP moves to 37+/9.1.0+.
+
 ## What's deliberately not here
 
 - No ProGuard/R8 minification config beyond Gradle defaults (`isMinifyEnabled
   = false` for debug and release, matching barnard's own example app — real
   release signing/minification is a pre-launch concern, not scaffold scope).
-- No instrumentation or device E2E tests yet. JVM unit tests currently cover
-  the app-to-`shared/` bridge and the native unsent-window ledger store. For
-  the current hosted job set and the GitHub Actions / Xcode Cloud division,
-  use the repository's authoritative [PR CI contract](../AGENTS.md#pr-ci)
-  together with its executable workflow, `.github/workflows/pr-ci.yml`.
+- No instrumentation or device E2E tests. See "Testing" above for why Compose
+  UI coverage is Robolectric-backed JVM tests instead. JVM unit tests
+  currently cover the app-to-`shared/` bridge, the native unsent-window
+  ledger store, and the Event Join ViewModel/screen. For the current hosted
+  job set and the GitHub Actions / Xcode Cloud division, use the
+  repository's authoritative [PR CI contract](../AGENTS.md#pr-ci) together
+  with its executable workflow, `.github/workflows/pr-ci.yml`.

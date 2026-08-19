@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import org.levarac.beid.sensing.EventJoinCoordinator
-import org.levarac.beid.ui.screens.EventJoinScreen
+import org.levarac.beid.sensing.EventJoinSession
+import org.levarac.beid.ui.screens.EventJoinRoute
 
 /**
  * Root navigation scaffold — the Compose-Navigation equivalent of iOS's
@@ -13,11 +13,11 @@ import org.levarac.beid.ui.screens.EventJoinScreen
  * screens are added as routes here as they land.
  */
 @Composable
-fun AppNavHost(coordinator: EventJoinCoordinator) {
+fun AppNavHost(session: EventJoinSession) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = Screen.EventJoin.route) {
         composable(Screen.EventJoin.route) {
-            EventJoinScreen(coordinator)
+            EventJoinRoute(session)
         }
     }
 }

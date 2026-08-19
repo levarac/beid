@@ -40,6 +40,15 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric-backed unit tests (see android/README.md "Testing")
+            // resolve stringResource(...) and other Android resources, which
+            // requires the unit test classpath to include merged app resources.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -55,8 +64,22 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.navigation:navigation-compose:2.9.8")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation(kotlin("test"))
+
+    // Robolectric-backed Compose unit tests (see android/README.md "Testing").
+    testImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    // debugImplementation (not testImplementation): its bundled AndroidManifest.xml
+    // (declaring a launcher ComponentActivity for createComposeRule()) must merge into
+    // the *debug variant's* manifest, since that's what Robolectric resolves for
+    // :app:testDebugUnitTest — testImplementation dependencies never contribute to a
+    // variant's own manifest merge.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("org.robolectric:robolectric:4.15.1")
+    testImplementation("androidx.test.ext:junit:1.3.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }

@@ -46,15 +46,15 @@ fun mapPermissionResultToState(result: BarnardPermissionResult): EventJoinUiStat
  * `startAuto`). This is intentionally not a full `SensingCoordinator` port —
  * see android/README.md for scaffold scope.
  */
-class EventJoinCoordinator(private val activity: Activity) {
+class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
     private val engine = BarnardEngine(activity.applicationContext).apply {
         setActivity(activity)
     }
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
-    val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
+    override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
 
-    fun joinEvent(code: String) {
+    override fun joinEvent(code: String) {
         _state.value = EventJoinUiState.RequestingPermission
         engine.requestPermissions { result ->
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
@@ -67,7 +67,7 @@ class EventJoinCoordinator(private val activity: Activity) {
         }
     }
 
-    fun openAppSettings() = engine.openAppSettings()
+    override fun openAppSettings() = engine.openAppSettings()
 
     fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean =
         engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
