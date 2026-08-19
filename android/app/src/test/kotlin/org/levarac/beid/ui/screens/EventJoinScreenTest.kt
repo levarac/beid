@@ -40,7 +40,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel)
+                EventJoinScreen(viewModel, onOpenAccount = {})
             }
         }
 
@@ -60,7 +60,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel)
+                EventJoinScreen(viewModel, onOpenAccount = {})
             }
         }
 
@@ -77,7 +77,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel)
+                EventJoinScreen(viewModel, onOpenAccount = {})
             }
         }
 
@@ -92,7 +92,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel)
+                EventJoinScreen(viewModel, onOpenAccount = {})
             }
         }
 
@@ -106,13 +106,29 @@ class EventJoinScreenTest {
     }
 
     @Test
+    fun tappingTheAccountEntryInvokesOnOpenAccount() {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        var accountOpened = false
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinScreen(viewModel, onOpenAccount = { accountOpened = true })
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        assertTrue(accountOpened)
+    }
+
+    @Test
     fun signalLostPhaseRendersAResumeControlThatCallsResumeSensing() {
         val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.SignalLost(session1, peersVerified = 2)))
         val viewModel = EventJoinViewModel(session)
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel)
+                EventJoinScreen(viewModel, onOpenAccount = {})
             }
         }
 

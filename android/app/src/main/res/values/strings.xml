@@ -52,4 +52,16 @@
     <string name="event_join_resume_sensing">Resume</string>
     <!-- Manual affordance standing in for real signal-loss detection, which does not exist yet on Android. -->
     <string name="event_join_simulate_signal_lost">Simulate signal lost</string>
+
+    <!-- Reused for both the nav entry-point label on EventJoinScreen (tap target that opens the Account screen) and the Account screen's own title, so both say the same word. -->
+    <string name="account_title">Account</string>
+
+    <!-- Screen 09-equivalent: Account (mirrors iOS's AccountSheetView, minus wallet/Venue Device/Past Events — see beid#126). -->
+    <string name="account_bluetooth_label">Bluetooth</string>
+    <!-- Bluetooth status badge text: the phone's Bluetooth radio is powered on. Not "in use" or "connected to a device" — just radio power state. -->
+    <string name="account_bluetooth_status_on">Active</string>
+    <!-- Bluetooth status badge text: the phone's Bluetooth radio is powered off. -->
+    <string name="account_bluetooth_status_off">Off</string>
+    <!-- Destructive-named (not destructive-colored) action: leaves the currently joined event. -->
+    <string name="account_leave_event_button">Leave Event</string>
 </resources>

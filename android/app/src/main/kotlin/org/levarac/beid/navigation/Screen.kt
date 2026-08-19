@@ -12,4 +12,5 @@ sealed class Screen(val route: String) {
     data object BluetoothPermission : Screen("bluetooth_permission")
     data object BluetoothOff : Screen("bluetooth_off")
     data object EventJoin : Screen("event_join")
+    data object Account : Screen("account")
 }

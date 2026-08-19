@@ -40,6 +40,14 @@ internal object BeidPalette {
 
     val StrokeHairlineLight = Color(0xFFE3DFD6)
     val StrokeHairlineDark = Color(0xFF2A2E31)
+
+    /** DESIGN.md §5 "Binary on/off status, 'on'" — e.g. the Account screen's Bluetooth-active badge. */
+    val StatusOnLight = Color(0xFF1E7E34)
+    val StatusOnDark = Color(0xFF30D158)
+
+    /** DESIGN.md §5 "Binary on/off status, 'off'" — e.g. the Account screen's Bluetooth-off badge. */
+    val StatusOffLight = Color(0xFF6B7075)
+    val StatusOffDark = Color(0xFF83898F)
 }
 
 /**
@@ -60,6 +68,8 @@ data class BeidColorScheme(
     val labelOnWarning: Color,
     val labelOnSeal: Color,
     val strokeHairline: Color,
+    val statusOn: Color,
+    val statusOff: Color,
 )
 
 internal val LightBeidColors = BeidColorScheme(
@@ -74,6 +84,8 @@ internal val LightBeidColors = BeidColorScheme(
     labelOnWarning = BeidPalette.LabelOnWarningLight,
     labelOnSeal = BeidPalette.LabelOnSealLight,
     strokeHairline = BeidPalette.StrokeHairlineLight,
+    statusOn = BeidPalette.StatusOnLight,
+    statusOff = BeidPalette.StatusOffLight,
 )
 
 internal val DarkBeidColors = BeidColorScheme(
@@ -88,4 +100,6 @@ internal val DarkBeidColors = BeidColorScheme(
     labelOnWarning = BeidPalette.LabelOnWarningDark,
     labelOnSeal = BeidPalette.LabelOnSealDark,
     strokeHairline = BeidPalette.StrokeHairlineDark,
+    statusOn = BeidPalette.StatusOnDark,
+    statusOff = BeidPalette.StatusOffDark,
 )
