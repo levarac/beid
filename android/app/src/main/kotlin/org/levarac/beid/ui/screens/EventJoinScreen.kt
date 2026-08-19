@@ -18,16 +18,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.R
-import org.levarac.beid.sensing.EventJoinCoordinator
+import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidRadius
@@ -35,23 +34,13 @@ import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
 
 /**
- * Field-level validation error shown inline under the event-code field,
- * mirroring iOS's `EventCodeEntryView.errorMessage` (`ios/Beid/Views/
- * EventCodeEntryView.swift`) — same copy, same "clear on edit" behavior.
- *
- * [JoinFailed] has no producer yet: [EventJoinCoordinator]'s state machine
- * (`EventJoinUiState`) collapses every non-permission join outcome into
- * [EventJoinUiState.PermissionDenied] — it doesn't yet distinguish "the SDK
- * rejected this code" from "permission was denied" (see
- * `BarnardPermissionResult.Failed` in `EventJoinCoordinator.kt`). Wiring this
- * branch is a coordinator change (`EventJoinUiState` needs a distinct failure
- * case), which is out of this screen's scope — the case is kept here, sharing
- * the same rendering path as [EmptyCode], so the future wiring is a one-line
- * state change rather than new UI.
+ * Compose test tags for [EventJoinScreen] — not user-facing copy, so these
+ * deliberately do not go through the string catalog (see AGENTS.md's
+ * Localization Process).
  */
-private sealed class EventJoinFieldError {
-    data object EmptyCode : EventJoinFieldError()
-    data object JoinFailed : EventJoinFieldError()
+object EventJoinScreenTestTags {
+    const val SUBMIT_BUTTON = "event_join_submit_button"
+    const val FIELD_ERROR = "event_join_field_error"
 }
 
 @Composable
@@ -66,25 +55,12 @@ private fun EventJoinFieldError.message(): String = when (this) {
  * event-join slice landing on iOS in parallel; a stub/simple version here is
  * intentional, not a placeholder for missing work.
  *
- * [coordinator] is owned by `MainActivity` (not created here) because
- * `BarnardEngine.requestPermissions` is Activity-driven on Android — the
- * hosting Activity must forward `onRequestPermissionsResult` into the same
- * engine instance for the request to ever resolve.
+ * State lives in [viewModel], not here — this composable only renders
+ * [EventJoinViewModel.uiState] and forwards user actions back to it.
  */
 @Composable
-fun EventJoinScreen(coordinator: EventJoinCoordinator) {
-    val uiState by coordinator.state.collectAsState()
-    var eventCode by remember { mutableStateOf("") }
-    var fieldError by remember { mutableStateOf<EventJoinFieldError?>(null) }
-
-    fun submit() {
-        if (eventCode.isBlank()) {
-            fieldError = EventJoinFieldError.EmptyCode
-            return
-        }
-        fieldError = null
-        coordinator.joinEvent(eventCode)
-    }
+fun EventJoinScreen(viewModel: EventJoinViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
         Column(
@@ -102,13 +78,10 @@ fun EventJoinScreen(coordinator: EventJoinCoordinator) {
 
             Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
                 OutlinedTextField(
-                    value = eventCode,
-                    onValueChange = {
-                        eventCode = it
-                        fieldError = null
-                    },
+                    value = uiState.eventCode,
+                    onValueChange = viewModel::onEventCodeChanged,
                     label = { Text(stringResource(R.string.event_join_code_label)) },
-                    isError = fieldError != null,
+                    isError = uiState.fieldError != null,
                     singleLine = true,
                     shape = RoundedCornerShape(BeidRadius.control),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -133,12 +106,13 @@ fun EventJoinScreen(coordinator: EventJoinCoordinator) {
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                fieldError?.let { error ->
+                uiState.fieldError?.let { error ->
                     // iOS renders this row in DS.Color.textPrimary (plain ink), not a warning
                     // accent — DESIGN.md §5's accent map reserves signalWarning for BLE
                     // signal-loss recovery screens, and a validation/join error isn't that.
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
                     ) {
                         Text(
                             text = "⚠",
@@ -155,28 +129,43 @@ fun EventJoinScreen(coordinator: EventJoinCoordinator) {
             }
 
             Text(
-                text = statusText(uiState),
+                text = statusText(uiState.sessionState),
                 style = MaterialTheme.typography.bodyMedium,
                 color = BeidTheme.colors.textSecondary,
             )
 
-            when (uiState) {
+            when (uiState.sessionState) {
                 is EventJoinUiState.PermissionDenied -> {
                     BeidCtaButton(
                         text = stringResource(R.string.event_join_open_settings),
-                        onClick = { coordinator.openAppSettings() },
+                        onClick = { viewModel.openAppSettings() },
+                        testTag = EventJoinScreenTestTags.SUBMIT_BUTTON,
                     )
                 }
                 else -> {
                     BeidCtaButton(
                         text = stringResource(R.string.event_join_button),
-                        onClick = ::submit,
-                        enabled = uiState !is EventJoinUiState.RequestingPermission,
+                        onClick = viewModel::submit,
+                        enabled = uiState.sessionState !is EventJoinUiState.RequestingPermission,
+                        testTag = EventJoinScreenTestTags.SUBMIT_BUTTON,
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * Constructs (via [EventJoinViewModel.Factory]) and remembers the screen's
+ * [EventJoinViewModel], scoped to the current [androidx.lifecycle.ViewModelStoreOwner]
+ * (`MainActivity`). Kept separate from [EventJoinScreen] so the latter stays
+ * a pure function of [EventJoinViewModel] for Compose tests to render
+ * directly against a fake session, without a real [EventJoinSession].
+ */
+@Composable
+fun EventJoinRoute(session: EventJoinSession) {
+    val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
+    EventJoinScreen(viewModel)
 }
 
 /**
@@ -194,6 +183,7 @@ private fun BeidCtaButton(
     text: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    testTag: String? = null,
 ) {
     Button(
         onClick = onClick,
@@ -205,7 +195,8 @@ private fun BeidCtaButton(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp),
+            .heightIn(min = 52.dp)
+            .let { if (testTag != null) it.testTag(testTag) else it },
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge)
     }
@@ -245,7 +236,7 @@ private fun EventJoinScreenEmptyCodeErrorPreview() {
 /**
  * Pins [EventJoinFieldError.JoinFailed]'s copy/visual even though it has no
  * live producer yet (see the kdoc on [EventJoinFieldError]) — Preview is the
- * only way to exercise it until [EventJoinCoordinator] gains a distinct
+ * only way to exercise it until [EventJoinSession] gains a distinct
  * join-failure state.
  */
 @Preview(name = "Error — join failed (dormant, see kdoc)", showBackground = true)
