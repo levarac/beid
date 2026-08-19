@@ -11,14 +11,26 @@ struct ScanFlowView: View {
   @ObservedObject private var sensing: SensingCoordinator
   @Environment(\.scenePhase) private var scenePhase
   /// The connect+binding interstitial (§5.6). Presented over this view
-  /// (never blocking `.recording`) the *next* time the app becomes active
-  /// while `bindingState` is `.pendingConnect` — deliberately gated on an
-  /// actual background/inactive→active scene transition (not merely "is
-  /// currently active"), matching D3's own rationale for splitting this
-  /// trigger from the confirm/recording transition: popping the sheet the
-  /// instant the threshold trips, while the user may be actively looking at
-  /// this same screen, would be the intrusive mid-interaction interruption
-  /// D3 specifically avoided by choosing the next-foreground moment.
+  /// (never blocking `.recording`) through two triggers that both funnel
+  /// into `presentBindingSheetIfNeeded()` below:
+  ///
+  /// 1. **Primary — `.onChange(of: sensing.entranceCeremonyFinished)`**:
+  ///    fires the moment `RecordingView`'s one-time entrance ceremony
+  ///    finishes, whether or not the app is foreground at that instant.
+  ///    Presenting while the user is already looking at the screen is
+  ///    intended, not an interruption to avoid — owner decision
+  ///    2026-08-18. DECISIONS 2026-07-30 already specified binding at
+  ///    `.recording`'s own start ("recording 開始 = 前面化 binding と同時");
+  ///    gating presentation on a background→foreground transition alone
+  ///    left it unreachable for any session that never backgrounds (the
+  ///    whole DemoEvent walkthrough, for one) — 2026-08-18 fixed that
+  ///    wiring gap, it did not introduce a new policy.
+  /// 2. **Safety net — `.onChange(of: scenePhase)`**: re-checks
+  ///    `presentBindingSheetIfNeeded()` on return to foreground, covering a
+  ///    session that *did* background before the ceremony finished.
+  ///    `presentBindingSheetIfNeeded()` re-checks `bindingState ==
+  ///    .pendingConnect` and no-ops if the sheet is already up, so both
+  ///    triggers firing is harmless.
   @State private var bindingSheetPresented = false
 
   init(sensing: SensingCoordinator) {
@@ -81,6 +93,39 @@ struct ScanFlowView: View {
         sensing.checkpointOpenWindowForBackgrounding()
       }
       guard oldPhase != .active, newPhase == .active else { return }
+      presentBindingSheetIfNeeded()
+    }
+    // Dismisses off `bindingState` itself, not off any one specific caller
+    // of `finishScan()`/`reset()`. `SensingCoordinator.resetSessionState()`
+    // (which `finishScan()` -> `reset()` always goes through, and which
+    // also runs at every fresh `.eventFound`) is the single choke point
+    // that sets `bindingState = .none`, from ANY prior state — driving
+    // dismissal off that value change covers every current and future
+    // caller uniformly, including the Close button above (which no longer
+    // special-cases the binding sheet at all — it just calls
+    // `finishScan()` unconditionally and lets this handler keep
+    // `bindingSheetPresented` in sync) and the `scenePhase` background
+    // checkpoint path.
+    //
+    // Any transition INTO `.none`, from any prior state. Never fires
+    // mid-attempt — `.connecting`/`.awaitingApproval`/`.bound`/`.failed`
+    // are none of them `.none`, so the sheet stays up through the whole
+    // round trip, including `.failed` -> (Try Again -> `declineBinding()`)
+    // -> `.pendingConnect`, which never passes through `.none` at all.
+    .onChange(of: sensing.bindingState) { _, newValue in
+      guard case .none = newValue else { return }
+      bindingSheetPresented = false
+    }
+    // Presentation is chained to the entrance ceremony finishing, not
+    // directly to `bindingState` reaching `.pendingConnect` — §5.5 wants
+    // the one-time "Proof Collected" ceremony and the binding prompt
+    // sequenced one after the other, not the sheet's presentation
+    // animation starting on top of the ceremony's. `RecordingView.onAppear`
+    // marks this even when there's no ceremony to show at all (a resumed
+    // session), so this still fires promptly in that case rather than
+    // waiting on something that will never happen.
+    .onChange(of: sensing.entranceCeremonyFinished) { _, newValue in
+      guard newValue else { return }
       presentBindingSheetIfNeeded()
     }
   }
