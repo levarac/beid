@@ -21,6 +21,8 @@ internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState
         private set
     var permissionRequested: Boolean = false
         private set
+    var leaveEventCallCount: Int = 0
+        private set
 
     override fun joinEvent(code: String) {
         joinedCode = code
@@ -41,6 +43,10 @@ internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState
 
     override fun resumeSensing() {
         sensingResumed = true
+    }
+
+    override fun leaveEvent() {
+        leaveEventCallCount += 1
     }
 
     fun emit(next: EventJoinUiState) {

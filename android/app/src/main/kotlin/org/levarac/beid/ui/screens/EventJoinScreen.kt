@@ -1,5 +1,6 @@
 package org.levarac.beid.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +47,7 @@ object EventJoinScreenTestTags {
     const val PEERS_VERIFIED_ROW = "event_join_peers_verified_row"
     const val RESUME_BUTTON = "event_join_resume_button"
     const val SIMULATE_SIGNAL_LOST_BUTTON = "event_join_simulate_signal_lost_button"
+    const val ACCOUNT_ENTRY = "event_join_account_entry"
 }
 
 @Composable
@@ -64,7 +66,7 @@ private fun EventJoinFieldError.message(): String = when (this) {
  * [EventJoinViewModel.uiState] and forwards user actions back to it.
  */
 @Composable
-fun EventJoinScreen(viewModel: EventJoinViewModel) {
+fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
@@ -75,6 +77,20 @@ fun EventJoinScreen(viewModel: EventJoinViewModel) {
                 .padding(BeidSpacing.pageMargin),
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
         ) {
+            // Plain clickable text — this screen's only entry point into the new Account
+            // screen (beid#126). iOS has no direct equivalent to mirror here (its Account
+            // sheet opens from a CollectionHomeView toolbar button that doesn't exist on
+            // Android yet), so kept minimal and undesigned: existing typography/color
+            // tokens only, no new icon or reusable component.
+            Text(
+                text = stringResource(R.string.account_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = BeidTheme.colors.textPrimary,
+                modifier = Modifier
+                    .clickable(onClick = onOpenAccount)
+                    .testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
+            )
+
             Text(
                 text = stringResource(R.string.event_join_title),
                 style = MaterialTheme.typography.headlineLarge,
@@ -242,9 +258,9 @@ private fun ScanPhaseDetail(
  * directly against a fake session, without a real [EventJoinSession].
  */
 @Composable
-fun EventJoinRoute(session: EventJoinSession) {
+fun EventJoinRoute(session: EventJoinSession, onOpenAccount: () -> Unit) {
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
-    EventJoinScreen(viewModel)
+    EventJoinScreen(viewModel, onOpenAccount)
 }
 
 @Composable

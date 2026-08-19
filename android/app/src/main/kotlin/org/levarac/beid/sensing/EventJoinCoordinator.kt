@@ -132,6 +132,26 @@ class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }
 
+    /**
+     * Mirrors iOS's `SensingCoordinator.leaveEvent()` (`engine.leaveEvent()`
+     * + resetting `joinedEventCode`), adapted for this class's richer local
+     * state. iOS's version is minimal because `joinedEventCode: String?` is
+     * its only local session bookkeeping; this class additionally carries
+     * [scanPhase] and [accounting], so a bare `engine.leaveEvent()` call
+     * alone would leave both stale (still reporting a [ScanPhase]/[state] as
+     * if a session were active). [applyStopSensing] is the same "any phase ->
+     * IDLE" shared-authorized transition [dispose] already uses — reusing it
+     * here (rather than deciding a new transition) keeps the resulting phase
+     * decision inside the existing shared-owned contract instead of inventing
+     * a second one.
+     */
+    override fun leaveEvent() {
+        engine.leaveEvent()
+        scanPhase = applyStopSensing()
+        accounting.reset()
+        _state.value = EventJoinUiState.Idle
+    }
+
     override fun openAppSettings() = engine.openAppSettings()
 
     override fun requestBluetoothPermission(onComplete: () -> Unit) {

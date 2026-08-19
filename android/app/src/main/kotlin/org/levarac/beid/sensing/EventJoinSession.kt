@@ -52,4 +52,17 @@ interface EventJoinSession {
      * [EventJoinUiState.Sensing] phase is [ScanPhase.SignalLost].
      */
     fun resumeSensing()
+
+    /**
+     * Leaves the currently-joined event — the Account screen's "Leave Event"
+     * action (beid#126). Mirrors iOS's `SensingCoordinator.leaveEvent()`
+     * (`engine.leaveEvent()` + resetting `joinedEventCode`), adapted for this
+     * session's richer local state (a [ScanPhase] and device-accounting
+     * bookkeeping iOS's simple `joinedEventCode: String?` doesn't carry): the
+     * production implementation calls the SDK's `leaveEvent()` and then
+     * resets native bookkeeping back to [EventJoinUiState.Idle] so the UI
+     * reflects "no active session" afterward. Callers gate this action's
+     * availability on session activity themselves — see [state].
+     */
+    fun leaveEvent()
 }

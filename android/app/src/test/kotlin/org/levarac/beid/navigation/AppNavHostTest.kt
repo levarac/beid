@@ -7,11 +7,15 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.onboarding.OnboardingPreferences
+import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.ui.screens.AccountScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothOffScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothPermissionScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
@@ -83,5 +87,24 @@ class AppNavHostTest {
 
         composeTestRule.onNodeWithTag(BluetoothOffScreenTestTags.OPEN_SETTINGS_BUTTON).assertIsDisplayed()
         composeTestRule.onNodeWithTag(WelcomeScreenTestTags.GET_STARTED_BUTTON).assertDoesNotExist()
+    }
+
+    @Test
+    fun openingAccountFromEventJoinAndLeavingAnActiveSessionCallsSessionLeaveEvent() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing))
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performClick()
+
+        assertEquals(1, session.leaveEventCallCount)
     }
 }

@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import org.levarac.beid.onboarding.OnboardingPreferences
 import org.levarac.beid.sensing.BluetoothRadioMonitor
 import org.levarac.beid.sensing.EventJoinSession
+import org.levarac.beid.ui.screens.AccountRoute
 import org.levarac.beid.ui.screens.BluetoothOffScreen
 import org.levarac.beid.ui.screens.BluetoothPermissionScreen
 import org.levarac.beid.ui.screens.EventJoinRoute
@@ -79,7 +80,14 @@ fun AppNavHost(session: EventJoinSession) {
         }
 
         composable(Screen.EventJoin.route) {
-            EventJoinRoute(session)
+            EventJoinRoute(
+                session,
+                onOpenAccount = { navController.navigate(Screen.Account.route) },
+            )
+        }
+
+        composable(Screen.Account.route) {
+            AccountRoute(session)
         }
     }
 }

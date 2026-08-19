@@ -49,4 +49,11 @@
     <string name="event_join_status_pill_paused">一時停止中</string>
     <string name="event_join_resume_sensing">再開</string>
     <string name="event_join_simulate_signal_lost">信号途絶をシミュレート</string>
+
+    <string name="account_title">アカウント</string>
+
+    <string name="account_bluetooth_label">Bluetooth</string>
+    <string name="account_bluetooth_status_on">有効</string>
+    <string name="account_bluetooth_status_off">オフ</string>
+    <string name="account_leave_event_button">イベントから退出</string>
 </resources>
