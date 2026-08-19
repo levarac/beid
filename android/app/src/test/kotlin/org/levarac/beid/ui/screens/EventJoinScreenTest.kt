@@ -8,10 +8,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.R
+import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -26,6 +30,8 @@ import org.robolectric.annotation.Config
 class EventJoinScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    private val session1 = ScanEventSession(eventCode = "ABC123")
 
     @Test
     fun submittingAnEmptyEventCodeShowsTheInlineErrorAndDoesNotJoin() {
@@ -45,5 +51,76 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.FIELD_ERROR).assertIsDisplayed()
         composeTestRule.onNodeWithText(expectedError).assertIsDisplayed()
         assertNull(session.joinedCode)
+    }
+
+    @Test
+    fun sensingPhaseRendersItsOwnStatusTextAndNoPhaseDetailControls() {
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing))
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinScreen(viewModel)
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_sensing)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON).assertDoesNotExist()
+    }
+
+    @Test
+    fun eventFoundPhaseRendersItsOwnStatusText() {
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.EventFound(session1)))
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinScreen(viewModel)
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_event_found)).assertIsDisplayed()
+    }
+
+    @Test
+    fun recordingPhaseRendersPeersVerifiedAndASimulateSignalLostControl() {
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Recording(session1, peersVerified = 2)))
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinScreen(viewModel)
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_recording)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
+        composeTestRule.onNodeWithText("2").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON).performClick()
+        assertTrue(session.signalLostSimulated)
+    }
+
+    @Test
+    fun signalLostPhaseRendersAResumeControlThatCallsResumeSensing() {
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.SignalLost(session1, peersVerified = 2)))
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinScreen(viewModel)
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_signal_lost)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON).performClick()
+        assertTrue(session.sensingResumed)
     }
 }

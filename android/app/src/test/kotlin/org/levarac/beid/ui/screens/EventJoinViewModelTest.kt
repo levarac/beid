@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.ScanPhase
 
 /**
  * Unit tests for [EventJoinViewModel] against a [FakeEventJoinSession] — no
@@ -80,10 +81,10 @@ class EventJoinViewModelTest {
         val viewModel = EventJoinViewModel(session)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        session.emit(EventJoinUiState.Sensing)
+        session.emit(EventJoinUiState.Sensing(ScanPhase.Sensing))
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(EventJoinUiState.Sensing, viewModel.uiState.value.sessionState)
+        assertEquals(EventJoinUiState.Sensing(ScanPhase.Sensing), viewModel.uiState.value.sessionState)
     }
 
     @Test
@@ -94,5 +95,25 @@ class EventJoinViewModelTest {
         viewModel.openAppSettings()
 
         assertTrue(session.openedAppSettings)
+    }
+
+    @Test
+    fun simulateSignalLostDelegatesToSession() {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+
+        viewModel.simulateSignalLost()
+
+        assertTrue(session.signalLostSimulated)
+    }
+
+    @Test
+    fun resumeSensingDelegatesToSession() {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+
+        viewModel.resumeSensing()
+
+        assertTrue(session.sensingResumed)
     }
 }

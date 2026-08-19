@@ -15,6 +15,10 @@ internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState
         private set
     var openedAppSettings: Boolean = false
         private set
+    var signalLostSimulated: Boolean = false
+        private set
+    var sensingResumed: Boolean = false
+        private set
 
     override fun joinEvent(code: String) {
         joinedCode = code
@@ -22,6 +26,14 @@ internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState
 
     override fun openAppSettings() {
         openedAppSettings = true
+    }
+
+    override fun simulateSignalLost() {
+        signalLostSimulated = true
+    }
+
+    override fun resumeSensing() {
+        sensingResumed = true
     }
 
     fun emit(next: EventJoinUiState) {

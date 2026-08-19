@@ -24,7 +24,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.R
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.ui.designsystem.BeidMetricRow
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
+import org.levarac.beid.ui.designsystem.BeidSecondaryButton
+import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidRadius
 import org.levarac.beid.ui.theme.BeidSpacing
@@ -38,6 +42,10 @@ import org.levarac.beid.ui.theme.BeidTheme
 object EventJoinScreenTestTags {
     const val SUBMIT_BUTTON = "event_join_submit_button"
     const val FIELD_ERROR = "event_join_field_error"
+    const val PHASE_STATUS_PILL = "event_join_phase_status_pill"
+    const val PEERS_VERIFIED_ROW = "event_join_peers_verified_row"
+    const val RESUME_BUTTON = "event_join_resume_button"
+    const val SIMULATE_SIGNAL_LOST_BUTTON = "event_join_simulate_signal_lost_button"
 }
 
 @Composable
@@ -131,7 +139,7 @@ fun EventJoinScreen(viewModel: EventJoinViewModel) {
                 color = BeidTheme.colors.textSecondary,
             )
 
-            when (uiState.sessionState) {
+            when (val sessionState = uiState.sessionState) {
                 is EventJoinUiState.PermissionDenied -> {
                     BeidPrimaryButton(
                         text = stringResource(R.string.event_join_open_settings),
@@ -139,6 +147,13 @@ fun EventJoinScreen(viewModel: EventJoinViewModel) {
                         contentColor = BeidTheme.colors.surfaceCanvas,
                         onClick = { viewModel.openAppSettings() },
                         modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
+                    )
+                }
+                is EventJoinUiState.Sensing -> {
+                    ScanPhaseDetail(
+                        phase = sessionState.phase,
+                        onSimulateSignalLost = viewModel::simulateSignalLost,
+                        onResumeSensing = viewModel::resumeSensing,
                     )
                 }
                 else -> {
@@ -152,6 +167,69 @@ fun EventJoinScreen(viewModel: EventJoinViewModel) {
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Renders the current [ScanPhase] once [EventJoinUiState.Sensing] is
+ * reached — the plainest form distinguishing the four reachable phases
+ * (`Sensing`/`EventFound`/`Recording`/`SignalLost`) via existing
+ * design-system vocabulary ([BeidStatusPill]/[BeidMetricRow]), not a
+ * redesign. `Idle` never renders here — it is never published as this
+ * screen's [EventJoinUiState.Sensing] payload (see
+ * [org.levarac.beid.sensing.EventJoinCoordinator]'s call sites into
+ * `org.levarac.beid.shared.sensing`).
+ */
+@Composable
+private fun ScanPhaseDetail(
+    phase: ScanPhase,
+    onSimulateSignalLost: () -> Unit,
+    onResumeSensing: () -> Unit,
+) {
+    val isPaused = phase is ScanPhase.SignalLost
+    Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.m)) {
+        BeidStatusPill(
+            label = stringResource(
+                if (isPaused) R.string.event_join_status_pill_paused else R.string.event_join_status_pill_active,
+            ),
+            tone = if (isPaused) BeidStatusPill.Tone.Paused else BeidStatusPill.Tone.Active,
+            modifier = Modifier.testTag(EventJoinScreenTestTags.PHASE_STATUS_PILL),
+        )
+
+        when (phase) {
+            is ScanPhase.Recording -> {
+                BeidMetricRow(
+                    label = stringResource(R.string.event_join_peers_verified_label),
+                    value = phase.peersVerified.toString(),
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW),
+                )
+                // Android has no real BLE signal-loss detection yet (mirrors iOS's
+                // own demo-only manual trigger) — this is the only way to reach
+                // SignalLost until real detection lands.
+                BeidSecondaryButton(
+                    text = stringResource(R.string.event_join_simulate_signal_lost),
+                    contentColor = BeidTheme.colors.textPrimary,
+                    borderColor = BeidTheme.colors.strokeHairline,
+                    onClick = onSimulateSignalLost,
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
+                )
+            }
+            is ScanPhase.SignalLost -> {
+                BeidMetricRow(
+                    label = stringResource(R.string.event_join_peers_verified_label),
+                    value = phase.peersVerified.toString(),
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW),
+                )
+                BeidPrimaryButton(
+                    text = stringResource(R.string.event_join_resume_sensing),
+                    containerColor = BeidTheme.colors.actionPrimary,
+                    contentColor = BeidTheme.colors.surfaceCanvas,
+                    onClick = onResumeSensing,
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.RESUME_BUTTON),
+                )
+            }
+            ScanPhase.Idle, ScanPhase.Sensing, is ScanPhase.EventFound -> Unit
         }
     }
 }
@@ -173,9 +251,17 @@ fun EventJoinRoute(session: EventJoinSession) {
 private fun statusText(state: EventJoinUiState): String = when (state) {
     is EventJoinUiState.Idle -> stringResource(R.string.event_join_status_idle)
     is EventJoinUiState.RequestingPermission -> stringResource(R.string.event_join_status_requesting_permission)
-    is EventJoinUiState.Sensing -> stringResource(R.string.event_join_status_sensing)
+    is EventJoinUiState.Sensing -> phaseStatusText(state.phase)
     is EventJoinUiState.PermissionDenied -> stringResource(R.string.event_join_status_permission_denied)
     is EventJoinUiState.JoinFailed -> stringResource(R.string.event_join_error_join_failed)
+}
+
+@Composable
+private fun phaseStatusText(phase: ScanPhase): String = when (phase) {
+    ScanPhase.Idle, ScanPhase.Sensing -> stringResource(R.string.event_join_status_sensing)
+    is ScanPhase.EventFound -> stringResource(R.string.event_join_status_event_found)
+    is ScanPhase.Recording -> stringResource(R.string.event_join_status_recording)
+    is ScanPhase.SignalLost -> stringResource(R.string.event_join_status_signal_lost)
 }
 
 @Preview(name = "Idle", showBackground = true)

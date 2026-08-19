@@ -5,18 +5,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.levarac.barnard.BarnardEngine
+import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardPermissionResult
 
 /**
  * UI-facing state for [EventJoinCoordinator]. Mirrors the shape of iOS's
- * `SensingCoordinator` phases (`ios/Beid/Sensing/SensingCoordinator.swift`)
- * but scoped to just this scaffold's one screen: request permission, then
- * join the event and start sensing.
+ * `SensingCoordinator` phases (`ios/Beid/Sensing/SensingCoordinator.swift`).
+ * [Sensing] carries the native [ScanPhase] driven by
+ * `org.levarac.beid.shared.sensing` (beid#116/#120) once the event join
+ * succeeds — see [EventJoinCoordinator]'s detection handling.
  */
 sealed class EventJoinUiState {
     data object Idle : EventJoinUiState()
     data object RequestingPermission : EventJoinUiState()
-    data object Sensing : EventJoinUiState()
+    data class Sensing(val phase: ScanPhase) : EventJoinUiState()
     data object PermissionDenied : EventJoinUiState()
     data object JoinFailed : EventJoinUiState()
 }
@@ -41,18 +43,27 @@ fun mapPermissionResultToState(result: BarnardPermissionResult): EventJoinUiStat
 }
 
 /**
- * Thin wrapper around [BarnardEngine] proving the Barnard SDK call
- * compiles and runs end to end (permission request → `joinEvent` →
- * `startAuto`). This is intentionally not a full `SensingCoordinator` port —
- * see android/README.md for scaffold scope.
+ * Wraps [BarnardEngine] (permission request → `joinEvent` → `startAuto`)
+ * behind the native [ScanPhase] state machine driven by
+ * `org.levarac.beid.shared.sensing` (beid#116/#120) — the Android
+ * counterpart of iOS's `SensingCoordinator`, scoped to this app's one
+ * screen. This adapter holds no threshold or transition-graph logic of its
+ * own; every phase decision is a single call into [applyPhaseDecision] or
+ * one of the explicit-action functions in `ScanPhase.kt`.
  */
 class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
     private val engine = BarnardEngine(activity.applicationContext).apply {
         setActivity(activity)
+        onEvent = ::handleBarnardEvent
     }
+
+    private val accounting = ScanDeviceAccounting()
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
+
+    /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
+    private var scanPhase: ScanPhase = ScanPhase.Idle
 
     override fun joinEvent(code: String) {
         _state.value = EventJoinUiState.RequestingPermission
@@ -60,11 +71,65 @@ class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
                 engine.joinEvent(code)
                 engine.startAuto()
-                _state.value = EventJoinUiState.Sensing
+                startSensing()
             } else {
                 _state.value = mapPermissionResultToState(result)
             }
         }
+    }
+
+    private fun startSensing() {
+        accounting.reset()
+        scanPhase = applyStartSensing()
+        _state.value = EventJoinUiState.Sensing(scanPhase)
+    }
+
+    private fun handleBarnardEvent(event: BarnardEvent) {
+        val detection = (event as? BarnardEvent.Detection)?.detection ?: return
+        handleDetection(enin = detection.enin, rpid = detection.rpid, detectedDisplayId = detection.detectedDisplayId)
+    }
+
+    /**
+     * Mirrors iOS's `SensingCoordinator.handleDetection(enin:rpid:detectedDisplayId:)`.
+     * Runs the native counting bookkeeping unconditionally, then calls
+     * through to [applyPhaseDecision] regardless of [scanPhase] — `IDLE`/
+     * `SIGNAL_LOST` are not special-cased out here; `applyScanDetection`
+     * (beid#116) already reports those as no-ops via its result flags, and
+     * duplicating that "ignore" branch natively would be exactly the kind
+     * of re-derived transition AGENTS.md's ownership boundary forbids.
+     */
+    private fun handleDetection(enin: Long, rpid: String, detectedDisplayId: String?) {
+        val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
+
+        val session = when (val phase = scanPhase) {
+            is ScanPhase.EventFound -> phase.session
+            is ScanPhase.Recording -> phase.session
+            is ScanPhase.SignalLost -> phase.session
+            ScanPhase.Sensing -> ScanEventSession(eventCode = engine.getCurrentEventCode() ?: UNKNOWN_EVENT_CODE)
+            ScanPhase.Idle -> ScanEventSession(eventCode = UNKNOWN_EVENT_CODE)
+        }
+
+        scanPhase = applyPhaseDecision(
+            currentPhase = scanPhase,
+            session = session,
+            coPresentDeviceCount = accounting.coPresentDeviceCount,
+            distinctDeviceCount = accounting.distinctDeviceCount,
+            distinctDeviceCountChanged = distinctDeviceCountChanged,
+            eventConfirmThreshold = BeidConfig.eventConfirmThreshold,
+        )
+        _state.value = EventJoinUiState.Sensing(scanPhase)
+    }
+
+    override fun simulateSignalLost() {
+        if (_state.value !is EventJoinUiState.Sensing) return
+        scanPhase = applySignalLost(scanPhase)
+        _state.value = EventJoinUiState.Sensing(scanPhase)
+    }
+
+    override fun resumeSensing() {
+        if (_state.value !is EventJoinUiState.Sensing) return
+        scanPhase = applyResumeSensing(scanPhase)
+        _state.value = EventJoinUiState.Sensing(scanPhase)
     }
 
     override fun openAppSettings() = engine.openAppSettings()
@@ -72,5 +137,14 @@ class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
     fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean =
         engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-    fun dispose() = engine.dispose()
+    /** Explicit stop/reset at Activity teardown — mirrors iOS's `endSensing(stopEngine: true)`. */
+    fun dispose() {
+        scanPhase = applyStopSensing()
+        engine.dispose()
+    }
+
+    private companion object {
+        /** Mirrors iOS's `SensingCoordinator.handleDetection`'s `"Unknown Event"` fallback. */
+        const val UNKNOWN_EVENT_CODE = "Unknown Event"
+    }
 }
