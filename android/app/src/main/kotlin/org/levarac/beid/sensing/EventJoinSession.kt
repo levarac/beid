@@ -20,6 +20,23 @@ interface EventJoinSession {
     fun openAppSettings()
 
     /**
+     * Triggers the real Android runtime-permission flow for BLE
+     * (BLUETOOTH_SCAN/CONNECT/ADVERTISE) — the same underlying
+     * `engine.requestPermissions` call [joinEvent] makes — so onboarding's
+     * "Allow Bluetooth" CTA (`BluetoothPermissionScreen`) actually produces
+     * the OS prompt its copy promises, instead of being purely cosmetic.
+     *
+     * Deliberately does not branch on the resulting `BarnardPermissionResult`
+     * granted/denied content: onboarding routing after this call is
+     * radio-power-only ([BluetoothRadioMonitor.isOn]), mirroring iOS's
+     * `evaluateBluetoothState()`, which likewise never consults permission
+     * grant/denial when deciding where to route. A denied-permission
+     * onboarding state is out of scope here; `EventJoinUiState.PermissionDenied`
+     * on the join screen already covers a hard denial reached later.
+     */
+    fun requestBluetoothPermission(onComplete: () -> Unit)
+
+    /**
      * Manual trigger for `RECORDING -> SIGNAL_LOST` (beid#120) — Android has
      * no real BLE signal-loss *detection* yet, only this explicit action,
      * mirroring iOS's `SensingCoordinator.simulateSignalLost()`. A no-op

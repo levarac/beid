@@ -1,6 +1,32 @@
 <resources>
     <string name="app_name">beid</string>
 
+    <!-- Screen 01: Welcome (mirrors iOS's WelcomeView). -->
+    <string name="welcome_title">beid</string>
+    <string name="welcome_subtitle">Prove you were there. Automatically.</string>
+    <string name="welcome_get_started">Get Started</string>
+
+    <!-- Screen 02: Bluetooth-permission explanation (mirrors iOS's BluetoothPermissionView). -->
+    <string name="bluetooth_permission_title">Enable Bluetooth</string>
+    <string name="bluetooth_permission_subtitle">beid senses nearby events and people over Bluetooth Low Energy — that\'s how it proves you were really there.</string>
+    <string name="bluetooth_permission_bullet_events_find_you_title">Events find you</string>
+    <string name="bluetooth_permission_bullet_events_find_you_subtitle">Nearby events appear automatically — no codes, no search.</string>
+    <string name="bluetooth_permission_bullet_private_title">Private by design</string>
+    <string name="bluetooth_permission_bullet_private_subtitle">Only anonymous proofs are exchanged, never your identity.</string>
+    <string name="bluetooth_permission_bullet_zero_effort_title">Zero effort</string>
+    <string name="bluetooth_permission_bullet_zero_effort_subtitle">Sensing runs quietly in the background. Nothing to tap.</string>
+    <string name="bluetooth_permission_allow_button">Allow Bluetooth</string>
+    <string name="bluetooth_permission_settings_note">You can change this anytime in Settings.</string>
+
+    <!-- Screen 03: Bluetooth-off recovery (mirrors iOS's BluetoothOffView). -->
+    <string name="bluetooth_off_title">Bluetooth is off</string>
+    <string name="bluetooth_off_message">beid can\'t sense events or collect proofs while Bluetooth is off.</string>
+    <string name="bluetooth_off_step_open_settings">Open Settings</string>
+    <string name="bluetooth_off_step_tap_bluetooth">Tap Bluetooth</string>
+    <string name="bluetooth_off_step_switch_on">Switch it on</string>
+    <string name="bluetooth_off_open_settings_button">Open Settings</string>
+    <string name="bluetooth_off_turned_on_button">I\'ve turned it on</string>
+
     <string name="event_join_title">Join an event</string>
     <string name="event_join_code_label">Event code</string>
     <string name="event_join_button">Join event</string>

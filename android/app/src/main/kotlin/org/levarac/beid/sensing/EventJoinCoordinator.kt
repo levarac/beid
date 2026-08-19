@@ -134,6 +134,10 @@ class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
 
     override fun openAppSettings() = engine.openAppSettings()
 
+    override fun requestBluetoothPermission(onComplete: () -> Unit) {
+        engine.requestPermissions { _ -> onComplete() }
+    }
+
     fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean =
         engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
