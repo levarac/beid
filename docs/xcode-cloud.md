@@ -46,6 +46,9 @@ Distribution identity. `project.yml` scopes
 target's Release configuration. The GitHub Actions archive supplies that
 custom build setting with the installed profile name; under Xcode Cloud it is
 unset and resolves empty, leaving normal automatic signing unchanged.
+The GitHub Actions export also uses manual signing and maps
+`org.levarac.beid` to that profile in `provisioningProfiles`, so export uses
+the runner-local identity and profile instead of ASC cloud signing.
 
 This GitHub Actions upload does **not** currently publish TestFlight "What to
 Test" notes. Xcode Cloud supplies those notes through

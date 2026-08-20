@@ -78,6 +78,7 @@ set +a
 : "${ASC_ISSUER_ID:?ASC_ISSUER_ID is missing from the runner-local ASC environment file}"
 : "${ASC_KEY_PATH:?ASC_KEY_PATH is missing from the runner-local ASC environment file}"
 : "${BEID_TEAM_ID:?BEID_TEAM_ID is missing from the runner-local ASC environment file}"
+BEID_BUNDLE_ID='org.levarac.beid'
 BEID_PROVISIONING_PROFILE="${BEID_PROVISIONING_PROFILE:-Beid GitHub Actions App Store}"
 
 if [[ ! -r "$ASC_KEY_PATH" ]]; then
@@ -126,7 +127,12 @@ xcodebuild \
 plutil -create xml1 "$EXPORT_OPTIONS"
 plutil -insert method -string app-store-connect "$EXPORT_OPTIONS"
 plutil -insert destination -string upload "$EXPORT_OPTIONS"
-plutil -insert signingStyle -string automatic "$EXPORT_OPTIONS"
+plutil -insert signingStyle -string manual "$EXPORT_OPTIONS"
+plutil -insert signingCertificate -string 'Apple Distribution' "$EXPORT_OPTIONS"
+plutil -insert provisioningProfiles -dictionary "$EXPORT_OPTIONS"
+/usr/libexec/PlistBuddy \
+  -c "Add :provisioningProfiles:$BEID_BUNDLE_ID string $BEID_PROVISIONING_PROFILE" \
+  "$EXPORT_OPTIONS"
 plutil -insert teamID -string "$BEID_TEAM_ID" "$EXPORT_OPTIONS"
 plutil -insert manageAppVersionAndBuildNumber -bool YES "$EXPORT_OPTIONS"
 

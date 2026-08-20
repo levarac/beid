@@ -415,6 +415,9 @@ dates). The contract every agent must know before touching delivery files:
   `PROVISIONING_PROFILE_SPECIFIER=$(BEID_PROVISIONING_PROFILE)`を参照し、GitHub
   Actionsのarchive時だけ同変数へprofile名を渡す。未設定のXcode Cloudでは空に
   解決されるため、通常のAutomatic signingを変えない。
+- GitHub Actionsのexportもmanual signingとし、ExportOptionsの
+  `provisioningProfiles`で`org.levarac.beid`を同profileへ対応づける。これにより
+  ASC cloud signing permissionに依存せず、runner-localのidentity/profileを使う。
 - GitHub Actions upload は現時点で TestFlight の **What to Test を反映しない**。
   API upload 後に ASC API で notes を設定する処理は別 follow-up であり、この
   temporary lane の upload 成否と混同しない。
