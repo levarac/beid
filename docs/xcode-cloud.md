@@ -39,6 +39,12 @@ that it contains a valid signing identity for `BEID_TEAM_ID`. The runner env
 file is mode 600; the password value must never be printed, committed, or
 copied into GitHub Secrets. `BEID_CI_KEYCHAIN_PATH` may override the path when
 the runner layout changes, but the fixed path above is the current default.
+The runner also has the active App Store provisioning profile
+`Beid GitHub Actions App Store`, created for `org.levarac.beid` with that
+Distribution identity. The archive names it explicitly through
+`PROVISIONING_PROFILE_SPECIFIER`; set runner-local
+`BEID_PROVISIONING_PROFILE_SPECIFIER` only if the installed profile name must
+change.
 
 This GitHub Actions upload does **not** currently publish TestFlight "What to
 Test" notes. Xcode Cloud supplies those notes through
