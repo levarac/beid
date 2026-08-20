@@ -184,9 +184,36 @@ The other two workflows:
   hosted jobs named in the repository's authoritative
   [PR CI contract](../AGENTS.md#pr-ci). They do not prove that anything was
   built or tested on macOS. Tracked as gh#93.
-- **Default** — the leftover initial-setup workflow (branch `main`, no
-  files rule). Disable-or-delete candidate; kept only until the
-  maintainer rules on it.
+- **Default** — the leftover initial-setup workflow. Disable-or-delete
+  candidate; kept only until the maintainer rules on it.
+
+  **Corrected 2026-08-20: "branch `main`, no files rule" was wrong.**
+  Observation over 14 consecutive `main` commits contradicts it. `Default`
+  fired on **exactly** the 4 that changed `what_to_test.json`
+  (`870baec`, `ae81bf5`, `4f51fab`, `bbd0b76`) and on **none** of the 10
+  that did not (`5398604`, `1af54eb`, `99cb85b`, `a63fc1e`, `af7fe69`,
+  `b50fd1d`, `d506568`, `51cbb0e`, `eadbf2b`, `13f9d69`) — checked via the
+  commit-statuses API, which is where Xcode Cloud reports, not
+  check-runs. Internal Build fired on exactly the same 4 and no others.
+
+  So `Default` behaves as though it carries the same
+  `what_to_test.json` files filter as Internal Build, and duplicates that
+  workflow rather than firing on every `main` push. Its waste is one extra
+  archive **per TestFlight delivery**, not per push — a materially smaller
+  number than the earlier wording implied, and one that was cited as a
+  compute-budget factor before anyone measured it.
+
+  The settings themselves live in the ASC GUI and were not re-read for this
+  correction; only the observed firing behaviour was. Treat this as a
+  last-checked observation, not a settings audit — and per this document's
+  own rule, when ASC and this file disagree, ASC wins.
+
+  **Method note, because this is the second time this document has been
+  wrong about a start condition** (see the 2026-08-04 reversal of the
+  "docs files in the diff are the trigger" theory): a start-condition claim
+  is only worth what the observation behind it is worth. Correlate firings
+  against the actual diffs across enough commits to distinguish the
+  hypothesis from coincidence before writing it down as fact.
 
 Version/build numbers: `project.yml` hardcodes
 `MARKETING_VERSION: "1.0"` / `CURRENT_PROJECT_VERSION: "1"`.
