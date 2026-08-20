@@ -11,6 +11,7 @@ on:
       - what_to_test.ios.json
       # Smoke test only; lets the smoke-trigger push exercise this workflow.
       - .github/workflows/internal-testflight.yml
+      - scripts/gha/build-and-upload-ios.sh
   workflow_dispatch:
 
 permissions:
