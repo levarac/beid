@@ -1,5 +1,6 @@
 package org.levarac.parallax.registry
 
+import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume
 import org.junit.Test
@@ -59,6 +60,71 @@ class LocalAnvilEventRegistryIntegrationTest {
                 transport.requestCount,
                 "moving safe pin must refresh its block header before reusing pinned CBOR",
             )
+        }
+    }
+
+    @Test
+    fun fetchesTheAnchoredSignedDefinitionFromALocalHttpStub() {
+        Assume.assumeTrue(
+            "Set BEID_RUN_ANVIL_REGISTRY_TEST=1 and provide the Anvil definition fixture",
+            System.getenv("BEID_RUN_ANVIL_REGISTRY_TEST") == "1",
+        )
+
+        val rpcUrl = requiredEnvironment("BEID_ANVIL_RPC_URL")
+        val readerAddress = requiredEnvironment("BEID_EVENT_REGISTRY_READER_ADDRESS")
+        val eventId = requiredEnvironment("BEID_EVENT_ID_HEX").decodeHex(expectedBytes = 32)
+        val expectedCbor = requiredEnvironment("BEID_EXPECTED_CBOR_HEX").decodeHex()
+        val signedDefinition = requiredEnvironment("BEID_SIGNED_DEFINITION_HEX").decodeHex()
+
+        runBlocking {
+            val primary = JsonRpcEthCallAdapter(
+                rpcUrl,
+                readerAddress,
+                createPlatformRegistryHttpTransport(),
+            )
+            val resolver = RegistryResolver(
+                chainId = 31_337,
+                readerAddressHex = readerAddress,
+                primary = primary,
+                secondary = primary,
+                etherscan = null,
+                cache = InMemoryRegistryCache(),
+                retryDelay = NoRetryDelay,
+                jitter = JitterSource { 0 },
+                maxAttempts = 1,
+            )
+            val resolved = resolver.resolve(eventId, safeRegistryReadPin())
+            assertContentEquals(expectedCbor, resolved.rawCbor)
+            val record = requireNotNull(resolved.context.definitionAt(0))
+            assertEquals(record.definitionDigestHex, Sha256.digest(signedDefinition).toPrefixedHex())
+
+            val server = HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+            server.createContext("/") { exchange ->
+                exchange.sendResponseHeaders(200, signedDefinition.size.toLong())
+                exchange.responseBody.use { output -> output.write(signedDefinition) }
+            }
+            server.start()
+            try {
+                val template = requireNotNull(
+                    createDefinitionUrlTemplate(
+                        "http://127.0.0.1:${server.address.port}/{definitionHash}.cbor",
+                    ),
+                )
+                val context = SignedDefinitionFetcher(
+                    template = template,
+                    transport = createPlatformRegistryHttpTransport(),
+                ).fetch(
+                    eventId = eventId,
+                    record = record,
+                    selectedAt = record.validFrom,
+                )
+                assertEquals(eventId.toPrefixedHex(), context.eventIdHex)
+                assertEquals(record.definitionDigestHex, context.definitionHashHex)
+                assertEquals(record.validFrom, context.definition.validFrom)
+                assertEquals(record.validUntil, context.definition.validUntil)
+            } finally {
+                server.stop(0)
+            }
         }
     }
 
