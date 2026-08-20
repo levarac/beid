@@ -77,6 +77,12 @@ struct RecordingView: View {
             Text(windowBuildupCaption)
               .font(DS.Font.meta)
               .foregroundStyle(DS.Color.textSecondary)
+            // #218 — temporary field-diagnostic line, not #if DEBUG-gated
+            // (see diagnosticCaption's doc comment): a live multi-device
+            // field test needs to read these counters without a debugger.
+            Text(diagnosticCaption)
+              .font(DS.Font.meta)
+              .foregroundStyle(DS.Color.textSecondary)
           }
         }
       }
@@ -150,6 +156,24 @@ struct RecordingView: View {
       localized: "scan.recording.windowBuildup",
       defaultValue: "\(windowCount) windows recorded",
       comment: "Count of ENIN time-windows recorded for this session so far, shown as a simple running total. This is a coverage/buildup indicator, not a device or confirmation count — a window is \"recorded\" once its time interval has been observed and closed, independent of how many devices were present in it."
+    )
+  }
+
+  /// Temporary diagnostic line (beid#218, DECISIONS 2026-08-20): reads
+  /// `sensing.devicesVerified`/`sensing.unidentifiedRpidCount` directly,
+  /// both already `@Published` on the `SensingCoordinator` this view holds
+  /// — no new wiring. Not `#if DEBUG`-gated (unlike the neighboring
+  /// "Simulate Signal Lost" button above): this ships to real
+  /// TestFlight/production builds because a live multi-device field test
+  /// needs to read these counters without a debugger attached. Not
+  /// permanent product UI and does not need to survive #141's rebuild.
+  private var diagnosticCaption: String {
+    let identifiedCount = sensing.devicesVerified
+    let unidentifiedCount = sensing.unidentifiedRpidCount
+    return String(
+      localized: "scan.recording.diagnosticCaption",
+      defaultValue: "Diagnostics: \(identifiedCount) identified · \(unidentifiedCount) unidentified",
+      comment: "Temporary diagnostic line on the Recording screen (beid#218, DECISIONS 2026-08-20) — not permanent product UI, does not need to survive #141's rebuild, but ships to real TestFlight/production builds (not #if DEBUG) because a live multi-device field test needs to read these counters without a debugger attached. \"Identified\" is SensingCoordinator.devicesVerified: distinct nearby devices whose proximity identifier (RPID) was resolved to a display ID. \"Unidentified\" is SensingCoordinator.unidentifiedRpidCount: proximity identifiers observed but not yet resolved to a display ID — radio is arriving, but the device could not be identified. A large unidentified count with a flat identified count points at an identification failure; both flat points at nothing arriving at all — opposite fixes, which is why both numbers must be visible together. Do NOT translate this as mutual, two-way, or reciprocal confirmation of any kind — neither number says anything about whether a peer observed this device back (the protocol carries no such signal, DECISIONS 2026-08-09). Same bar as this file's `scan.recording.caption` translator comment on the line above this one."
     )
   }
 }

@@ -91,10 +91,7 @@ struct TransparencyView: View {
           comment: "Tier 2 of 3 on the Transparency screen: what has happened to this device's sensing data after joining (recorded on-device / sent to a report server / included in published data). Distinct from \"Verified proof\" below it, which is about third-party verification, not data handling."
         )
         TierRow(
-          label: Text(
-            "Recorded on device",
-            comment: "Sub-state row under \"Participation record\": the sensing data has been locally signed and stored on this device (not yet sent anywhere). Refers to on-device storage, not a video/audio recording."
-          ),
+          label: Text(verbatim: recordedOnDeviceLabelText),
           isAvailable: recordedOnDeviceCount != nil,
           valueText: recordedOnDeviceCount.map { String($0) }
         )
@@ -125,7 +122,7 @@ struct TransparencyView: View {
       VStack(alignment: .leading, spacing: DS.Space.m) {
         tierTitle(
           "Verified proof",
-          comment: "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification (a status that would include a pending sub-state once it exists). Always shows \"Not yet available\" today because no verifier exists yet in the product. Distinct from the existing, always-true \"Verified\" status shown on the Proof Detail screen, which is about local BLE self-evidence, not third-party verification — do not reuse that screen's translation for this one."
+          comment: "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification (a status that would include a pending sub-state once it exists). Always shows \"Not yet available\" today because no verifier exists yet in the product. Distinct from the Proof Detail screen's Status row, which shows \"Recorded on device\" (this screen's Participation record tier text above, reused verbatim — beid#240) rather than any claim about third-party verification."
         )
         TierRow(label: nil, isAvailable: false, valueText: nil)
       }
@@ -136,6 +133,18 @@ struct TransparencyView: View {
     Text(text, comment: comment)
       .font(DS.Font.cardTitle)
       .foregroundStyle(DS.Color.textPrimary)
+  }
+
+  /// Explicit shared key with `ItemDetailView.statusRow` (AGENTS.md's
+  /// reuse rule — the same English text now appears at a second call
+  /// site): key/defaultValue/comment must stay byte-identical at both
+  /// call sites so Xcode's String Catalog treats them as one entry.
+  private var recordedOnDeviceLabelText: String {
+    String(
+      localized: "status.recordedOnDevice",
+      defaultValue: "Recorded on device",
+      comment: "Label shown when a proof's sensing data is known to be locally signed and stored on this device (not yet sent anywhere). Used in two places: (1) the Transparency screen's Participation record tier, where it's one of three rows (Sent / Included in published data are separate, always-unavailable rows below it); (2) the Proof Detail screen's Status row, where it replaced a prior unconditional \"Verified\" claim that had no backing model (beid#240, DECISIONS 2026-08-20) — the device only has its own signature, which shows \"this device recorded this,\" nothing more. Refers to on-device storage, not a video/audio recording."
+    )
   }
 }
 

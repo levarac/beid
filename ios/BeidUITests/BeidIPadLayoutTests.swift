@@ -83,6 +83,111 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "signal-lost-\(orientation)")
   }
 
+  /// beid#240, DECISIONS 2026-08-20: Proof Detail's Status row must show
+  /// "Recorded on device" — the only claim the app can currently back —
+  /// never the unconditional "Verified" that used to render regardless of
+  /// any real signature/verification state.
+  func testProofDetailStatusRowShowsRecordedOnDevice() {
+    navigateToCollectionWithProof()
+    openFirstProof()
+
+    XCTAssertTrue(app.staticTexts["Recorded on device"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Verified"].exists)
+  }
+
+  /// beid#222, DECISIONS 2026-08-20: the Participation summary headline
+  /// ("Devices mutually confirmed") must never render a literal number,
+  /// including 0 — the protocol cannot measure mutual (two-way)
+  /// confirmation on-device, and an honest 0 reads on real hardware as
+  /// "measured and got 0," which is misinformation. It must always show a
+  /// "not yet available" state instead, independent of whether a
+  /// session-aggregate snapshot exists (this DemoEvent proof does have one,
+  /// so `bandBuildupSection` legitimately shows real band rows — this test
+  /// confirms the headline's own fix applies even when other data on the
+  /// same screen is present, which is the actual #222 regression scenario).
+  func testParticipationSummaryHeadlineHidesNumericMutualCount() {
+    navigateToCollectionWithProof()
+    openFirstProof()
+
+    app.buttons["View participation summary"].tap()
+    XCTAssertTrue(app.staticTexts["Devices mutually confirmed"].waitForExistence(timeout: 5))
+
+    XCTAssertTrue(app.staticTexts["Not yet available"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["0"].exists)
+  }
+
+  /// beid#218, DECISIONS 2026-08-20: the Recording screen must show a
+  /// diagnostic caption with both the identified and unidentified device
+  /// counts, unconditionally (not `#if DEBUG`-gated), so a field tester can
+  /// read them without a debugger attached. Asserts the caption's static
+  /// structure only ("Diagnostics:" prefix, "identified"/"unidentified"
+  /// present) — not an exact numeric value for the identified count, since
+  /// `devicesVerified` grows across several `Task.sleep`-gated steps in the
+  /// DemoEvent sequence and pinning a number would make this test racy for
+  /// reasons unrelated to whether the fix is correct. The unidentified
+  /// count IS asserted exactly as "0": DemoEvent's synthetic devices always
+  /// carry a `detectedDisplayId` (`observeOneDemoDevice()`), so none should
+  /// ever land in the unidentified bucket — this also serves as the
+  /// empirical, on-screen confirmation of that (not just a code-reading
+  /// claim); the full caption text is printed to the test log for manual
+  /// review.
+  func testRecordingScreenShowsDiagnosticCounters() {
+    reachRecordingScreen()
+
+    let diagnosticCaption = app.staticTexts.matching(
+      NSPredicate(format: "label CONTAINS %@", "Diagnostics:")
+    ).firstMatch
+    XCTAssertTrue(diagnosticCaption.waitForExistence(timeout: 5))
+
+    let label = diagnosticCaption.label
+    print("RECORDING DIAGNOSTIC CAPTION: \(label)")
+    XCTAssertTrue(label.contains("identified"), "Expected an \"identified\" count in: \(label)")
+    XCTAssertTrue(label.contains("unidentified"), "Expected an \"unidentified\" count in: \(label)")
+    XCTAssertTrue(
+      label.contains("0 unidentified"),
+      "Expected the DemoEvent sequence's unidentified count to stay 0; got: \(label)"
+    )
+  }
+
+  /// Shared navigation prefix: joins the DemoEvent event and waits until
+  /// `.recording` begins and `RecordingView`'s "Simulate Signal Lost"
+  /// affordance is present — the earliest reliable signal of that (see
+  /// `capturePrimaryFlow`'s own comment on this). Used by both the
+  /// Recording-screen test above and `navigateToCollectionWithProof` below.
+  private func reachRecordingScreen() {
+    app.launchArguments = ["-beid-ui-test"]
+    app.launch()
+
+    app.buttons["Get Started"].tap()
+    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+    app.buttons["Allow Bluetooth"].tap()
+
+    let senseEvent = app.buttons["Sense Event"]
+    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    senseEvent.tap()
+    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+  }
+
+  /// Ends the session `reachRecordingScreen()` just started, landing on
+  /// Collection with the resulting proof. Same steps `capturePrimaryFlow`
+  /// already exercises, without its screenshot/orientation concerns.
+  private func navigateToCollectionWithProof() {
+    reachRecordingScreen()
+    app.buttons["Close"].tap()
+
+    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+  }
+
+  /// Opens the DemoEvent proof `navigateToCollectionWithProof` just left on
+  /// Collection, and waits for Proof Detail to appear.
+  private func openFirstProof() {
+    app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+  }
+
   private func assertWelcomeLayout(named name: String) {
     let getStarted = app.buttons["Get Started"]
     let appWindow = app.windows.firstMatch

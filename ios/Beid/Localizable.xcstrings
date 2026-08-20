@@ -853,6 +853,23 @@
         }
       }
     },
+    "status.recordedOnDevice": {
+      "comment": "Label shown when a proof's sensing data is known to be locally signed and stored on this device (not yet sent anywhere). Used in two places: (1) the Transparency screen's Participation record tier, where it's one of three rows (Sent / Included in published data are separate, always-unavailable rows below it); (2) the Proof Detail screen's Status row, where it replaced a prior unconditional \"Verified\" claim that had no backing model (beid#240, DECISIONS 2026-08-20) — the device only has its own signature, which shows \"this device recorded this,\" nothing more. Refers to on-device storage, not a video/audio recording.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded on device"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "端末内に記録済み"
+          }
+        }
+      }
+    },
     "Switch it on": {
       "localizations": {
         "ja": {
@@ -1476,6 +1493,23 @@
         }
       }
     },
+    "scan.recording.diagnosticCaption": {
+      "comment": "Temporary diagnostic line on the Recording screen (beid#218, DECISIONS 2026-08-20) — not permanent product UI, does not need to survive #141's rebuild, but ships to real TestFlight/production builds (not #if DEBUG) because a live multi-device field test needs to read these counters without a debugger attached. \"Identified\" is SensingCoordinator.devicesVerified: distinct nearby devices whose proximity identifier (RPID) was resolved to a display ID. \"Unidentified\" is SensingCoordinator.unidentifiedRpidCount: proximity identifiers observed but not yet resolved to a display ID — radio is arriving, but the device could not be identified. A large unidentified count with a flat identified count points at an identification failure; both flat points at nothing arriving at all — opposite fixes, which is why both numbers must be visible together. Do NOT translate this as mutual, two-way, or reciprocal confirmation of any kind — neither number says anything about whether a peer observed this device back (the protocol carries no such signal, DECISIONS 2026-08-09). Same bar as this file's `scan.recording.caption` translator comment on the line above this one.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostics: %1$lld identified · %2$lld unidentified"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "診断: 識別済み %1$lld · 未識別 %2$lld"
+          }
+        }
+      }
+    },
     "Transparency": {
       "comment": "Screen title (also reused as the ItemDetailView row label linking to this screen): the name of the screen showing a participant the status of their own data (recorded/sent/published/verified). Noun referring to open, checkable data status, not visual/window transparency or opacity.",
       "localizations": {
@@ -1557,23 +1591,6 @@
           "stringUnit": {
             "state": "needs_review",
             "value": "参加記録"
-          }
-        }
-      }
-    },
-    "Recorded on device": {
-      "comment": "Sub-state row under \"Participation record\": the sensing data has been locally signed and stored on this device (not yet sent anywhere). Refers to on-device storage, not a video/audio recording.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recorded on device"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "needs_review",
-            "value": "端末内に記録済み"
           }
         }
       }
@@ -1880,7 +1897,7 @@
       }
     },
     "Devices mutually confirmed": {
-      "comment": "Headline metric label on the Participation summary screen, paired with a count. This is the mutually-confirmed (two-way) device count for the whole session, a different and currently-always-zero metric from any all-observation device count shown elsewhere in the app (see beid#142's \"Devices sensed\"/\"Mutual confirmations\" precedent) — the reciprocity signal this depends on does not exist on-device yet, so this count is honestly 0 today, not a bug. Do not translate this as if it always grows together with a devices-sensed count, and do not substitute an estimate for it.",
+      "comment": "Headline metric label on the Participation summary screen, paired with a value. This is the mutually-confirmed (two-way) device count for the whole session, a different metric from any all-observation device count shown elsewhere in the app (see beid#142's \"Devices sensed\"/\"Mutual confirmations\" precedent) — the reciprocity signal this depends on does not exist on-device yet, so this metric never shows a numeric value: the value shown next to this label is always a \"cannot be determined on this device\" state (see `participationSummary.mutualCount.unavailable`), never a number including 0. Do not translate this as if it always grows together with a devices-sensed count, and do not substitute an estimate for it.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1998,8 +2015,25 @@
         }
       }
     },
+    "participationSummary.mutualCount.unavailable": {
+      "comment": "Value shown for the \"Devices mutually confirmed\" headline metric on the Participation summary screen — unconditionally, regardless of whether a session-aggregate snapshot exists for this proof. The mutual (two-way) device count cannot be measured on this device at all: the protocol only reports \"this device observed a peer,\" never \"the peer observed this device back,\" so establishing mutual confirmation requires reconciling two devices' signed records off-device (beid#144 stage 4, not yet built). This is a different, narrower reason than this screen's other \"Not yet available\" text (`participationSummary.notYetAvailable`, used when no session data was captured at all) — do not merge the two keys, and do not translate this as an error, warning, or declined state. Never show a numeric value (including 0) for this metric; DECISIONS 2026-08-20 (beid#222) settled that an honest-but-unmeasured 0 was read on real hardware as \"measured and got 0,\" which is misinformation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet available"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "未対応"
+          }
+        }
+      }
+    },
     "participationSummary.notYetAvailable": {
-      "comment": "Status shown on the Participation summary screen when no session-aggregate snapshot was ever persisted for this proof: the session ended before the snapshot-writing feature existed, the write failed (best-effort, can fail silently), or the session never reached the recording phase at all. This means the data was never captured, not that an attempt was made and failed — do not translate as an error, warning, or declined state, and do not confuse it with a real, present value of zero (this screen's headline metric can legitimately show a real 0, which is a different, available state).",
+      "comment": "Status shown on the Participation summary screen when no session-aggregate snapshot was ever persisted for this proof: the session ended before the snapshot-writing feature existed, the write failed (best-effort, can fail silently), or the session never reached the recording phase at all. This means the data was never captured, not that an attempt was made and failed — do not translate as an error, warning, or declined state. Never confuse this key with `participationSummary.mutualCount.unavailable`, the headline metric's own \"not yet available\" text — a different, narrower reason (mutual confirmation is structurally unmeasurable on-device, not merely uncaptured).",
       "localizations": {
         "en": {
           "stringUnit": {
