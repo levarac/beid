@@ -405,6 +405,10 @@ dates). The contract every agent must know before touching delivery files:
 - ASC API key と team ID は repository secret ではなく、runner-local の
   `$ASC_CRED_DIR/env` とそこから指す key file から実行時に読む。値を workflow
   や log に出してはならない。
+- Apple Distribution identity はrunner-localの専用keychain
+  `~/Library/Keychains/beid-ci.keychain-db`に置く。job開始時にrunner `.env`の
+  `BEID_CI_KEYCHAIN_PASSWORD`でunlockし、設定済みteam IDに一致する有効identityを
+  確認してからarchiveする。passwordをrepository・GitHub Secrets・logへ出さない。
 - GitHub Actions upload は現時点で TestFlight の **What to Test を反映しない**。
   API upload 後に ASC API で notes を設定する処理は別 follow-up であり、この
   temporary lane の upload 成否と混同しない。

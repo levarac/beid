@@ -30,6 +30,14 @@ number. Authentication is runner-local: the script reads `$ASC_CRED_DIR/env`
 and its referenced key file at runtime. Credentials must not be copied into
 GitHub secrets, repository files, or logs.
 
+Code signing uses the dedicated runner-local keychain
+`~/Library/Keychains/beid-ci.keychain-db`. At job start the script unlocks it
+with `BEID_CI_KEYCHAIN_PASSWORD` from `~/actions-runner-beid/.env`, then checks
+that it contains a valid signing identity for `BEID_TEAM_ID`. The runner env
+file is mode 600; the password value must never be printed, committed, or
+copied into GitHub Secrets. `BEID_CI_KEYCHAIN_PATH` may override the path when
+the runner layout changes, but the fixed path above is the current default.
+
 This GitHub Actions upload does **not** currently publish TestFlight "What to
 Test" notes. Xcode Cloud supplies those notes through
 `ci_post_xcodebuild.sh`; an API-uploaded build needs a separate ASC API update

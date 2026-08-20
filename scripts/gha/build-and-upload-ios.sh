@@ -84,6 +84,24 @@ if [[ ! -r "$ASC_KEY_PATH" ]]; then
   exit 1
 fi
 
+CI_KEYCHAIN_PATH="${BEID_CI_KEYCHAIN_PATH:-$HOME/Library/Keychains/beid-ci.keychain-db}"
+: "${BEID_CI_KEYCHAIN_PASSWORD:?BEID_CI_KEYCHAIN_PASSWORD is missing from the runner environment}"
+
+if [[ ! -r "$CI_KEYCHAIN_PATH" ]]; then
+  echo "error: dedicated iOS signing keychain is not readable at the configured path." >&2
+  exit 1
+fi
+
+echo "Unlocking the dedicated iOS signing keychain..."
+security unlock-keychain -p "$BEID_CI_KEYCHAIN_PASSWORD" "$CI_KEYCHAIN_PATH"
+
+SIGNING_IDENTITIES="$(security find-identity -v -p codesigning "$CI_KEYCHAIN_PATH")"
+if ! grep -Fq "($BEID_TEAM_ID)" <<< "$SIGNING_IDENTITIES"; then
+  echo "error: dedicated iOS signing keychain has no valid identity for the configured team." >&2
+  exit 1
+fi
+echo "Dedicated iOS signing identity is available."
+
 echo "Archiving Beid for a generic iOS device..."
 # -quiet prevents xcodebuild's command-invocation banner from logging the
 # runner-local authentication identifiers. Warnings and errors remain visible.
