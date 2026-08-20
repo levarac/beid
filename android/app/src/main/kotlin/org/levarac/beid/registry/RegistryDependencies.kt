@@ -9,5 +9,6 @@ internal object RegistryDependencies {
     fun createClient(): RegistryClient? = createSepoliaRegistryClient(
         readerAddressHex = BuildConfig.EVENT_REGISTRY_READER_ADDRESS,
         etherscanApiKey = BuildConfig.ETHERSCAN_API_KEY.ifBlank { null },
+        definitionUrlTemplate = BuildConfig.EVENT_DEFINITION_URL_TEMPLATE.ifBlank { null },
     )
 }

@@ -29,8 +29,12 @@ private class AndroidRegistryHttpTransport : RegistryHttpTransport {
                 }
                 val status = connection.responseCode
                 val stream = if (status >= 400) connection.errorStream else connection.inputStream
-                val responseBody = stream?.use(::readBoundedUtf8).orEmpty()
-                RegistryHttpResponse(statusCode = status, body = responseBody)
+                val responseBytes = stream?.use(::readBoundedBytes) ?: ByteArray(0)
+                RegistryHttpResponse(
+                    statusCode = status,
+                    body = responseBytes.decodeToString(),
+                    bodyBytes = responseBytes,
+                )
             } catch (error: SocketTimeoutException) {
                 throw RegistryTransportTimeoutException(causeMessage(error))
             } finally {
@@ -39,7 +43,7 @@ private class AndroidRegistryHttpTransport : RegistryHttpTransport {
         }
 }
 
-private fun readBoundedUtf8(stream: InputStream): String {
+private fun readBoundedBytes(stream: InputStream): ByteArray {
     val output = ByteArrayOutputStream()
     val buffer = ByteArray(8 * 1_024)
     var total = 0
@@ -50,7 +54,7 @@ private fun readBoundedUtf8(stream: InputStream): String {
         require(total <= MAX_HTTP_RESPONSE_BYTES) { "registry HTTP response exceeds the configured limit" }
         output.write(buffer, 0, count)
     }
-    return output.toByteArray().decodeToString()
+    return output.toByteArray()
 }
 
 private fun causeMessage(error: Throwable): String =

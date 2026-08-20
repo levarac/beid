@@ -9,6 +9,7 @@ fun String.asBuildConfigString(): String =
 
 val registryReaderAddress = providers.gradleProperty("beid.registryReaderAddress").orElse("")
 val etherscanApiKey = providers.gradleProperty("beid.etherscanApiKey").orElse("")
+val definitionUrlTemplate = providers.gradleProperty("beid.definitionUrlTemplate").orElse("")
 
 android {
     namespace = "org.levarac.beid"
@@ -29,6 +30,11 @@ android {
             "String",
             "ETHERSCAN_API_KEY",
             etherscanApiKey.get().asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "EVENT_DEFINITION_URL_TEMPLATE",
+            definitionUrlTemplate.get().asBuildConfigString(),
         )
     }
 

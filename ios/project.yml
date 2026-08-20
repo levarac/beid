@@ -67,6 +67,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         BeidEventRegistryReaderAddress: "$(BEID_EVENT_REGISTRY_READER_ADDRESS)"
         BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
+        BeidEventDefinitionURLTemplate: "$(BEID_EVENT_DEFINITION_URL_TEMPLATE)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
@@ -102,6 +103,7 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         BEID_EVENT_REGISTRY_READER_ADDRESS: ""
         BEID_ETHERSCAN_API_KEY: ""
+        BEID_EVENT_DEFINITION_URL_TEMPLATE: ""
       configs:
         Debug:
           # XcodeGen 2.45.3 has no configuration filter for package
