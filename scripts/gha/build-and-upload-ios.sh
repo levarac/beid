@@ -116,6 +116,9 @@ xcodebuild \
   -authenticationKeyPath "$ASC_KEY_PATH" \
   -authenticationKeyID "$ASC_KEY_ID" \
   -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY='Apple Distribution' \
+  DEVELOPMENT_TEAM="$BEID_TEAM_ID" \
   archive
 
 plutil -create xml1 "$EXPORT_OPTIONS"

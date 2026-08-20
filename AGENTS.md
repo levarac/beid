@@ -399,9 +399,10 @@ dates). The contract every agent must know before touching delivery files:
   self-hosted runner `emi` 上で動き、同じ concurrency group で直列化する。
 - 共通処理は `scripts/gha/build-and-upload-ios.sh` に置く。XcodeGen の pin と
   drift guard は Xcode Cloud の `ci_post_clone.sh` と同じ契約を守り、Release
-  archive を生成して `xcodebuild -exportArchive` で App Store Connect へ
-  upload する。build number は `manageAppVersionAndBuildNumber` で Apple に
-  採番させる。
+  archive をtemporary lane内だけManual / Apple Distributionで署名して生成し、
+  `xcodebuild -exportArchive` で App Store Connect へuploadする。通常のproject
+  signing設定とXcode Cloudは変更しない。build number は
+  `manageAppVersionAndBuildNumber` でAppleに採番させる。
 - ASC API key と team ID は repository secret ではなく、runner-local の
   `$ASC_CRED_DIR/env` とそこから指す key file から実行時に読む。値を workflow
   や log に出してはならない。

@@ -24,11 +24,13 @@ returns; no Xcode Cloud setting needs to be removed for this temporary lane.
 
 `scripts/gha/build-and-upload-ios.sh` installs the XcodeGen version pinned by
 `ios/ci_scripts/XCODEGEN_VERSION`, checks that generation leaves the committed
-project clean, archives the Release scheme, and uploads it with
-`xcodebuild -exportArchive`. The upload asks Apple to assign the next build
-number. Authentication is runner-local: the script reads `$ASC_CRED_DIR/env`
-and its referenced key file at runtime. Credentials must not be copied into
-GitHub secrets, repository files, or logs.
+project clean, archives the Release scheme with command-line-only Manual /
+Apple Distribution signing overrides, and uploads it with
+`xcodebuild -exportArchive`. The repository's normal automatic signing setting
+and Xcode Cloud configuration remain unchanged. The upload asks Apple to assign
+the next build number. Authentication is runner-local: the script reads
+`$ASC_CRED_DIR/env` and its referenced key file at runtime. Credentials must
+not be copied into GitHub secrets, repository files, or logs.
 
 Code signing uses the dedicated runner-local keychain
 `~/Library/Keychains/beid-ci.keychain-db`. At job start the script unlocks it
