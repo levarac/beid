@@ -14,6 +14,8 @@ internal data class RegistryHttpRequest(
 internal data class RegistryHttpResponse(
     val statusCode: Int,
     val body: String,
+    /** Raw response bytes; JSON callers continue to use [body]. */
+    val bodyBytes: ByteArray = body.encodeToByteArray(),
 )
 
 internal interface RegistryHttpTransport {
