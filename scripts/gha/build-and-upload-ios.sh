@@ -61,15 +61,6 @@ ARCHIVE_PATH="$DELIVERY_TMP/Beid.xcarchive"
 EXPORT_PATH="$DELIVERY_TMP/export"
 EXPORT_OPTIONS="$DELIVERY_TMP/ExportOptions.plist"
 
-echo "Archiving Beid for a generic iOS device..."
-xcodebuild \
-  -project ios/Beid.xcodeproj \
-  -scheme Beid \
-  -configuration Release \
-  -destination 'generic/platform=iOS' \
-  -archivePath "$ARCHIVE_PATH" \
-  archive
-
 : "${ASC_CRED_DIR:?ASC_CRED_DIR must point to the runner-local ASC credential directory}"
 ASC_ENV_FILE="$ASC_CRED_DIR/env"
 if [[ ! -r "$ASC_ENV_FILE" ]]; then
@@ -93,6 +84,22 @@ if [[ ! -r "$ASC_KEY_PATH" ]]; then
   exit 1
 fi
 
+echo "Archiving Beid for a generic iOS device..."
+# -quiet prevents xcodebuild's command-invocation banner from logging the
+# runner-local authentication identifiers. Warnings and errors remain visible.
+xcodebuild \
+  -quiet \
+  -project ios/Beid.xcodeproj \
+  -scheme Beid \
+  -configuration Release \
+  -destination 'generic/platform=iOS' \
+  -archivePath "$ARCHIVE_PATH" \
+  -allowProvisioningUpdates \
+  -authenticationKeyPath "$ASC_KEY_PATH" \
+  -authenticationKeyID "$ASC_KEY_ID" \
+  -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+  archive
+
 plutil -create xml1 "$EXPORT_OPTIONS"
 plutil -insert method -string app-store-connect "$EXPORT_OPTIONS"
 plutil -insert destination -string upload "$EXPORT_OPTIONS"
@@ -102,6 +109,7 @@ plutil -insert manageAppVersionAndBuildNumber -bool YES "$EXPORT_OPTIONS"
 
 echo "Uploading archive to App Store Connect..."
 xcodebuild \
+  -quiet \
   -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
   -exportPath "$EXPORT_PATH" \
