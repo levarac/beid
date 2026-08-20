@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.shared.event.normalizedEventCodeOrNull
 
 /**
  * Field-level validation error shown inline under the event-code field,
@@ -39,9 +40,11 @@ data class EventJoinScreenState(
 /**
  * Presentation layer over [EventJoinSession] — owns the event-code text
  * field and its validation state, and forwards the actual join decision to
- * [session] unchanged. This is a thin layer, not a second decision-maker:
- * the only decision made here is "is the code field blank?", a
- * presentation-only check, not a product/session decision.
+ * [session]. This is a thin layer, not a second decision-maker: what counts
+ * as empty and what the canonical form is come from
+ * `org.levarac.beid.shared.event.normalizedEventCodeOrNull` (beid#226,
+ * DECISIONS 2026-08-20), the same `shared/` decision iOS's join path
+ * applies, not a native `isBlank()`/trim/lowercase check owned here.
  */
 class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
     private val _uiState = MutableStateFlow(EventJoinScreenState(sessionState = session.state.value))
@@ -61,12 +64,13 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun submit() {
         val code = _uiState.value.eventCode
-        if (code.isBlank()) {
+        val normalized = normalizedEventCodeOrNull(code)
+        if (normalized == null) {
             _uiState.update { it.copy(fieldError = EventJoinFieldError.EmptyCode) }
             return
         }
         _uiState.update { it.copy(fieldError = null) }
-        session.joinEvent(code)
+        session.joinEvent(normalized)
     }
 
     fun openAppSettings() = session.openAppSettings()

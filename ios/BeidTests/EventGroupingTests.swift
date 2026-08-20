@@ -108,6 +108,45 @@ final class EventGroupingTests: XCTestCase {
     XCTAssertEqual(group.first?.date, newest.date, "Title/date must still track the newest session.")
   }
 
+  // MARK: - beid#226/DECISIONS 2026-08-20: normalized comparison key
+
+  func testGroupsMergesEventCodesDifferingOnlyByCase() {
+    let upper = Proof(eventName: "Event", date: Date(), peersVerified: 1, eventCode: "ETHTOKYO")
+    let lower = Proof(eventName: "Event", date: Date(), peersVerified: 1, eventCode: "ethtokyo")
+    let proofs = [upper, lower]
+
+    let groups = EventGrouping.groups(from: proofs)
+
+    XCTAssertEqual(groups.count, 1, "\"ETHTOKYO\" and \"ethtokyo\" must normalize to the same group.")
+    XCTAssertEqual(groups[0].map(\.id), [upper.id, lower.id])
+  }
+
+  func testSessionsForEitherCasingReturnsBoth() {
+    let upper = Proof(eventName: "Event", date: Date(), peersVerified: 1, eventCode: "ETHTOKYO")
+    let lower = Proof(eventName: "Event", date: Date(), peersVerified: 1, eventCode: "ethtokyo")
+    let proofs = [upper, lower]
+
+    XCTAssertEqual(
+      EventGrouping.sessions(for: upper, in: proofs).map(\.id), [upper.id, lower.id],
+      "sessions(for:in:) from the upper-case proof must include the lower-case one."
+    )
+    XCTAssertEqual(
+      EventGrouping.sessions(for: lower, in: proofs).map(\.id), [upper.id, lower.id],
+      "sessions(for:in:) from the lower-case proof must include the upper-case one."
+    )
+  }
+
+  func testPastEventsCollapsesDifferentlyCasedEventCodesToOneRepresentative() {
+    let older = Proof(eventName: "Event", date: Date().addingTimeInterval(-3600), peersVerified: 1, eventCode: "ETHTOKYO")
+    let newer = Proof(eventName: "Event", date: Date(), peersVerified: 1, eventCode: "ethtokyo")
+    let proofs = [newer, older] // newest-first
+
+    let past = EventGrouping.pastEvents(from: proofs)
+
+    XCTAssertEqual(past.count, 1, "Differently-cased eventCodes for the same event must collapse to one past-events entry.")
+    XCTAssertEqual(past[0].id, newer.id, "The representative must still be the group's newest proof.")
+  }
+
   // MARK: - pastEvents(from:) — beid#230
 
   func testPastEventsReturnsOneRepresentativePerDistinctEventCodeNewestFirst() {

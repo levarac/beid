@@ -43,6 +43,20 @@ final class EventCodeJoinTests: XCTestCase {
     XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "ethtokyo2026")
   }
 
+  /// beid#226/DECISIONS 2026-08-20: `joinEvent(code:)` case-folds through
+  /// `attemptJoinEvent`'s shared `normalizedEventCodeOrNull` call, not a
+  /// native `.trimmingCharacters`-only check — proves the fix end-to-end,
+  /// not just at the pure-function level.
+  func testJoinEventCaseFoldsTheCodeEndToEnd() {
+    let coordinator = AppCoordinator()
+    coordinator.screen = .eventCodeEntry
+
+    let error = coordinator.joinEvent(code: "  ETHTOKYO2026  ")
+
+    XCTAssertNil(error)
+    XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "ethtokyo2026")
+  }
+
   func testOpenEventCodeEntryFromAccountSheetPresentsSheet() {
     let coordinator = AppCoordinator()
 
