@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - main
+      # Smoke test only; remove before merge.
+      - ci/gha-testflight-lane
     paths:
       - what_to_test.json
       - what_to_test.ios.json
+      # Smoke test only; lets the smoke-trigger push exercise this workflow.
+      - .github/workflows/internal-testflight.yml
   workflow_dispatch:
 
 permissions:
