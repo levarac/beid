@@ -21,6 +21,7 @@ final class AppCoordinator: ObservableObject {
 
   let onboardingMode = OnboardingMode.current
   let proofStore: ProofStore
+  let registryClient = RegistryDependencies.createClient()
   let sensingCoordinator = SensingCoordinator()
   let bluetoothMonitor = BluetoothMonitor()
 
@@ -38,6 +39,10 @@ final class AppCoordinator: ObservableObject {
     if hasCompletedOnboardingPersisted {
       restoreAfterOnboarding()
     }
+  }
+
+  deinit {
+    registryClient?.close()
   }
 
   // MARK: - Onboarding

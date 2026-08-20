@@ -4,8 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import org.levarac.beid.navigation.AppNavHost
+import org.levarac.beid.registry.RegistryDependencies
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.ui.theme.BeidAppTheme
+import org.levarac.parallax.registry.RegistryClient
 
 /**
  * Single-activity Compose host — the Android equivalent of iOS's
@@ -19,9 +21,11 @@ import org.levarac.beid.ui.theme.BeidAppTheme
  */
 class MainActivity : ComponentActivity() {
     private lateinit var eventJoinCoordinator: EventJoinCoordinator
+    private var registryClient: RegistryClient? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registryClient = RegistryDependencies.createClient()
         eventJoinCoordinator = EventJoinCoordinator(this)
         setContent {
             BeidAppTheme {
@@ -44,6 +48,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        registryClient?.close()
         eventJoinCoordinator.dispose()
         super.onDestroy()
     }

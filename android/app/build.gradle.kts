@@ -4,6 +4,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+fun String.asBuildConfigString(): String =
+    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val registryReaderAddress = providers.gradleProperty("beid.registryReaderAddress").orElse("")
+val etherscanApiKey = providers.gradleProperty("beid.etherscanApiKey").orElse("")
+
 android {
     namespace = "org.levarac.beid"
     compileSdk = 36
@@ -14,6 +20,16 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField(
+            "String",
+            "EVENT_REGISTRY_READER_ADDRESS",
+            registryReaderAddress.get().asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "ETHERSCAN_API_KEY",
+            etherscanApiKey.get().asBuildConfigString(),
+        )
     }
 
     compileOptions {
@@ -27,6 +43,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     buildTypes {
