@@ -1,22 +1,10 @@
 [
   {
     "language": "ja",
-    "text": "記録中の画面から「相互確認」の行がなくなりました。これは常に0のままで、端末だけでは判定できない値だったため、表示をやめています。記録中に見えるのは検知した端末数と記録の積み上がりだけになりますので、表示が欠けているように見えないかを見てください。あわせて、このビルドで一通り通して確認してほしいです。アカウントからイベントコードを入れ、4人以上で同じ場所でセンシングし、記録が始まったらスキャン画面を閉じ、コレクションに証明が並ぶところまでです。同じイベントを2回以上記録してもコレクションでは1枚にまとまります。"
+    "text": "このビルドは実機での検証を目的としています。参加する全員が必ずこのビルドに更新してください。イベントコードの扱い方を変えたため、古いビルドと新しいビルドが混ざると、同じコードを入力しても別のイベントとして扱われ、互いを検知しません。イベントコードは大文字小文字を区別しなくなり、前後の空白も無視されます。ETHTokyo と ethtokyo は同じイベントです。記録中の画面に「診断: 識別済み◯ · 未識別◯」という行が増えています。これは調査用の一時的な表示で、相互確認の数ではありません。4人以上で記録を始めたあと、この2つの数がどう動いたかを教えてください。識別済みが伸びない場合、未識別が増えているかどうかで原因が変わります。"
   },
   {
     "language": "en-US",
-    "text": "The \"Mutual confirmations\" line is gone from the recording screen. It was always 0 — it is not something a device can determine on its own — so we stopped showing it rather than showing a number that was never measured. The recording screen now shows only the devices-sensed count and the recording buildup; please check that nothing looks like it is missing. Please also run one full pass on this build: set an event code from Account, sense together with four or more people in the same place, close the scan screen once recording starts, and check the proof appears in your collection. Recording the same event more than once still shows as a single card there."
-  },
-  {
-    "language": "zh-Hans",
-    "text": "记录中界面已移除「相互确认」这一行。该数值始终为 0——仅凭单台设备无法判断——因此我们不再显示这个从未被测量过的数字。记录中界面现在只显示检测到的设备数和记录的累积情况，请确认看起来没有缺失内容。另外请在本版本上完整走一遍流程：从「账户」输入活动代码，四人以上在同一地点一起感应，开始记录后关闭扫描界面，确认收藏页出现证明。同一活动记录多次，在收藏页仍只显示为一张卡片。"
-  },
-  {
-    "language": "es-ES",
-    "text": "La línea «Confirmaciones mutuas» ha desaparecido de la pantalla de grabación. Siempre era 0 — no es algo que un dispositivo pueda determinar por sí solo — así que hemos dejado de mostrar un número que nunca se llegó a medir. La pantalla de grabación ahora muestra solo el número de dispositivos detectados y la acumulación de la grabación; comprueba que no parezca que falte nada. Haz también una pasada completa en esta versión: indica un código de evento desde Cuenta, detectad juntos cuatro personas o más en el mismo lugar, cierra la pantalla de escaneo cuando empiece la grabación y comprueba que la prueba aparece en tu colección. Grabar el mismo evento más de una vez sigue mostrándose ahí como una sola tarjeta."
-  },
-  {
-    "language": "fr-FR",
-    "text": "La ligne « Confirmations mutuelles » a disparu de l'écran d'enregistrement. Elle valait toujours 0 — ce n'est pas quelque chose qu'un appareil peut déterminer seul — nous avons donc cessé d'afficher un nombre qui n'a jamais été mesuré. L'écran d'enregistrement n'affiche plus que le nombre d'appareils détectés et la progression de l'enregistrement ; vérifiez que rien ne semble manquer. Faites aussi un passage complet sur cette version : saisissez un code d'événement depuis Compte, détectez ensemble à quatre personnes ou plus au même endroit, fermez l'écran de scan une fois l'enregistrement lancé, et vérifiez que la preuve apparaît dans votre collection. Enregistrer le même événement plusieurs fois n'y affiche toujours qu'une seule carte."
+    "text": "This build is for on-device testing. Everyone taking part must update to it. Event codes are handled differently now, so a mix of old and new builds will treat the same typed code as two different events and will not sense each other. Event codes are no longer case-sensitive and surrounding spaces are ignored: ETHTokyo and ethtokyo are the same event. The recording screen now shows a line reading \"Diagnostics: N identified · N unidentified\". It is a temporary investigation aid, not a count of mutual confirmations. After starting a recording with four or more people, please tell us how those two numbers moved. If the identified count stays flat, whether the unidentified count is rising tells us which cause we are looking at."
   }
 ]
