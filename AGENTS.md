@@ -363,9 +363,9 @@ localization mechanism — they are not meant to overlap.
 
 ## Delivery / CI contract (GitHub Actions + Xcode Cloud)
 
-The full delivery doc is `docs/xcode-cloud.md` (canonical, carries
-verification dates). The contract every agent must know before touching
-delivery files:
+The platform delivery docs are `docs/xcode-cloud.md` for iOS and
+`docs/google-play.md` for Android (canonical, each carries verification
+dates). The contract every agent must know before touching delivery files:
 
 ### PR CI
 
@@ -408,6 +408,30 @@ delivery files:
 - GitHub Actions upload は現時点で TestFlight の **What to Test を反映しない**。
   API upload 後に ASC API で notes を設定する処理は別 follow-up であり、この
   temporary lane の upload 成否と混同しない。
+
+### Temporary Android delivery lane (GitHub Actions)
+
+- `.github/workflows/internal-google-play.yml` は `main` への push のうち
+  `what_to_test.json` または `what_to_test.android.json` が変わった時と、
+  手動実行で起動する。`GHA_DELIVERY == on` の時だけ self-hosted runner `emi`
+  上でAABをbuild・署名し、Google Play internal testingへuploadする。
+- Android laneもXcode Cloud予算枯渇中のtemporary pathである。iOS laneと同じ
+  repository variableで止まるため、予算復旧時は`GHA_DELIVERY=off`で両方を
+  無効化する。Android側にXcode Cloudの代替元はないため、再開時の恒久運用は
+  別途決める。
+- runnerは`ANDROID_HOME`と`KMP_JAVA_HOME`を持ち、Gradleは必ずrepositoryの
+  `scripts/resolve_kmp_java_home.sh`が選ぶJDK 17で動かす。ambientなsystem Javaを
+  使ってはならない。
+- Play service-account JSONとupload keystoreはGitHub Secretsへ移さず、
+  runner-localの`$PLAY_CRED_DIR/env`とそこから指すfileから読む。passwordは
+  logやprocess command lineへ直接展開しない。
+- repositoryの`android/app/build.gradle.kts`にはrelease signing設定を追加しない。
+  workflowはunsigned AABを生成後、runner-local upload keyで`jarsigner`署名する。
+  temporary laneのversionCodeはworkflow runから10億台で採番し、sourceの
+  `versionCode=1`を変更しない。
+- Google Playのapp record、初回manual AAB upload、upload key登録、service
+  account権限付与が完了するまではactivation blockedである。正確なrunner設定と
+  Ken側activation手順は`docs/google-play.md`を参照する。
 
 - **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
   root). The temporary GitHub Actions lane triggers from this change on

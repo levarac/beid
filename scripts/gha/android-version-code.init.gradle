@@ -1,0 +1,17 @@
+gradle.beforeProject { project ->
+    if (project.path != ":app") {
+        return
+    }
+
+    project.pluginManager.withPlugin("com.android.application") {
+        def versionCodeText = System.getenv("BEID_ANDROID_VERSION_CODE")
+        if (versionCodeText == null || !(versionCodeText ==~ /[1-9][0-9]*/)) {
+            throw new GradleException("BEID_ANDROID_VERSION_CODE must be a positive integer")
+        }
+
+        def requestedVersionCode = Integer.parseInt(versionCodeText)
+        project.androidComponents.finalizeDsl { extension ->
+            extension.defaultConfig.versionCode = requestedVersionCode
+        }
+    }
+}
