@@ -1,0 +1,28 @@
+name: Internal TestFlight Delivery
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - what_to_test.json
+      - what_to_test.ios.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beid-ios-delivery
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    name: Archive and upload to TestFlight
+    if: ${{ vars.GHA_DELIVERY == 'on' }}
+    runs-on: [self-hosted, emi]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive and upload
+        run: scripts/gha/build-and-upload-ios.sh

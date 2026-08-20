@@ -1,11 +1,60 @@
-# Xcode Cloud → TestFlight
+# iOS delivery: GitHub Actions and Xcode Cloud
 
-This document is the source of truth for beid's Xcode Cloud setup. It exists
-because Xcode Cloud workflows are configured in the App Store Connect (ASC)
-GUI, not in this repo, so the exact values used there need to live somewhere
-reviewable. Modeled on the delivery documentation of a sister project,
-trimmed to beid's current scope (TestFlight only — no App Store submission
-automation yet).
+This document is the source of truth for beid's iOS delivery setup. It keeps
+the retained Xcode Cloud configuration reviewable and records the temporary
+GitHub Actions lane used while the Xcode Cloud budget is exhausted. Beid's
+scope is TestFlight only; App Store submission automation is not included.
+
+## Current temporary status — 2026-08-20
+
+The Xcode Cloud workflows remain configured but are not the active delivery
+path while their compute budget is exhausted. Two repository workflows provide
+the temporary path:
+
+| Workflow | Automatic trigger | Manual trigger |
+|---|---|---|
+| `.github/workflows/internal-testflight.yml` | Push to `main` changing `what_to_test.json` or `what_to_test.ios.json` | Yes |
+| `.github/workflows/release-testflight.yml` | Push to `release/**` | Yes |
+
+Both jobs run only when the repository variable `GHA_DELIVERY` is exactly
+`on`. They share the fixed `beid-ios-delivery` concurrency group, do not cancel
+an in-progress delivery, and run on the self-hosted `emi` runner. Set the
+variable to `off` to silence both workflows when the Xcode Cloud budget
+returns; no Xcode Cloud setting needs to be removed for this temporary lane.
+
+`scripts/gha/build-and-upload-ios.sh` installs the XcodeGen version pinned by
+`ios/ci_scripts/XCODEGEN_VERSION`, checks that generation leaves the committed
+project clean, archives the Release scheme with command-line-only Manual /
+Apple Distribution signing overrides, and uploads it with
+`xcodebuild -exportArchive`. The repository's normal automatic signing setting
+and Xcode Cloud configuration remain unchanged. The upload asks Apple to assign
+the next build number. Authentication is runner-local: the script reads
+`$ASC_CRED_DIR/env` and its referenced key file at runtime. Credentials must
+not be copied into GitHub secrets, repository files, or logs.
+
+Code signing uses the dedicated runner-local keychain
+`~/Library/Keychains/beid-ci.keychain-db`. At job start the script unlocks it
+with `BEID_CI_KEYCHAIN_PASSWORD` from `~/actions-runner-beid/.env`, then checks
+that it contains a valid signing identity for `BEID_TEAM_ID`. The runner env
+file is mode 600; the password value must never be printed, committed, or
+copied into GitHub Secrets. `BEID_CI_KEYCHAIN_PATH` may override the path when
+the runner layout changes, but the fixed path above is the current default.
+The runner also has the active App Store provisioning profile
+`Beid GitHub Actions App Store`, created for `org.levarac.beid` with that
+Distribution identity. `project.yml` scopes
+`PROVISIONING_PROFILE_SPECIFIER=$(BEID_PROVISIONING_PROFILE)` to the Beid
+target's Release configuration. The GitHub Actions archive supplies that
+custom build setting with the installed profile name; under Xcode Cloud it is
+unset and resolves empty, leaving normal automatic signing unchanged.
+The GitHub Actions export also uses manual signing and maps
+`org.levarac.beid` to that profile in `provisioningProfiles`, so export uses
+the runner-local identity and profile instead of ASC cloud signing.
+
+This GitHub Actions upload does **not** currently publish TestFlight "What to
+Test" notes. Xcode Cloud supplies those notes through
+`ci_post_xcodebuild.sh`; an API-uploaded build needs a separate ASC API update
+after processing. That notes update is a follow-up, not part of this temporary
+upload lane.
 
 ## Two convention files, two audiences
 
@@ -15,10 +64,9 @@ automation yet).
 | `release_notes.json` | root | External testers / eventual App Store copy | `release/*` branch pushes |
 
 Both are arrays of `{"language": "<ASC locale>", "text": "..."}`. Use ASC's
-locale identifiers, not Xcode's String Catalog locale ids — for beid's
-current 5-locale set that's `en-US`, `ja`, `zh-Hans`, `es-ES`, `fr-FR` (String
-Catalog uses `en`/`es`/`fr`, ASC wants the region-qualified form). `ja` and
-`en-US` are the required minimum; keep the others in sync when practical.
+locale identifiers, not Xcode's String Catalog locale ids. Beid's current
+settled locale set is `en-US` and `ja` (String Catalog uses `en` for English).
+Both entries are required.
 
 - **`what_to_test.json`**: what to check in *this* build. Rewrite it each
   time — don't accumulate history. 1–3 plain-language sentences, no PR/issue
@@ -220,7 +268,10 @@ Version/build numbers: `project.yml` hardcodes
 **Verified 2026-07-23**: ASC's "Build Number Source: Xcode Cloud" is in
 effect — delivered build numbers equal the Xcode Cloud run numbers
 (builds 3/7/8/9 = runs 3/7/8/9), so the repo's
-`CURRENT_PROJECT_VERSION` is inert and must not be bumped per build.
+`CURRENT_PROJECT_VERSION` is inert and must not be bumped per build. The
+temporary GitHub Actions lane instead sets
+`manageAppVersionAndBuildNumber: true` during export, so Apple assigns its
+next build number without changing `project.yml`.
 `MARKETING_VERSION` remains the single version knob, in `project.yml`
 only.
 

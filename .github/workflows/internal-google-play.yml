@@ -1,0 +1,39 @@
+name: Internal Google Play Delivery
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - what_to_test.json
+      - what_to_test.android.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beid-android-delivery
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    name: Build and upload AAB to internal testing
+    if: ${{ vars.GHA_DELIVERY == 'on' }}
+    runs-on: [self-hosted, emi]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate runner-local Play credentials
+        run: scripts/gha/check-play-delivery.sh
+      - name: Build and sign release AAB
+        run: scripts/gha/build-and-sign-android.sh
+      - name: Upload AAB to Google Play internal testing
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJson: ${{ env.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: org.levarac.beid
+          releaseFiles: ${{ env.ANDROID_AAB_PATH }}
+          tracks: internal
+          status: completed
+          releaseName: GHA ${{ env.ANDROID_VERSION_CODE }}

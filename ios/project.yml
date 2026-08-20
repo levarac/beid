@@ -110,6 +110,9 @@ targets:
             - "$(BUILT_PRODUCTS_DIR)/SocketIO.o"
             - "$(BUILT_PRODUCTS_DIR)/Starscream.o"
             - "-lecies"
+        Release:
+          # Runner-only indirection: empty under Xcode Cloud, explicit in GHA.
+          PROVISIONING_PROFILE_SPECIFIER: "$(BEID_PROVISIONING_PROFILE)"
   BeidMetaMaskDebug:
     type: library.static
     platform: iOS
