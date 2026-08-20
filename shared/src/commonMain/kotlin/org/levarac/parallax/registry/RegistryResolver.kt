@@ -80,6 +80,21 @@ internal class InMemoryRegistryCache(
         }
     }
 
+    internal suspend fun removeByBlockHash(
+        chainId: Long,
+        registryAddressHex: String,
+        eventIdHex: String,
+        blockHashHex: String,
+    ): Unit = mutex.withLock {
+        values.removeAll { entry ->
+            val key = entry.value.cacheKey
+            key.chainId == chainId &&
+                key.registryAddressHex == registryAddressHex &&
+                key.eventIdHex == eventIdHex &&
+                key.blockHashHex == blockHashHex
+        }
+    }
+
     internal suspend fun put(pin: RegistryReadPin, value: RegistryResolvedValue): RegistryCachePutResult =
         mutex.withLock {
             val key = value.cacheKey
@@ -198,12 +213,34 @@ internal class RegistryResolver(
         if (pin.kind == RegistryReadPinKind.BLOCK_HASH) {
             val blockHashHex = requireNotNull(pin.blockHashHex)
             rejectConflictedBlock(eventIdHex, blockHashHex)
-            cache.findByBlockHash(
+            val cached = cache.findByBlockHash(
                 chainId = chainId,
                 registryAddressHex = registryAddress,
                 eventIdHex = eventIdHex,
                 blockHashHex = blockHashHex,
-            )?.let { return it }
+            )
+            if (cached != null) {
+                val verifier = listOf(primary, secondary).firstOrNull { it.endpointId !in quarantined }
+                    ?: throw RegistryGatewayException(
+                        RegistryErrorCode.NO_ENDPOINT,
+                        retryable = false,
+                        message = "no registry RPC can verify the cached strict block",
+                    )
+                val canonicalBlock = retry {
+                    verifier.resolveCanonicalBlockAtNumber(cached.cacheKey.blockNumber)
+                }
+                if (canonicalBlock.blockHashHex != blockHashHex) {
+                    cache.removeByBlockHash(
+                        chainId = chainId,
+                        registryAddressHex = registryAddress,
+                        eventIdHex = eventIdHex,
+                        blockHashHex = blockHashHex,
+                    )
+                    conflictedBlocks += ConflictedBlockKey(eventIdHex, blockHashHex)
+                    throw blockConflictFailure()
+                }
+                return cached
+            }
         }
 
         val resolvedPin = resolveBlockPin(pin)

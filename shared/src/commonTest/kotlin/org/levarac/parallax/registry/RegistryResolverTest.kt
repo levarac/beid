@@ -300,10 +300,11 @@ class RegistryResolverTest {
     }
 
     @Test
-    fun strictBlockHashResolveIsCacheOnlyAfterTheFirstPinnedRead() = runTest {
+    fun strictBlockHashResolveRevalidatesTheCachedHeaderWithoutRepeatingEthCall() = runTest {
         val primaryTransport = RecordingRegistryTransport(
             RegistryTestFixtures.headerResponse(),
             RegistryTestFixtures.callResponse(),
+            RegistryTestFixtures.headerResponse(),
         )
         val secondaryTransport = RecordingRegistryTransport(RegistryTestFixtures.callResponse())
         val resolver = resolver(primaryTransport, secondaryTransport, RecordingRetryDelay())
@@ -315,8 +316,51 @@ class RegistryResolverTest {
         val second = resolver.resolve(RegistryTestFixtures.eventId.copyOf(), strictPin)
 
         assertContentEquals(first.rawCbor, second.rawCbor)
-        assertEquals(firstPrimaryCount, primaryTransport.requests.size)
+        assertEquals(firstPrimaryCount + 1, primaryTransport.requests.size)
         assertEquals(firstSecondaryCount, secondaryTransport.requests.size)
+        val cacheHitRequests = primaryTransport.requests.drop(firstPrimaryCount) +
+            secondaryTransport.requests.drop(firstSecondaryCount)
+        assertEquals(1, cacheHitRequests.size)
+        val cacheHitBody = requireNotNull(cacheHitRequests.single().body)
+        assertTrue(cacheHitBody.contains("\"method\":\"eth_getBlockByNumber\""))
+        assertTrue(cacheHitBody.contains("\"params\":[\"0x1234\",false]"))
+        assertTrue(cacheHitRequests.none { it.body?.contains("\"method\":\"eth_call\"") == true })
+    }
+
+    @Test
+    fun strictBlockHashCacheEntryIsQuarantinedWhenItsNumberIsNoLongerCanonical() = runTest {
+        val primaryTransport = RecordingRegistryTransport(
+            RegistryTestFixtures.headerResponse(),
+            RegistryTestFixtures.callResponse(),
+            RegistryTestFixtures.headerResponse(blockHash = RegistryTestFixtures.OTHER_BLOCK_HASH),
+        )
+        val secondaryTransport = RecordingRegistryTransport(RegistryTestFixtures.callResponse())
+        val cache = InMemoryRegistryCache()
+        val resolver = resolver(
+            primaryTransport,
+            secondaryTransport,
+            RecordingRetryDelay(),
+            cache = cache,
+        )
+        val strictPin = requireNotNull(strictRegistryReadPin(RegistryTestFixtures.BLOCK_HASH))
+        resolver.resolve(RegistryTestFixtures.eventId, strictPin)
+
+        val conflict = gatewayFailure {
+            resolver.resolve(RegistryTestFixtures.eventId.copyOf(), strictPin)
+        }
+
+        assertEquals(RegistryErrorCode.RESULT_MISMATCH, conflict.code)
+        assertTrue(cache.snapshotKeys().isEmpty())
+        val primaryRequestCount = primaryTransport.requests.size
+        val secondaryRequestCount = secondaryTransport.requests.size
+        val repeatedConflict = gatewayFailure {
+            resolver.resolve(RegistryTestFixtures.eventId.copyOf(), strictPin)
+        }
+        assertEquals(RegistryErrorCode.RESULT_MISMATCH, repeatedConflict.code)
+        assertEquals(primaryRequestCount, primaryTransport.requests.size)
+        assertEquals(secondaryRequestCount, secondaryTransport.requests.size)
+        assertEquals(3, primaryTransport.requests.size)
+        assertEquals(1, secondaryTransport.requests.size)
     }
 
     @Test
@@ -324,6 +368,7 @@ class RegistryResolverTest {
         val primaryTransport = RecordingRegistryTransport(
             RegistryTestFixtures.headerResponse(),
             RegistryTestFixtures.callResponse(),
+            RegistryTestFixtures.headerResponse(),
         )
         val secondaryTransport = RecordingRegistryTransport(RegistryTestFixtures.callResponse())
         val resolver = resolver(primaryTransport, secondaryTransport, RecordingRetryDelay())
@@ -335,7 +380,7 @@ class RegistryResolverTest {
         )
 
         assertContentEquals(safe.rawCbor, strict.rawCbor)
-        assertEquals(2, primaryTransport.requests.size)
+        assertEquals(3, primaryTransport.requests.size)
         assertEquals(1, secondaryTransport.requests.size)
     }
 

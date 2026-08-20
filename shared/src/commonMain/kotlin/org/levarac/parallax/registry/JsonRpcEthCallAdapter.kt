@@ -27,11 +27,7 @@ internal class JsonRpcEthCallAdapter(
         }
         val body = """{"jsonrpc":"2.0","id":1,"method":"$method","params":[$parameter,false]}"""
         val result = executeJsonRpc(body, expectedId = 1)
-        return try {
-            val header = requireResultObject(result, "block header")
-            val numberHex = header.requiredString("number")
-            val blockHashHex = header.requiredString("hash").decodeHex(expectedBytes = 32).toPrefixedHex()
-            val number = decodeHexQuantity(numberHex)
+        return decodeBlockHeader(result) { number, blockHashHex ->
             if (pin.kind == RegistryReadPinKind.BLOCK_HASH) {
                 if (blockHashHex != pin.blockHashHex) {
                     throw protocolFailure("resolved block hash does not match the strict pin")
@@ -42,10 +38,24 @@ internal class JsonRpcEthCallAdapter(
                 blockHashHex = blockHashHex,
                 strict = pin.kind == RegistryReadPinKind.BLOCK_HASH,
             )
-        } catch (error: RegistryGatewayException) {
-            throw error
-        } catch (error: IllegalArgumentException) {
-            throw protocolFailure("registry RPC returned an invalid block header", error)
+        }
+    }
+
+    internal suspend fun resolveCanonicalBlockAtNumber(blockNumber: Long): ResolvedBlockPin {
+        require(blockNumber >= 0) { "blockNumber must not be negative" }
+        val blockNumberHex = "0x${blockNumber.toString(16)}"
+        val body =
+            """{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["$blockNumberHex",false]}"""
+        val result = executeJsonRpc(body, expectedId = 1)
+        return decodeBlockHeader(result) { resolvedNumber, blockHashHex ->
+            if (resolvedNumber != blockNumber) {
+                throw protocolFailure("resolved block number does not match the requested number")
+            }
+            ResolvedBlockPin(
+                blockNumber = resolvedNumber,
+                blockHashHex = blockHashHex,
+                strict = true,
+            )
         }
     }
 
@@ -197,6 +207,20 @@ internal class JsonRpcEthCallAdapter(
             )
         }
         return result as? JsonObject ?: throw protocolFailure("$label result must be an object")
+    }
+
+    private fun decodeBlockHeader(
+        result: JsonElement,
+        transform: (blockNumber: Long, blockHashHex: String) -> ResolvedBlockPin,
+    ): ResolvedBlockPin = try {
+        val header = requireResultObject(result, "block header")
+        val numberHex = header.requiredString("number")
+        val blockHashHex = header.requiredString("hash").decodeHex(expectedBytes = 32).toPrefixedHex()
+        transform(decodeHexQuantity(numberHex), blockHashHex)
+    } catch (error: RegistryGatewayException) {
+        throw error
+    } catch (error: IllegalArgumentException) {
+        throw protocolFailure("registry RPC returned an invalid block header", error)
     }
 
     private fun JsonObject.requiredString(name: String): String =
