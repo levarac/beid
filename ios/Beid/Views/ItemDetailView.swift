@@ -106,18 +106,40 @@ struct ItemDetailView: View {
     }
   }
 
-  /// Fixed, unconditional "Verified" — deliberately not derived from
-  /// `proof.signatureState`. See `docs/specs/itemdetail-redesign.md` §5.2.
+  /// Shows "Recorded on device" — the step before verification, and the
+  /// only claim about this proof's signature the app can currently back.
+  /// Third-party verification does not exist in the product (#144 stage 4,
+  /// unstarted); the device only holds its own signature, which shows
+  /// "this device recorded this," nothing more. Unconditional (not derived
+  /// from `proof.signatureState`) because "Recorded on device" is
+  /// unconditionally true for any `Proof` reaching this screen — see
+  /// `transparencyRow`'s doc comment on `hasJoined`. Was unconditional
+  /// "Verified" until beid#240 (DECISIONS 2026-08-20); superseded
+  /// `docs/specs/itemdetail-redesign.md` §5.2's OD-2, see that section's
+  /// 2026-08-20 superseding note.
   private var statusRow: some View {
     HStack(alignment: .firstTextBaseline) {
       Text("Status")
         .font(DS.Font.supporting)
         .foregroundStyle(DS.Color.textSecondary)
       Spacer(minLength: DS.Space.m)
-      Label("Verified", systemImage: "checkmark.circle.fill")
+      Label(recordedOnDeviceStatusText, systemImage: "checkmark.circle.fill")
         .font(DS.Font.cardTitle)
         .foregroundStyle(DS.Color.proofSeal)
     }
+  }
+
+  /// Explicit shared key with `TransparencyView`'s Participation record
+  /// tier (AGENTS.md's reuse rule — the same English text appears at a
+  /// second call site here): key/defaultValue/comment must stay
+  /// byte-identical at both call sites so Xcode's String Catalog treats
+  /// them as one entry.
+  private var recordedOnDeviceStatusText: String {
+    String(
+      localized: "status.recordedOnDevice",
+      defaultValue: "Recorded on device",
+      comment: "Label shown when a proof's sensing data is known to be locally signed and stored on this device (not yet sent anywhere). Used in two places: (1) the Transparency screen's Participation record tier, where it's one of three rows (Sent / Included in published data are separate, always-unavailable rows below it); (2) the Proof Detail screen's Status row, where it replaced a prior unconditional \"Verified\" claim that had no backing model (beid#240, DECISIONS 2026-08-20) — the device only has its own signature, which shows \"this device recorded this,\" nothing more. Refers to on-device storage, not a video/audio recording."
+    )
   }
 
   /// Entry point for beid#137's Transparency screen — the only "check the

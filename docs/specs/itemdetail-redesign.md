@@ -148,6 +148,16 @@ current header `BeidPanel`)
    (forbidden term, DESIGN.md §15, and an unmodeled claim). A checkmark
    icon (`checkmark.circle.fill`, `DS.Color.proofSeal`) is added beside the
    text for visual parity with Figma.
+
+   **Superseded 2026-08-20 (beid#240, DECISIONS 2026-08-20):** the
+   "Verified" resolution above has the same defect it identified in
+   "on-chain" — no backing model. Third-party verification does not exist
+   in the product (#144 stage 4, unstarted); the device only has its own
+   signature. The Status row now shows "Recorded on device," reusing
+   `TransparencyView`'s participation-record vocabulary (the
+   `status.recordedOnDevice` key) instead of "Verified." The checkmark icon
+   and `DS.Color.proofSeal` styling are unchanged — "Recorded on device" is
+   unconditionally true for any `Proof` reachable from this screen.
 3. **OD-3 — Venue text has no `Proof` field — RESOLVED: drop the venue
    segment, date-only.** The title-block date line renders only a
    medium-style date (matching `ProofCardView`'s formatter), no venue.
@@ -167,6 +177,17 @@ current header `BeidPanel`)
   the same `"Verified"` string already used by the Status row today, so no
   orphaned key results from removing that `Label` — the string stays
   referenced by the Status row.
+
+  **Superseded 2026-08-20 (beid#240):** both bullets above are now false.
+  The Status row's fix (§5 OD-2's superseding note) introduces one new
+  shared key, `status.recordedOnDevice`, reused verbatim from
+  `TransparencyView`'s existing "Recorded on device" row (AGENTS.md's
+  explicit-key reuse rule — the same English text now appears at a second
+  call site). `"Verified"` is now orphaned: `ItemDetailView.swift:117` was
+  its only call site in the repo, and this change removed that call site.
+  The `"Verified"` catalog entry is intentionally retained rather than
+  deleted, the same treatment already applied to other documented orphans
+  (e.g. `scan.recording.mutualCount` after beid#223).
 
 ## 7. Acceptance criteria
 

@@ -88,7 +88,7 @@ struct SessionParticipationListView: View {
           .font(DS.Font.cardTitle)
           .foregroundStyle(DS.Color.textPrimary)
         Spacer(minLength: DS.Space.m)
-        trailingValue(for: session.aggregate)
+        trailingValue
         Image(systemName: "chevron.right")
           .font(DS.Font.meta)
           .foregroundStyle(DS.Color.textSecondary)
@@ -98,36 +98,28 @@ struct SessionParticipationListView: View {
     }
   }
 
-  @ViewBuilder
-  private func trailingValue(for aggregate: BeidSharedKit.aggregation.SessionAggregate?) -> some View {
-    if let aggregate {
-      Text(mutualCountText(for: aggregate))
-        .font(DS.Font.supporting)
-        .foregroundStyle(DS.Color.textSecondary)
-    } else {
-      Text(notYetAvailableText)
-        .font(DS.Font.supporting)
-        .foregroundStyle(DS.Color.statusOff)
-    }
+  /// beid#222, DECISIONS 2026-08-20: the mutual (two-way) device count
+  /// cannot be measured on-device at all — same reason as
+  /// `ParticipationSummaryView.headlineRow`, which this row duplicates on a
+  /// per-session basis via its own `mutualDeviceCount` read. In scope for
+  /// the same fix because it renders that identical, structurally
+  /// unmeasurable metric a second time. Unconditional, independent of
+  /// whether `aggregate` exists for this session — never a literal number,
+  /// including 0.
+  private var trailingValue: some View {
+    Text(mutualCountUnavailableText)
+      .font(DS.Font.supporting)
+      .foregroundStyle(DS.Color.statusOff)
   }
 
-  private func mutualCountText(for aggregate: BeidSharedKit.aggregation.SessionAggregate) -> String {
+  /// Shared verbatim (same key/defaultValue/comment) with
+  /// `ParticipationSummaryView.mutualCountUnavailableText` — AGENTS.md's
+  /// reuse rule.
+  private var mutualCountUnavailableText: String {
     String(
-      localized: "participationSummary.sessionList.row.mutualCount",
-      defaultValue: "\(Int(aggregate.mutualDeviceCount)) confirmed",
-      comment: "Trailing value on one row of the per-session list on the Participation summary screen: the mutually-confirmed device count for that one specific session, matching the scope of the headline metric shown on the single-session Participation summary screen. Not a duration, not an index, not the event-wide Transparency count."
-    )
-  }
-
-  /// Reused verbatim from `ParticipationSummaryView` — same meaning (no
-  /// session-aggregate snapshot was ever persisted for this proof), now
-  /// also read per-row instead of full-screen only. Must not be duplicated
-  /// under a new key (spec §6.3/§8).
-  private var notYetAvailableText: String {
-    String(
-      localized: "participationSummary.notYetAvailable",
+      localized: "participationSummary.mutualCount.unavailable",
       defaultValue: "Not yet available",
-      comment: "Status shown on the Participation summary screen when no session-aggregate snapshot was ever persisted for this proof: the session ended before the snapshot-writing feature existed, the write failed (best-effort, can fail silently), or the session never reached the recording phase at all. This means the data was never captured, not that an attempt was made and failed — do not translate as an error, warning, or declined state, and do not confuse it with a real, present value of zero (this screen's headline metric can legitimately show a real 0, which is a different, available state)."
+      comment: "Value shown for the \"Devices mutually confirmed\" headline metric on the Participation summary screen — unconditionally, regardless of whether a session-aggregate snapshot exists for this proof. The mutual (two-way) device count cannot be measured on this device at all: the protocol only reports \"this device observed a peer,\" never \"the peer observed this device back,\" so establishing mutual confirmation requires reconciling two devices' signed records off-device (beid#144 stage 4, not yet built). This is a different, narrower reason than this screen's other \"Not yet available\" text (`participationSummary.notYetAvailable`, used when no session data was captured at all) — do not merge the two keys, and do not translate this as an error, warning, or declined state. Never show a numeric value (including 0) for this metric; DECISIONS 2026-08-20 (beid#222) settled that an honest-but-unmeasured 0 was read on real hardware as \"measured and got 0,\" which is misinformation."
     )
   }
 }

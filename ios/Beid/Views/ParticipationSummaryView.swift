@@ -85,24 +85,32 @@ struct ParticipationSummaryView: View {
 
   // MARK: - Headline
 
+  /// Unconditional — independent of whether `aggregate` exists, unlike
+  /// `bandBuildupSection` below. The mutual (two-way) device count is
+  /// structurally unmeasurable on-device by design (see
+  /// `mutualCountUnavailableText`'s comment), not merely "not captured
+  /// yet," so this never becomes a real value once a snapshot exists,
+  /// unlike the band data `bandBuildupSection` legitimately gains.
   private var headlineRow: some View {
-    Group {
-      if let aggregate {
-        BeidMetricRow(
-          label: headlineLabelKey,
-          verbatimValue: "\(Int(aggregate.mutualDeviceCount))"
-        )
-      } else {
-        BeidMetricRow(
-          label: headlineLabelKey,
-          verbatimValue: notYetAvailableText,
-          valueStyle: AnyShapeStyle(DS.Color.statusOff)
-        )
-      }
-    }
+    BeidMetricRow(
+      label: headlineLabelKey,
+      verbatimValue: mutualCountUnavailableText,
+      valueStyle: AnyShapeStyle(DS.Color.statusOff)
+    )
   }
 
   private var headlineLabelKey: LocalizedStringKey { "Devices mutually confirmed" }
+
+  /// Shared verbatim (same key/defaultValue/comment) with
+  /// `SessionParticipationListView.mutualCountUnavailableText` — AGENTS.md's
+  /// reuse rule.
+  private var mutualCountUnavailableText: String {
+    String(
+      localized: "participationSummary.mutualCount.unavailable",
+      defaultValue: "Not yet available",
+      comment: "Value shown for the \"Devices mutually confirmed\" headline metric on the Participation summary screen — unconditionally, regardless of whether a session-aggregate snapshot exists for this proof. The mutual (two-way) device count cannot be measured on this device at all: the protocol only reports \"this device observed a peer,\" never \"the peer observed this device back,\" so establishing mutual confirmation requires reconciling two devices' signed records off-device (beid#144 stage 4, not yet built). This is a different, narrower reason than this screen's other \"Not yet available\" text (`participationSummary.notYetAvailable`, used when no session data was captured at all) — do not merge the two keys, and do not translate this as an error, warning, or declined state. Never show a numeric value (including 0) for this metric; DECISIONS 2026-08-20 (beid#222) settled that an honest-but-unmeasured 0 was read on real hardware as \"measured and got 0,\" which is misinformation."
+    )
+  }
 
   // MARK: - Time-band buildup
 
@@ -155,19 +163,21 @@ struct ParticipationSummaryView: View {
     )
   }
 
-  /// Reused for both the headline metric and the band-buildup section when
-  /// `aggregate == nil` — an explicit key per AGENTS.md's reuse rule.
-  /// Deliberately a distinct key from `TransparencyView`'s
-  /// `transparency.notYetAvailable`, even though the English wording
-  /// matches: that key's comment is scoped to `TransparencyView`'s own
-  /// three reasons (no report-submission/verifier code exists yet), while
-  /// this screen's "not yet available" reflects a different data gap (no
-  /// persisted session-aggregate snapshot for this proof, per beid#166).
+  /// Used by `bandBuildupBody` only, when `aggregate == nil` — an explicit
+  /// key per AGENTS.md's reuse rule. Deliberately a distinct key from
+  /// `TransparencyView`'s `transparency.notYetAvailable`, even though the
+  /// English wording matches: that key's comment is scoped to
+  /// `TransparencyView`'s own three reasons (no report-submission/verifier
+  /// code exists yet), while this screen's "not yet available" reflects a
+  /// different data gap (no persisted session-aggregate snapshot for this
+  /// proof, per beid#166). No longer reused by the headline metric (that
+  /// row now always renders `mutualCountUnavailableText`, a narrower,
+  /// distinct-reason key — beid#222).
   private var notYetAvailableText: String {
     String(
       localized: "participationSummary.notYetAvailable",
       defaultValue: "Not yet available",
-      comment: "Status shown on the Participation summary screen when no session-aggregate snapshot was ever persisted for this proof: the session ended before the snapshot-writing feature existed, the write failed (best-effort, can fail silently), or the session never reached the recording phase at all. This means the data was never captured, not that an attempt was made and failed — do not translate as an error, warning, or declined state, and do not confuse it with a real, present value of zero (this screen's headline metric can legitimately show a real 0, which is a different, available state)."
+      comment: "Status shown on the Participation summary screen when no session-aggregate snapshot was ever persisted for this proof: the session ended before the snapshot-writing feature existed, the write failed (best-effort, can fail silently), or the session never reached the recording phase at all. This means the data was never captured, not that an attempt was made and failed — do not translate as an error, warning, or declined state. Never confuse this key with `participationSummary.mutualCount.unavailable`, the headline metric's own \"not yet available\" text — a different, narrower reason (mutual confirmation is structurally unmeasurable on-device, not merely uncaptured)."
     )
   }
 }
