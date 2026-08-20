@@ -24,20 +24,21 @@ final class EventRejoinTests: XCTestCase {
     XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "beid-test-event")
   }
 
-  /// beid#226 is open (event-code normalization differs iOS/Android); this
-  /// task must not add a second normalization rule on top of the one
-  /// `attemptJoinEvent` already applies at first-join time. A stored
-  /// `Proof.eventCode` was already normalized once, so replay must be
-  /// verbatim — proven here by passing a string `attemptJoinEvent` would
-  /// have altered (padding whitespace) and asserting it survives untouched.
-  func testRejoinPastEventDoesNotNormalizeTheCodeASecondTime() {
+  /// beid#226 is resolved (DECISIONS 2026-08-20): `rejoinPastEvent` now
+  /// shares `attemptJoinEvent`'s normalization (trim surrounding
+  /// whitespace, then fold case) instead of passing `code` through
+  /// verbatim. This keeps rejoin and a fresh join of the same typed text
+  /// deriving the same RPID — including for a `Proof.eventCode` stored
+  /// before this fix, which may still carry surrounding whitespace or
+  /// mixed case from the old, platform-diverging behavior.
+  func testRejoinPastEventNormalizesTheStoredCode() {
     let coordinator = AppCoordinator()
 
-    coordinator.rejoinPastEvent(code: "  beid-test-event  ")
+    coordinator.rejoinPastEvent(code: "  ETHTOKYO  ")
 
     XCTAssertEqual(
-      coordinator.sensingCoordinator.joinedEventCode, "  beid-test-event  ",
-      "rejoinPastEvent must pass the stored eventCode verbatim, with no .trimmingCharacters or other normalization."
+      coordinator.sensingCoordinator.joinedEventCode, "ethtokyo",
+      "rejoinPastEvent must normalize through the same shared decision attemptJoinEvent uses."
     )
   }
 

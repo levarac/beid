@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import Foundation
 
 /// Root state machine for onboarding + the collection home. Order of the
@@ -142,10 +143,17 @@ final class AppCoordinator: ObservableObject {
   /// Shared join attempt behind both `joinEvent(code:)` and
   /// `joinEventFromAccountSheet(code:)` — validates and calls into
   /// `SensingCoordinator`, without deciding what happens on success.
+  ///
+  /// Canonicalization (surrounding whitespace trimmed, then case folded) is
+  /// `BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode:)`
+  /// (beid#226, DECISIONS 2026-08-20) — a `shared/` decision so iOS and
+  /// Android derive the same RPID from the same typed text, not a native
+  /// `.trimmingCharacters` check.
   private func attemptJoinEvent(code rawCode: String) -> EventCodeJoinError? {
-    let trimmed = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return .emptyCode }
-    guard sensingCoordinator.joinEvent(trimmed) else { return .joinFailed }
+    guard let normalized = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) else {
+      return .emptyCode
+    }
+    guard sensingCoordinator.joinEvent(normalized) else { return .joinFailed }
     return nil
   }
 
@@ -161,19 +169,22 @@ final class AppCoordinator: ObservableObject {
   /// covers for "Join Event"; the caller is expected to disable the row the
   /// same way, but this does not rely on that as its only guard.
   ///
-  /// Unlike `attemptJoinEvent(code:)`, `code` is passed to
-  /// `SensingCoordinator.joinEvent(_:)` verbatim, with no
-  /// `.trimmingCharacters` or other normalization. A stored `Proof.eventCode`
-  /// was already normalized once, at the moment it was first joined
-  /// (`attemptJoinEvent(code:)` trims before calling `sensingCoordinator
-  /// .joinEvent`, and that trimmed string is what `SensingCoordinator`
-  /// records onto the resulting `Proof`) — normalizing it a second time here
-  /// would be a second, undiscussed normalization rule layered on top of the
-  /// open cross-platform question beid#226 already tracks (iOS trims before
-  /// joining, Android does not), not this task's to introduce.
+  /// Routes through `attemptJoinEvent(code:)` (beid#226, DECISIONS
+  /// 2026-08-20) so there is exactly one iOS call site into
+  /// `normalizedEventCodeOrNull`, not two. A `Proof.eventCode` stored before
+  /// this change may carry surrounding whitespace or mixed case that a fresh
+  /// join of the same text would no longer produce; sharing
+  /// `attemptJoinEvent`'s normalization here means a legacy-cased stored
+  /// code rejoins to the same RPID a fresh join of the same text derives
+  /// today, instead of reproducing whatever it happened to canonicalize to
+  /// under the old, platform-diverging rule. The return value is discarded:
+  /// a stored `Proof.eventCode` cannot normalize to empty (it was itself
+  /// produced by a successful join), and a `.joinFailed` here has no
+  /// separate UI to report to, matching this function's pre-existing
+  /// `Bool`-discarding call into `SensingCoordinator`.
   func rejoinPastEvent(code: String) {
     guard sensingCoordinator.joinedEventCode == nil else { return }
-    sensingCoordinator.joinEvent(code)
+    _ = attemptJoinEvent(code: code)
   }
 
   /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the

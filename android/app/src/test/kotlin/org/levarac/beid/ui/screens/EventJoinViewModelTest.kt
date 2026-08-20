@@ -57,7 +57,27 @@ class EventJoinViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertNull(viewModel.uiState.value.fieldError)
-        assertEquals("ABC123", session.joinedCode)
+        assertEquals("abc123", session.joinedCode)
+    }
+
+    /**
+     * beid#226/DECISIONS 2026-08-20: proves the normalization fix end-to-end
+     * through the ViewModel — surrounding whitespace trimmed, then case
+     * folded — not just asserted by coincidence on an already-clean string
+     * like the test above.
+     */
+    @Test
+    fun submittingCodeWithWhitespaceAndMixedCaseNormalizesBeforeJoining() = runTest {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEventCodeChanged("  EthTokyo  ")
+        viewModel.submit()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.fieldError)
+        assertEquals("ethtokyo", session.joinedCode)
     }
 
     @Test

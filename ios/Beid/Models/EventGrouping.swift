@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import Foundation
 
 /// Display-side event grouping shared by `CollectionHomeView` and
@@ -19,7 +20,7 @@ enum EventGrouping {
     var order: [String] = []
     var groups: [String: [Proof]] = [:]
     for proof in proofs {
-      let key = proof.eventCode ?? "singleton-\(proof.id.uuidString)"
+      let key = normalizedKey(for: proof.eventCode) ?? "singleton-\(proof.id.uuidString)"
       if groups[key] == nil {
         order.append(key)
         groups[key] = []
@@ -35,8 +36,24 @@ enum EventGrouping {
   /// Always non-empty (`proof` itself is always a member of its own
   /// result).
   static func sessions(for proof: Proof, in proofs: [Proof]) -> [Proof] {
-    guard let eventCode = proof.eventCode else { return [proof] }
-    return proofs.filter { $0.eventCode == eventCode }
+    guard let key = normalizedKey(for: proof.eventCode) else { return [proof] }
+    return proofs.filter { normalizedKey(for: $0.eventCode) == key }
+  }
+
+  /// The comparison/grouping key for `eventCode`, per beid#226/DECISIONS
+  /// 2026-08-20 — surrounding whitespace trimmed, then case folded, via the
+  /// same `shared/` decision iOS's join path
+  /// (`AppCoordinator.attemptJoinEvent(code:)`) already applies, so two
+  /// proofs typed/stored under different case or padding (e.g. legacy
+  /// stored codes from before this fix) group together. `Proof.eventCode`
+  /// itself is untouched — no migration, this only changes the comparison
+  /// key. A non-nil `eventCode` that somehow normalizes to nil (should not
+  /// happen for already-validated stored data) falls back to `nil` here,
+  /// same as a genuinely-nil `eventCode` — callers degrade that to its own
+  /// singleton rather than merging it into an unrelated bucket.
+  private static func normalizedKey(for eventCode: String?) -> String? {
+    guard let eventCode else { return nil }
+    return BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: eventCode)
   }
 
   /// One representative `Proof` per distinct non-nil `eventCode` in
