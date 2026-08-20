@@ -361,7 +361,7 @@ string "mint"). When DESIGN.md and this section conflict on copy tone vs.
 mechanism, DESIGN.md governs tone/vocabulary and this section governs the
 localization mechanism — they are not meant to overlap.
 
-## Delivery / CI contract (Xcode Cloud)
+## Delivery / CI contract (GitHub Actions + Xcode Cloud)
 
 The full delivery doc is `docs/xcode-cloud.md` (canonical, carries
 verification dates). The contract every agent must know before touching
@@ -385,10 +385,35 @@ delivery files:
   上の KMP review gate を免除しない。KMP の independent review は作業上の
   gate、GitHub の approving review は merge button の設定で、別の条件である。
 
+### Temporary iOS delivery lane (GitHub Actions)
+
+- **2026-08-20 現在、Xcode Cloud の budget 枯渇中は GitHub Actions が
+  TestFlight upload を代行する。** Xcode Cloud の workflow 設定は削除・変更
+  せず、そのまま保持する。budget が戻ったら repository variable
+  `GHA_DELIVERY` を `off` にして GitHub Actions lane を止め、Xcode Cloud を
+  再び delivery path として使う。
+- `.github/workflows/internal-testflight.yml` は `main` への push のうち
+  `what_to_test.json` または `what_to_test.ios.json` が変わった時と、手動実行で
+  起動する。`.github/workflows/release-testflight.yml` は `release/**` branch
+  への push と手動実行で起動する。両方とも `GHA_DELIVERY == on` の時だけ
+  self-hosted runner `emi` 上で動き、同じ concurrency group で直列化する。
+- 共通処理は `scripts/gha/build-and-upload-ios.sh` に置く。XcodeGen の pin と
+  drift guard は Xcode Cloud の `ci_post_clone.sh` と同じ契約を守り、Release
+  archive を生成して `xcodebuild -exportArchive` で App Store Connect へ
+  upload する。build number は `manageAppVersionAndBuildNumber` で Apple に
+  採番させる。
+- ASC API key と team ID は repository secret ではなく、runner-local の
+  `$ASC_CRED_DIR/env` とそこから指す key file から実行時に読む。値を workflow
+  や log に出してはならない。
+- GitHub Actions upload は現時点で TestFlight の **What to Test を反映しない**。
+  API upload 後に ASC API で notes を設定する処理は別 follow-up であり、この
+  temporary lane の upload 成否と混同しない。
+
 - **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
-  root). Changing this file on any branch push both **triggers** the
-  Internal Build workflow and becomes the tester-facing "What to Test"
-  notes. Rewrite it wholesale each time — what to check in *this* build
+  root). The temporary GitHub Actions lane triggers from this change on
+  `main`, but does not yet copy the file into tester-facing "What to Test"
+  notes. Xcode Cloud does both when it is the active delivery path. Rewrite
+  the file wholesale each time — what to check in *this* build
   only, 1-3 plain sentences per locale (ASC locales: `en-US`, `ja`), no PR
   numbers, no internal jargon, no accumulated history.
 - **`release_notes.json` is App Store "What's New" copy.** On non-release
@@ -401,9 +426,10 @@ delivery files:
   confusion). When in doubt, the file you want is `what_to_test.json`.
 - **Versioning**: `MARKETING_VERSION` lives once in `ios/project.yml`
   (the project is xcodegen-generated — never hand-edit the `.xcodeproj`).
-  Build numbers are managed by Xcode Cloud (build number = run number);
-  `CURRENT_PROJECT_VERSION` in `project.yml` is an inert placeholder
-  (`"1"`) — leave it, never bump it per build.
+  Xcode Cloud builds use the Xcode Cloud run number. The temporary GitHub
+  Actions lane asks Apple to assign the next build number during export.
+  `CURRENT_PROJECT_VERSION` in `project.yml` remains an inert placeholder
+  (`"1"`) in both paths — leave it, never bump it per build.
 - **"Uploaded" ≠ "delivered"**: a build can be `VALID` in App Store
   Connect yet reach no tester. Internal builds auto-deliver to the "Dev"
   TestFlight group via the ASC workflow post-action (configured
