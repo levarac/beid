@@ -65,6 +65,8 @@ targets:
         # Release template (TestFlight/App Store): standard crypto only
         # (HTTPS/BLE) => exempt, skips the per-upload export-compliance question.
         ITSAppUsesNonExemptEncryption: false
+        BeidEventRegistryReaderAddress: "$(BEID_EVENT_REGISTRY_READER_ADDRESS)"
+        BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
@@ -98,6 +100,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        BEID_EVENT_REGISTRY_READER_ADDRESS: ""
+        BEID_ETHERSCAN_API_KEY: ""
       configs:
         Debug:
           # XcodeGen 2.45.3 has no configuration filter for package
