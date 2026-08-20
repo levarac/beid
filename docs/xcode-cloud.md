@@ -41,10 +41,11 @@ copied into GitHub Secrets. `BEID_CI_KEYCHAIN_PATH` may override the path when
 the runner layout changes, but the fixed path above is the current default.
 The runner also has the active App Store provisioning profile
 `Beid GitHub Actions App Store`, created for `org.levarac.beid` with that
-Distribution identity. The archive names it explicitly through
-`PROVISIONING_PROFILE_SPECIFIER`; set runner-local
-`BEID_PROVISIONING_PROFILE_SPECIFIER` only if the installed profile name must
-change.
+Distribution identity. `project.yml` scopes
+`PROVISIONING_PROFILE_SPECIFIER=$(BEID_PROVISIONING_PROFILE)` to the Beid
+target's Release configuration. The GitHub Actions archive supplies that
+custom build setting with the installed profile name; under Xcode Cloud it is
+unset and resolves empty, leaving normal automatic signing unchanged.
 
 This GitHub Actions upload does **not** currently publish TestFlight "What to
 Test" notes. Xcode Cloud supplies those notes through

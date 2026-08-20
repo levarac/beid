@@ -411,8 +411,10 @@ dates). The contract every agent must know before touching delivery files:
   `BEID_CI_KEYCHAIN_PASSWORD`でunlockし、設定済みteam IDに一致する有効identityを
   確認してからarchiveする。passwordをrepository・GitHub Secrets・logへ出さない。
 - App Store provisioning profile `Beid GitHub Actions App Store` はrunner-localに
-  installし、archive時の`PROVISIONING_PROFILE_SPECIFIER`として明示する。同名を
-  変更する場合だけrunner `.env`の`BEID_PROVISIONING_PROFILE_SPECIFIER`で上書きする。
+  installする。`project.yml`はBeid targetのReleaseだけで
+  `PROVISIONING_PROFILE_SPECIFIER=$(BEID_PROVISIONING_PROFILE)`を参照し、GitHub
+  Actionsのarchive時だけ同変数へprofile名を渡す。未設定のXcode Cloudでは空に
+  解決されるため、通常のAutomatic signingを変えない。
 - GitHub Actions upload は現時点で TestFlight の **What to Test を反映しない**。
   API upload 後に ASC API で notes を設定する処理は別 follow-up であり、この
   temporary lane の upload 成否と混同しない。

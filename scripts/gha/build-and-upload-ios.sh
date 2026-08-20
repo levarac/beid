@@ -78,7 +78,7 @@ set +a
 : "${ASC_ISSUER_ID:?ASC_ISSUER_ID is missing from the runner-local ASC environment file}"
 : "${ASC_KEY_PATH:?ASC_KEY_PATH is missing from the runner-local ASC environment file}"
 : "${BEID_TEAM_ID:?BEID_TEAM_ID is missing from the runner-local ASC environment file}"
-PROVISIONING_PROFILE_SPECIFIER="${BEID_PROVISIONING_PROFILE_SPECIFIER:-Beid GitHub Actions App Store}"
+BEID_PROVISIONING_PROFILE="${BEID_PROVISIONING_PROFILE:-Beid GitHub Actions App Store}"
 
 if [[ ! -r "$ASC_KEY_PATH" ]]; then
   echo "error: ASC authentication key is not readable at the configured path." >&2
@@ -120,7 +120,7 @@ xcodebuild \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY='Apple Distribution' \
   DEVELOPMENT_TEAM="$BEID_TEAM_ID" \
-  PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER" \
+  BEID_PROVISIONING_PROFILE="$BEID_PROVISIONING_PROFILE" \
   archive
 
 plutil -create xml1 "$EXPORT_OPTIONS"
