@@ -262,6 +262,7 @@ class EventDefinitionCborCodecTest {
         val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
         val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
         listOf(
+            "httpſ://operator.example/submit",
             "https://[not-ipv6]/submit",
             "https://[2001:db8::1/submit",
             "https://[2001:db8::1]]/submit",
@@ -291,6 +292,19 @@ class EventDefinitionCborCodecTest {
                 expected = DefinitionDecodeError.INVALID_ENDPOINT,
             )
         }
+    }
+
+    @Test
+    fun asciiUppercaseHttpsSchemeReachesSignatureVerification() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
+
+        assertDecodeReason(
+            signed = signedDefinitionWithEndpoint(vector, "HTTPS://operator.example/submit"),
+            keySet = keySet,
+            vector = vector,
+            expected = DefinitionDecodeError.INVALID_SIGNATURE,
+        )
     }
 
     @Test

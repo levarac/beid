@@ -372,7 +372,12 @@ internal object EventDefinitionCborCodec {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must be 1..2048 UTF-8 bytes")
         }
         val schemeSeparator = value.indexOf("://")
-        if (schemeSeparator != 5 || !value.regionMatches(0, "https", 0, 5, ignoreCase = true)) {
+        val schemeIsHttps = schemeSeparator == 5 && (0 until 5).all { index ->
+            val code = value[index].code
+            val foldedCode = if (code in 'A'.code..'Z'.code) code + ('a'.code - 'A'.code) else code
+            code <= 0x7F && foldedCode == "https"[index].code
+        }
+        if (!schemeIsHttps) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must be an absolute URI")
         }
         val authorityStart = schemeSeparator + 3
