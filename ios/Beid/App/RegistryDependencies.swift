@@ -17,9 +17,16 @@ enum RegistryDependencies {
     }
     let apiKey = bundle.object(forInfoDictionaryKey: "BeidEtherscanAPIKey") as? String
     let nonEmptyApiKey = apiKey?.isEmpty == false ? apiKey : nil
+    let definitionTemplate = bundle.object(
+      forInfoDictionaryKey: "BeidEventDefinitionURLTemplate"
+    ) as? String
+    let nonEmptyDefinitionTemplate = definitionTemplate?.isEmpty == false
+      ? definitionTemplate
+      : nil
     return ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClient(
       readerAddressHex: readerAddress,
-      etherscanApiKey: nonEmptyApiKey
+      etherscanApiKey: nonEmptyApiKey,
+      definitionUrlTemplate: nonEmptyDefinitionTemplate
     )
   }
 }

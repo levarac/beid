@@ -14,8 +14,9 @@ internal class JsonRpcEthCallAdapter(
     endpointUrl: String,
     readerAddressHex: String,
     private val transport: RegistryHttpTransport,
+    allowInsecureLoopbackForTests: Boolean = false,
 ) {
-    internal val endpointId: String = validateEndpointUrl(endpointUrl)
+    internal val endpointId: String = validateEndpointUrl(endpointUrl, allowInsecureLoopbackForTests)
     private val readerAddress: String = validateReaderAddress(readerAddressHex)
 
     internal suspend fun resolvePin(pin: RegistryReadPin): ResolvedBlockPin {

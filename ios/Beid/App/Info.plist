@@ -6,6 +6,8 @@
 	<string>$(BEID_ETHERSCAN_API_KEY)</string>
 	<key>BeidEventRegistryReaderAddress</key>
 	<string>$(BEID_EVENT_REGISTRY_READER_ADDRESS)</string>
+	<key>BeidEventDefinitionURLTemplate</key>
+	<string>$(BEID_EVENT_DEFINITION_URL_TEMPLATE)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

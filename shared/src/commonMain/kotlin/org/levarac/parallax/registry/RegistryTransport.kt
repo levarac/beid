@@ -14,6 +14,8 @@ internal data class RegistryHttpRequest(
 internal data class RegistryHttpResponse(
     val statusCode: Int,
     val body: String,
+    /** Raw response bytes; JSON callers continue to use [body]. */
+    val bodyBytes: ByteArray = body.encodeToByteArray(),
 )
 
 internal interface RegistryHttpTransport {
@@ -92,14 +94,102 @@ internal fun validateReaderAddress(addressHex: String): String {
     return normalized
 }
 
-internal fun validateEndpointUrl(url: String): String {
+internal fun validateEndpointUrl(
+    url: String,
+    allowInsecureLoopbackForTests: Boolean = false,
+): String {
     val normalized = url.trimEnd('/')
-    val productionHttps = normalized.startsWith("https://")
-    val loopbackHttp = normalized.startsWith("http://127.0.0.1:") ||
-        normalized.startsWith("http://localhost:") ||
-        normalized.startsWith("http://[::1]:")
-    require(productionHttps || loopbackHttp) { "registry endpoint must use HTTPS or loopback HTTP" }
+    val parsed = parseRegistryUrl(normalized)
+    val productionHttps = parsed.scheme == "https"
+    val loopbackHttp = allowInsecureLoopbackForTests &&
+        parsed.scheme == "http" &&
+        parsed.host in LOOPBACK_HOSTS &&
+        parsed.port != null
+    require(productionHttps || loopbackHttp) {
+        "registry endpoint must use HTTPS or loopback HTTP"
+    }
     return normalized
 }
 
+private data class ParsedRegistryUrl(
+    val scheme: String,
+    val host: String,
+    val port: Int?,
+)
+
+private fun parseRegistryUrl(url: String): ParsedRegistryUrl {
+    val schemeEnd = url.indexOf("://")
+    require(schemeEnd > 0) { "registry endpoint URL must have a scheme" }
+    val scheme = url.substring(0, schemeEnd).lowercase()
+    require(scheme.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }) {
+        "registry endpoint URL has an invalid scheme"
+    }
+
+    val authorityStart = schemeEnd + 3
+    require(authorityStart < url.length) { "registry endpoint URL has no host" }
+    val authorityEnd = url.indexOfFirstFrom(authorityStart) ?: url.length
+    val authority = url.substring(authorityStart, authorityEnd)
+    require(authority.isNotEmpty()) { "registry endpoint URL has no host" }
+    require('@' !in authority) { "registry endpoint URL must not contain userinfo" }
+    require('\\' !in authority) { "registry endpoint URL contains an invalid host" }
+
+    val host: String
+    val port: Int?
+    if (authority.startsWith('[')) {
+        val closingBracket = authority.indexOf(']')
+        require(closingBracket > 1) { "registry endpoint URL has an invalid IPv6 host" }
+        host = authority.substring(1, closingBracket).lowercase()
+        require(host.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' || it == ':' }) {
+            "registry endpoint URL has an invalid IPv6 host"
+        }
+        val suffix = authority.substring(closingBracket + 1)
+        port = parsePortSuffix(suffix)
+    } else {
+        require('[' !in authority && ']' !in authority) {
+            "registry endpoint URL has an invalid host"
+        }
+        val colon = authority.indexOf(':')
+        if (colon >= 0) {
+            require(authority.indexOf(':', colon + 1) < 0) {
+                "registry endpoint URL has an invalid host"
+            }
+            host = authority.substring(0, colon).lowercase()
+            port = parsePort(authority.substring(colon + 1))
+        } else {
+            host = authority.lowercase()
+            port = null
+        }
+        require(host.all { it.isLetterOrDigit() || it == '.' || it == '-' }) {
+            "registry endpoint URL has an invalid host"
+        }
+    }
+    require(host.isNotEmpty()) { "registry endpoint URL has no host" }
+    return ParsedRegistryUrl(scheme, host, port)
+}
+
+private fun parsePortSuffix(suffix: String): Int? {
+    if (suffix.isEmpty()) return null
+    require(suffix.startsWith(':')) { "registry endpoint URL has an invalid port" }
+    return parsePort(suffix.substring(1))
+}
+
+private fun parsePort(port: String): Int {
+    require(port.isNotEmpty() && port.all { it in '0'..'9' }) {
+        "registry endpoint URL has an invalid port"
+    }
+    val value = port.toIntOrNull()
+    require(value != null && value in 1..65_535) {
+        "registry endpoint URL has an invalid port"
+    }
+    return value
+}
+
+private fun String.indexOfFirstFrom(startIndex: Int): Int? {
+    for (index in startIndex until length) {
+        if (this[index] == '/' || this[index] == '?' || this[index] == '#') return index
+    }
+    return null
+}
+
 private const val ZERO_ADDRESS_HEX: String = "0x0000000000000000000000000000000000000000"
+private val LOOPBACK_HOSTS = setOf("127.0.0.1", "localhost", "::1")

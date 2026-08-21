@@ -5,6 +5,8 @@
 
 package org.levarac.parallax.registry
 
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSData
 import platform.Foundation.NSError
@@ -26,12 +28,12 @@ import platform.Foundation.NSURLSessionResponseDisposition
 import platform.Foundation.NSURLSessionTask
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.appendData
-import platform.Foundation.create
 import platform.Foundation.dataUsingEncoding
 import platform.Foundation.setHTTPBody
 import platform.Foundation.setHTTPMethod
 import platform.Foundation.setValue
 import platform.darwin.NSObject
+import platform.posix.memcpy
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -159,15 +161,16 @@ private class BoundedRegistrySessionDelegate(
             fail(session, Exception("registry HTTP response was not HTTP"))
             return
         }
-        val body = try {
-            receivedData.decodeUtf8()
-        } catch (error: Throwable) {
-            fail(session, error)
-            return
-        }
+        val bodyBytes = receivedData.toByteArray()
         completed = true
         session.finishTasksAndInvalidate()
-        onSuccess(RegistryHttpResponse(statusCode = response.statusCode.toInt(), body = body))
+        onSuccess(
+            RegistryHttpResponse(
+                statusCode = response.statusCode.toInt(),
+                body = bodyBytes.decodeToString(),
+                bodyBytes = bodyBytes,
+            ),
+        )
     }
 
     private fun fail(session: NSURLSession, error: Throwable) {
@@ -178,9 +181,15 @@ private class BoundedRegistrySessionDelegate(
     }
 }
 
-private fun NSData.decodeUtf8(): String =
-    NSString.create(data = this, encoding = NSUTF8StringEncoding)?.toString()
-        ?: throw IllegalArgumentException("registry HTTP response is not UTF-8")
+private fun NSData.toByteArray(): ByteArray {
+    val output = ByteArray(length.toInt())
+    if (output.isNotEmpty()) {
+        output.usePinned { pinned ->
+            memcpy(pinned.addressOf(0), bytes, length)
+        }
+    }
+    return output
+}
 
 private fun NSError.toRegistryTransportException(): Throwable =
     if (code == NS_URL_ERROR_TIMED_OUT) {
