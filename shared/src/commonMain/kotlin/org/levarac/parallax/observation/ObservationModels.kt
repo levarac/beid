@@ -1,5 +1,9 @@
 package org.levarac.parallax.observation
 
+private class ReadOnlyList<T>(values: List<T>) : List<T> by values.toList()
+
+private fun <T> readOnlySnapshot(values: List<T>): List<T> = ReadOnlyList(values)
+
 /** A defensive-copy byte container for values that cross the native/shared boundary. */
 public open class ImmutableBytes(bytes: ByteArray) {
     private val value: ByteArray = bytes.copyOf()
@@ -80,8 +84,10 @@ public class MutualSensingWindowEvidence(
     public val legacyPeerCount: Long? = null,
 ) {
     /** Null is deliberate: a legacy count-only record has no lossless RPID set. */
-    public val observedRpids: List<ImmutableBytes>? = observedRpids?.map {
-        ImmutableBytes(it.toByteArray())
+    public val observedRpids: List<ImmutableBytes>? = observedRpids?.let { values ->
+        readOnlySnapshot(values.map {
+            ImmutableBytes(it.toByteArray())
+        })
     }
 
     public val rpidClaim: ImmutableBytes? = rpidClaim?.let { ImmutableBytes(it.toByteArray()) }
@@ -144,13 +150,48 @@ public class MutualSensingWindowEvidence(
     }
 }
 
-public data class MutualSensingPayloadV1(
+public class MutualSensingPayloadV1(
     public val eventDefinitionDigest: ByteString32,
     public val enin: ProtocolUInt,
-    public val observedRpids: List<BarnardRpid17>,
+    observedRpids: List<BarnardRpid17>,
     public val rpidClaim: ImmutableBytes?,
     public val participantCommitment: ByteString32?,
-)
+) {
+    public val observedRpids: List<BarnardRpid17> = readOnlySnapshot(observedRpids)
+
+    public fun copy(
+        eventDefinitionDigest: ByteString32 = this.eventDefinitionDigest,
+        enin: ProtocolUInt = this.enin,
+        observedRpids: List<BarnardRpid17> = this.observedRpids,
+        rpidClaim: ImmutableBytes? = this.rpidClaim,
+        participantCommitment: ByteString32? = this.participantCommitment,
+    ): MutualSensingPayloadV1 = MutualSensingPayloadV1(
+        eventDefinitionDigest = eventDefinitionDigest,
+        enin = enin,
+        observedRpids = observedRpids,
+        rpidClaim = rpidClaim,
+        participantCommitment = participantCommitment,
+    )
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MutualSensingPayloadV1) return false
+        return eventDefinitionDigest == other.eventDefinitionDigest &&
+            enin == other.enin &&
+            observedRpids == other.observedRpids &&
+            rpidClaim == other.rpidClaim &&
+            participantCommitment == other.participantCommitment
+    }
+
+    override fun hashCode(): Int {
+        var result = eventDefinitionDigest.hashCode()
+        result = 31 * result + enin.hashCode()
+        result = 31 * result + observedRpids.hashCode()
+        result = 31 * result + (rpidClaim?.hashCode() ?: 0)
+        result = 31 * result + (participantCommitment?.hashCode() ?: 0)
+        return result
+    }
+}
 
 public data class ObservationV1(
     public val version: Int,

@@ -189,6 +189,121 @@ class MutualSensingObservationTest {
     }
 
     @Test
+    fun payloadEncodedBytesDoNotChangeWhenCallerMutatesItsObservedRpidList() {
+        val root = Json.parseToJsonElement(
+            readVectorResource("vectors/positive/mutual-sensing-window-v1.json"),
+        ).jsonObject
+        val source = root.getValue("cases").jsonArray.first().jsonObject
+            .getValue("input").jsonObject.toEvidence()
+        val callerRpids = mutableListOf(
+            BarnardRpid17(source.observedRpids!!.first().toByteArray()),
+        )
+        val payload = MutualSensingPayloadV1(
+            eventDefinitionDigest = source.eventDefinitionDigest,
+            enin = source.enin,
+            observedRpids = callerRpids,
+            rpidClaim = source.rpidClaim,
+            participantCommitment = null,
+        )
+        val before = payload.encodeCanonicalBytesForTest()
+
+        callerRpids.clear()
+
+        assertContentEquals(before, payload.encodeCanonicalBytesForTest())
+    }
+
+    @Test
+    fun observationEncodedBytesDoNotChangeWhenCallerMutatesItsPayloadBytes() {
+        val payloadBytes = byteArrayOf(1, 2, 3)
+        val observation = ObservationV1(
+            version = 1,
+            id = UuidBytes16(ByteArray(16) { it.toByte() }),
+            profile = "levarac.mutual-sensing/v1",
+            context = ByteString32(ByteArray(32) { 0x21 }),
+            observer = CompressedSecp256k1PublicKey(
+                "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900".hexToBytes(),
+            ),
+            observedAt = ProtocolUInt(1),
+            subject = BarnardRpid17(byteArrayOf(1) + ByteArray(16) { 0x10 }),
+            payload = ImmutableBytes(payloadBytes),
+        )
+        val before = observation.encodeCanonicalBytesForTest()
+
+        payloadBytes[0] = 0x7f
+
+        assertContentEquals(before, observation.encodeCanonicalBytesForTest())
+    }
+
+    @Test
+    fun publicByteBoundariesKeepEncodedBytesWhenCallerMutatesInputArrays() {
+        val idInput = ByteArray(16) { it.toByte() }
+        val id = UuidBytes16(idInput)
+        val idBefore = id.toByteArray()
+        idInput[0] = 0x7f
+        assertContentEquals(idBefore, id.toByteArray())
+
+        val bytes32Input = ByteArray(32) { it.toByte() }
+        val bytes32 = ByteString32(bytes32Input)
+        val bytes32Before = bytes32.toByteArray()
+        bytes32Input[0] = 0x7f
+        assertContentEquals(bytes32Before, bytes32.toByteArray())
+
+        val rpidInput = byteArrayOf(1) + ByteArray(16) { it.toByte() }
+        val rpid = BarnardRpid17(rpidInput)
+        val rpidBefore = rpid.toByteArray()
+        rpidInput[0] = 0x7f
+        assertContentEquals(rpidBefore, rpid.toByteArray())
+
+        val publicKeyInput =
+            "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900".hexToBytes()
+        val publicKey = CompressedSecp256k1PublicKey(publicKeyInput)
+        val publicKeyBefore = publicKey.toByteArray()
+        publicKeyInput[0] = 0x02
+        assertContentEquals(publicKeyBefore, publicKey.toByteArray())
+
+        val observationCborInput = byteArrayOf(1, 2, 3)
+        val observationCbor = ObservationCborBytes(observationCborInput)
+        val observationCborBefore = observationCbor.toByteArray()
+        observationCborInput[0] = 0x7f
+        assertContentEquals(observationCborBefore, observationCbor.toByteArray())
+
+        val sigStructureInput = byteArrayOf(4, 5, 6)
+        val sigStructure = SigStructureBytes(sigStructureInput)
+        val sigStructureBefore = sigStructure.toByteArray()
+        sigStructureInput[0] = 0x7f
+        assertContentEquals(sigStructureBefore, sigStructure.toByteArray())
+
+        val digestInput = ByteArray(32) { (it + 1).toByte() }
+        val digest = Sha256Digest(digestInput)
+        val digestBefore = digest.toByteArray()
+        digestInput[0] = 0x7f
+        assertContentEquals(digestBefore, digest.toByteArray())
+    }
+
+    @Test
+    fun signerInputsAndOutputsKeepEncodedBytesWhenCallerMutatesInputArrays() {
+        val sigStructureInput = byteArrayOf(1, 2, 3)
+        val sigStructureRequest = SigningRequest.SigStructure(SigStructureBytes(sigStructureInput))
+        val sigStructureBefore = sigStructureRequest.bytes.toByteArray()
+        sigStructureInput[0] = 0x7f
+        assertContentEquals(sigStructureBefore, sigStructureRequest.bytes.toByteArray())
+
+        val digestInput = ByteArray(32) { it.toByte() }
+        val digestRequest = SigningRequest.Digest(Sha256Digest(digestInput))
+        val digestBefore = digestRequest.digest.toByteArray()
+        digestInput[0] = 0x7f
+        assertContentEquals(digestBefore, digestRequest.digest.toByteArray())
+
+        val rInput = ByteArray(32) { it.toByte() }
+        val sInput = ByteArray(32) { (it + 1).toByte() }
+        val signature = CompactEs256kSignature(rInput, sInput)
+        val signatureBefore = signature.toByteArray()
+        rInput[0] = 0x7f
+        sInput[0] = 0x7f
+        assertContentEquals(signatureBefore, signature.toByteArray())
+    }
+
+    @Test
     fun malformedObservedRpidBytesReachTypedIneligibility() {
         val root = Json.parseToJsonElement(
             readVectorResource("vectors/positive/mutual-sensing-window-v1.json"),
@@ -240,6 +355,33 @@ private fun JsonObject.toEvidence(): MutualSensingWindowEvidence = MutualSensing
     rpidClaim = getValue("rpidClaimHex").jsonPrimitive.contentOrNull?.hexToBytes()?.let(::ImmutableBytes),
     participantCommitmentHex = getValue("participantCommitmentHex").jsonPrimitive.contentOrNull,
     legacyPeerCount = get("legacyPeerCount")?.jsonPrimitive?.long,
+)
+
+private fun MutualSensingPayloadV1.encodeCanonicalBytesForTest(): ByteArray = CanonicalCbor.encode(
+    CanonicalCbor.map(
+        CanonicalCbor.uint(1) to CanonicalCbor.bytes(eventDefinitionDigest.toByteArray()),
+        CanonicalCbor.uint(2) to CanonicalCbor.uint(enin.value),
+        CanonicalCbor.uint(3) to CanonicalCbor.array(
+            observedRpids.map { CanonicalCbor.bytes(it.toByteArray()) },
+        ),
+        CanonicalCbor.uint(4) to (rpidClaim?.let { CanonicalCbor.bytes(it.toByteArray()) }
+            ?: CanonicalCbor.nullValue()),
+        CanonicalCbor.uint(5) to (participantCommitment?.let { CanonicalCbor.bytes(it.toByteArray()) }
+            ?: CanonicalCbor.nullValue()),
+    ),
+)
+
+private fun ObservationV1.encodeCanonicalBytesForTest(): ByteArray = CanonicalCbor.encode(
+    CanonicalCbor.map(
+        CanonicalCbor.uint(1) to CanonicalCbor.uint(version.toLong()),
+        CanonicalCbor.uint(2) to CanonicalCbor.bytes(id.toByteArray()),
+        CanonicalCbor.uint(3) to CanonicalCbor.text(profile),
+        CanonicalCbor.uint(4) to CanonicalCbor.bytes(context.toByteArray()),
+        CanonicalCbor.uint(5) to CanonicalCbor.bytes(observer.toByteArray()),
+        CanonicalCbor.uint(6) to CanonicalCbor.uint(observedAt.value),
+        CanonicalCbor.uint(7) to CanonicalCbor.bytes(subject.toByteArray()),
+        CanonicalCbor.uint(8) to CanonicalCbor.bytes(payload.toByteArray()),
+    ),
 )
 
 private fun String.hexToBytes(): ByteArray {
