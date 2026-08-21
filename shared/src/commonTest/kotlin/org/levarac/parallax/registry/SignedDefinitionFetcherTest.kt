@@ -32,8 +32,8 @@ class SignedDefinitionFetcherTest {
 
     @Test
     fun hashMismatchIsRejectedBeforeDecode() = runTest {
-        val payload = eventDefinitionCbor()
-        val record = definitionRecordFor(payload + 0x00)
+        val payload = byteArrayOf(0x01, 0x02, 0x03)
+        val record = definitionRecordFor(eventDefinitionCbor())
         val fetcher = SignedDefinitionFetcher(
             template = requireNotNull(createDefinitionUrlTemplate("https://defs.example/{definitionHash}")),
             transport = RecordingRegistryTransport(
@@ -49,6 +49,26 @@ class SignedDefinitionFetcherTest {
             )
         }
         assertEquals(DefinitionFetchError.HASH_MISMATCH, error.reason)
+    }
+
+    @Test
+    fun oversizedRemotePayloadBecomesTypedFetchErrorBeforeHashing() = runTest {
+        val payload = ByteArray(MAX_EVENT_DEFINITION_PAYLOAD_BYTES + 1)
+        val fetcher = SignedDefinitionFetcher(
+            template = requireNotNull(createDefinitionUrlTemplate("https://defs.example/{definitionHash}")),
+            transport = RecordingRegistryTransport(
+                RegistryHttpResponse(statusCode = 200, body = "", bodyBytes = payload),
+            ),
+        )
+
+        val error = assertFailsWith<DefinitionFetchException> {
+            fetcher.fetch(
+                eventId = DEFINITION_EVENT_ID_HEX.fixtureHexToByteArrayForTest(),
+                record = definitionRecordFor(eventDefinitionCbor()),
+                selectedAt = 150L,
+            )
+        }
+        assertEquals(DefinitionFetchError.PAYLOAD_TOO_LARGE, error.reason)
     }
 
     @Test

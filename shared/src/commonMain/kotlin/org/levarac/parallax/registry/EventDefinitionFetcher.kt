@@ -71,6 +71,12 @@ internal class SignedDefinitionFetcher(
             )
         }
         val bytes = response.bodyBytes
+        if (bytes.size > MAX_EVENT_DEFINITION_PAYLOAD_BYTES) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.PAYLOAD_TOO_LARGE,
+                "signed definition response exceeds the configured limit",
+            )
+        }
         val actualHash = Sha256.digest(bytes).toPrefixedHex()
         if (actualHash != expectedHash) {
             throw DefinitionFetchException(

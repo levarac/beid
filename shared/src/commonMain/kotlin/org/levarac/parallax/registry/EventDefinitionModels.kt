@@ -1,5 +1,8 @@
 package org.levarac.parallax.registry
 
+internal const val MAX_EVENT_DEFINITION_PAYLOAD_BYTES: Int = 512 * 1_024
+internal const val MAX_EVENT_DEFINITION_DELEGATIONS: Int = 1_024
+
 /**
  * The two assignment meanings currently defined by the beid demo schema.
  *
@@ -106,6 +109,7 @@ public enum class DefinitionFetchError {
     DECODE_ERROR,
     EVENT_ID_MISMATCH,
     VALIDITY_MISMATCH,
+    PAYLOAD_TOO_LARGE,
 }
 
 public class DefinitionFetchException(

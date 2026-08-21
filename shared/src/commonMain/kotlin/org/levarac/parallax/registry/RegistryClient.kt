@@ -38,6 +38,7 @@ public class RegistryClient internal constructor(
     private val resolver: RegistryResolver,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val definitionFetcher: SignedDefinitionFetcher? = null,
+    private val definitionConfigurationError: DefinitionFetchException? = null,
 ) {
     public fun resolve(
         eventIdHex: String,
@@ -115,10 +116,12 @@ public class RegistryClient internal constructor(
     ): RegistryRequest {
         val job = scope.launch {
             val resolution = try {
-                val fetcher = definitionFetcher ?: throw DefinitionFetchException(
-                    DefinitionFetchError.NOT_CONFIGURED,
-                    "signed definition URL template is not configured",
-                )
+                val fetcher = definitionFetcher ?: run {
+                    throw definitionConfigurationError ?: DefinitionFetchException(
+                        DefinitionFetchError.NOT_CONFIGURED,
+                        "signed definition URL template is not configured",
+                    )
+                }
                 val eventId = eventIdHex.decodeHex(expectedBytes = 32)
                 val result = resolver.resolve(eventId, pin)
                 val record = definitionForUseTime(result.context, useTimeEpochSeconds)
@@ -213,10 +216,18 @@ public fun createSepoliaRegistryClient(
         return null
     }
     val transport = createPlatformRegistryHttpTransport()
+    var definitionConfigurationError: DefinitionFetchException? = null
     val definitionFetcher = definitionUrlTemplate
         ?.takeIf { it.isNotBlank() }
         ?.let { template ->
-            createDefinitionUrlTemplate(template)?.let { validated ->
+            val validated = createDefinitionUrlTemplate(template)
+            if (validated == null) {
+                definitionConfigurationError = DefinitionFetchException(
+                    DefinitionFetchError.INVALID_URL_TEMPLATE,
+                    "signed definition URL template is invalid",
+                )
+                null
+            } else {
                 SignedDefinitionFetcher(validated, transport)
             }
         }
@@ -250,6 +261,7 @@ public fun createSepoliaRegistryClient(
             cache = InMemoryRegistryCache(),
         ),
         definitionFetcher = definitionFetcher,
+        definitionConfigurationError = definitionConfigurationError,
     )
 }
 
@@ -262,6 +274,7 @@ private val DefinitionFetchError.wireName: String
         DefinitionFetchError.DECODE_ERROR -> "definition_decode_error"
         DefinitionFetchError.EVENT_ID_MISMATCH -> "definition_event_id_mismatch"
         DefinitionFetchError.VALIDITY_MISMATCH -> "definition_validity_mismatch"
+        DefinitionFetchError.PAYLOAD_TOO_LARGE -> "definition_payload_too_large"
     }
 
 private const val SEPOLIA_CHAIN_ID: Long = 11_155_111L

@@ -12,15 +12,15 @@ package org.levarac.parallax.registry
  * 6 valid-from, 7 valid-until, 8 issuer key ID, and 9 signature.
  */
 internal object EventDefinitionCborCodec {
-    private const val MAX_PAYLOAD_BYTES: Int = 512 * 1_024
     private const val EVENT_DEFINITION_SCHEMA_VERSION: Long = 1L
     private const val DELEGATION_CERT_SCHEMA_VERSION: Long = 1L
-    private const val MAX_DELEGATIONS: Int = 1_024
     private const val HASH_BYTES: Int = 32
     private const val SIGNATURE_BYTES: Int = 64
 
     internal fun decode(bytes: ByteArray): EventDefinition = try {
-        require(bytes.size <= MAX_PAYLOAD_BYTES) { "signed definition exceeds the configured limit" }
+        require(bytes.size <= MAX_EVENT_DEFINITION_PAYLOAD_BYTES) {
+            "signed definition exceeds the configured limit"
+        }
         val reader = DefinitionCborReader(bytes)
         reader.expectMap(8)
         reader.expectUnsigned(1L)
@@ -45,7 +45,9 @@ internal object EventDefinitionCborCodec {
         val authoritySignature = reader.readByteString(SIGNATURE_BYTES).toPrefixedHex()
         reader.expectUnsigned(8L)
         val delegationCount = reader.readArrayLength()
-        require(delegationCount <= MAX_DELEGATIONS) { "too many delegation certificates" }
+        require(delegationCount <= MAX_EVENT_DEFINITION_DELEGATIONS) {
+            "too many delegation certificates"
+        }
         if (validFrom > validUntil || signedAt > validFrom) {
             throw DefinitionDecodeException(
                 DefinitionDecodeError.INVALID_VALIDITY,
