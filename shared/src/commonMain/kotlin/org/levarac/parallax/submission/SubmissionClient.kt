@@ -297,9 +297,8 @@ private fun decodeAndVerifyAcceptanceReceipt(
     configuration.validUntil?.let { validUntil ->
         require(fields.mergeBy.value <= validUntil) { "AcceptanceReceipt exceeds Event Definition validity" }
     }
-    val expectedOperatorId = acceptanceOperatorId(configuration.receiptPublicKey.toByteArray())
-    require(fields.operatorId.toByteArray().contentEquals(expectedOperatorId)) {
-        "AcceptanceReceipt operatorId does not match operator key"
+    require(fields.operatorId.toByteArray().contentEquals(configuration.operatorId.toByteArray())) {
+        "AcceptanceReceipt operatorId does not match the verified Event Definition"
     }
     return AcceptanceReceipt(
         signedBytes = ImmutableBytes(signedBytes),

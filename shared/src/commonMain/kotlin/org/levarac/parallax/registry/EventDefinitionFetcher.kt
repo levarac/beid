@@ -1,5 +1,7 @@
 package org.levarac.parallax.registry
 
+import kotlinx.coroutines.sync.withLock
+
 /**
  * Validated URL template for signed definitions.
  *
@@ -16,22 +18,163 @@ public class DefinitionUrlTemplate internal constructor(
     }
 }
 
+public class EventKeySetUrlTemplate internal constructor(
+    private val template: String,
+) {
+    internal fun urlFor(keySetDigestHex: String): String {
+        val digest = keySetDigestHex.removePrefix("0x")
+        return template.replace(EVENT_KEY_SET_DIGEST_PLACEHOLDER, digest)
+    }
+}
+
 public fun createDefinitionUrlTemplate(
     template: String,
     allowInsecureLoopbackForTests: Boolean = false,
-): DefinitionUrlTemplate? = try {
+): DefinitionUrlTemplate? = createUrlTemplate(
+    template = template,
+    placeholder = DEFINITION_HASH_PLACEHOLDER,
+    description = "definition",
+    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
+) { DefinitionUrlTemplate(it) }
+
+public fun createEventKeySetUrlTemplate(
+    template: String,
+    allowInsecureLoopbackForTests: Boolean = false,
+): EventKeySetUrlTemplate? = createUrlTemplate(
+    template = template,
+    placeholder = EVENT_KEY_SET_DIGEST_PLACEHOLDER,
+    description = "EventKeySet",
+    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
+) { EventKeySetUrlTemplate(it) }
+
+private fun <T> createUrlTemplate(
+    template: String,
+    placeholder: String,
+    description: String,
+    allowInsecureLoopbackForTests: Boolean,
+    factory: (String) -> T,
+): T? = try {
     val normalized = template.trim()
     require(normalized.count { it == '{' } == 1 && normalized.count { it == '}' } == 1) {
-        "definition URL template must contain exactly one placeholder"
+        "$description URL template must contain exactly one placeholder"
     }
-    require(normalized.contains(DEFINITION_HASH_PLACEHOLDER)) {
-        "definition URL template must contain {definitionHash}"
+    require(normalized.contains(placeholder)) {
+        "$description URL template must contain $placeholder"
     }
-    val probe = normalized.replace(DEFINITION_HASH_PLACEHOLDER, "0".repeat(64))
+    val probe = normalized.replace(placeholder, "0".repeat(64))
     validateEndpointUrl(probe, allowInsecureLoopbackForTests)
-    DefinitionUrlTemplate(normalized)
+    factory(normalized)
 } catch (_: IllegalArgumentException) {
     null
+}
+
+internal class EventKeySetFetcher(
+    private val template: EventKeySetUrlTemplate,
+    private val transport: RegistryHttpTransport,
+    private val cache: InMemoryEventKeySetCache = InMemoryEventKeySetCache(),
+) {
+    internal suspend fun fetch(keySetDigestHex: String): ByteArray {
+        val expectedDigest = try {
+            keySetDigestHex.decodeHex(expectedBytes = EVENT_KEY_SET_DIGEST_BYTES).toPrefixedHex()
+        } catch (error: IllegalArgumentException) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.INVALID_KEY_SET,
+                "registry keySetDigest is invalid",
+                error,
+            )
+        }
+        cache.find(expectedDigest)?.let { return it }
+
+        val response = try {
+            transport.execute(
+                RegistryHttpRequest(
+                    method = "GET",
+                    url = template.urlFor(expectedDigest),
+                    headers = mapOf("Accept" to EVENT_KEY_SET_MEDIA_TYPE),
+                ),
+            )
+        } catch (error: RegistryTransportTimeoutException) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.KEY_SET_HTTP_ERROR,
+                "EventKeySet artifact request timed out",
+                error,
+            )
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.KEY_SET_HTTP_ERROR,
+                "EventKeySet artifact request failed",
+                error,
+            )
+        }
+        if (response.statusCode !in 200..299) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.KEY_SET_HTTP_ERROR,
+                "EventKeySet artifact returned HTTP ${response.statusCode}",
+            )
+        }
+        val bytes = response.bodyBytes
+        if (bytes.size > MAX_EVENT_KEY_SET_PAYLOAD_BYTES) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.KEY_SET_PAYLOAD_TOO_LARGE,
+                "EventKeySet artifact exceeds the configured limit",
+            )
+        }
+        val actualDigest = try {
+            EventDefinitionCborCodec.eventKeySetDigest(bytes).toPrefixedHex()
+        } catch (error: DefinitionDecodeException) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.INVALID_KEY_SET,
+                "EventKeySet artifact is invalid",
+                error,
+            )
+        }
+        if (actualDigest != expectedDigest) {
+            throw DefinitionFetchException(
+                DefinitionFetchError.KEY_SET_HASH_MISMATCH,
+                "EventKeySet artifact digest does not match the registry registration",
+            )
+        }
+        cache.put(expectedDigest, bytes)
+        return bytes.copyOf()
+    }
+}
+
+internal class InMemoryEventKeySetCache(
+    private val maxEntries: Int = DEFAULT_EVENT_KEY_SET_CACHE_ENTRIES,
+) {
+    private val mutex = kotlinx.coroutines.sync.Mutex()
+    private val values = mutableListOf<CacheEntry>()
+
+    init {
+        require(maxEntries > 0) { "maxEntries must be positive" }
+    }
+
+    internal suspend fun find(digestHex: String): ByteArray? = mutex.withLock {
+        val index = values.indexOfFirst { it.digestHex == digestHex }
+        if (index < 0) return@withLock null
+        val entry = values.removeAt(index)
+        values += entry
+        entry.bytes.copyOf()
+    }
+
+    internal suspend fun put(digestHex: String, bytes: ByteArray) {
+        mutex.withLock {
+            values.removeAll { it.digestHex == digestHex }
+            values += CacheEntry(digestHex, bytes.copyOf())
+            while (values.size > maxEntries) values.removeAt(0)
+        }
+    }
+
+    private data class CacheEntry(
+        val digestHex: String,
+        val bytes: ByteArray,
+    )
+
+    private companion object {
+        const val DEFAULT_EVENT_KEY_SET_CACHE_ENTRIES: Int = 32
+    }
 }
 
 internal class SignedDefinitionFetcher(
@@ -40,8 +183,10 @@ internal class SignedDefinitionFetcher(
 ) {
     internal suspend fun fetch(
         eventId: ByteArray,
+        registration: RegistryRegistration,
         record: RegistryDefinitionRecord,
         selectedAt: Long,
+        encodedEventKeySet: ByteArray,
     ): EventDefinitionContext {
         val expectedHash = record.definitionDigestHex
         val response = try {
@@ -49,7 +194,7 @@ internal class SignedDefinitionFetcher(
                 RegistryHttpRequest(
                     method = "GET",
                     url = template.urlFor(expectedHash),
-                    headers = mapOf("Accept" to "application/cbor"),
+                    headers = mapOf("Accept" to "application/vnd.levarac.event-definition+cose"),
                 ),
             )
         } catch (error: RegistryTransportTimeoutException) {
@@ -80,43 +225,45 @@ internal class SignedDefinitionFetcher(
                 "signed definition response exceeds the configured limit",
             )
         }
-        val actualHash = Sha256.digest(bytes).toPrefixedHex()
+        // The chain commitment is the canonical domain-separated Event Definition digest. Keep
+        // this before decoding so an untrusted response can never influence parser work first.
+        val actualHash = EventDefinitionCborCodec.eventDefinitionDigest(bytes).toPrefixedHex()
         if (actualHash != expectedHash) {
             throw DefinitionFetchException(
                 DefinitionFetchError.HASH_MISMATCH,
                 "signed definition hash does not match the chain record",
             )
         }
-        val definition = try {
-            EventDefinitionCborCodec.decode(bytes)
+        val verified = try {
+            EventDefinitionCborCodec.verify(
+                signedBytes = bytes,
+                encodedKeySet = encodedEventKeySet,
+                eventId = eventId,
+                registration = registration,
+                record = record,
+                at = selectedAt,
+            )
         } catch (error: DefinitionDecodeException) {
             throw DefinitionFetchException(
                 DefinitionFetchError.DECODE_ERROR,
-                "signed definition CBOR is invalid: ${error.reason}",
+                "signed Event Definition is invalid: ${error.reason}",
                 error,
             )
         }
         val expectedEventId = eventId.toPrefixedHex()
-        if (definition.eventIdHex != expectedEventId) {
-            throw DefinitionFetchException(
-                DefinitionFetchError.EVENT_ID_MISMATCH,
-                "signed definition event ID does not match the registry read",
-            )
-        }
-        if (definition.validFrom != record.validFrom || definition.validUntil != record.validUntil) {
-            throw DefinitionFetchException(
-                DefinitionFetchError.VALIDITY_MISMATCH,
-                "signed definition validity does not match the chain record",
-            )
-        }
         return EventDefinitionContext(
             eventIdHex = expectedEventId,
             definitionHashHex = expectedHash,
             selectedAt = selectedAt,
             record = record,
-            definition = definition,
+            definition = verified.definition,
         )
     }
 }
 
 private const val DEFINITION_HASH_PLACEHOLDER: String = "{definitionHash}"
+private const val EVENT_KEY_SET_DIGEST_PLACEHOLDER: String = "{keySetDigest}"
+private const val EVENT_KEY_SET_DIGEST_BYTES: Int = 32
+private const val EVENT_KEY_SET_MEDIA_TYPE: String =
+    "application/vnd.levarac.event-key-set+cbor"
+internal const val MAX_EVENT_KEY_SET_PAYLOAD_BYTES: Int = 64 * 1_024

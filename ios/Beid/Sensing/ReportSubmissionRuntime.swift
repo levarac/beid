@@ -249,6 +249,9 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       receiptPublicKeyHex: Data(
         bytesFromKotlinByteArray: verified.configuration.receiptPublicKey.toByteArray()
       ).hexString,
+      operatorIdHex: Data(
+        bytesFromKotlinByteArray: verified.configuration.operatorId.toByteArray()
+      ).hexString,
       eventIdHex: eventIdHex,
       eventDefinitionDigestHex: definitionDigestHex,
       validFrom: verified.configuration.validFrom,
@@ -408,6 +411,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionOperatorConfiguration(
       endpoint: record.endpoint,
       receiptPublicKeyHex: record.receiptPublicKeyHex,
+      operatorIdHex: record.operatorIdHex,
       eventIdHex: record.eventIdHex,
       eventDefinitionDigestHex: record.eventDefinitionDigestHex,
       validFrom: record.validFrom,

@@ -32,6 +32,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
   let eventCode: String
   let endpoint: String
   let receiptPublicKeyHex: String
+  let operatorIdHex: String?
   let eventIdHex: String?
   let eventDefinitionDigestHex: String?
   let validFrom: Int64?
@@ -54,6 +55,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     validUntil: Int64?,
     signedObservationHex: String,
     observationDigestHex: String,
+    operatorIdHex: String? = nil,
     submissionState: ReportSubmissionState = .prepared,
     acceptanceReceiptHex: String? = nil,
     terminalErrorCode: String? = nil,
@@ -63,6 +65,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     self.eventCode = eventCode
     self.endpoint = endpoint
     self.receiptPublicKeyHex = receiptPublicKeyHex
+    self.operatorIdHex = operatorIdHex
     self.eventIdHex = eventIdHex
     self.eventDefinitionDigestHex = eventDefinitionDigestHex
     self.validFrom = validFrom
@@ -80,6 +83,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     case eventCode
     case endpoint
     case receiptPublicKeyHex
+    case operatorIdHex
     case eventIdHex
     case eventDefinitionDigestHex
     case validFrom
@@ -101,6 +105,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     eventCode = try container.decode(String.self, forKey: .eventCode)
     endpoint = try container.decode(String.self, forKey: .endpoint)
     receiptPublicKeyHex = try container.decode(String.self, forKey: .receiptPublicKeyHex)
+    operatorIdHex = try container.decodeIfPresent(String.self, forKey: .operatorIdHex)
     eventIdHex = try container.decodeIfPresent(String.self, forKey: .eventIdHex)
     eventDefinitionDigestHex = try container.decodeIfPresent(
       String.self,
@@ -125,6 +130,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
     try container.encode(eventCode, forKey: .eventCode)
     try container.encode(endpoint, forKey: .endpoint)
     try container.encode(receiptPublicKeyHex, forKey: .receiptPublicKeyHex)
+    try container.encodeIfPresent(operatorIdHex, forKey: .operatorIdHex)
     try container.encodeIfPresent(eventIdHex, forKey: .eventIdHex)
     try container.encodeIfPresent(eventDefinitionDigestHex, forKey: .eventDefinitionDigestHex)
     try container.encodeIfPresent(validFrom, forKey: .validFrom)
@@ -145,6 +151,7 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
       eventCode == other.eventCode &&
       endpoint == other.endpoint &&
       receiptPublicKeyHex == other.receiptPublicKeyHex &&
+      operatorIdHex == other.operatorIdHex &&
       eventIdHex == other.eventIdHex &&
       eventDefinitionDigestHex == other.eventDefinitionDigestHex &&
       validFrom == other.validFrom &&

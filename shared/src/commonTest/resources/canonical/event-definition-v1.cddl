@@ -1,0 +1,30 @@
+event-artifact-v1 = event-key-set-v1 / signed-event-definition-v1
+
+event-key-set-v1 = {
+  1: 1,
+  2: [1* bstr .size 33],
+  3: 1
+}
+
+signed-event-definition-v1 = #6.18([
+  protected: bstr,
+  unprotected: {},
+  payload: bstr .cbor event-definition-v1,
+  signature: bstr .size 64
+])
+
+event-definition-v1 = {
+  1: 1,
+  2: bstr .size 32,
+  3: bstr .size 20,
+  4: bstr .size 20,
+  5: bstr .size 32,
+  6: bstr .size 32,
+  7: 1..9007199254740991,
+  8: bstr .size 32,
+  9: bstr .size 33,
+  10: bstr .size 32,
+  11: tstr .size (1..2048),
+  12: 0..9007199254740991,
+  13: 0..9007199254740991
+}

@@ -68,6 +68,7 @@ targets:
         BeidEventRegistryReaderAddress: "$(BEID_EVENT_REGISTRY_READER_ADDRESS)"
         BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
         BeidEventDefinitionURLTemplate: "$(BEID_EVENT_DEFINITION_URL_TEMPLATE)"
+        BeidEventKeySetURLTemplate: "$(BEID_EVENT_KEY_SET_URL_TEMPLATE)"
         BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
@@ -109,6 +110,7 @@ targets:
         # event identity, digest, and validity are supplied only by the
         # verified Event Definition fetched through the registry module.
         BEID_REPORT_SUBMISSION_ENABLED: "NO"
+        BEID_EVENT_KEY_SET_URL_TEMPLATE: ""
       configs:
         Debug:
           # XcodeGen 2.45.3 has no configuration filter for package

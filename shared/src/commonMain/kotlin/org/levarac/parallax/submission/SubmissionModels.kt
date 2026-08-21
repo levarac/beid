@@ -18,6 +18,7 @@ public class StoredObservationV1 internal constructor(
 public class SubmissionOperatorConfiguration internal constructor(
     public val submissionEndpoint: String,
     public val receiptPublicKey: CompressedSecp256k1PublicKey,
+    public val operatorId: ByteString32,
     public val eventId: ByteString32?,
     public val eventDefinitionDigest: ByteString32?,
     public val validFrom: Long?,
@@ -84,6 +85,7 @@ public fun restoreStoredObservation(signedBytesHex: String): StoredObservationV1
 public fun createSubmissionOperatorConfiguration(
     endpoint: String,
     receiptPublicKeyHex: String,
+    operatorIdHex: String? = null,
     eventIdHex: String? = null,
     eventDefinitionDigestHex: String? = null,
     validFrom: Long? = null,
@@ -92,6 +94,8 @@ public fun createSubmissionOperatorConfiguration(
 ): SubmissionOperatorConfiguration? = try {
     val normalizedEndpoint = validateSubmissionEndpoint(endpoint, allowInsecureLoopbackForTests)
     val receiptPublicKey = CompressedSecp256k1PublicKey(receiptPublicKeyHex.decodeHex(33))
+    val operatorId = operatorIdHex?.let { ByteString32(it.decodeHex(32)) }
+        ?: ByteString32(acceptanceOperatorId(receiptPublicKey.toByteArray()))
     val eventId = eventIdHex?.let { ByteString32(it.decodeHex(32)) }
     val definitionDigest = eventDefinitionDigestHex?.let { ByteString32(it.decodeHex(32)) }
     require((validFrom == null) == (validUntil == null)) {
@@ -100,9 +104,10 @@ public fun createSubmissionOperatorConfiguration(
     require(validFrom == null || validFrom <= validUntil!!) {
         "Event Definition validity is inverted"
     }
-    SubmissionOperatorConfiguration(
+    buildSubmissionOperatorConfiguration(
         submissionEndpoint = normalizedEndpoint,
         receiptPublicKey = receiptPublicKey,
+        operatorId = operatorId,
         eventId = eventId,
         eventDefinitionDigest = definitionDigest,
         validFrom = validFrom,
@@ -123,15 +128,22 @@ public fun createSubmissionOperatorConfiguration(
 public fun createSubmissionOperatorConfiguration(
     context: EventDefinitionContext,
     allowInsecureLoopbackForTests: Boolean = false,
-): SubmissionOperatorConfiguration? = createSubmissionOperatorConfiguration(
-    endpoint = context.definition.submissionEndpoint,
-    receiptPublicKeyHex = context.definition.receiptPublicKeyHex,
-    eventIdHex = context.eventIdHex,
-    eventDefinitionDigestHex = context.definitionHashHex,
-    validFrom = context.definition.validFrom,
-    validUntil = context.definition.validUntil,
-    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
-)
+): SubmissionOperatorConfiguration? = try {
+    buildSubmissionOperatorConfiguration(
+        submissionEndpoint = validateSubmissionEndpoint(
+            context.submissionEndpoint,
+            allowInsecureLoopbackForTests,
+        ),
+        receiptPublicKey = context.receiptPublicKey,
+        operatorId = context.operatorId,
+        eventId = context.eventId,
+        eventDefinitionDigest = ByteString32(context.definitionHashHex.decodeHex(32)),
+        validFrom = context.validFrom.value,
+        validUntil = context.validUntil.value,
+    )
+} catch (_: IllegalArgumentException) {
+    null
+}
 
 /** Swift-export-friendly name for the verified-context overload. */
 public fun createSubmissionOperatorConfigurationFromEventDefinition(
@@ -155,6 +167,29 @@ private fun sha256DomainDigest(domain: String, bytes: ByteArray): ByteArray =
     org.levarac.parallax.observation.Sha256.digest(
         domain.encodeToByteArray() + byteArrayOf(0) + bytes,
     )
+
+private fun buildSubmissionOperatorConfiguration(
+    submissionEndpoint: String,
+    receiptPublicKey: CompressedSecp256k1PublicKey,
+    operatorId: ByteString32,
+    eventId: ByteString32?,
+    eventDefinitionDigest: ByteString32?,
+    validFrom: Long?,
+    validUntil: Long?,
+): SubmissionOperatorConfiguration {
+    require(operatorId.toByteArray().contentEquals(acceptanceOperatorId(receiptPublicKey.toByteArray()))) {
+        "Event Definition operatorId does not match receiptPublicKey"
+    }
+    return SubmissionOperatorConfiguration(
+        submissionEndpoint = submissionEndpoint,
+        receiptPublicKey = receiptPublicKey,
+        operatorId = operatorId,
+        eventId = eventId,
+        eventDefinitionDigest = eventDefinitionDigest,
+        validFrom = validFrom,
+        validUntil = validUntil,
+    )
+}
 
 private fun validateSubmissionEndpoint(url: String, allowInsecureLoopbackForTests: Boolean): String {
     val normalized = url.trimEnd('/')
