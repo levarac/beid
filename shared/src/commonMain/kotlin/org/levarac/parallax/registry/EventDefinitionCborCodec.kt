@@ -442,7 +442,7 @@ internal object EventDefinitionCborCodec {
                 index += 1
                 host[index - 1].code
             }
-            if (isForbiddenHostCodePoint(codePoint)) {
+            if (isForbiddenDomainCodePoint(codePoint)) {
                 fail(
                     DefinitionDecodeError.INVALID_ENDPOINT,
                     "submissionEndpoint host contains a forbidden code point",
@@ -451,25 +451,20 @@ internal object EventDefinitionCborCodec {
         }
     }
 
-    private fun isForbiddenHostCodePoint(codePoint: Int): Boolean = when (codePoint) {
-        0x0000, // NULL
-        0x0009, // TAB
-        0x000A, // LF
-        0x000D, // CR
-        0x0020, // SPACE
-        '#'.code,
-        '/'.code,
-        ':'.code,
-        '<'.code,
-        '>'.code,
-        '?'.code,
-        '@'.code,
-        '['.code,
-        '\\'.code,
-        ']'.code,
-        '^'.code,
-        '|'.code,
-        -> true
+    private fun isForbiddenDomainCodePoint(codePoint: Int): Boolean = when {
+        codePoint in 0x00..0x20 || codePoint == 0x25 || codePoint == 0x7F -> true
+        codePoint == '#'.code ||
+            codePoint == '/'.code ||
+            codePoint == ':'.code ||
+            codePoint == '<'.code ||
+            codePoint == '>'.code ||
+            codePoint == '?'.code ||
+            codePoint == '@'.code ||
+            codePoint == '['.code ||
+            codePoint == '\\'.code ||
+            codePoint == ']'.code ||
+            codePoint == '^'.code ||
+            codePoint == '|'.code -> true
         else -> false
     }
 
