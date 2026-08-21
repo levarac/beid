@@ -172,7 +172,7 @@ class UnsentWindowLedgerStoreTest {
     }
 
     @Test
-    fun foregroundEndBackgroundAndProcessStartOrderingSubmitsWindowAtMostOnce() {
+    fun foregroundEndBackgroundAndProcessStartOrderingPreparesWindowAtMostOnce() {
         val directory = Files.createTempDirectory("beid-ledger-bg-report").toFile()
         try {
             val ledgerFile = directory.resolve("ledger.snapshot")
@@ -284,7 +284,7 @@ class UnsentWindowLedgerStoreTest {
     }
 
     @Test
-    fun backgroundBeforeForegroundEndAndProcessStartOrderingSubmitsWindowAtMostOnce() {
+    fun backgroundBeforeForegroundEndAndProcessStartOrderingPreparesWindowAtMostOnce() {
         val directory = Files.createTempDirectory("beid-ledger-bg-first").toFile()
         try {
             val ledgerFile = directory.resolve("ledger.snapshot")
@@ -341,6 +341,16 @@ class UnsentWindowLedgerStoreTest {
             assertEquals(1, submission.windowCount)
             assertEquals("window-1", submission.windowIdAt(0))
             assertEquals("observation-1", submission.observationReferenceAt(0))
+
+            // A second preparation remains empty while the first is in flight.
+            val duplicatePrepare = prepareNextUnsentWindowSubmission(
+                ledger = confirmed.ledger,
+                maximumWindowCount = 10,
+                nowEpochMilliseconds = 0L,
+            )
+            assertTrue(duplicatePrepare.isSuccess)
+            assertFalse(duplicatePrepare.changed)
+            assertNull(duplicatePrepare.submission)
         } finally {
             directory.deleteRecursively()
         }
