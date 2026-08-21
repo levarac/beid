@@ -129,12 +129,12 @@ class LocalAnvilEventRegistryIntegrationTest {
                 val context = SignedDefinitionFetcher(
                     template = template,
                     transport = createPlatformRegistryHttpTransport(),
-                    encodedEventKeySet = eventKeySet,
                 ).fetch(
                     eventId = eventId,
                     registration = resolved.context.registration,
                     record = record,
                     selectedAt = record.validFrom,
+                    encodedEventKeySet = eventKeySet,
                 )
                 assertEquals(eventId.toPrefixedHex(), context.eventIdHex)
                 assertEquals(record.definitionDigestHex, context.definitionHashHex)

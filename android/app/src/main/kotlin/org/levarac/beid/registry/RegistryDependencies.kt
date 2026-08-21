@@ -10,6 +10,6 @@ internal object RegistryDependencies {
         readerAddressHex = BuildConfig.EVENT_REGISTRY_READER_ADDRESS,
         etherscanApiKey = BuildConfig.ETHERSCAN_API_KEY.ifBlank { null },
         definitionUrlTemplate = BuildConfig.EVENT_DEFINITION_URL_TEMPLATE.ifBlank { null },
-        eventKeySetHex = BuildConfig.EVENT_KEY_SET_HEX.ifBlank { null },
+        eventKeySetUrlTemplate = BuildConfig.EVENT_KEY_SET_URL_TEMPLATE.ifBlank { null },
     )
 }

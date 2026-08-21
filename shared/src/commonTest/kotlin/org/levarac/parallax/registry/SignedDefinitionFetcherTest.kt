@@ -15,7 +15,6 @@ class SignedDefinitionFetcherTest {
             transport = RecordingRegistryTransport(
                 RegistryHttpResponse(statusCode = 200, body = "", bodyBytes = signed),
             ),
-            encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
         )
 
         val context = fetcher.fetch(
@@ -23,6 +22,7 @@ class SignedDefinitionFetcherTest {
             registration = vector.anchorRegistration(),
             record = vector.definitionRecord(),
             selectedAt = vector.definitionRecord().validFrom,
+            encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
         )
 
         assertEquals(vector.requiredString("eventDefinitionDigestHex"), context.definitionHashHex.removePrefix("0x"))
@@ -44,7 +44,6 @@ class SignedDefinitionFetcherTest {
             transport = RecordingRegistryTransport(
                 RegistryHttpResponse(statusCode = 200, body = "", bodyBytes = byteArrayOf(1, 2, 3)),
             ),
-            encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
         )
 
         val error = assertFailsWith<DefinitionFetchException> {
@@ -53,6 +52,7 @@ class SignedDefinitionFetcherTest {
                 registration = vector.anchorRegistration(),
                 record = vector.definitionRecord(),
                 selectedAt = vector.definitionRecord().validFrom,
+                encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
             )
         }
         assertEquals(DefinitionFetchError.HASH_MISMATCH, error.reason)
@@ -70,7 +70,6 @@ class SignedDefinitionFetcherTest {
                     bodyBytes = ByteArray(MAX_EVENT_DEFINITION_PAYLOAD_BYTES + 1),
                 ),
             ),
-            encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
         )
 
         val error = assertFailsWith<DefinitionFetchException> {
@@ -79,6 +78,7 @@ class SignedDefinitionFetcherTest {
                 registration = vector.anchorRegistration(),
                 record = vector.definitionRecord(),
                 selectedAt = vector.definitionRecord().validFrom,
+                encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
             )
         }
         assertEquals(DefinitionFetchError.PAYLOAD_TOO_LARGE, error.reason)
@@ -102,7 +102,6 @@ class SignedDefinitionFetcherTest {
             transport = RecordingRegistryTransport(
                 RegistryHttpResponse(statusCode = 200, body = "", bodyBytes = payload),
             ),
-            encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
         )
 
         val error = assertFailsWith<DefinitionFetchException> {
@@ -111,6 +110,7 @@ class SignedDefinitionFetcherTest {
                 registration = vector.anchorRegistration(),
                 record = record,
                 selectedAt = base.validFrom,
+                encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
             )
         }
         assertEquals(DefinitionFetchError.DECODE_ERROR, error.reason)
@@ -119,7 +119,7 @@ class SignedDefinitionFetcherTest {
     }
 
     @Test
-    fun authorityVerificationCannotBeSkippedWhenKeySetArtifactIsMissing() = runTest {
+    fun invalidKeySetArtifactBecomesTypedFetchDecodeError() = runTest {
         val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
         val signed = vector.requiredString("signedEventDefinitionHex").vectorHexBytes()
         val fetcher = SignedDefinitionFetcher(
@@ -134,9 +134,12 @@ class SignedDefinitionFetcherTest {
                 registration = vector.anchorRegistration(),
                 record = vector.definitionRecord(),
                 selectedAt = vector.definitionRecord().validFrom,
+                encodedEventKeySet = byteArrayOf(),
             )
         }
-        assertEquals(DefinitionFetchError.KEY_SET_NOT_CONFIGURED, error.reason)
+        assertEquals(DefinitionFetchError.DECODE_ERROR, error.reason)
+        assertEquals(DefinitionDecodeException::class, error.cause!!::class)
+        assertEquals(DefinitionDecodeError.INVALID_KEY_SET, (error.cause as DefinitionDecodeException).reason)
     }
 }
 

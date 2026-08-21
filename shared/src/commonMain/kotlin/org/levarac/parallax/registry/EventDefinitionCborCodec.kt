@@ -376,13 +376,20 @@ internal object EventDefinitionCborCodec {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must be an absolute URI")
         }
         val scheme = value.substring(0, schemeSeparator).lowercase()
+        if (!scheme.first().isLetter() ||
+            !scheme.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }
+        ) {
+            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint URI scheme is invalid")
+        }
         if (scheme != "https" && scheme != "http") {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must use HTTPS or loopback HTTP")
         }
         val authorityStart = schemeSeparator + 3
         val authorityEnd = value.indexOfAny(charArrayOf('/', '?', '#'), authorityStart)
         val authority = value.substring(authorityStart, if (authorityEnd < 0) value.length else authorityEnd)
-        if (authority.isEmpty() || authority.any { it.isWhitespace() } || authority.contains('@')) {
+        if (authority.isEmpty() || authority.any { it.isWhitespace() || it.code < 0x21 || it == '\\' } ||
+            authority.contains('@')
+        ) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint authority is invalid")
         }
         val host = parseAuthorityHost(authority)
@@ -397,10 +404,14 @@ internal object EventDefinitionCborCodec {
             if (closingBracket <= 1 || authority.substring(closingBracket + 1).contains(']')) {
                 fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv6 authority is invalid")
             }
+            val host = authority.substring(1, closingBracket)
+            if (parseIpv6Groups(host) == null) {
+                fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv6 authority is invalid")
+            }
             validatePortSuffix(authority.substring(closingBracket + 1))
-            return authority.substring(0, closingBracket + 1).lowercase()
+            return "[${host.lowercase()}]"
         }
-        if (authority.count { it == ':' } > 1) {
+        if ('[' in authority || ']' in authority || authority.count { it == ':' } > 1) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv6 host must be bracketed")
         }
         val colon = authority.indexOf(':')
@@ -414,7 +425,9 @@ internal object EventDefinitionCborCodec {
 
     private fun validatePortSuffix(suffix: String) {
         if (suffix.isEmpty()) return
-        if (!suffix.startsWith(":")) {
+        if (!suffix.startsWith(":") || suffix.length == 1 ||
+            suffix.substring(1).any { !it.isDigit() }
+        ) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint port is invalid")
         }
         val port = suffix.substring(1).toIntOrNull()
@@ -423,8 +436,65 @@ internal object EventDefinitionCborCodec {
         }
     }
 
-    private fun isLoopbackHost(host: String): Boolean =
-        host == "localhost" || host == "127.0.0.1" || host == "[::1]"
+    private fun isLoopbackHost(host: String): Boolean {
+        if (host == "localhost" || host == "127.0.0.1") return true
+        if (!host.startsWith("[") || !host.endsWith("]")) return false
+        return parseIpv6Groups(host.substring(1, host.length - 1)) == List(8) { index ->
+            if (index == 7) 1 else 0
+        }
+    }
+
+    /**
+     * WHATWG URL rejects bracketed hosts that are not IPv6 literals. Keep the common parser
+     * independent of java.net so the same check runs in the Android host and iOS native tests.
+     */
+    private fun parseIpv6Groups(value: String): List<Int>? {
+        if (value.isEmpty() || '%' in value) return null
+        val compression = value.indexOf("::")
+        if (compression >= 0 && value.indexOf("::", compression + 2) >= 0) return null
+
+        val leftText = if (compression >= 0) value.substring(0, compression) else value
+        val rightText = if (compression >= 0) value.substring(compression + 2) else ""
+        if (leftText.contains('.') && rightText.isNotEmpty()) return null
+        val left = parseIpv6Part(leftText) ?: return null
+        val right = if (compression >= 0) parseIpv6Part(rightText) ?: return null else emptyList()
+        val groupCount = left.size + right.size
+        return if (compression >= 0) {
+            if (groupCount >= 8) return null
+            left + List(8 - groupCount) { 0 } + right
+        } else {
+            groupCount.takeIf { it == 8 }?.let { left }
+        }
+    }
+
+    private fun parseIpv6Part(value: String): List<Int>? {
+        if (value.isEmpty()) return emptyList()
+        if (value.startsWith(':') || value.endsWith(':')) return null
+        val groups = mutableListOf<Int>()
+        val components = value.split(':')
+        components.forEachIndexed { index, component ->
+            if (component.contains('.')) {
+                if (index != components.lastIndex) return null
+                val ipv4 = component.split('.')
+                if (ipv4.size != 4 || ipv4.any { it.isEmpty() || it.any { character -> !character.isDigit() } }) {
+                    return null
+                }
+                ipv4.forEach {
+                    if (it.toIntOrNull() !in 0..255) return null
+                }
+                groups += (ipv4[0].toInt() shl 8) or ipv4[1].toInt()
+                groups += (ipv4[2].toInt() shl 8) or ipv4[3].toInt()
+            } else {
+                if (component.length !in 1..4 ||
+                    component.any { it !in '0'..'9' && it.lowercaseChar() !in 'a'..'f' }
+                ) {
+                    return null
+                }
+                groups += component.toInt(16)
+            }
+        }
+        return groups
+    }
 
     private fun RawDefinition.toPublic(authorityKey: CompressedSecp256k1PublicKey): EventDefinition =
         EventDefinition(

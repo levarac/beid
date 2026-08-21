@@ -11,7 +11,7 @@ val registryReaderAddress = providers.gradleProperty("beid.registryReaderAddress
     .orElse("0xd4852f8526A1555A1b2C34145f0eCDA412a53c51")
 val etherscanApiKey = providers.gradleProperty("beid.etherscanApiKey").orElse("")
 val definitionUrlTemplate = providers.gradleProperty("beid.definitionUrlTemplate").orElse("")
-val eventKeySetHex = providers.gradleProperty("beid.eventKeySetHex").orElse("")
+val eventKeySetUrlTemplate = providers.gradleProperty("beid.eventKeySetUrlTemplate").orElse("")
 
 android {
     namespace = "org.levarac.beid"
@@ -40,8 +40,8 @@ android {
         )
         buildConfigField(
             "String",
-            "EVENT_KEY_SET_HEX",
-            eventKeySetHex.get().asBuildConfigString(),
+            "EVENT_KEY_SET_URL_TEMPLATE",
+            eventKeySetUrlTemplate.get().asBuildConfigString(),
         )
     }
 

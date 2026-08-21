@@ -127,8 +127,12 @@ public class DefinitionDecodeException(
 public enum class DefinitionFetchError {
     NOT_CONFIGURED,
     INVALID_URL_TEMPLATE,
+    KEY_SET_INVALID_URL_TEMPLATE,
     INVALID_KEY_SET,
     KEY_SET_NOT_CONFIGURED,
+    KEY_SET_HTTP_ERROR,
+    KEY_SET_HASH_MISMATCH,
+    KEY_SET_PAYLOAD_TOO_LARGE,
     HTTP_ERROR,
     HASH_MISMATCH,
     DECODE_ERROR,

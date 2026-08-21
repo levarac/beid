@@ -32,12 +32,12 @@ class LocalDefinitionHttpStubTest {
                 val context = SignedDefinitionFetcher(
                     template = template,
                     transport = createPlatformRegistryHttpTransport(),
-                    encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
                 ).fetch(
                     eventId = eventId,
                     registration = registration,
                     record = record,
                     selectedAt = record.validFrom,
+                    encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
                 )
                 assertEquals(record.definitionDigestHex, context.definitionHashHex)
                 assertEquals(eventId.toPrefixedHex(), context.eventIdHex)
