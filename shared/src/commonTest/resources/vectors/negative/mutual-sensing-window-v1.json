@@ -1,0 +1,78 @@
+{
+  "vector": "levarac-mutual-sensing-window-v1-negative-eligibility",
+  "generator": "npm run vectors:mutual-sensing",
+  "cases": [
+    {
+      "name": "malformed-participant-commitment",
+      "input": {
+        "idHex": "00112233445566778899aabbccddeeff",
+        "eventIdHex": "2121212121212121212121212121212121212121212121212121212121212121",
+        "eventDefinitionDigestHex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "observerHex": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+        "finalizedAt": 1800000000.75,
+        "reporterRpidHex": "0110101010101010101010101010101010",
+        "enin": 6000000,
+        "observedRpidsHex": [
+          "0122222222222222222222222222222222",
+          "0111111111111111111111111111111111"
+        ],
+        "rpidClaimHex": null,
+        "participantCommitmentHex": "not-hex"
+      },
+      "expectedCode": "malformed-participant-commitment"
+    },
+    {
+      "name": "legacy-count-only",
+      "input": {
+        "idHex": "00112233445566778899aabbccddeeff",
+        "eventIdHex": "2121212121212121212121212121212121212121212121212121212121212121",
+        "eventDefinitionDigestHex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "observerHex": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+        "finalizedAt": 1800000000.75,
+        "reporterRpidHex": "0110101010101010101010101010101010",
+        "enin": 6000000,
+        "rpidClaimHex": null,
+        "participantCommitmentHex": "abababababababababababababababababababababababababababababababab",
+        "legacyPeerCount": 2
+      },
+      "expectedCode": "legacy-count-only"
+    },
+    {
+      "name": "duplicate-observed-rpid",
+      "input": {
+        "idHex": "00112233445566778899aabbccddeeff",
+        "eventIdHex": "2121212121212121212121212121212121212121212121212121212121212121",
+        "eventDefinitionDigestHex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "observerHex": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+        "finalizedAt": 1800000000.75,
+        "reporterRpidHex": "0110101010101010101010101010101010",
+        "enin": 6000000,
+        "observedRpidsHex": [
+          "0111111111111111111111111111111111",
+          "0111111111111111111111111111111111"
+        ],
+        "rpidClaimHex": null,
+        "participantCommitmentHex": "abababababababababababababababababababababababababababababababab"
+      },
+      "expectedCode": "duplicate-observed-rpid"
+    },
+    {
+      "name": "malformed-observed-rpid",
+      "input": {
+        "idHex": "00112233445566778899aabbccddeeff",
+        "eventIdHex": "2121212121212121212121212121212121212121212121212121212121212121",
+        "eventDefinitionDigestHex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "observerHex": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+        "finalizedAt": 1800000000.75,
+        "reporterRpidHex": "0110101010101010101010101010101010",
+        "enin": 6000000,
+        "observedRpidsHex": [
+          "00000000000000000000000000000000"
+        ],
+        "rpidClaimHex": null,
+        "participantCommitmentHex": "abababababababababababababababababababababababababababababababab"
+      },
+      "expectedCode": "malformed-observed-rpid"
+    }
+  ]
+}
