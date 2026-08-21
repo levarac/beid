@@ -1,8 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-#if DEBUG
-import BeidMetaMaskDebug
+import BeidMetaMaskSupport
 import Combine
 import Foundation
 
@@ -28,9 +27,10 @@ protocol MetaMaskTransport: AnyObject {
   func handle(url: URL) -> Bool
 }
 
-/// DEBUG-only direct MetaMask connector. Session truth lives here rather
-/// than in metamask-ios-sdk's `connected` property, which remains true
-/// after `disconnect()` in 0.8.10.
+/// Direct MetaMask connector, shipped in Release as well as Debug
+/// (DECISIONS 2026-08-21). Session truth lives here rather than in
+/// metamask-ios-sdk's `connected` property, which remains true after
+/// `disconnect()` in 0.8.10.
 @MainActor
 final class MetaMaskConnector: ObservableObject, WalletConnector {
   static let shared = MetaMaskConnector(transport: MetaMaskSDKTransport())
@@ -265,4 +265,3 @@ private final class MetaMaskSDKTransport: MetaMaskTransport {
     return "eip155:1"
   }
 }
-#endif

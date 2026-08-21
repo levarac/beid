@@ -8,25 +8,21 @@ packages:
   Barnard:
     url: https://github.com/levarac/barnard.git
     exactVersion: 0.3.0
-  WalletConnect:
-    # Reown (formerly WalletConnect Inc) — the legacy
-    # WalletConnect/WalletConnectSwiftV2 repo is archived; reown-swift is
-    # the maintained successor. Only the low-level "WalletConnect" product
-    # (Sign + Pairing) is used, not ReownAppKit, to avoid pulling in
-    # Yttrium/CoinbaseWalletSDK surface that doesn't fit beid's
-    # WalletConnect-login-no-account-abstraction ruling. Validated by
-    # spike/walletconnect-native (commit a22d0f4) on Simulator.
-    url: https://github.com/reown-com/reown-swift
-    exactVersion: 2.3.0
   CoinbaseWallet:
     # Direct app-to-app wallet transport. Pinned because upstream activity
     # is limited and compatibility must be reviewed before any upgrade.
     url: https://github.com/coinbase/wallet-mobile-sdk
     exactVersion: 1.1.2
   MetaMask:
-    # Archived, non-commercially licensed spike dependency. Keep this exact
-    # pin: compatibility must be proven on a physical device before any
-    # upgrade or non-DEBUG exposure.
+    # Archived, non-commercially licensed dependency, now linked into
+    # Release (DECISIONS 2026-08-21 "#250 で MetaMask を Release へ昇格させる"):
+    # WalletConnect (Reown) was removed as beid's third wallet option, and
+    # without MetaMask promoted the shipping build would offer only
+    # Coinbase. Keep this exact pin — an upgrade needs the same physical-
+    # device review as this promotion did. The connect → sign → return
+    # round trip has never been verified on a real device; that
+    # verification is a still-owed release gate, tracked in
+    # docs/field-test-procedure.md, not something this change completes.
     url: https://github.com/MetaMask/metamask-ios-sdk
     exactVersion: 0.8.10
 targets:
@@ -53,17 +49,21 @@ targets:
         product: Barnard
       - package: Barnard
         product: BarnardCore
-      - package: WalletConnect
-        product: WalletConnect
       - package: CoinbaseWallet
         product: CoinbaseWalletSDK
-      - target: BeidMetaMaskDebug
+      - target: BeidMetaMaskSupport
     info:
       path: Beid/App/Info.plist
       properties:
         UILaunchScreen: {}
-        # Release template (TestFlight/App Store): standard crypto only
-        # (HTTPS/BLE) => exempt, skips the per-upload export-compliance question.
+        # Release template (TestFlight/App Store): skips the per-upload
+        # export-compliance question. The basis was "HTTPS/BLE only" until
+        # gh#250 promoted MetaMask to Release (DECISIONS 2026-08-21), which
+        # links the SDK's crypto (including -lecies) into the shipping
+        # binary. The declaration is left at false because ECIES is standard
+        # cryptography, not proprietary or otherwise non-exempt — but the
+        # stated basis changed, so re-confirm this before the next upload
+        # rather than assuming the old justification still describes the app.
         ITSAppUsesNonExemptEncryption: false
         BeidEventRegistryReaderAddress: "$(BEID_EVENT_REGISTRY_READER_ADDRESS)"
         BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
@@ -104,26 +104,28 @@ targets:
         BEID_EVENT_REGISTRY_READER_ADDRESS: "0xd4852f8526A1555A1b2C34145f0eCDA412a53c51"
         BEID_ETHERSCAN_API_KEY: ""
         BEID_EVENT_DEFINITION_URL_TEMPLATE: ""
+        # XcodeGen 2.45.3 has no configuration filter for package
+        # dependencies. BeidMetaMaskSupport keeps the package build-order
+        # dependency stable, while this OTHER_LDFLAGS entry links the pinned
+        # package's static product objects and binary target. It lives in
+        # `base`, not a single config, because MetaMask is promoted to
+        # Release as well as Debug (DECISIONS 2026-08-21) — both configs
+        # need the same linkage.
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o"
+          - "$(BUILT_PRODUCTS_DIR)/SocketIO.o"
+          - "$(BUILT_PRODUCTS_DIR)/Starscream.o"
+          - "-lecies"
       configs:
-        Debug:
-          # XcodeGen 2.45.3 has no configuration filter for package
-          # dependencies. BeidMetaMaskDebug keeps the package build-order
-          # dependency stable, while only Debug links the pinned package's
-          # static product objects and binary target.
-          OTHER_LDFLAGS:
-            - "$(inherited)"
-            - "$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o"
-            - "$(BUILT_PRODUCTS_DIR)/SocketIO.o"
-            - "$(BUILT_PRODUCTS_DIR)/Starscream.o"
-            - "-lecies"
         Release:
           # Runner-only indirection: empty under Xcode Cloud, explicit in GHA.
           PROVISIONING_PROFILE_SPECIFIER: "$(BEID_PROVISIONING_PROFILE)"
-  BeidMetaMaskDebug:
+  BeidMetaMaskSupport:
     type: library.static
     platform: iOS
     sources:
-      - BeidMetaMaskDebug
+      - BeidMetaMaskSupport
     dependencies:
       - package: MetaMask
         product: metamask-ios-sdk

@@ -106,12 +106,12 @@ final class CoinbaseWalletConnector: ObservableObject, WalletConnector {
           }
         }
       }
-      // Contract divergence from ReownWalletConnectClient: the Coinbase SDK
-      // exposes no dispatch-success signal (makeRequest only calls back with a
-      // response or failure), so onDispatched fires as soon as the request is
-      // handed to the SDK. An immediate dispatch failure briefly persists
-      // .awaitingApproval before the failure result overwrites it; the
-      // installed-wallet guard above removes the dominant failure mode.
+      // The Coinbase SDK exposes no dispatch-success signal (makeRequest only
+      // calls back with a response or failure), so onDispatched fires as soon
+      // as the request is handed to the SDK rather than after a distinct
+      // dispatch acknowledgement. An immediate dispatch failure briefly
+      // persists .awaitingApproval before the failure result overwrites it;
+      // the installed-wallet guard above removes the dominant failure mode.
       onDispatched?()
       gate.timeoutTask = Task { @MainActor in
         try? await Task.sleep(nanoseconds: UInt64(responseTimeout * 1_000_000_000))
