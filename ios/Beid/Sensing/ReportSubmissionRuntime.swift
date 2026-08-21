@@ -249,9 +249,6 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       receiptPublicKeyHex: Data(
         bytesFromKotlinByteArray: verified.configuration.receiptPublicKey.toByteArray()
       ).hexString,
-      operatorIdHex: Data(
-        bytesFromKotlinByteArray: verified.configuration.operatorId.toByteArray()
-      ).hexString,
       eventIdHex: eventIdHex,
       eventDefinitionDigestHex: definitionDigestHex,
       validFrom: verified.configuration.validFrom,
@@ -261,6 +258,9 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       ).hexString,
       observationDigestHex: Data(
         bytesFromKotlinByteArray: stored.observationDigest.toByteArray()
+      ).hexString,
+      operatorIdHex: Data(
+        bytesFromKotlinByteArray: verified.configuration.operatorId.toByteArray()
       ).hexString
     )
 
