@@ -1046,6 +1046,151 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     XCTAssertTrue(close.changed)
   }
 
+  func testForegroundEndBackgroundAndColdLaunchSequencePreparesWindowAtMostOnce() async throws {
+    let fixture = try makeRuntimeFixture(named: "fg-end-bg-launch-sequence")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+    fixture.coordinator.startSensing(eventCode: "TEST-FG-BG-LAUNCH-IDEMPOTENCY")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording phase, got \(fixture.coordinator.phase)")
+      return
+    }
+
+    // 1. Foreground-end (stopSensing closes the open window and persists WindowReport)
+    _ = fixture.coordinator.stopSensing()
+    XCTAssertEqual(fixture.reportStore.reports.count, 1)
+    let originalReport = try XCTUnwrap(fixture.reportStore.reports.first)
+    let windowIdHex = originalReport.id.uuidString.lowercased()
+
+    // 2. Background transition (checkpointOpenWindowForBackgrounding)
+    // The window was already closed; checkpoint must safely no-op. This unit
+    // test calls the coordinator seam directly; the SwiftUI scenePhase hook
+    // at ScanFlowView.swift:92-94 is not exercised here.
+    fixture.coordinator.checkpointOpenWindowForBackgrounding()
+    XCTAssertEqual(fixture.reportStore.reports.count, 1)
+
+    // 3. Cold launch: drive the same async beginLedgerLoad path used by the
+    // production convenience initializer.
+    let relaunchedLedgerStore = try UnsentWindowLedgerStore(fileURL: fixture.ledgerFileURL)
+    let relaunchedCoordinator = SensingCoordinator(
+      loadingFromDirectory: fixture.directory,
+      sensingCryptography: DeterministicSensingCryptography()
+    )
+    XCTAssertTrue(relaunchedCoordinator.isLedgerLoading)
+    await relaunchedCoordinator.waitForLedgerLoadToFinish()
+    XCTAssertFalse(relaunchedCoordinator.isLedgerLoading)
+
+    // 4. Prepare one submission descriptor: exactly one must be produced.
+    let durable = try XCTUnwrap(try relaunchedLedgerStore.load())
+    let prepared = BeidSharedKit.report.prepareNextUnsentWindowSubmission(
+      ledger: try XCTUnwrap(durable.ledger),
+      maximumWindowCount: 10,
+      nowEpochMilliseconds: 0
+    )
+    XCTAssertTrue(prepared.changed)
+
+    // Persist and confirm the in-flight submission. The shared reducer emits
+    // the submission only after the changed snapshot is durable.
+    let confirmed = BeidSharedKit.report.confirmUnsentWindowLedgerPersistence(
+      ledger: prepared.ledger,
+      revision: try relaunchedLedgerStore.persist(prepared)
+    )
+    XCTAssertTrue(confirmed.isSuccess)
+    let submission = try XCTUnwrap(confirmed.submission)
+    XCTAssertEqual(submission.windowCount, 1)
+    XCTAssertEqual(submission.windowIdAt(index: 0), windowIdHex)
+    XCTAssertEqual(submission.observationReferenceAt(index: 0), windowIdHex)
+
+    // 5. Idempotency: the second preparation returns nil (already in flight).
+    let inFlight = try XCTUnwrap(try relaunchedLedgerStore.load())
+    let duplicatePrepared = BeidSharedKit.report.prepareNextUnsentWindowSubmission(
+      ledger: try XCTUnwrap(inFlight.ledger),
+      maximumWindowCount: 10,
+      nowEpochMilliseconds: 0
+    )
+    XCTAssertFalse(duplicatePrepared.changed)
+    XCTAssertNil(duplicatePrepared.submission)
+  }
+
+  func testBackgroundTransitionBeforeStopAndColdLaunchSequencePreparesWindowAtMostOnce() async throws {
+    let fixture = try makeRuntimeFixture(named: "bg-before-stop-launch-sequence")
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+    fixture.coordinator.startSensing(eventCode: "TEST-BG-BEFORE-STOP-LAUNCH")
+
+    let threshold = BeidConfig.eventConfirmThreshold
+    for index in 0..<threshold {
+      fixture.coordinator.handleDetection(
+        enin: 1,
+        rpid: "peer-\(index)",
+        detectedDisplayId: DetectionFixture.displayId(device: index)
+      )
+    }
+    guard case .recording = fixture.coordinator.phase else {
+      XCTFail("expected .recording phase, got \(fixture.coordinator.phase)")
+      return
+    }
+
+    // 1. Background transition checkpoints and closes open window. This unit
+    // test calls the coordinator seam directly; the SwiftUI scenePhase hook
+    // at ScanFlowView.swift:92-94 is not exercised here.
+    fixture.coordinator.checkpointOpenWindowForBackgrounding()
+    XCTAssertEqual(fixture.reportStore.reports.count, 1)
+    let originalReport = try XCTUnwrap(fixture.reportStore.reports.first)
+    let windowIdHex = originalReport.id.uuidString.lowercased()
+
+    // 2. Foreground stop afterwards: already closed window is safely skipped
+    _ = fixture.coordinator.stopSensing()
+    XCTAssertEqual(fixture.reportStore.reports.count, 1)
+
+    // 3. Cold launch / process restart through the async beginLedgerLoad path
+    let relaunchedLedgerStore = try UnsentWindowLedgerStore(fileURL: fixture.ledgerFileURL)
+    let relaunchedCoordinator = SensingCoordinator(
+      loadingFromDirectory: fixture.directory,
+      sensingCryptography: DeterministicSensingCryptography()
+    )
+    XCTAssertTrue(relaunchedCoordinator.isLedgerLoading)
+    await relaunchedCoordinator.waitForLedgerLoadToFinish()
+    XCTAssertFalse(relaunchedCoordinator.isLedgerLoading)
+
+    // 4. Prepare submission descriptor
+    let durable = try XCTUnwrap(try relaunchedLedgerStore.load())
+    let prepared = BeidSharedKit.report.prepareNextUnsentWindowSubmission(
+      ledger: try XCTUnwrap(durable.ledger),
+      maximumWindowCount: 10,
+      nowEpochMilliseconds: 0
+    )
+    XCTAssertTrue(prepared.changed)
+    let confirmed = BeidSharedKit.report.confirmUnsentWindowLedgerPersistence(
+      ledger: prepared.ledger,
+      revision: try relaunchedLedgerStore.persist(prepared)
+    )
+    XCTAssertTrue(confirmed.isSuccess)
+    let submission = try XCTUnwrap(confirmed.submission)
+    XCTAssertEqual(submission.windowCount, 1)
+    XCTAssertEqual(submission.windowIdAt(index: 0), windowIdHex)
+    XCTAssertEqual(submission.observationReferenceAt(index: 0), windowIdHex)
+
+    // 5. A second preparation remains empty while the first is in flight.
+    let inFlight = try XCTUnwrap(try relaunchedLedgerStore.load())
+    let duplicatePrepared = BeidSharedKit.report.prepareNextUnsentWindowSubmission(
+      ledger: try XCTUnwrap(inFlight.ledger),
+      maximumWindowCount: 10,
+      nowEpochMilliseconds: 0
+    )
+    XCTAssertFalse(duplicatePrepared.changed)
+    XCTAssertNil(duplicatePrepared.submission)
+  }
+
   private func makeReport(id: UUID) throws -> WindowReport {
     let data = Data(
       """
@@ -1079,8 +1224,9 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
   private func makeRuntimeFixture(named name: String) throws -> RuntimeFixture {
     let directory = temporaryDirectory(named: name)
     let ledgerFileURL = directory.appendingPathComponent("ledger.snapshot")
+    let reportFileURL = directory.appendingPathComponent("window-reports.json")
     let reportStore = WindowReportStore(
-      fileURL: directory.appendingPathComponent("window-reports.json")
+      fileURL: reportFileURL
     )
     let runtime = try UnsentWindowLedgerRuntime(
       store: try UnsentWindowLedgerStore(fileURL: ledgerFileURL),
@@ -1107,6 +1253,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     return RuntimeFixture(
       directory: directory,
       ledgerFileURL: ledgerFileURL,
+      reportFileURL: reportFileURL,
       reportStore: reportStore,
       coordinator: coordinator
     )
@@ -1182,6 +1329,7 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
   private struct RuntimeFixture {
     let directory: URL
     let ledgerFileURL: URL
+    let reportFileURL: URL
     let reportStore: WindowReportStore
     let coordinator: SensingCoordinator
   }
