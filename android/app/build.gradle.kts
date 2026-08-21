@@ -7,7 +7,8 @@ plugins {
 fun String.asBuildConfigString(): String =
     "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-val registryReaderAddress = providers.gradleProperty("beid.registryReaderAddress").orElse("")
+val registryReaderAddress = providers.gradleProperty("beid.registryReaderAddress")
+    .orElse("0xd4852f8526A1555A1b2C34145f0eCDA412a53c51")
 val etherscanApiKey = providers.gradleProperty("beid.etherscanApiKey").orElse("")
 val definitionUrlTemplate = providers.gradleProperty("beid.definitionUrlTemplate").orElse("")
 
