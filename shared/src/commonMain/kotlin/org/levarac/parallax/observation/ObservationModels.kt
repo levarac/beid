@@ -107,6 +107,10 @@ public class PreparedObservationV1 internal constructor(
     public val sigStructure: SigStructureBytes,
     public val sha256Digest: Sha256Digest,
 ) {
+    /** The canonical COSE Sig_structure bytes, before any signer-side hashing. */
+    public val signatureStructure: SigStructureBytes
+        get() = sigStructure
+
     /** Sign once through the native key owner, then verify before producing COSE bytes. */
     public fun sign(signer: SignerPort): SignedObservationV1 {
         require(signer.publicKey == observation.observer) {

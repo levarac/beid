@@ -60,7 +60,7 @@ class MutualSensingObservationTest {
             if (case.getValue("name").jsonPrimitive.content == "canonical-sorted-rpids") {
                 assertContentEquals(
                     "846a5369676e6174757265315839a301382e0378286170706c69636174696f6e2f766e642e6c6576617261632e6f62736572766174696f6e2b63626f7204482e0268a2a205c3f040590109a80101025000112233445566778899aabbccddeeff0378196c6576617261632e6d757475616c2d73656e73696e672f76310458202121212121212121212121212121212121212121212121212121212121212121055821031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900061a6b49d20007510110101010101010101010101010101010085875a50158202222222222222222222222222222222222222222222222222222222222222222021a005b8d80038251011111111111111111111111111111111151012222222222222222222222222222222204f6055820abababababababababababababababababababababababababababababababab".hexToBytes(),
-                    prepared.sigStructure.toByteArray(),
+                    prepared.signatureStructure.toByteArray(),
                 )
                 assertEquals(
                     "2cbf616a81bc175ad3fb5f525bc45514894cedac1fe459af3318f9213a3bb03a",
@@ -117,7 +117,7 @@ class MutualSensingObservationTest {
             override fun sign(request: SigningRequest): CompactEs256kSignature {
                 assertTrue(request is SigningRequest.SigStructure)
                 assertContentEquals(
-                    prepared.sigStructure.toByteArray(),
+                    prepared.signatureStructure.toByteArray(),
                     request.bytes.toByteArray(),
                 )
                 return CompactEs256kSignature(ByteArray(32), ByteArray(32))
