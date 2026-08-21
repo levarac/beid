@@ -34,10 +34,11 @@ public fun prepareMutualSensingObservation(
 
     val sortedRpids = ArrayList<BarnardRpid17>(evidence.observedRpids.size)
     val seen = HashSet<String>()
-    for (rpid in evidence.observedRpids) {
-        if (!hasRpidFormatVersion(rpid)) {
-            return ObservationPreparationResult.Ineligible(ObservationIneligibilityCode.MALFORMED_OBSERVED_RPID)
-        }
+    for (rawRpid in evidence.observedRpids) {
+        val rpid = parseObservedRpid(rawRpid)
+            ?: return ObservationPreparationResult.Ineligible(
+                ObservationIneligibilityCode.MALFORMED_OBSERVED_RPID,
+            )
         val key = rpid.toByteArray().toHex()
         if (!seen.add(key)) {
             return ObservationPreparationResult.Ineligible(ObservationIneligibilityCode.DUPLICATE_OBSERVED_RPID)
@@ -126,9 +127,18 @@ public fun prepareObservationV1(
 ): ObservationPreparationResult = prepareMutualSensingObservation(evidence)
 
 private fun parseParticipantCommitment(value: String): ByteString32? {
-    if (value.length != 64 || value.any { it.digitToIntOrNull(16) == null }) return null
+    if (value.length != 64 || value.any { !it.isAsciiHexDigit() }) return null
     return ByteString32(ByteArray(32) { index -> value.substring(index * 2, index * 2 + 2).toInt(16).toByte() })
 }
+
+private fun parseObservedRpid(value: ImmutableBytes): BarnardRpid17? {
+    val bytes = value.toByteArray()
+    if (bytes.size != 17 || bytes[0].toInt() and 0xff != 1) return null
+    return BarnardRpid17(bytes)
+}
+
+private fun Char.isAsciiHexDigit(): Boolean =
+    this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
 
 private fun hasRpidFormatVersion(rpid: BarnardRpid17): Boolean =
     rpid.toByteArray().firstOrNull()?.toInt()?.and(0xff) == 1

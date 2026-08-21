@@ -166,6 +166,60 @@ class MutualSensingObservationTest {
             signed.cose.toByteArray(),
         )
     }
+
+    @Test
+    fun capturedEvidenceDoesNotChangeWhenCallerMutatesItsInputs() {
+        val root = Json.parseToJsonElement(
+            readVectorResource("vectors/positive/mutual-sensing-window-v1.json"),
+        ).jsonObject
+        val source = root.getValue("cases").jsonArray.first().jsonObject
+            .getValue("input").jsonObject.toEvidence()
+        val callerRpidBytes = source.observedRpids!!.first().toByteArray()
+        val callerRpids = mutableListOf<ImmutableBytes>(ImmutableBytes(callerRpidBytes))
+        val captured = source.copy(observedRpids = callerRpids)
+        val before = (prepareMutualSensingObservation(captured) as ObservationPreparationResult.Eligible)
+            .prepared.observationCbor.toByteArray()
+
+        callerRpids.clear()
+        callerRpidBytes[0] = 0
+
+        val after = (prepareMutualSensingObservation(captured) as ObservationPreparationResult.Eligible)
+            .prepared.observationCbor.toByteArray()
+        assertContentEquals(before, after)
+    }
+
+    @Test
+    fun malformedObservedRpidBytesReachTypedIneligibility() {
+        val root = Json.parseToJsonElement(
+            readVectorResource("vectors/positive/mutual-sensing-window-v1.json"),
+        ).jsonObject
+        val source = root.getValue("cases").jsonArray.first().jsonObject
+            .getValue("input").jsonObject.toEvidence()
+        val malformed = listOf(ImmutableBytes(ByteArray(16) { 1 }))
+        val result = prepareMutualSensingObservation(source.copy(observedRpids = malformed))
+
+        assertEquals(
+            ObservationIneligibilityCode.MALFORMED_OBSERVED_RPID,
+            (result as ObservationPreparationResult.Ineligible).code,
+        )
+    }
+
+    @Test
+    fun nonAsciiParticipantCommitmentIsMalformed() {
+        val root = Json.parseToJsonElement(
+            readVectorResource("vectors/positive/mutual-sensing-window-v1.json"),
+        ).jsonObject
+        val source = root.getValue("cases").jsonArray.first().jsonObject
+            .getValue("input").jsonObject.toEvidence()
+        val result = prepareMutualSensingObservation(
+            source.copy(participantCommitmentHex = "١".repeat(64)),
+        )
+
+        assertEquals(
+            ObservationIneligibilityCode.MALFORMED_PARTICIPANT_COMMITMENT,
+            (result as ObservationPreparationResult.Ineligible).code,
+        )
+    }
 }
 
 private fun JsonObject.toEvidence(): MutualSensingWindowEvidence = MutualSensingWindowEvidence(
@@ -181,9 +235,7 @@ private fun JsonObject.toEvidence(): MutualSensingWindowEvidence = MutualSensing
     reporterRpid = BarnardRpid17(getValue("reporterRpidHex").jsonPrimitive.content.hexToBytes()),
     enin = ProtocolUInt(getValue("enin").jsonPrimitive.long),
     observedRpids = get("observedRpidsHex")?.jsonArray?.map {
-        it.jsonPrimitive.content.hexToBytes().let { bytes ->
-            if (bytes.size == 17) BarnardRpid17(bytes) else BarnardRpid17(ByteArray(17))
-        }
+        ImmutableBytes(it.jsonPrimitive.content.hexToBytes())
     },
     rpidClaim = getValue("rpidClaimHex").jsonPrimitive.contentOrNull?.hexToBytes()?.let(::ImmutableBytes),
     participantCommitmentHex = getValue("participantCommitmentHex").jsonPrimitive.contentOrNull,
