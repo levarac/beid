@@ -1,141 +1,136 @@
 package org.levarac.parallax.registry
 
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
+import org.levarac.parallax.observation.readVectorResource
 
 class EventDefinitionCborCodecTest {
     @Test
-    fun validDefinitionAndDelegationDecode() {
-        val definition = EventDefinitionCborCodec.decode(eventDefinitionCbor())
-
-        assertEquals(1, definition.schemaVersion)
-        assertEquals(DEFINITION_EVENT_ID_HEX, definition.eventIdHex.removePrefix("0x"))
-        assertEquals(100L, definition.validFrom)
-        assertEquals(200L, definition.validUntil)
-        assertEquals(90L, definition.signedAt)
-        assertEquals(1, definition.delegationCount)
-        val delegation = requireNotNull(definition.delegationAt(0))
-        assertTrue(delegation.hasRole(DelegationRoles.RECEPTION))
-        assertEquals(130L, delegation.validFrom)
-        assertEquals(180L, delegation.validUntil)
-    }
-
-    @Test
-    fun malformedPayloadProducesTypedDecodeError() {
-        val valid = eventDefinitionCbor()
-        val malformed = valid.copyOf(valid.lastIndex)
-
-        val error = assertFailsWith<DefinitionDecodeException> {
-            EventDefinitionCborCodec.decode(malformed)
-        }
-        assertEquals(DefinitionDecodeError.MALFORMED, error.reason)
-    }
-
-    @Test
-    fun unsupportedVersionIsRejectedExplicitly() {
-        val error = assertFailsWith<DefinitionDecodeException> {
-            EventDefinitionCborCodec.decode(eventDefinitionCbor(schemaVersion = 2L))
-        }
-        assertEquals(DefinitionDecodeError.UNSUPPORTED_VERSION, error.reason)
-    }
-
-    @Test
-    fun backdatedDelegationIsRejectedAsForwardValidityViolation() {
-        val error = assertFailsWith<DefinitionDecodeException> {
-            EventDefinitionCborCodec.decode(
-                eventDefinitionCbor(
-                    delegations = listOf(
-                        DelegationFixture(issuedAt = 95L, validFrom = 99L),
-                    ),
-                ),
-            )
-        }
-        assertEquals(DefinitionDecodeError.FORWARD_VALIDITY, error.reason)
-    }
-
-    @Test
-    fun unknownTopLevelKeyIsRejected() {
-        val malformed = eventDefinitionCbor().withTopLevelKey8(9)
-
-        assertMalformed(malformed)
-    }
-
-    @Test
-    fun duplicateTopLevelKeyIsRejected() {
-        val malformed = eventDefinitionCbor().withTopLevelKey8(7)
-
-        assertMalformed(malformed)
-    }
-
-    @Test
-    fun wrongTopLevelMajorTypeIsRejected() {
-        val malformed = eventDefinitionCbor().copyOf().also { it[0] = 0x88.toByte() }
-
-        assertMalformed(malformed)
-    }
-
-    @Test
-    fun nonMinimalUnsignedEncodingIsRejected() {
-        val valid = eventDefinitionCbor()
-        val malformed = ByteArray(valid.size + 1)
-        valid.copyInto(malformed, endIndex = 2)
-        malformed[2] = 0x18
-        malformed[3] = 0x01
-        valid.copyInto(malformed, destinationOffset = 4, startIndex = 3)
-
-        assertMalformed(malformed)
-    }
-
-    @Test
-    fun indefiniteLengthEncodingIsRejected() {
-        val malformed = eventDefinitionCbor().copyOf().also { it[0] = 0xbf.toByte() }
-
-        assertMalformed(malformed)
-    }
-
-    @Test
-    fun fixedLengthEventIdIsRejected() {
-        assertMalformed(eventDefinitionCbor(eventIdHex = "01".repeat(31)))
-    }
-
-    @Test
-    fun fixedLengthAuthoritySignatureIsRejected() {
-        assertMalformed(eventDefinitionCbor(authoritySignatureHex = "05".repeat(63)))
-    }
-
-    @Test
-    fun delegationCountCapIsEnforced() {
-        assertMalformed(
-            eventDefinitionCbor(
-                delegations = List(MAX_EVENT_DEFINITION_DELEGATIONS + 1) { DelegationFixture() },
-            ),
+    fun committedVectorsMatchThePinnedParallaxSourceChecksums() {
+        assertEquals(
+            "db889e0a47557ce0fa3ca0ea1b04bf83295c9def70d89e2b53462f7c8898dc00",
+            Sha256.digest(
+                readVectorResource("vectors/positive/event-definition-v1.json").encodeToByteArray(),
+            ).toHexWithoutPrefix(),
+        )
+        assertEquals(
+            "fab1ef02cd5403ef785203a75973159820bf7e1050d2325777913a5a16f03d0d",
+            Sha256.digest(
+                readVectorResource("vectors/negative/event-definition-v1.json").encodeToByteArray(),
+            ).toHexWithoutPrefix(),
+        )
+        assertEquals(
+            "e1fa6c37c0154b495f7d43fa1098ee79ea837e70652e6aef2bede68d68a82326",
+            Sha256.digest(
+                readVectorResource("canonical/event-definition-v1.cddl").encodeToByteArray(),
+            ).toHexWithoutPrefix(),
         )
     }
 
     @Test
-    fun payloadSizeCapIsEnforced() {
-        assertMalformed(ByteArray(MAX_EVENT_DEFINITION_PAYLOAD_BYTES + 1))
+    fun positiveVectorDecodesTheExactCanonicalBytesAndVerifiesAllBindings() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val signed = vector.requiredString("signedEventDefinitionHex").vectorHexBytes()
+        val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
+        val eventId = vector.vectorEventId()
+
+        assertContentEquals(
+            vector.requiredString("signedEventDefinitionHex").vectorHexBytes(),
+            signed,
+        )
+        assertEquals(
+            "0x" + vector.requiredString("keySetDigestHex"),
+            EventDefinitionCborCodec.eventKeySetDigest(keySet).toPrefixedHex(),
+        )
+        assertEquals(
+            "0x" + vector.requiredString("eventDefinitionDigestHex"),
+            EventDefinitionCborCodec.eventDefinitionDigest(signed).toPrefixedHex(),
+        )
+
+        val verified = EventDefinitionCborCodec.verify(
+            signedBytes = signed,
+            encodedKeySet = keySet,
+            eventId = eventId,
+            registration = vector.anchorRegistration(),
+            record = vector.definitionRecord(),
+            at = vector.definitionRecord().validFrom,
+        )
+        val definition = verified.definition
+
+        assertEquals(1, definition.version)
+        assertContentEquals(eventId, definition.eventId.toByteArray())
+        assertEquals("1111111111111111111111111111111111111111", definition.registrar.toByteArray().toHexWithoutPrefix())
+        assertEquals("2222222222222222222222222222222222222222", definition.anchorOperator.toByteArray().toHexWithoutPrefix())
+        assertEquals("3333333333333333333333333333333333333333333333333333333333333333", definition.nonce.toByteArray().toHexWithoutPrefix())
+        assertEquals("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5", definition.receiptPublicKey.toByteArray().toHexWithoutPrefix())
+        assertEquals("50d8f3689f95e95c30be32dc4e516460dff139c088ab1117af0c104188252949", definition.operatorId.toByteArray().toHexWithoutPrefix())
+        assertEquals("https://operator.example/v1/observations", definition.submissionEndpoint)
+        assertEquals(1L, definition.sequence.value)
+        assertEquals(1_799_999_900L, definition.validFrom.value)
+        assertEquals(1_800_086_400L, definition.validUntil.value)
+        assertEquals(1, verified.keySet.authorityKeyCount)
+        assertEquals(
+            "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+            definition.authorityPublicKey.toByteArray().toHexWithoutPrefix(),
+        )
     }
 
     @Test
-    fun trailingBytesAreRejected() {
-        assertMalformed(eventDefinitionCbor() + byteArrayOf(0))
+    fun negativeVectorSubstitutedKeySetIsAtypedKeySetDigestRejection() {
+        val vector = readEventDefinitionVector("vectors/negative/event-definition-v1.json")
+        val error = assertFailsWith<DefinitionDecodeException> {
+            EventDefinitionCborCodec.verify(
+                signedBytes = vector.requiredString("signedEventDefinitionHex").vectorHexBytes(),
+                encodedKeySet = vector.requiredString("substitutedEventKeySetHex").vectorHexBytes(),
+                eventId = vector.vectorEventId(),
+                registration = vector.anchorRegistration(),
+                record = vector.definitionRecord(),
+                at = vector.definitionRecord().validFrom,
+            )
+        }
+        assertEquals(DefinitionDecodeError.KEY_SET_DIGEST_MISMATCH, error.reason)
     }
 
-    private fun assertMalformed(bytes: ByteArray) {
+    @Test
+    fun negativeVectorAnchorAtValidityStartIsAtypedValidityRejection() {
+        val vector = readEventDefinitionVector("vectors/negative/event-definition-v1.json")
         val error = assertFailsWith<DefinitionDecodeException> {
-            EventDefinitionCborCodec.decode(bytes)
+            EventDefinitionCborCodec.verify(
+                signedBytes = vector.requiredString("signedEventDefinitionHex").vectorHexBytes(),
+                encodedKeySet = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+                    .requiredString("eventKeySetHex").vectorHexBytes(),
+                eventId = vector.vectorEventId(),
+                registration = vector.anchorRegistration(),
+                record = vector.definitionRecord("sameTimeDefinitionAnchor"),
+                at = vector.definitionRecord().validFrom,
+            )
+        }
+        assertEquals(DefinitionDecodeError.INVALID_VALIDITY, error.reason)
+    }
+
+    @Test
+    fun trailingBytesAreRejectedBeforeAnyAuthorityVerification() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val error = assertFailsWith<DefinitionDecodeException> {
+            EventDefinitionCborCodec.verify(
+                signedBytes = vector.requiredString("signedEventDefinitionHex").vectorHexBytes() + byteArrayOf(0),
+                encodedKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
+                eventId = vector.vectorEventId(),
+                registration = vector.anchorRegistration(),
+                record = vector.definitionRecord(),
+                at = vector.definitionRecord().validFrom,
+            )
         }
         assertEquals(DefinitionDecodeError.MALFORMED, error.reason)
     }
+}
 
-    private fun ByteArray.withTopLevelKey8(value: Int): ByteArray {
-        val copy = copyOf()
-        val keyIndex = indexOfFirst { (it.toInt() and 0xff) == 8 }
-        require(keyIndex >= 0)
-        copy[keyIndex] = value.toByte()
-        return copy
+private fun ByteArray.toHexWithoutPrefix(): String = buildString(size * 2) {
+    for (byte in this@toHexWithoutPrefix) {
+        val value = byte.toInt() and 0xff
+        append("0123456789abcdef"[value ushr 4])
+        append("0123456789abcdef"[value and 0x0f])
     }
 }

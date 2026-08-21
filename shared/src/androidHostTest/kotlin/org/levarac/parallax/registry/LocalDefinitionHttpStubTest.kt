@@ -7,10 +7,12 @@ import kotlin.test.assertEquals
 
 class LocalDefinitionHttpStubTest {
     @Test
-    fun fetchesSignedDefinitionBytesThroughThePlatformHttpTransport() {
-        val payload = eventDefinitionCbor()
-        val eventId = DEFINITION_EVENT_ID_HEX.decodeHex(expectedBytes = 32)
-        val record = definitionRecordFor(payload)
+    fun fetchesCanonicalSignedDefinitionBytesThroughThePlatformHttpTransport() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val payload = vector.requiredString("signedEventDefinitionHex").vectorHexBytes()
+        val eventId = vector.vectorEventId()
+        val registration = vector.anchorRegistration()
+        val record = vector.definitionRecord()
         var requestedPath: String? = null
         val server = HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange ->
@@ -22,7 +24,7 @@ class LocalDefinitionHttpStubTest {
         try {
             val template = requireNotNull(
                 createDefinitionUrlTemplate(
-                    "http://127.0.0.1:${server.address.port}/{definitionHash}.cbor",
+                    "http://127.0.0.1:${server.address.port}/{definitionHash}.cose",
                     allowInsecureLoopbackForTests = true,
                 ),
             )
@@ -30,19 +32,21 @@ class LocalDefinitionHttpStubTest {
                 val context = SignedDefinitionFetcher(
                     template = template,
                     transport = createPlatformRegistryHttpTransport(),
+                    encodedEventKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
                 ).fetch(
                     eventId = eventId,
+                    registration = registration,
                     record = record,
-                    selectedAt = 130L,
+                    selectedAt = record.validFrom,
                 )
                 assertEquals(record.definitionDigestHex, context.definitionHashHex)
-                assertEquals(DEFINITION_EVENT_ID_HEX, context.eventIdHex.removePrefix("0x"))
-                assertEquals(record.validFrom, context.definition.validFrom)
-                assertEquals(record.validUntil, context.definition.validUntil)
-                assertEquals(1, context.activeDelegationCount)
+                assertEquals(eventId.toPrefixedHex(), context.eventIdHex)
+                assertEquals(record.validFrom, context.validFrom.value)
+                assertEquals(record.validUntil, context.validUntil.value)
+                assertEquals("https://operator.example/v1/observations", context.submissionEndpoint)
             }
             assertEquals(
-                "/${record.definitionDigestHex.removePrefix("0x")}.cbor",
+                "/${record.definitionDigestHex.removePrefix("0x")}.cose",
                 requestedPath,
             )
         } finally {
