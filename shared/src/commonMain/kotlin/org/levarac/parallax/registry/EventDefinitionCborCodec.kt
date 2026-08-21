@@ -419,9 +419,30 @@ internal object EventDefinitionCborCodec {
         if (host.isEmpty()) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host is empty")
         }
+        validateHostPercentEncoding(host)
         if (colon >= 0) validatePortSuffix(authority.substring(colon))
         return host.lowercase()
     }
+
+    private fun validateHostPercentEncoding(host: String) {
+        var index = 0
+        while (index < host.length) {
+            if (host[index] == '%') {
+                if (index + 2 >= host.length ||
+                    !isAsciiHexDigit(host[index + 1]) ||
+                    !isAsciiHexDigit(host[index + 2])
+                ) {
+                    fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host has invalid percent-encoding")
+                }
+                index += 3
+            } else {
+                index += 1
+            }
+        }
+    }
+
+    private fun isAsciiHexDigit(value: Char): Boolean =
+        value in '0'..'9' || value in 'a'..'f' || value in 'A'..'F'
 
     private fun validatePortSuffix(suffix: String) {
         if (suffix.isEmpty()) return
@@ -455,7 +476,10 @@ internal object EventDefinitionCborCodec {
 
         val leftText = if (compression >= 0) value.substring(0, compression) else value
         val rightText = if (compression >= 0) value.substring(compression + 2) else ""
-        if (leftText.contains('.') && rightText.isNotEmpty()) return null
+        // An embedded IPv4 address expands to the final two 16-bit groups. It can therefore
+        // only occur on the right of ::, or at the end of an uncompressed address; placing it
+        // before a trailing compression would leave groups after the IPv4 address.
+        if (compression >= 0 && leftText.contains('.')) return null
         val left = parseIpv6Part(leftText) ?: return null
         val right = if (compression >= 0) parseIpv6Part(rightText) ?: return null else emptyList()
         val groupCount = left.size + right.size
@@ -476,7 +500,12 @@ internal object EventDefinitionCborCodec {
             if (component.contains('.')) {
                 if (index != components.lastIndex) return null
                 val ipv4 = component.split('.')
-                if (ipv4.size != 4 || ipv4.any { it.isEmpty() || it.any { character -> !character.isDigit() } }) {
+                if (ipv4.size != 4 || ipv4.any { octet ->
+                        octet.isEmpty() ||
+                            (octet.length > 1 && octet[0] == '0') ||
+                            octet.any { character -> character !in '0'..'9' }
+                    }
+                ) {
                     return null
                 }
                 ipv4.forEach {

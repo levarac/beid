@@ -194,6 +194,11 @@ class EventDefinitionCborCodecTest {
             "https://[not-ipv6]/submit",
             "https://[2001:db8::1/submit",
             "https://[2001:db8::1]]/submit",
+            "https://[1.2.3.4::]/submit",
+            "https://[2001:db8::1::2]/submit",
+            "https://[2001:db8:0:0:0:0:0:0:1]/submit",
+            "https://[2001:db8::gg]/submit",
+            "https://%zz/submit",
             "https://user:pass@operator.example/submit",
             "http://operator.example/submit",
             "https://operator.example:65536/submit",
@@ -204,6 +209,24 @@ class EventDefinitionCborCodecTest {
                 keySet = keySet,
                 vector = vector,
                 expected = DefinitionDecodeError.INVALID_ENDPOINT,
+            )
+        }
+    }
+
+    @Test
+    fun validBracketedIpv6HostsReachSignatureVerification() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
+        listOf(
+            "https://[2001:0db8:0000:0000:0000:ff00:0042:8329]/submit",
+            "https://[2001:db8::1]/submit",
+            "https://[::ffff:192.0.2.128]/submit",
+        ).forEach { endpoint ->
+            assertDecodeReason(
+                signed = signedDefinitionWithEndpoint(vector, endpoint),
+                keySet = keySet,
+                vector = vector,
+                expected = DefinitionDecodeError.INVALID_SIGNATURE,
             )
         }
     }
