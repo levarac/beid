@@ -372,17 +372,8 @@ internal object EventDefinitionCborCodec {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must be 1..2048 UTF-8 bytes")
         }
         val schemeSeparator = value.indexOf("://")
-        if (schemeSeparator <= 0) {
+        if (schemeSeparator != 5 || !value.regionMatches(0, "https", 0, 5, ignoreCase = true)) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must be an absolute URI")
-        }
-        val scheme = value.substring(0, schemeSeparator).lowercase()
-        if (!scheme.first().isLetter() ||
-            !scheme.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }
-        ) {
-            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint URI scheme is invalid")
-        }
-        if (scheme != "https" && scheme != "http") {
-            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must use HTTPS or loopback HTTP")
         }
         val authorityStart = schemeSeparator + 3
         val authorityEnd = value.indexOfAny(charArrayOf('/', '?', '#'), authorityStart)
@@ -392,13 +383,10 @@ internal object EventDefinitionCborCodec {
         ) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint authority is invalid")
         }
-        val host = parseAuthorityHost(authority)
-        if (scheme == "http" && !isLoopbackHost(host)) {
-            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint HTTP authority is not loopback")
-        }
+        validateAuthority(authority)
     }
 
-    private fun parseAuthorityHost(authority: String): String {
+    private fun validateAuthority(authority: String) {
         if (authority.startsWith("[")) {
             val closingBracket = authority.indexOf(']')
             if (closingBracket <= 1 || authority.substring(closingBracket + 1).contains(']')) {
@@ -409,7 +397,7 @@ internal object EventDefinitionCborCodec {
                 fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv6 authority is invalid")
             }
             validatePortSuffix(authority.substring(closingBracket + 1))
-            return "[${host.lowercase()}]"
+            return
         }
         if ('[' in authority || ']' in authority || authority.count { it == ':' } > 1) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv6 host must be bracketed")
@@ -419,83 +407,53 @@ internal object EventDefinitionCborCodec {
         if (host.isEmpty()) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host is empty")
         }
-        validateHostPercentEncoding(host)
         if (colon >= 0) validatePortSuffix(authority.substring(colon))
-        return host.lowercase()
+        validateAsciiHost(host)
     }
 
-    private fun validateHostPercentEncoding(host: String) {
-        var index = 0
-        while (index < host.length) {
-            val codePoint = if (host[index] == '%') {
-                if (index + 2 >= host.length ||
-                    !isAsciiHexDigit(host[index + 1]) ||
-                    !isAsciiHexDigit(host[index + 2])
+    private fun validateAsciiHost(host: String) {
+        if (host.any { it.code >= 0x80 || it == '%' }) {
+            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host must be ASCII without percent-encoding")
+        }
+        val labels = host.split('.')
+        val isDecimalQuad = labels.size == 4 && labels.all { label ->
+            label.isNotEmpty() && label.all { character -> character in '0'..'9' }
+        }
+        if (isDecimalQuad) {
+            labels.forEach { label ->
+                if ((label.length > 1 && label[0] == '0') ||
+                    label.toIntOrNull()?.takeIf { it in 0..255 } == null
                 ) {
-                    fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host has invalid percent-encoding")
+                    fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv4 host is invalid")
                 }
-                val high = asciiHexValue(host[index + 1])
-                val low = asciiHexValue(host[index + 2])
-                index += 3
-                (high shl 4) or low
-            } else {
-                index += 1
-                host[index - 1].code
             }
-            if (isForbiddenDomainCodePoint(codePoint)) {
-                fail(
-                    DefinitionDecodeError.INVALID_ENDPOINT,
-                    "submissionEndpoint host contains a forbidden code point",
-                )
+            return
+        }
+        if (labels.any { label ->
+                label.isEmpty() ||
+                    label.first() == '-' ||
+                    label.last() == '-' ||
+                    label.any { character ->
+                        character !in 'A'..'Z' && character !in 'a'..'z' &&
+                            character !in '0'..'9' && character != '-'
+                    }
             }
+        ) {
+            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint domain host is invalid")
         }
     }
-
-    private fun isForbiddenDomainCodePoint(codePoint: Int): Boolean = when {
-        codePoint in 0x00..0x20 || codePoint == 0x25 || codePoint == 0x7F -> true
-        codePoint == '#'.code ||
-            codePoint == '/'.code ||
-            codePoint == ':'.code ||
-            codePoint == '<'.code ||
-            codePoint == '>'.code ||
-            codePoint == '?'.code ||
-            codePoint == '@'.code ||
-            codePoint == '['.code ||
-            codePoint == '\\'.code ||
-            codePoint == ']'.code ||
-            codePoint == '^'.code ||
-            codePoint == '|'.code -> true
-        else -> false
-    }
-
-    private fun asciiHexValue(value: Char): Int = when (value) {
-        in '0'..'9' -> value.code - '0'.code
-        in 'a'..'f' -> value.code - 'a'.code + 10
-        in 'A'..'F' -> value.code - 'A'.code + 10
-        else -> error("not an ASCII hex digit")
-    }
-
-    private fun isAsciiHexDigit(value: Char): Boolean =
-        value in '0'..'9' || value in 'a'..'f' || value in 'A'..'F'
 
     private fun validatePortSuffix(suffix: String) {
         if (suffix.isEmpty()) return
         if (!suffix.startsWith(":") || suffix.length == 1 ||
-            suffix.substring(1).any { !it.isDigit() }
+            suffix.substring(1).any { it !in '0'..'9' }
         ) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint port is invalid")
         }
-        val port = suffix.substring(1).toIntOrNull()
-        if (port == null || port !in 0..65_535) {
+        val digits = suffix.substring(1).dropWhile { it == '0' }
+        val port = digits.toIntOrNull()
+        if (digits.isEmpty() || port == null || port !in 1..65_535) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint port is invalid")
-        }
-    }
-
-    private fun isLoopbackHost(host: String): Boolean {
-        if (host == "localhost" || host == "127.0.0.1") return true
-        if (!host.startsWith("[") || !host.endsWith("]")) return false
-        return parseIpv6Groups(host.substring(1, host.length - 1)) == List(8) { index ->
-            if (index == 7) 1 else 0
         }
     }
 

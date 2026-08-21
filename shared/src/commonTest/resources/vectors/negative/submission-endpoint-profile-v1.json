@@ -1,0 +1,50 @@
+{
+  "vector": "levarac-submission-endpoint-profile-v1-negative",
+  "cases": [
+    {
+      "name": "percent-encoded-host",
+      "submissionEndpoint": "https://%FF/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "soft-hyphen-unicode-host",
+      "submissionEndpoint": "https://soft­hyphen.example/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "zero-width-joiner-unicode-host",
+      "submissionEndpoint": "https://zwj‍.example/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "ipv4-octet-out-of-range",
+      "submissionEndpoint": "https://256.256.256.256/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "ipv4-leading-zero",
+      "submissionEndpoint": "https://01.2.3.4/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "userinfo",
+      "submissionEndpoint": "https://user:pass@operator.example/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "port-zero",
+      "submissionEndpoint": "https://operator.example:0/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "port-out-of-range",
+      "submissionEndpoint": "https://operator.example:65536/submit",
+      "reason": "endpoint-profile violation"
+    },
+    {
+      "name": "http-scheme",
+      "submissionEndpoint": "http://operator.example/submit",
+      "reason": "endpoint-profile violation"
+    }
+  ]
+}

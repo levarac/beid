@@ -28,12 +28,20 @@ class ParallaxEventDefinitionSourceChecksumTest {
             source = root.resolve("protocol/vectors/negative/event-definition-v1.json"),
         )
         assertResourceMatchesSource(
+            resourcePath = "vectors/positive/submission-endpoint-profile-v1.json",
+            source = root.resolve("protocol/vectors/positive/submission-endpoint-profile-v1.json"),
+        )
+        assertResourceMatchesSource(
+            resourcePath = "vectors/negative/submission-endpoint-profile-v1.json",
+            source = root.resolve("protocol/vectors/negative/submission-endpoint-profile-v1.json"),
+        )
+        assertResourceMatchesSource(
             resourcePath = "canonical/event-definition-v1.cddl",
             source = root.resolve("protocol/cddl/event-definition-v1.cddl"),
         )
         assertSourceChecksum(
             source = root.resolve("protocol/reference/js/src/wire-identifiers.ts"),
-            expectedSha256 = "0x43f09463989086a0b44e3213f495d7e8b06dc14bf0a4e69f830d2e788cdffc61",
+            expectedSha256 = "0x78dd66a08c6cac756ee15c15567fc58ca8238b0db9becb46ccf5879837623eb5",
         )
     }
 
