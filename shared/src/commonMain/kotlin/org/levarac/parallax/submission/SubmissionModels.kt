@@ -85,12 +85,52 @@ public fun restoreStoredObservation(signedBytesHex: String): StoredObservationV1
 public fun createSubmissionOperatorConfiguration(
     endpoint: String,
     receiptPublicKeyHex: String,
-    operatorIdHex: String? = null,
     eventIdHex: String? = null,
     eventDefinitionDigestHex: String? = null,
     validFrom: Long? = null,
     validUntil: Long? = null,
     allowInsecureLoopbackForTests: Boolean = false,
+): SubmissionOperatorConfiguration? = createSubmissionOperatorConfigurationInternal(
+    endpoint = endpoint,
+    receiptPublicKeyHex = receiptPublicKeyHex,
+    operatorIdHex = null,
+    eventIdHex = eventIdHex,
+    eventDefinitionDigestHex = eventDefinitionDigestHex,
+    validFrom = validFrom,
+    validUntil = validUntil,
+    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
+)
+
+/** Restores a durable submission configuration with the operator ID from its verified context. */
+public fun createSubmissionOperatorConfigurationWithOperatorId(
+    endpoint: String,
+    receiptPublicKeyHex: String,
+    operatorIdHex: String?,
+    eventIdHex: String? = null,
+    eventDefinitionDigestHex: String? = null,
+    validFrom: Long? = null,
+    validUntil: Long? = null,
+    allowInsecureLoopbackForTests: Boolean = false,
+): SubmissionOperatorConfiguration? = createSubmissionOperatorConfigurationInternal(
+    endpoint = endpoint,
+    receiptPublicKeyHex = receiptPublicKeyHex,
+    operatorIdHex = operatorIdHex,
+    eventIdHex = eventIdHex,
+    eventDefinitionDigestHex = eventDefinitionDigestHex,
+    validFrom = validFrom,
+    validUntil = validUntil,
+    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
+)
+
+private fun createSubmissionOperatorConfigurationInternal(
+    endpoint: String,
+    receiptPublicKeyHex: String,
+    operatorIdHex: String?,
+    eventIdHex: String?,
+    eventDefinitionDigestHex: String?,
+    validFrom: Long?,
+    validUntil: Long?,
+    allowInsecureLoopbackForTests: Boolean,
 ): SubmissionOperatorConfiguration? = try {
     val normalizedEndpoint = validateSubmissionEndpoint(endpoint, allowInsecureLoopbackForTests)
     val receiptPublicKey = CompressedSecp256k1PublicKey(receiptPublicKeyHex.decodeHex(33))

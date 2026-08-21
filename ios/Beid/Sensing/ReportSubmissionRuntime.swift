@@ -408,16 +408,17 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   private func makeConfiguration(
     for record: ReportSubmissionRecord
   ) -> ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionOperatorConfiguration? {
-    ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionOperatorConfiguration(
-      endpoint: record.endpoint,
-      receiptPublicKeyHex: record.receiptPublicKeyHex,
-      operatorIdHex: record.operatorIdHex,
-      eventIdHex: record.eventIdHex,
-      eventDefinitionDigestHex: record.eventDefinitionDigestHex,
-      validFrom: record.validFrom,
-      validUntil: record.validUntil,
-      allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
-    )
+    ExportedKotlinPackages.org.levarac.parallax.submission
+      .createSubmissionOperatorConfigurationWithOperatorId(
+        endpoint: record.endpoint,
+        receiptPublicKeyHex: record.receiptPublicKeyHex,
+        operatorIdHex: record.operatorIdHex,
+        eventIdHex: record.eventIdHex,
+        eventDefinitionDigestHex: record.eventDefinitionDigestHex,
+        validFrom: record.validFrom,
+        validUntil: record.validUntil,
+        allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
+      )
   }
 
   private static func isEnabled(bundle: Bundle) -> Bool {
