@@ -68,6 +68,7 @@ targets:
         BeidEventRegistryReaderAddress: "$(BEID_EVENT_REGISTRY_READER_ADDRESS)"
         BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
         BeidEventDefinitionURLTemplate: "$(BEID_EVENT_DEFINITION_URL_TEMPLATE)"
+        BeidEventKeySetURLTemplate: "$(BEID_EVENT_KEY_SET_URL_TEMPLATE)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
@@ -104,6 +105,7 @@ targets:
         BEID_EVENT_REGISTRY_READER_ADDRESS: "0xd4852f8526A1555A1b2C34145f0eCDA412a53c51"
         BEID_ETHERSCAN_API_KEY: ""
         BEID_EVENT_DEFINITION_URL_TEMPLATE: ""
+        BEID_EVENT_KEY_SET_URL_TEMPLATE: ""
       configs:
         Debug:
           # XcodeGen 2.45.3 has no configuration filter for package

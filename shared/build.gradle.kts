@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.swiftexport.ExperimentalSwiftExportDsl
+import org.gradle.api.tasks.Copy
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
@@ -49,4 +50,22 @@ kotlin {
             }
         }
     }
+}
+
+// Kotlin/Native does not automatically package commonTest resources into the test executable.
+// Keep the existing loader's stable processedResources layout populated for both native targets.
+val commonTestResourceDirectory = layout.projectDirectory.dir("src/commonTest/resources")
+val copyIosSimulatorArm64TestResources = tasks.register<Copy>("copyIosSimulatorArm64TestResources") {
+    from(commonTestResourceDirectory)
+    into(layout.buildDirectory.dir("processedResources/iosSimulatorArm64/test"))
+}
+val copyIosArm64TestResources = tasks.register<Copy>("copyIosArm64TestResources") {
+    from(commonTestResourceDirectory)
+    into(layout.buildDirectory.dir("processedResources/iosArm64/test"))
+}
+tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach {
+    dependsOn(copyIosSimulatorArm64TestResources)
+}
+tasks.matching { it.name == "iosArm64Test" }.configureEach {
+    dependsOn(copyIosArm64TestResources)
 }
