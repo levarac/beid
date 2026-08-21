@@ -372,17 +372,13 @@ internal object EventDefinitionCborCodec {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must be 1..2048 UTF-8 bytes")
         }
         val schemeSeparator = value.indexOf("://")
-        if (schemeSeparator <= 0) {
+        val schemeIsHttps = schemeSeparator == 5 && (0 until 5).all { index ->
+            val code = value[index].code
+            val foldedCode = if (code in 'A'.code..'Z'.code) code + ('a'.code - 'A'.code) else code
+            code <= 0x7F && foldedCode == "https"[index].code
+        }
+        if (!schemeIsHttps) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must be an absolute URI")
-        }
-        val scheme = value.substring(0, schemeSeparator).lowercase()
-        if (!scheme.first().isLetter() ||
-            !scheme.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }
-        ) {
-            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint URI scheme is invalid")
-        }
-        if (scheme != "https" && scheme != "http") {
-            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint must use HTTPS or loopback HTTP")
         }
         val authorityStart = schemeSeparator + 3
         val authorityEnd = value.indexOfAny(charArrayOf('/', '?', '#'), authorityStart)
@@ -392,13 +388,10 @@ internal object EventDefinitionCborCodec {
         ) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint authority is invalid")
         }
-        val host = parseAuthorityHost(authority)
-        if (scheme == "http" && !isLoopbackHost(host)) {
-            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint HTTP authority is not loopback")
-        }
+        validateAuthority(authority)
     }
 
-    private fun parseAuthorityHost(authority: String): String {
+    private fun validateAuthority(authority: String) {
         if (authority.startsWith("[")) {
             val closingBracket = authority.indexOf(']')
             if (closingBracket <= 1 || authority.substring(closingBracket + 1).contains(']')) {
@@ -409,7 +402,7 @@ internal object EventDefinitionCborCodec {
                 fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv6 authority is invalid")
             }
             validatePortSuffix(authority.substring(closingBracket + 1))
-            return "[${host.lowercase()}]"
+            return
         }
         if ('[' in authority || ']' in authority || authority.count { it == ':' } > 1) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv6 host must be bracketed")
@@ -420,27 +413,52 @@ internal object EventDefinitionCborCodec {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host is empty")
         }
         if (colon >= 0) validatePortSuffix(authority.substring(colon))
-        return host.lowercase()
+        validateAsciiHost(host)
+    }
+
+    private fun validateAsciiHost(host: String) {
+        if (host.any { it.code >= 0x80 || it == '%' }) {
+            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host must be ASCII without percent-encoding")
+        }
+        val labels = host.split('.')
+        val isDecimalQuad = labels.size == 4 && labels.all { label ->
+            label.isNotEmpty() && label.all { character -> character in '0'..'9' }
+        }
+        if (isDecimalQuad) {
+            labels.forEach { label ->
+                if ((label.length > 1 && label[0] == '0') ||
+                    label.toIntOrNull()?.takeIf { it in 0..255 } == null
+                ) {
+                    fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint IPv4 host is invalid")
+                }
+            }
+            return
+        }
+        if (labels.any { label ->
+                label.isEmpty() ||
+                    label.first() == '-' ||
+                    label.last() == '-' ||
+                    label.any { character ->
+                        character !in 'A'..'Z' && character !in 'a'..'z' &&
+                            character !in '0'..'9' && character != '-'
+                    }
+            }
+        ) {
+            fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint domain host is invalid")
+        }
     }
 
     private fun validatePortSuffix(suffix: String) {
         if (suffix.isEmpty()) return
         if (!suffix.startsWith(":") || suffix.length == 1 ||
-            suffix.substring(1).any { !it.isDigit() }
+            suffix.substring(1).any { it !in '0'..'9' }
         ) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint port is invalid")
         }
-        val port = suffix.substring(1).toIntOrNull()
-        if (port == null || port !in 0..65_535) {
+        val digits = suffix.substring(1).dropWhile { it == '0' }
+        val port = digits.toIntOrNull()
+        if (digits.isEmpty() || port == null || port !in 1..65_535) {
             fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint port is invalid")
-        }
-    }
-
-    private fun isLoopbackHost(host: String): Boolean {
-        if (host == "localhost" || host == "127.0.0.1") return true
-        if (!host.startsWith("[") || !host.endsWith("]")) return false
-        return parseIpv6Groups(host.substring(1, host.length - 1)) == List(8) { index ->
-            if (index == 7) 1 else 0
         }
     }
 
@@ -455,7 +473,10 @@ internal object EventDefinitionCborCodec {
 
         val leftText = if (compression >= 0) value.substring(0, compression) else value
         val rightText = if (compression >= 0) value.substring(compression + 2) else ""
-        if (leftText.contains('.') && rightText.isNotEmpty()) return null
+        // An embedded IPv4 address expands to the final two 16-bit groups. It can therefore
+        // only occur on the right of ::, or at the end of an uncompressed address; placing it
+        // before a trailing compression would leave groups after the IPv4 address.
+        if (compression >= 0 && leftText.contains('.')) return null
         val left = parseIpv6Part(leftText) ?: return null
         val right = if (compression >= 0) parseIpv6Part(rightText) ?: return null else emptyList()
         val groupCount = left.size + right.size
@@ -476,7 +497,12 @@ internal object EventDefinitionCborCodec {
             if (component.contains('.')) {
                 if (index != components.lastIndex) return null
                 val ipv4 = component.split('.')
-                if (ipv4.size != 4 || ipv4.any { it.isEmpty() || it.any { character -> !character.isDigit() } }) {
+                if (ipv4.size != 4 || ipv4.any { octet ->
+                        octet.isEmpty() ||
+                            (octet.length > 1 && octet[0] == '0') ||
+                            octet.any { character -> character !in '0'..'9' }
+                    }
+                ) {
                     return null
                 }
                 ipv4.forEach {

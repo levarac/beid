@@ -1,6 +1,8 @@
 package org.levarac.parallax.registry
 
 import org.levarac.parallax.observation.CanonicalCbor
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -23,11 +25,80 @@ class EventDefinitionCborCodecTest {
             ).toHexWithoutPrefix(),
         )
         assertEquals(
+            "bf4e589730f34d1bb4e0a136fa67bc930775f7309c5ceba326786db9a34a8108",
+            Sha256.digest(
+                readVectorResource("vectors/positive/submission-endpoint-profile-v1.json").encodeToByteArray(),
+            ).toHexWithoutPrefix(),
+        )
+        assertEquals(
+            "9e13c9c756a171935644132c98385df0565352dda42101c9284b94ed67b156ed",
+            Sha256.digest(
+                readVectorResource("vectors/negative/submission-endpoint-profile-v1.json").encodeToByteArray(),
+            ).toHexWithoutPrefix(),
+        )
+        assertEquals(
             "e1fa6c37c0154b495f7d43fa1098ee79ea837e70652e6aef2bede68d68a82326",
             Sha256.digest(
                 readVectorResource("canonical/event-definition-v1.cddl").encodeToByteArray(),
             ).toHexWithoutPrefix(),
         )
+    }
+
+    @Test
+    fun submissionEndpointProfilePositiveVectorsPassEndpointValidation() {
+        val eventDefinition = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = eventDefinition.requiredString("eventKeySetHex").vectorHexBytes()
+        val profile = readEventDefinitionVector("vectors/positive/submission-endpoint-profile-v1.json")
+
+        profile.getValue("cases").jsonArray.forEach { element ->
+            val case = element.jsonObject
+            val outcome = runCatching {
+                EventDefinitionCborCodec.verify(
+                    signedBytes = signedDefinitionWithEndpoint(
+                        eventDefinition,
+                        case.requiredString("submissionEndpoint"),
+                    ),
+                    encodedKeySet = keySet,
+                    eventId = eventDefinition.vectorEventId(),
+                    registration = eventDefinition.anchorRegistration(),
+                    record = eventDefinition.definitionRecord(),
+                    at = eventDefinition.definitionRecord().validFrom,
+                )
+            }
+            when (val error = outcome.exceptionOrNull()) {
+                null -> Unit
+                is DefinitionDecodeException -> {
+                    assertEquals(DefinitionDecodeError.INVALID_SIGNATURE, error.reason, case.requiredString("name"))
+                }
+                else -> throw error
+            }
+        }
+    }
+
+    @Test
+    fun submissionEndpointProfileNegativeVectorsAreRejectedWithTheirTypedReason() {
+        val eventDefinition = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = eventDefinition.requiredString("eventKeySetHex").vectorHexBytes()
+        val profile = readEventDefinitionVector("vectors/negative/submission-endpoint-profile-v1.json")
+
+        profile.getValue("cases").jsonArray.forEach { element ->
+            val case = element.jsonObject
+            val error = assertFailsWith<DefinitionDecodeException> {
+                EventDefinitionCborCodec.verify(
+                    signedBytes = signedDefinitionWithEndpoint(
+                        eventDefinition,
+                        case.requiredString("submissionEndpoint"),
+                    ),
+                    encodedKeySet = keySet,
+                    eventId = eventDefinition.vectorEventId(),
+                    registration = eventDefinition.anchorRegistration(),
+                    record = eventDefinition.definitionRecord(),
+                    at = eventDefinition.definitionRecord().validFrom,
+                )
+            }
+            assertEquals("endpoint-profile violation", case.requiredString("reason"), case.requiredString("name"))
+            assertEquals(DefinitionDecodeError.INVALID_ENDPOINT, error.reason, case.requiredString("name"))
+        }
     }
 
     @Test
@@ -191,9 +262,24 @@ class EventDefinitionCborCodecTest {
         val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
         val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
         listOf(
+            "httpſ://operator.example/submit",
             "https://[not-ipv6]/submit",
             "https://[2001:db8::1/submit",
             "https://[2001:db8::1]]/submit",
+            "https://[1.2.3.4::]/submit",
+            "https://[2001:db8::1::2]/submit",
+            "https://[2001:db8:0:0:0:0:0:0:1]/submit",
+            "https://[2001:db8::gg]/submit",
+            "https://%zz/submit",
+            "https://%2F/submit",
+            "https://%00/submit",
+            "https://%0B/submit",
+            "https://%0C/submit",
+            "https://%25/submit",
+            "https://%7F/submit",
+            "https://%23/submit",
+            "https://%40/submit",
+            "https://%5C/submit",
             "https://user:pass@operator.example/submit",
             "http://operator.example/submit",
             "https://operator.example:65536/submit",
@@ -204,6 +290,50 @@ class EventDefinitionCborCodecTest {
                 keySet = keySet,
                 vector = vector,
                 expected = DefinitionDecodeError.INVALID_ENDPOINT,
+            )
+        }
+    }
+
+    @Test
+    fun asciiUppercaseHttpsSchemeReachesSignatureVerification() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
+
+        assertDecodeReason(
+            signed = signedDefinitionWithEndpoint(vector, "HTTPS://operator.example/submit"),
+            keySet = keySet,
+            vector = vector,
+            expected = DefinitionDecodeError.INVALID_SIGNATURE,
+        )
+    }
+
+    @Test
+    fun percentEncodedHostCharactersAreRejectedByTheEndpointProfile() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
+
+        assertDecodeReason(
+            signed = signedDefinitionWithEndpoint(vector, "https://operator%2D.example/submit"),
+            keySet = keySet,
+            vector = vector,
+            expected = DefinitionDecodeError.INVALID_ENDPOINT,
+        )
+    }
+
+    @Test
+    fun validBracketedIpv6HostsReachSignatureVerification() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
+        listOf(
+            "https://[2001:0db8:0000:0000:0000:ff00:0042:8329]/submit",
+            "https://[2001:db8::1]/submit",
+            "https://[::ffff:192.0.2.128]/submit",
+        ).forEach { endpoint ->
+            assertDecodeReason(
+                signed = signedDefinitionWithEndpoint(vector, endpoint),
+                keySet = keySet,
+                vector = vector,
+                expected = DefinitionDecodeError.INVALID_SIGNATURE,
             )
         }
     }

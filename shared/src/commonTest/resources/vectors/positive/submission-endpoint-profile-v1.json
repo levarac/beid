@@ -1,0 +1,21 @@
+{
+  "vector": "levarac-submission-endpoint-profile-v1-positive",
+  "cases": [
+    {
+      "name": "ascii-domain",
+      "submissionEndpoint": "https://operator.example/v1/observations"
+    },
+    {
+      "name": "bracketed-ipv6",
+      "submissionEndpoint": "https://[2001:db8::1]/submit"
+    },
+    {
+      "name": "dotted-quad-ipv4",
+      "submissionEndpoint": "https://192.0.2.10/submit"
+    },
+    {
+      "name": "domain-with-port-and-components",
+      "submissionEndpoint": "https://operator.example:8443/v1/observations?mode=full#fragment"
+    }
+  ]
+}
