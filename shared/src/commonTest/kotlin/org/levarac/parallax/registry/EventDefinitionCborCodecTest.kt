@@ -199,6 +199,11 @@ class EventDefinitionCborCodecTest {
             "https://[2001:db8:0:0:0:0:0:0:1]/submit",
             "https://[2001:db8::gg]/submit",
             "https://%zz/submit",
+            "https://%2F/submit",
+            "https://%00/submit",
+            "https://%23/submit",
+            "https://%40/submit",
+            "https://%5C/submit",
             "https://user:pass@operator.example/submit",
             "http://operator.example/submit",
             "https://operator.example:65536/submit",
@@ -211,6 +216,19 @@ class EventDefinitionCborCodecTest {
                 expected = DefinitionDecodeError.INVALID_ENDPOINT,
             )
         }
+    }
+
+    @Test
+    fun harmlessPercentDecodedHostCharactersReachSignatureVerification() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
+
+        assertDecodeReason(
+            signed = signedDefinitionWithEndpoint(vector, "https://operator%2D.example/submit"),
+            keySet = keySet,
+            vector = vector,
+            expected = DefinitionDecodeError.INVALID_SIGNATURE,
+        )
     }
 
     @Test

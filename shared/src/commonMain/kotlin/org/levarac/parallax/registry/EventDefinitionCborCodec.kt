@@ -427,18 +427,57 @@ internal object EventDefinitionCborCodec {
     private fun validateHostPercentEncoding(host: String) {
         var index = 0
         while (index < host.length) {
-            if (host[index] == '%') {
+            val codePoint = if (host[index] == '%') {
                 if (index + 2 >= host.length ||
                     !isAsciiHexDigit(host[index + 1]) ||
                     !isAsciiHexDigit(host[index + 2])
                 ) {
                     fail(DefinitionDecodeError.INVALID_ENDPOINT, "submissionEndpoint host has invalid percent-encoding")
                 }
+                val high = asciiHexValue(host[index + 1])
+                val low = asciiHexValue(host[index + 2])
                 index += 3
+                (high shl 4) or low
             } else {
                 index += 1
+                host[index - 1].code
+            }
+            if (isForbiddenHostCodePoint(codePoint)) {
+                fail(
+                    DefinitionDecodeError.INVALID_ENDPOINT,
+                    "submissionEndpoint host contains a forbidden code point",
+                )
             }
         }
+    }
+
+    private fun isForbiddenHostCodePoint(codePoint: Int): Boolean = when (codePoint) {
+        0x0000, // NULL
+        0x0009, // TAB
+        0x000A, // LF
+        0x000D, // CR
+        0x0020, // SPACE
+        '#'.code,
+        '/'.code,
+        ':'.code,
+        '<'.code,
+        '>'.code,
+        '?'.code,
+        '@'.code,
+        '['.code,
+        '\\'.code,
+        ']'.code,
+        '^'.code,
+        '|'.code,
+        -> true
+        else -> false
+    }
+
+    private fun asciiHexValue(value: Char): Int = when (value) {
+        in '0'..'9' -> value.code - '0'.code
+        in 'a'..'f' -> value.code - 'a'.code + 10
+        in 'A'..'F' -> value.code - 'A'.code + 10
+        else -> error("not an ASCII hex digit")
     }
 
     private fun isAsciiHexDigit(value: Char): Boolean =
