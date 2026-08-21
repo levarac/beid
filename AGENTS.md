@@ -223,15 +223,20 @@ selects the reviewer and frames the review, not a judgment about a person.
   in English in code; `ios/project.yml`'s `options.developmentLanguage` is
   `en` and is the single source of truth for the development region — do
   not set a development region anywhere else.
-- **Target locales**: `en` (source) + `ja` — 2 locales total. Settled by owner
-  decision 2026-08-19 (`DECISIONS.md`); this replaces the earlier unratified
-  5-locale proposal (`zh-Hans`, `es`, `fr` are no longer targets). ASC notes
-  locales narrow to `en-US` and `ja` to match. Treat the locale list in
-  `Localizable.xcstrings` as the canonical current set; this doc's list must
-  match it.
-  - The removed `zh-Hans` / `es` / `fr` entries were machine drafts left at
-    `needs_review` and never given a human pass, so nothing reviewed was lost.
-    They are recoverable from git history if the target set ever widens again.
+- **Target locales**: `en` only. Settled by owner decision 2026-08-21
+  (`DECISIONS.md`, MTG 2026-08-20); this supersedes the 2026-08-19 `en`+`ja`
+  reduction, which itself replaced an unratified 5-locale proposal. ASC notes
+  and store listings are `en-US` only to match.
+  - **The localization mechanism stays in place.** Shipping one locale is not
+    licence to hardcode copy: user-facing text still goes through the String
+    Catalog (iOS) / string resources (Android), never inline in a view, so
+    adding a locale later is configuration rather than a rewrite. The
+    design-system rule that components take `LocalizedStringKey` (never
+    `String`) is unchanged and is what makes that true.
+  - The `ja` entries removed on 2026-08-21, and the `zh-Hans`/`es`/`fr`
+    entries removed on 2026-08-19, are recoverable from git history if the
+    target set ever widens again. Nothing human-reviewed was lost — every
+    removed translation was a machine draft left at `needs_review`.
 
 ### Mechanism
 
@@ -319,7 +324,11 @@ gracefully to English rather than blocking or breaking the build.
 - Run the app under a specific language without changing the system
   language: Xcode scheme editor → Run → Options → **App Language**, or from
   the CLI, launch args `-AppleLanguages (ja) -AppleLocale ja_JP`.
-- Check **`ja`** specifically for truncation — CJK glyphs and English-length
+- Length/truncation checks no longer have a `ja` axis (2026-08-21: `en` only),
+  but keep the pseudo-locale check below — it is what catches truncation
+  without depending on any one real translation. Historical note: `ja` was
+  the longest-string outlier in this set, so the pseudo-locale double-length
+  case is now the only guard against that class of bug. CJK glyphs and English-length
   assumptions interact badly, and `ja` is often among the longest
   string-length outliers in this string set (e.g. header labels, primary
   CTAs).
@@ -451,7 +460,7 @@ dates). The contract every agent must know before touching delivery files:
   `main`, but does not yet copy the file into tester-facing "What to Test"
   notes. Xcode Cloud does both when it is the active delivery path. Rewrite
   the file wholesale each time — what to check in *this* build
-  only, 1-3 plain sentences per locale (ASC locales: `en-US`, `ja`), no PR
+  only, 1-3 plain sentences (ASC locale: `en-US` only), no PR
   numbers, no internal jargon, no accumulated history.
 - **`release_notes.json` is App Store "What's New" copy.** On non-release
   branches it is never delivered to testers and editing it neither

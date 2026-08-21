@@ -1,9 +1,5 @@
 [
   {
-    "language": "ja",
-    "text": "このビルドは実機での検証を目的としています。参加する全員が必ずこのビルドに更新してください。イベントコードの扱い方を変えたため、古いビルドと新しいビルドが混ざると、同じコードを入力しても別のイベントとして扱われ、互いを検知しません。イベントコードは大文字小文字を区別しなくなり、前後の空白も無視されます。ETHTokyo と ethtokyo は同じイベントです。記録中の画面に「診断: 識別済み◯ · 未識別◯」という行が増えています。これは調査用の一時的な表示で、相互確認の数ではありません。4人以上で記録を始めたあと、この2つの数がどう動いたかを教えてください。識別済みが伸びない場合、未識別が増えているかどうかで原因が変わります。"
-  },
-  {
     "language": "en-US",
     "text": "This build is for on-device testing. Everyone taking part must update to it. Event codes are handled differently now, so a mix of old and new builds will treat the same typed code as two different events and will not sense each other. Event codes are no longer case-sensitive and surrounding spaces are ignored: ETHTokyo and ethtokyo are the same event. The recording screen now shows a line reading \"Diagnostics: N identified · N unidentified\". It is a temporary investigation aid, not a count of mutual confirmations. After starting a recording with four or more people, please tell us how those two numbers moved. If the identified count stays flat, whether the unidentified count is rising tells us which cause we are looking at."
   }

@@ -136,19 +136,25 @@ reason to support API 24–25 shows up.
 Following the root `AGENTS.md` process, adapted for Android tooling: Android
 [string resources](https://developer.android.com/guide/topics/resources/string-resource)
 (`res/values*/strings.xml`) are this platform's equivalent of iOS's SwiftUI
-String Catalog, covering the same locale set — `en` (source, sentence-case,
-DESIGN.md §15 vocabulary/forbidden-term rules) + `ja`. That is the whole set:
-the owner narrowed the targets from five locales to two on 2026-08-19
-(`DECISIONS.md`), and `values-b+zh+Hans`, `values-es` and `values-fr` were
-removed in the same change. `ja` is a machine-drafted starting point.
+String Catalog. The target set is `en` only — owner decision 2026-08-21
+(`DECISIONS.md`, MTG 2026-08-20), superseding the 2026-08-19 `en`+`ja`
+reduction. `values-ja/` was removed in the same change; `values-b+zh+Hans/`,
+`values-es/` and `values-fr/` went on 2026-08-19. All are recoverable from git
+history.
 
-Android's resource format has no built-in `needs_review` state the way Xcode
-String Catalogs do; each translated file carries an explicit XML comment
-marking it as machine-drafted and un-reviewed instead — see
-`values-ja/strings.xml` etc. A missing or untranslated string falls back to
-the default `values/` (English) at runtime, same graceful-degradation
-property as the iOS process describes, so shipping partial/needs-review
-translations in this PR is safe.
+**Shipping one locale does not mean hardcoding copy.** User-facing text still
+goes through `res/values/strings.xml`, never inline in a Composable, and
+design-system components take strings as parameters rather than embedding
+them (beid#119's contract). That is what keeps adding a locale later a matter
+of configuration rather than a rewrite.
+
+With `en` as the only target there is nothing to mark as needs-review today.
+The convention to restore if a locale is ever added back: Android's resource
+format has no built-in `needs_review` state the way Xcode String Catalogs do,
+so each translated file carried an explicit XML comment marking it as
+machine-drafted and un-reviewed. A missing or untranslated string falls back
+to the default `values/` (English) at runtime, which is what made shipping
+partial translations safe.
 
 ## Testing
 
