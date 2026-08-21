@@ -5,6 +5,8 @@ internal val DEFINITION_AUTHORITY_KEY_HEX: String = "02".repeat(32)
 internal val DEFINITION_SUBJECT_KEY_HEX: String = "03".repeat(32)
 internal val DEFINITION_ISSUER_KEY_HEX: String = "04".repeat(32)
 internal val DEFINITION_SIGNATURE_HEX: String = "05".repeat(64)
+internal val DEFINITION_RECEIPT_PUBLIC_KEY_HEX: String =
+    "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
 
 internal data class DelegationFixture(
     val subjectKeyIdHex: String = DEFINITION_SUBJECT_KEY_HEX,
@@ -24,9 +26,11 @@ internal fun eventDefinitionCbor(
     authorityKeyIdHex: String = DEFINITION_AUTHORITY_KEY_HEX,
     authoritySignatureHex: String = DEFINITION_SIGNATURE_HEX,
     delegations: List<DelegationFixture> = listOf(DelegationFixture()),
+    submissionEndpoint: String = "https://operator.example/v1",
+    receiptPublicKeyHex: String = DEFINITION_RECEIPT_PUBLIC_KEY_HEX,
     schemaVersion: Long = 1L,
 ): ByteArray = DefinitionCborFixtureBuilder().apply {
-    map(8)
+    map(10)
     unsigned(1)
     unsigned(schemaVersion)
     unsigned(2)
@@ -64,6 +68,10 @@ internal fun eventDefinitionCbor(
         unsigned(9)
         bytes(delegation.signatureHex)
     }
+    unsigned(9)
+    text(submissionEndpoint)
+    unsigned(10)
+    bytes(receiptPublicKeyHex)
 }.toByteArray()
 
 internal fun definitionRecordFor(
@@ -89,6 +97,12 @@ internal class DefinitionCborFixtureBuilder {
         val value = hex.removePrefix("0x").fixtureHexToByteArray()
         typeAndValue(majorType = 2, value = value.size.toLong())
         value.forEach(output::add)
+    }
+
+    fun text(value: String) {
+        val bytes = value.encodeToByteArray()
+        typeAndValue(majorType = 3, value = bytes.size.toLong())
+        bytes.forEach { output += it }
     }
 
     fun array(size: Int) = typeAndValue(majorType = 4, value = size.toLong())

@@ -1,10 +1,27 @@
-# Local operator submission test
+# Local operator submission tests
 
-The iOS operator integration test is opt-in. Without
+The normal iOS suite runs a hermetic operator integration test with an
+in-process loopback HTTP server. It drives the real `SensingCoordinator` close
+path, captures the RPID set before the coordinator clears it, signs and stores
+the exact Observation bytes, submits those same bytes, and stores the verified
+AcceptanceReceipt. The same suite also proves the inactive-by-default flag,
+the durable `SUBMITTING` crash boundary (lookup before any replay POST), and
+rejection of a receipt signed by a key outside the verified Event Definition.
+
+Run the normal integration suite with the required exact simulator destination:
+
+```sh
+cd /Users/kenichi/Develop/worktrees/thegreeting-beid/report-submission
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid -configuration Debug \
+  -destination 'platform=iOS Simulator,id=5638ACA8-5A90-4931-AB47-9F472D95B7E1' \
+  test -only-testing:BeidTests/ReportSubmissionOperatorIntegrationTests
+```
+
+The reference-operator integration test remains opt-in. Without
 `BEID_RUN_OPERATOR_SUBMISSION_TEST=1` it reports an explicit skip and never
-opens a network connection. The test creates a real close-window-shaped
-Observation with the Barnard event signing key, submits the exact signed COSE
-bytes, and requires a verified AcceptanceReceipt.
+opens a network connection. It creates a real close-window-shaped Observation
+with the Barnard event signing key, submits the exact signed COSE bytes, and
+requires a verified AcceptanceReceipt.
 
 The current reference-operator checkout does not contain the
 `scripts/operator-canary.sh` path mentioned by the original integration brief.

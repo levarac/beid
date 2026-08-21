@@ -148,6 +148,13 @@ public class SubmissionClient internal constructor(
                     message = "operator rejected the Observation natural-key conflict",
                 )
 
+                request.method == "GET" && response.statusCode == 404 -> failure(
+                    statusCode = response.statusCode,
+                    code = SubmissionErrorCode.RECEIPT_NOT_FOUND,
+                    retryable = false,
+                    message = "operator has no stored AcceptanceReceipt for this Observation",
+                )
+
                 response.statusCode == 422 -> failure(
                     statusCode = response.statusCode,
                     code = SubmissionErrorCode.REJECTED,

@@ -21,8 +21,8 @@ final class AppCoordinator: ObservableObject {
 
   let onboardingMode = OnboardingMode.current
   let proofStore: ProofStore
-  let registryClient = RegistryDependencies.createClient()
-  let sensingCoordinator = SensingCoordinator()
+  let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
+  let sensingCoordinator: SensingCoordinator
   let bluetoothMonitor = BluetoothMonitor()
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
@@ -31,6 +31,9 @@ final class AppCoordinator: ObservableObject {
     walletConnector: (any WalletConnector)? = nil,
     proofStore: ProofStore? = nil
   ) {
+    let registryClient = RegistryDependencies.createClient()
+    self.registryClient = registryClient
+    self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
     self.walletConnector = walletConnector
     self.proofStore = proofStore ?? ProofStore()
     sensingCoordinator.onProofCollected = { [weak self] proof in

@@ -69,12 +69,6 @@ targets:
         BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
         BeidEventDefinitionURLTemplate: "$(BEID_EVENT_DEFINITION_URL_TEMPLATE)"
         BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
-        BeidReportSubmissionEndpoint: "$(BEID_REPORT_SUBMISSION_ENDPOINT)"
-        BeidOperatorReceiptPublicKey: "$(BEID_OPERATOR_RECEIPT_PUBLIC_KEY)"
-        BeidEventId: "$(BEID_EVENT_ID)"
-        BeidEventDefinitionDigest: "$(BEID_EVENT_DEFINITION_DIGEST)"
-        BeidEventDefinitionValidFrom: "$(BEID_EVENT_DEFINITION_VALID_FROM)"
-        BeidEventDefinitionValidUntil: "$(BEID_EVENT_DEFINITION_VALID_UNTIL)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
@@ -111,16 +105,10 @@ targets:
         BEID_EVENT_REGISTRY_READER_ADDRESS: "0xd4852f8526A1555A1b2C34145f0eCDA412a53c51"
         BEID_ETHERSCAN_API_KEY: ""
         BEID_EVENT_DEFINITION_URL_TEMPLATE: ""
-        # Canonical Observation submission is opt-in. Endpoint and trust
-        # material are supplied by the selected Event Definition at build
-        # time; no operator URL or key is embedded in source.
+        # Canonical Observation submission is opt-in. Endpoint, receipt key,
+        # event identity, digest, and validity are supplied only by the
+        # verified Event Definition fetched through the registry module.
         BEID_REPORT_SUBMISSION_ENABLED: "NO"
-        BEID_REPORT_SUBMISSION_ENDPOINT: ""
-        BEID_OPERATOR_RECEIPT_PUBLIC_KEY: ""
-        BEID_EVENT_ID: ""
-        BEID_EVENT_DEFINITION_DIGEST: ""
-        BEID_EVENT_DEFINITION_VALID_FROM: ""
-        BEID_EVENT_DEFINITION_VALID_UNTIL: ""
       configs:
         Debug:
           # XcodeGen 2.45.3 has no configuration filter for package

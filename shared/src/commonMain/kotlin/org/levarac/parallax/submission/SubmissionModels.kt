@@ -6,6 +6,7 @@ import org.levarac.parallax.observation.ImmutableBytes
 import org.levarac.parallax.observation.ProtocolUInt
 import org.levarac.parallax.observation.Sha256Digest
 import org.levarac.parallax.observation.SignedObservationV1
+import org.levarac.parallax.registry.EventDefinitionContext
 
 /** Exact bytes and digest retained after the native app has signed an Observation. */
 public class StoredObservationV1 internal constructor(
@@ -41,6 +42,7 @@ public enum class SubmissionErrorCode(public val wireName: String) {
     HTTP_ERROR("http_error"),
     PROTOCOL_ERROR("protocol_error"),
     CONFLICT("conflict"),
+    RECEIPT_NOT_FOUND("receipt_not_found"),
     REJECTED("rejected"),
     CANCELLED("cancelled"),
 }
@@ -109,6 +111,36 @@ public fun createSubmissionOperatorConfiguration(
 } catch (_: IllegalArgumentException) {
     null
 }
+
+/**
+ * Binds submission trust to the registry module's verified Event Definition.
+ *
+ * Production callers should use this overload. The lower-level overload above
+ * remains available for isolated transport tests, but it is not a source of
+ * runtime configuration: endpoint, receipt key, event ID, digest, and validity
+ * all come from the same fetched definition context here.
+ */
+public fun createSubmissionOperatorConfiguration(
+    context: EventDefinitionContext,
+    allowInsecureLoopbackForTests: Boolean = false,
+): SubmissionOperatorConfiguration? = createSubmissionOperatorConfiguration(
+    endpoint = context.definition.submissionEndpoint,
+    receiptPublicKeyHex = context.definition.receiptPublicKeyHex,
+    eventIdHex = context.eventIdHex,
+    eventDefinitionDigestHex = context.definitionHashHex,
+    validFrom = context.definition.validFrom,
+    validUntil = context.definition.validUntil,
+    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
+)
+
+/** Swift-export-friendly name for the verified-context overload. */
+public fun createSubmissionOperatorConfigurationFromEventDefinition(
+    context: EventDefinitionContext,
+    allowInsecureLoopbackForTests: Boolean = false,
+): SubmissionOperatorConfiguration? = createSubmissionOperatorConfiguration(
+    context = context,
+    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
+)
 
 internal fun observationDigestBytes(signedBytes: ByteArray): ByteArray =
     sha256DomainDigest("levarac:observation-digest:v1", signedBytes)

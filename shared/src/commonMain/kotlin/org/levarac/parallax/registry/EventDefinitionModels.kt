@@ -40,10 +40,13 @@ public class DelegationCert internal constructor(
  *
  * Barnard 0.3.0 does not publish an EventDefinition or DelegationCert schema.
  * This minimal CBOR schema therefore belongs to this registry module for this
- * slice. It carries authority signatures and key IDs, but does not execute
- * signature verification: the on-chain key-set commitment is the trust anchor,
- * and key-set retrieval plus Barnard signature execution remain native/SDK
- * responsibilities.
+ * slice. It carries authority signatures and key IDs, plus the operator
+ * submission endpoint and the compressed receipt-verification public key. The
+ * registry module does not execute authority signature verification: the
+ * on-chain key-set commitment is the trust anchor, and key-set retrieval plus
+ * Barnard signature execution remain native/SDK responsibilities. Submission
+ * code must use the endpoint and receipt key from this verified context rather
+ * than independently configured Info.plist values.
  */
 public class EventDefinition internal constructor(
     public val schemaVersion: Int,
@@ -53,6 +56,8 @@ public class EventDefinition internal constructor(
     public val signedAt: Long,
     public val authorityKeyIdHex: String,
     public val authoritySignatureHex: String,
+    public val submissionEndpoint: String,
+    public val receiptPublicKeyHex: String,
     internal val delegations: List<DelegationCert>,
 ) {
     public val delegationCount: Int
@@ -92,6 +97,8 @@ public enum class DefinitionDecodeError {
     FORWARD_VALIDITY,
     INVALID_ROLE,
     INVALID_SIGNATURE,
+    INVALID_SUBMISSION_ENDPOINT,
+    INVALID_RECEIPT_PUBLIC_KEY,
     EVENT_ID_MISMATCH,
 }
 

@@ -496,8 +496,19 @@ final class SensingCoordinator: ObservableObject {
   }
   #endif
 
-  convenience init() {
+  convenience init(
+    registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
+      RegistryDependencies.createClient()
+  ) {
     let sensingCryptography = BarnardSensingCryptography()
+    let allowInsecureLoopbackForTests: Bool
+    #if DEBUG
+    allowInsecureLoopbackForTests = ProcessInfo.processInfo.environment[
+      "BEID_RUN_OPERATOR_SUBMISSION_TEST"
+    ] == "1"
+    #else
+    allowInsecureLoopbackForTests = false
+    #endif
     self.init(
       windowReportFileURL: nil,
       selfProofFileURL: nil,
@@ -507,7 +518,14 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerFileURL: nil,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: ReportSubmissionRuntime.makeIfEnabled(
-        eventSigningCryptography: sensingCryptography
+        eventSigningCryptography: sensingCryptography,
+        definitionProvider: registryClient.map {
+          RegistryEventDefinitionContextProvider(
+            client: $0,
+            allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
+          )
+        },
+        allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
       )
     )
   }

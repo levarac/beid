@@ -62,6 +62,19 @@ class SubmissionClientTest {
     }
 
     @Test
+    fun lookup404IsAnExplicitReceiptNotFoundResult() = runTest {
+        val transport = FakeSubmissionTransport(
+            SubmissionHttpResponse(404, ByteArray(0)),
+        )
+        val result = createSubmissionClientForTest(transport)
+            .lookupReceiptAndAwait(storedObservation(), operatorConfiguration())
+
+        assertFalse(result.isSuccess)
+        assertEquals("receipt_not_found", result.errorCode)
+        assertFalse(result.isRetryable)
+    }
+
+    @Test
     fun responseMediaTypeIsRequiredForAReceipt() = runTest {
         val transport = FakeSubmissionTransport(
             SubmissionHttpResponse(

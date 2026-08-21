@@ -28,6 +28,32 @@ final class ReportSubmissionStoreTests: XCTestCase {
     XCTAssertEqual(restored.signedObservationHex, record.signedObservationHex)
     XCTAssertEqual(restored.observationDigestHex, record.observationDigestHex)
     XCTAssertEqual(restored.acceptanceReceiptHex, receiptHex)
+    XCTAssertEqual(restored.submissionState, .accepted)
+  }
+
+  func testSubmissionStatePersistsPreparedSubmittingAcceptedAcrossReloads() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-state-machine")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let record = makeRecord()
+    let store = ReportSubmissionStore(fileURL: fileURL)
+
+    try store.add(record)
+    XCTAssertEqual(store.record(id: record.id)?.submissionState, .prepared)
+
+    let submitting = try store.markSubmitting(for: record.id)
+    XCTAssertEqual(submitting.submissionState, .submitting)
+    let reloadedSubmitting = try XCTUnwrap(
+      ReportSubmissionStore(fileURL: fileURL).record(id: record.id)
+    )
+    XCTAssertEqual(reloadedSubmitting.submissionState, .submitting)
+
+    let accepted = try store.storeReceipt(
+      for: record.id,
+      signedReceiptHex: String(repeating: "ab", count: 24)
+    )
+    XCTAssertEqual(accepted.submissionState, .accepted)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingRecords.isEmpty)
   }
 
   func testDuplicateWindowAndReceiptWritesAreIdempotent() throws {

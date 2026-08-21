@@ -5,7 +5,8 @@ package org.levarac.parallax.registry
  *
  * EventDefinition/v1 is a map with exactly these keys, in ascending order:
  * 1 schema version, 2 event ID, 3 valid-from, 4 valid-until, 5 signed-at,
- * 6 authority key ID, 7 authority signature, and 8 delegation certificates.
+ * 6 authority key ID, 7 authority signature, 8 delegation certificates,
+ * 9 submission endpoint, and 10 receipt public key.
  *
  * DelegationCert/v1 is a map with exactly these keys, in ascending order:
  * 1 schema version, 2 event ID, 3 subject key ID, 4 role bits, 5 issued-at,
@@ -16,13 +17,14 @@ internal object EventDefinitionCborCodec {
     private const val DELEGATION_CERT_SCHEMA_VERSION: Long = 1L
     private const val HASH_BYTES: Int = 32
     private const val SIGNATURE_BYTES: Int = 64
+    private const val RECEIPT_PUBLIC_KEY_BYTES: Int = 33
 
     internal fun decode(bytes: ByteArray): EventDefinition = try {
         require(bytes.size <= MAX_EVENT_DEFINITION_PAYLOAD_BYTES) {
             "signed definition exceeds the configured limit"
         }
         val reader = DefinitionCborReader(bytes)
-        reader.expectMap(8)
+        reader.expectMap(10)
         reader.expectUnsigned(1L)
         val version = reader.readUnsigned()
         if (version != EVENT_DEFINITION_SCHEMA_VERSION) {
@@ -58,6 +60,22 @@ internal object EventDefinitionCborCodec {
         repeat(delegationCount) {
             delegations += decodeDelegation(reader, eventId, signedAt, validFrom, validUntil)
         }
+        reader.expectUnsigned(9L)
+        val submissionEndpoint = reader.readText()
+        if (submissionEndpoint.isBlank() || submissionEndpoint.length > 2_048) {
+            throw DefinitionDecodeException(
+                DefinitionDecodeError.INVALID_SUBMISSION_ENDPOINT,
+                "EventDefinition submission endpoint is empty or too long",
+            )
+        }
+        reader.expectUnsigned(10L)
+        val receiptPublicKey = reader.readByteString(RECEIPT_PUBLIC_KEY_BYTES)
+        if (receiptPublicKey[0].toInt() and 0xff !in 0x02..0x03) {
+            throw DefinitionDecodeException(
+                DefinitionDecodeError.INVALID_RECEIPT_PUBLIC_KEY,
+                "EventDefinition receipt public key is not compressed secp256k1",
+            )
+        }
         reader.requireFinished()
         EventDefinition(
             schemaVersion = version.toInt(),
@@ -67,6 +85,8 @@ internal object EventDefinitionCborCodec {
             signedAt = signedAt,
             authorityKeyIdHex = authorityKeyId,
             authoritySignatureHex = authoritySignature,
+            submissionEndpoint = submissionEndpoint,
+            receiptPublicKeyHex = receiptPublicKey.toPrefixedHex(),
             delegations = delegations,
         )
     } catch (error: DefinitionDecodeException) {
@@ -188,6 +208,14 @@ private class DefinitionCborReader(private val bytes: ByteArray) {
         require(actualLength == expectedLength) { "unexpected signed definition byte-string length" }
         require(actualLength <= bytes.size - offset) { "truncated signed definition byte string" }
         return bytes.copyOfRange(offset, offset + actualLength).also { offset += actualLength }
+    }
+
+    fun readText(): String {
+        val actualLength = readLength(expectedMajor = 3)
+        require(actualLength <= bytes.size - offset) { "truncated signed definition text" }
+        return bytes.copyOfRange(offset, offset + actualLength)
+            .also { offset += actualLength }
+            .decodeToString()
     }
 
     fun requireFinished() {

@@ -15,6 +15,8 @@ class EventDefinitionCborCodecTest {
         assertEquals(100L, definition.validFrom)
         assertEquals(200L, definition.validUntil)
         assertEquals(90L, definition.signedAt)
+        assertEquals("https://operator.example/v1", definition.submissionEndpoint)
+        assertEquals(DEFINITION_RECEIPT_PUBLIC_KEY_HEX, definition.receiptPublicKeyHex.removePrefix("0x"))
         assertEquals(1, definition.delegationCount)
         val delegation = requireNotNull(definition.delegationAt(0))
         assertTrue(delegation.hasRole(DelegationRoles.RECEPTION))
@@ -103,6 +105,21 @@ class EventDefinitionCborCodecTest {
     @Test
     fun fixedLengthAuthoritySignatureIsRejected() {
         assertMalformed(eventDefinitionCbor(authoritySignatureHex = "05".repeat(63)))
+    }
+
+    @Test
+    fun fixedLengthReceiptPublicKeyIsRejected() {
+        assertMalformed(eventDefinitionCbor(receiptPublicKeyHex = "02" + "00".repeat(31)))
+    }
+
+    @Test
+    fun invalidReceiptPublicKeyPrefixIsRejectedLoudly() {
+        val error = assertFailsWith<DefinitionDecodeException> {
+            EventDefinitionCborCodec.decode(
+                eventDefinitionCbor(receiptPublicKeyHex = "04" + "00".repeat(32)),
+            )
+        }
+        assertEquals(DefinitionDecodeError.INVALID_RECEIPT_PUBLIC_KEY, error.reason)
     }
 
     @Test
