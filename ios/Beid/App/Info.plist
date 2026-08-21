@@ -4,10 +4,24 @@
 <dict>
 	<key>BeidEtherscanAPIKey</key>
 	<string>$(BEID_ETHERSCAN_API_KEY)</string>
-	<key>BeidEventRegistryReaderAddress</key>
-	<string>$(BEID_EVENT_REGISTRY_READER_ADDRESS)</string>
+	<key>BeidEventDefinitionDigest</key>
+	<string>$(BEID_EVENT_DEFINITION_DIGEST)</string>
 	<key>BeidEventDefinitionURLTemplate</key>
 	<string>$(BEID_EVENT_DEFINITION_URL_TEMPLATE)</string>
+	<key>BeidEventDefinitionValidFrom</key>
+	<string>$(BEID_EVENT_DEFINITION_VALID_FROM)</string>
+	<key>BeidEventDefinitionValidUntil</key>
+	<string>$(BEID_EVENT_DEFINITION_VALID_UNTIL)</string>
+	<key>BeidEventId</key>
+	<string>$(BEID_EVENT_ID)</string>
+	<key>BeidEventRegistryReaderAddress</key>
+	<string>$(BEID_EVENT_REGISTRY_READER_ADDRESS)</string>
+	<key>BeidOperatorReceiptPublicKey</key>
+	<string>$(BEID_OPERATOR_RECEIPT_PUBLIC_KEY)</string>
+	<key>BeidReportSubmissionEnabled</key>
+	<string>$(BEID_REPORT_SUBMISSION_ENABLED)</string>
+	<key>BeidReportSubmissionEndpoint</key>
+	<string>$(BEID_REPORT_SUBMISSION_ENDPOINT)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

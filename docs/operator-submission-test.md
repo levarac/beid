@@ -1,0 +1,48 @@
+# Local operator submission test
+
+The iOS operator integration test is opt-in. Without
+`BEID_RUN_OPERATOR_SUBMISSION_TEST=1` it reports an explicit skip and never
+opens a network connection. The test creates a real close-window-shaped
+Observation with the Barnard event signing key, submits the exact signed COSE
+bytes, and requires a verified AcceptanceReceipt.
+
+The current reference-operator checkout does not contain the
+`scripts/operator-canary.sh` path mentioned by the original integration brief.
+Use the repository's documented local Worker commands below; they exercise the
+same `POST /v1/observations` and receipt response contract.
+
+From the Parallax checkout, install dependencies once and start the local
+Worker:
+
+```sh
+cd /Users/kenichi/Repository/Levarac/parallax
+npm ci
+cd operator
+npm run d1:migrate:local
+npm run workers:dev
+```
+
+Before starting Wrangler, create the ignored `operator/.dev.vars` file with a
+development-only 32-byte operator signing key. Keep the key local; do not put
+it in this repository, shell history, or test output. The operator listens on
+`http://127.0.0.1:8787` in the default Wrangler configuration.
+
+Run only the opt-in test from the beid checkout. The public key is the
+operator's compressed public key, while the event identity and definition
+digest must be the values selected by the Event Definition used for the test:
+
+```sh
+cd /Users/kenichi/Develop/worktrees/thegreeting-beid/report-submission
+BEID_RUN_OPERATOR_SUBMISSION_TEST=1 \
+BEID_OPERATOR_SUBMISSION_ENDPOINT=http://127.0.0.1:8787 \
+BEID_OPERATOR_RECEIPT_PUBLIC_KEY=<operator-compressed-public-key-hex> \
+BEID_EVENT_ID=<event-id-32-byte-hex> \
+BEID_EVENT_DEFINITION_DIGEST=<definition-digest-32-byte-hex> \
+xcodebuild -project ios/Beid.xcodeproj -scheme Beid -configuration Debug \
+  -destination 'platform=iOS Simulator,id=5638ACA8-5A90-4931-AB47-9F472D95B7E1' \
+  test -only-testing:BeidTests/ReportSubmissionOperatorIntegrationTests
+```
+
+The integration-only loopback exception is compiled into Debug tests and is
+not enabled in Release. Production submission still requires an HTTPS
+endpoint selected by the Event Definition projection.
