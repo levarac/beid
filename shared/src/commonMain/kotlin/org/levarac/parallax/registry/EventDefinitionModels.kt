@@ -1,75 +1,81 @@
 package org.levarac.parallax.registry
 
+import org.levarac.parallax.observation.ByteString32
+import org.levarac.parallax.observation.CompressedSecp256k1PublicKey
+import org.levarac.parallax.observation.ImmutableBytes
+import org.levarac.parallax.observation.ProtocolUInt
+
 internal const val MAX_EVENT_DEFINITION_PAYLOAD_BYTES: Int = 512 * 1_024
-internal const val MAX_EVENT_DEFINITION_DELEGATIONS: Int = 1_024
 
-/**
- * The two assignment meanings currently defined by the beid demo schema.
- *
- * These are deliberately bit values, not an enum ordinal. A certificate may
- * carry more than one role, while the signed bytes remain extensible only by a
- * deliberate schema change rather than by silently accepting an unknown bit.
- */
-public object DelegationRoles {
-    public const val RECEPTION: Long = 1L shl 0
-    public const val BOOTH_A: Long = 1L shl 1
+/** A defensive-copy Ethereum address used by the canonical event preimage. */
+public class Address20 internal constructor(bytes: ByteArray) :
+    ImmutableBytes(bytes.requireLength(20, "Ethereum address"))
 
-    internal const val KNOWN_MASK: Long = RECEPTION or BOOTH_A
-}
-
-/** A role assignment signed by an authority key from the event's key set. */
-public class DelegationCert internal constructor(
-    public val schemaVersion: Int,
-    public val eventIdHex: String,
-    public val subjectKeyIdHex: String,
-    public val roleBits: Long,
-    public val issuedAt: Long,
-    public val validFrom: Long,
-    public val validUntil: Long,
-    public val issuerKeyIdHex: String,
-    public val signatureHex: String,
+/** The canonical EventKeySet/v1 artifact committed by the Parallax protocol. */
+public class EventKeySet internal constructor(
+    public val version: Int,
+    authorityKeys: List<CompressedSecp256k1PublicKey>,
+    public val threshold: Int,
 ) {
-    public fun hasRole(role: Long): Boolean = role > 0L && role and roleBits == role
+    /** A defensive snapshot; callers cannot mutate the verified key set. */
+    public val authorityKeys: List<CompressedSecp256k1PublicKey> = authorityKeys.toList()
 
-    public fun isValidAt(epochSeconds: Long): Boolean =
-        epochSeconds >= validFrom && epochSeconds <= validUntil
+    public val authorityKeyCount: Int
+        get() = authorityKeys.size
+
+    public fun authorityKeyAt(index: Int): CompressedSecp256k1PublicKey? = authorityKeys.getOrNull(index)
 }
 
 /**
- * The signed off-chain EventDefinition/v1 payload.
+ * The canonical event-definition-v1 payload carried inside COSE_Sign1.
  *
- * Barnard 0.3.0 does not publish an EventDefinition or DelegationCert schema.
- * This minimal CBOR schema therefore belongs to this registry module for this
- * slice. It carries authority signatures and key IDs, but does not execute
- * signature verification: the on-chain key-set commitment is the trust anchor,
- * and key-set retrieval plus Barnard signature execution remain native/SDK
- * responsibilities.
+ * The byte-bearing protocol values use defensive-copy wrappers. Numeric protocol values use
+ * ProtocolUInt so a native caller cannot accidentally construct a value outside the CBOR-safe
+ * integer range.
  */
 public class EventDefinition internal constructor(
-    public val schemaVersion: Int,
-    public val eventIdHex: String,
-    public val validFrom: Long,
-    public val validUntil: Long,
-    public val signedAt: Long,
-    public val authorityKeyIdHex: String,
-    public val authoritySignatureHex: String,
-    internal val delegations: List<DelegationCert>,
+    public val version: Int,
+    public val eventId: ByteString32,
+    public val registrar: Address20,
+    public val anchorOperator: Address20,
+    public val nonce: ByteString32,
+    public val keySetDigest: ByteString32,
+    public val sequence: ProtocolUInt,
+    public val previousDefinitionDigest: ByteString32,
+    public val receiptPublicKey: CompressedSecp256k1PublicKey,
+    public val operatorId: ByteString32,
+    public val submissionEndpoint: String,
+    public val validFrom: ProtocolUInt,
+    public val validUntil: ProtocolUInt,
+    /** The authority key that verified the COSE signature for this definition. */
+    public val authorityPublicKey: CompressedSecp256k1PublicKey,
 ) {
-    public val delegationCount: Int
-        get() = delegations.size
+    public val eventIdHex: String
+        get() = eventId.toByteArray().toPrefixedHex()
 
-    public fun delegationAt(index: Int): DelegationCert? = delegations.getOrNull(index)
+    public val registrarHex: String
+        get() = registrar.toByteArray().toPrefixedHex()
 
-    public fun activeDelegationCount(epochSeconds: Long): Int =
-        delegations.count { it.isValidAt(epochSeconds) }
+    public val anchorOperatorHex: String
+        get() = anchorOperator.toByteArray().toPrefixedHex()
 
-    public fun activeDelegationAt(epochSeconds: Long, index: Int): DelegationCert? =
-        delegations.filter { it.isValidAt(epochSeconds) }.getOrNull(index)
+    public val keySetDigestHex: String
+        get() = keySetDigest.toByteArray().toPrefixedHex()
+
+    public val previousDefinitionDigestHex: String
+        get() = previousDefinitionDigest.toByteArray().toPrefixedHex()
+}
+
+private fun ByteArray.requireLength(expected: Int, name: String): ByteArray {
+    require(size == expected) { "$name must be exactly $expected bytes" }
+    return this
 }
 
 /**
- * A definition selected from the chain at one use time and then verified from
- * the off-chain bytes named by that chain record.
+ * One chain-selected definition together with its verified canonical off-chain artifact.
+ *
+ * These fields are intentionally repeated at the context boundary. Native callers should not
+ * need to know which nested model owns a protocol decision, and each value remains immutable.
  */
 public class EventDefinitionContext internal constructor(
     public val eventIdHex: String,
@@ -78,21 +84,38 @@ public class EventDefinitionContext internal constructor(
     public val record: RegistryDefinitionRecord,
     public val definition: EventDefinition,
 ) {
-    public val activeDelegationCount: Int
-        get() = definition.activeDelegationCount(selectedAt)
+    public val eventId: ByteString32
+        get() = definition.eventId
 
-    public fun activeDelegationAt(index: Int): DelegationCert? =
-        definition.activeDelegationAt(selectedAt, index)
+    public val receiptPublicKey: CompressedSecp256k1PublicKey
+        get() = definition.receiptPublicKey
+
+    public val operatorId: ByteString32
+        get() = definition.operatorId
+
+    public val submissionEndpoint: String
+        get() = definition.submissionEndpoint
+
+    public val validFrom: ProtocolUInt
+        get() = definition.validFrom
+
+    public val validUntil: ProtocolUInt
+        get() = definition.validUntil
 }
 
 public enum class DefinitionDecodeError {
     MALFORMED,
     UNSUPPORTED_VERSION,
     INVALID_VALIDITY,
-    FORWARD_VALIDITY,
-    INVALID_ROLE,
+    INVALID_ENDPOINT,
+    INVALID_KEY_SET,
+    INVALID_COSE,
     INVALID_SIGNATURE,
     EVENT_ID_MISMATCH,
+    OPERATOR_ID_MISMATCH,
+    KEY_SET_DIGEST_MISMATCH,
+    ANCHOR_MISMATCH,
+    DEFINITION_HASH_MISMATCH,
 }
 
 public class DefinitionDecodeException(
@@ -104,6 +127,8 @@ public class DefinitionDecodeException(
 public enum class DefinitionFetchError {
     NOT_CONFIGURED,
     INVALID_URL_TEMPLATE,
+    INVALID_KEY_SET,
+    KEY_SET_NOT_CONFIGURED,
     HTTP_ERROR,
     HASH_MISMATCH,
     DECODE_ERROR,

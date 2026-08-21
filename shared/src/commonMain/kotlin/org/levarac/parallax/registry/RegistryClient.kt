@@ -129,7 +129,12 @@ public class RegistryClient internal constructor(
                         DefinitionFetchError.VALIDITY_MISMATCH,
                         "no registry definition is valid at the requested time",
                     )
-                val context = fetcher.fetch(eventId, record, useTimeEpochSeconds)
+                val context = fetcher.fetch(
+                    eventId = eventId,
+                    registration = result.context.registration,
+                    record = record,
+                    selectedAt = useTimeEpochSeconds,
+                )
                 EventDefinitionResolution(
                     isSuccess = true,
                     context = context,
@@ -208,6 +213,7 @@ public fun createSepoliaRegistryClient(
     readerAddressHex: String,
     etherscanApiKey: String?,
     definitionUrlTemplate: String? = null,
+    eventKeySetHex: String? = null,
 ): RegistryClient? {
     if (readerAddressHex.isBlank()) return null
     val readerAddress = try {
@@ -228,7 +234,31 @@ public fun createSepoliaRegistryClient(
                 )
                 null
             } else {
-                SignedDefinitionFetcher(validated, transport)
+                val encodedKeySet = eventKeySetHex
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { value ->
+                        try {
+                            val bytes = value.decodeHex()
+                            EventDefinitionCborCodec.eventKeySetDigest(bytes)
+                            bytes
+                        } catch (error: Throwable) {
+                            definitionConfigurationError = DefinitionFetchException(
+                                DefinitionFetchError.INVALID_KEY_SET,
+                                "configured EventKeySet artifact is invalid",
+                                error,
+                            )
+                            null
+                        }
+                    }
+                if (encodedKeySet == null && definitionConfigurationError == null) {
+                    definitionConfigurationError = DefinitionFetchException(
+                        DefinitionFetchError.KEY_SET_NOT_CONFIGURED,
+                        "EventKeySet artifact is required to verify Event Definition signatures",
+                    )
+                }
+                encodedKeySet?.let { bytes ->
+                    SignedDefinitionFetcher(validated, transport, bytes)
+                }
             }
         }
     val primary = JsonRpcEthCallAdapter(
@@ -269,6 +299,8 @@ private val DefinitionFetchError.wireName: String
     get() = when (this) {
         DefinitionFetchError.NOT_CONFIGURED -> "definition_not_configured"
         DefinitionFetchError.INVALID_URL_TEMPLATE -> "definition_invalid_url_template"
+        DefinitionFetchError.INVALID_KEY_SET -> "definition_invalid_key_set"
+        DefinitionFetchError.KEY_SET_NOT_CONFIGURED -> "definition_key_set_not_configured"
         DefinitionFetchError.HTTP_ERROR -> "definition_http_error"
         DefinitionFetchError.HASH_MISMATCH -> "definition_hash_mismatch"
         DefinitionFetchError.DECODE_ERROR -> "definition_decode_error"

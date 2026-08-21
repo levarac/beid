@@ -37,9 +37,13 @@ public fun createDefinitionUrlTemplate(
 internal class SignedDefinitionFetcher(
     private val template: DefinitionUrlTemplate,
     private val transport: RegistryHttpTransport,
+    encodedEventKeySet: ByteArray? = null,
 ) {
+    private val encodedEventKeySet: ByteArray? = encodedEventKeySet?.copyOf()
+
     internal suspend fun fetch(
         eventId: ByteArray,
+        registration: RegistryRegistration,
         record: RegistryDefinitionRecord,
         selectedAt: Long,
     ): EventDefinitionContext {
@@ -49,7 +53,7 @@ internal class SignedDefinitionFetcher(
                 RegistryHttpRequest(
                     method = "GET",
                     url = template.urlFor(expectedHash),
-                    headers = mapOf("Accept" to "application/cbor"),
+                    headers = mapOf("Accept" to "application/vnd.levarac.event-definition+cose"),
                 ),
             )
         } catch (error: RegistryTransportTimeoutException) {
@@ -80,41 +84,42 @@ internal class SignedDefinitionFetcher(
                 "signed definition response exceeds the configured limit",
             )
         }
-        val actualHash = Sha256.digest(bytes).toPrefixedHex()
+        // The chain commitment is the canonical domain-separated Event Definition digest. Keep
+        // this before decoding so an untrusted response can never influence parser work first.
+        val actualHash = EventDefinitionCborCodec.eventDefinitionDigest(bytes).toPrefixedHex()
         if (actualHash != expectedHash) {
             throw DefinitionFetchException(
                 DefinitionFetchError.HASH_MISMATCH,
                 "signed definition hash does not match the chain record",
             )
         }
-        val definition = try {
-            EventDefinitionCborCodec.decode(bytes)
+        val keySet = encodedEventKeySet ?: throw DefinitionFetchException(
+            DefinitionFetchError.KEY_SET_NOT_CONFIGURED,
+            "EventKeySet artifact is required to verify the authority signature",
+        )
+        val verified = try {
+            EventDefinitionCborCodec.verify(
+                signedBytes = bytes,
+                encodedKeySet = keySet,
+                eventId = eventId,
+                registration = registration,
+                record = record,
+                at = selectedAt,
+            )
         } catch (error: DefinitionDecodeException) {
             throw DefinitionFetchException(
                 DefinitionFetchError.DECODE_ERROR,
-                "signed definition CBOR is invalid: ${error.reason}",
+                "signed Event Definition is invalid: ${error.reason}",
                 error,
             )
         }
         val expectedEventId = eventId.toPrefixedHex()
-        if (definition.eventIdHex != expectedEventId) {
-            throw DefinitionFetchException(
-                DefinitionFetchError.EVENT_ID_MISMATCH,
-                "signed definition event ID does not match the registry read",
-            )
-        }
-        if (definition.validFrom != record.validFrom || definition.validUntil != record.validUntil) {
-            throw DefinitionFetchException(
-                DefinitionFetchError.VALIDITY_MISMATCH,
-                "signed definition validity does not match the chain record",
-            )
-        }
         return EventDefinitionContext(
             eventIdHex = expectedEventId,
             definitionHashHex = expectedHash,
             selectedAt = selectedAt,
             record = record,
-            definition = definition,
+            definition = verified.definition,
         )
     }
 }
