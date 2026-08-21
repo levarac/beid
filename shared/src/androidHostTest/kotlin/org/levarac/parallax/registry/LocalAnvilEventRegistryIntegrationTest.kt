@@ -22,8 +22,18 @@ class LocalAnvilEventRegistryIntegrationTest {
 
         runBlocking {
             val transport = CountingTransport(createPlatformRegistryHttpTransport())
-            val primary = JsonRpcEthCallAdapter(rpcUrl, readerAddress, transport)
-            val secondary = JsonRpcEthCallAdapter(rpcUrl, readerAddress, transport)
+            val primary = JsonRpcEthCallAdapter(
+                endpointUrl = rpcUrl,
+                readerAddressHex = readerAddress,
+                transport = transport,
+                allowInsecureLoopbackForTests = true,
+            )
+            val secondary = JsonRpcEthCallAdapter(
+                endpointUrl = rpcUrl,
+                readerAddressHex = readerAddress,
+                transport = transport,
+                allowInsecureLoopbackForTests = true,
+            )
             val cache = InMemoryRegistryCache()
             val resolver = RegistryResolver(
                 chainId = 31_337,
@@ -81,6 +91,7 @@ class LocalAnvilEventRegistryIntegrationTest {
                 rpcUrl,
                 readerAddress,
                 createPlatformRegistryHttpTransport(),
+                allowInsecureLoopbackForTests = true,
             )
             val resolver = RegistryResolver(
                 chainId = 31_337,
@@ -108,6 +119,7 @@ class LocalAnvilEventRegistryIntegrationTest {
                 val template = requireNotNull(
                     createDefinitionUrlTemplate(
                         "http://127.0.0.1:${server.address.port}/{definitionHash}.cbor",
+                        allowInsecureLoopbackForTests = true,
                     ),
                 )
                 val context = SignedDefinitionFetcher(

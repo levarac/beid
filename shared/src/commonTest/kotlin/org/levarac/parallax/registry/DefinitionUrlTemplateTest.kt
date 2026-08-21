@@ -22,6 +22,16 @@ class DefinitionUrlTemplateTest {
     }
 
     @Test
+    fun rejectsLoopbackHttpTemplateWithoutExplicitOptIn() {
+        assertNull(
+            createDefinitionUrlTemplate("http://localhost:8545/{definitionHash}.cbor"),
+        )
+        assertNull(
+            createDefinitionUrlTemplate("http://127.0.0.1:8545/{definitionHash}.cbor"),
+        )
+    }
+
+    @Test
     fun rejectsLoopbackPrefixHostConfusion() {
         assertNull(
             createDefinitionUrlTemplate(
@@ -31,10 +41,11 @@ class DefinitionUrlTemplateTest {
     }
 
     @Test
-    fun acceptsExplicitLoopbackHttpTemplate() {
+    fun acceptsLoopbackHttpTemplateOnlyWithExplicitOptIn() {
         assertNotNull(
             createDefinitionUrlTemplate(
                 "http://127.0.0.1:8080/{definitionHash}.cbor",
+                allowInsecureLoopbackForTests = true,
             ),
         )
     }

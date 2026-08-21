@@ -9,11 +9,25 @@ import kotlin.test.assertFalse
 class RegistryClientTest {
     @Test
     fun invalidDefinitionTemplateSurfacesTypedConfigurationError() = runTest {
+        assertInvalidDefinitionTemplate("http://defs.example/{definitionHash}")
+    }
+
+    @Test
+    fun localhostHttpDefinitionTemplateSurfacesTypedConfigurationError() = runTest {
+        assertInvalidDefinitionTemplate("http://localhost:8545/{definitionHash}")
+    }
+
+    @Test
+    fun loopbackAddressHttpDefinitionTemplateSurfacesTypedConfigurationError() = runTest {
+        assertInvalidDefinitionTemplate("http://127.0.0.1:8545/{definitionHash}")
+    }
+
+    private suspend fun assertInvalidDefinitionTemplate(template: String) {
         val client = requireNotNull(
             createSepoliaRegistryClient(
                 readerAddressHex = RegistryTestFixtures.READER,
                 etherscanApiKey = null,
-                definitionUrlTemplate = "http://defs.example/{definitionHash}",
+                definitionUrlTemplate = template,
             ),
         )
         val resolution = CompletableDeferred<EventDefinitionResolution>()

@@ -23,6 +23,7 @@ class LocalDefinitionHttpStubTest {
             val template = requireNotNull(
                 createDefinitionUrlTemplate(
                     "http://127.0.0.1:${server.address.port}/{definitionHash}.cbor",
+                    allowInsecureLoopbackForTests = true,
                 ),
             )
             runBlocking {

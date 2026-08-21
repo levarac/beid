@@ -94,11 +94,15 @@ internal fun validateReaderAddress(addressHex: String): String {
     return normalized
 }
 
-internal fun validateEndpointUrl(url: String): String {
+internal fun validateEndpointUrl(
+    url: String,
+    allowInsecureLoopbackForTests: Boolean = false,
+): String {
     val normalized = url.trimEnd('/')
     val parsed = parseRegistryUrl(normalized)
     val productionHttps = parsed.scheme == "https"
-    val loopbackHttp = parsed.scheme == "http" &&
+    val loopbackHttp = allowInsecureLoopbackForTests &&
+        parsed.scheme == "http" &&
         parsed.host in LOOPBACK_HOSTS &&
         parsed.port != null
     require(productionHttps || loopbackHttp) {

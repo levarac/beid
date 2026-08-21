@@ -16,7 +16,10 @@ public class DefinitionUrlTemplate internal constructor(
     }
 }
 
-public fun createDefinitionUrlTemplate(template: String): DefinitionUrlTemplate? = try {
+public fun createDefinitionUrlTemplate(
+    template: String,
+    allowInsecureLoopbackForTests: Boolean = false,
+): DefinitionUrlTemplate? = try {
     val normalized = template.trim()
     require(normalized.count { it == '{' } == 1 && normalized.count { it == '}' } == 1) {
         "definition URL template must contain exactly one placeholder"
@@ -25,7 +28,7 @@ public fun createDefinitionUrlTemplate(template: String): DefinitionUrlTemplate?
         "definition URL template must contain {definitionHash}"
     }
     val probe = normalized.replace(DEFINITION_HASH_PLACEHOLDER, "0".repeat(64))
-    validateEndpointUrl(probe)
+    validateEndpointUrl(probe, allowInsecureLoopbackForTests)
     DefinitionUrlTemplate(normalized)
 } catch (_: IllegalArgumentException) {
     null
