@@ -62,10 +62,8 @@ public class CompactEs256kSignature(r: ByteArray, s: ByteArray) {
 /**
  * Lossless evidence captured at the window-close boundary.
  *
- * The iOS hook is deliberately not wired in this change. The current capture seam is
- * `SensingCoordinator.closeWindow` (`ios/Beid/Sensing/SensingCoordinator.swift:1576-1643`):
- * it reads `currentWindowRpids` at line 1596 and clears that set at line 1643. A future
- * native adapter must snapshot the 17-byte RPIDs before that clear; a persisted count-only
+ * The iOS adapter wires this evidence at `SensingCoordinator.closeWindow`: it snapshots
+ * the 17-byte RPIDs before the native window state is cleared. A persisted count-only
  * WindowReport is permanently ineligible and must not be converted here.
  */
 public class MutualSensingWindowEvidence(
@@ -225,7 +223,26 @@ public class PreparedObservationV1 internal constructor(
             SignerInputMode.SIG_STRUCTURE -> SigningRequest.SigStructure(sigStructure)
             SignerInputMode.SHA256_DIGEST -> SigningRequest.Digest(sha256Digest)
         }
-        val signature = signer.sign(request)
+        return signWithCompactSignature(signer.sign(request))
+    }
+
+    /**
+     * Native bridges may not be able to implement a Swift Export interface or
+     * construct Kotlin ByteArray values directly. They still own the signer:
+     * this entry point accepts its exact 32-byte compact components as hex and
+     * keeps verification and COSE assembly in the shared implementation.
+     */
+    public fun signWithCompactSignatureHex(
+        rHex: String,
+        sHex: String,
+    ): SignedObservationV1 = signWithCompactSignature(
+        CompactEs256kSignature(
+            r = decodeFixedHex(rHex, 32, "signature r"),
+            s = decodeFixedHex(sHex, 32, "signature s"),
+        ),
+    )
+
+    private fun signWithCompactSignature(signature: CompactEs256kSignature): SignedObservationV1 {
         if (!Secp256k1.verify(
                 digest = sha256Digest.toByteArray(),
                 signature = signature,
@@ -322,3 +339,16 @@ internal fun ByteArray.toHex(): String = buildString(size * 2) {
         append("0123456789abcdef"[value and 0x0f])
     }
 }
+
+internal fun decodeFixedHex(value: String, expectedBytes: Int, label: String): ByteArray {
+    val source = value.removePrefix("0x")
+    require(source.length == expectedBytes * 2 && source.all { it.isAsciiHexDigit() }) {
+        "$label must be exactly $expectedBytes hexadecimal bytes"
+    }
+    return ByteArray(expectedBytes) { index ->
+        source.substring(index * 2, index * 2 + 2).toInt(16).toByte()
+    }
+}
+
+private fun Char.isAsciiHexDigit(): Boolean =
+    this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'

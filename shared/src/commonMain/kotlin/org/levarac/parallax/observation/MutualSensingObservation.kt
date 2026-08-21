@@ -126,9 +126,60 @@ public fun prepareObservationV1(
     evidence: MutualSensingWindowEvidence,
 ): ObservationPreparationResult = prepareMutualSensingObservation(evidence)
 
+/**
+ * Swift Export-friendly evidence factory. The native app supplies values that
+ * came from its Event Definition and Barnard callbacks as hex strings; the
+ * canonical evidence model and all malformed-RPID decisions remain shared.
+ */
+public fun createMutualSensingWindowEvidence(
+    idHex: String,
+    eventIdHex: String,
+    eventDefinitionDigestHex: String,
+    observerHex: String,
+    finalizedAt: Double,
+    reporterRpidHex: String,
+    enin: Long,
+    observedRpidHexes: List<String>?,
+    rpidClaimHex: String? = null,
+    participantCommitmentHex: String? = null,
+    legacyPeerCount: Long? = null,
+): MutualSensingWindowEvidence? = try {
+    MutualSensingWindowEvidence(
+        id = UuidBytes16(decodeFixedHex(idHex, 16, "Observation id")),
+        eventId = ByteString32(decodeFixedHex(eventIdHex, 32, "event id")),
+        eventDefinitionDigest = ByteString32(
+            decodeFixedHex(eventDefinitionDigestHex, 32, "Event Definition digest"),
+        ),
+        observer = CompressedSecp256k1PublicKey(
+            decodeFixedHex(observerHex, 33, "observer public key"),
+        ),
+        finalizedAt = finalizedAt,
+        reporterRpid = BarnardRpid17(decodeFixedHex(reporterRpidHex, 17, "reporter RPID")),
+        enin = ProtocolUInt(enin),
+        observedRpids = observedRpidHexes?.map { value ->
+            ImmutableBytes(value.decodeVariableHex("observed RPID"))
+        },
+        rpidClaim = rpidClaimHex?.let { ImmutableBytes(it.decodeVariableHex("RPID claim")) },
+        participantCommitmentHex = participantCommitmentHex,
+        legacyPeerCount = legacyPeerCount,
+    )
+} catch (_: IllegalArgumentException) {
+    null
+}
+
 private fun parseParticipantCommitment(value: String): ByteString32? {
     if (value.length != 64 || value.any { !it.isAsciiHexDigit() }) return null
     return ByteString32(ByteArray(32) { index -> value.substring(index * 2, index * 2 + 2).toInt(16).toByte() })
+}
+
+private fun String.decodeVariableHex(label: String): ByteArray {
+    val source = removePrefix("0x")
+    require(source.length % 2 == 0 && source.all { it.isAsciiHexDigit() }) {
+        "$label must be even-length hexadecimal"
+    }
+    return ByteArray(source.length / 2) { index ->
+        source.substring(index * 2, index * 2 + 2).toInt(16).toByte()
+    }
 }
 
 private fun parseObservedRpid(value: ImmutableBytes): BarnardRpid17? {
