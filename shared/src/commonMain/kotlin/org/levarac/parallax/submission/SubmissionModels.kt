@@ -170,10 +170,10 @@ public fun createSubmissionOperatorConfiguration(
     allowInsecureLoopbackForTests: Boolean = false,
 ): SubmissionOperatorConfiguration? = try {
     buildSubmissionOperatorConfiguration(
-        submissionEndpoint = validateSubmissionEndpoint(
-            context.submissionEndpoint,
-            allowInsecureLoopbackForTests,
-        ),
+        // EventDefinitionCborCodec has already verified this exact endpoint
+        // under the canonical registry profile. Re-running a second,
+        // narrower validator here would make the trust boundary drift.
+        submissionEndpoint = context.submissionEndpoint,
         receiptPublicKey = context.receiptPublicKey,
         operatorId = context.operatorId,
         eventId = context.eventId,

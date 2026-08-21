@@ -3,6 +3,7 @@ package org.levarac.parallax.registry
 import org.levarac.parallax.observation.CanonicalCbor
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import org.levarac.parallax.submission.createSubmissionOperatorConfiguration
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -73,6 +74,51 @@ class EventDefinitionCborCodecTest {
                 else -> throw error
             }
         }
+    }
+
+    @Test
+    fun submissionConfigurationConsumesTheVerifiedEndpointWithoutASecondValidator() {
+        val eventDefinition = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val endpoint = "https://operator.example:8443/v1/observations?mode=full#fragment"
+        val keySet = eventDefinition.requiredString("eventKeySetHex").vectorHexBytes()
+        val verified = EventDefinitionCborCodec.verify(
+            signedBytes = eventDefinition.requiredString("signedEventDefinitionHex").vectorHexBytes(),
+            encodedKeySet = keySet,
+            eventId = eventDefinition.vectorEventId(),
+            registration = eventDefinition.anchorRegistration(),
+            record = eventDefinition.definitionRecord(),
+            at = eventDefinition.definitionRecord().validFrom,
+        )
+        val base = verified.definition
+        val definition = EventDefinition(
+            version = base.version,
+            eventId = base.eventId,
+            registrar = base.registrar,
+            anchorOperator = base.anchorOperator,
+            nonce = base.nonce,
+            keySetDigest = base.keySetDigest,
+            sequence = base.sequence,
+            previousDefinitionDigest = base.previousDefinitionDigest,
+            receiptPublicKey = base.receiptPublicKey,
+            operatorId = base.operatorId,
+            submissionEndpoint = endpoint,
+            validFrom = base.validFrom,
+            validUntil = base.validUntil,
+            authorityPublicKey = base.authorityPublicKey,
+        )
+        val context = EventDefinitionContext(
+            eventIdHex = eventDefinition.vectorEventId().toPrefixedHex(),
+            definitionHashHex = eventDefinition
+                .requiredString("eventDefinitionDigestHex")
+                .let { "0x$it" },
+            selectedAt = eventDefinition.definitionRecord().validFrom,
+            record = eventDefinition.definitionRecord(),
+            definition = definition,
+        )
+
+        val configuration = createSubmissionOperatorConfiguration(context)
+
+        assertEquals(endpoint, configuration?.submissionEndpoint)
     }
 
     @Test

@@ -130,6 +130,30 @@ final class ReportSubmissionStoreTests: XCTestCase {
     )
   }
 
+  func testRawWindowCloseCaptureSurvivesReloadBeforeDefinitionResolution() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-capture")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let capture = ReportSubmissionCapture(
+      id: UUID(),
+      eventCode: "event-1",
+      eventIdHex: String(repeating: "11", count: 32),
+      enin: 7,
+      peerRpids: ["peer-1", "peer-2"],
+      reporterRpid: "01" + String(repeating: "aa", count: 16),
+      participantCommitment: Data([1, 2, 3]),
+      finalizedAt: 1_800_000_000
+    )
+    let store = ReportSubmissionStore(fileURL: fileURL)
+
+    try store.addPendingCapture(capture)
+
+    let reloaded = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.pendingCaptures, [capture])
+    XCTAssertEqual(reloaded.pendingCaptures.first?.peerRpids, ["peer-1", "peer-2"])
+    XCTAssertEqual(reloaded.pendingCaptures.first?.finalizedAt, 1_800_000_000)
+  }
+
   private func makeRecord(id: UUID = UUID()) -> ReportSubmissionRecord {
     ReportSubmissionRecord(
       id: id,

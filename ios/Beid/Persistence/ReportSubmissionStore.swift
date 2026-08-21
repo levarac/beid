@@ -6,6 +6,7 @@ import Foundation
 
 enum ReportSubmissionStoreError: Error {
   case conflictingObservation
+  case conflictingCapture
   case missingObservation
   case invalidReceipt
   case invalidState
@@ -20,6 +21,55 @@ enum ReportSubmissionState: String, Codable {
   case prepared = "PREPARED"
   case submitting = "SUBMITTING"
   case accepted = "ACCEPTED"
+}
+
+/// Lossless window-close inputs captured before registry resolution and
+/// Observation preparation. This is a separate durable file because the
+/// inputs must survive a process boundary even when no signed Observation
+/// exists yet.
+struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
+  let id: UUID
+  let eventCode: String
+  let eventIdHex: String?
+  let enin: Int
+  let peerRpids: [String]
+  let reporterRpid: String
+  let participantCommitment: Data?
+  let finalizedAt: TimeInterval
+  let createdAt: Date
+
+  init(
+    id: UUID,
+    eventCode: String,
+    eventIdHex: String?,
+    enin: Int,
+    peerRpids: [String],
+    reporterRpid: String,
+    participantCommitment: Data?,
+    finalizedAt: TimeInterval = Date().timeIntervalSince1970,
+    createdAt: Date = Date()
+  ) {
+    self.id = id
+    self.eventCode = eventCode
+    self.eventIdHex = eventIdHex
+    self.enin = enin
+    self.peerRpids = Array(Set(peerRpids)).sorted()
+    self.reporterRpid = reporterRpid
+    self.participantCommitment = participantCommitment
+    self.finalizedAt = finalizedAt
+    self.createdAt = createdAt
+  }
+
+  func hasSameWindowInputs(as other: ReportSubmissionCapture) -> Bool {
+    id == other.id &&
+      eventCode == other.eventCode &&
+      eventIdHex == other.eventIdHex &&
+      enin == other.enin &&
+      peerRpids == other.peerRpids &&
+      reporterRpid == other.reporterRpid &&
+      participantCommitment == other.participantCommitment &&
+      finalizedAt == other.finalizedAt
+  }
 }
 
 /// One canonical Observation and its operator receipt.
@@ -169,13 +219,20 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
 @MainActor
 final class ReportSubmissionStore: ObservableObject {
   @Published private(set) var records: [ReportSubmissionRecord] = []
+  @Published private(set) var pendingCaptures: [ReportSubmissionCapture] = []
 
   private let fileURL: URL
+  private let pendingCaptureFileURL: URL
   private var loadError: Error?
+  private var pendingCaptureLoadError: Error?
 
   init(fileURL: URL? = nil) {
-    self.fileURL = fileURL ?? Self.defaultFileURL()
+    let resolvedFileURL = fileURL ?? Self.defaultFileURL()
+    self.fileURL = resolvedFileURL
+    self.pendingCaptureFileURL = resolvedFileURL.deletingPathExtension()
+      .appendingPathExtension("pending.json")
     load()
+    loadPendingCaptures()
   }
 
   private static func defaultFileURL() -> URL {
@@ -197,6 +254,31 @@ final class ReportSubmissionStore: ObservableObject {
     try persist(updated)
     records = updated
     return record
+  }
+
+  @discardableResult
+  func addPendingCapture(_ capture: ReportSubmissionCapture) throws -> ReportSubmissionCapture {
+    try ensureWritable()
+    if let existing = pendingCaptures.first(where: { $0.id == capture.id }) {
+      guard existing.hasSameWindowInputs(as: capture) else {
+        throw ReportSubmissionStoreError.conflictingCapture
+      }
+      return existing
+    }
+
+    let updated = pendingCaptures + [capture]
+    try persistPendingCaptures(updated)
+    pendingCaptures = updated
+    return capture
+  }
+
+  func removePendingCapture(id: UUID) throws {
+    try ensureWritable()
+    guard let index = pendingCaptures.firstIndex(where: { $0.id == id }) else { return }
+    var updated = pendingCaptures
+    updated.remove(at: index)
+    try persistPendingCaptures(updated)
+    pendingCaptures = updated
   }
 
   func record(id: UUID) -> ReportSubmissionRecord? {
@@ -296,16 +378,37 @@ final class ReportSubmissionStore: ObservableObject {
 
   private func ensureWritable() throws {
     if let loadError { throw loadError }
+    if let pendingCaptureLoadError { throw pendingCaptureLoadError }
   }
 
   private func persist(_ records: [ReportSubmissionRecord]) throws {
+    try persistEncoded(
+      records,
+      to: fileURL,
+      stagingPrefix: ".report-submissions"
+    )
+  }
+
+  private func persistPendingCaptures(_ captures: [ReportSubmissionCapture]) throws {
+    try persistEncoded(
+      captures,
+      to: pendingCaptureFileURL,
+      stagingPrefix: ".report-submission-captures"
+    )
+  }
+
+  private func persistEncoded<Value: Encodable>(
+    _ value: Value,
+    to destinationURL: URL,
+    stagingPrefix: String
+  ) throws {
     try FileManager.default.createDirectory(
-      at: fileURL.deletingLastPathComponent(),
+      at: destinationURL.deletingLastPathComponent(),
       withIntermediateDirectories: true
     )
-    let data = try JSONEncoder().encode(records)
-    let stagedURL = fileURL.deletingLastPathComponent().appendingPathComponent(
-      ".report-submissions-\(UUID().uuidString.lowercased()).tmp"
+    let data = try JSONEncoder().encode(value)
+    let stagedURL = destinationURL.deletingLastPathComponent().appendingPathComponent(
+      "\(stagingPrefix)-\(UUID().uuidString.lowercased()).tmp"
     )
     var stagedFileWasMoved = false
     defer {
@@ -318,7 +421,7 @@ final class ReportSubmissionStore: ObservableObject {
     try handle.synchronize()
     try handle.close()
     let renameResult = stagedURL.path.withCString { stagedPath in
-      fileURL.path.withCString { destinationPath in
+      destinationURL.path.withCString { destinationPath in
         Darwin.rename(stagedPath, destinationPath)
       }
     }
@@ -326,7 +429,7 @@ final class ReportSubmissionStore: ObservableObject {
       throw NSError(
         domain: NSPOSIXErrorDomain,
         code: Int(errno),
-        userInfo: [NSFilePathErrorKey: fileURL.path]
+        userInfo: [NSFilePathErrorKey: destinationURL.path]
       )
     }
     stagedFileWasMoved = true
@@ -343,6 +446,18 @@ final class ReportSubmissionStore: ObservableObject {
       // Never replace an unreadable queue with an empty durable file. The
       // caller can surface this state and retry after the next process start.
       loadError = error
+    }
+  }
+
+  private func loadPendingCaptures() {
+    guard FileManager.default.fileExists(atPath: pendingCaptureFileURL.path) else { return }
+    do {
+      pendingCaptures = try JSONDecoder().decode(
+        [ReportSubmissionCapture].self,
+        from: Data(contentsOf: pendingCaptureFileURL)
+      )
+    } catch {
+      pendingCaptureLoadError = error
     }
   }
 }

@@ -92,6 +92,52 @@ class SubmissionClientTest {
     }
 
     @Test
+    fun oversizedDeclaredArrayLengthIsRejectedBeforeAllocation() = runTest {
+        val response = byteArrayOf(
+            0x9a.toByte(),
+            0x7f,
+            0xff.toByte(),
+            0xff.toByte(),
+            0xff.toByte(),
+        )
+        val result = createSubmissionClientForTest(
+            FakeSubmissionTransport(
+                SubmissionHttpResponse(
+                    statusCode = 201,
+                    body = response,
+                    headers = mapOf("Content-Type" to ACCEPTANCE_RECEIPT_MEDIA_TYPE),
+                ),
+            ),
+        ).submitAndAwait(storedObservation(), operatorConfiguration())
+
+        assertFalse(result.isSuccess)
+        assertEquals("protocol_error", result.errorCode)
+    }
+
+    @Test
+    fun oversizedDeclaredMapLengthIsRejectedBeforeAllocation() = runTest {
+        val response = byteArrayOf(
+            0xba.toByte(),
+            0x7f,
+            0xff.toByte(),
+            0xff.toByte(),
+            0xff.toByte(),
+        )
+        val result = createSubmissionClientForTest(
+            FakeSubmissionTransport(
+                SubmissionHttpResponse(
+                    statusCode = 201,
+                    body = response,
+                    headers = mapOf("Content-Type" to ACCEPTANCE_RECEIPT_MEDIA_TYPE),
+                ),
+            ),
+        ).submitAndAwait(storedObservation(), operatorConfiguration())
+
+        assertFalse(result.isSuccess)
+        assertEquals("protocol_error", result.errorCode)
+    }
+
+    @Test
     fun storedObservationCanBeRestoredWithoutChangingItsBytes() {
         val stored = requireNotNull(restoreStoredObservation(SIGNED_OBSERVATION_HEX))
 

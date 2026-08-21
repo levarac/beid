@@ -97,6 +97,10 @@ final class SensingCoordinator: ObservableObject {
   /// `startSensing(eventCode:)` once the user has joined manually via
   /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
   @Published private(set) var joinedEventCode: String?
+  /// Canonical registry Event ID resolved for `joinedEventCode`, when the
+  /// caller has already completed the verified registry lookup. Event codes
+  /// are not sufficient to derive this value locally.
+  @Published private(set) var joinedCanonicalEventIdHex: String?
   /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
   /// played for the current session. Lives here rather than as view-local
   /// `@State` because `.recording` can be interrupted by `.signalLost` and
@@ -335,6 +339,9 @@ final class SensingCoordinator: ObservableObject {
   /// `waitForDemoSequenceToFinish()` below.
   private var ledgerLoadTask: Task<Void, Never>?
   private var demoTask: Task<Void, Never>?
+  /// Canonical Event ID carried from the verified join result until the first
+  /// real event session is established. It is never derived from event code.
+  private var pendingCanonicalEventIdHex: String?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
   /// `advanceWindowBookkeepingIfNeeded`-derived `firstWindowEnin`/
@@ -849,7 +856,12 @@ final class SensingCoordinator: ObservableObject {
     switch phase {
     case .sensing:
       let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
-      let session = EventSession(id: eventCode, name: eventCode, venue: nil)
+      let session = EventSession(
+        id: eventCode,
+        name: eventCode,
+        venue: nil,
+        canonicalEventIdHex: pendingCanonicalEventIdHex
+      )
       beginEventFoundSessionState(session)
       observe(
         enin: enin,
@@ -1119,10 +1131,11 @@ final class SensingCoordinator: ObservableObject {
   /// (`EventCodeEntryView`) for choosing which event to sense, since there
   /// is no BLE auto-discovery yet. Returns whether the code took effect.
   @discardableResult
-  func joinEvent(_ code: String) -> Bool {
+  func joinEvent(_ code: String, canonicalEventIdHex: String? = nil) -> Bool {
     engine.joinEvent(code)
     let confirmed = engine.getCurrentEventCode()
     joinedEventCode = confirmed
+    joinedCanonicalEventIdHex = confirmed == code ? canonicalEventIdHex : nil
     return confirmed == code
   }
 
@@ -1131,11 +1144,18 @@ final class SensingCoordinator: ObservableObject {
   func leaveEvent() {
     engine.leaveEvent()
     joinedEventCode = engine.getCurrentEventCode()
+    joinedCanonicalEventIdHex = nil
   }
 
-  func startSensing(eventCode: String? = nil, demoEvent: EventSession = .demoSample) {
+  func startSensing(
+    eventCode: String? = nil,
+    eventIdHex: String? = nil,
+    demoEvent: EventSession = .demoSample
+  ) {
     let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
+    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
+    pendingCanonicalEventIdHex = canonicalEventIdHex
     reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
@@ -1243,6 +1263,7 @@ final class SensingCoordinator: ObservableObject {
     currentWindowRpids = []
     currentWindowReporterRpid = nil
     currentWindowLedgerOpened = false
+    pendingCanonicalEventIdHex = nil
     activeCommit = nil
     activeProofId = nil
     pendingBindingMessage = nil
@@ -1325,6 +1346,15 @@ final class SensingCoordinator: ObservableObject {
     switch phase {
     case .eventFound(let session), .recording(let session, _), .signalLost(let session, _):
       return session.id
+    case .idle, .sensing:
+      return nil
+    }
+  }
+
+  private var currentSessionEventIdHex: String? {
+    switch phase {
+    case .eventFound(let session), .recording(let session, _), .signalLost(let session, _):
+      return session.canonicalEventIdHex
     case .idle, .sensing:
       return nil
     }
@@ -1674,6 +1704,7 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.captureAndQueueWindow(
       id: currentWindowId,
       eventCode: eventCode,
+      eventIdHex: currentSessionEventIdHex,
       enin: enin,
       peerRpids: closingPeerRpids,
       reporterRpid: closingReporterRpid,
@@ -2012,6 +2043,12 @@ final class SensingCoordinator: ObservableObject {
 
   func runDemoSequence(demoEvent: EventSession, stepDelayNanos: UInt64 = 700_000_000) {
     demoTask?.cancel()
+    let session = EventSession(
+      id: demoEvent.id,
+      name: demoEvent.name,
+      venue: demoEvent.venue,
+      canonicalEventIdHex: demoEvent.canonicalEventIdHex ?? pendingCanonicalEventIdHex
+    )
     // `applyPhaseDecision`'s shared reducer only transitions `.sensing ->
     // .eventFound` (or straight through to `.recording`) when
     // `currentPhaseKind` reads `.SENSING` — unlike the old direct-call
@@ -2029,7 +2066,7 @@ final class SensingCoordinator: ObservableObject {
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
       guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-      self.beginEventFoundSessionState(demoEvent)
+      self.beginEventFoundSessionState(session)
       // Device #1: `phase` is `.sensing` (set by `startSensing()` before
       // this task was created), and this is the session's very first
       // observation, so `distinctDeviceCountChanged` is always `true` —
@@ -2044,7 +2081,7 @@ final class SensingCoordinator: ObservableObject {
       self.applyPhaseDecision(
         coPresentDeviceCount: self.demoWindowRpids.count,
         distinctDeviceCountChanged: true,
-        for: demoEvent
+        for: session
       )
       // Window boundary right after device #1, matching the exact
       // `advanceDemoWindow()` call-site position the old
@@ -2083,7 +2120,7 @@ final class SensingCoordinator: ObservableObject {
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
           distinctDeviceCountChanged: changed,
-          for: demoEvent
+          for: session
         )
       }
       self.advanceDemoWindow()
@@ -2094,7 +2131,7 @@ final class SensingCoordinator: ObservableObject {
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
           distinctDeviceCountChanged: changed,
-          for: demoEvent
+          for: session
         )
         self.advanceDemoWindow()
       }

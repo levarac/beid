@@ -16,7 +16,7 @@ struct VerifiedSubmissionDefinition {
 @MainActor
 protocol EventDefinitionContextProvider: AnyObject {
   func resolve(
-    eventCode: String,
+    eventIdHex: String,
     completion: @escaping (VerifiedSubmissionDefinition?) -> Void
   )
 }
@@ -26,43 +26,60 @@ protocol EventDefinitionContextProvider: AnyObject {
 /// identity, digest, and validity all come from one context object.
 @MainActor
 final class RegistryEventDefinitionContextProvider: EventDefinitionContextProvider {
-  private let client: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient
-  private let allowInsecureLoopbackForTests: Bool
+  private let resolveByCanonicalEventId: (
+    String,
+    @escaping (VerifiedSubmissionDefinition?) -> Void
+  ) -> Void
 
   init(
     client: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient,
     allowInsecureLoopbackForTests: Bool = false
   ) {
-    self.client = client
-    self.allowInsecureLoopbackForTests = allowInsecureLoopbackForTests
+    self.resolveByCanonicalEventId = { eventIdHex, completion in
+      client.resolveEventDefinition(
+        eventIdHex: eventIdHex,
+        pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin(),
+        useTimeEpochSeconds: Int64(Date().timeIntervalSince1970)
+      ) { resolution in
+        Task { @MainActor in
+          guard resolution.isSuccess, let context = resolution.context,
+                let configuration =
+                  ExportedKotlinPackages.org.levarac.parallax.submission
+                    .createSubmissionOperatorConfigurationFromEventDefinition(
+                      context: context,
+                      allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
+                    )
+          else {
+            completion(nil)
+            return
+          }
+          completion(VerifiedSubmissionDefinition(configuration: configuration))
+        }
+      }
+    }
+  }
+
+  /// Hermetic registry lookup seam used by the integration test. It still
+  /// exercises this concrete production adapter and requires the caller to
+  /// supply the canonical Event ID; it does not restore event-code hashing.
+  init(
+    lookup: @escaping (
+      String,
+      @escaping (VerifiedSubmissionDefinition?) -> Void
+    ) -> Void
+  ) {
+    self.resolveByCanonicalEventId = lookup
   }
 
   func resolve(
-    eventCode: String,
+    eventIdHex: String,
     completion: @escaping (VerifiedSubmissionDefinition?) -> Void
   ) {
-    let eventIdHex = EventIdHash.compute(eventCode: eventCode).hexString
-    client.resolveEventDefinition(
-      eventIdHex: eventIdHex,
-      pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin(),
-      useTimeEpochSeconds: Int64(Date().timeIntervalSince1970)
-    ) { [weak self] resolution in
-      Task { @MainActor [weak self] in
-        guard let self else { return }
-        guard resolution.isSuccess, let context = resolution.context,
-              let configuration =
-                ExportedKotlinPackages.org.levarac.parallax.submission
-                  .createSubmissionOperatorConfigurationFromEventDefinition(
-                    context: context,
-                    allowInsecureLoopbackForTests: self.allowInsecureLoopbackForTests
-                  )
-        else {
-          completion(nil)
-          return
-        }
-        completion(VerifiedSubmissionDefinition(configuration: configuration))
-      }
+    guard let normalized = eventIdHex.normalizedCanonicalEventIdHex else {
+      completion(nil)
+      return
     }
+    resolveByCanonicalEventId(normalized, completion)
   }
 }
 
@@ -71,6 +88,7 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   func captureAndQueueWindow(
     id: UUID,
     eventCode: String,
+    eventIdHex: String?,
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
@@ -139,6 +157,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   func captureAndQueueWindow(
     id: UUID,
     eventCode: String,
+    eventIdHex: String?,
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
@@ -147,75 +166,101 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     // A missing reporter RPID means this window has only legacy/count-style
     // evidence. It is deliberately ineligible and is never synthesized into
     // an Observation from the peer count.
-    guard reporterRpid != nil else {
+    guard let reporterRpid else {
       Self.log.error("Skipped canonical submission for a window without reporter RPID")
       submitPending()
       return
     }
 
-    // These are already copied by SensingCoordinator before its RPID set is
-    // discarded. Definition resolution may be asynchronous, so retain only
-    // the lossless close-window inputs in this closure.
-    definitionProvider.resolve(eventCode: eventCode) { [weak self] verified in
+    // Persist the close-window inputs before any registry lookup. A process
+    // boundary or a failed definition fetch must not erase the only copy of
+    // the RPID set and timing needed to reconstruct the Observation.
+    let capture = ReportSubmissionCapture(
+      id: id,
+      eventCode: eventCode,
+      eventIdHex: eventIdHex,
+      enin: enin,
+      peerRpids: peerRpids.sorted(),
+      reporterRpid: reporterRpid,
+      participantCommitment: participantCommitment,
+      finalizedAt: Date().timeIntervalSince1970
+    )
+    do {
+      try store.addPendingCapture(capture)
+    } catch {
+      Self.log.error("Unable to persist raw close-window capture: \(String(describing: error), privacy: .public)")
+      return
+    }
+    processPendingCapture(capture)
+  }
+
+  private func processPendingCapture(_ capture: ReportSubmissionCapture) {
+    if store.record(id: capture.id) != nil {
+      do {
+        try store.removePendingCapture(id: capture.id)
+      } catch {
+        Self.log.error("Unable to remove a completed raw close-window capture: \(String(describing: error), privacy: .public)")
+      }
+      return
+    }
+    guard let eventIdHex = capture.eventIdHex,
+          eventIdHex.normalizedCanonicalEventIdHex != nil
+    else {
+      Self.log.error("Deferred canonical submission without a canonical Event ID")
+      return
+    }
+    guard inFlight.insert(capture.id).inserted else { return }
+    definitionProvider.resolve(eventIdHex: eventIdHex) { [weak self] verified in
       Task { @MainActor [weak self] in
         guard let self else { return }
-        self.prepareAndQueueWindow(
-          id: id,
-          eventCode: eventCode,
-          enin: enin,
-          peerRpids: peerRpids,
-          reporterRpid: reporterRpid,
-          participantCommitment: participantCommitment,
-          verified: verified
-        )
+        self.inFlight.remove(capture.id)
+        self.prepareAndQueueWindow(capture: capture, verified: verified)
       }
     }
   }
 
   private func prepareAndQueueWindow(
-    id: UUID,
-    eventCode: String,
-    enin: Int,
-    peerRpids: Set<String>,
-    reporterRpid: String?,
-    participantCommitment: Data?,
+    capture: ReportSubmissionCapture,
     verified: VerifiedSubmissionDefinition?
   ) {
     guard let verified,
           let eventId = verified.configuration.eventId,
           let definitionDigest = verified.configuration.eventDefinitionDigest,
-          let reporterRpid
+          let requestedEventIdHex = capture.eventIdHex
     else {
-      Self.log.error("Skipped canonical submission without a verified Event Definition")
-      submitPending()
+      Self.log.error("Deferred canonical submission without a verified Event Definition")
       return
     }
 
+    let reporterRpid = capture.reporterRpid
     let eventIdHex = Data(bytesFromKotlinByteArray: eventId.toByteArray()).hexString
+    guard requestedEventIdHex.normalizedCanonicalEventIdHex == eventIdHex else {
+      Self.log.error("Deferred canonical submission whose definition Event ID did not match the requested Event ID")
+      return
+    }
     let definitionDigestHex = Data(
       bytesFromKotlinByteArray: definitionDigest.toByteArray()
     ).hexString
     let observerHex = eventSigningCryptography
-      .eventSigningPublicKey(eventCode: eventCode)
+      .eventSigningPublicKey(eventCode: capture.eventCode)
       .hexString
-    let observedRpidHexes = peerRpids.map { $0.lowercased() }.sorted()
+    let observedRpidHexes = capture.peerRpids.map { $0.lowercased() }.sorted()
     let evidence = ExportedKotlinPackages.org.levarac.parallax.observation
       .createMutualSensingWindowEvidence(
-        idHex: id.hexString,
+        idHex: capture.id.hexString,
         eventIdHex: eventIdHex,
         eventDefinitionDigestHex: definitionDigestHex,
         observerHex: observerHex,
-        finalizedAt: Date().timeIntervalSince1970,
+        finalizedAt: capture.finalizedAt,
         reporterRpidHex: reporterRpid,
-        enin: Int64(enin),
+        enin: Int64(capture.enin),
         observedRpidHexes: observedRpidHexes,
         rpidClaimHex: nil,
-        participantCommitmentHex: participantCommitment?.hexString,
+        participantCommitmentHex: capture.participantCommitment?.hexString,
         legacyPeerCount: nil
       )
     guard let evidence else {
       Self.log.error("Skipped canonical submission with malformed close-window evidence")
-      submitPending()
       return
     }
 
@@ -225,7 +270,6 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible
     else {
       Self.log.error("Skipped an ineligible canonical close-window observation")
-      submitPending()
       return
     }
 
@@ -233,7 +277,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       bytesFromKotlinByteArray: eligible.prepared.signatureStructure.toByteArray()
     )
     let signature = eventSigningCryptography.signWindowReport(
-      eventCode: eventCode,
+      eventCode: capture.eventCode,
       bytes: signatureInput
     )
     let signed = eligible.prepared.signWithCompactSignatureHex(
@@ -243,8 +287,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     let stored = ExportedKotlinPackages.org.levarac.parallax.submission
       .storeSignedObservation(signed: signed)
     let record = ReportSubmissionRecord(
-      id: id,
-      eventCode: eventCode,
+      id: capture.id,
+      eventCode: capture.eventCode,
       endpoint: verified.configuration.submissionEndpoint,
       receiptPublicKeyHex: Data(
         bytesFromKotlinByteArray: verified.configuration.receiptPublicKey.toByteArray()
@@ -266,6 +310,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
 
     do {
       try store.add(record)
+      try store.removePendingCapture(id: capture.id)
     } catch {
       Self.log.error("Unable to persist canonical Observation: \(String(describing: error), privacy: .public)")
     }
@@ -273,6 +318,9 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   }
 
   func submitPending() {
+    for capture in store.pendingCaptures {
+      processPendingCapture(capture)
+    }
     for record in store.pendingRecords {
       guard inFlight.insert(record.id).inserted else { continue }
       guard let stored = ExportedKotlinPackages.org.levarac.parallax.submission
@@ -447,5 +495,21 @@ private extension UUID {
   var hexString: String {
     var copy = self
     return withUnsafeBytes(of: &copy) { Data($0).hexString }
+  }
+}
+
+private extension String {
+  var normalizedCanonicalEventIdHex: String? {
+    let value = hasPrefix("0x") || hasPrefix("0X") ? String(dropFirst(2)) : self
+    guard value.count == 64,
+          value.allSatisfy({
+            ($0 >= "0" && $0 <= "9") ||
+              ($0 >= "a" && $0 <= "f") ||
+              ($0 >= "A" && $0 <= "F")
+          })
+    else {
+      return nil
+    }
+    return value.lowercased()
   }
 }

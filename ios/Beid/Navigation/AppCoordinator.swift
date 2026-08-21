@@ -130,8 +130,13 @@ final class AppCoordinator: ObservableObject {
   /// where `completeWalletConnect()` does, without ever setting
   /// `walletAddress`.
   @discardableResult
-  func joinEvent(code rawCode: String) -> EventCodeJoinError? {
-    if let error = attemptJoinEvent(code: rawCode) { return error }
+  func joinEvent(
+    code rawCode: String,
+    canonicalEventIdHex: String? = nil
+  ) -> EventCodeJoinError? {
+    if let error = attemptJoinEvent(code: rawCode, canonicalEventIdHex: canonicalEventIdHex) {
+      return error
+    }
     screen = .bluetoothPermission
     return nil
   }
@@ -142,8 +147,13 @@ final class AppCoordinator: ObservableObject {
   /// `joinEvent(code:)`, success here just dismisses the sheet — it never
   /// touches `screen`, since the user is already past onboarding.
   @discardableResult
-  func joinEventFromAccountSheet(code rawCode: String) -> EventCodeJoinError? {
-    if let error = attemptJoinEvent(code: rawCode) { return error }
+  func joinEventFromAccountSheet(
+    code rawCode: String,
+    canonicalEventIdHex: String? = nil
+  ) -> EventCodeJoinError? {
+    if let error = attemptJoinEvent(code: rawCode, canonicalEventIdHex: canonicalEventIdHex) {
+      return error
+    }
     eventCodeEntrySheetPresented = false
     return nil
   }
@@ -157,11 +167,17 @@ final class AppCoordinator: ObservableObject {
   /// (beid#226, DECISIONS 2026-08-20) — a `shared/` decision so iOS and
   /// Android derive the same RPID from the same typed text, not a native
   /// `.trimmingCharacters` check.
-  private func attemptJoinEvent(code rawCode: String) -> EventCodeJoinError? {
+  private func attemptJoinEvent(
+    code rawCode: String,
+    canonicalEventIdHex: String? = nil
+  ) -> EventCodeJoinError? {
     guard let normalized = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) else {
       return .emptyCode
     }
-    guard sensingCoordinator.joinEvent(normalized) else { return .joinFailed }
+    guard sensingCoordinator.joinEvent(
+      normalized,
+      canonicalEventIdHex: canonicalEventIdHex
+    ) else { return .joinFailed }
     return nil
   }
 
@@ -190,9 +206,9 @@ final class AppCoordinator: ObservableObject {
   /// produced by a successful join), and a `.joinFailed` here has no
   /// separate UI to report to, matching this function's pre-existing
   /// `Bool`-discarding call into `SensingCoordinator`.
-  func rejoinPastEvent(code: String) {
+  func rejoinPastEvent(code: String, canonicalEventIdHex: String? = nil) {
     guard sensingCoordinator.joinedEventCode == nil else { return }
-    _ = attemptJoinEvent(code: code)
+    _ = attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
   }
 
   /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the

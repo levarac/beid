@@ -416,6 +416,9 @@ private class SubmissionCborReader(private val bytes: ByteArray) {
             3 -> SubmissionCborValue.Text(readByteString(readAdditional(additional)).decodeToString())
             4 -> {
                 val length = readContainerLength(additional)
+                require(length <= bytes.size - offset) {
+                    "CBOR array length exceeds the remaining buffer"
+                }
                 SubmissionCborValue.ArrayValue(List(length) { readValue() })
             }
             5 -> readMap(additional)
@@ -430,6 +433,9 @@ private class SubmissionCborReader(private val bytes: ByteArray) {
 
     private fun readMap(additional: Int): SubmissionCborValue.MapValue {
         val length = readContainerLength(additional)
+        require(length <= (bytes.size - offset) / 2) {
+            "CBOR map length exceeds the remaining buffer"
+        }
         val entries = ArrayList<Pair<SubmissionCborValue, SubmissionCborValue>>(length)
         var previousKey: ByteArray? = null
         repeat(length) {

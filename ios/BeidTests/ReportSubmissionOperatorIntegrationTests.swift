@@ -19,10 +19,57 @@ private final class StaticEventDefinitionContextProvider: EventDefinitionContext
   }
 
   func resolve(
-    eventCode: String,
+    eventIdHex: String,
     completion: @escaping (VerifiedSubmissionDefinition?) -> Void
   ) {
     completion(verified)
+  }
+}
+
+@MainActor
+private final class DeferredEventDefinitionContextProvider: EventDefinitionContextProvider {
+  private let verified: VerifiedSubmissionDefinition
+  private(set) var requestedEventIds: [String] = []
+  private var completions: [(VerifiedSubmissionDefinition?) -> Void] = []
+
+  init(configuration: ExportedKotlinPackages.org.levarac.parallax.submission
+    .SubmissionOperatorConfiguration) {
+    verified = VerifiedSubmissionDefinition(configuration: configuration)
+  }
+
+  func resolve(
+    eventIdHex: String,
+    completion: @escaping (VerifiedSubmissionDefinition?) -> Void
+  ) {
+    requestedEventIds.append(eventIdHex)
+    completions.append(completion)
+  }
+
+  func resolveAll() {
+    let pending = completions
+    completions.removeAll()
+    pending.forEach { $0(verified) }
+  }
+}
+
+@MainActor
+private final class RecordingRegistryLookup {
+  private let verified: VerifiedSubmissionDefinition
+  private(set) var requestedEventIds: [String] = []
+
+  init(configuration: ExportedKotlinPackages.org.levarac.parallax.submission
+    .SubmissionOperatorConfiguration) {
+    verified = VerifiedSubmissionDefinition(configuration: configuration)
+  }
+
+  func resolve(
+    eventIdHex: String,
+    completion: @escaping (VerifiedSubmissionDefinition?) -> Void
+  ) {
+    requestedEventIds.append(eventIdHex)
+    DispatchQueue.main.async { [verified] in
+      completion(verified)
+    }
   }
 }
 
@@ -559,6 +606,100 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     XCTAssertEqual(postedBody, try XCTUnwrap(Data(hexEncoded: record.signedObservationHex)))
   }
 
+  func testRegistryLookupUsesTheCanonicalEventIdForTheJoinedEvent() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-canonical-id")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let cryptography = TestSensingCryptography()
+    let configuration = try makeConfiguration(endpoint: endpoint)
+    let lookup = RecordingRegistryLookup(configuration: configuration)
+    let provider = RegistryEventDefinitionContextProvider(lookup: lookup.resolve)
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      provider: provider
+    ))
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: cryptography,
+      reportSubmissionRuntime: runtime
+    )
+
+    try await driveOneRealWindow(coordinator: coordinator, eventIdHex: eventIdHex)
+
+    try await server.waitFor(postCount: 1)
+    XCTAssertEqual(lookup.requestedEventIds, [eventIdHex])
+    XCTAssertEqual(
+      ReportSubmissionStore(fileURL: fileURL).records.first?.eventIdHex,
+      eventIdHex
+    )
+  }
+
+  func testWindowCloseCaptureSurvivesResolutionGapAndCompletesAfterRelaunch() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-capture-relaunch")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let cryptography = TestSensingCryptography()
+    let configuration = try makeConfiguration(endpoint: endpoint)
+    let firstProvider = DeferredEventDefinitionContextProvider(configuration: configuration)
+    let firstRuntime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      provider: firstProvider
+    ))
+    let firstCoordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: cryptography,
+      reportSubmissionRuntime: firstRuntime
+    )
+
+    try await driveOneRealWindow(coordinator: firstCoordinator, eventIdHex: eventIdHex)
+
+    let capture = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.first)
+    XCTAssertEqual(firstProvider.requestedEventIds, [eventIdHex])
+    XCTAssertEqual(capture.eventIdHex, eventIdHex)
+    XCTAssertEqual(capture.enin, 7)
+    XCTAssertFalse(capture.peerRpids.isEmpty)
+    XCTAssertNotNil(capture.reporterRpid)
+
+    let relaunchedProvider = DeferredEventDefinitionContextProvider(configuration: configuration)
+    let relaunchedRuntime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      provider: relaunchedProvider
+    ))
+    relaunchedRuntime.submitPending()
+    XCTAssertEqual(relaunchedProvider.requestedEventIds, [eventIdHex])
+
+    relaunchedProvider.resolveAll()
+    try await server.waitFor(postCount: 1)
+    try await waitForSubmissionState(.accepted, at: fileURL)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.isEmpty)
+  }
+
   func testFlagOffLeavesTheRealCoordinatorPathWithoutASubmission() async throws {
     let server = try StubOperatorServer(
       eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
@@ -766,7 +907,8 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     receiptPublicKeyHex: String,
     cryptography: any SensingCryptography,
     fileURL: URL,
-    enabled: Bool
+    enabled: Bool,
+    provider: (any EventDefinitionContextProvider)? = nil
   ) throws -> ReportSubmissionRuntime? {
     let configuration = try XCTUnwrap(
       ExportedKotlinPackages.org.levarac.parallax.submission
@@ -781,7 +923,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
         ),
       "endpoint=\(endpoint.absoluteString)"
     )
-    let provider = StaticEventDefinitionContextProvider(configuration: configuration)
+    let provider = provider ?? StaticEventDefinitionContextProvider(configuration: configuration)
     let bundleDirectory = try makeIsolatedDirectory(named: "beid-report-submission-bundle")
     let plist: [String: Any] = [
       "CFBundleIdentifier": "org.levarac.beid.tests.\(UUID().uuidString)",
@@ -804,9 +946,31 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     )
   }
 
-  private func driveOneRealWindow(coordinator: SensingCoordinator) async throws {
+  private func driveOneRealWindow(
+    coordinator: SensingCoordinator,
+    eventIdHex: String? = nil
+  ) async throws {
     coordinator.useDemoEventMode = false
-    coordinator.startSensing(eventCode: "verified-definition-event")
+    let joinedForTest = eventIdHex != nil
+    defer {
+      if joinedForTest {
+        coordinator.leaveEvent()
+      }
+    }
+    if let eventIdHex {
+      XCTAssertTrue(
+        coordinator.joinEvent(
+          "verified-definition-event",
+          canonicalEventIdHex: eventIdHex
+        )
+      )
+      coordinator.startSensing()
+    } else {
+      coordinator.startSensing(
+        eventCode: "verified-definition-event",
+        eventIdHex: self.eventIdHex
+      )
+    }
     // startSensing requests simulator permissions before configuring Barnard;
     // let that callback finish before driving the real detection entry point.
     try await Task.sleep(nanoseconds: 100_000_000)
@@ -821,6 +985,24 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       )
     }
     _ = coordinator.stopSensing()
+  }
+
+  private func makeConfiguration(
+    endpoint: URL
+  ) throws -> ExportedKotlinPackages.org.levarac.parallax.submission
+    .SubmissionOperatorConfiguration {
+    try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.submission
+        .createSubmissionOperatorConfiguration(
+          endpoint: endpoint.absoluteString,
+          receiptPublicKeyHex: receiptKeyHex,
+          eventIdHex: eventIdHex,
+          eventDefinitionDigestHex: definitionDigestHex,
+          validFrom: nil,
+          validUntil: nil,
+          allowInsecureLoopbackForTests: true
+        )
+    )
   }
 
   private func waitForSubmissionState(

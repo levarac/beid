@@ -15,4 +15,21 @@ struct EventSession: Equatable, Identifiable {
   /// e.g. "Tokyo Big Sight". `nil` when the source (real or demo) has no
   /// venue to report — rendered as an absent line, never a placeholder.
   let venue: String?
+  /// The canonical registry Event ID resolved for this joined event. It is
+  /// intentionally optional at this boundary because the current manual
+  /// event-code entry path does not resolve registry definitions yet; the
+  /// submission runtime fails closed when it is absent.
+  let canonicalEventIdHex: String?
+
+  init(
+    id: String,
+    name: String,
+    venue: String?,
+    canonicalEventIdHex: String? = nil
+  ) {
+    self.id = id
+    self.name = name
+    self.venue = venue
+    self.canonicalEventIdHex = canonicalEventIdHex
+  }
 }
