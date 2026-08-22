@@ -39,6 +39,8 @@ public class RegistryClient internal constructor(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val definitionFetcher: SignedDefinitionFetcher? = null,
     private val definitionConfigurationError: DefinitionFetchException? = null,
+    private val eventKeySetFetcher: EventKeySetFetcher? = null,
+    private val eventKeySetConfigurationError: DefinitionFetchException? = null,
 ) {
     public fun resolve(
         eventIdHex: String,
@@ -122,6 +124,12 @@ public class RegistryClient internal constructor(
                         "signed definition URL template is not configured",
                     )
                 }
+                val keySetFetcher = eventKeySetFetcher ?: run {
+                    throw eventKeySetConfigurationError ?: DefinitionFetchException(
+                        DefinitionFetchError.KEY_SET_NOT_CONFIGURED,
+                        "EventKeySet URL template is not configured",
+                    )
+                }
                 val eventId = eventIdHex.decodeHex(expectedBytes = 32)
                 val result = resolver.resolve(eventId, pin)
                 val record = definitionForUseTime(result.context, useTimeEpochSeconds)
@@ -129,7 +137,14 @@ public class RegistryClient internal constructor(
                         DefinitionFetchError.VALIDITY_MISMATCH,
                         "no registry definition is valid at the requested time",
                     )
-                val context = fetcher.fetch(eventId, record, useTimeEpochSeconds)
+                val encodedEventKeySet = keySetFetcher.fetch(result.context.registration.keySetDigestHex)
+                val context = fetcher.fetch(
+                    eventId = eventId,
+                    registration = result.context.registration,
+                    record = record,
+                    selectedAt = useTimeEpochSeconds,
+                    encodedEventKeySet = encodedEventKeySet,
+                )
                 EventDefinitionResolution(
                     isSuccess = true,
                     context = context,
@@ -208,6 +223,7 @@ public fun createSepoliaRegistryClient(
     readerAddressHex: String,
     etherscanApiKey: String?,
     definitionUrlTemplate: String? = null,
+    eventKeySetUrlTemplate: String? = null,
 ): RegistryClient? {
     if (readerAddressHex.isBlank()) return null
     val readerAddress = try {
@@ -217,6 +233,7 @@ public fun createSepoliaRegistryClient(
     }
     val transport = createPlatformRegistryHttpTransport()
     var definitionConfigurationError: DefinitionFetchException? = null
+    var eventKeySetConfigurationError: DefinitionFetchException? = null
     val definitionFetcher = definitionUrlTemplate
         ?.takeIf { it.isNotBlank() }
         ?.let { template ->
@@ -229,6 +246,20 @@ public fun createSepoliaRegistryClient(
                 null
             } else {
                 SignedDefinitionFetcher(validated, transport)
+            }
+        }
+    val eventKeySetFetcher = eventKeySetUrlTemplate
+        ?.takeIf { it.isNotBlank() }
+        ?.let { template ->
+            val validated = createEventKeySetUrlTemplate(template)
+            if (validated == null) {
+                eventKeySetConfigurationError = DefinitionFetchException(
+                    DefinitionFetchError.KEY_SET_INVALID_URL_TEMPLATE,
+                    "EventKeySet URL template is invalid",
+                )
+                null
+            } else {
+                EventKeySetFetcher(validated, transport)
             }
         }
     val primary = JsonRpcEthCallAdapter(
@@ -262,6 +293,8 @@ public fun createSepoliaRegistryClient(
         ),
         definitionFetcher = definitionFetcher,
         definitionConfigurationError = definitionConfigurationError,
+        eventKeySetFetcher = eventKeySetFetcher,
+        eventKeySetConfigurationError = eventKeySetConfigurationError,
     )
 }
 
@@ -269,6 +302,12 @@ private val DefinitionFetchError.wireName: String
     get() = when (this) {
         DefinitionFetchError.NOT_CONFIGURED -> "definition_not_configured"
         DefinitionFetchError.INVALID_URL_TEMPLATE -> "definition_invalid_url_template"
+        DefinitionFetchError.KEY_SET_INVALID_URL_TEMPLATE -> "definition_key_set_invalid_url_template"
+        DefinitionFetchError.INVALID_KEY_SET -> "definition_invalid_key_set"
+        DefinitionFetchError.KEY_SET_NOT_CONFIGURED -> "definition_key_set_not_configured"
+        DefinitionFetchError.KEY_SET_HTTP_ERROR -> "definition_key_set_http_error"
+        DefinitionFetchError.KEY_SET_HASH_MISMATCH -> "definition_key_set_hash_mismatch"
+        DefinitionFetchError.KEY_SET_PAYLOAD_TOO_LARGE -> "definition_key_set_payload_too_large"
         DefinitionFetchError.HTTP_ERROR -> "definition_http_error"
         DefinitionFetchError.HASH_MISMATCH -> "definition_hash_mismatch"
         DefinitionFetchError.DECODE_ERROR -> "definition_decode_error"

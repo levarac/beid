@@ -22,6 +22,57 @@ class RegistryClientTest {
         assertInvalidDefinitionTemplate("http://127.0.0.1:8545/{definitionHash}")
     }
 
+    @Test
+    fun missingEventKeySetUrlTemplateSurfacesATypedConfigurationError() = runTest {
+        val client = requireNotNull(
+            createSepoliaRegistryClient(
+                readerAddressHex = RegistryTestFixtures.READER,
+                etherscanApiKey = null,
+                definitionUrlTemplate = "https://defs.example/{definitionHash}",
+            ),
+        )
+        val resolution = CompletableDeferred<EventDefinitionResolution>()
+        try {
+            client.resolveEventDefinition(
+                eventIdHex = "0x" + "01".repeat(32),
+                pin = safeRegistryReadPin(),
+                useTimeEpochSeconds = 150L,
+            ) { resolution.complete(it) }
+
+            val result = resolution.await()
+            assertFalse(result.isSuccess)
+            assertEquals("definition_key_set_not_configured", result.errorCode)
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
+    fun invalidEventKeySetUrlTemplateSurfacesATypedConfigurationError() = runTest {
+        val client = requireNotNull(
+            createSepoliaRegistryClient(
+                readerAddressHex = RegistryTestFixtures.READER,
+                etherscanApiKey = null,
+                definitionUrlTemplate = "https://defs.example/{definitionHash}",
+                eventKeySetUrlTemplate = "http://keys.example/{keySetDigest}",
+            ),
+        )
+        val resolution = CompletableDeferred<EventDefinitionResolution>()
+        try {
+            client.resolveEventDefinition(
+                eventIdHex = "0x" + "01".repeat(32),
+                pin = safeRegistryReadPin(),
+                useTimeEpochSeconds = 150L,
+            ) { resolution.complete(it) }
+
+            val result = resolution.await()
+            assertFalse(result.isSuccess)
+            assertEquals("definition_key_set_invalid_url_template", result.errorCode)
+        } finally {
+            client.close()
+        }
+    }
+
     private suspend fun assertInvalidDefinitionTemplate(template: String) {
         val client = requireNotNull(
             createSepoliaRegistryClient(

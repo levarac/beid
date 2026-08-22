@@ -85,6 +85,7 @@ class LocalAnvilEventRegistryIntegrationTest {
         val eventId = requiredEnvironment("BEID_EVENT_ID_HEX").decodeHex(expectedBytes = 32)
         val expectedCbor = requiredEnvironment("BEID_EXPECTED_CBOR_HEX").decodeHex()
         val signedDefinition = requiredEnvironment("BEID_SIGNED_DEFINITION_HEX").decodeHex()
+        val eventKeySet = requiredEnvironment("BEID_EVENT_KEY_SET_HEX").decodeHex()
 
         runBlocking {
             val primary = JsonRpcEthCallAdapter(
@@ -107,7 +108,10 @@ class LocalAnvilEventRegistryIntegrationTest {
             val resolved = resolver.resolve(eventId, safeRegistryReadPin())
             assertContentEquals(expectedCbor, resolved.rawCbor)
             val record = requireNotNull(resolved.context.definitionAt(0))
-            assertEquals(record.definitionDigestHex, Sha256.digest(signedDefinition).toPrefixedHex())
+            assertEquals(
+                record.definitionDigestHex,
+                EventDefinitionCborCodec.eventDefinitionDigest(signedDefinition).toPrefixedHex(),
+            )
 
             val server = HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
             server.createContext("/") { exchange ->
@@ -127,13 +131,15 @@ class LocalAnvilEventRegistryIntegrationTest {
                     transport = createPlatformRegistryHttpTransport(),
                 ).fetch(
                     eventId = eventId,
+                    registration = resolved.context.registration,
                     record = record,
                     selectedAt = record.validFrom,
+                    encodedEventKeySet = eventKeySet,
                 )
                 assertEquals(eventId.toPrefixedHex(), context.eventIdHex)
                 assertEquals(record.definitionDigestHex, context.definitionHashHex)
-                assertEquals(record.validFrom, context.definition.validFrom)
-                assertEquals(record.validUntil, context.definition.validUntil)
+                assertEquals(record.validFrom, context.validFrom.value)
+                assertEquals(record.validUntil, context.validUntil.value)
             } finally {
                 server.stop(0)
             }
