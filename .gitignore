@@ -11,6 +11,3 @@ local.properties
 
 # Materialized per-checkout by scripts/lint.sh from lint/baseline.template.json
 .swiftlint-baseline.json
-
-# WalletConnect (Reown) project ID — see ios/Secrets.example.plist
-ios/Beid/Secrets.plist

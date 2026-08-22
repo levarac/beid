@@ -94,8 +94,8 @@ final class AppCoordinator: ObservableObject {
     }
   }
 
-  /// `address` is supplied by the real WalletConnect (Reown) pairing flow
-  /// (`WalletConnectPairingView`) once a session settles.
+  /// `address` is supplied by `WalletConnectPairingView` (Coinbase or
+  /// MetaMask) once a session settles.
   func completeWalletConnect(address: String, connector: (any WalletConnector)? = nil) {
     recordWalletConnection(address: address, connector: connector)
     screen = .bluetoothPermission
@@ -220,14 +220,15 @@ final class AppCoordinator: ObservableObject {
     walletConnectSheetPresented = true
   }
 
-  /// Clears the connected address and resets `ReownWalletConnectClient`'s
-  /// local state back to `.idle`, so reopening the pairing sheet shows the
-  /// "Connect Wallet" button again instead of a stale `.connected` screen.
-  /// Does not tear down the underlying WalletConnect session with the
+  /// Clears the connected address and resets the recorded connector's local
+  /// state back to `.idle` (falling back to `CoinbaseWalletConnector` when
+  /// no connector was ever recorded), so reopening the pairing sheet shows
+  /// the "Connect Wallet" button again instead of a stale `.connected`
+  /// screen. Does not tear down the underlying wallet session with the
   /// wallet (session teardown is out of scope for this slice).
   func disconnectWallet() {
     walletAddress = nil
-    (walletConnector ?? ReownWalletConnectClient.shared).disconnect()
+    (walletConnector ?? CoinbaseWalletConnector.shared).disconnect()
     walletConnector = nil
   }
 
