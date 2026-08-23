@@ -29,11 +29,18 @@ enum RegistryDependencies {
     let nonEmptyEventKeySetURLTemplate = eventKeySetURLTemplate?.isEmpty == false
       ? eventKeySetURLTemplate
       : nil
+    let eventCodeLookupURLTemplate = bundle.object(
+      forInfoDictionaryKey: "BeidEventCodeLookupURLTemplate"
+    ) as? String
+    let nonEmptyEventCodeLookupURLTemplate = eventCodeLookupURLTemplate?.isEmpty == false
+      ? eventCodeLookupURLTemplate
+      : nil
     return ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClient(
       readerAddressHex: readerAddress,
       etherscanApiKey: nonEmptyApiKey,
       definitionUrlTemplate: nonEmptyDefinitionTemplate,
-      eventKeySetUrlTemplate: nonEmptyEventKeySetURLTemplate
+      eventKeySetUrlTemplate: nonEmptyEventKeySetURLTemplate,
+      eventCodeLookupUrlTemplate: nonEmptyEventCodeLookupURLTemplate
     )
   }
 }

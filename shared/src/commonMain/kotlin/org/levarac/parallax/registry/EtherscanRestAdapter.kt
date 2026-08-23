@@ -197,7 +197,7 @@ internal class EtherscanRestAdapter(
     }
 }
 
-private fun percentEncode(value: String): String = buildString {
+internal fun percentEncode(value: String): String = buildString {
     val unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
     for (byte in value.encodeToByteArray()) {
         val unsigned = byte.toInt() and 0xff

@@ -146,3 +146,24 @@ public class DefinitionFetchException(
     message: String,
     cause: Throwable? = null,
 ) : IllegalArgumentException(message, cause)
+
+/**
+ * Failure modes for [EventCodeLookupFetcher] (beid#258 P1-1 interim
+ * mechanism). This lookup is a routing hint, not a trust boundary — its
+ * result is only ever used as an input to [RegistryClient.resolveEventDefinition],
+ * which independently verifies it on-chain. See dispatch#21 for the durable,
+ * cryptographically-bound replacement.
+ */
+public enum class EventCodeLookupError {
+    NOT_CONFIGURED,
+    INVALID_URL_TEMPLATE,
+    HTTP_ERROR,
+    NOT_FOUND,
+    INVALID_RESPONSE,
+}
+
+public class EventCodeLookupException(
+    public val reason: EventCodeLookupError,
+    message: String,
+    cause: Throwable? = null,
+) : IllegalArgumentException(message, cause)

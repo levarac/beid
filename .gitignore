@@ -11,3 +11,10 @@ local.properties
 
 # Materialized per-checkout by scripts/lint.sh from lint/baseline.template.json
 .swiftlint-baseline.json
+
+# WalletConnect (Reown) project ID — see ios/Secrets.example.plist
+ios/Beid/Secrets.plist
+
+# xcodemake build-acceleration cache (tool-generated, machine-local)
+ios/Makefile
+ios/xcodemake_*.log

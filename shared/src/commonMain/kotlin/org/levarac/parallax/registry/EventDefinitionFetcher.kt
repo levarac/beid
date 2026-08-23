@@ -1,6 +1,10 @@
 package org.levarac.parallax.registry
 
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Validated URL template for signed definitions.
@@ -46,6 +50,33 @@ public fun createEventKeySetUrlTemplate(
     description = "EventKeySet",
     allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
 ) { EventKeySetUrlTemplate(it) }
+
+/**
+ * Validated URL template for the interim operator-hosted event-code lookup
+ * (beid#258 P1-1). The single substitution is the normalized (trimmed,
+ * lowercased — [normalizedEventCodeOrNull]) event code, percent-encoded.
+ * This lookup is a convenience routing hint, not a trust boundary: its
+ * result is only ever consumed as an input to
+ * [RegistryClient.resolveEventDefinition], which independently verifies it
+ * on-chain. See dispatch#21 for the durable, cryptographically-bound
+ * replacement.
+ */
+public class EventCodeLookupUrlTemplate internal constructor(
+    private val template: String,
+) {
+    internal fun urlFor(normalizedCode: String): String =
+        template.replace(EVENT_CODE_PLACEHOLDER, percentEncode(normalizedCode))
+}
+
+public fun createEventCodeLookupUrlTemplate(
+    template: String,
+    allowInsecureLoopbackForTests: Boolean = false,
+): EventCodeLookupUrlTemplate? = createUrlTemplate(
+    template = template,
+    placeholder = EVENT_CODE_PLACEHOLDER,
+    description = "event code lookup",
+    allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
+) { EventCodeLookupUrlTemplate(it) }
 
 private fun <T> createUrlTemplate(
     template: String,
@@ -177,6 +208,77 @@ internal class InMemoryEventKeySetCache(
     }
 }
 
+/**
+ * Fetches the registry Event ID mapped to a normalized event code from the
+ * deployment-configured operator lookup endpoint (beid#258 P1-1 interim
+ * mechanism). No caching: this runs once per join attempt, not per window.
+ */
+internal class EventCodeLookupFetcher(
+    private val template: EventCodeLookupUrlTemplate,
+    private val transport: RegistryHttpTransport,
+) {
+    internal suspend fun fetch(normalizedCode: String): String {
+        val response = try {
+            transport.execute(
+                RegistryHttpRequest(
+                    method = "GET",
+                    url = template.urlFor(normalizedCode),
+                    headers = mapOf("Accept" to "application/json"),
+                ),
+            )
+        } catch (error: RegistryTransportTimeoutException) {
+            throw EventCodeLookupException(
+                EventCodeLookupError.HTTP_ERROR,
+                "event code lookup request timed out",
+                error,
+            )
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            throw EventCodeLookupException(
+                EventCodeLookupError.HTTP_ERROR,
+                "event code lookup request failed",
+                error,
+            )
+        }
+        if (response.statusCode == 404) {
+            throw EventCodeLookupException(
+                EventCodeLookupError.NOT_FOUND,
+                "no event is registered for this code",
+            )
+        }
+        if (response.statusCode !in 200..299) {
+            throw EventCodeLookupException(
+                EventCodeLookupError.HTTP_ERROR,
+                "event code lookup returned HTTP ${response.statusCode}",
+            )
+        }
+        val eventIdHex = try {
+            Json.parseToJsonElement(response.body).jsonObject["eventId"]
+                ?.let { it as? JsonPrimitive }
+                ?.contentOrNull
+        } catch (error: Throwable) {
+            throw EventCodeLookupException(
+                EventCodeLookupError.INVALID_RESPONSE,
+                "event code lookup response is not valid JSON",
+                error,
+            )
+        } ?: throw EventCodeLookupException(
+            EventCodeLookupError.INVALID_RESPONSE,
+            "event code lookup response is missing eventId",
+        )
+        return try {
+            eventIdHex.decodeHex(expectedBytes = 32).toPrefixedHex()
+        } catch (error: IllegalArgumentException) {
+            throw EventCodeLookupException(
+                EventCodeLookupError.INVALID_RESPONSE,
+                "event code lookup response eventId is not a valid 32-byte hex value",
+                error,
+            )
+        }
+    }
+}
+
 internal class SignedDefinitionFetcher(
     private val template: DefinitionUrlTemplate,
     private val transport: RegistryHttpTransport,
@@ -267,3 +369,4 @@ private const val EVENT_KEY_SET_DIGEST_BYTES: Int = 32
 private const val EVENT_KEY_SET_MEDIA_TYPE: String =
     "application/vnd.levarac.event-key-set+cbor"
 internal const val MAX_EVENT_KEY_SET_PAYLOAD_BYTES: Int = 64 * 1_024
+private const val EVENT_CODE_PLACEHOLDER: String = "{code}"

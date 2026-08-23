@@ -6,6 +6,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.reinterpret
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSProcessInfo
 
 @OptIn(ExperimentalForeignApi::class)
 internal actual fun readVectorResource(path: String): String {
@@ -26,8 +27,33 @@ internal actual fun readVectorResource(path: String): String {
     val processedResourcePath = target?.let {
         "${NSBundle.mainBundle.bundlePath}/../../../processedResources/$it/test/$path"
     }
-    val data = listOfNotNull(bundleResourcePath, processedResourcePath)
+    // Kotlin/Native's standalone test executable does not create an NSBundle
+    // for commonTest resources. Keep the fixture in its canonical
+    // commonTest/resources location and walk from both the simulator's
+    // working directory and the test executable path. The latter remains
+    // stable even when XCTest changes the process working directory.
+    val sourceRoots = listOfNotNull(
+        NSFileManager.defaultManager.currentDirectoryPath,
+        NSProcessInfo.processInfo.arguments.firstOrNull()?.toString(),
+        NSBundle.mainBundle.bundlePath,
+    )
+    val sourceResourcePaths = sourceRoots.flatMap { root ->
+        buildList {
+            var directory: String? = root.let { value ->
+                if (value.endsWith('/')) value.trimEnd('/') else value.substringBeforeLast('/')
+            }
+            repeat(16) {
+                val base = directory ?: return@repeat
+                add("$base/src/commonTest/resources/$path")
+                add("$base/shared/src/commonTest/resources/$path")
+                val parent = base.substringBeforeLast('/')
+                directory = if (parent.isEmpty() || parent == base) null else parent
+            }
+        }
+    }.distinct()
+    val data = (listOfNotNull(bundleResourcePath, processedResourcePath) + sourceResourcePaths)
         .asSequence()
+        .distinct()
         .mapNotNull { NSFileManager.defaultManager.contentsAtPath(it) }
         .firstOrNull()
         ?: error("unable to read test resource: $path")

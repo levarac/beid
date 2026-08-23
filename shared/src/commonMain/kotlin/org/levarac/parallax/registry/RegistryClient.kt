@@ -28,6 +28,19 @@ public class EventDefinitionResolution internal constructor(
     public val errorMessage: String?,
 )
 
+/**
+ * Result of [RegistryClient.resolveEventId] — a routing hint, not a trust
+ * boundary. [eventIdHex] still requires [RegistryClient.resolveEventDefinition]
+ * to be trusted for anything (beid#258 P1-1; dispatch#21 tracks the durable
+ * replacement).
+ */
+public class EventIdLookupResolution internal constructor(
+    public val isSuccess: Boolean,
+    public val eventIdHex: String?,
+    public val errorCode: String?,
+    public val errorMessage: String?,
+)
+
 public class RegistryRequest internal constructor(private val job: Job) {
     public fun cancel() {
         job.cancel()
@@ -41,6 +54,8 @@ public class RegistryClient internal constructor(
     private val definitionConfigurationError: DefinitionFetchException? = null,
     private val eventKeySetFetcher: EventKeySetFetcher? = null,
     private val eventKeySetConfigurationError: DefinitionFetchException? = null,
+    private val eventCodeLookupFetcher: EventCodeLookupFetcher? = null,
+    private val eventCodeLookupConfigurationError: EventCodeLookupException? = null,
 ) {
     public fun resolve(
         eventIdHex: String,
@@ -210,6 +225,62 @@ public class RegistryClient internal constructor(
         return RegistryRequest(job)
     }
 
+    /**
+     * Resolves a normalized event code (see `normalizedEventCodeOrNull`) to the
+     * registry's canonical Event ID via the deployment-configured operator
+     * lookup endpoint (beid#258 P1-1 interim mechanism). This is a routing
+     * hint only, never a trust boundary: callers must still pass the returned
+     * ID through [resolveEventDefinition], which independently verifies it
+     * on-chain and against the authority signature before trusting anything
+     * derived from it. See dispatch#21 for the durable, cryptographically-bound
+     * replacement.
+     */
+    public fun resolveEventId(
+        code: String,
+        completion: (EventIdLookupResolution) -> Unit,
+    ): RegistryRequest {
+        val job = scope.launch {
+            val resolution = try {
+                val fetcher = eventCodeLookupFetcher ?: run {
+                    throw eventCodeLookupConfigurationError ?: EventCodeLookupException(
+                        EventCodeLookupError.NOT_CONFIGURED,
+                        "event code lookup URL template is not configured",
+                    )
+                }
+                val eventIdHex = fetcher.fetch(code)
+                EventIdLookupResolution(
+                    isSuccess = true,
+                    eventIdHex = eventIdHex,
+                    errorCode = null,
+                    errorMessage = null,
+                )
+            } catch (error: CancellationException) {
+                EventIdLookupResolution(
+                    isSuccess = false,
+                    eventIdHex = null,
+                    errorCode = RegistryErrorCode.CANCELLED.wireName,
+                    errorMessage = "event code lookup was cancelled",
+                )
+            } catch (error: EventCodeLookupException) {
+                EventIdLookupResolution(
+                    isSuccess = false,
+                    eventIdHex = null,
+                    errorCode = error.reason.wireName,
+                    errorMessage = error.message,
+                )
+            } catch (_: Throwable) {
+                EventIdLookupResolution(
+                    isSuccess = false,
+                    eventIdHex = null,
+                    errorCode = RegistryErrorCode.PROTOCOL_ERROR.wireName,
+                    errorMessage = "event code lookup failed",
+                )
+            }
+            completion(resolution)
+        }
+        return RegistryRequest(job)
+    }
+
     public fun close() {
         scope.cancel()
     }
@@ -224,6 +295,7 @@ public fun createSepoliaRegistryClient(
     etherscanApiKey: String?,
     definitionUrlTemplate: String? = null,
     eventKeySetUrlTemplate: String? = null,
+    eventCodeLookupUrlTemplate: String? = null,
 ): RegistryClient? {
     if (readerAddressHex.isBlank()) return null
     val readerAddress = try {
@@ -234,6 +306,7 @@ public fun createSepoliaRegistryClient(
     val transport = createPlatformRegistryHttpTransport()
     var definitionConfigurationError: DefinitionFetchException? = null
     var eventKeySetConfigurationError: DefinitionFetchException? = null
+    var eventCodeLookupConfigurationError: EventCodeLookupException? = null
     val definitionFetcher = definitionUrlTemplate
         ?.takeIf { it.isNotBlank() }
         ?.let { template ->
@@ -260,6 +333,20 @@ public fun createSepoliaRegistryClient(
                 null
             } else {
                 EventKeySetFetcher(validated, transport)
+            }
+        }
+    val eventCodeLookupFetcher = eventCodeLookupUrlTemplate
+        ?.takeIf { it.isNotBlank() }
+        ?.let { template ->
+            val validated = createEventCodeLookupUrlTemplate(template)
+            if (validated == null) {
+                eventCodeLookupConfigurationError = EventCodeLookupException(
+                    EventCodeLookupError.INVALID_URL_TEMPLATE,
+                    "event code lookup URL template is invalid",
+                )
+                null
+            } else {
+                EventCodeLookupFetcher(validated, transport)
             }
         }
     val primary = JsonRpcEthCallAdapter(
@@ -295,6 +382,8 @@ public fun createSepoliaRegistryClient(
         definitionConfigurationError = definitionConfigurationError,
         eventKeySetFetcher = eventKeySetFetcher,
         eventKeySetConfigurationError = eventKeySetConfigurationError,
+        eventCodeLookupFetcher = eventCodeLookupFetcher,
+        eventCodeLookupConfigurationError = eventCodeLookupConfigurationError,
     )
 }
 
@@ -314,6 +403,15 @@ private val DefinitionFetchError.wireName: String
         DefinitionFetchError.EVENT_ID_MISMATCH -> "definition_event_id_mismatch"
         DefinitionFetchError.VALIDITY_MISMATCH -> "definition_validity_mismatch"
         DefinitionFetchError.PAYLOAD_TOO_LARGE -> "definition_payload_too_large"
+    }
+
+private val EventCodeLookupError.wireName: String
+    get() = when (this) {
+        EventCodeLookupError.NOT_CONFIGURED -> "event_code_lookup_not_configured"
+        EventCodeLookupError.INVALID_URL_TEMPLATE -> "event_code_lookup_invalid_url_template"
+        EventCodeLookupError.HTTP_ERROR -> "event_code_lookup_http_error"
+        EventCodeLookupError.NOT_FOUND -> "event_code_lookup_not_found"
+        EventCodeLookupError.INVALID_RESPONSE -> "event_code_lookup_invalid_response"
     }
 
 private const val SEPOLIA_CHAIN_ID: Long = 11_155_111L

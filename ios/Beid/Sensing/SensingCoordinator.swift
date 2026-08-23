@@ -97,6 +97,10 @@ final class SensingCoordinator: ObservableObject {
   /// `startSensing(eventCode:)` once the user has joined manually via
   /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
   @Published private(set) var joinedEventCode: String?
+  /// Canonical registry Event ID resolved for `joinedEventCode`, when the
+  /// caller has already completed the verified registry lookup. Event codes
+  /// are not sufficient to derive this value locally.
+  @Published private(set) var joinedCanonicalEventIdHex: String?
   /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
   /// played for the current session. Lives here rather than as view-local
   /// `@State` because `.recording` can be interrupted by `.signalLost` and
@@ -245,6 +249,7 @@ final class SensingCoordinator: ObservableObject {
 
   private let engine = BarnardEngine()
   private let sensingCryptography: any SensingCryptography
+  private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private var windowReportStore: WindowReportStore
   private var unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
@@ -327,13 +332,16 @@ final class SensingCoordinator: ObservableObject {
   /// why the whole raw detection is queued rather than only its
   /// store-touching calls.
   private var queuedDetectionsWhileLoading:
-    [(enin: Int, rpid: String, detectedDisplayId: String?)] = []
+    [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?)] = []
   /// Decision 1's background load/reconcile task (`beginLedgerLoad(...)`).
   /// Held so tests can deterministically await it
   /// (`waitForLedgerLoadToFinish()`), mirroring `demoTask`/
   /// `waitForDemoSequenceToFinish()` below.
   private var ledgerLoadTask: Task<Void, Never>?
   private var demoTask: Task<Void, Never>?
+  /// Canonical Event ID carried from the verified join result until the first
+  /// real event session is established. It is never derived from event code.
+  private var pendingCanonicalEventIdHex: String?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
   /// `advanceWindowBookkeepingIfNeeded`-derived `firstWindowEnin`/
@@ -422,6 +430,7 @@ final class SensingCoordinator: ObservableObject {
   /// the range.
   private var lastWindowEnin: Int?
   private var currentWindowRpids: Set<String> = []
+  private var currentWindowReporterRpid: String?
   /// beid#114: whether the currently tracked window (`currentWindowId`) has
   /// had its ledger-runtime `openWindow` effect run yet — i.e. whether this
   /// window is eligible to be signed and durably persisted (via
@@ -494,7 +503,19 @@ final class SensingCoordinator: ObservableObject {
   }
   #endif
 
-  convenience init() {
+  convenience init(
+    registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
+      RegistryDependencies.createClient()
+  ) {
+    let sensingCryptography = BarnardSensingCryptography()
+    let allowInsecureLoopbackForTests: Bool
+    #if DEBUG
+    allowInsecureLoopbackForTests = ProcessInfo.processInfo.environment[
+      "BEID_RUN_OPERATOR_SUBMISSION_TEST"
+    ] == "1"
+    #else
+    allowInsecureLoopbackForTests = false
+    #endif
     self.init(
       windowReportFileURL: nil,
       selfProofFileURL: nil,
@@ -502,7 +523,17 @@ final class SensingCoordinator: ObservableObject {
       bindingRecordFileURL: nil,
       sessionAggregateSnapshotFileURL: nil,
       unsentWindowLedgerFileURL: nil,
-      sensingCryptography: BarnardSensingCryptography()
+      sensingCryptography: sensingCryptography,
+      reportSubmissionRuntime: ReportSubmissionRuntime.makeIfEnabled(
+        eventSigningCryptography: sensingCryptography,
+        definitionProvider: registryClient.map {
+          RegistryEventDefinitionContextProvider(
+            client: $0,
+            allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
+          )
+        },
+        allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
+      )
     )
   }
 
@@ -519,7 +550,8 @@ final class SensingCoordinator: ObservableObject {
   /// proves the queue/drain mechanism itself, not a stand-in for it.
   convenience init(
     loadingFromDirectory directory: URL,
-    sensingCryptography: any SensingCryptography
+    sensingCryptography: any SensingCryptography,
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
   ) {
     self.init(
       windowReportFileURL: directory.appendingPathComponent("window-reports.json"),
@@ -528,7 +560,8 @@ final class SensingCoordinator: ObservableObject {
       bindingRecordFileURL: directory.appendingPathComponent("binding-records.json"),
       sessionAggregateSnapshotFileURL: directory.appendingPathComponent("session-aggregate-snapshots.json"),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
-      sensingCryptography: sensingCryptography
+      sensingCryptography: sensingCryptography,
+      reportSubmissionRuntime: reportSubmissionRuntime
     )
   }
 
@@ -556,7 +589,8 @@ final class SensingCoordinator: ObservableObject {
     bindingRecordFileURL: URL?,
     sessionAggregateSnapshotFileURL: URL?,
     unsentWindowLedgerFileURL: URL?,
-    sensingCryptography: any SensingCryptography
+    sensingCryptography: any SensingCryptography,
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
   ) {
     self.init(
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
@@ -566,6 +600,7 @@ final class SensingCoordinator: ObservableObject {
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: sessionAggregateSnapshotFileURL),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
+      reportSubmissionRuntime: reportSubmissionRuntime,
       initialLedgerFailure: nil
     )
     // Only this initializer chain is actually loading — see
@@ -658,6 +693,7 @@ final class SensingCoordinator: ObservableObject {
       self.reconcileSelfProofCheckpointIfNeeded()
       self.logOwnerKeyRegenerationSignalsIfNeeded()
       self.isLedgerLoading = false
+      self.reportSubmissionRuntime?.submitPending()
       self.drainQueuedDetectionsAfterLoad()
     }
   }
@@ -693,7 +729,8 @@ final class SensingCoordinator: ObservableObject {
     bindingRecordStore: BindingRecordStore,
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
     unsentWindowLedgerFileURL: URL,
-    sensingCryptography: any SensingCryptography
+    sensingCryptography: any SensingCryptography,
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
   ) {
     guard
       let store = try? UnsentWindowLedgerStore(fileURL: unsentWindowLedgerFileURL),
@@ -708,7 +745,8 @@ final class SensingCoordinator: ObservableObject {
       bindingRecordStore: bindingRecordStore,
       sessionAggregateSnapshotStore: sessionAggregateSnapshotStore,
       unsentWindowLedgerRuntime: runtime,
-      sensingCryptography: sensingCryptography
+      sensingCryptography: sensingCryptography,
+      reportSubmissionRuntime: reportSubmissionRuntime
     )
   }
 
@@ -720,6 +758,7 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
     initialLedgerFailure: Error? = nil
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
@@ -750,6 +789,7 @@ final class SensingCoordinator: ObservableObject {
     self.sessionAggregateSnapshotStore = sessionAggregateSnapshotStore
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
+    self.reportSubmissionRuntime = reportSubmissionRuntime
     if let ledgerFailure {
       ledgerHealth = .degraded(reason: ledgerFailure, since: Date())
     }
@@ -769,7 +809,8 @@ final class SensingCoordinator: ObservableObject {
       handleDetection(
         enin: detection.enin,
         rpid: detection.rpid,
-        detectedDisplayId: detection.detectedDisplayId
+        detectedDisplayId: detection.detectedDisplayId,
+        reporterRpid: detection.reporterRpid
       )
     default:
       break
@@ -788,7 +829,12 @@ final class SensingCoordinator: ObservableObject {
   /// a caller that omitted it would silently produce an observation that
   /// cannot be attributed to a device. Every caller must say what it
   /// observed.
-  func handleDetection(enin: Int, rpid: String, detectedDisplayId: String?) {
+  func handleDetection(
+    enin: Int,
+    rpid: String,
+    detectedDisplayId: String?,
+    reporterRpid: String? = nil
+  ) {
     // beid#134 Decision 1: while the background load is still recovering
     // stores, queue the whole raw detection instead of processing it —
     // every ledger-relevant native state field this function's cases would
@@ -798,20 +844,48 @@ final class SensingCoordinator: ObservableObject {
     // `docs/specs/ledger-async-io.md` §4.2.
     guard !isLedgerLoading else {
       queuedDetectionsWhileLoading.append(
-        (enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
+        (
+          enin: enin,
+          rpid: rpid,
+          detectedDisplayId: detectedDisplayId,
+          reporterRpid: reporterRpid
+        )
       )
       return
     }
     switch phase {
     case .sensing:
       let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
-      let session = EventSession(id: eventCode, name: eventCode, venue: nil)
+      let session = EventSession(
+        id: eventCode,
+        name: eventCode,
+        venue: nil,
+        canonicalEventIdHex: pendingCanonicalEventIdHex
+      )
       beginEventFoundSessionState(session)
-      observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
+      observe(
+        enin: enin,
+        rpid: rpid,
+        detectedDisplayId: detectedDisplayId,
+        reporterRpid: reporterRpid,
+        for: session
+      )
     case .eventFound(let session):
-      observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
+      observe(
+        enin: enin,
+        rpid: rpid,
+        detectedDisplayId: detectedDisplayId,
+        reporterRpid: reporterRpid,
+        for: session
+      )
     case .recording(let session, _):
-      observe(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId, for: session)
+      observe(
+        enin: enin,
+        rpid: rpid,
+        detectedDisplayId: detectedDisplayId,
+        reporterRpid: reporterRpid,
+        for: session
+      )
     case .idle, .signalLost:
       // `.signalLost` is frozen — real signal-loss *detection* doesn't
       // exist yet (only the demo-only manual trigger does), so this branch
@@ -855,8 +929,17 @@ final class SensingCoordinator: ObservableObject {
   /// reducer's *result* for this same detection, not from `phase` before the
   /// call, so the very detection that confirms the event is also the one
   /// allowed to open/use its own window immediately.
-  private func observe(enin: Int, rpid: String, detectedDisplayId: String?, for session: EventSession) {
+  private func observe(
+    enin: Int,
+    rpid: String,
+    detectedDisplayId: String?,
+    reporterRpid: String?,
+    for session: EventSession
+  ) {
     advanceWindowBookkeepingIfNeeded(enin: enin, eventCode: session.id)
+    if currentWindowReporterRpid == nil {
+      currentWindowReporterRpid = reporterRpid
+    }
     currentWindowRpids.insert(rpid)
 
     let deviceCountChanged = recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: detectedDisplayId)
@@ -1048,10 +1131,11 @@ final class SensingCoordinator: ObservableObject {
   /// (`EventCodeEntryView`) for choosing which event to sense, since there
   /// is no BLE auto-discovery yet. Returns whether the code took effect.
   @discardableResult
-  func joinEvent(_ code: String) -> Bool {
+  func joinEvent(_ code: String, canonicalEventIdHex: String? = nil) -> Bool {
     engine.joinEvent(code)
     let confirmed = engine.getCurrentEventCode()
     joinedEventCode = confirmed
+    joinedCanonicalEventIdHex = confirmed == code ? canonicalEventIdHex : nil
     return confirmed == code
   }
 
@@ -1060,11 +1144,19 @@ final class SensingCoordinator: ObservableObject {
   func leaveEvent() {
     engine.leaveEvent()
     joinedEventCode = engine.getCurrentEventCode()
+    joinedCanonicalEventIdHex = nil
   }
 
-  func startSensing(eventCode: String? = nil, demoEvent: EventSession = .demoSample) {
+  func startSensing(
+    eventCode: String? = nil,
+    eventIdHex: String? = nil,
+    demoEvent: EventSession = .demoSample
+  ) {
     let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
+    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
+    pendingCanonicalEventIdHex = canonicalEventIdHex
+    reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
       runDemoSequence(demoEvent: demoEvent, stepDelayNanos: demoStepDelayNanos)
@@ -1150,6 +1242,7 @@ final class SensingCoordinator: ObservableObject {
     }
     resetSessionState()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
+    reportSubmissionRuntime?.submitPending()
     return selfProof
   }
 
@@ -1168,7 +1261,9 @@ final class SensingCoordinator: ObservableObject {
     demoWindowEnin = 0
     demoWindowRpids = []
     currentWindowRpids = []
+    currentWindowReporterRpid = nil
     currentWindowLedgerOpened = false
+    pendingCanonicalEventIdHex = nil
     activeCommit = nil
     activeProofId = nil
     pendingBindingMessage = nil
@@ -1251,6 +1346,15 @@ final class SensingCoordinator: ObservableObject {
     switch phase {
     case .eventFound(let session), .recording(let session, _), .signalLost(let session, _):
       return session.id
+    case .idle, .sensing:
+      return nil
+    }
+  }
+
+  private var currentSessionEventIdHex: String? {
+    switch phase {
+    case .eventFound(let session), .recording(let session, _), .signalLost(let session, _):
+      return session.canonicalEventIdHex
     case .idle, .sensing:
       return nil
     }
@@ -1453,6 +1557,7 @@ final class SensingCoordinator: ObservableObject {
       firstWindowEnin = enin
     }
     currentWindowLedgerOpened = false
+    currentWindowReporterRpid = nil
     checkpointSelfProofStateIfNeeded()
   }
 
@@ -1540,13 +1645,21 @@ final class SensingCoordinator: ObservableObject {
   /// persists nothing.
   func checkpointOpenWindowForBackgrounding() {
     redeliverPendingWindowReports()
-    guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else { return }
-    guard currentWindowId != nil else { return }
+    guard let enin = currentWindowEnin, let eventCode = currentSessionEventCode else {
+      reportSubmissionRuntime?.submitPending()
+      return
+    }
+    guard currentWindowId != nil else {
+      reportSubmissionRuntime?.submitPending()
+      return
+    }
     guard currentWindowLedgerOpened else {
       clearCurrentWindowState()
+      reportSubmissionRuntime?.submitPending()
       return
     }
     closeWindow(enin: enin, eventCode: eventCode)
+    reportSubmissionRuntime?.submitPending()
   }
 
   /// Marks `ledgerHealth` degraded for an operational persist failure (as
@@ -1563,16 +1676,16 @@ final class SensingCoordinator: ObservableObject {
 
   private func clearCurrentWindowState() {
     currentWindowRpids = []
+    currentWindowReporterRpid = nil
     currentWindowEnin = nil
     currentWindowId = nil
     currentWindowObservationReference = nil
   }
 
-  /// Signs the closing window's observations with the event signing key
-  /// (no wallet, no user approval — high frequency, per the protocol model)
-  /// and queues the report locally. No transport exists yet
-  /// (`scan-protocol-model.md` §9 lists that as separate downstream work) —
-  /// this only produces and stores the signature.
+  /// Signs the legacy closing-window report with the event signing key and
+  /// queues it locally. When enabled, the canonical submission runtime is
+  /// called at the same boundary before this legacy payload is cleared or
+  /// reconstructed; it owns exact Observation bytes and HTTPS delivery.
   private func closeWindow(enin: Int, eventCode: String) {
     guard
       let commit = activeCommit,
@@ -1582,6 +1695,21 @@ final class SensingCoordinator: ObservableObject {
       clearCurrentWindowState()
       return
     }
+
+    // Snapshot every lossless input before either the legacy report path or
+    // clearCurrentWindowState() can discard the current RPID set. The new
+    // submission runtime is independent of the legacy WindowReport bytes.
+    let closingPeerRpids = currentWindowRpids
+    let closingReporterRpid = currentWindowReporterRpid
+    reportSubmissionRuntime?.captureAndQueueWindow(
+      id: currentWindowId,
+      eventCode: eventCode,
+      eventIdHex: currentSessionEventIdHex,
+      enin: enin,
+      peerRpids: closingPeerRpids,
+      reporterRpid: closingReporterRpid,
+      participantCommitment: commit
+    )
 
     let observationReference: String
     if let currentWindowObservationReference {
@@ -1593,7 +1721,7 @@ final class SensingCoordinator: ObservableObject {
       let payload = windowReportPayload(
         eventCode: eventCode,
         enin: enin,
-        peerRpids: currentWindowRpids,
+        peerRpids: closingPeerRpids,
         commit: commit
       )
       let signature = sensingCryptography.signWindowReport(eventCode: eventCode, bytes: payload)
@@ -1601,7 +1729,7 @@ final class SensingCoordinator: ObservableObject {
         id: currentWindowId,
         eventCode: eventCode,
         enin: enin,
-        peerCount: currentWindowRpids.count,
+        peerCount: closingPeerRpids.count,
         commit: commit,
         signature: signature
       )
@@ -1915,6 +2043,12 @@ final class SensingCoordinator: ObservableObject {
 
   func runDemoSequence(demoEvent: EventSession, stepDelayNanos: UInt64 = 700_000_000) {
     demoTask?.cancel()
+    let session = EventSession(
+      id: demoEvent.id,
+      name: demoEvent.name,
+      venue: demoEvent.venue,
+      canonicalEventIdHex: demoEvent.canonicalEventIdHex ?? pendingCanonicalEventIdHex
+    )
     // `applyPhaseDecision`'s shared reducer only transitions `.sensing ->
     // .eventFound` (or straight through to `.recording`) when
     // `currentPhaseKind` reads `.SENSING` — unlike the old direct-call
@@ -1932,7 +2066,7 @@ final class SensingCoordinator: ObservableObject {
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
       guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-      self.beginEventFoundSessionState(demoEvent)
+      self.beginEventFoundSessionState(session)
       // Device #1: `phase` is `.sensing` (set by `startSensing()` before
       // this task was created), and this is the session's very first
       // observation, so `distinctDeviceCountChanged` is always `true` —
@@ -1947,7 +2081,7 @@ final class SensingCoordinator: ObservableObject {
       self.applyPhaseDecision(
         coPresentDeviceCount: self.demoWindowRpids.count,
         distinctDeviceCountChanged: true,
-        for: demoEvent
+        for: session
       )
       // Window boundary right after device #1, matching the exact
       // `advanceDemoWindow()` call-site position the old
@@ -1986,7 +2120,7 @@ final class SensingCoordinator: ObservableObject {
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
           distinctDeviceCountChanged: changed,
-          for: demoEvent
+          for: session
         )
       }
       self.advanceDemoWindow()
@@ -1997,7 +2131,7 @@ final class SensingCoordinator: ObservableObject {
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
           distinctDeviceCountChanged: changed,
-          for: demoEvent
+          for: session
         )
         self.advanceDemoWindow()
       }
@@ -2095,7 +2229,8 @@ final class SensingCoordinator: ObservableObject {
       handleDetection(
         enin: detection.enin,
         rpid: detection.rpid,
-        detectedDisplayId: detection.detectedDisplayId
+        detectedDisplayId: detection.detectedDisplayId,
+        reporterRpid: detection.reporterRpid
       )
     }
   }
