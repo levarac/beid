@@ -134,6 +134,25 @@ the same name shadows them.
   the host is arm64. If a link error names an architecture that no simulator
   on the host actually uses, inspect the destination before changing code or
   dependency symbols. See `ios/README.md` for the command form.
+- **Erase the Simulator before a run whose failures you intend to interpret.**
+  State accumulates across runs — completed onboarding, `UserDefaults`, an
+  existing `ProofStore` — and a dirty device produces failures that look like
+  code defects and reproduce consistently enough to be mistaken for them.
+  Observed 2026-08-21 on gh#250: two tests failed on the working simulator,
+  were analyzed as pre-existing and unrelated (no diff touched either file),
+  and both passed after `xcrun simctl erase`. The same two failure classes
+  appear in PR #258's verification notes, from different work on the same
+  host, traced to the same cause. **Absence of a code diff rules out a
+  code-caused regression; it does not rule out an environment-caused
+  failure.** Before concluding "pre-existing", ask what else produces this
+  failure — and say which simulator state each reported number came from,
+  because a test count means nothing without it. Note that #244 (UI-test
+  `ProofStore` contamination) is a *within-run* instance of the same family.
+- **`xcode-select` may point at CommandLineTools, breaking `simctl` and
+  `xcodebuild` with no obvious connection to your change.** Do not
+  `sudo xcode-select -s` — that is a host-wide change affecting every
+  worktree and session. Pass `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
+  per invocation instead (verified 2026-08-21).
 - **Resolve a supported local JDK through
   `scripts/resolve_kmp_java_home.sh`.** Canonical commands must not hardcode a
   machine path. The resolver accepts a supported `KMP_JAVA_HOME`, then tries

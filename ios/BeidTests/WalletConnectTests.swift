@@ -5,36 +5,13 @@ import Combine
 import XCTest
 @testable import Beid
 
-/// Covers the graceful-degradation path (no Secrets.plist/project ID) and
-/// the coordinator wiring around the real WalletConnect (Reown) flow. Does
-/// not exercise `ReownWalletConnectClient.connect()` itself — that requires
-/// a live relay connection and a real Reown Cloud project ID, neither of
-/// which are available in CI; see ios/README.md "WalletConnect".
+/// Covers the `AppCoordinator` wiring around wallet connect/disconnect, and
+/// the `CoinbaseWalletConnector`/`MetaMaskConnector` implementations of
+/// `WalletConnector` against fake transports. Does not exercise either
+/// SDK's real handshake — that requires a live wallet app installed on a
+/// device; see docs/field-test-procedure.md.
 @MainActor
 final class WalletConnectTests: XCTestCase {
-  func testReownClientConformsToWalletConnector() {
-    assertWalletConnector(ReownWalletConnectClient.shared)
-  }
-
-  func testProjectIdIsNilWithoutSecretsPlist() throws {
-    // On a fresh checkout (and in CI) `Beid/Secrets.plist` doesn't exist —
-    // it's gitignored. This documents that WalletConnectSecrets degrades to
-    // nil rather than crashing, which is what lets the pairing UI reach
-    // `.notConfigured` instead of the app failing to build or launch. Skips
-    // on a dev machine that has installed its own Secrets.plist per the
-    // README's setup instructions — this assertion is only meaningful when
-    // no project ID is present.
-    try XCTSkipIf(WalletConnectSecrets.projectId != nil, "Secrets.plist with a project ID is installed on this machine")
-    XCTAssertNil(WalletConnectSecrets.projectId)
-  }
-
-  func testClientReachesNotConfiguredWithoutProjectId() throws {
-    try XCTSkipIf(WalletConnectSecrets.projectId != nil, "Secrets.plist with a project ID is installed on this machine")
-    let client = ReownWalletConnectClient.shared
-    client.configureIfNeeded()
-    XCTAssertEqual(client.state, .notConfigured)
-  }
-
   func testCompleteWalletConnectSetsAddressAndAdvancesScreen() {
     let coordinator = AppCoordinator()
     coordinator.completeWalletConnect(address: "0xREALADDRESS")
@@ -51,18 +28,18 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertNil(coordinator.walletAddress)
   }
 
-  func testDisconnectWalletClearsAddressAndResetsClient() throws {
-    try XCTSkipIf(WalletConnectSecrets.projectId != nil, "Secrets.plist with a project ID is installed on this machine")
+  func testDisconnectWalletClearsAddressAndResetsFallbackConnector() {
     let coordinator = AppCoordinator()
     coordinator.walletAddress = "0xREALADDRESS"
 
     coordinator.disconnectWallet()
 
     XCTAssertNil(coordinator.walletAddress)
-    // Without a project ID the shared client never leaves .notConfigured,
-    // so reset() is a documented no-op here — this asserts it doesn't
-    // crash or otherwise misbehave when called on an unconfigured client.
-    XCTAssertEqual(ReownWalletConnectClient.shared.state, .notConfigured)
+    // No connector was ever recorded on this coordinator, so
+    // disconnectWallet() falls back to CoinbaseWalletConnector.shared —
+    // this asserts that fallback doesn't crash and leaves the singleton
+    // idle.
+    XCTAssertEqual(CoinbaseWalletConnector.shared.state, .idle)
   }
 
   func testCoinbaseConnectDoesNotStartHandshakeWhenWalletIsMissing() async {
@@ -203,10 +180,6 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertEqual(connector.state, .idle)
     XCTAssertNil(connector.address)
     XCTAssertEqual(connector.chainId, "eip155:1")
-  }
-
-  private func assertWalletConnector<C: WalletConnector>(_ connector: C) {
-    _ = connector
   }
 }
 

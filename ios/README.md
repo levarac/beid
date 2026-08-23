@@ -127,99 +127,28 @@ Flip the flag and rebuild to demo the other order — `OnboardingFlagTests`
 exercises both branches (the inapplicable one self-skips via `XCTSkip`
 rather than being commented out, so both stay compiled and typo-checked).
 
-The wallet step uses the real WalletConnect (Reown) pairing flow — see
-"WalletConnect" below.
+The wallet step uses direct app-to-app wallet connections (Coinbase Wallet
+and MetaMask) — see "WalletConnect" below.
 
 ## WalletConnect
 
 `WalletConnectView` (onboarding) and the Account sheet's "Connect Wallet"
 action both use `WalletConnectPairingView`
 (`Beid/Views/WalletConnectView.swift`). The UI selects a `WalletConnector`:
-`ReownWalletConnectClient` wraps reown-swift 2.3.0, while
-`CoinbaseWalletConnector` wraps Coinbase's direct app-to-app mobile SDK.
-The selected connector is retained by `AppCoordinator`, so proof signing
-uses the same session that supplied the connected address.
+`CoinbaseWalletConnector` wraps Coinbase's direct app-to-app mobile SDK, and
+`MetaMaskConnector` wraps MetaMask's direct app-to-app mobile SDK. The
+selected connector is retained by `AppCoordinator`, so proof signing uses
+the same session that supplied the connected address.
 
-**SDK choice**: [reown-swift](https://github.com/reown-com/reown-swift)
-(actively maintained; the legacy
-[WalletConnect/WalletConnectSwiftV2](https://github.com/WalletConnect/WalletConnectSwiftV2)
-repo is archived). `project.yml` pins the `WalletConnect` product (→
-`WalletConnectSign` target) only, not `ReownAppKit` — AppKit adds
-`ReownAppKitUI`/`CoinbaseWalletSDK`/`Yttrium`-adjacent surface area (wallet
-picker UI, account abstraction, on-ramp) that doesn't fit beid's
-"WalletConnect login, no account abstraction" ruling.
-
-**What had to be hand-rolled** (reown-swift doesn't bundle these):
-- A `WebSocketFactory`/`WebSocketConnecting` adapter for the relay
-  transport (`Beid/Onboarding/NativeWebSocketFactory.swift`), on native
-  `URLSessionWebSocketTask` — reown's own example app uses Starscream
-  (stale), avoided here to skip a third dependency.
-- A `CryptoProvider` (`Beid/Onboarding/NativeCryptoProvider.swift`) — only
-  exercised by SIWE (`Sign.instance.authenticate`), which beid's plain
-  `connect(namespaces:)` pairing flow never calls. Left as `fatalError`
-  rather than pulling in Web3/CryptoSwift/HDWalletKit for a code path beid
-  doesn't use.
-- QR rendering (`Beid/Onboarding/QRCodeRenderer.swift`) via CoreImage's
-  built-in `CIFilter.qrCodeGenerator()` — no third-party QR dependency.
-
-**Credentials required to actually pair**: a Reown Cloud **Project ID**
-(free signup at [dashboard.reown.com](https://dashboard.reown.com/) →
-create project → copy Project ID). Read from the gitignored
-`Beid/Secrets.plist` (`WalletConnectSecrets.projectId`, key `PROJECT_ID`) —
-copy `ios/Secrets.example.plist` to `ios/Beid/Secrets.plist` and fill it
-in. Without it, the pairing view shows a "WalletConnect not configured"
-state rather than crashing, and the app still builds/tests/runs — this is
-the graceful-degradation path exercised by `WalletConnectTests` and the
-default state in CI, where no `Secrets.plist` exists.
-
-**App Group requirement — intentionally NOT shipped while Reown is
-unconfigured**: `Networking.configure(groupIdentifier:)` requires a
-syntactically valid App Group ID (`group.<id>` format), but that call only
-runs when `WalletConnectSecrets.projectId` resolves (see
-`configureIfNeeded()`), which it never does in CI/TestFlight builds — no
-`Secrets.plist` is present there. The app therefore ships **without** the
-`com.apple.security.application-groups` entitlement: carrying it breaks
-Xcode Cloud's App Store export ("No profiles for 'org.levarac.beid' were
-found") unless the App Group is also registered and assigned in the
-Developer Portal, which Apple exposes no API for. When Reown actually gets
-configured (a real Project ID reaches distributed builds), restore all
-three pieces together:
-
-1. Register `group.org.levarac.beid` under Identifiers → App Groups in the
-   Developer Portal, and assign it to the `org.levarac.beid` App ID's App
-   Groups capability (both are portal-manual; the capability itself is
-   already enabled on the App ID).
-2. Re-add `Beid/App/Beid.entitlements` with the
-   `com.apple.security.application-groups` array containing
-   `group.org.levarac.beid`.
-3. Re-add the `entitlements:` block under the `Beid` target in
-   `project.yml` and run `xcodegen generate`.
-
-This applies to **local development too**: do NOT put a real Project ID in
-`Secrets.plist` on a checkout without steps 2-3 — with a projectId present,
-`configureIfNeeded()` hands the group ID to the Reown SDK, whose
-`UserDefaults(suiteName:)` / keychain-access-group usage can fail (up to
-`fatalError` in `NetworkingClientFactory`) on a build that lacks the
-entitlement, especially on a real device.
-
-Historical note: with the entitlement present, Simulator ad-hoc "Sign to
-Run Locally" signing worked without any portal registration (discovered by
-`spike/walletconnect-native`, commit `a22d0f4`) — the failure only appears
-at real distribution signing.
-
-**Verified on Simulator** (no `Secrets.plist` present, matching CI): the
-pairing UI reaches `.notConfigured` and does not crash — this is the
-graceful-degradation boundary. With a real Project ID, `Sign.instance.connect(namespaces:)`
-runs, attempts the relay WebSocket connection, and (per the spike's
-manual testing with a placeholder, non-functional Project ID) fails
-cleanly rather than crashing when the relay is unreachable.
-
-**Not verified in this slice** (needs Ken's real Project ID plus a second
-device running a wallet app — same gap the spike flagged): a real pairing
-URI actually being scanned/approved by a wallet, the `beid://` redirect
-round-trip back from a wallet app, disconnect/session-persistence across
-launches, and SIWE/`authenticate()` (out of scope — beid does WalletConnect
-login, not SIWE).
+WalletConnect (Reown) — a relay-based pairing SDK that was beid's original
+third wallet option — was removed entirely (gh#250, DECISIONS 2026-08-20):
+the app depends on no third-party relay server today. Its removal is what
+allowed [MetaMask](#metamask-connector) to be promoted from a Debug-only
+spike into a full Release wallet option (DECISIONS 2026-08-21), so
+Coinbase Wallet and MetaMask remain a real two-way choice in the shipping
+build, not just in Debug. If a relay-based option is ever needed again, the
+git history before this change (`ReownWalletConnectClient.swift` and its
+supporting adapters) is the starting point — recovery, not resurrection.
 
 ### Coinbase Wallet connector
 
@@ -239,27 +168,35 @@ Base app on 1.1.2; this is a real-device verification risk, not something a
 Simulator test can settle. Keep the exact pin until an upgrade is reviewed
 against a real Coinbase Wallet pairing and `personal_sign` round trip.
 
-### MetaMask direct-connect spike (DEBUG only)
+### MetaMask connector
 
 `project.yml` pins the archived `MetaMask/metamask-ios-sdk` exactly at
-**0.8.10**. The connector initializes the SDK only with
-`.deeplinking(dappScheme: "beid")`; it does not select the SDK's Socket.IO
-communication layer. `beid://mmsdk` callbacks are forwarded from
+**0.8.10**, linked into both Debug and Release (DECISIONS 2026-08-21 "#250
+で MetaMask を Release へ昇格させる"). The connector initializes the SDK
+only with `.deeplinking(dappScheme: "beid")`; it does not select the SDK's
+Socket.IO communication layer. `beid://mmsdk` callbacks are forwarded from
 `BeidApp.onOpenURL`, and `metamask` is declared in
 `LSApplicationQueriesSchemes` so the SDK can detect whether MetaMask is
-installed.
+installed. The SDK is consumed through the `BeidMetaMaskSupport` static
+library target, which exists only to keep the pinned package's build-order
+dependency stable in the absence of a per-configuration package-dependency
+filter in XcodeGen 2.45.3 — the actual link step (`OTHER_LDFLAGS` on the
+`Beid` target) lives in `project.yml`'s shared `base` settings so both
+configs link the same binary objects.
 
-The connector and every MetaMask UI entry point are wrapped in `#if DEBUG`.
-Release builds therefore retain the existing WalletConnect/Coinbase choices
-and behavior. This is a time-bounded compatibility spike: the SDK is archived
-and carries a non-commercial license, so it is not a production wallet
-foundation.
+Promoting MetaMask out of `#if DEBUG` was a deliberate, owner-accepted risk,
+not a claim that the SDK has graduated: it is still archived and carries a
+non-commercial license, so it is not a production wallet foundation in the
+usual sense — it ships because removing WalletConnect (Reown) would
+otherwise have left Release with only one wallet option (Coinbase).
 
 The 0.8.10 package's bundled `Ecies.xcframework` has an arm64 Simulator slice
 but no x86_64 Simulator slice. A multi-architecture Simulator build therefore
 fails at link time. The required iPhone 17 Pro Debug test builds only its
 active arm64 architecture; for other configurations, explicitly build arm64
-only or use a physical device for this spike.
+only or use a physical device. A local Release-configuration Simulator build
+hits the same failure and needs the same `ONLY_ACTIVE_ARCH=YES` override,
+since Release defaults to building all architectures.
 
 `MetaMaskConnector` owns the active account, chain, connection-attempt ID, and
 session ID. It deliberately never reads the SDK's `connected` property because
@@ -267,10 +204,14 @@ session ID. It deliberately never reads the SDK's `connected` property because
 MetaMask installation, disconnect cleanup despite stale SDK state, and a late
 connect response after cancellation.
 
-**Still requires a physical-device E2E:** install a current MetaMask Mobile
-build and a DEBUG beid build, then verify connect → `personal_sign` → automatic
-return to beid, including MetaMask and beid cold starts. The Simulator cannot
-settle this because it does not provide the installed-wallet round trip.
+**Still requires a physical-device E2E, and it is a release gate, not a
+nice-to-have:** install a current MetaMask Mobile build and a beid build,
+then verify connect → `personal_sign` → automatic return to beid, including
+MetaMask and beid cold starts. The Simulator cannot settle this because it
+does not provide the installed-wallet round trip. The procedure lives in
+`docs/field-test-procedure.md`; per DECISIONS 2026-08-21, if that
+verification fails, the promotion to Release reverts and beid ships
+Coinbase-only again.
 
 ## DemoEvent mode
 
@@ -370,19 +311,20 @@ Lost" button on the Recording screen while in DemoEvent mode, and covered by
 
 ## What's stubbed / out of scope for this slice
 
-- **Wallet**: real WalletConnect (Reown) pairing is wired (see
-  "WalletConnect" above), but no real pairing has been completed end-to-end
-  — that needs Ken's Reown Cloud Project ID plus a second device running a
-  wallet app. Once a wallet is connected, Item Detail's
-  `ProofSignatureControlsView` calls `AppCoordinator.signProof(_:)`, which
-  builds a `SignaturePayload`, hashes its canonical JSON with
-  `signingDigestHex()`, requests `personal_sign` through the selected
-  `WalletConnector`, and persists the returned `SignatureRecord` in the
-  proof's `signatureState`. This is the **PROVISIONAL local convenience
-  signature** defined in `ProofSignature.swift`: it is not the protocol's
-  self-proof, does not prove physical attendance by itself, and no backend or
-  verifier may depend on its payload. A real-device connect → sign → return
-  round trip is still unverified, as described above.
+- **Wallet**: direct app-to-app connect/sign for Coinbase Wallet and
+  MetaMask is wired (see "WalletConnect" above). Coinbase's real-device
+  round trip is a known, tracked risk (see "Coinbase Wallet connector"
+  above); MetaMask's has never been verified on a real device at all — see
+  "MetaMask connector" above and `docs/field-test-procedure.md`. Once a
+  wallet is connected, Item Detail's `ProofSignatureControlsView` calls
+  `AppCoordinator.signProof(_:)`, which builds a `SignaturePayload`, hashes
+  its canonical JSON with `signingDigestHex()`, requests `personal_sign`
+  through the selected `WalletConnector`, and persists the returned
+  `SignatureRecord` in the proof's `signatureState`. This is the
+  **PROVISIONAL local convenience signature** defined in
+  `ProofSignature.swift`: it is not the protocol's self-proof, does not
+  prove physical attendance by itself, and no backend or verifier may
+  depend on its payload.
 - **Chain**: no on-chain calls anywhere (`BarnardIdentity.proveRpidOwnership`
   is available in the barnard SDK but not called from the app in this
   slice).
@@ -440,7 +382,6 @@ ios/
   project.yml              # XcodeGen spec
   Beid.xcodeproj/          # generated project, committed for local convenience
   README.md                # this file
-  Secrets.example.plist    # WalletConnect credential template, see above
   Beid/
     App/                    # @main entry point, Info.plist, shared-runtime probe
     Assets.xcassets/        # app icon catalog
@@ -453,7 +394,7 @@ ios/
     Onboarding/             # wallet clients and platform adapters, see above
     Navigation/             # AppCoordinator, AppScreen, RootView
     Views/                  # current onboarding, collection, scan, and detail views
-  BeidMetaMaskDebug/        # DEBUG-only MetaMask package isolation target
+  BeidMetaMaskSupport/      # MetaMask package build-order isolation target
   BeidTests/                # coordinator, persistence/ledger, cryptography, and UI contract tests
   BeidUITests/              # iPad layout UI tests
   ci_scripts/               # Xcode Cloud hooks and pinned XcodeGen version

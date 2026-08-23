@@ -152,18 +152,18 @@ struct AccountSheetView: View {
     if connector is CoinbaseWalletConnector {
       return "Coinbase Wallet"
     }
-    if connector is ReownWalletConnectClient {
-      return "WalletConnect"
-    }
-    #if DEBUG
     if connector is MetaMaskConnector {
       return "MetaMask"
     }
+    #if DEBUG
     if connector is DemoWalletConnector {
       return "Demo Wallet"
     }
     #endif
-    return "WalletConnect"
+    // Coinbase and MetaMask are the only two connectors Release ever
+    // records; this is unreachable there in practice, and even in Debug
+    // (Demo Wallet handled above) is the sensible remaining default.
+    return "Coinbase Wallet"
   }
 
   private func truncated(_ address: String) -> String {
@@ -201,11 +201,8 @@ private struct WalletConnectSheetView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", role: .cancel) {
-            ReownWalletConnectClient.shared.reset()
             CoinbaseWalletConnector.shared.disconnect()
-            #if DEBUG
             MetaMaskConnector.shared.disconnect()
-            #endif
             coordinator.walletConnectSheetPresented = false
           }
         }

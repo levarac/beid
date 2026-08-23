@@ -176,10 +176,10 @@ struct EventBindingSheetView: View {
   // Two wallet-side approvals (connect, then sign) over the existing
   // `WalletConnector` protocol — the pinned Coinbase Wallet Mobile SDK
   // can't bundle `personal_sign` into `initiateHandshake(initialActions:)`
-  // without already knowing the address it would sign for, and Reown has no
-  // bundled connect+sign RPC at all, so a uniform 2-step round trip (rather
-  // than a per-provider special case) is what's actually available through
-  // the shared connector surface `WalletConnectPairingView` already reuses.
+  // without already knowing the address it would sign for, so a uniform
+  // 2-step round trip (rather than a per-provider special case) is what's
+  // actually available through the shared connector surface
+  // `WalletConnectPairingView` already reuses.
 
   @MainActor
   private func performBinding(address: String, connector: any WalletConnector) async {
