@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "This build is for on-device testing with four or more people, and everyone taking part must update to it first. Event codes are handled differently now, so a mix of old and new builds will treat the same typed code as two different events and will not sense each other. Codes are no longer case-sensitive and surrounding spaces are ignored: ETHTokyo and ethtokyo are the same event. The recording screen shows a line reading \"Diagnostics: N identified · N unidentified\" — a temporary investigation aid, not a count of mutual confirmations. After recording starts, please tell us how those two numbers moved on each device, including any device that never reaches the recording screen. If the identified count stays flat, whether the unidentified count is rising is what tells us which cause we are looking at. The app is also English-only from this build on."
+    "text": "Connecting a wallet now offers MetaMask or Coinbase Wallet, and the older WalletConnect option is gone. Please connect with MetaMask, approve one signature, and return to the app — this path has never run on a real device before, so tell us exactly where it stops if it does. If you are testing with a group, everyone needs to be on this build before you start."
   }
 ]
