@@ -14,3 +14,7 @@ local.properties
 
 # WalletConnect (Reown) project ID — see ios/Secrets.example.plist
 ios/Beid/Secrets.plist
+
+# xcodemake build-acceleration cache (tool-generated, machine-local)
+ios/Makefile
+ios/xcodemake_*.log

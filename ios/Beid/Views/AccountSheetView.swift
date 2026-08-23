@@ -106,7 +106,25 @@ struct AccountSheetView: View {
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()
     }
-    .sheet(isPresented: $coordinator.eventCodeEntrySheetPresented) {
+    // A custom `Binding`, not `$coordinator.eventCodeEntrySheetPresented`
+    // directly: swipe-to-dismiss writes `false` through whatever binding
+    // `.sheet(isPresented:)` was given, and only this `set` closure runs
+    // synchronously with that exact write. An `.onChange(of:)` observing the
+    // same property instead reacts to the write *after* SwiftUI schedules
+    // it — a stale lookup resuming on the main actor in that gap would still
+    // see the old, not-yet-cancelled generation and could join anyway
+    // (beid#258 P1-1 round-3 fix; the explicit Cancel button in
+    // `EventCodeEntrySheetView` below cancels directly in its own action
+    // closure instead, since it never writes through this binding at all).
+    .sheet(isPresented: Binding(
+      get: { coordinator.eventCodeEntrySheetPresented },
+      set: { isPresented in
+        if !isPresented {
+          coordinator.cancelPendingAccountSheetJoinAttempt()
+        }
+        coordinator.eventCodeEntrySheetPresented = isPresented
+      }
+    )) {
       EventCodeEntrySheetView()
     }
   }
@@ -217,6 +235,10 @@ private struct EventCodeEntrySheetView: View {
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel", role: .cancel) {
+              // Direct property write, not through AccountSheetView's
+              // custom cancelling `Binding` — cancel synchronously here too
+              // (beid#258 P1-1 round-3 fix).
+              coordinator.cancelPendingAccountSheetJoinAttempt()
               coordinator.eventCodeEntrySheetPresented = false
             }
           }
@@ -255,7 +277,11 @@ private struct EventMembershipSections: View {
           PastEventsView(
             sensingCoordinator: sensingCoordinator,
             proofStore: coordinator.proofStore,
-            onRejoin: { code in coordinator.rejoinPastEvent(code: code) }
+            onRejoin: { code in
+              Task { @MainActor in
+                await coordinator.rejoinPastEventResolvingCanonicalId(code: code)
+              }
+            }
           )
         } label: {
           Label { Text(pastEventsLabel) } icon: { Image(systemName: "clock.arrow.circlepath") }

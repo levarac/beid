@@ -73,6 +73,47 @@ class RegistryClientTest {
         }
     }
 
+    @Test
+    fun resolveEventIdWithNoUrlTemplateConfiguredSurfacesATypedConfigurationError() = runTest {
+        val client = requireNotNull(
+            createSepoliaRegistryClient(
+                readerAddressHex = RegistryTestFixtures.READER,
+                etherscanApiKey = null,
+            ),
+        )
+        val resolution = CompletableDeferred<EventIdLookupResolution>()
+        try {
+            client.resolveEventId(code = "ethtokyo2026") { resolution.complete(it) }
+
+            val result = resolution.await()
+            assertFalse(result.isSuccess)
+            assertEquals("event_code_lookup_not_configured", result.errorCode)
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
+    fun resolveEventIdWithAnInvalidUrlTemplateSurfacesATypedConfigurationError() = runTest {
+        val client = requireNotNull(
+            createSepoliaRegistryClient(
+                readerAddressHex = RegistryTestFixtures.READER,
+                etherscanApiKey = null,
+                eventCodeLookupUrlTemplate = "http://lookup.example/{code}",
+            ),
+        )
+        val resolution = CompletableDeferred<EventIdLookupResolution>()
+        try {
+            client.resolveEventId(code = "ethtokyo2026") { resolution.complete(it) }
+
+            val result = resolution.await()
+            assertFalse(result.isSuccess)
+            assertEquals("event_code_lookup_invalid_url_template", result.errorCode)
+        } finally {
+            client.close()
+        }
+    }
+
     private suspend fun assertInvalidDefinitionTemplate(template: String) {
         val client = requireNotNull(
             createSepoliaRegistryClient(

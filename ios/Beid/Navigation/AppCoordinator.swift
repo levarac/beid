@@ -27,11 +27,20 @@ final class AppCoordinator: ObservableObject {
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
 
+  /// `registryClient` defaults to the production, Info.plist-driven
+  /// resolution (`RegistryDependencies.createClient()`), evaluated fresh at
+  /// each call site with no override — mirroring `walletConnector`/
+  /// `proofStore`'s existing injectability so tests can point the coordinator
+  /// at a fake/stub registry without touching `Bundle.main`. An explicit
+  /// `nil` here is a meaningful test input (an app build with no registry
+  /// configured), not "use the default" — so this is a plain default
+  /// expression, not a `?? RegistryDependencies.createClient()` fallback.
   init(
     walletConnector: (any WalletConnector)? = nil,
-    proofStore: ProofStore? = nil
+    proofStore: ProofStore? = nil,
+    registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
+      RegistryDependencies.createClient()
   ) {
-    let registryClient = RegistryDependencies.createClient()
     self.registryClient = registryClient
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
     self.walletConnector = walletConnector
@@ -120,7 +129,15 @@ final class AppCoordinator: ObservableObject {
   /// The way back out of `EventCodeEntryView` for a user who doesn't
   /// actually have a code — this is a root-switch screen (not a modal
   /// push), so there is no system back affordance without this.
+  ///
+  /// Also abandons any join attempt still resolving its lookup: without
+  /// this, a user who taps this while a code-entry lookup is in flight and
+  /// then reaches `.walletConnect` could later be silently yanked into
+  /// `.bluetoothPermission` when that stale lookup finally completes and
+  /// `joinEvent` succeeds — a screen change the user never asked for, for
+  /// an event they explicitly walked away from (beid#258 P1-1 round-2 fix).
   func returnToWalletConnect() {
+    cancelPendingJoinAttempt()
     screen = .walletConnect
   }
 
@@ -156,6 +173,128 @@ final class AppCoordinator: ObservableObject {
     }
     eventCodeEntrySheetPresented = false
     return nil
+  }
+
+  /// Best-effort code -> canonical registry Event ID lookup, via the
+  /// deployment-configured operator lookup endpoint (beid#258 P1-1 interim
+  /// mechanism — see dispatch#21 for the durable, cryptographically-bound
+  /// replacement). This is a routing hint only, never a trust boundary: a
+  /// wrong or malicious answer can only point the caller at a different
+  /// *registered* event, because whatever ID comes back still has to pass
+  /// `RegistryClient.resolveEventDefinition`'s full on-chain and
+  /// authority-signature verification before anything derived from it is
+  /// trusted. Never throws: a missing client, unconfigured lookup, or any
+  /// network failure all resolve to `nil`, which is `attemptJoinEvent`'s
+  /// existing fail-closed default — callers do not need their own fallback.
+  ///
+  /// Takes `code` as a plain value, not read from a caller's live `@State` —
+  /// this method's own body is the only place that reads it, exactly once,
+  /// before the `await` below. A caller that instead re-reads a mutable
+  /// binding after awaiting a sibling composed method (below) would pair a
+  /// lookup result for one code with a join for whatever the binding holds
+  /// by the time the lookup returns, which need not be the same code.
+  /// Test-only override point: when set, replaces this method's real
+  /// `registryClient` call entirely. Production code never sets this — the
+  /// default `nil` means "use the real lookup" and nothing else in this
+  /// file reads it. It exists solely so a test can control exactly when a
+  /// lookup resumes (via its own `CheckedContinuation`), to deterministically
+  /// exercise `joinAttemptGeneration` supersession under a genuine
+  /// concurrent race — `createSepoliaRegistryClient` refuses loopback HTTP
+  /// for every URL template, so there is no other way to get a real,
+  /// test-controllable suspension point here without either a flaky
+  /// wall-clock-dependent test or this seam (beid#258 P1-1 round-3).
+  var resolveCanonicalEventIdHexOverride: ((String) async -> String?)?
+
+  func resolveCanonicalEventIdHex(forCode rawCode: String) async -> String? {
+    if let resolveCanonicalEventIdHexOverride {
+      return await resolveCanonicalEventIdHexOverride(rawCode)
+    }
+    guard let registryClient else { return nil }
+    guard let normalized = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) else {
+      return nil
+    }
+    return await withCheckedContinuation { continuation in
+      registryClient.resolveEventId(code: normalized) { resolution in
+        continuation.resume(returning: resolution.isSuccess ? resolution.eventIdHex : nil)
+      }
+    }
+  }
+
+  /// Monotonic counter guarding every composed "resolve, then join" attempt
+  /// below against a newer attempt superseding it mid-flight — the user
+  /// double-taps Join, edits the code field while a lookup is in flight,
+  /// taps a different past-events row before an earlier lookup returns, or
+  /// leaves the join surface entirely (`cancelPendingJoinAttempt`). Only one
+  /// shared counter across all three composed methods: they all fight over
+  /// the same single-slot join state (`SensingCoordinator.joinedEventCode`),
+  /// so the latest attempt or cancellation from any of them should win, not
+  /// just the latest within its own surface.
+  private var joinAttemptGeneration = 0
+
+  /// Result of a composed "resolve, then join" attempt below.
+  /// `.superseded` means exactly that and nothing else: the attempt neither
+  /// succeeded nor failed, because a newer attempt (or an explicit
+  /// cancellation) started first. Callers must not treat `.superseded` as
+  /// `.completed(nil)` — both are "no error to show", but only the second
+  /// means *this* attempt actually ran and its caller's UI state should
+  /// reflect it. Collapsing the two let a stale attempt's late completion
+  /// silently clear a newer attempt's error message (beid#258 P1-1 round-2
+  /// fix) — the whole reason this is a dedicated type and not `T?`.
+  enum JoinAttemptOutcome: Equatable {
+    case superseded
+    case completed(EventCodeJoinError?)
+  }
+
+  /// Bumps `joinAttemptGeneration` with no new attempt starting — the
+  /// explicit "the user left this join surface" signal. Any composed
+  /// attempt already in flight will see its generation stale when its
+  /// lookup resumes and report `.superseded` instead of joining or touching
+  /// UI state on the caller's behalf.
+  private func cancelPendingJoinAttempt() {
+    joinAttemptGeneration += 1
+  }
+
+  /// Composes `resolveCanonicalEventIdHex` with `joinEvent(code:canonicalEventIdHex:)`
+  /// for one code, snapshotted once as `code` itself — see that function's
+  /// own doc comment for why this matters. Returns `.superseded` with no
+  /// join attempted at all if a newer call to any of the three composed
+  /// methods (or an explicit cancellation) started before this one's lookup
+  /// finished.
+  func joinEventResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
+    joinAttemptGeneration += 1
+    let generation = joinAttemptGeneration
+    let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
+    guard generation == joinAttemptGeneration else { return .superseded }
+    return .completed(joinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex))
+  }
+
+  /// Same composition as `joinEventResolvingCanonicalId`, for the
+  /// account-sheet join surface.
+  func joinEventFromAccountSheetResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
+    joinAttemptGeneration += 1
+    let generation = joinAttemptGeneration
+    let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
+    guard generation == joinAttemptGeneration else { return .superseded }
+    return .completed(joinEventFromAccountSheet(code: code, canonicalEventIdHex: canonicalEventIdHex))
+  }
+
+  /// Call when the account-sheet join surface is dismissed (Cancel or
+  /// swipe) while a lookup may still be in flight — see
+  /// `cancelPendingJoinAttempt`'s doc comment and `returnToWalletConnect`'s
+  /// onboarding-side equivalent.
+  func cancelPendingAccountSheetJoinAttempt() {
+    cancelPendingJoinAttempt()
+  }
+
+  /// Same composition as `joinEventResolvingCanonicalId`, for rejoining a
+  /// past event. `rejoinPastEvent` has no return value to discard on a
+  /// superseded attempt; the guard here still prevents it from firing at all.
+  func rejoinPastEventResolvingCanonicalId(code: String) async {
+    joinAttemptGeneration += 1
+    let generation = joinAttemptGeneration
+    let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
+    guard generation == joinAttemptGeneration else { return }
+    rejoinPastEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
   }
 
   /// Shared join attempt behind both `joinEvent(code:)` and

@@ -112,12 +112,29 @@ struct EventCodeEntryView: View {
     .onAppear { codeFieldFocused = true }
   }
 
+  /// Resolves a canonical Event ID for the typed code (beid#258 P1-1 —
+  /// best-effort, bounded by the lookup's own timeout, never blocks on an
+  /// unbounded hang) before joining, so the normal manual-entry path
+  /// carries a lookup-derived ID instead of always joining with `nil`.
+  /// `code` is captured once into `submittedCode` before the `Task` starts:
+  /// `AppCoordinator`'s composed methods take it as a plain value and never
+  /// re-read this view's live `@State`, but capturing it here too keeps that
+  /// guarantee visible at the call site rather than relying on it silently.
   private func submit() {
-    switch mode {
-    case .onboarding:
-      errorMessage = message(for: coordinator.joinEvent(code: code))
-    case .accountSheet:
-      errorMessage = message(for: coordinator.joinEventFromAccountSheet(code: code))
+    let submittedCode = code
+    Task { @MainActor in
+      let outcome: AppCoordinator.JoinAttemptOutcome
+      switch mode {
+      case .onboarding:
+        outcome = await coordinator.joinEventResolvingCanonicalId(code: submittedCode)
+      case .accountSheet:
+        outcome = await coordinator.joinEventFromAccountSheetResolvingCanonicalId(code: submittedCode)
+      }
+      // `.superseded` must not touch `errorMessage` at all — a stale attempt
+      // resuming after a newer one (or a cancellation) started must never
+      // overwrite whatever the current attempt already showed.
+      guard case .completed(let error) = outcome else { return }
+      errorMessage = message(for: error)
     }
   }
 
