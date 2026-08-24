@@ -106,13 +106,31 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         BEID_EVENT_REGISTRY_READER_ADDRESS: "0xd4852f8526A1555A1b2C34145f0eCDA412a53c51"
         BEID_ETHERSCAN_API_KEY: ""
-        BEID_EVENT_DEFINITION_URL_TEMPLATE: ""
+        # Non-secret: a public URL on the already-deployed operator
+        # (levarac/parallax#8, #16, #17), not a credential — committed
+        # directly here, matching BEID_EVENT_REGISTRY_READER_ADDRESS above,
+        # rather than routed through CI-only injection. The actual GHA
+        # release pipeline (scripts/gha/build-and-upload-ios.sh) passes no
+        # BEID_EVENT_* build settings to xcodebuild at all, and Xcode Cloud
+        # is currently unfunded — a value that only exists as an
+        # externally-injected build setting would not reach any real build
+        # right now. Route existence verified live via curl before committing:
+        # GET /artifacts/definitions/<real policy digest> -> 200 with the
+        # signed EventDefinition CBOR bytes; GET .../<a wrong digest> -> 404,
+        # not 500 (confirms the route, not just a lucky match).
+        BEID_EVENT_DEFINITION_URL_TEMPLATE: "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}"
         # Canonical Observation submission is opt-in. Endpoint, receipt key,
         # event identity, digest, and validity are supplied only by the
         # verified Event Definition fetched through the registry module.
         BEID_REPORT_SUBMISSION_ENABLED: "NO"
-        BEID_EVENT_KEY_SET_URL_TEMPLATE: ""
-        BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE: ""
+        # Same non-secret reasoning as BEID_EVENT_DEFINITION_URL_TEMPLATE
+        # above. Route existence verified live: GET /artifacts/key-sets/<a
+        # wrong digest> -> 404 "EventKeySet artifact not found", not 500.
+        BEID_EVENT_KEY_SET_URL_TEMPLATE: "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}"
+        # Same non-secret reasoning (beid#258 P1-1). Route verified live this
+        # session: GET /v1/events/by-code/parallax-demo -> 200 with the
+        # registered eventId.
+        BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE: "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}"
         # XcodeGen 2.45.3 has no configuration filter for package
         # dependencies. BeidMetaMaskSupport keeps the package build-order
         # dependency stable, while this OTHER_LDFLAGS entry links the pinned
