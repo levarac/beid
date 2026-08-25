@@ -7,6 +7,25 @@ import XCTest
 @testable import Beid
 
 @MainActor
+private final class ColdLaunchSubmissionRuntimeSpy: WindowReportSubmissionRuntimeProtocol {
+  private(set) var submitPendingCallCount = 0
+
+  func captureAndQueueWindow(
+    id _: UUID,
+    eventCode _: String,
+    eventIdHex _: String?,
+    enin _: Int,
+    peerRpids _: Set<String>,
+    reporterRpid _: String?,
+    participantCommitment _: Data?
+  ) {}
+
+  func submitPending() {
+    submitPendingCallCount += 1
+  }
+}
+
+@MainActor
 final class UnsentWindowLedgerRuntimeTests: XCTestCase {
   func testReportRedeliveryBufferDropsNewestArtifactAtCapacity() throws {
     let first = try makeReport(
@@ -1081,13 +1100,20 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
     // 3. Cold launch: drive the same async beginLedgerLoad path used by the
     // production convenience initializer.
     let relaunchedLedgerStore = try UnsentWindowLedgerStore(fileURL: fixture.ledgerFileURL)
+    let launchRuntime = ColdLaunchSubmissionRuntimeSpy()
     let relaunchedCoordinator = SensingCoordinator(
       loadingFromDirectory: fixture.directory,
-      sensingCryptography: DeterministicSensingCryptography()
+      sensingCryptography: DeterministicSensingCryptography(),
+      reportSubmissionRuntime: launchRuntime
     )
     XCTAssertTrue(relaunchedCoordinator.isLedgerLoading)
     await relaunchedCoordinator.waitForLedgerLoadToFinish()
     XCTAssertFalse(relaunchedCoordinator.isLedgerLoading)
+    XCTAssertEqual(
+      launchRuntime.submitPendingCallCount,
+      1,
+      "cold launch must retry pending submissions once without restarting sensing"
+    )
 
     // 4. Prepare one submission descriptor: exactly one must be produced.
     let durable = try XCTUnwrap(try relaunchedLedgerStore.load())
@@ -1154,13 +1180,20 @@ final class UnsentWindowLedgerRuntimeTests: XCTestCase {
 
     // 3. Cold launch / process restart through the async beginLedgerLoad path
     let relaunchedLedgerStore = try UnsentWindowLedgerStore(fileURL: fixture.ledgerFileURL)
+    let launchRuntime = ColdLaunchSubmissionRuntimeSpy()
     let relaunchedCoordinator = SensingCoordinator(
       loadingFromDirectory: fixture.directory,
-      sensingCryptography: DeterministicSensingCryptography()
+      sensingCryptography: DeterministicSensingCryptography(),
+      reportSubmissionRuntime: launchRuntime
     )
     XCTAssertTrue(relaunchedCoordinator.isLedgerLoading)
     await relaunchedCoordinator.waitForLedgerLoadToFinish()
     XCTAssertFalse(relaunchedCoordinator.isLedgerLoading)
+    XCTAssertEqual(
+      launchRuntime.submitPendingCallCount,
+      1,
+      "cold launch must retry pending submissions once without restarting sensing"
+    )
 
     // 4. Prepare submission descriptor
     let durable = try XCTUnwrap(try relaunchedLedgerStore.load())

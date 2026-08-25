@@ -91,7 +91,39 @@ final class ReportSubmissionWiringTests: XCTestCase {
     XCTAssertEqual(runtime.captures.first?.enin, 7)
     XCTAssertEqual(runtime.captures.first?.peerRpids, expectedPeerRpids)
     XCTAssertEqual(runtime.captures.first?.reporterRpid, reporterRpid)
-    XCTAssertGreaterThanOrEqual(runtime.submitPendingCallCount, 4)
+    XCTAssertEqual(
+      runtime.submitPendingCallCount,
+      4,
+      "start, the background checkpoint, stop, and reset must each retry pending submissions once"
+    )
+  }
+
+  func testColdLaunchSubmitsPendingOnceWithoutStartingSensing() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent(
+        "beid-report-submission-cold-launch-\(UUID().uuidString)",
+        isDirectory: true
+      )
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let runtime = ReportSubmissionRuntimeSpy()
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: DeterministicSensingCryptography(),
+      reportSubmissionRuntime: runtime
+    )
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertFalse(coordinator.isLedgerLoading)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertTrue(runtime.captures.isEmpty)
+    XCTAssertEqual(
+      runtime.submitPendingCallCount,
+      1,
+      "cold launch must retry persisted submissions once before sensing starts"
+    )
   }
 
   func testLegacyCountOnlyWindowPassesNoReporterRpidToSubmissionBoundary() {

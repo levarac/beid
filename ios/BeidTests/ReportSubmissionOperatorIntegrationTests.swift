@@ -691,7 +691,14 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       enabled: true,
       provider: relaunchedProvider
     ))
-    relaunchedRuntime.submitPending()
+    let relaunchedCoordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: cryptography,
+      reportSubmissionRuntime: relaunchedRuntime
+    )
+    await relaunchedCoordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertEqual(relaunchedCoordinator.phase, .idle)
     XCTAssertEqual(relaunchedProvider.requestedEventIds, [eventIdHex])
 
     relaunchedProvider.resolveAll()
@@ -731,6 +738,24 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
 
     XCTAssertEqual(server.postCount, 0)
     XCTAssertEqual(server.getCount, 0)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+  }
+
+  func testEnabledButUnconfiguredRuntimeDoesNotCreateOrTouchTheQueue() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-unconfigured")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+
+    let runtime = try makeRuntime(
+      endpoint: try XCTUnwrap(URL(string: "http://127.0.0.1:8080")),
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(),
+      fileURL: fileURL,
+      enabled: true,
+      useDefaultProvider: false
+    )
+
+    XCTAssertNil(runtime)
     XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
   }
 
@@ -777,7 +802,14 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       fileURL: fileURL,
       enabled: true
     ))
-    relaunchedRuntime.submitPending()
+    let relaunchedCoordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: cryptography,
+      reportSubmissionRuntime: relaunchedRuntime
+    )
+    await relaunchedCoordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertEqual(relaunchedCoordinator.phase, .idle)
     try await server.waitFor(postCount: 1, getCount: 1)
     try await waitForSubmissionState(.accepted, at: fileURL)
     let restored = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
@@ -908,7 +940,8 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     cryptography: any SensingCryptography,
     fileURL: URL,
     enabled: Bool,
-    provider: (any EventDefinitionContextProvider)? = nil
+    provider: (any EventDefinitionContextProvider)? = nil,
+    useDefaultProvider: Bool = true
   ) throws -> ReportSubmissionRuntime? {
     let configuration = try XCTUnwrap(
       ExportedKotlinPackages.org.levarac.parallax.submission
@@ -923,7 +956,14 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
         ),
       "endpoint=\(endpoint.absoluteString)"
     )
-    let provider = provider ?? StaticEventDefinitionContextProvider(configuration: configuration)
+    let resolvedProvider: (any EventDefinitionContextProvider)?
+    if let provider {
+      resolvedProvider = provider
+    } else if useDefaultProvider {
+      resolvedProvider = StaticEventDefinitionContextProvider(configuration: configuration)
+    } else {
+      resolvedProvider = nil
+    }
     let bundleDirectory = try makeIsolatedDirectory(named: "beid-report-submission-bundle")
     let plist: [String: Any] = [
       "CFBundleIdentifier": "org.levarac.beid.tests.\(UUID().uuidString)",
@@ -940,7 +980,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     return ReportSubmissionRuntime.makeIfEnabled(
       bundle: bundle,
       eventSigningCryptography: cryptography,
-      definitionProvider: provider,
+      definitionProvider: resolvedProvider,
       fileURL: fileURL,
       allowInsecureLoopbackForTests: true
     )
