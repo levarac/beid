@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The beid mark. The adaptive-icon safe zone is a 66dp *circle* on the
+     108dp canvas, not a 66dp square: the mark's four diagonal strokes reach
+     its corners, so a full-bleed foreground gets them clipped by a circular
+     launcher mask. The foreground layer therefore draws the mark at 70% of
+     the canvas, which puts its circumscribed circle inside the safe zone. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
