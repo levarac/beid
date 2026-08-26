@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "Connecting a wallet now offers MetaMask or Coinbase Wallet, and the older WalletConnect option is gone. Please connect with MetaMask, approve one signature, and return to the app — this path has never run on a real device before, so tell us exactly where it stops if it does. If you are testing with a group, everyone needs to be on this build before you start."
+    "text": "The app icon has changed to the beid mark, so a different icon on your home screen is expected and does not mean a different app was installed. If you have not done it on an earlier build, please connect a wallet with MetaMask, approve one signature, and return to the app, then tell us exactly where it stops if it does. If you are testing with a group, everyone taking part needs to be on this build before you start."
   }
 ]
