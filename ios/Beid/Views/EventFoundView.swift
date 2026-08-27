@@ -7,8 +7,17 @@ import SwiftUI
 struct EventFoundView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let event: EventSession
+  let onRetryVerification: () -> Void
 
   @State private var appeared = false
+
+  init(
+    event: EventSession,
+    onRetryVerification: @escaping () -> Void = {}
+  ) {
+    self.event = event
+    self.onRetryVerification = onRetryVerification
+  }
 
   var body: some View {
     BeidStatusLayout(
@@ -16,7 +25,12 @@ struct EventFoundView: View {
       title: "Event Found",
       message: "Verification starts automatically — stay nearby",
       accessory: {
-      EventCardView(event: event, badge: .detected)
+      EventCardView(event: event, badge: .detected) {
+        EventIdentityVerificationRow(
+          status: event.identityVerification,
+          onRetry: onRetryVerification
+        )
+      }
         .offset(y: appeared ? 0 : 40)
         .opacity(appeared ? 1 : 0)
       }

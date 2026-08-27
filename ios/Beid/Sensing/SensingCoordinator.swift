@@ -97,9 +97,10 @@ final class SensingCoordinator: ObservableObject {
   /// `startSensing(eventCode:)` once the user has joined manually via
   /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
   @Published private(set) var joinedEventCode: String?
-  /// Canonical registry Event ID resolved for `joinedEventCode`, when the
-  /// caller has already completed the verified registry lookup. Event codes
-  /// are not sufficient to derive this value locally.
+  /// Canonical registry Event ID returned by the code lookup for
+  /// `joinedEventCode`. It is an untrusted routing hint until the dedicated
+  /// event-definition resolution completes; event codes are not sufficient to
+  /// derive this value locally.
   @Published private(set) var joinedCanonicalEventIdHex: String?
   /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
   /// played for the current session. Lives here rather than as view-local
@@ -250,6 +251,7 @@ final class SensingCoordinator: ObservableObject {
   private let engine = BarnardEngine()
   private let sensingCryptography: any SensingCryptography
   private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
+  private let eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private var windowReportStore: WindowReportStore
   private var unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
@@ -339,8 +341,16 @@ final class SensingCoordinator: ObservableObject {
   /// `waitForDemoSequenceToFinish()` below.
   private var ledgerLoadTask: Task<Void, Never>?
   private var demoTask: Task<Void, Never>?
-  /// Canonical Event ID carried from the verified join result until the first
-  /// real event session is established. It is never derived from event code.
+  /// Generation and session identity protect the UI from a completion that
+  /// belongs to a reset, leave, retry, or later session with the same raw code.
+  private var eventIdentityVerificationGeneration = 0
+  private var eventIdentityVerificationRequest: (any EventIdentityVerificationRequest)?
+  private var eventIdentityVerificationSessionID: UUID?
+  private var eventIdentityVerificationEventID: String?
+  private var eventIdentityVerificationHint: String?
+  /// Canonical Event ID carried from the code-lookup result until the first
+  /// real event session is established. It is an untrusted routing hint and is
+  /// never derived from event code.
   private var pendingCanonicalEventIdHex: String?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
@@ -533,7 +543,10 @@ final class SensingCoordinator: ObservableObject {
           )
         },
         allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
-      )
+      ),
+      eventIdentityVerificationSource: registryClient.map {
+        RegistryEventIdentityVerificationSource(client: $0)
+      }
     )
   }
 
@@ -551,7 +564,8 @@ final class SensingCoordinator: ObservableObject {
   convenience init(
     loadingFromDirectory directory: URL,
     sensingCryptography: any SensingCryptography,
-    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil
   ) {
     self.init(
       windowReportFileURL: directory.appendingPathComponent("window-reports.json"),
@@ -561,7 +575,8 @@ final class SensingCoordinator: ObservableObject {
       sessionAggregateSnapshotFileURL: directory.appendingPathComponent("session-aggregate-snapshots.json"),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography,
-      reportSubmissionRuntime: reportSubmissionRuntime
+      reportSubmissionRuntime: reportSubmissionRuntime,
+      eventIdentityVerificationSource: eventIdentityVerificationSource
     )
   }
 
@@ -590,7 +605,8 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregateSnapshotFileURL: URL?,
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography,
-    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
+    eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
   ) {
     self.init(
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
@@ -601,6 +617,7 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      eventIdentityVerificationSource: eventIdentityVerificationSource,
       initialLedgerFailure: nil
     )
     // Only this initializer chain is actually loading — see
@@ -730,7 +747,8 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography,
-    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
+    reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil
   ) {
     guard
       let store = try? UnsentWindowLedgerStore(fileURL: unsentWindowLedgerFileURL),
@@ -746,7 +764,8 @@ final class SensingCoordinator: ObservableObject {
       sessionAggregateSnapshotStore: sessionAggregateSnapshotStore,
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography,
-      reportSubmissionRuntime: reportSubmissionRuntime
+      reportSubmissionRuntime: reportSubmissionRuntime,
+      eventIdentityVerificationSource: eventIdentityVerificationSource
     )
   }
 
@@ -759,6 +778,7 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     initialLedgerFailure: Error? = nil
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
@@ -790,6 +810,7 @@ final class SensingCoordinator: ObservableObject {
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     self.reportSubmissionRuntime = reportSubmissionRuntime
+    self.eventIdentityVerificationSource = eventIdentityVerificationSource
     if let ledgerFailure {
       ledgerHealth = .degraded(reason: ledgerFailure, since: Date())
     }
@@ -798,6 +819,13 @@ final class SensingCoordinator: ObservableObject {
       Task { @MainActor in self.handle(event) }
     }
     reconcileSelfProofCheckpointIfNeeded()
+  }
+
+  deinit {
+    let request = eventIdentityVerificationRequest
+    Task { @MainActor in
+      request?.cancel()
+    }
   }
 
   private func handle(_ event: BarnardEvent) {
@@ -990,7 +1018,8 @@ final class SensingCoordinator: ObservableObject {
   private func applyPhaseDecision(
     coPresentDeviceCount: Int,
     distinctDeviceCountChanged: Bool,
-    for session: EventSession
+    for session: EventSession,
+    startIdentityVerification: Bool = true
   ) -> BeidSharedKit.sensing.ScanDetectionResult {
     let result = BeidSharedKit.sensing.applyScanDetection(
       currentPhase: currentPhaseKind,
@@ -1014,6 +1043,20 @@ final class SensingCoordinator: ObservableObject {
     // edge case for free now, since it calls this same function — before
     // this split it could not, since it always hardcoded a separate
     // `.eventFound` step first.
+    let shouldStartIdentityVerification = startIdentityVerification
+      && session.identityVerification == .notChecked
+      && session.canonicalEventIdHex != nil
+    let eventToPublish: EventSession
+    if shouldStartIdentityVerification
+    {
+      // Publish `.checking` in the phase payload before starting the native
+      // request. The same payload is then copied into pending binding state by
+      // `beginRecording` when confirmation happens on this detection.
+      eventToPublish = session.replacingIdentityVerification(.checking)
+    } else {
+      eventToPublish = session
+    }
+
     if result.confirmedEvent {
       Self.log.notice(
         """
@@ -1023,14 +1066,115 @@ final class SensingCoordinator: ObservableObject {
         \(self.unidentifiedRpidCount, privacy: .public) unidentified
         """
       )
-      beginRecording(event: session, peersVerified: devicesVerified)
+      beginRecording(event: eventToPublish, peersVerified: devicesVerified)
     } else if result.transitionedToEventFound {
-      phase = .eventFound(session)
+      phase = .eventFound(eventToPublish)
     } else if result.updatedRecording {
-      updateRecording(event: session, peersVerified: devicesVerified)
+      updateRecording(event: eventToPublish, peersVerified: devicesVerified)
+    }
+
+    if shouldStartIdentityVerification {
+      startEventIdentityVerificationIfNeeded(for: eventToPublish)
     }
 
     return result
+  }
+
+  /// Begins one eager lookup after the first real event payload is published.
+  /// Demo callers pass `startIdentityVerification: false`, so a demo event can
+  /// carry a fixture hint without ever reaching this seam.
+  private func startEventIdentityVerificationIfNeeded(for event: EventSession) {
+    guard event.identityVerification == .checking,
+          let hint = event.canonicalEventIdHex,
+          let currentEvent = currentEventSession,
+          currentEvent.sessionID == event.sessionID,
+          currentEvent.id == event.id,
+          currentEvent.canonicalEventIdHex == hint
+    else { return }
+
+    eventIdentityVerificationGeneration &+= 1
+    eventIdentityVerificationRequest?.cancel()
+    eventIdentityVerificationRequest = nil
+    let generation = eventIdentityVerificationGeneration
+    eventIdentityVerificationSessionID = event.sessionID
+    eventIdentityVerificationEventID = event.id
+    eventIdentityVerificationHint = hint
+
+    guard let source = eventIdentityVerificationSource else {
+      handleEventIdentityVerificationResolution(
+        EventIdentityVerificationResolution(
+          isSuccess: false,
+          context: nil,
+          errorCode: nil,
+          errorMessage: "registry client unavailable"
+        ),
+        generation: generation,
+        sessionID: event.sessionID,
+        eventID: event.id,
+        hint: hint
+      )
+      return
+    }
+
+    let request = source.resolve(eventIdHex: hint) { [weak self] resolution in
+      Task { @MainActor [weak self] in
+        self?.handleEventIdentityVerificationResolution(
+          resolution,
+          generation: generation,
+          sessionID: event.sessionID,
+          eventID: event.id,
+          hint: hint
+        )
+      }
+    }
+    eventIdentityVerificationRequest = request
+  }
+
+  /// Applies only a current completion. All live event-bearing state is
+  /// updated synchronously on MainActor, while cancelled requests deliberately
+  /// leave `.checking` unchanged.
+  private func handleEventIdentityVerificationResolution(
+    _ resolution: EventIdentityVerificationResolution,
+    generation: Int,
+    sessionID: UUID,
+    eventID: String,
+    hint: String
+  ) {
+    guard generation == eventIdentityVerificationGeneration,
+          eventIdentityVerificationSessionID == sessionID,
+          eventIdentityVerificationEventID == eventID,
+          eventIdentityVerificationHint == hint,
+          let currentEvent = currentEventSession,
+          currentEvent.sessionID == sessionID,
+          currentEvent.id == eventID,
+          currentEvent.canonicalEventIdHex == hint
+    else { return }
+
+    guard let outcome = EventIdentityVerificationMapper.map(resolution) else {
+      eventIdentityVerificationRequest = nil
+      return
+    }
+
+    phase = phase.updatingIdentityVerification(
+      forEventID: eventID,
+      to: outcome
+    )
+    bindingState = bindingState.updatingIdentityVerification(
+      forEventID: eventID,
+      to: outcome
+    )
+    eventIdentityVerificationRequest = nil
+  }
+
+  /// Invalidates the current lookup before any lifecycle operation can expose
+  /// a later session to its callback.
+  private func invalidateEventIdentityVerification() {
+    eventIdentityVerificationGeneration &+= 1
+    eventIdentityVerificationRequest?.cancel()
+    eventIdentityVerificationRequest = nil
+    eventIdentityVerificationSessionID = nil
+    eventIdentityVerificationEventID = nil
+    eventIdentityVerificationHint = nil
   }
 
   /// `BeidSharedKit.sensing.ScanPhaseKind` mirroring `phase`, without its
@@ -1142,9 +1286,35 @@ final class SensingCoordinator: ObservableObject {
   /// Calls the Barnard SDK's leave API (`BarnardEngine.leaveEvent`) to clear
   /// a manually joined event code, symmetric with `joinEvent(_:)`.
   func leaveEvent() {
+    invalidateEventIdentityVerification()
     engine.leaveEvent()
     joinedEventCode = engine.getCurrentEventCode()
     joinedCanonicalEventIdHex = nil
+  }
+
+  /// Retries the current real event's registry lookup only after a terminal
+  /// `.unavailable` or `.notFound` result. There is no view-level automatic
+  /// retry loop; the registry client's own retry remains the only automatic
+  /// retry in this slice.
+  func retryEventIdentityVerification() {
+    guard let event = currentEventSession,
+          event.canonicalEventIdHex != nil
+    else { return }
+    guard event.identityVerification == .unavailable
+      || event.identityVerification == .notFound
+    else { return }
+
+    invalidateEventIdentityVerification()
+    let checkingEvent = event.replacingIdentityVerification(.checking)
+    phase = phase.updatingIdentityVerification(
+      forEventID: event.id,
+      to: .checking
+    )
+    bindingState = bindingState.updatingIdentityVerification(
+      forEventID: event.id,
+      to: .checking
+    )
+    startEventIdentityVerificationIfNeeded(for: checkingEvent)
   }
 
   func startSensing(
@@ -1247,6 +1417,7 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func resetSessionState() {
+    invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
     sessionAggregate = nil
     demoDeviceSequence = 0
@@ -1324,6 +1495,15 @@ final class SensingCoordinator: ObservableObject {
   // The interstitial (`EventBindingSheetView`) drives these; this type owns
   // the message/signing/persistence side so the view only ever handles the
   // wallet connector's `connect()`/`requestPersonalSign(messageHex:)` calls.
+
+  private var currentEventSession: EventSession? {
+    switch phase {
+    case .eventFound(let event), .recording(let event, _), .signalLost(let event, _):
+      return event
+    case .idle, .sensing:
+      return nil
+    }
+  }
 
   private var currentBindingEvent: EventSession? {
     switch phase {
@@ -2047,7 +2227,9 @@ final class SensingCoordinator: ObservableObject {
       id: demoEvent.id,
       name: demoEvent.name,
       venue: demoEvent.venue,
-      canonicalEventIdHex: demoEvent.canonicalEventIdHex ?? pendingCanonicalEventIdHex
+      canonicalEventIdHex: demoEvent.canonicalEventIdHex ?? pendingCanonicalEventIdHex,
+      sessionID: demoEvent.sessionID,
+      identityVerification: .notChecked
     )
     // `applyPhaseDecision`'s shared reducer only transitions `.sensing ->
     // .eventFound` (or straight through to `.recording`) when
@@ -2081,7 +2263,8 @@ final class SensingCoordinator: ObservableObject {
       self.applyPhaseDecision(
         coPresentDeviceCount: self.demoWindowRpids.count,
         distinctDeviceCountChanged: true,
-        for: session
+        for: session,
+        startIdentityVerification: false
       )
       // Window boundary right after device #1, matching the exact
       // `advanceDemoWindow()` call-site position the old
@@ -2120,7 +2303,8 @@ final class SensingCoordinator: ObservableObject {
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
           distinctDeviceCountChanged: changed,
-          for: session
+          for: session,
+          startIdentityVerification: false
         )
       }
       self.advanceDemoWindow()
@@ -2131,7 +2315,8 @@ final class SensingCoordinator: ObservableObject {
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
           distinctDeviceCountChanged: changed,
-          for: session
+          for: session,
+          startIdentityVerification: false
         )
         self.advanceDemoWindow()
       }
@@ -2158,7 +2343,8 @@ final class SensingCoordinator: ObservableObject {
         self.applyPhaseDecision(
           coPresentDeviceCount: self.demoWindowRpids.count,
           distinctDeviceCountChanged: changed,
-          for: event
+          for: event,
+          startIdentityVerification: false
         )
         self.advanceDemoWindow()
       }

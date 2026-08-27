@@ -10,6 +10,17 @@ struct SignalLostView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   let event: EventSession
   let peersVerified: Int
+  let onRetryVerification: () -> Void
+
+  init(
+    event: EventSession,
+    peersVerified: Int,
+    onRetryVerification: @escaping () -> Void = {}
+  ) {
+    self.event = event
+    self.peersVerified = peersVerified
+    self.onRetryVerification = onRetryVerification
+  }
 
   var body: some View {
     BeidStatusLayout(
@@ -20,9 +31,15 @@ struct SignalLostView: View {
       VStack(spacing: BeidDesign.Spacing.content) {
         BeidStatusPill(state: .sensingPaused)
         EventCardView(event: event, badge: .paused) {
-          // Same corrected count and same label as Proof Detail — one number
-          // must not carry two labels. See beid#154.
-          BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(peersVerified)")
+          VStack(alignment: .leading, spacing: DS.Space.xs) {
+            EventIdentityVerificationRow(
+              status: event.identityVerification,
+              onRetry: onRetryVerification
+            )
+            // Same corrected count and same label as Proof Detail — one number
+            // must not carry two labels. See beid#154.
+            BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(peersVerified)")
+          }
         }
       }
       },

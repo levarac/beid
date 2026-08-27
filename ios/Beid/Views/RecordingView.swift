@@ -13,6 +13,7 @@ struct RecordingView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   let event: EventSession
   let peersVerified: Int
+  let onRetryVerification: () -> Void
 
   /// Seeded once at this view identity's creation from
   /// `sensing.recordingCeremonyShown` — SwiftUI preserves `@State` across
@@ -33,11 +34,13 @@ struct RecordingView: View {
     sensing: SensingCoordinator,
     event: EventSession,
     peersVerified: Int,
+    onRetryVerification: @escaping () -> Void = {},
     ceremonyDwellNanos: UInt64 = 2_000_000_000
   ) {
     self.sensing = sensing
     self.event = event
     self.peersVerified = peersVerified
+    self.onRetryVerification = onRetryVerification
     self.ceremonyDwellNanos = ceremonyDwellNanos
     _showEntranceCeremony = State(initialValue: !sensing.recordingCeremonyShown)
   }
@@ -61,6 +64,10 @@ struct RecordingView: View {
 
         EventCardView(event: event, badge: .recording) {
           VStack(alignment: .leading, spacing: DS.Space.xs) {
+            EventIdentityVerificationRow(
+              status: event.identityVerification,
+              onRetry: onRetryVerification
+            )
             HStack(spacing: DS.Space.s) {
               // Indeterminate, non-fractional activity indicator — no
               // denominator exists to show a fraction of (§5.2). Not
