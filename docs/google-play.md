@@ -22,8 +22,15 @@ the same steps `build-and-sign-android.sh` would run, since a one-off bootstrap
 upload does not need the CI runner. The Play publishing service account is
 `play-publisher@levarac.iam.gserviceaccount.com` (its own dedicated `levarac`
 GCP project), granted "Release apps to testing tracks" scoped to just this
-app. Remaining: place the upload keystore and this service-account JSON on
-`emi` at the paths below, then flip `GHA_DELIVERY` to `on`.
+app. Remaining: either place the upload keystore and this service-account
+JSON on `emi` at the paths below, or set the GitHub Secrets described in
+"Hosted-runner support" — then flip `GHA_DELIVERY` to `on`.
+
+The job's `runs-on` also now resolves through the repository variable
+`RUNS_ON_ANDROID` (`${{ vars.RUNS_ON_ANDROID || 'emi' }}`), so the same
+workflow file can run on either `emi` or a GitHub-hosted runner without
+edits — see "Hosted-runner support" below. This mirrors the pattern
+`ShiokazeHD/umidori` uses for its own Android delivery lane.
 
 `what_to_test.json` and `what_to_test.android.json` are trigger inputs only in
 this temporary lane. Publishing their text as localized Google Play release
@@ -80,6 +87,45 @@ Do not print, commit, or send the password values or service-account JSON
 through agmsg. `jarsigner` reads both passwords through environment-variable
 references, so their values do not appear as command-line arguments.
 
+## Hosted-runner support
+
+The workflow can run on either `emi` or a GitHub-hosted runner. Which one a
+given run uses is controlled by the repository variable `RUNS_ON_ANDROID`:
+unset (the default) resolves to `emi`; setting it to `ubuntu-latest` switches
+delivery to a GitHub-hosted runner instead. No workflow edit is needed to
+switch — this follows the same `vars.RUNS_ON_* || <default>` pattern
+`ShiokazeHD/umidori` uses for its own Android delivery workflow.
+
+`emi`'s credential path is unchanged: it still reads the runner-local
+`$PLAY_CRED_DIR/env` file described above. A GitHub-hosted runner is a fresh
+VM on every run, so it has no such local state — instead, when
+`runner.environment == 'github-hosted'`, the workflow decodes the same five
+values from GitHub Secrets into a fresh, mode-600 env file under
+`$RUNNER_TEMP`, then points `PLAY_CRED_DIR` at it. `check-play-delivery.sh`
+and `build-and-sign-android.sh` run unchanged either way, since both only
+care that `$PLAY_CRED_DIR/env` exists with the right five variable names.
+
+Secrets required for the hosted-runner path (`gh secret set <name> --repo
+thegreeting/beid`, run by Ken — these values should never pass through an
+agent):
+
+| Secret | Contents |
+|---|---|
+| `PLAY_KEYSTORE_B64` | `base64 -i beid-upload.jks \| pbcopy`, paste as the secret value |
+| `PLAY_SERVICE_ACCOUNT_JSON_B64` | `base64 -i <service-account>.json \| pbcopy`, paste as the secret value |
+| `PLAY_KEYSTORE_PASSWORD` | the upload keystore's store password, plain value |
+| `PLAY_KEY_PASSWORD` | the `beid-upload` key's password, plain value |
+
+The key alias is not sensitive, so it is a repository **variable** instead of
+a secret: `PLAY_KEY_ALIAS`, default `beid-upload` if unset — only needs
+setting if a different alias is ever used.
+
+The hosted path also installs Android SDK platform 36 and build-tools 36.0.0
+explicitly (via `sdkmanager`) rather than assuming a given runner image
+already has them, and installs JDK 17 via `actions/setup-java`, exporting it
+as `KMP_JAVA_HOME` — `resolve_kmp_java_home.sh`'s other detection branches are
+all macOS-specific and cannot succeed on a Linux runner.
+
 ## Ken-side activation list
 
 These prerequisites were confirmed missing in the 2026-08-20 preflight; status
@@ -92,10 +138,13 @@ as of 2026-08-28:
    service account in its own `levarac` GCP project, enabled the Google Play
    Android Developer API on that project, and granted the service account
    "Release apps to testing tracks" scoped to just `org.levarac.beid`.
-3. ⬜ Place the upload keystore plus the service-account JSON under
+3. ⬜ Either place the upload keystore plus the service-account JSON under
    `/Users/eiji/.credentials/play` on `emi`, as the mode-600 `env` file
-   described above. Not yet done — the bootstrap upload below was built and
-   signed locally instead, so this is still needed before CI can run.
+   described above, **or** set the four GitHub Secrets and one variable
+   described in "Hosted-runner support" and switch `RUNS_ON_ANDROID` to
+   `ubuntu-latest`. Not yet done either way — the bootstrap upload below was
+   built and signed locally instead, so one of these two is still needed
+   before CI can run.
 4. ✅ Perform the first AAB upload manually in Play Console — done 2026-08-28,
    via the Play Console UI (a new app's first upload cannot be API-driven).
 

@@ -20,10 +20,97 @@ jobs:
   deliver:
     name: Build and upload AAB to internal testing
     if: ${{ vars.GHA_DELIVERY == 'on' }}
-    runs-on: [self-hosted, emi]
+    runs-on: ${{ vars.RUNS_ON_ANDROID || 'emi' }}
     timeout-minutes: 90
     steps:
+      # GitHub-hosted runners leave limited free disk space; a release AAB
+      # build can exhaust it. Reclaim space by dropping preinstalled
+      # toolchains this job never uses. runner.environment guards every
+      # hosted-only step below so none of them can fire on emi.
+      - name: Free disk space (hosted runners only)
+        if: runner.environment == 'github-hosted'
+        run: |
+          set -uo pipefail
+          echo "Before:"; df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+            /usr/local/share/powershell /usr/lib/jvm/temurin-*-jdk-amd64 \
+            "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}/CodeQL" || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          echo "After:"; df -h /
+
       - uses: actions/checkout@v4
+
+      - name: Setup Java (hosted runners only)
+        if: runner.environment == 'github-hosted'
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      # resolve_kmp_java_home.sh only has macOS-shaped detection branches
+      # (Homebrew paths, Android Studio's bundled JBR, /usr/libexec/java_home);
+      # none of them exist on a Linux runner. Its KMP_JAVA_HOME override branch
+      # is the one path that can succeed here, so point it at the JDK
+      # setup-java just installed.
+      - name: Point resolve_kmp_java_home.sh at the hosted JDK
+        if: runner.environment == 'github-hosted'
+        run: echo "KMP_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      # build-and-sign-android.sh hard-fails if these exact components are
+      # missing under ANDROID_HOME. emi has them pre-provisioned; a hosted
+      # runner's bundled SDK is not guaranteed to, so install explicitly
+      # rather than depend on what a given runner image happens to ship.
+      - name: Install required Android SDK components (hosted runners only)
+        if: runner.environment == 'github-hosted'
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" "build-tools;36.0.0"
+
+      # emi keeps the keystore, service-account JSON, and passwords in a
+      # runner-local $PLAY_CRED_DIR/env file (see docs/google-play.md) because
+      # it is a persistent machine. A hosted runner is a fresh VM every run,
+      # so there is no local state to read here -- decode the same five
+      # variables from GitHub Secrets into a fresh, mode-600 env file instead,
+      # then point PLAY_CRED_DIR at it. check-play-delivery.sh and
+      # build-and-sign-android.sh are already filename- and path-agnostic
+      # (they only care about PLAY_CRED_DIR/env existing with these five
+      # names), so nothing below this step needs to change per runner type.
+      - name: Synthesize Play credentials from GitHub Secrets (hosted runners only)
+        if: runner.environment == 'github-hosted'
+        env:
+          PLAY_KEYSTORE_B64: ${{ secrets.PLAY_KEYSTORE_B64 }}
+          PLAY_SERVICE_ACCOUNT_JSON_B64: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON_B64 }}
+          PLAY_KEYSTORE_PASSWORD: ${{ secrets.PLAY_KEYSTORE_PASSWORD }}
+          PLAY_KEY_PASSWORD: ${{ secrets.PLAY_KEY_PASSWORD }}
+          RESOLVED_PLAY_KEY_ALIAS: ${{ vars.PLAY_KEY_ALIAS || 'beid-upload' }}
+        run: |
+          set -euo pipefail
+          for name in PLAY_KEYSTORE_B64 PLAY_SERVICE_ACCOUNT_JSON_B64 PLAY_KEYSTORE_PASSWORD PLAY_KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing $name secret. Set it with 'gh secret set $name --repo thegreeting/beid' before running this workflow on a hosted runner."
+              exit 1
+            fi
+          done
+
+          cred_dir="$RUNNER_TEMP/play-creds"
+          mkdir -m 700 -p "$cred_dir"
+          echo "$PLAY_KEYSTORE_B64" | base64 --decode > "$cred_dir/upload.jks"
+          echo "$PLAY_SERVICE_ACCOUNT_JSON_B64" | base64 --decode > "$cred_dir/service-account.json"
+          chmod 600 "$cred_dir/upload.jks" "$cred_dir/service-account.json"
+
+          {
+            printf 'PLAY_SERVICE_ACCOUNT_JSON=%s\n' "$cred_dir/service-account.json"
+            printf 'PLAY_KEYSTORE_PATH=%s\n' "$cred_dir/upload.jks"
+            printf 'PLAY_KEY_ALIAS=%s\n' "$RESOLVED_PLAY_KEY_ALIAS"
+            printf 'PLAY_KEYSTORE_PASSWORD=%s\n' "$PLAY_KEYSTORE_PASSWORD"
+            printf 'PLAY_KEY_PASSWORD=%s\n' "$PLAY_KEY_PASSWORD"
+          } > "$cred_dir/env"
+          chmod 600 "$cred_dir/env"
+
+          echo "PLAY_CRED_DIR=$cred_dir" >> "$GITHUB_ENV"
+
       - name: Validate runner-local Play credentials
         run: scripts/gha/check-play-delivery.sh
       - name: Build and sign release AAB
