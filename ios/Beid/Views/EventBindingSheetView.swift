@@ -114,7 +114,12 @@ struct EventBindingSheetView: View {
       ProgressView()
         .tint(DS.Color.actionPrimary)
         .padding(.top, DS.Space.s)
-    } else if let address = coordinator.walletAddress, let connector = coordinator.walletConnector {
+    } else if let address = coordinator.walletAddress,
+      let connector = coordinator.walletConnector,
+      !(connector is CoinbaseWalletConnector) {
+      // A Coinbase session recorded before the picker below stopped
+      // offering Coinbase (thegreeting/beid#270) falls through to the
+      // MetaMask-only picker instead of offering to reuse it here.
       BeidPrimaryButton("Seal with connected wallet", systemImage: "checkmark.seal") {
         Task { await performBinding(address: address, connector: connector) }
       }

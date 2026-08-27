@@ -110,7 +110,11 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
       // that already-settled state now, since `.onChange` below only
       // fires on a *transition* and would otherwise never fire for a
       // state that was already `.connected` when this view appeared.
-      deliverConnectedState(from: coinbaseClient, provider: .coinbase)
+      //
+      // Coinbase is intentionally skipped here (thegreeting/beid#270):
+      // the picker below no longer offers a way to select it, so an
+      // already-settled Coinbase session must not auto-advance past a
+      // screen the user can no longer reach through normal navigation.
       deliverConnectedState(from: metaMaskClient, provider: .metamask)
     }
     .onChange(of: coinbaseClient.state) { _, newState in
@@ -181,16 +185,18 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
       )
 
       VStack(spacing: DS.Space.s) {
-        BeidPrimaryButton("Connect with Coinbase Wallet", systemImage: "wallet.pass") {
-          selectedProvider = .coinbase
-        }
-        .tint(DS.Color.actionPrimary)
-        .padding(.top, DS.Space.s)
-
-        BeidSecondaryButton(title: "Connect with MetaMask") {
+        // Coinbase Wallet is temporarily unreachable from this picker
+        // (thegreeting/beid#270): the Base app rebrand broke the approval
+        // dialog handshake, and the underlying SDK has no published
+        // native-iOS migration path yet. The connector, its tests, and the
+        // dormant `.coinbase` branches below stay in place so this is a
+        // one-line reversal once upstream ships a fix — see
+        // `CoinbaseWalletConnector.swift`.
+        BeidPrimaryButton("Connect with MetaMask", systemImage: "wallet.pass") {
           selectedProvider = .metamask
         }
         .tint(DS.Color.actionPrimary)
+        .padding(.top, DS.Space.s)
 
         if let secondaryAction {
           BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)

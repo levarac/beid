@@ -50,6 +50,7 @@
 		5A5BD6CD875999D8E6C36A8C /* DetectionFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C31D39275DE0F8E68D2F0E9 /* DetectionFixtures.swift */; };
 		5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBBF900C092346BBFDF6BA96 /* RecordingView.swift */; };
 		5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */; };
+		61D5E95FE083DD81814A1B69 /* WalletProviderVisibilityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BFA5243CE469457AD89DA7 /* WalletProviderVisibilityUITests.swift */; };
 		64645438E8897AC3115D5188 /* SharedRuntimeProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C307E6ACEDA06F3CE4546F10 /* SharedRuntimeProbe.swift */; };
 		67D6643DEE67BF7E3D10D181 /* AggregationRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */; };
 		6997A7F8099B9742B3F3EC17 /* SelfProofCheckpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C67609A206E5D182BCFECF3 /* SelfProofCheckpoint.swift */; };
@@ -233,6 +234,7 @@
 		A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidIPadLayoutTests.swift; sourceTree = "<group>"; };
 		A0B8D5C627A0DB76BAA9A54B /* SessionAggregateSnapshotPersistHookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateSnapshotPersistHookTests.swift; sourceTree = "<group>"; };
 		A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidApp.swift; sourceTree = "<group>"; };
+		A4BFA5243CE469457AD89DA7 /* WalletProviderVisibilityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletProviderVisibilityUITests.swift; sourceTree = "<group>"; };
 		A5703915F87566D192896C7B /* DeviceCountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceCountTests.swift; sourceTree = "<group>"; };
 		A66AC8F313C43F47575480DE /* EventRejoinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRejoinTests.swift; sourceTree = "<group>"; };
 		A6B5D084B36D8B81C91BD987 /* VenueDeviceOrganizerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceOrganizerViewModel.swift; sourceTree = "<group>"; };
@@ -386,6 +388,7 @@
 				A0B0F719CDD2DE7CBBEDB7F5 /* BeidIPadLayoutTests.swift */,
 				6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */,
 				CADBE5E0B665DA97DF1CF7B6 /* RecordingBindingSheetUITests.swift */,
+				A4BFA5243CE469457AD89DA7 /* WalletProviderVisibilityUITests.swift */,
 			);
 			path = BeidUITests;
 			sourceTree = "<group>";
@@ -734,6 +737,7 @@
 				48805AF863EF6409D14E5B2E /* BeidIPadLayoutTests.swift in Sources */,
 				A270412A7278D241A8A344C7 /* EventMembershipUITests.swift in Sources */,
 				6A599DE79B7D6BFF11C01F49 /* RecordingBindingSheetUITests.swift in Sources */,
+				61D5E95FE083DD81814A1B69 /* WalletProviderVisibilityUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
