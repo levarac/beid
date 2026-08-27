@@ -48,12 +48,19 @@ At the verification point above, the walking skeleton is wired into both apps.
 The shared unsent-window ledger reducer and snapshot codec are also wired into
 the iOS production `SensingCoordinator`; native snapshot stores exist on both
 platforms, while Android production wiring remains deferred to Issue #121.
-Android currently has only the Event Join screen, and
-`EventJoinCoordinator` stops at `Idle`, `RequestingPermission`, `Sensing`, or
-`PermissionDenied`. The entire post-join screen flow—event found, recording
-(including the one-time proof entrance), signal-loss recovery, and collection
-home—is absent on Android today; the gap is broader than ledger persistence
-alone.
+Android's screen set has grown since that verification point and this
+paragraph was measured again on 2026-08-27 against `203adb0`. Android now has
+five screens—Welcome, Bluetooth permission, Bluetooth off, Join event, and
+Account—and `EventJoinScreen` renders `Sensing`, `EventFound`, `Recording`,
+and `SignalLost` inside the Join event screen rather than as the four
+dedicated screens iOS uses. `EventJoinCoordinator` calls `engine.onEvent`.
+What is still absent on Android is the collection home and the proof-detail
+surfaces (`Screen.kt` states outright that `EventJoin` stands in for iOS's
+`.home`), wallet connection, and owner-key binding/self-proof. Those are
+Issues #121, #122, #124, and #125; the last two are blocked upstream on
+barnard#133, so the gap cannot be closed from inside this repository.
+Do not restate "Android has only one screen"—that was true when Issue #117
+was filed and has not been true since #119/#120/#123/#126/#118 landed.
 The iOS coordinator owns one native `SensingCryptography` facade, with
 `BarnardSensingCryptography` as its production implementation, instead of
 retaining `BarnardIdentity` directly. That facade is a native testability
