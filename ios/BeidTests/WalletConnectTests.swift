@@ -6,10 +6,10 @@ import XCTest
 @testable import Beid
 
 /// Covers the `AppCoordinator` wiring around wallet connect/disconnect, and
-/// the `CoinbaseWalletConnector`/`MetaMaskConnector` implementations of
-/// `WalletConnector` against fake transports. Does not exercise either
-/// SDK's real handshake — that requires a live wallet app installed on a
-/// device; see docs/field-test-procedure.md.
+/// the `MetaMaskConnector` implementation of `WalletConnector` against a
+/// fake transport. Does not exercise the SDK's real handshake — that
+/// requires a live wallet app installed on a device; see
+/// docs/field-test-procedure.md.
 @MainActor
 final class WalletConnectTests: XCTestCase {
   func testCompleteWalletConnectSetsAddressAndAdvancesScreen() {
@@ -36,69 +36,9 @@ final class WalletConnectTests: XCTestCase {
 
     XCTAssertNil(coordinator.walletAddress)
     // No connector was ever recorded on this coordinator, so
-    // disconnectWallet() falls back to CoinbaseWalletConnector.shared —
-    // this asserts that fallback doesn't crash and leaves the singleton
-    // idle.
-    XCTAssertEqual(CoinbaseWalletConnector.shared.state, .idle)
-  }
-
-  func testCoinbaseConnectDoesNotStartHandshakeWhenWalletIsMissing() async {
-    let transport = FakeCoinbaseWalletTransport(isWalletInstalled: false)
-    let connector = CoinbaseWalletConnector(transport: transport)
-
-    await connector.connect()
-
-    XCTAssertEqual(connector.state, .unavailable(.walletNotInstalled))
-    XCTAssertEqual(transport.handshakeCount, 0)
-  }
-
-  func testCoinbaseConnectPublishesConnectedAddressAndChain() async {
-    let transport = FakeCoinbaseWalletTransport(isWalletInstalled: true)
-    transport.handshakeResult = .success(
-      CoinbaseWalletAccount(address: "0xCOINBASE", chainId: "eip155:8453")
-    )
-    let connector = CoinbaseWalletConnector(transport: transport)
-
-    await connector.connect()
-
-    XCTAssertEqual(connector.state, .connected(address: "0xCOINBASE"))
-    XCTAssertEqual(connector.address, "0xCOINBASE")
-    XCTAssertEqual(connector.chainId, "eip155:8453")
-  }
-
-  func testCoinbasePersonalSignUsesConnectedAccountAndDigest() async {
-    let transport = FakeCoinbaseWalletTransport(isWalletInstalled: true)
-    transport.handshakeResult = .success(
-      CoinbaseWalletAccount(address: "0xCOINBASE", chainId: "eip155:1")
-    )
-    transport.signatureResult = .success("0xSIGNATURE")
-    let connector = CoinbaseWalletConnector(transport: transport)
-    await connector.connect()
-
-    var dispatched = false
-    let result = await connector.requestPersonalSign(messageHex: "0xMESSAGE") {
-      dispatched = true
-    }
-
-    XCTAssertEqual(result, .success("0xSIGNATURE"))
-    XCTAssertEqual(transport.requestedAddress, "0xCOINBASE")
-    XCTAssertEqual(transport.requestedMessage, "0xMESSAGE")
-    XCTAssertTrue(dispatched)
-  }
-
-  func testCoinbaseDisconnectClearsSessionState() async {
-    let transport = FakeCoinbaseWalletTransport(isWalletInstalled: true)
-    transport.handshakeResult = .success(
-      CoinbaseWalletAccount(address: "0xCOINBASE", chainId: "eip155:1")
-    )
-    let connector = CoinbaseWalletConnector(transport: transport)
-    await connector.connect()
-
-    connector.disconnect()
-
-    XCTAssertEqual(connector.state, .idle)
-    XCTAssertNil(connector.address)
-    XCTAssertEqual(transport.disconnectCount, 1)
+    // disconnectWallet() falls back to MetaMaskConnector.shared — this
+    // asserts that fallback doesn't crash and leaves the singleton idle.
+    XCTAssertEqual(MetaMaskConnector.shared.state, .idle)
   }
 
   func testMetaMaskConnectDoesNotStartHandshakeWhenWalletIsMissing() async {
@@ -180,48 +120,6 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertEqual(connector.state, .idle)
     XCTAssertNil(connector.address)
     XCTAssertEqual(connector.chainId, "eip155:1")
-  }
-}
-
-@MainActor
-private final class FakeCoinbaseWalletTransport: CoinbaseWalletTransport {
-  let isWalletInstalled: Bool
-  var handshakeResult: Result<CoinbaseWalletAccount, CoinbaseWalletTransportError> =
-    .failure(.failed("No handshake result"))
-  var signatureResult: Result<String, CoinbaseWalletTransportError> =
-    .failure(.failed("No signature result"))
-  private(set) var handshakeCount = 0
-  private(set) var disconnectCount = 0
-  private(set) var requestedAddress: String?
-  private(set) var requestedMessage: String?
-
-  init(isWalletInstalled: Bool) {
-    self.isWalletInstalled = isWalletInstalled
-  }
-
-  func initiateHandshake(
-    completion: @MainActor @escaping (Result<CoinbaseWalletAccount, CoinbaseWalletTransportError>) -> Void
-  ) {
-    handshakeCount += 1
-    completion(handshakeResult)
-  }
-
-  func requestPersonalSign(
-    address: String,
-    messageHex: String,
-    completion: @escaping (Result<String, CoinbaseWalletTransportError>) -> Void
-  ) {
-    requestedAddress = address
-    requestedMessage = messageHex
-    completion(signatureResult)
-  }
-
-  func disconnect() {
-    disconnectCount += 1
-  }
-
-  func handle(url: URL) -> Bool {
-    false
   }
 }
 
