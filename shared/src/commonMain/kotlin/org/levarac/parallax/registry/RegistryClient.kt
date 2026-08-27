@@ -148,10 +148,17 @@ public class RegistryClient internal constructor(
                 val eventId = eventIdHex.decodeHex(expectedBytes = 32)
                 val result = resolver.resolve(eventId, pin)
                 val record = definitionForUseTime(result.context, useTimeEpochSeconds)
-                    ?: throw DefinitionFetchException(
-                        DefinitionFetchError.VALIDITY_MISMATCH,
-                        "no registry definition is valid at the requested time",
-                    )
+                    ?: throw if (result.context.definitionCount == 0) {
+                        DefinitionFetchException(
+                            DefinitionFetchError.NOT_FOUND,
+                            "event has no registry definitions",
+                        )
+                    } else {
+                        DefinitionFetchException(
+                            DefinitionFetchError.VALIDITY_MISMATCH,
+                            "no registry definition is valid at the requested time",
+                        )
+                    }
                 val encodedEventKeySet = keySetFetcher.fetch(result.context.registration.keySetDigestHex)
                 val context = fetcher.fetch(
                     eventId = eventId,
@@ -401,6 +408,7 @@ private val DefinitionFetchError.wireName: String
         DefinitionFetchError.HASH_MISMATCH -> "definition_hash_mismatch"
         DefinitionFetchError.DECODE_ERROR -> "definition_decode_error"
         DefinitionFetchError.EVENT_ID_MISMATCH -> "definition_event_id_mismatch"
+        DefinitionFetchError.NOT_FOUND -> "definition_not_found"
         DefinitionFetchError.VALIDITY_MISMATCH -> "definition_validity_mismatch"
         DefinitionFetchError.PAYLOAD_TOO_LARGE -> "definition_payload_too_large"
     }

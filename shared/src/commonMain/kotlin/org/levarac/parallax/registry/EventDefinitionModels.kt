@@ -137,6 +137,7 @@ public enum class DefinitionFetchError {
     HASH_MISMATCH,
     DECODE_ERROR,
     EVENT_ID_MISMATCH,
+    NOT_FOUND,
     VALIDITY_MISMATCH,
     PAYLOAD_TOO_LARGE,
 }
