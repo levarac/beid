@@ -141,11 +141,23 @@ struct ScanFlowView: View {
     case .idle, .sensing:
       SensingView()
     case .eventFound(let event):
-      EventFoundView(event: event)
+      EventFoundView(
+        event: event,
+        onRetryVerification: { sensing.retryEventIdentityVerification() }
+      )
     case .recording(let event, let peersVerified):
-      RecordingView(sensing: sensing, event: event, peersVerified: peersVerified)
+      RecordingView(
+        sensing: sensing,
+        event: event,
+        peersVerified: peersVerified,
+        onRetryVerification: { sensing.retryEventIdentityVerification() }
+      )
     case .signalLost(let event, let peersVerified):
-      SignalLostView(event: event, peersVerified: peersVerified)
+      SignalLostView(
+        event: event,
+        peersVerified: peersVerified,
+        onRetryVerification: { sensing.retryEventIdentityVerification() }
+      )
     }
   }
 }

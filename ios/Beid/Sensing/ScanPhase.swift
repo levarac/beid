@@ -35,3 +35,30 @@ enum ScanPhase: Equatable {
   /// not a restart. Nothing already recorded is lost.
   case signalLost(event: EventSession, peersVerified: Int)
 }
+
+extension ScanPhase {
+  /// Updates only the matching event payload. The coordinator calls this on
+  /// the MainActor so eventFound/recording/signalLost copies change together
+  /// with the pending binding payload.
+  func updatingIdentityVerification(
+    forEventID eventID: String,
+    to identityVerification: EventIdentityVerification
+  ) -> ScanPhase {
+    switch self {
+    case .eventFound(let event) where event.id == eventID:
+      return .eventFound(event.replacingIdentityVerification(identityVerification))
+    case .recording(let event, let peersVerified) where event.id == eventID:
+      return .recording(
+        event: event.replacingIdentityVerification(identityVerification),
+        peersVerified: peersVerified
+      )
+    case .signalLost(let event, let peersVerified) where event.id == eventID:
+      return .signalLost(
+        event: event.replacingIdentityVerification(identityVerification),
+        peersVerified: peersVerified
+      )
+    default:
+      return self
+    }
+  }
+}

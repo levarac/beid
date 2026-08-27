@@ -52,6 +52,61 @@
     "Enter an event code to continue. Ask the event organizer for it.": {},
     "Enter event code instead": {},
     "Event Found": {},
+    "event.identityVerification.checking": {
+      "comment": "Status row beneath a live event card while the app checks the event registry. Sentence case. Do not add an event name; this row reports status only.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking event registry…"
+          }
+        }
+      }
+    },
+    "event.identityVerification.notFound": {
+      "comment": "Neutral terminal status row when the registry has no definition for the detected event. Sentence case. Do not add an event name or imply that the event is invalid.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No registry definition was found for this event."
+          }
+        }
+      }
+    },
+    "event.identityVerification.retry": {
+      "comment": "Accessible button label for manually retrying an unavailable or no-definition event registry lookup. Sentence case. This is the only retry affordance in the row.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry event registry verification"
+          }
+        }
+      }
+    },
+    "event.identityVerification.unavailable": {
+      "comment": "Neutral terminal status row when the event registry could not be reached or returned malformed data. Sentence case. Do not add an event name or imply a verification result.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event registry is temporarily unavailable."
+          }
+        }
+      }
+    },
+    "event.identityVerification.verified": {
+      "comment": "Success status row after the registry returned a valid verified event context. Sentence case. Report identity status only; never include the event display name in this row.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event identity verified"
+          }
+        }
+      }
+    },
     "Event code": {
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join."
     },
