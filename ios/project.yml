@@ -8,21 +8,18 @@ packages:
   Barnard:
     url: https://github.com/levarac/barnard.git
     exactVersion: 0.3.0
-  CoinbaseWallet:
-    # Direct app-to-app wallet transport. Pinned because upstream activity
-    # is limited and compatibility must be reviewed before any upgrade.
-    url: https://github.com/coinbase/wallet-mobile-sdk
-    exactVersion: 1.1.2
   MetaMask:
     # Archived, non-commercially licensed dependency, now linked into
     # Release (DECISIONS 2026-08-21 "#250 で MetaMask を Release へ昇格させる"):
     # WalletConnect (Reown) was removed as beid's third wallet option, and
-    # without MetaMask promoted the shipping build would offer only
-    # Coinbase. Keep this exact pin — an upgrade needs the same physical-
-    # device review as this promotion did. The connect → sign → return
-    # round trip has never been verified on a real device; that
-    # verification is a still-owed release gate, tracked in
-    # docs/field-test-procedure.md, not something this change completes.
+    # without MetaMask promoted the shipping build would have offered no
+    # direct-connect wallet at all (Coinbase Wallet was beid's other option
+    # then; it was removed outright later, thegreeting/beid#270). Keep this
+    # exact pin — an upgrade needs the same physical-device review as this
+    # promotion did. The connect → sign → return round trip has never been
+    # verified on a real device; that verification is a still-owed release
+    # gate, tracked in docs/field-test-procedure.md, not something this
+    # change completes.
     url: https://github.com/MetaMask/metamask-ios-sdk
     exactVersion: 0.8.10
 targets:
@@ -49,8 +46,6 @@ targets:
         product: Barnard
       - package: Barnard
         product: BarnardCore
-      - package: CoinbaseWallet
-        product: CoinbaseWalletSDK
       - target: BeidMetaMaskSupport
     info:
       path: Beid/App/Info.plist
@@ -89,9 +84,7 @@ targets:
           - CFBundleURLSchemes:
               - beid
         LSApplicationQueriesSchemes:
-          - cbwallet
           - metamask
-          - mwp+1.1
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.levarac.beid
