@@ -61,7 +61,7 @@ final class SelfProofCheckpointStore: ObservableObject {
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
     do {
       let data = try Data(contentsOf: fileURL)
-      checkpoint = try JSONDecoder().decode(SelfProofCheckpoint.self, from: data)
+      checkpoint = try RecordSchemaEnvelope.decodeRecord(SelfProofCheckpoint.self, from: data)
     } catch {
       // Same corrupt-file policy as the other proof-bearing stores
       // (beid#135) — preserve the unreadable bytes before anything can
@@ -82,7 +82,7 @@ final class SelfProofCheckpointStore: ObservableObject {
       try? FileManager.default.removeItem(at: fileURL)
       return
     }
-    guard let data = try? JSONEncoder().encode(checkpoint) else { return }
+    guard let data = try? RecordSchemaEnvelope.encodeRecord(checkpoint) else { return }
     try? data.write(to: fileURL, options: .atomic)
   }
 }

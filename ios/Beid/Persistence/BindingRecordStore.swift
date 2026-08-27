@@ -57,7 +57,7 @@ final class BindingRecordStore: ObservableObject {
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
     do {
       let data = try Data(contentsOf: fileURL)
-      records = try JSONDecoder().decode([BindingRecord].self, from: data)
+      records = try RecordSchemaEnvelope.decodeRecords(BindingRecord.self, from: data)
     } catch {
       // A file that fails to decode used to be discarded silently and then
       // destroyed by the next save, taking every binding record with it
@@ -74,7 +74,7 @@ final class BindingRecordStore: ObservableObject {
 
   private func save() {
     guard !isPersistenceSuspended else { return }
-    guard let data = try? JSONEncoder().encode(records) else { return }
+    guard let data = try? RecordSchemaEnvelope.encodeRecords(records) else { return }
     try? data.write(to: fileURL, options: .atomic)
   }
 }
