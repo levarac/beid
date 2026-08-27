@@ -4,12 +4,12 @@
 <dict>
 	<key>BeidEtherscanAPIKey</key>
 	<string>$(BEID_ETHERSCAN_API_KEY)</string>
+	<key>BeidEventCodeLookupURLTemplate</key>
+	<string>$(BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE)</string>
 	<key>BeidEventDefinitionURLTemplate</key>
 	<string>$(BEID_EVENT_DEFINITION_URL_TEMPLATE)</string>
 	<key>BeidEventKeySetURLTemplate</key>
 	<string>$(BEID_EVENT_KEY_SET_URL_TEMPLATE)</string>
-	<key>BeidEventCodeLookupURLTemplate</key>
-	<string>$(BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE)</string>
 	<key>BeidEventRegistryReaderAddress</key>
 	<string>$(BEID_EVENT_REGISTRY_READER_ADDRESS)</string>
 	<key>BeidReportSubmissionEnabled</key>
@@ -43,9 +43,7 @@
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
-		<string>cbwallet</string>
 		<string>metamask</string>
-		<string>mwp+1.1</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>beid uses Bluetooth to automatically sense nearby events and collect proof of attendance.</string>

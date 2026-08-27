@@ -127,15 +127,14 @@ Flip the flag and rebuild to demo the other order — `OnboardingFlagTests`
 exercises both branches (the inapplicable one self-skips via `XCTSkip`
 rather than being commented out, so both stay compiled and typo-checked).
 
-The wallet step uses direct app-to-app wallet connections (Coinbase Wallet
-and MetaMask) — see "WalletConnect" below.
+The wallet step uses a direct app-to-app wallet connection (MetaMask) — see
+"WalletConnect" below.
 
 ## WalletConnect
 
 `WalletConnectView` (onboarding) and the Account sheet's "Connect Wallet"
 action both use `WalletConnectPairingView`
-(`Beid/Views/WalletConnectView.swift`). The UI selects a `WalletConnector`:
-`CoinbaseWalletConnector` wraps Coinbase's direct app-to-app mobile SDK, and
+(`Beid/Views/WalletConnectView.swift`), which drives a `WalletConnector`:
 `MetaMaskConnector` wraps MetaMask's direct app-to-app mobile SDK. The
 selected connector is retained by `AppCoordinator`, so proof signing uses
 the same session that supplied the connected address.
@@ -144,29 +143,20 @@ WalletConnect (Reown) — a relay-based pairing SDK that was beid's original
 third wallet option — was removed entirely (gh#250, DECISIONS 2026-08-20):
 the app depends on no third-party relay server today. Its removal is what
 allowed [MetaMask](#metamask-connector) to be promoted from a Debug-only
-spike into a full Release wallet option (DECISIONS 2026-08-21), so
-Coinbase Wallet and MetaMask remain a real two-way choice in the shipping
-build, not just in Debug. If a relay-based option is ever needed again, the
-git history before this change (`ReownWalletConnectClient.swift` and its
-supporting adapters) is the starting point — recovery, not resurrection.
+spike into a full Release wallet option (DECISIONS 2026-08-21). If a
+relay-based option is ever needed again, the git history before this change
+(`ReownWalletConnectClient.swift` and its supporting adapters) is the
+starting point — recovery, not resurrection.
 
-### Coinbase Wallet connector
-
-`project.yml` pins `coinbase/wallet-mobile-sdk` exactly at **1.1.2** and
-links its `CoinbaseWalletSDK` product directly. It uses the existing `beid`
-custom URL scheme with callback `beid://coinbase-wallet`; no API key,
-project ID, relay, or `Secrets.plist` change is required. The app declares
-the SDK's `cbwallet` and `mwp+1.1` query schemes so it can detect whether
-Coinbase Wallet is installed. If it is absent, the connector does not start
-a handshake and the UI offers the Coinbase Wallet App Store page instead.
-
-The upstream project is not archived, but tag 1.1.2 dates from 2024-09-10
-and the repository's last source push was 2025-06-12. An
-[open upstream issue](https://github.com/coinbase/wallet-mobile-sdk/issues/10)
-reports that Mobile Wallet Protocol connection requests may not reach the
-Base app on 1.1.2; this is a real-device verification risk, not something a
-Simulator test can settle. Keep the exact pin until an upgrade is reviewed
-against a real Coinbase Wallet pairing and `personal_sign` round trip.
+Coinbase Wallet was beid's second wallet option until thegreeting/beid#270
+(2026-08-27): the Base app rebrand broke the SDK's approval-dialog
+handshake, `coinbase/wallet-mobile-sdk` (pinned 1.1.2) has been stale since
+2025-06-12 on both hosting orgs, and Coinbase's official successor (Base
+Account SDK) has no native-iOS/Swift migration path published yet. The
+connector was removed outright rather than hidden, since there was nothing
+left to keep dormant for — see the git history before that removal
+(`CoinbaseWalletConnector.swift` and its supporting fake-transport tests)
+as the starting point if a working iOS path ever ships upstream.
 
 ### MetaMask connector
 
@@ -188,7 +178,10 @@ Promoting MetaMask out of `#if DEBUG` was a deliberate, owner-accepted risk,
 not a claim that the SDK has graduated: it is still archived and carries a
 non-commercial license, so it is not a production wallet foundation in the
 usual sense — it ships because removing WalletConnect (Reown) would
-otherwise have left Release with only one wallet option (Coinbase).
+otherwise have left Release with no wallet option at all. Since Coinbase
+Wallet's later removal (thegreeting/beid#270), MetaMask is the only wallet
+connect path Release has; if this promotion is ever reverted, beid ships
+with no direct-connect wallet option until a replacement lands.
 
 The 0.8.10 package's bundled `Ecies.xcframework` has an arm64 Simulator slice
 but no x86_64 Simulator slice. A multi-architecture Simulator build therefore
@@ -210,8 +203,9 @@ then verify connect → `personal_sign` → automatic return to beid, including
 MetaMask and beid cold starts. The Simulator cannot settle this because it
 does not provide the installed-wallet round trip. The procedure lives in
 `docs/field-test-procedure.md`; per DECISIONS 2026-08-21, if that
-verification fails, the promotion to Release reverts and beid ships
-Coinbase-only again.
+verification fails, the promotion to Release reverts — see the note above
+on what that means for wallet-connect availability now that Coinbase
+Wallet is gone.
 
 ## DemoEvent mode
 
@@ -311,11 +305,10 @@ Lost" button on the Recording screen while in DemoEvent mode, and covered by
 
 ## What's stubbed / out of scope for this slice
 
-- **Wallet**: direct app-to-app connect/sign for Coinbase Wallet and
-  MetaMask is wired (see "WalletConnect" above). Coinbase's real-device
-  round trip is a known, tracked risk (see "Coinbase Wallet connector"
-  above); MetaMask's has never been verified on a real device at all — see
-  "MetaMask connector" above and `docs/field-test-procedure.md`. Once a
+- **Wallet**: direct app-to-app connect/sign for MetaMask is wired (see
+  "WalletConnect" above). Its real-device round trip has never been
+  verified at all — see "MetaMask connector" above and
+  `docs/field-test-procedure.md`. Once a
   wallet is connected, Item Detail's `ProofSignatureControlsView` calls
   `AppCoordinator.signProof(_:)`, which builds a `SignaturePayload`, hashes
   its canonical JSON with `signingDigestHex()`, requests `personal_sign`

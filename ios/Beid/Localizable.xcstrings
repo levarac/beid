@@ -9,7 +9,6 @@
     "Added to your collection.": {},
     "Address": {},
     "Allow Bluetooth": {},
-    "Approve the connection in Coinbase Wallet": {},
     "Approve the connection in MetaMask": {
       "comment": "Instruction shown while beid waits for the user to approve the direct connection in the MetaMask app."
     },
@@ -18,19 +17,12 @@
     "Bluetooth": {},
     "Bluetooth is off": {},
     "Cancel": {},
-    "Choose another wallet": {
-      "comment": "Button: returns to the wallet-provider selection without connecting."
-    },
     "Close": {
       "comment": "Accessibility label for the scan flow's toolbar close (X) button that dismisses the scan modal."
     },
-    "Coinbase Wallet is not installed": {},
     "Connect Wallet": {},
     "Connect Your Wallet": {},
     "Connect wallet instead": {},
-    "Connect with Coinbase Wallet": {
-      "comment": "Button: starts a direct app-to-app connection with the Coinbase Wallet app."
-    },
     "Connect with MetaMask": {
       "comment": "Button: starts a direct app-to-app connection with the MetaMask app."
     },
@@ -64,15 +56,11 @@
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join."
     },
     "Events find you": {},
-    "Get Coinbase Wallet": {
-      "comment": "Button: opens the App Store page for Coinbase Wallet."
-    },
     "Get MetaMask": {
       "comment": "Button: opens the App Store page for MetaMask."
     },
     "Get Started": {},
     "I've turned it on": {},
-    "Install Coinbase Wallet to connect directly.": {},
     "Install MetaMask to connect directly.": {},
     "Join Event": {},
     "Keep beid open nearby to collect proof of attendance.": {},
@@ -135,6 +123,9 @@
       }
     },
     "Switch it on": {},
+    "Start Over": {
+      "comment": "Button: abandons the current wallet-connect attempt and returns to the start of the flow."
+    },
     "Tap Bluetooth": {},
     "Tap Sense Event to start collecting proof of attendance automatically.": {},
     "The request timed out. Try again once your wallet is reachable.": {},
@@ -145,7 +136,7 @@
     "Walk into an event — it will show up here automatically.": {},
     "Wallet": {},
     "Wallet not available": {},
-    "This wallet can't be used right now. Choose another wallet to continue.": {},
+    "This wallet can't be used right now. Try again in a moment.": {},
     "You can change this anytime in Settings.": {},
     "You declined the request in your wallet.": {},
     "Your attendance proof is ready to be added to your collection.": {},

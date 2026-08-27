@@ -149,9 +149,6 @@ struct AccountSheetView: View {
   /// so the connector's display name is derived here from its concrete type.
   private var connectorDisplayName: String {
     let connector = coordinator.walletConnector
-    if connector is CoinbaseWalletConnector {
-      return "Coinbase Wallet"
-    }
     if connector is MetaMaskConnector {
       return "MetaMask"
     }
@@ -160,10 +157,10 @@ struct AccountSheetView: View {
       return "Demo Wallet"
     }
     #endif
-    // Coinbase and MetaMask are the only two connectors Release ever
-    // records; this is unreachable there in practice, and even in Debug
-    // (Demo Wallet handled above) is the sensible remaining default.
-    return "Coinbase Wallet"
+    // MetaMask is the only connector Release ever records; this is
+    // unreachable there in practice, and even in Debug (Demo Wallet handled
+    // above) is the sensible remaining default.
+    return "MetaMask"
   }
 
   private func truncated(_ address: String) -> String {
@@ -201,7 +198,6 @@ private struct WalletConnectSheetView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", role: .cancel) {
-            CoinbaseWalletConnector.shared.disconnect()
             MetaMaskConnector.shared.disconnect()
             coordinator.walletConnectSheetPresented = false
           }

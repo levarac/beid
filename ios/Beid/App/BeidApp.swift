@@ -12,7 +12,6 @@ struct BeidApp: App {
       RootView()
         .environmentObject(coordinator)
         .onOpenURL { url in
-          CoinbaseWalletConnector.shared.handle(url: url)
           MetaMaskConnector.shared.handle(url: url)
         }
     }

@@ -41,50 +41,41 @@ struct WalletConnectView: View {
 /// code instead"; the Account sheet passes `nil` and relies on its own
 /// Cancel toolbar button instead).
 ///
-/// Generic over the Coinbase connector type (defaulted to the real
-/// singleton below) purely so `#Preview` can inject a fake `WalletConnector`
-/// sitting in an arbitrary `state` — see `PreviewWalletConnector` at the
-/// bottom of this file. `metaMaskClient` stays a concrete, non-generic
-/// singleton: every state this preview machinery needs is reachable through
-/// the `coinbaseClient` slot already.
-struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
-  fileprivate enum Provider: Equatable {
-    case coinbase
-    case metamask
-  }
-
+/// MetaMask is currently the only wallet this connects to (Coinbase Wallet
+/// was removed, thegreeting/beid#270 — the Base app rebrand broke its
+/// approval-dialog handshake and the SDK has no native-iOS fix). Generic
+/// over the connector type (defaulted to the real singleton below) purely
+/// so `#Preview` can inject a fake `WalletConnector` sitting in an
+/// arbitrary `state` — see `PreviewWalletConnector` at the bottom of this
+/// file.
+struct WalletConnectPairingView<Connector: WalletConnector>: View {
   @Environment(\.openURL) private var openURL
-  @StateObject private var coinbaseClient: Coinbase
-  @StateObject private var metaMaskClient = MetaMaskConnector.shared
-  @State private var selectedProvider: Provider?
+  @StateObject private var client: Connector
+  @State private var hasStarted = false
   let onConnected: (String, any WalletConnector) -> Void
   let secondaryAction: (title: LocalizedStringKey, action: () -> Void)?
 
   init(
-    coinbaseClient: Coinbase = CoinbaseWalletConnector.shared,
+    client: Connector = MetaMaskConnector.shared,
     onConnected: @escaping (String, any WalletConnector) -> Void,
     secondaryAction: (title: LocalizedStringKey, action: () -> Void)? = nil
   ) {
-    _coinbaseClient = StateObject(wrappedValue: coinbaseClient)
+    _client = StateObject(wrappedValue: client)
     self.onConnected = onConnected
     self.secondaryAction = secondaryAction
   }
 
   #if DEBUG
-  /// Preview-only: lets a `#Preview` start already on a given provider,
-  /// instead of every real call site's shared entrypoint at
-  /// `providerSelectionContent`. `fileprivate` (not the default `internal`)
-  /// because `Provider` itself is `fileprivate` — an initializer can't be
-  /// more visible than the types in its own signature — which is fine since
-  /// only the `#Preview` blocks below, in this same file, need it.
+  /// Preview-only: lets a `#Preview` start already mid-flow, instead of
+  /// every real call site's shared entrypoint at `providerSelectionContent`.
   fileprivate init(
-    coinbaseClient: Coinbase = CoinbaseWalletConnector.shared,
-    initialProvider: Provider,
+    client: Connector = MetaMaskConnector.shared,
+    startedImmediately: Bool,
     onConnected: @escaping (String, any WalletConnector) -> Void,
     secondaryAction: (title: LocalizedStringKey, action: () -> Void)? = nil
   ) {
-    _coinbaseClient = StateObject(wrappedValue: coinbaseClient)
-    _selectedProvider = State(wrappedValue: initialProvider)
+    _client = StateObject(wrappedValue: client)
+    _hasStarted = State(wrappedValue: startedImmediately)
     self.onConnected = onConnected
     self.secondaryAction = secondaryAction
   }
@@ -92,76 +83,66 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
 
   var body: some View {
     VStack(spacing: DS.Space.l) {
-      switch selectedProvider {
-      case nil:
+      if hasStarted {
+        connectorContent
+      } else {
         providerSelectionContent
-      case .coinbase:
-        connectorContent(coinbaseClient, provider: .coinbase)
-      case .metamask:
-        connectorContent(metaMaskClient, provider: .metamask)
       }
     }
     .task {
-      coinbaseClient.configureIfNeeded()
-      metaMaskClient.configureIfNeeded()
+      client.configureIfNeeded()
       // A wallet may have approved a connection started from a previous
       // mount of this view (e.g. the user backgrounded the app, or left
       // for the event-code fallback, while `.awaitingApproval`) — deliver
       // that already-settled state now, since `.onChange` below only
       // fires on a *transition* and would otherwise never fire for a
       // state that was already `.connected` when this view appeared.
-      deliverConnectedState(from: coinbaseClient, provider: .coinbase)
-      deliverConnectedState(from: metaMaskClient, provider: .metamask)
+      deliverConnectedState()
     }
-    .onChange(of: coinbaseClient.state) { _, newState in
-      if selectedProvider == .coinbase, case .connected(let address) = newState {
-        onConnected(address, coinbaseClient)
-      }
-    }
-    .onChange(of: metaMaskClient.state) { _, newState in
-      if selectedProvider == .metamask, case .connected(let address) = newState {
-        onConnected(address, metaMaskClient)
+    .onChange(of: client.state) { _, newState in
+      if hasStarted, case .connected(let address) = newState {
+        onConnected(address, client)
       }
     }
   }
 
   @ViewBuilder
-  private func connectorContent<C: WalletConnector>(_ client: C, provider: Provider) -> some View {
+  private var connectorContent: some View {
     switch client.state {
     case .notConfigured:
-      notConfiguredContent(client: client)
+      notConfiguredContent
     case .unavailable(.walletNotInstalled):
-      walletNotInstalledContent(provider: provider, client: client)
+      walletNotInstalledContent
     case .idle:
       connectingContent
         .task { await client.connect() }
     case .connecting:
       connectingContent
     case .awaitingApproval(let uri):
-      awaitingApprovalContent(uri: uri, provider: provider, client: client)
+      awaitingApprovalContent(uri: uri)
     case .connected(let address):
       connectedContent(address: address)
     case .failed(let message):
-      failedContent(message: message, client: client)
+      failedContent(message: message)
     }
   }
 
   /// `WalletConnectorState.notConfigured` is part of the shared
-  /// `WalletConnector` protocol (see WalletConnector.swift), but neither
-  /// `CoinbaseWalletConnector` nor `MetaMaskConnector` ever produces it —
-  /// both start at `.idle` and need no external credential. This branch
-  /// exists only so `connectorContent`'s switch stays exhaustive against the
-  /// protocol's full state space.
-  private func notConfiguredContent<C: WalletConnector>(client: C) -> some View {
+  /// `WalletConnector` protocol (see WalletConnector.swift), but
+  /// `MetaMaskConnector` never produces it — it starts at `.idle` and
+  /// needs no external credential. This branch exists only so
+  /// `connectorContent`'s switch stays exhaustive against the protocol's
+  /// full state space.
+  private var notConfiguredContent: some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
         systemImage: "exclamationmark.triangle.fill",
         title: "Wallet not available",
-        subtitle: "This wallet can't be used right now. Choose another wallet to continue.",
+        subtitle: "This wallet can't be used right now. Try again in a moment.",
         tint: DS.Color.actionPrimary
       )
-      BeidSecondaryButton(title: "Choose another wallet") {
-        chooseAnotherWallet(client)
+      BeidSecondaryButton(title: "Start Over") {
+        chooseAnotherWallet()
       }
       .tint(DS.Color.actionPrimary)
       if let secondaryAction {
@@ -181,16 +162,11 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
       )
 
       VStack(spacing: DS.Space.s) {
-        BeidPrimaryButton("Connect with Coinbase Wallet", systemImage: "wallet.pass") {
-          selectedProvider = .coinbase
+        BeidPrimaryButton("Connect with MetaMask", systemImage: "wallet.pass") {
+          hasStarted = true
         }
         .tint(DS.Color.actionPrimary)
         .padding(.top, DS.Space.s)
-
-        BeidSecondaryButton(title: "Connect with MetaMask") {
-          selectedProvider = .metamask
-        }
-        .tint(DS.Color.actionPrimary)
 
         if let secondaryAction {
           BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)
@@ -213,13 +189,9 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
     }
   }
 
-  private func awaitingApprovalContent<C: WalletConnector>(
-    uri: String?,
-    provider: Provider,
-    client: C
-  ) -> some View {
+  private func awaitingApprovalContent(uri: String?) -> some View {
     VStack(spacing: DS.Space.m) {
-      Text(approvalTitle(for: provider))
+      Text("Approve the connection in MetaMask")
         .font(DS.Font.sectionTitle)
         .foregroundStyle(DS.Color.textPrimary)
         .multilineTextAlignment(.center)
@@ -249,7 +221,7 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
       .padding(.top, DS.Space.s)
 
       Button("Cancel", role: .cancel) {
-        chooseAnotherWallet(client)
+        chooseAnotherWallet()
       }
       .tint(DS.Color.actionPrimary)
       .padding(.top, DS.Space.xs)
@@ -265,7 +237,7 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
     )
   }
 
-  private func failedContent<C: WalletConnector>(message: String, client: C) -> some View {
+  private func failedContent(message: String) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
         systemImage: "xmark.octagon.fill",
@@ -284,8 +256,8 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
         }
         .tint(DS.Color.actionPrimary)
 
-        BeidSecondaryButton(title: "Choose another wallet") {
-          chooseAnotherWallet(client)
+        BeidSecondaryButton(title: "Start Over") {
+          chooseAnotherWallet()
         }
         .tint(DS.Color.actionPrimary)
 
@@ -297,25 +269,22 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
     }
   }
 
-  private func walletNotInstalledContent<C: WalletConnector>(
-    provider: Provider,
-    client: C
-  ) -> some View {
+  private var walletNotInstalledContent: some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
         systemImage: "wallet.pass.fill",
-        title: walletNotInstalledTitle(for: provider),
-        subtitle: walletNotInstalledSubtitle(for: provider),
+        title: "MetaMask is not installed",
+        subtitle: "Install MetaMask to connect directly.",
         tint: DS.Color.actionPrimary
       )
       VStack(spacing: DS.Space.s) {
-        BeidPrimaryButton(walletStoreButtonTitle(for: provider), systemImage: "arrow.up.right.square") {
-          openURL(walletStoreURL(for: provider))
+        BeidPrimaryButton("Get MetaMask", systemImage: "arrow.up.right.square") {
+          openURL(MetaMaskConnector.appStoreURL)
         }
         .tint(DS.Color.actionPrimary)
 
-        BeidSecondaryButton(title: "Choose another wallet") {
-          chooseAnotherWallet(client)
+        BeidSecondaryButton(title: "Start Over") {
+          chooseAnotherWallet()
         }
         .tint(DS.Color.actionPrimary)
 
@@ -327,59 +296,14 @@ struct WalletConnectPairingView<Coinbase: WalletConnector>: View {
     }
   }
 
-  private func chooseAnotherWallet<C: WalletConnector>(_ client: C) {
+  private func chooseAnotherWallet() {
     client.disconnect()
-    selectedProvider = nil
+    hasStarted = false
   }
 
-  private func approvalTitle(for provider: Provider) -> LocalizedStringKey {
-    switch provider {
-    case .coinbase:
-      return "Approve the connection in Coinbase Wallet"
-    case .metamask:
-      return "Approve the connection in MetaMask"
-    }
-  }
-
-  private func walletNotInstalledTitle(for provider: Provider) -> LocalizedStringKey {
-    switch provider {
-    case .coinbase:
-      return "Coinbase Wallet is not installed"
-    case .metamask:
-      return "MetaMask is not installed"
-    }
-  }
-
-  private func walletNotInstalledSubtitle(for provider: Provider) -> LocalizedStringKey {
-    switch provider {
-    case .coinbase:
-      return "Install Coinbase Wallet to connect directly."
-    case .metamask:
-      return "Install MetaMask to connect directly."
-    }
-  }
-
-  private func walletStoreButtonTitle(for provider: Provider) -> LocalizedStringKey {
-    switch provider {
-    case .coinbase:
-      return "Get Coinbase Wallet"
-    case .metamask:
-      return "Get MetaMask"
-    }
-  }
-
-  private func walletStoreURL(for provider: Provider) -> URL {
-    switch provider {
-    case .coinbase:
-      return CoinbaseWalletConnector.appStoreURL
-    case .metamask:
-      return MetaMaskConnector.appStoreURL
-    }
-  }
-
-  private func deliverConnectedState<C: WalletConnector>(from client: C, provider: Provider) {
-    guard selectedProvider == nil, case .connected(let address) = client.state else { return }
-    selectedProvider = provider
+  private func deliverConnectedState() {
+    guard !hasStarted, case .connected(let address) = client.state else { return }
+    hasStarted = true
     onConnected(address, client)
   }
 }
@@ -439,8 +363,8 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
 #if DEBUG
 #Preview("Connecting") {
   WalletConnectPairingView(
-    coinbaseClient: PreviewWalletConnector(state: .connecting),
-    initialProvider: .coinbase,
+    client: PreviewWalletConnector(state: .connecting),
+    startedImmediately: true,
     onConnected: { _, _ in }
   )
   .padding(.horizontal, DS.Space.pageMargin)
@@ -448,13 +372,13 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
 
 #Preview("Awaiting Approval") {
   WalletConnectPairingView(
-    coinbaseClient: PreviewWalletConnector(
+    client: PreviewWalletConnector(
       state: .awaitingApproval(
         uri: "wc:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
           + "@2?relay-protocol=irn&symKey=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
       )
     ),
-    initialProvider: .coinbase,
+    startedImmediately: true,
     onConnected: { _, _ in }
   )
   .padding(.horizontal, DS.Space.pageMargin)
@@ -462,10 +386,10 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
 
 #Preview("Connected") {
   WalletConnectPairingView(
-    coinbaseClient: PreviewWalletConnector(
+    client: PreviewWalletConnector(
       state: .connected(address: "0x1234567890abcdef1234567890abcdef12345678")
     ),
-    initialProvider: .coinbase,
+    startedImmediately: true,
     onConnected: { _, _ in }
   )
   .padding(.horizontal, DS.Space.pageMargin)
@@ -473,10 +397,10 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
 
 #Preview("Failed") {
   WalletConnectPairingView(
-    coinbaseClient: PreviewWalletConnector(
+    client: PreviewWalletConnector(
       state: .failed("The wallet rejected the connection request.")
     ),
-    initialProvider: .coinbase,
+    startedImmediately: true,
     onConnected: { _, _ in }
   )
   .padding(.horizontal, DS.Space.pageMargin)
