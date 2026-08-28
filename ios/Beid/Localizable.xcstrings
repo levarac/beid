@@ -751,6 +751,106 @@
           }
         }
       }
+    },
+    "No proofs yet today": {
+      "comment": "Empty-state title on the Daily Summary screen when no proof has been collected yet today (local calendar day). Distinct from Collection Home's all-time empty state (\"No proofs yet\").",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No proofs yet today"
+          }
+        }
+      }
+    },
+    "Proofs you collect today will show up here.": {
+      "comment": "Empty-state body on the Daily Summary screen, directly under \"No proofs yet today\". Describes what will populate this list, not an instruction to act right now.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proofs you collect today will show up here."
+          }
+        }
+      }
+    },
+    "Submission": {
+      "comment": "Section header on the Daily Summary screen, above one line describing whether sending proofs to a report server is turned on for this build. Noun, not a verb/CTA.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submission"
+          }
+        }
+      }
+    },
+    "collection.dailySummaryButton": {
+      "comment": "Accessibility label for the calendar-icon toolbar button on Collection Home that opens the Daily Summary screen (gh#291) — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's own navigation title, since this button's only purpose is opening that screen.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today"
+          }
+        }
+      }
+    },
+    "dailySummary.title": {
+      "comment": "Navigation title of the Daily Summary screen: a day-scoped rollup of proofs collected on the current local calendar day. Refers to the current day, not a to-do list or calendar-app sense of \"Today\".",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today"
+          }
+        }
+      }
+    },
+    "dailySummary.recordCount": {
+      "comment": "Header above the Daily Summary screen's list of today's proofs: how many proofs (Proof records in ProofStore, not distinct events) were collected on the current local calendar day. Only shown when the day is non-empty — the empty-day state (\"No proofs yet today\") is a separate string.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proof collected today"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proofs collected today"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "dailySummary.submission.notSentYet": {
+      "comment": "Submission status line on the Daily Summary screen, shown only when the BeidReportSubmissionEnabled build flag is on. States plainly that nothing has been transmitted to a report server yet — not a count, not a claim about verification.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet."
+          }
+        }
+      }
+    },
+    "dailySummary.submission.disabledForBuild": {
+      "comment": "Submission status line on the Daily Summary screen, shown when the BeidReportSubmissionEnabled build flag is off (the default today). Communicates that the sending feature exists but is switched off for this build — \"built, off,\" never \"not built\" — not that anything failed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending isn't turned on for this build."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -16,6 +16,7 @@ final class AppCoordinator: ObservableObject {
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
+  @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
