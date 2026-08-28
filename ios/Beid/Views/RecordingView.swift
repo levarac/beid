@@ -230,35 +230,18 @@ struct RecordingView: View {
 /// which mechanism gates the ceremony (still `sensing.recordingCeremonyShown`,
 /// set once in `.onAppear`). If the ceremony instead reset itself on every
 /// re-render, this preview would still be showing the "Proof Collected"
-/// hero after all three phase updates — it shows the steady eventCard.
+/// hero after all three phase updates — it shows the steady event card.
 #Preview("Ceremony does not replay across peersVerified updates") {
   let coordinator = AppCoordinator()
   let sensing = coordinator.sensingCoordinator
-  sensing.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+  sensing.runDemoScenario(.appReviewGolden, stepDelayNanos: 0)
   return ScanFlowPreviewHarness(sensing: sensing)
     .environmentObject(coordinator)
     .task {
-      await sensing.waitForDemoSequenceToFinish()
+      await sensing.waitForDemoScenarioPreviewToSettle()
       // Grace period for the near-zero ceremony dwell timer (kicked off by
       // the first `.recording` render's `.onAppear`) to resolve before the
       // static snapshot is taken.
       try? await Task.sleep(nanoseconds: 100_000_000)
     }
-}
-
-/// Thin `#Preview`-only wrapper that re-reads `sensing.phase` on every
-/// change, the same way `ScanFlowView` does, so the "ceremony does not
-/// replay" preview above renders `RecordingView` fresh for each
-/// `peersVerified` update rather than a single static snapshot.
-private struct ScanFlowPreviewHarness: View {
-  @ObservedObject var sensing: SensingCoordinator
-
-  var body: some View {
-    switch sensing.phase {
-    case .recording(let event, let peersVerified):
-      RecordingView(sensing: sensing, event: event, peersVerified: peersVerified, ceremonyDwellNanos: 0)
-    default:
-      Text(verbatim: "phase: \(sensing.phase)")
-    }
-  }
 }

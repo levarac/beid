@@ -34,6 +34,28 @@
       "comment": "Button: copies the connected wallet address to the clipboard, not a noun."
     },
     "Detected event": {},
+    "demo.scenario.longDisplayNames.eventName": {
+      "comment": "Long fictional event name used only in the Debug demo scenario to verify wrapping and hierarchy.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The International Gathering for Open, Verifiable and Durable Local Participation"
+          }
+        }
+      }
+    },
+    "demo.scenario.longDisplayNames.venue": {
+      "comment": "Long fictional venue name used only in the Debug demo scenario to verify wrapping and hierarchy.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The East Exhibition Hall at the Tokyo International Convention and Community Center"
+          }
+        }
+      }
+    },
     "detail.devicesSensed.label": {
       "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a phone or handset, not a word for a person or a peer.",
       "localizations": {

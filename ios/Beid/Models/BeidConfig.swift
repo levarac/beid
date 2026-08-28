@@ -54,4 +54,17 @@ enum BeidConfig {
     #endif
     return 3
   }
+
+  /// Resolves the Debug demo walkthrough requested by a launch argument.
+  /// Invalid or incomplete input deliberately falls back to the App Review
+  /// golden path, so an App Review/demo launch never becomes a blank screen.
+  static func demoScenario(arguments: [String] = ProcessInfo.processInfo.arguments) -> DemoScenario {
+    guard let flagIndex = arguments.firstIndex(of: "-beid-demo-scenario"),
+          arguments.indices.contains(flagIndex + 1),
+          let scenario = DemoScenario.named(arguments[flagIndex + 1])
+    else {
+      return .appReviewGolden
+    }
+    return scenario
+  }
 }
