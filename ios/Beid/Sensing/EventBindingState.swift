@@ -22,3 +22,17 @@ enum EventBindingState: Equatable {
   case bound(BindingRecord)
   case failed(reason: String)
 }
+
+extension EventBindingState {
+  /// Keeps the pending binding copy aligned with the live scan phase without
+  /// changing an already-started binding attempt.
+  func updatingIdentityVerification(
+    forEventID eventID: String,
+    to identityVerification: EventIdentityVerification
+  ) -> EventBindingState {
+    guard case .pendingConnect(let event) = self, event.id == eventID else {
+      return self
+    }
+    return .pendingConnect(event.replacingIdentityVerification(identityVerification))
+  }
+}

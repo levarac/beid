@@ -9,5 +9,10 @@ import Foundation
 /// file per `AGENTS.md`'s localization note — demo fixture data is real
 /// user-visible copy, not a test-only value.
 extension EventSession {
-  static let demoSample = EventSession(id: "ETHGLOBALTOKYO-DEMO", name: "ETHGlobal Tokyo", venue: "Shibuya Hikarie")
+  static let demoSample = EventSession(
+    id: "ETHGLOBALTOKYO-DEMO",
+    name: "ETHGlobal Tokyo",
+    venue: "Shibuya Hikarie",
+    identityVerification: .notChecked
+  )
 }

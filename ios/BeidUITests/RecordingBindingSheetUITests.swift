@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import UIKit
 import XCTest
 
 /// Regression coverage for beid#222/#224: the wallet-binding sheet's
@@ -21,11 +22,14 @@ import XCTest
 /// `testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose`
 /// guards the mistimed-tap-recovers invariant: tapping `ScanFlowView`'s
 /// "Close" toolbar button in the narrow window right as the auto-presented
-/// binding sheet begins animating in is a no-op (the button is not yet
-/// hittable when the tap lands), and the user reaches Collection Home
-/// deterministically in two further, real taps — `Cancel` then `Close`. See
-/// that test's own doc comment for the investigation history that
-/// established this.
+/// binding sheet begins animating in must not strand the user. **Its
+/// recovery path is device-class dependent (beid#245)** — see that test's
+/// own doc comment. On iPhone, the tap is a true no-op (the page sheet
+/// covers the button) and recovery takes two further, real taps: `Cancel`
+/// then `Close`. On iPad, the same tap lands on the form sheet's visible
+/// backdrop and genuinely dismisses the binding sheet, recovering in one
+/// fewer tap. Both device classes converge on the same end state —
+/// Collection Home, deterministically reachable — by different real paths.
 final class RecordingBindingSheetUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -125,6 +129,24 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// sheet ships as-is, on `.sheet` — no chrome change, no fallback, no
   /// fifth structural fix. This test's job is to protect that recovery
   /// invariant going forward, not to chase a lockup that doesn't exist.
+  ///
+  /// **beid#245 — this test's claim depends on device class.** The
+  /// investigation above was run on iPhone, where `.sheet` presents as a
+  /// page sheet covering nearly the full screen: the toolbar `Close`
+  /// button underneath is genuinely covered, so the raced tap lands on
+  /// nothing and is a true no-op. On iPad, `.sheet` instead presents as a
+  /// centered form sheet with a wide dimmed backdrop visible around it;
+  /// `Close`'s on-screen coordinate falls on that backdrop, and UIKit's
+  /// standard backdrop-tap-to-dismiss (no `.interactiveDismissDisabled` is
+  /// set anywhere on this sheet) closes the binding sheet immediately —
+  /// not a no-op, and not a defect either: the user is left on a live
+  /// `RecordingView` in this single tap, recovering in *one* fewer real
+  /// tap than the iPhone path needs. Neither path is broken; they are
+  /// different, correct recoveries for different presentation styles, and
+  /// this test asserts each one on the device class that actually produces
+  /// it rather than asserting iPhone's shape everywhere and failing
+  /// deterministically on iPad (which is exactly what this test did before
+  /// this fix).
   func testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose() {
     launchAndReachSenseEventScreen()
 
@@ -144,22 +166,43 @@ final class RecordingBindingSheetUITests: XCTestCase {
     // delay here would defeat the point of this test.
     closeButton.tap()
 
-    // The raced tap is a no-op, not damage: it must not tear down or
-    // otherwise disturb the binding sheet that's still mid-presentation.
-    XCTAssertTrue(
-      cancelButton.exists,
-      "A mistimed Close tap should be a no-op (Close not yet hittable), leaving the binding sheet's Cancel button present"
-    )
+    if UIDevice.current.userInterfaceIdiom == .pad {
+      // See this method's doc comment (beid#245): the raced tap lands on
+      // the form sheet's backdrop and dismisses the binding sheet for
+      // real, in this one tap.
+      let cancelGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: cancelButton)
+      wait(for: [cancelGone], timeout: 5)
+      XCTAssertFalse(
+        cancelButton.exists,
+        "On iPad the mistimed tap lands on the form sheet's backdrop and should dismiss the binding sheet"
+      )
+      XCTAssertTrue(
+        app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5),
+        "The backdrop-dismissed sheet should reveal a live RecordingView, not a dead screen"
+      )
 
-    cancelButton.tap()
+      // The binding sheet is already gone, so this real tap reaches
+      // ScanFlowView's own toolbar Close button directly — the same final
+      // destination the iPhone branch below reaches in two taps instead.
+      closeButton.tap()
+    } else {
+      // The raced tap is a no-op, not damage: it must not tear down or
+      // otherwise disturb the binding sheet that's still mid-presentation.
+      XCTAssertTrue(
+        cancelButton.exists,
+        "A mistimed Close tap should be a no-op on iPhone (Close not yet hittable), leaving the binding sheet's Cancel button present"
+      )
 
-    XCTAssertFalse(cancelButton.exists, "Cancel should dismiss the binding sheet")
-    XCTAssertTrue(
-      app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5),
-      "Cancel must land the user on a live RecordingView, not a dead screen"
-    )
+      cancelButton.tap()
 
-    closeButton.tap()
+      XCTAssertFalse(cancelButton.exists, "Cancel should dismiss the binding sheet")
+      XCTAssertTrue(
+        app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5),
+        "Cancel must land the user on a live RecordingView, not a dead screen"
+      )
+
+      closeButton.tap()
+    }
 
     let closeGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: closeButton)
     let cancelStillGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: cancelButton)
@@ -173,7 +216,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not remain presented")
     XCTAssertTrue(
       app.buttons["Sense Event"].isHittable,
-      "The second real Close tap must reach Collection Home"
+      "The final real Close tap must reach Collection Home"
     )
   }
 

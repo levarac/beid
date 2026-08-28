@@ -118,4 +118,20 @@ final class ProofStore: ObservableObject {
     guard let data = try? JSONEncoder().encode(proofs) else { return }
     try? data.write(to: fileURL, options: .atomic)
   }
+
+  /// Test-only reset: clears in-memory state and deletes any persisted
+  /// file, so a `-beid-ui-test` launch (see `AppCoordinator.init`) starts
+  /// from an empty store regardless of what an earlier UI-test run left in
+  /// this simulator's installed-app container — beid#244. Proofs
+  /// accumulating undetected across independent test launches (each
+  /// `app.launch()` reuses one on-disk `proofs.json`) silently changed
+  /// which destination `ItemDetailView.participationSummaryRow` rendered,
+  /// without failing anything. Not called on a caller-injected `ProofStore`
+  /// (unit tests always construct their own via `fileURL:`).
+  func resetForUITesting() {
+    proofs = []
+    quarantinedFileURL = nil
+    persistenceSuspensionReason = nil
+    try? FileManager.default.removeItem(at: fileURL)
+  }
 }

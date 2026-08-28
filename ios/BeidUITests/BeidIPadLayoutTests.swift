@@ -116,6 +116,50 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertFalse(app.staticTexts["0"].exists)
   }
 
+  /// Regression coverage for beid#244. **What this test's claim depends
+  /// on**: every DemoEvent proof carries the same fixed `eventCode`
+  /// (`DemoEvent.EventSession.demoSample.id`, `"ETHGLOBALTOKYO-DEMO"`), so
+  /// two proofs recorded in two different launches of this test still
+  /// group together via `EventGrouping.sessions(for:in:)` unless
+  /// `ProofStore`'s on-disk state was actually reset between launches —
+  /// this test does not by itself prove isolation for a store keyed some
+  /// other way.
+  ///
+  /// `xcodebuild test` reinstalls the app once per suite run, not once per
+  /// test method: every `app.launch()` across every UI test method reuses
+  /// the same on-disk container. Before the beid#244 fix, a `ProofStore`
+  /// proof left behind by an earlier launch silently accumulated with a
+  /// later launch's proof under the same `eventCode`, flipping
+  /// `ItemDetailView.participationSummaryRow`'s destination from
+  /// `ParticipationSummaryView` (single session) to
+  /// `SessionParticipationListView` (multi-session) without failing any
+  /// assertion on its own — this test forces that exact
+  /// record/terminate/relaunch/record sequence inside one method (rather
+  /// than relying on suite execution order, which is not guaranteed) and
+  /// asserts the second launch still resolves a single-session group.
+  func testProofStoreDoesNotAccumulateAcrossUITestLaunches() {
+    navigateToCollectionWithProof()
+
+    // Force-quit-and-relaunch (documented `XCUIApplication.launch()`
+    // behavior for an already-running app), simulating the process
+    // boundary between two independent UI-test launches that share one
+    // installed app container — the exact scenario beid#244 reported.
+    app.terminate()
+    navigateToCollectionWithProof()
+    openFirstProof()
+
+    app.buttons["View participation summary"].tap()
+    XCTAssertTrue(
+      app.staticTexts["Devices mutually confirmed"].waitForExistence(timeout: 5),
+      "A second -beid-ui-test launch must still resolve a single-session group; seeing " +
+        "the multi-session list here means the first launch's proof leaked into this one"
+    )
+    XCTAssertFalse(
+      app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "recorded for this event")).firstMatch.exists,
+      "SessionParticipationListView's header must not appear for what should be a single-session group"
+    )
+  }
+
   /// beid#218, DECISIONS 2026-08-20: the Recording screen must show a
   /// diagnostic caption with both the identified and unidentified device
   /// counts, unconditionally (not `#if DEBUG`-gated), so a field tester can
