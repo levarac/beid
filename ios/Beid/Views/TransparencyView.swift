@@ -40,6 +40,18 @@ struct TransparencyView: View {
   /// published data" below it — an honest "not yet available," never a
   /// fabricated zero.
   let recordedOnDeviceCount: Int?
+  /// Tier 2 (参加記録), third and fourth sub-states (送信済み / 受領確認済み):
+  /// the most-advanced durable state of this event's report submissions,
+  /// read from `SensingCoordinator.submissionState(forEventCode:)` (beid#292).
+  /// Event-code scoped like `recordedOnDeviceCount` above, for the same
+  /// historically-scoped reason (this screen's type doc comment) — not a
+  /// second design decision, matching the convention that property already
+  /// established. `nil` renders both the "Sent" and "Acceptance receipt"
+  /// rows as "not yet available," identically to a legacy proof with no
+  /// `eventCode` — this is honest either when report submission is gated
+  /// off in production (`BeidReportSubmissionEnabled`) or when this event
+  /// simply has no submission queued yet; never a false negative for either.
+  let submissionState: ReportSubmissionState?
 
   var body: some View {
     ScrollView {
@@ -88,8 +100,14 @@ struct TransparencyView: View {
       VStack(alignment: .leading, spacing: DS.Space.m) {
         tierTitle(
           "Participation record",
-          comment: "Tier 2 of 3 on the Transparency screen: what has happened to this device's sensing data after joining (recorded on-device / sent to a report server / included in published data). Distinct from \"Verified proof\" below it, which is about third-party verification, not data handling."
+          comment: "Tier 2 of 3 on the Transparency screen: what has happened to this device's sensing data after joining (mutually observed / recorded on-device / sent to a report server / receipt confirmed / included in published data). Distinct from \"Verified proof\" below it, which is about third-party verification, not data handling."
         )
+        TierRow(
+          label: Text(verbatim: mutualObservationLabelText),
+          isAvailable: false,
+          valueText: nil
+        )
+        Divider()
         TierRow(
           label: Text(verbatim: recordedOnDeviceLabelText),
           isAvailable: recordedOnDeviceCount != nil,
@@ -99,10 +117,16 @@ struct TransparencyView: View {
         TierRow(
           label: Text(
             "Sent",
-            comment: "Sub-state row under \"Participation record\": whether this device's sensing data has been transmitted to a report server. Always shows \"Not yet available\" today (see the adjacent status text) because no report-submission code exists in the app yet — this is not a failed-send state."
+            comment: "Sub-state row under \"Participation record\": whether this device's sensing data has been transmitted to a report server for this event. Available once at least one submission has reached the SUBMITTING or ACCEPTED durable state (beid#292); report-submission code exists in the app today but is gated off in production by the BeidReportSubmissionEnabled build setting, so this reflects genuinely stored state, not a permanently-unbuilt capability like the rows below it. Shows \"Not yet available\" (not a failed-send state) before any submission for this event has been attempted."
           ),
-          isAvailable: false,
-          valueText: nil
+          isAvailable: isSent,
+          valueText: isSent ? sentValueText : nil
+        )
+        Divider()
+        TierRow(
+          label: Text(verbatim: acceptanceReceiptLabelText),
+          isAvailable: hasAcceptanceReceipt,
+          valueText: hasAcceptanceReceipt ? receivedValueText : nil
         )
         Divider()
         TierRow(
@@ -115,6 +139,14 @@ struct TransparencyView: View {
         )
       }
     }
+  }
+
+  private var isSent: Bool {
+    submissionState == .submitting || submissionState == .accepted
+  }
+
+  private var hasAcceptanceReceipt: Bool {
+    submissionState == .accepted
   }
 
   private var verifiedProofPanel: some View {
@@ -144,6 +176,59 @@ struct TransparencyView: View {
       localized: "status.recordedOnDevice",
       defaultValue: "Recorded on device",
       comment: "Label shown when a proof's sensing data is known to be locally signed and stored on this device (not yet sent anywhere). Used in two places: (1) the Transparency screen's Participation record tier, where it's one of three rows (Sent / Included in published data are separate, always-unavailable rows below it); (2) the Proof Detail screen's Status row, where it replaced a prior unconditional \"Verified\" claim that had no backing model (beid#240, DECISIONS 2026-08-20) — the device only has its own signature, which shows \"this device recorded this,\" nothing more. Refers to on-device storage, not a video/audio recording."
+    )
+  }
+
+  /// First row under "Participation record" (beid#292): always flat and
+  /// unavailable by design, not merely unwired-so-far. Two devices
+  /// confirming they mutually sensed each other is not measurable on-device
+  /// today — `SessionAggregate.mutual*` exists in `shared/` but its only
+  /// production writer hardcodes `mutual: false` on every call, so those
+  /// fields are structurally meaningless and are never read here (that would
+  /// repeat beid#222's corrected mistake: a measured-looking zero reads as
+  /// "we measured and got zero," not "we can't measure this yet"). This row
+  /// stays unavailable until beid#144 stage 4 delivers a real reciprocity
+  /// signal.
+  private var mutualObservationLabelText: String {
+    String(
+      localized: "transparency.mutualObservation",
+      defaultValue: "Mutual observation",
+      comment: "Sub-state row under \"Participation record\": whether two devices have confirmed they mutually sensed each other during this event. Always shows \"Not yet available\" today because there is no on-device reciprocity signal in the product yet — this is not a failed-measurement or zero-result state, the capability itself does not exist yet. Refers to two devices detecting each other, not audio/video observation."
+    )
+  }
+
+  /// Trailing value on the "Sent" row once available. Deliberately the same
+  /// word as that row's own label (beid#292) — DESIGN.md §2.9 requires the
+  /// icon shape and the trailing text to change together, and there is no
+  /// separate status word for "a report was sent"; a distinct explicit key
+  /// from the row's label so translators can adjust either independently.
+  private var sentValueText: String {
+    String(
+      localized: "transparency.sent",
+      defaultValue: "Sent",
+      comment: "Trailing value on the \"Sent\" sub-state row under \"Participation record\", shown once at least one submission for this event has actually been transmitted to a report server. Same word as the row's own label — confirming the label is now true, not a separate or more specific status."
+    )
+  }
+
+  /// Fourth row under "Participation record" (beid#292): whether the report
+  /// server has confirmed receipt of at least one of this device's
+  /// submissions for this event — a verified, stored `AcceptanceReceipt`,
+  /// not merely that a POST was attempted. Distinct from "Sent" above it,
+  /// which only means transmission was attempted.
+  private var acceptanceReceiptLabelText: String {
+    String(
+      localized: "transparency.acceptanceReceipt",
+      defaultValue: "Acceptance receipt",
+      comment: "Sub-state row under \"Participation record\": whether the report server has confirmed receipt of at least one of this device's submissions for this event. Always shows \"Not yet available\" until a receipt has actually been verified and stored — a submission that was merely sent, with no confirmed receipt yet, is not enough for this row."
+    )
+  }
+
+  /// Trailing value on the "Acceptance receipt" row once available.
+  private var receivedValueText: String {
+    String(
+      localized: "transparency.received",
+      defaultValue: "Received",
+      comment: "Trailing value on the \"Acceptance receipt\" sub-state row under \"Participation record\", shown once the report server has actually confirmed receipt for at least one submission for this event. Not a separate status word like \"pending\" or \"delivered\" — it means the receipt itself is confirmed and stored."
     )
   }
 }
@@ -190,35 +275,78 @@ private struct TierRow: View {
     }
   }
 
-  /// Reused across three rows on this screen (Sent / Included in published
-  /// data / Verified proof) with identical, non-parameterized text — an
-  /// explicit key per AGENTS.md's localization rule ("about to write the
-  /// same `Text(...)` in a second place"), rather than a literal-English
-  /// key repeated at each call site.
+  /// Reused across this screen's `TierRow`s whenever `isAvailable` is
+  /// `false`, with identical, non-parameterized text — an explicit key per
+  /// AGENTS.md's localization rule ("about to write the same `Text(...)` in
+  /// a second place"), rather than a literal-English key repeated at each
+  /// call site. Covers two different reasons a row can be unavailable, both
+  /// honestly described by the same words: a row whose capability does not
+  /// exist in the product at all yet (Mutual observation, Included in
+  /// published data, Verified proof — permanently, until a future feature
+  /// lands), and a row whose capability exists but has not happened for
+  /// this specific event yet (Sent, Acceptance receipt, before a submission
+  /// reaches that state).
   private var notYetAvailableText: String {
     String(
       localized: "transparency.notYetAvailable",
       defaultValue: "Not yet available",
-      comment: "Status for a participation-record or verified-proof row whose data source doesn't exist in the product yet (no report submission or verifier is implemented). This means the capability itself is not built yet, not that an attempt was made and failed — do not translate as an error, warning, or declined state."
+      comment: "Status for a participation-record or verified-proof row that has no data to show yet — either because the underlying capability isn't implemented in the product at all, or because it exists but hasn't happened for this event yet (e.g. no submission has been sent/received). This means there is nothing to report yet, not that an attempt was made and failed — do not translate as an error, warning, or declined state."
     )
   }
 }
 
 #Preview("Recorded, live") {
   NavigationStack {
-    TransparencyView(eventName: "ETHGlobal Tokyo", hasJoined: true, recordedOnDeviceCount: 5)
+    TransparencyView(
+      eventName: "ETHGlobal Tokyo",
+      hasJoined: true,
+      recordedOnDeviceCount: 5,
+      submissionState: nil
+    )
   }
 }
 
 #Preview("Recorded, live (Dark)") {
   NavigationStack {
-    TransparencyView(eventName: "ETHGlobal Tokyo", hasJoined: true, recordedOnDeviceCount: 5)
+    TransparencyView(
+      eventName: "ETHGlobal Tokyo",
+      hasJoined: true,
+      recordedOnDeviceCount: 5,
+      submissionState: nil
+    )
   }
   .preferredColorScheme(.dark)
 }
 
 #Preview("Legacy proof, no eventCode") {
   NavigationStack {
-    TransparencyView(eventName: "ETHGlobal Tokyo", hasJoined: true, recordedOnDeviceCount: nil)
+    TransparencyView(
+      eventName: "ETHGlobal Tokyo",
+      hasJoined: true,
+      recordedOnDeviceCount: nil,
+      submissionState: nil
+    )
+  }
+}
+
+#Preview("Sent, awaiting receipt") {
+  NavigationStack {
+    TransparencyView(
+      eventName: "ETHGlobal Tokyo",
+      hasJoined: true,
+      recordedOnDeviceCount: 5,
+      submissionState: .submitting
+    )
+  }
+}
+
+#Preview("Receipt confirmed") {
+  NavigationStack {
+    TransparencyView(
+      eventName: "ETHGlobal Tokyo",
+      hasJoined: true,
+      recordedOnDeviceCount: 5,
+      submissionState: .accepted
+    )
   }
 }

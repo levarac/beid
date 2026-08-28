@@ -155,7 +155,8 @@ struct ItemDetailView: View {
         // `ScanPhase`'s doc comment. Reaching this row therefore always
         // implies "joined."
         hasJoined: true,
-        recordedOnDeviceCount: recordedOnDeviceCount
+        recordedOnDeviceCount: recordedOnDeviceCount,
+        submissionState: submissionState
       )
     } label: {
       HStack {
@@ -183,6 +184,18 @@ struct ItemDetailView: View {
   private var recordedOnDeviceCount: Int? {
     guard let eventCode = proof.eventCode else { return nil }
     return coordinator.sensingCoordinator.recordedWindowCount(forEventCode: eventCode)
+  }
+
+  /// `nil` when `proof.eventCode` is absent — same reason and same
+  /// historically-scoped treatment as `recordedOnDeviceCount` above, not a
+  /// second design decision. Feeds Transparency's "Sent"/"Acceptance
+  /// receipt" rows (beid#292) via
+  /// `SensingCoordinator.submissionState(forEventCode:)`, which is `nil`
+  /// both when report submission is gated off in production and when no
+  /// submission has been queued for this event yet.
+  private var submissionState: ReportSubmissionState? {
+    guard let eventCode = proof.eventCode else { return nil }
+    return coordinator.sensingCoordinator.submissionState(forEventCode: eventCode)
   }
 
   /// Entry point for beid#143's Participation summary screen — sits
