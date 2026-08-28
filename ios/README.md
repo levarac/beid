@@ -224,6 +224,22 @@ container survives installing a TestFlight build over the dev build —
 delete the app between a demo E2E session and any real-sensing or
 TestFlight evaluation.
 
+The optional `-beid-demo-scenario <identifier>` argument chooses a named
+walkthrough: `appReviewGolden` (the default and fallback for a missing or
+unknown value), `crowdSurge`, `signalLostMidway`, or `longDisplayNames`.
+Use it together with `-beid-demo-event` on a Debug real device; Simulator
+Debug builds already enable DemoEvent mode. Each scenario uses the production
+`ScanFlowContent` router and the same Sensing, Event Found, Recording, and
+Signal Lost views as an ordinary scan flow. The scenario interpreter only
+advances demo bookkeeping and phase state: it does not open ledger windows,
+capture a report for submission, or write a window report.
+
+For Xcode preview selection, use `ScanFlowView`'s `Sensing` or `Signal Lost
+scenario` preview, and `RecordingView`'s `Ceremony does not replay across
+peersVerified updates` preview for the App Review golden walkthrough. Those
+previews use the same production router; they are not separate diagnostic
+cards or text-only stand-ins.
+
 `05 Sensing → 06a Event Found → 06b Recording`. The proof lands in
 `ProofStore` when recording starts. `RecordingView` first shows the
 one-time "Proof Collected" entrance ceremony, then the steady event card as
@@ -297,11 +313,11 @@ lines (subsystem `org.levarac.beid`, category `sensing`) when an observation
 arrives with no display id and when an event confirms, so a real-device run
 is readable in Console.app or a sysdiagnose without a debug build.
 
-The 06d Signal Lost screen isn't on the golden DemoEvent path (which always
-completes successfully) but is fully wired — reachable via
+The 06d Signal Lost screen is not on the golden App Review path (which always
+completes successfully), but `signalLostMidway` includes it as a named,
+pause-and-resume scenario. It remains reachable manually through
 `SensingCoordinator.simulateSignalLost()`, exposed as a "Simulate Signal
-Lost" button on the Recording screen while in DemoEvent mode, and covered by
-`testSimulateSignalLostOnlyAppliesDuringRecording`.
+Lost" button on the Recording screen while in DemoEvent mode.
 
 ## What's stubbed / out of scope for this slice
 

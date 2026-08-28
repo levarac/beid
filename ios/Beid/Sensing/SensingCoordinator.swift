@@ -75,6 +75,18 @@ enum LedgerHealth {
   }
 }
 
+/// Observable checkpoints emitted while a named DemoEvent scenario is interpreted.
+///
+/// They are intentionally separate from production sensing state so tests can prove
+/// that preview/demo behavior has not entered the durable-report path.
+enum DemoInterpreterCheckpoint: Equatable {
+  case step(Int, DemoScenario.Step)
+  case renderTurnSettled(Int)
+  case suspended(Int)
+  case resumed(Int)
+  case completed
+}
+
 /// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
 /// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
 /// state machine. The facade — not `BarnardIdentity` directly — is what this
@@ -203,6 +215,17 @@ final class SensingCoordinator: ObservableObject {
   /// `.recording`, so the caller can update the same `Proof` in place
   /// (`ProofStore.updatePeersVerified(for:to:)`) rather than re-creating it.
   var onPeersVerifiedChanged: ((UUID, Int) -> Void)?
+
+  /// Test-only visibility into the deterministic DemoEvent interpreter.
+  /// This does not represent an on-device sensing callback and never enters
+  /// the ledger or report-submission paths.
+  var onDemoInterpreterCheckpointForTesting: ((DemoInterpreterCheckpoint) -> Void)?
+
+  var hasParkedDemoScenarioForTesting: Bool { demoInterpreterIsParked }
+
+  var parkedDemoScenarioCursorForTesting: Int? {
+    demoInterpreterIsParked ? demoInterpreterCursor : nil
+  }
 
   /// The number of ENIN windows locally signed and stored for one event
   /// (beid#137's Transparency screen, "Recorded on device" row —
@@ -341,6 +364,11 @@ final class SensingCoordinator: ObservableObject {
   /// `waitForDemoSequenceToFinish()` below.
   private var ledgerLoadTask: Task<Void, Never>?
   private var demoTask: Task<Void, Never>?
+  private var demoInterpreterScenario: DemoScenario?
+  private var demoInterpreterCursor: Int?
+  private var demoInterpreterIsParked = false
+  private var demoInterpreterLastObservationChanged = false
+  private var demoInterpreterStepDelayNanos: UInt64 = 700_000_000
   /// Generation and session identity protect the UI from a completion that
   /// belongs to a reset, leave, retry, or later session with the same raw code.
   private var eventIdentityVerificationGeneration = 0
@@ -1320,7 +1348,8 @@ final class SensingCoordinator: ObservableObject {
   func startSensing(
     eventCode: String? = nil,
     eventIdHex: String? = nil,
-    demoEvent: EventSession = .demoSample
+    demoEvent: EventSession? = nil,
+    demoScenario: DemoScenario? = nil
   ) {
     let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
@@ -1329,7 +1358,11 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
-      runDemoSequence(demoEvent: demoEvent, stepDelayNanos: demoStepDelayNanos)
+      var selectedScenario = demoScenario ?? BeidConfig.demoScenario()
+      if let demoEvent {
+        selectedScenario = selectedScenario.replacingEvent(demoEvent)
+      }
+      runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
       engine.requestPermissions { [weak self] status in
         guard let self else { return }
@@ -1357,6 +1390,7 @@ final class SensingCoordinator: ObservableObject {
     let result = BeidSharedKit.sensing.scanPhaseAfterSignalLost(currentPhase: currentPhaseKind)
     guard result.applied, case .recording(let event, let peersVerified) = phase else { return }
     demoTask?.cancel()
+    clearDemoInterpreterState()
     phase = .signalLost(event: event, peersVerified: peersVerified)
   }
 
@@ -1372,6 +1406,9 @@ final class SensingCoordinator: ObservableObject {
     let result = BeidSharedKit.sensing.scanPhaseAfterResumeSensing(currentPhase: currentPhaseKind)
     guard result.applied, case .signalLost(let event, let peersVerified) = phase else { return }
     phase = .recording(event: event, peersVerified: peersVerified)
+    if resumeParkedDemoScenarioIfNeeded() {
+      return
+    }
     if useDemoEventMode {
       continueDemoRecording(event: event, stepDelayNanos: demoStepDelayNanos)
     }
@@ -1431,6 +1468,7 @@ final class SensingCoordinator: ObservableObject {
     lastWindowEnin = nil
     demoWindowEnin = 0
     demoWindowRpids = []
+    clearDemoInterpreterState()
     currentWindowRpids = []
     currentWindowReporterRpid = nil
     currentWindowLedgerOpened = false
@@ -2221,106 +2259,141 @@ final class SensingCoordinator: ObservableObject {
   // Simulator, so its `devicesVerified` growth comes from the same source a
   // real session uses rather than a bare loop counter.
 
+  /// Retains the historical test/preview seam while making the App Review
+  /// primitive sequence data rather than a second scripted implementation.
   func runDemoSequence(demoEvent: EventSession, stepDelayNanos: UInt64 = 700_000_000) {
+    runDemoScenario(
+      DemoScenario.appReviewGolden.replacingEvent(demoEvent),
+      stepDelayNanos: stepDelayNanos
+    )
+  }
+
+  /// Runs a named deterministic DemoEvent scenario without calling the real
+  /// BLE observation, ledger, report, or submission-capture paths.
+  func runDemoScenario(_ scenario: DemoScenario, stepDelayNanos: UInt64 = 700_000_000) {
     demoTask?.cancel()
     let session = EventSession(
-      id: demoEvent.id,
-      name: demoEvent.name,
-      venue: demoEvent.venue,
-      canonicalEventIdHex: demoEvent.canonicalEventIdHex ?? pendingCanonicalEventIdHex,
-      sessionID: demoEvent.sessionID,
+      id: scenario.event.id,
+      name: scenario.event.name,
+      venue: scenario.event.venue,
+      canonicalEventIdHex: scenario.event.canonicalEventIdHex ?? pendingCanonicalEventIdHex,
+      sessionID: scenario.event.sessionID,
       identityVerification: .notChecked
     )
-    // `applyPhaseDecision`'s shared reducer only transitions `.sensing ->
-    // .eventFound` (or straight through to `.recording`) when
-    // `currentPhaseKind` reads `.SENSING` — unlike the old direct-call
-    // `beginEventFound(_:)` this replaced, which set `phase` unconditionally
-    // regardless of its prior value. In production this is already true by
-    // the time this runs (`startSensing()` sets it immediately before
-    // calling this function), but this function is deliberately not
-    // `private` — several tests call it directly, bypassing
-    // `startSensing()`, and previously relied on the old unconditional-set
-    // behavior. Setting it explicitly here makes the precondition this
-    // function actually needs part of its own contract rather than an
-    // implicit assumption about caller state; harmless/idempotent from
-    // `startSensing()`'s own call site.
+
+    // `runDemoScenario` remains callable from tests and previews without
+    // `startSensing()`, so make its `.sensing` precondition explicit.
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
+    beginEventFoundSessionState(session)
+    phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
+
+    let resolvedScenario = scenario.replacingEvent(session)
+    demoInterpreterScenario = resolvedScenario
+    demoInterpreterCursor = 0
+    demoInterpreterIsParked = false
+    demoInterpreterLastObservationChanged = false
+    demoInterpreterStepDelayNanos = stepDelayNanos
+    runDemoInterpreter(resolvedScenario, cursor: 0, stepDelayNanos: stepDelayNanos)
+  }
+
+  private func runDemoInterpreter(
+    _ scenario: DemoScenario,
+    cursor: Int,
+    stepDelayNanos: UInt64
+  ) {
     demoTask = Task { @MainActor [weak self] in
       guard let self else { return }
-      guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-      self.beginEventFoundSessionState(session)
-      // Device #1: `phase` is `.sensing` (set by `startSensing()` before
-      // this task was created), and this is the session's very first
-      // observation, so `distinctDeviceCountChanged` is always `true` —
-      // `applyPhaseDecision` moves `.sensing -> .eventFound` unconditionally
-      // on this call, exactly like the real path's first real detection,
-      // unless `BeidConfig.eventConfirmThreshold <= 1` (the DEBUG
-      // `-beid-threshold-override 1` case), in which case it goes straight
-      // to `.recording` in this same step — a real-path edge case demo mode
-      // could not previously reproduce, since it always hardcoded a
-      // separate `.eventFound` step first.
-      self.observeOneDemoDevice()
-      self.applyPhaseDecision(
-        coPresentDeviceCount: self.demoWindowRpids.count,
-        distinctDeviceCountChanged: true,
-        for: session,
+
+      for index in cursor..<scenario.steps.count {
+        guard !Task.isCancelled else { return }
+        let step = scenario.steps[index]
+        self.onDemoInterpreterCheckpointForTesting?(.step(index, step))
+
+        var shouldPark = false
+        switch step {
+        case .pause:
+          guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
+        default:
+          shouldPark = self.applyDemoScenarioStep(step, event: scenario.event)
+        }
+
+        guard !Task.isCancelled else { return }
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        self.onDemoInterpreterCheckpointForTesting?(.renderTurnSettled(index))
+        self.demoInterpreterCursor = index + 1
+
+        if shouldPark {
+          self.demoInterpreterIsParked = true
+          self.onDemoInterpreterCheckpointForTesting?(.suspended(index + 1))
+          return
+        }
+      }
+
+      self.clearDemoInterpreterState()
+      self.onDemoInterpreterCheckpointForTesting?(.completed)
+    }
+  }
+
+  private func applyDemoScenarioStep(
+    _ step: DemoScenario.Step,
+    event: EventSession
+  ) -> Bool {
+    switch step {
+    case .pause:
+      return false
+    case let .observeOneDemoDevice(displayId, rpid, enin):
+      demoInterpreterLastObservationChanged = observeOneDemoDevice(
+        displayId: displayId,
+        rpid: rpid,
+        enin: enin
+      )
+    case .applyPhaseDecision:
+      applyPhaseDecision(
+        coPresentDeviceCount: demoWindowRpids.count,
+        distinctDeviceCountChanged: demoInterpreterLastObservationChanged,
+        for: event,
         startIdentityVerification: false
       )
-      // Window boundary right after device #1, matching the exact
-      // `advanceDemoWindow()` call-site position the old
-      // `beginEventFound(demoEvent); advanceDemoWindow()` pair had —
-      // `firstWindowEnin`/`lastWindowEnin` (self-proof's `eninStart`/
-      // `eninEnd`) are set only by `advanceDemoWindow()`, never by
-      // `observeOneDemoDevice()`, so this call's exact position (not just
-      // its total count across the whole sequence) determines those
-      // values. Moving it would silently change a demo-generated
-      // self-proof's `eninEnd` by exactly the count of window boundaries
-      // shifted — caught by `SelfProofTests`/`SensingCryptographyTests`
-      // asserting exact `eninStart`/`eninEnd` values during this change's
-      // own evidence run, not found by inspection.
-      self.advanceDemoWindow()
-      guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-
-      // Devices 2..<threshold: bunched with no window advance between them,
-      // so `demoWindowRpids` — and therefore the co-presence arm, not just
-      // the distinct-count arm — genuinely reflects however many of them
-      // land in this one still-open window (never `threshold` itself,
-      // since device #1 already closed its own window above). Confirmation
-      // is still always actually driven by the distinct-device arm
-      // crossing `threshold` in practice, since that count is cumulative
-      // across the whole scripted session; this is not a behavior change
-      // from before this split.
-      // `max(0, ...)`, not a bare `1..<threshold` range: `threshold` is a
-      // `#if DEBUG`-only overridable value (`-beid-threshold-override`),
-      // and a `1..<threshold` range traps at runtime for any override
-      // `<= 0` (`Range` requires `lowerBound <= upperBound`) — device #1
-      // above already covers threshold `<= 1` correctly on its own, so
-      // this loop degrading to zero iterations for those values is exactly
-      // right, not a special case to guard separately.
-      let threshold = BeidConfig.eventConfirmThreshold
-      for _ in 0..<max(0, threshold - 1) {
-        let changed = self.observeOneDemoDevice()
-        self.applyPhaseDecision(
-          coPresentDeviceCount: self.demoWindowRpids.count,
-          distinctDeviceCountChanged: changed,
-          for: session,
-          startIdentityVerification: false
-        )
-      }
-      self.advanceDemoWindow()
-
-      for _ in 0..<2 {
-        guard await self.delay(stepDelayNanos), !Task.isCancelled else { return }
-        let changed = self.observeOneDemoDevice()
-        self.applyPhaseDecision(
-          coPresentDeviceCount: self.demoWindowRpids.count,
-          distinctDeviceCountChanged: changed,
-          for: session,
-          startIdentityVerification: false
-        )
-        self.advanceDemoWindow()
-      }
+    case .advanceDemoWindow:
+      advanceDemoWindow()
+    case .simulateSignalLost:
+      return applyDemoSignalLost()
     }
+    return false
+  }
+
+  private func applyDemoSignalLost() -> Bool {
+    let result = BeidSharedKit.sensing.scanPhaseAfterSignalLost(currentPhase: currentPhaseKind)
+    guard result.applied, case .recording(let event, let peersVerified) = phase else { return false }
+    phase = .signalLost(event: event, peersVerified: peersVerified)
+    return true
+  }
+
+  private func resumeParkedDemoScenarioIfNeeded() -> Bool {
+    guard demoInterpreterIsParked,
+          let scenario = demoInterpreterScenario,
+          let cursor = demoInterpreterCursor
+    else {
+      return false
+    }
+
+    demoInterpreterIsParked = false
+    onDemoInterpreterCheckpointForTesting?(.resumed(cursor))
+    runDemoInterpreter(
+      scenario,
+      cursor: cursor,
+      stepDelayNanos: demoInterpreterStepDelayNanos
+    )
+    return true
+  }
+
+  private func clearDemoInterpreterState() {
+    demoInterpreterScenario = nil
+    demoInterpreterCursor = nil
+    demoInterpreterIsParked = false
+    demoInterpreterLastObservationChanged = false
+    demoInterpreterStepDelayNanos = 700_000_000
   }
 
   /// Continues the demo growth loop from where `devicesVerified` was frozen
@@ -2362,10 +2435,20 @@ final class SensingCoordinator: ObservableObject {
   /// feed it into `applyPhaseDecision`'s `distinctDeviceCountChanged`.
   @discardableResult
   private func observeOneDemoDevice() -> Bool {
+    let syntheticId = "demo-device-\(demoDeviceSequence + 1)"
+    return observeOneDemoDevice(
+      displayId: syntheticId,
+      rpid: syntheticId,
+      enin: demoWindowEnin
+    )
+  }
+
+  @discardableResult
+  private func observeOneDemoDevice(displayId: String, rpid: String, enin: Int) -> Bool {
     demoDeviceSequence += 1
-    let syntheticId = "demo-device-\(demoDeviceSequence)"
-    demoWindowRpids.insert(syntheticId)
-    return recordDeviceIdentity(enin: demoWindowEnin, rpid: syntheticId, detectedDisplayId: syntheticId)
+    demoWindowEnin = enin
+    demoWindowRpids.insert(rpid)
+    return recordDeviceIdentity(enin: enin, rpid: rpid, detectedDisplayId: displayId)
   }
 
   /// Demo-only stand-in for the real path's `advanceWindowBookkeepingIfNeeded` —
@@ -2389,6 +2472,12 @@ final class SensingCoordinator: ObservableObject {
   }
 
   func waitForDemoSequenceToFinish() async {
+    await demoTask?.value
+  }
+
+  /// Preview/test seam: a scenario is settled only after each primitive has
+  /// yielded one render turn, or it has deliberately parked at Signal Lost.
+  func waitForDemoScenarioPreviewToSettle() async {
     await demoTask?.value
   }
 
