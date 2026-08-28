@@ -51,6 +51,18 @@
     "Enter Event Code": {},
     "Enter an event code to continue. Ask the event organizer for it.": {},
     "Enter event code instead": {},
+    "ETHGlobal Tokyo": {
+      "comment": "Event name shown on the demo event card. A real conference name used as sample data in DemoEvent mode, which is also the App Review demo path — translate it the way that conference is referred to in the target language, or leave it as-is if it is normally written in Latin script.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ETHGlobal Tokyo"
+          }
+        }
+      }
+    },
     "Event Found": {},
     "Event code": {
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join."
@@ -97,6 +109,18 @@
       "comment": "Status pill label: sensing is temporarily paused. Parallels 'Sensing automatically' — keep the same grammatical form."
     },
     "Sensing runs quietly in the background. Nothing to tap.": {},
+    "Shibuya Hikarie": {
+      "comment": "Venue name shown under the demo event name on the demo event card. A real Tokyo building; translate only if the target language has a conventional rendering of it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shibuya Hikarie"
+          }
+        }
+      }
+    },
     "Sign this proof": {
       "comment": "Button: initiates a wallet-signature request for an already-collected proof."
     },
