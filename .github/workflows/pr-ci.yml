@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "17.0.20+8"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Build and test Android app
@@ -32,6 +32,20 @@ jobs:
         run: |
           java -version
           ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel
+      - name: Capture Barnard dependency resolution
+        working-directory: android
+        run: |
+          mkdir -p build
+          ./gradlew :app:dependencyInsight --dependency barnard --configuration debugRuntimeClasspath --no-daemon > build/barnard-dependency-insight.log
+          cat build/barnard-dependency-insight.log
+      - name: Verify resolved Barnard dependency provenance
+        working-directory: android
+        run: |
+          python3 ../scripts/check_barnard_dependency_provenance.py \
+            --build-gradle app/build.gradle.kts \
+            --settings-gradle settings.gradle.kts \
+            --root-build-gradle build.gradle.kts \
+            --dependency-insight-log build/barnard-dependency-insight.log
 
   lint:
     name: SwiftLint

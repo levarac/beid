@@ -96,6 +96,13 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   )
 
   func submitPending()
+
+  /// beid#292's Transparency screen ("Sent"/"Acceptance receipt" rows): the
+  /// most-advanced durable submission state (`.accepted` > `.submitting` >
+  /// `.prepared`) among this runtime's records for `eventCode`, or `nil` if
+  /// no submission has ever been queued for it. A pure read of already-
+  /// persisted state — never triggers a network call or a write.
+  func submissionState(forEventCode eventCode: String) -> ReportSubmissionState?
 }
 
 /// Native composition boundary for the inactive-by-default report pipeline.
@@ -317,6 +324,13 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     submitPending()
   }
 
+  func submissionState(forEventCode eventCode: String) -> ReportSubmissionState? {
+    store.records
+      .filter { $0.eventCode == eventCode }
+      .max { $0.submissionState.progressRank < $1.submissionState.progressRank }?
+      .submissionState
+  }
+
   func submitPending() {
     for capture in store.pendingCaptures {
       processPendingCapture(capture)
@@ -505,6 +519,20 @@ private extension UUID {
   var hexString: String {
     var copy = self
     return withUnsafeBytes(of: &copy) { Data($0).hexString }
+  }
+}
+
+private extension ReportSubmissionState {
+  /// Ordering for `submissionState(forEventCode:)`'s "most advanced state
+  /// wins" rule: an event with both a `.submitting` and an `.accepted`
+  /// record must report `.accepted`, not whichever record happened to be
+  /// stored first.
+  var progressRank: Int {
+    switch self {
+    case .prepared: return 0
+    case .submitting: return 1
+    case .accepted: return 2
+    }
   }
 }
 

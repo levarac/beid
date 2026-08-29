@@ -1,5 +1,8 @@
 package org.levarac.beid.sensing
 
+import org.levarac.beid.shared.sensing.coPresenceWindowBoundaryCrossed
+import org.levarac.beid.shared.sensing.normalizedDisplayIdOrNull
+
 /**
  * Native device-count bookkeeping feeding [applyPhaseDecision]'s
  * `coPresentDeviceCount`/`distinctDeviceCount`/`distinctDeviceCountChanged`
@@ -30,26 +33,25 @@ class ScanDeviceAccounting {
      * [distinctDeviceCount] moved — the caller's `distinctDeviceCountChanged`
      * argument into [applyPhaseDecision].
      *
-     * Co-presence: cleared whenever [enin] differs from the last-seen ENIN,
-     * **before** inserting [rpid] and reading the count — a lingering
-     * device's rotated `rpid` from a previous window must never still be
-     * counted in this window.
+     * Co-presence: cleared **before** inserting [rpid] and reading the
+     * count whenever [coPresenceWindowBoundaryCrossed] (beid#231) says
+     * [enin] crosses a window boundary relative to the last-seen ENIN — a
+     * lingering device's rotated `rpid` from a previous window must never
+     * still be counted in this window.
      *
-     * Distinct devices: keyed on [detectedDisplayId], lowercased to match
-     * observation (Barnard emits lowercase hex today; normalize so a future
-     * case change can't split one device into two). Observations with a
-     * null [detectedDisplayId] (Barnard B003 unavailable) are excluded
-     * entirely — never falling back to [rpid], which rotates and would
-     * inflate the distinct count.
+     * Distinct devices: keyed on [normalizedDisplayIdOrNull] (beid#231) of
+     * [detectedDisplayId]. Observations with a null [detectedDisplayId]
+     * (Barnard B003 unavailable) are excluded entirely — never falling back
+     * to [rpid], which rotates and would inflate the distinct count.
      */
     fun record(enin: Long, rpid: String, detectedDisplayId: String?): Boolean {
-        if (lastEnin != enin) {
+        if (coPresenceWindowBoundaryCrossed(lastEnin, enin)) {
             coPresentRpids.clear()
             lastEnin = enin
         }
         coPresentRpids.add(rpid)
 
-        val displayId = detectedDisplayId?.lowercase() ?: return false
+        val displayId = normalizedDisplayIdOrNull(detectedDisplayId) ?: return false
         return distinctDeviceIds.add(displayId)
     }
 }

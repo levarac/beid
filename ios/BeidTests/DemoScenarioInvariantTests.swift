@@ -43,6 +43,8 @@ private final class DemoScenarioSubmissionRuntimeSpy: WindowReportSubmissionRunt
   func submitPending() {
     submitPendingCallCount += 1
   }
+
+  func submissionState(forEventCode _: String) -> ReportSubmissionState? { nil }
 }
 
 @MainActor
