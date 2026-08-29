@@ -664,3 +664,16 @@ private final class DiscoveryIsolationReportRuntimeSpy: WindowReportSubmissionRu
     nil
   }
 }
+
+private extension Data {
+  /// Mirrors the file-private helper of the same name in
+  /// `ReportSubmissionRuntime.swift` and
+  /// `ReportSubmissionOperatorIntegrationTests.swift`. Each copy is
+  /// file-private, so this file needs its own to read a Kotlin `ByteArray`
+  /// out of a published discovery snapshot.
+  init(bytesFromKotlinByteArray bytes: ExportedKotlinPackages.kotlin.ByteArray) {
+    self.init((0..<Int(bytes.size)).map { index in
+      UInt8(bitPattern: bytes[Int32(index)])
+    })
+  }
+}

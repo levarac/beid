@@ -155,6 +155,71 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         assertEquals(0, completionCalls, "a disposed coordinator must ignore the late engine callback")
     }
 
+    @Test
+    fun leaveEventAloneClearsCandidatesWithoutRelyingOnAnExplicitDiscoveryStop() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.requestBluetoothPermission {}
+        engine.emitHint("p", "Event", EVENT_HASH)
+        coordinator.joinEvent("JOIN-CODE")
+        assertEquals(1, coordinator.nearbyEventCandidates.value.candidateCount)
+
+        coordinator.leaveEvent()
+
+        assertEquals(
+            0,
+            coordinator.nearbyEventCandidates.value.candidateCount,
+            "leaveEvent must clear pre-join candidates itself, not lean on stopNearbyEventDiscovery",
+        )
+    }
+
+    @Test
+    fun advertisingWithoutScanningStillBlocksASecondDiscoveryOwnedScan() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        engine.engineState = EventJoinEngineState(isScanning = false, isAdvertising = true)
+
+        coordinator.requestBluetoothPermission {}
+
+        assertEquals(
+            0,
+            engine.startScanCalls,
+            "an already-advertising transport is not this adapter's to re-arm for discovery",
+        )
+    }
+
+    @Test
+    fun aLiveJoinedSessionBlocksDiscoveryEvenWhenTheEngineReportsNoTransport() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.joinEvent("JOIN-CODE")
+        engine.engineState = EventJoinEngineState(isScanning = false, isAdvertising = false)
+
+        coordinator.requestBluetoothPermission {}
+
+        assertEquals(
+            0,
+            engine.startScanCalls,
+            "scanPhase, not the engine's reported transport, decides whether a join owns this session",
+        )
+    }
+
+    @Test
+    fun stopLeavesAScanThisAdapterNeverStartedRunning() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        engine.engineState = EventJoinEngineState(isScanning = true, isAdvertising = false)
+
+        coordinator.stopNearbyEventDiscovery()
+
+        assertEquals(
+            0,
+            engine.stopScanCalls,
+            "only a scan this adapter started for discovery may be stopped by it",
+        )
+        assertTrue(engine.engineState.isScanning)
+    }
+
     private fun kotlinx.coroutines.test.TestScope.coordinator(engine: FakeEventJoinEngine): EventJoinCoordinator =
         EventJoinCoordinator(
             engine = engine,
