@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import Foundation
 
 /// Centralized, app-wide protocol/UX constants — see
@@ -22,10 +23,11 @@ enum BeidConfig {
   /// those three words survived: the app cannot tell whether a peer sensed it
   /// back, and this counts devices rather than observations (beid#154).
   ///
-  /// A single named constant so the
-  /// later rework to a per-event, organizer-configurable value
-  /// (`event.confirmThreshold ?? BeidConfig.eventConfirmThreshold`) is a
-  /// one-line, one-call-site change.
+  /// The base value (`3`) now comes from
+  /// `BeidSharedKit.sensing.defaultEventConfirmThreshold` (beid#231 item 3) —
+  /// see that constant's doc comment for its provenance and what it does not
+  /// settle. This property still owns the DEBUG-only overrides below, which
+  /// wrap the shared value rather than replace it.
   #if DEBUG
   /// Test-only override, checked ahead of the `-beid-threshold-override`
   /// launch argument below. Exists because some threshold values (e.g. `1`,
@@ -52,7 +54,7 @@ enum BeidConfig {
       return override
     }
     #endif
-    return 3
+    return Int(BeidSharedKit.sensing.defaultEventConfirmThreshold)
   }
 
   /// Resolves the Debug demo walkthrough requested by a launch argument.

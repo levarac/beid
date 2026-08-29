@@ -22,6 +22,7 @@
 		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
 		263C863A858418EFF3DBD26D /* AggregationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */; };
 		28E75B406BEB88F153F41935 /* VenueDeviceBroadcastingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B72321D5649C6DAE0C3B30 /* VenueDeviceBroadcastingTests.swift */; };
+		29D016FBBA97209A70C7C35E /* BeidConfigThresholdTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B01383C582BD797CC2808F /* BeidConfigThresholdTests.swift */; };
 		2A1A2B29FD3D174FEB86910F /* VenueDeviceAssignmentStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D891FA92885297F5C4D602 /* VenueDeviceAssignmentStoreTests.swift */; };
 		2AAE343C266A4EF91A080FFD /* EventCodeEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */; };
 		2B231C75AA6AECD2C9DF9766 /* ReportSubmissionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2E357058CCA15BA3DCAE5E /* ReportSubmissionStoreTests.swift */; };
@@ -181,6 +182,7 @@
 		10807372081AA25A74942BE3 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSheetView.swift; sourceTree = "<group>"; };
 		13AA21AD1DA667D20C77BD26 /* EventIdHash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventIdHash.swift; sourceTree = "<group>"; };
+		13B01383C582BD797CC2808F /* BeidConfigThresholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidConfigThresholdTests.swift; sourceTree = "<group>"; };
 		185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoWalletConnector.swift; sourceTree = "<group>"; };
 		1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothPermissionView.swift; sourceTree = "<group>"; };
 		1E5E4675B28D0F28D480086D /* UnsentWindowLedgerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsentWindowLedgerStore.swift; sourceTree = "<group>"; };
@@ -508,6 +510,7 @@
 				E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */,
 				73260B2E5EA447B3E800555C /* AppCoordinatorRestoreTests.swift */,
 				761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */,
+				13B01383C582BD797CC2808F /* BeidConfigThresholdTests.swift */,
 				0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */,
 				23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */,
 				947190410BDDDD3DB0C6F24D /* DemoScenarioInvariantTests.swift */,
@@ -860,6 +863,7 @@
 				67D6643DEE67BF7E3D10D181 /* AggregationRuntimeTests.swift in Sources */,
 				B3A230BA5775F3098FF6595B /* AppCoordinatorRestoreTests.swift in Sources */,
 				F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */,
+				29D016FBBA97209A70C7C35E /* BeidConfigThresholdTests.swift in Sources */,
 				5FC832F5D33A285FE767636F /* BindingMessageTests.swift in Sources */,
 				AAA084FCDB8DD4558C438B58 /* CorruptStoreQuarantineTests.swift in Sources */,
 				9E85C338D129992CB713A690 /* DemoScenarioInvariantTests.swift in Sources */,

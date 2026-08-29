@@ -1249,9 +1249,11 @@ final class SensingCoordinator: ObservableObject {
   /// quantity from anything `BeidSharedKit.aggregation` reports (see
   /// `unidentifiedRpidCount`'s doc comment), so it stays purely native.
   private func recordDeviceIdentity(enin: Int, rpid: String, detectedDisplayId: String?) -> Bool {
-    // Barnard emits lowercase hex today; normalize so an upstream change of
-    // case could not split one device into two.
-    let displayId = detectedDisplayId?.lowercased()
+    // Canonicalization (lowercasing) is `BeidSharedKit.sensing
+    // .normalizedDisplayIdOrNull` (beid#231) — the same `shared/` decision
+    // Android's `ScanDeviceAccounting.record` applies, not a native
+    // `.lowercased()` check owned here.
+    let displayId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(detectedDisplayId: detectedDisplayId)
 
     if displayId == nil {
       if rpidsAwaitingDisplayId.insert(rpid).inserted {
@@ -1744,13 +1746,24 @@ final class SensingCoordinator: ObservableObject {
   /// (sign + persist) only if it was ever started
   /// (`currentWindowLedgerOpened`); otherwise the outgoing window is
   /// discarded with no report, per §4's accepted trade-off.
+  ///
+  /// The boundary test itself is `BeidSharedKit.sensing
+  /// .coPresenceWindowBoundaryCrossed` (beid#231) — the same `shared/`
+  /// decision Android's `ScanDeviceAccounting.record` applies, not a native
+  /// `!=` comparison owned here. Everything else in this function (the
+  /// ledger-open/self-proof orchestration below) remains native effect
+  /// scope.
   private func advanceWindowBookkeepingIfNeeded(enin: Int, eventCode: String) {
     redeliverPendingWindowReports()
     guard let openEnin = currentWindowEnin else {
       openNewWindowState(enin: enin)
       return
     }
-    guard openEnin != enin else {
+    guard
+      BeidSharedKit.sensing.coPresenceWindowBoundaryCrossed(
+        lastEnin: Int64(openEnin), enin: Int64(enin)
+      )
+    else {
       return
     }
     if currentWindowLedgerOpened {
