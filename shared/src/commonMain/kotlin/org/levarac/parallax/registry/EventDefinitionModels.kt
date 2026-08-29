@@ -137,6 +137,16 @@ public enum class DefinitionFetchError {
     HASH_MISMATCH,
     DECODE_ERROR,
     EVENT_ID_MISMATCH,
+
+    /**
+     * The registry has no definition record at all for this event ID —
+     * distinct from [VALIDITY_MISMATCH], where records exist but none
+     * covers the requested time. Callers that need to tell "this event was
+     * never registered" apart from "this event's registration has a
+     * validity gap right now" (e.g. beid#258 dispatch#2's UI-visible
+     * verification indicator) must not collapse the two.
+     */
+    NOT_FOUND,
     VALIDITY_MISMATCH,
     PAYLOAD_TOO_LARGE,
 }
