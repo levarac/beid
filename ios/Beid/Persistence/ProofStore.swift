@@ -71,7 +71,7 @@ final class ProofStore: ObservableObject {
     var loaded: [Proof]
     do {
       let data = try Data(contentsOf: fileURL)
-      loaded = try JSONDecoder().decode([Proof].self, from: data)
+      loaded = try RecordSchemaEnvelope.decodeRecords(Proof.self, from: data)
     } catch {
       // A file that fails to decode used to be discarded silently and then
       // destroyed by the next save, taking every stored proof with it
@@ -115,7 +115,7 @@ final class ProofStore: ObservableObject {
 
   private func save() {
     guard !isPersistenceSuspended else { return }
-    guard let data = try? JSONEncoder().encode(proofs) else { return }
+    guard let data = try? RecordSchemaEnvelope.encodeRecords(proofs) else { return }
     try? data.write(to: fileURL, options: .atomic)
   }
 

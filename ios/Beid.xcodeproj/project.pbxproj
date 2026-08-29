@@ -19,6 +19,7 @@
 		1226A80744BF52066457276F /* DemoScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7861DB9570E12A35417692F4 /* DemoScenario.swift */; };
 		12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */; };
 		18404D198F54E376B76E29F1 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E82F02CAFD9439A1F6661 /* RootView.swift */; };
+		1AADFD0958F5B7312884FD4F /* RecordSchemaEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */; };
 		2373C0D65D076799C38E0C6D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B26B23A64184D96C012A5B6 /* DesignSystem.swift */; };
 		263C863A858418EFF3DBD26D /* AggregationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */; };
 		28E75B406BEB88F153F41935 /* VenueDeviceBroadcastingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B72321D5649C6DAE0C3B30 /* VenueDeviceBroadcastingTests.swift */; };
@@ -84,6 +85,7 @@
 		98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */; };
 		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
 		9AF57AA98679B17508065714 /* SensingCryptography.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */; };
+		9E337258C7DB06C41ADCC141 /* RecordSchemaEnvelopeMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D133F06DAE45C0813736C592 /* RecordSchemaEnvelopeMigrationTests.swift */; };
 		9E85C338D129992CB713A690 /* DemoScenarioInvariantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 947190410BDDDD3DB0C6F24D /* DemoScenarioInvariantTests.swift */; };
 		A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */; };
 		A270412A7278D241A8A344C7 /* EventMembershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */; };
@@ -97,6 +99,7 @@
 		ACCA8EA1D39994F420C779BA /* SelfProofTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */; };
 		ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E157C35B263F222E1DBDD5 /* ProofSignature.swift */; };
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
+		B31E5C4B7FFA24E8138EC93F /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC3BF967894221C74134CEB6 /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift */; };
 		B3A230BA5775F3098FF6595B /* AppCoordinatorRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73260B2E5EA447B3E800555C /* AppCoordinatorRestoreTests.swift */; };
 		BD424B0B114CBB6F3FE6BA8E /* WindowReportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C453FB39D62870ECDBCBF0 /* WindowReportStore.swift */; };
 		BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00B88F37F569ED386AB057A8 /* Assets.xcassets */; };
@@ -265,6 +268,7 @@
 		A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregationRuntime.swift; sourceTree = "<group>"; };
 		A8D8A4D0AA5745D9AAC65FBF /* ReportSubmissionStateQueryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSubmissionStateQueryTests.swift; sourceTree = "<group>"; };
 		AA596FDBF8F1F004E195D54E /* VenueDeviceAssignmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceAssignmentStore.swift; sourceTree = "<group>"; };
+		AC3BF967894221C74134CEB6 /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift; sourceTree = "<group>"; };
 		AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothMonitor.swift; sourceTree = "<group>"; };
 		B0333AAF8319263B67E8FE36 /* EventSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSession.swift; sourceTree = "<group>"; };
 		B07FD0202575465DCF463745 /* EventFoundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventFoundView.swift; sourceTree = "<group>"; };
@@ -274,6 +278,7 @@
 		BAE9AB6A36B71BDF979C1435 /* EventGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventGrouping.swift; sourceTree = "<group>"; };
 		BB47871AF9ADE5CDBDBA2EA6 /* SelfProofRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofRecord.swift; sourceTree = "<group>"; };
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSchemaEnvelope.swift; sourceTree = "<group>"; };
 		BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofTests.swift; sourceTree = "<group>"; };
 		C0412932757042A17306C358 /* RegistryDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegistryDependencies.swift; sourceTree = "<group>"; };
 		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
@@ -290,6 +295,7 @@
 		CA4E3BC04874E00A36445CB8 /* SelfProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofStore.swift; sourceTree = "<group>"; };
 		CADBE5E0B665DA97DF1CF7B6 /* RecordingBindingSheetUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingBindingSheetUITests.swift; sourceTree = "<group>"; };
 		CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCryptography.swift; sourceTree = "<group>"; };
+		D133F06DAE45C0813736C592 /* RecordSchemaEnvelopeMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSchemaEnvelopeMigrationTests.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D8F7094F03F3DA765492BFFC /* WindowReportStoreDurabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportStoreDurabilityTests.swift; sourceTree = "<group>"; };
 		DBBF900C092346BBFDF6BA96 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
@@ -391,6 +397,7 @@
 				FB0AA6219B53ABF42EDACF85 /* BindingRecordStore.swift */,
 				8F32BB88D92DB86709083B1E /* CorruptStoreQuarantine.swift */,
 				C0C21DF46165889A3C206F0C /* ProofStore.swift */,
+				BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */,
 				82026A01F786700EA024C27A /* ReportSubmissionStore.swift */,
 				2C67609A206E5D182BCFECF3 /* SelfProofCheckpoint.swift */,
 				884640A5A92A08B45287E2FE /* SelfProofCheckpointStore.swift */,
@@ -538,9 +545,11 @@
 				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
 				0A10CCB8E5D80E54CF5B4291 /* OwnerKeyProviderTests.swift */,
 				C199A4E7880D919E1D6F5B72 /* ParticipationSummaryDataTests.swift */,
+				AC3BF967894221C74134CEB6 /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift */,
 				7B21B483493CBB0273AB74DC /* ProofSignatureTests.swift */,
 				9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */,
 				F3C78211E54CB26A88AE8857 /* ProofTests.swift */,
+				D133F06DAE45C0813736C592 /* RecordSchemaEnvelopeMigrationTests.swift */,
 				227F031B1D42A852CC6278C8 /* ReportSubmissionOperatorIntegrationTests.swift */,
 				A8D8A4D0AA5745D9AAC65FBF /* ReportSubmissionStateQueryTests.swift */,
 				8F2E357058CCA15BA3DCAE5E /* ReportSubmissionStoreTests.swift */,
@@ -834,6 +843,7 @@
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
 				ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */,
 				AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */,
+				1AADFD0958F5B7312884FD4F /* RecordSchemaEnvelope.swift in Sources */,
 				5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */,
 				74A66D42D8B3D3B3D03A7496 /* RegistryDependencies.swift in Sources */,
 				322BD9E32E34B01EA0112610 /* ReportSubmissionRuntime.swift in Sources */,
@@ -898,9 +908,11 @@
 				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
 				BDE0B0D8E4FAB885CD25F9B8 /* OwnerKeyProviderTests.swift in Sources */,
 				0EC4037E7127223ED39102C2 /* ParticipationSummaryDataTests.swift in Sources */,
+				B31E5C4B7FFA24E8138EC93F /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift in Sources */,
 				E9736692F462A659CE323E75 /* ProofSignatureTests.swift in Sources */,
 				ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */,
 				C681656D4F0FBFB5973E28A4 /* ProofTests.swift in Sources */,
+				9E337258C7DB06C41ADCC141 /* RecordSchemaEnvelopeMigrationTests.swift in Sources */,
 				737AD87C8947B5348871BBC6 /* ReportSubmissionOperatorIntegrationTests.swift in Sources */,
 				F5A2C42AA783E9F15EAE309B /* ReportSubmissionStateQueryTests.swift in Sources */,
 				2B231C75AA6AECD2C9DF9766 /* ReportSubmissionStoreTests.swift in Sources */,
@@ -1309,7 +1321,7 @@
 			repositoryURL = "https://github.com/levarac/barnard.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.4.0;
+				version = 0.3.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
