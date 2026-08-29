@@ -23,6 +23,7 @@ extension EventSession {
     venue: String(
       localized: "Shibuya Hikarie",
       comment: "Venue name shown under the demo event name. A real Tokyo building; translate only if the target language has a conventional rendering of it."
-    )
+    ),
+    identityVerification: .notChecked
   )
 }

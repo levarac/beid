@@ -34,6 +34,28 @@
       "comment": "Button: copies the connected wallet address to the clipboard, not a noun."
     },
     "Detected event": {},
+    "demo.scenario.longDisplayNames.eventName": {
+      "comment": "Long fictional event name used only in the Debug demo scenario to verify wrapping and hierarchy.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The International Gathering for Open, Verifiable and Durable Local Participation"
+          }
+        }
+      }
+    },
+    "demo.scenario.longDisplayNames.venue": {
+      "comment": "Long fictional venue name used only in the Debug demo scenario to verify wrapping and hierarchy.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The East Exhibition Hall at the Tokyo International Convention and Community Center"
+          }
+        }
+      }
+    },
     "detail.devicesSensed.label": {
       "comment": "Metric row label on Proof Detail and Signal Lost, paired with a number. \"Devices\", not people: it counts distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual or reciprocal confirmation — this device cannot tell whether a peer also observed it back. Use your language's word for a phone or handset, not a word for a person or a peer.",
       "localizations": {
@@ -64,6 +86,61 @@
       }
     },
     "Event Found": {},
+    "event.identityVerification.checking": {
+      "comment": "Status row beneath a live event card while the app checks the event registry. Sentence case. Do not add an event name; this row reports status only.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking event registry…"
+          }
+        }
+      }
+    },
+    "event.identityVerification.notFound": {
+      "comment": "Neutral terminal status row when the registry has no definition for the detected event. Sentence case. Do not add an event name or imply that the event is invalid.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No registry definition was found for this event."
+          }
+        }
+      }
+    },
+    "event.identityVerification.retry": {
+      "comment": "Accessible button label for manually retrying an unavailable or no-definition event registry lookup. Sentence case. This is the only retry affordance in the row.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry event registry verification"
+          }
+        }
+      }
+    },
+    "event.identityVerification.unavailable": {
+      "comment": "Neutral terminal status row when the event registry could not be reached or returned malformed data. Sentence case. Do not add an event name or imply a verification result.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event registry is temporarily unavailable."
+          }
+        }
+      }
+    },
+    "event.identityVerification.verified": {
+      "comment": "Success status row after the registry returned a valid verified event context. Sentence case. Report identity status only; never include the event display name in this row.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event identity verified"
+          }
+        }
+      }
+    },
     "Event code": {
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join."
     },
@@ -431,7 +508,7 @@
       }
     },
     "Sent": {
-      "comment": "Sub-state row under \"Participation record\": whether this device's sensing data has been transmitted to a report server. Always shows \"Not yet available\" today (see the adjacent status text) because no report-submission code exists in the app yet — this is not a failed-send state.",
+      "comment": "Sub-state row under \"Participation record\": whether this device's sensing data has been transmitted to a report server for this event. Available once at least one submission has reached the SUBMITTING or ACCEPTED durable state (beid#292); report-submission code exists in the app today but is gated off in production by the BeidReportSubmissionEnabled build setting, so this reflects genuinely stored state, not a permanently-unbuilt capability like the rows below it. Shows \"Not yet available\" (not a failed-send state) before any submission for this event has been attempted.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -464,7 +541,7 @@
       }
     },
     "transparency.notYetAvailable": {
-      "comment": "Status for a participation-record or verified-proof row whose data source doesn't exist in the product yet (no report submission or verifier is implemented). This means the capability itself is not built yet, not that an attempt was made and failed — do not translate as an error, warning, or declined state.",
+      "comment": "Status for a participation-record or verified-proof row that has no data to show yet — either because the underlying capability isn't implemented in the product at all, or because it exists but hasn't happened for this event yet (e.g. no submission has been sent/received). This means there is nothing to report yet, not that an attempt was made and failed — do not translate as an error, warning, or declined state.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -695,6 +772,150 @@
           "stringUnit": {
             "state": "translated",
             "value": "Past Events"
+          }
+        }
+      }
+    },
+    "transparency.mutualObservation": {
+      "comment": "Sub-state row under \"Participation record\": whether two devices have confirmed they mutually sensed each other during this event. Always shows \"Not yet available\" today because there is no on-device reciprocity signal in the product yet — this is not a failed-measurement or zero-result state, the capability itself does not exist yet. Refers to two devices detecting each other, not audio/video observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mutual observation"
+          }
+        }
+      }
+    },
+    "transparency.sent": {
+      "comment": "Trailing value on the \"Sent\" sub-state row under \"Participation record\", shown once at least one submission for this event has actually been transmitted to a report server. Same word as the row's own label — confirming the label is now true, not a separate or more specific status.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent"
+          }
+        }
+      }
+    },
+    "transparency.acceptanceReceipt": {
+      "comment": "Sub-state row under \"Participation record\": whether the report server has confirmed receipt of at least one of this device's submissions for this event. Always shows \"Not yet available\" until a receipt has actually been verified and stored — a submission that was merely sent, with no confirmed receipt yet, is not enough for this row.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acceptance receipt"
+          }
+        }
+      }
+    },
+    "transparency.received": {
+      "comment": "Trailing value on the \"Acceptance receipt\" sub-state row under \"Participation record\", shown once the report server has actually confirmed receipt for at least one submission for this event. Not a separate status word like \"pending\" or \"delivered\" — it means the receipt itself is confirmed and stored.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Received"
+          }
+        }
+      }
+    },
+    "No proofs yet today": {
+      "comment": "Empty-state title on the Daily Summary screen when no proof has been collected yet today (local calendar day). Distinct from Collection Home's all-time empty state (\"No proofs yet\").",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No proofs yet today"
+          }
+        }
+      }
+    },
+    "Proofs you collect today will show up here.": {
+      "comment": "Empty-state body on the Daily Summary screen, directly under \"No proofs yet today\". Describes what will populate this list, not an instruction to act right now.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proofs you collect today will show up here."
+          }
+        }
+      }
+    },
+    "Submission": {
+      "comment": "Section header on the Daily Summary screen, above one line describing whether sending proofs to a report server is turned on for this build. Noun, not a verb/CTA.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submission"
+          }
+        }
+      }
+    },
+    "collection.dailySummaryButton": {
+      "comment": "Accessibility label for the calendar-icon toolbar button on Collection Home that opens the Daily Summary screen (gh#291) — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's own navigation title, since this button's only purpose is opening that screen.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today"
+          }
+        }
+      }
+    },
+    "dailySummary.title": {
+      "comment": "Navigation title of the Daily Summary screen: a day-scoped rollup of proofs collected on the current local calendar day. Refers to the current day, not a to-do list or calendar-app sense of \"Today\".",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today"
+          }
+        }
+      }
+    },
+    "dailySummary.recordCount": {
+      "comment": "Header above the Daily Summary screen's list of today's proofs: how many proofs (Proof records in ProofStore, not distinct events) were collected on the current local calendar day. Only shown when the day is non-empty — the empty-day state (\"No proofs yet today\") is a separate string.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proof collected today"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proofs collected today"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "dailySummary.submission.notSentYet": {
+      "comment": "Submission status line on the Daily Summary screen, shown only when the BeidReportSubmissionEnabled build flag is on. States plainly that nothing has been transmitted to a report server yet — not a count, not a claim about verification.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet."
+          }
+        }
+      }
+    },
+    "dailySummary.submission.disabledForBuild": {
+      "comment": "Submission status line on the Daily Summary screen, shown when the BeidReportSubmissionEnabled build flag is off (the default today). Communicates that the sending feature exists but is switched off for this build — \"built, off,\" never \"not built\" — not that anything failed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending isn't turned on for this build."
           }
         }
       }

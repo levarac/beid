@@ -137,16 +137,85 @@ struct ScanFlowView: View {
 
   @ViewBuilder
   private var content: some View {
-    switch sensing.phase {
+    ScanFlowContent.view(phase: sensing.phase, sensing: sensing)
+  }
+}
+
+/// The sole production router for scan-phase content. Keeping the route next
+/// to the actual view construction means preview scenarios exercise the same
+/// Sensing/Event Found/Recording/Signal Lost views as the app, not a reduced
+/// card or diagnostic placeholder.
+enum ScanFlowContent {
+  enum Route: Equatable {
+    case sensing
+    case eventFound
+    case recording
+    case signalLost
+  }
+
+  static func route(for phase: ScanPhase) -> Route {
+    switch phase {
+    case .idle, .sensing:
+      .sensing
+    case .eventFound:
+      .eventFound
+    case .recording:
+      .recording
+    case .signalLost:
+      .signalLost
+    }
+  }
+
+  @ViewBuilder
+  static func view(
+    phase: ScanPhase,
+    sensing: SensingCoordinator,
+    recordingCeremonyDwellNanos: UInt64 = 2_000_000_000
+  ) -> some View {
+    switch phase {
     case .idle, .sensing:
       SensingView()
     case .eventFound(let event):
-      EventFoundView(event: event)
+      EventFoundView(
+        event: event,
+        onRetryVerification: { sensing.retryEventIdentityVerification() }
+      )
     case .recording(let event, let peersVerified):
-      RecordingView(sensing: sensing, event: event, peersVerified: peersVerified)
+      RecordingView(
+        sensing: sensing,
+        event: event,
+        peersVerified: peersVerified,
+        onRetryVerification: { sensing.retryEventIdentityVerification() },
+        ceremonyDwellNanos: recordingCeremonyDwellNanos
+      )
     case .signalLost(let event, let peersVerified):
-      SignalLostView(event: event, peersVerified: peersVerified)
+      SignalLostView(
+        event: event,
+        peersVerified: peersVerified,
+        onRetryVerification: { sensing.retryEventIdentityVerification() }
+      )
     }
+  }
+}
+
+/// A thin preview-only state observer. It deliberately delegates every phase
+/// to `ScanFlowContent`, so preview scenarios exercise the same production
+/// views and routing as a real scan flow.
+struct ScanFlowPreviewHarness: View {
+  @ObservedObject var sensing: SensingCoordinator
+  let recordingCeremonyDwellNanos: UInt64
+
+  init(sensing: SensingCoordinator, recordingCeremonyDwellNanos: UInt64 = 0) {
+    self.sensing = sensing
+    self.recordingCeremonyDwellNanos = recordingCeremonyDwellNanos
+  }
+
+  var body: some View {
+    ScanFlowContent.view(
+      phase: sensing.phase,
+      sensing: sensing,
+      recordingCeremonyDwellNanos: recordingCeremonyDwellNanos
+    )
   }
 }
 
@@ -162,9 +231,11 @@ struct ScanFlowView: View {
     .preferredColorScheme(.dark)
 }
 
-// Only the container's default (.idle/.sensing) phase is previewed here.
-// `phase` is `private(set)` on `SensingCoordinator` by design (state only
-// advances through the real/demo sensing sequence) so other phases aren't
-// independently reachable from a preview; each phase already has its own
-// dedicated #Preview on its view (EventFoundView, RecordingView,
-// SignalLostView).
+#Preview("Signal Lost scenario") {
+  let coordinator = AppCoordinator()
+  let sensing = coordinator.sensingCoordinator
+  sensing.runDemoScenario(.signalLostMidway, stepDelayNanos: 0)
+  return ScanFlowPreviewHarness(sensing: sensing)
+    .environmentObject(coordinator)
+    .task { await sensing.waitForDemoScenarioPreviewToSettle() }
+}

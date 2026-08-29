@@ -16,6 +16,7 @@ final class AppCoordinator: ObservableObject {
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
+  @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
@@ -45,6 +46,9 @@ final class AppCoordinator: ObservableObject {
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
     self.walletConnector = walletConnector
     self.proofStore = proofStore ?? ProofStore()
+    if proofStore == nil, shouldResetProofStoreForUITesting {
+      self.proofStore.resetForUITesting()
+    }
     sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
     }
@@ -73,6 +77,18 @@ final class AppCoordinator: ObservableObject {
     guard !ProcessInfo.processInfo.arguments.contains("-beid-ui-test") else { return false }
     #endif
     return UserDefaults.standard.bool(forKey: Self.hasCompletedOnboardingKey)
+  }
+
+  /// Same launch-argument gate as `hasCompletedOnboardingPersisted` above,
+  /// applied to the default `ProofStore` instead of the onboarding flag —
+  /// beid#244. `#if DEBUG` means Release builds (which never receive
+  /// `-beid-ui-test`) cannot reach this regardless of the argument check.
+  private var shouldResetProofStoreForUITesting: Bool {
+    #if DEBUG
+    return ProcessInfo.processInfo.arguments.contains("-beid-ui-test")
+    #else
+    return false
+    #endif
   }
 
   /// Restores a previously set-up device past `.welcome` on cold launch

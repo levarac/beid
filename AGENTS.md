@@ -199,6 +199,29 @@ the same name shadows them.
   fail when applied in a disposable checkout. Recurring CI automation is
   intentionally deferred to Issue #110; do not claim that CI currently runs
   them.
+- **"Which behavior is protected by which test" is a tool, not a hand-
+  maintained list.** `scripts/mutation_check.py` (beid#110) mutates one real
+  site at a time in a target Kotlin source file or directory (comparison-
+  operator swaps, boolean-literal flips, numeric-literal `N`→`N+1` including
+  `val`/`const val` declarations), reruns a given Gradle test task, and
+  reports per-site whether some test went red ("killed") or none did
+  ("survived"), then restores the file via `git checkout --`. It exists
+  because three rounds of manually rebuilding this check by hand during PR
+  #109's review each produced a list of "verified behaviors" that looked
+  complete and was later found short — and every time, by someone who
+  rebuilt the check from scratch rather than trusting the existing list, not
+  by someone reading it. It also catches a blind spot that manual review
+  missed three times: a test that asserts against a production constant *by
+  reference* rather than a literal doesn't go red when that constant's value
+  regresses, because the constant's mutation moves both sides of the
+  comparison at once — the tool mutates the constant's declaration and
+  reports the resulting survivor like any other. It is a line/regex-based
+  text scanner over Kotlin source, not a Kotlin AST mutation engine (see its
+  own `--help`/docstring for exactly what that does and doesn't catch), and
+  it is a manually run, on-demand developer/reviewer tool — it is
+  deliberately **not** wired into `.github/workflows/pr-ci.yml`, since one
+  full test-suite run per mutation site is too expensive to run
+  unconditionally on every PR.
 
 ### Review gate — SUSPENDED as of 2026-08-19
 
@@ -408,7 +431,15 @@ dates). The contract every agent must know before touching delivery files:
   `.github/workflows/pr-ci.yml` にある。現在の `pr-ci` はすべての PR と
   `main` への push で、Ubuntu 上に次の 3 job を実行する。
   - Android build: `:shared:testAndroidHostTest`、
-    `:app:testDebugUnitTest`、`:app:assembleDebug`
+    `:app:testDebugUnitTest`、`:app:assembleDebug`、`:app:dependencyInsight`
+    (`org.levarac:barnard` の `debugRuntimeClasspath` resolution を build と
+    test の step とは別の `./gradlew` 呼び出しとして追加実行し、その出力を
+    `scripts/check_barnard_dependency_provenance.py` で検証する。resolved
+    version が `android/app/build.gradle.kts` の宣言と一致すること、
+    force override / project・composite-build substitution /
+    `mavenLocal()` による差し替えが無いことを確認し、published dependency
+    が実際に何へ resolve したかを CI log に machine-checkable な証拠として
+    残す — gh#110)
   - SwiftLint: `scripts/lint.sh`
   - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証
 
