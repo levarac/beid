@@ -559,4 +559,108 @@ final class SensingCoordinatorTests: XCTestCase {
       return
     }
   }
+
+  /// B005 discovery is an unauthenticated pre-join hint only. The native
+  /// adapter must forward its fields to shared without entering sensing,
+  /// binding, proof, ledger, or report-submission paths.
+  func testEventInfoHintAppearsAsNearbyCandidateWithoutMutatingJoinedSessionState() throws {
+    let reportRuntime = DiscoveryIsolationReportRuntimeSpy()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      reportSubmissionRuntime: reportRuntime
+    )
+    var collectedProof = false
+    coordinator.onProofCollected = { _ in collectedProof = true }
+    let hash = Data([0, 1, 2, 3, 4, 5, 6, 7])
+    let census = Data([9, 8])
+
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      census: census,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_000
+    )
+
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(coordinator.bindingState, .none)
+    XCTAssertNil(coordinator.joinedEventCode)
+    XCTAssertNil(coordinator.joinedCanonicalEventIdHex)
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+    XCTAssertNil(coordinator.sessionAggregate)
+    XCTAssertEqual(coordinator.unidentifiedRpidCount, 0)
+    XCTAssertFalse(collectedProof)
+    XCTAssertEqual(reportRuntime.captureCalls, 0)
+    XCTAssertEqual(reportRuntime.submitCalls, 0)
+
+    let snapshot = coordinator.nearbyEventCandidates
+    XCTAssertEqual(snapshot.candidateCount, 1)
+    let candidate = try XCTUnwrap(snapshot.candidateAt(index: 0))
+    XCTAssertEqual(Data(bytesFromKotlinByteArray: candidate.eventCodeHash), hash)
+    XCTAssertEqual(candidate.displayNameAt(index: 0), "Community night")
+    let source = try XCTUnwrap(candidate.sourceAt(index: 0))
+    XCTAssertEqual(source.peripheralId, "peripheral-a")
+    XCTAssertEqual(source.eventDisplayName, "Community night")
+    XCTAssertEqual(
+      Data(bytesFromKotlinByteArray: try XCTUnwrap(source.census)),
+      census
+    )
+  }
+
+  /// Barnard's overflow marker carries no candidate identity. Its global
+  /// omission facts still cross the adapter, then reset with the discovery
+  /// session; the marker itself must never be shown as an event.
+  func testEventInfoOverflowMarkerPublishesOnlyOmissionFactsAndResetClearsThem() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.handleEventInfoHint(
+      peripheralId: "",
+      eventDisplayName: "",
+      eventCodeHash: Data(),
+      census: nil,
+      additionalNamesOmitted: true,
+      additionalEventsOmitted: true,
+      observedAtEpochMillis: 2_000
+    )
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertTrue(coordinator.nearbyEventCandidates.additionalNamesOmitted)
+    XCTAssertTrue(coordinator.nearbyEventCandidates.additionalEventsOmitted)
+    XCTAssertEqual(coordinator.phase, .idle)
+
+    coordinator.reset()
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertFalse(coordinator.nearbyEventCandidates.additionalNamesOmitted)
+    XCTAssertFalse(coordinator.nearbyEventCandidates.additionalEventsOmitted)
+    XCTAssertEqual(coordinator.phase, .idle)
+  }
+}
+
+@MainActor
+private final class DiscoveryIsolationReportRuntimeSpy: WindowReportSubmissionRuntimeProtocol {
+  private(set) var captureCalls = 0
+  private(set) var submitCalls = 0
+
+  func captureAndQueueWindow(
+    id: UUID,
+    eventCode: String,
+    eventIdHex: String?,
+    enin: Int,
+    peerRpids: Set<String>,
+    reporterRpid: String?,
+    participantCommitment: Data?
+  ) {
+    captureCalls += 1
+  }
+
+  func submitPending() {
+    submitCalls += 1
+  }
+
+  func submissionState(forEventCode eventCode: String) -> ReportSubmissionState? {
+    nil
+  }
 }
