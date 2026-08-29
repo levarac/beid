@@ -81,6 +81,15 @@ struct CollectionHomeView: View {
       .navigationTitle("Collection")
       .navigationBarTitleDisplayMode(.large)
       .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button {
+            BeidDesign.haptic()
+            coordinator.dailySummaryPresented = true
+          } label: {
+            Image(systemName: "calendar")
+          }
+          .accessibilityLabel(dailySummaryAccessibilityLabelText)
+        }
         ToolbarItem(placement: .topBarTrailing) {
           Button {
             BeidDesign.haptic()
@@ -108,6 +117,9 @@ struct CollectionHomeView: View {
           // render system blue. Same fix as AccountSheetView's own
           // WalletConnectSheetView doc comment already describes.
           .tint(DS.Color.actionPrimary)
+      }
+      .navigationDestination(isPresented: $coordinator.dailySummaryPresented) {
+        DailySummaryView()
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         ItemDetailView(proof: proof)
@@ -150,6 +162,14 @@ struct CollectionHomeView: View {
   private func startScan() {
     BeidDesign.haptic()
     coordinator.startScan()
+  }
+
+  private var dailySummaryAccessibilityLabelText: String {
+    String(
+      localized: "collection.dailySummaryButton",
+      defaultValue: "Today",
+      comment: "Accessibility label for the calendar-icon toolbar button on Collection Home that opens the Daily Summary screen (gh#291) — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's own navigation title, since this button's only purpose is opening that screen."
+    )
   }
 
   private var proofCountText: String {

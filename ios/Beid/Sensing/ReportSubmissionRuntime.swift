@@ -491,6 +491,16 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     )
   }
+
+  /// Exposes the same `BeidReportSubmissionEnabled` build-flag check
+  /// `makeIfEnabled(bundle:...)` already gates on, for callers (gh#291's
+  /// Daily Summary screen) that need to state the submission pipeline's
+  /// on/off status in words without constructing a runtime instance. Reuses
+  /// `isEnabled(bundle:)` rather than re-reading the Info.plist key a second
+  /// time, so the two can never disagree about what "enabled" means.
+  static func isSubmissionEnabled(bundle: Bundle = .main) -> Bool {
+    isEnabled(bundle: bundle)
+  }
 }
 
 private extension Data {
