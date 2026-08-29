@@ -23,6 +23,8 @@ private final class ColdLaunchSubmissionRuntimeSpy: WindowReportSubmissionRuntim
   func submitPending() {
     submitPendingCallCount += 1
   }
+
+  func submissionState(forEventCode _: String) -> ReportSubmissionState? { nil }
 }
 
 @MainActor

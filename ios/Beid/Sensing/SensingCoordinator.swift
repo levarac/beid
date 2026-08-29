@@ -240,6 +240,19 @@ final class SensingCoordinator: ObservableObject {
     windowReportStore.reports.filter { $0.eventCode == eventCode }.count
   }
 
+  /// beid#292's Transparency screen ("Sent"/"Acceptance receipt" rows): the
+  /// most-advanced report-submission state recorded for one event. Forwards
+  /// to `reportSubmissionRuntime.submissionState(forEventCode:)` — a pure
+  /// read of the durable `ReportSubmissionStore`, never a network call.
+  /// `nil` both when the runtime itself is `nil` (report submission is
+  /// gated off in production by `BeidReportSubmissionEnabled`) and when no
+  /// submission for this event code has ever been queued — both render
+  /// identically on the Transparency screen as an honest "not yet
+  /// available," never a false negative.
+  func submissionState(forEventCode eventCode: String) -> ReportSubmissionState? {
+    reportSubmissionRuntime?.submissionState(forEventCode: eventCode)
+  }
+
   /// beid#143's Participation summary screen entry point. Forwards to the
   /// privately-owned `sessionAggregateSnapshotStore` that
   /// `persistSessionAggregateSnapshotIfNeeded()` writes at session end

@@ -134,6 +134,7 @@
 		F23D870545BBEFF8C0585E4C /* TransparencyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
 		F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */; };
+		F5A2C42AA783E9F15EAE309B /* ReportSubmissionStateQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D8A4D0AA5745D9AAC65FBF /* ReportSubmissionStateQueryTests.swift */; };
 		F5F7A3F981CD58049736AE04 /* SessionAggregateSnapshotStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5459592F237296DD025E2E77 /* SessionAggregateSnapshotStoreTests.swift */; };
 		F8EEF80F16E6515536765320 /* DeviceCountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5703915F87566D192896C7B /* DeviceCountTests.swift */; };
 		FBB92DC557CD10D7B999A416 /* EventCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000D4B43F2D5A1703701E95 /* EventCardView.swift */; };
@@ -257,6 +258,7 @@
 		A6B5D084B36D8B81C91BD987 /* VenueDeviceOrganizerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceOrganizerViewModel.swift; sourceTree = "<group>"; };
 		A80A94378B0116CC976961AC /* BluetoothOffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothOffView.swift; sourceTree = "<group>"; };
 		A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregationRuntime.swift; sourceTree = "<group>"; };
+		A8D8A4D0AA5745D9AAC65FBF /* ReportSubmissionStateQueryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSubmissionStateQueryTests.swift; sourceTree = "<group>"; };
 		AA596FDBF8F1F004E195D54E /* VenueDeviceAssignmentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceAssignmentStore.swift; sourceTree = "<group>"; };
 		AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothMonitor.swift; sourceTree = "<group>"; };
 		B0333AAF8319263B67E8FE36 /* EventSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSession.swift; sourceTree = "<group>"; };
@@ -531,6 +533,7 @@
 				9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */,
 				F3C78211E54CB26A88AE8857 /* ProofTests.swift */,
 				227F031B1D42A852CC6278C8 /* ReportSubmissionOperatorIntegrationTests.swift */,
+				A8D8A4D0AA5745D9AAC65FBF /* ReportSubmissionStateQueryTests.swift */,
 				8F2E357058CCA15BA3DCAE5E /* ReportSubmissionStoreTests.swift */,
 				779C1DBA70189E14E9D1D5AE /* ReportSubmissionWiringTests.swift */,
 				919973A9C0109AE49487AC11 /* SelfProofCheckpointRecoveryTests.swift */,
@@ -887,6 +890,7 @@
 				ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */,
 				C681656D4F0FBFB5973E28A4 /* ProofTests.swift in Sources */,
 				737AD87C8947B5348871BBC6 /* ReportSubmissionOperatorIntegrationTests.swift in Sources */,
+				F5A2C42AA783E9F15EAE309B /* ReportSubmissionStateQueryTests.swift in Sources */,
 				2B231C75AA6AECD2C9DF9766 /* ReportSubmissionStoreTests.swift in Sources */,
 				EFAADC6CDAC67683A1ACD51A /* ReportSubmissionWiringTests.swift in Sources */,
 				C1CFD69AC0A6474FD6149026 /* SelfProofCheckpointRecoveryTests.swift in Sources */,

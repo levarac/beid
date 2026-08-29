@@ -45,6 +45,12 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
   func submitPending() {
     submitPendingCallCount += 1
   }
+
+  var submissionStateByEventCode: [String: ReportSubmissionState] = [:]
+
+  func submissionState(forEventCode eventCode: String) -> ReportSubmissionState? {
+    submissionStateByEventCode[eventCode]
+  }
 }
 
 @MainActor
