@@ -637,6 +637,52 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertFalse(coordinator.nearbyEventCandidates.additionalEventsOmitted)
     XCTAssertEqual(coordinator.phase, .idle)
   }
+
+  /// iOS mirror of Android's
+  /// `leaveEventAloneClearsCandidatesWithoutRelyingOnAnExplicitDiscoveryStop`.
+  /// Candidates seen before a join are stale once that join is given up, and
+  /// clearing them must not depend on a separate discovery-stop call.
+  func testLeaveEventAloneClearsNearbyEventCandidates() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: Data([0, 1, 2, 3, 4, 5, 6, 7]),
+      census: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_000
+    )
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+
+    coordinator.leaveEvent()
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+  }
+
+  /// Regression guard for the record/schedule clock split: the recorded
+  /// observation time and the time the expiry delay is computed against must
+  /// be the same value. When they diverge, every delay collapses to zero and
+  /// the rearmed refresh expires the hint that was just recorded. The other
+  /// discovery tests never suspend, so only an `async` test can observe it.
+  func testNearbyCandidateSurvivesTheScheduledExpiryRearm() async throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: Data([0, 1, 2, 3, 4, 5, 6, 7]),
+      census: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_000
+    )
+
+    // Long enough for a zero-delay rearm to run to completion, far short of
+    // the 300 s TTL a correctly scheduled rearm waits for.
+    try await Task.sleep(nanoseconds: 50_000_000)
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+  }
 }
 
 @MainActor

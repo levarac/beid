@@ -1380,6 +1380,10 @@ final class SensingCoordinator: ObservableObject {
     engine.leaveEvent()
     joinedEventCode = engine.getCurrentEventCode()
     joinedCanonicalEventIdHex = nil
+    // Mirrors Android's `EventJoinCoordinator.leaveEvent()`: candidates
+    // observed before a join are stale once that join is given up, and
+    // clearing them must not depend on a separate discovery-stop call.
+    clearNearbyEventDiscovery()
   }
 
   /// Retries the current real event's registry lookup only after a terminal
@@ -1572,17 +1576,22 @@ final class SensingCoordinator: ObservableObject {
     additionalEventsOmitted: Bool,
     observedAtEpochMillis: Int64? = nil
   ) {
+    // One time value drives both the record and the expiry schedule below.
+    // Reading the clock a second time for scheduling would let a caller-
+    // supplied `observedAtEpochMillis` disagree with "now", which collapses
+    // every delay to zero and immediately expires what was just recorded.
+    let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
     let update = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHint(
       store: nearbyDiscoveryStore,
       peripheralId: peripheralId,
       eventDisplayName: eventDisplayName,
-      eventCodeHash: .init(bytesFromData: eventCodeHash),
-      census: census.map { .init(bytesFromData: $0) },
+      eventCodeHash: kotlinByteArray(fromData: eventCodeHash),
+      census: census.map { kotlinByteArray(fromData: $0) },
       additionalNamesOmitted: additionalNamesOmitted,
       additionalEventsOmitted: additionalEventsOmitted,
-      observedAtEpochMillis: observedAtEpochMillis ?? nearbyDiscoveryClock()
+      observedAtEpochMillis: observedAt
     )
-    publishNearbyEventDiscovery(update.snapshot)
+    publishNearbyEventDiscovery(update.snapshot, asOf: observedAt)
   }
 
   /// Publishes one snapshot and rearms the single expiry wake-up from the
@@ -1590,25 +1599,31 @@ final class SensingCoordinator: ObservableObject {
   /// showing an event whose sources have gone quiet even when no further
   /// hint ever arrives to drive a refresh.
   private func publishNearbyEventDiscovery(
-    _ snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates
+    _ snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates,
+    asOf now: Int64
   ) {
     nearbyEventCandidates = snapshot
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
 
     guard let nextExpiryAtEpochMillis = snapshot.nextExpiryAtEpochMillis else { return }
-    let now = nearbyDiscoveryClock()
     let delayMillis = nextExpiryAtEpochMillis <= now ? 0 : nextExpiryAtEpochMillis - now
+    // `expiryAt` saturates at `Long.MAX_VALUE` in shared, so the nanosecond
+    // conversion is done saturating rather than trapping.
+    let delayNanos = UInt64(clamping: delayMillis).multipliedReportingOverflow(by: 1_000_000)
     nearbyDiscoveryExpiryTask = Task { @MainActor [weak self] in
-      try? await Task.sleep(nanoseconds: UInt64(delayMillis) * 1_000_000)
+      try? await Task.sleep(
+        nanoseconds: delayNanos.overflow ? UInt64.max : delayNanos.partialValue
+      )
       guard !Task.isCancelled, let self else { return }
       self.nearbyDiscoveryExpiryTask = nil
+      let refreshedAt = self.nearbyDiscoveryClock()
       let update = ExportedKotlinPackages.org.levarac.parallax.discovery
         .refreshNearbyEventDiscovery(
           store: self.nearbyDiscoveryStore,
-          nowEpochMillis: self.nearbyDiscoveryClock()
+          nowEpochMillis: refreshedAt
         )
-      self.publishNearbyEventDiscovery(update.snapshot)
+      self.publishNearbyEventDiscovery(update.snapshot, asOf: refreshedAt)
     }
   }
 
@@ -2694,14 +2709,22 @@ private extension Data {
 }
 
 
-private extension ExportedKotlinPackages.kotlin.ByteArray {
-  /// Write-direction counterpart of `ReportSubmissionRuntime.swift`'s
-  /// `Data(bytesFromKotlinByteArray:)`, using the same `Int32` subscript and
-  /// `Int8`/`UInt8` bit-pattern reinterpretation in reverse.
-  init(bytesFromData data: Data) {
-    self.init(size: Int32(data.count))
-    for (index, byte) in data.enumerated() {
-      self[Int32(index)] = Int8(bitPattern: byte)
-    }
+/// Write-direction counterpart of `ReportSubmissionRuntime.swift`'s
+/// `Data(bytesFromKotlinByteArray:)`, using the same `Int32` subscript and
+/// `Int8`/`UInt8` bit-pattern reinterpretation in reverse.
+///
+/// Deliberately a free function rather than an initializer in an extension:
+/// Swift Export's representation of `kotlin.ByteArray` is not something this
+/// repository has pinned down, and an `init` in an extension must be spelled
+/// `convenience` for a class and must *not* be for a struct. A free function
+/// compiles either way, and spelling the type at both call sites also keeps
+/// type inference out of `Optional.map`'s return position.
+private func kotlinByteArray(
+  fromData data: Data
+) -> ExportedKotlinPackages.kotlin.ByteArray {
+  let bytes = ExportedKotlinPackages.kotlin.ByteArray(size: Int32(data.count))
+  for (index, byte) in data.enumerated() {
+    bytes[Int32(index)] = Int8(bitPattern: byte)
   }
+  return bytes
 }
