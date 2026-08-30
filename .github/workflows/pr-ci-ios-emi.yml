@@ -189,11 +189,26 @@ jobs:
           try:
               summary = json.loads(summary_path.read_text(encoding="utf-8"))
               result = summary["result"]
-              total = int(summary["totalTestCount"])
-              passed = int(summary["passedTests"])
-              failed = int(summary["failedTests"])
-              skipped = int(summary["skippedTests"])
-              expected_failures = int(summary["expectedFailures"])
+              counts = {
+                  "total": summary["totalTestCount"],
+                  "passed": summary["passedTests"],
+                  "failed": summary["failedTests"],
+                  "skipped": summary["skippedTests"],
+                  "expected failures": summary["expectedFailures"],
+              }
+              if any(isinstance(value, bool) or not isinstance(value, int) for value in counts.values()):
+                  raise TypeError("test counts must be integers")
+              total = counts["total"]
+              passed = counts["passed"]
+              failed = counts["failed"]
+              skipped = counts["skipped"]
+              expected_failures = counts["expected failures"]
+              if any(value < 0 for value in counts.values()):
+                  raise ValueError("test counts must be nonnegative")
+              if any(value > total for name, value in counts.items() if name != "total"):
+                  raise ValueError("a test category exceeds the total test count")
+              if passed + failed + skipped + expected_failures != total:
+                  raise ValueError("test categories do not account for the total test count")
           except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
               with job_summary_path.open("a", encoding="utf-8") as output:
                   output.write("### iOS simulator tests\n\nStructured result data is corrupt or incomplete.\n")
