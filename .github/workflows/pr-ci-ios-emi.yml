@@ -156,8 +156,6 @@ jobs:
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
             build-for-testing
 
       - name: Test without rebuilding
@@ -172,8 +170,6 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
             test-without-building
 
       - name: Summarize structured test results
