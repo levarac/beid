@@ -239,3 +239,8 @@ jobs:
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY
+
+      - name: Shutdown simulator
+        if: always()
+        shell: bash
+        run: xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
