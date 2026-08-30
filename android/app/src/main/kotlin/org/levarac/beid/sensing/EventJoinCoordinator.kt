@@ -1,12 +1,15 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardPermissionResult
+import org.levarac.parallax.discovery.NearbyEventCandidates
 
 /**
  * UI-facing state for [EventJoinCoordinator]. Mirrors the shape of iOS's
@@ -43,7 +46,8 @@ fun mapPermissionResultToState(result: BarnardPermissionResult): EventJoinUiStat
 }
 
 /**
- * Wraps [BarnardEngine] (permission request → `joinEvent` → `startAuto`)
+ * Wraps Barnard through [BarnardEventJoinEngine] (permission request →
+ * `joinEvent` → `startAuto`)
  * behind the native [ScanPhase] state machine driven by
  * `org.levarac.beid.shared.sensing` (beid#116/#120) — the Android
  * counterpart of iOS's `SensingCoordinator`, scoped to this app's one
@@ -51,25 +55,44 @@ fun mapPermissionResultToState(result: BarnardPermissionResult): EventJoinUiStat
  * own; every phase decision is a single call into [applyPhaseDecision] or
  * one of the explicit-action functions in `ScanPhase.kt`.
  */
-class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
-    private val engine = BarnardEngine(activity.applicationContext).apply {
-        setActivity(activity)
-        onEvent = ::handleBarnardEvent
-    }
+class EventJoinCoordinator internal constructor(
+    private val engine: EventJoinEngine,
+    nowEpochMillis: () -> Long,
+    coroutineScope: CoroutineScope,
+) : EventJoinSession {
+    constructor(activity: Activity) : this(
+        engine = BarnardEventJoinEngine(activity),
+        nowEpochMillis = System::currentTimeMillis,
+        coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    )
 
     private val accounting = ScanDeviceAccounting()
+    private val nearbyDiscovery = NearbyEventDiscoverySession(
+        nowEpochMillis = nowEpochMillis,
+        coroutineScope = coroutineScope,
+    )
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
+    val nearbyEventCandidates: StateFlow<NearbyEventCandidates> = nearbyDiscovery.candidates
 
     /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
     private var scanPhase: ScanPhase = ScanPhase.Idle
+    private var discoveryOnlyScanOwned = false
+    private var disposed = false
+
+    init {
+        engine.onEvent = ::handleBarnardEvent
+    }
 
     override fun joinEvent(code: String) {
+        if (disposed) return
         _state.value = EventJoinUiState.RequestingPermission
         engine.requestPermissions { result ->
+            if (disposed) return@requestPermissions
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
                 engine.joinEvent(code)
+                discoveryOnlyScanOwned = false
                 engine.startAuto()
                 startSensing()
             } else {
@@ -85,8 +108,29 @@ class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
     }
 
     private fun handleBarnardEvent(event: BarnardEvent) {
-        val detection = (event as? BarnardEvent.Detection)?.detection ?: return
-        handleDetection(enin = detection.enin, rpid = detection.rpid, detectedDisplayId = detection.detectedDisplayId)
+        if (disposed) return
+        when (event) {
+            is BarnardEvent.EventInfoHint -> {
+                val hint = event.hint
+                nearbyDiscovery.recordHint(
+                    peripheralId = hint.peripheralId,
+                    eventDisplayName = hint.eventInfo.eventDisplayName,
+                    eventCodeHash = hint.eventInfo.eventCodeHash,
+                    census = hint.eventInfo.census,
+                    additionalNamesOmitted = hint.additionalNamesOmitted,
+                    additionalEventsOmitted = hint.additionalEventsOmitted,
+                )
+            }
+            is BarnardEvent.Detection -> {
+                val detection = event.detection
+                handleDetection(
+                    enin = detection.enin,
+                    rpid = detection.rpid,
+                    detectedDisplayId = detection.detectedDisplayId,
+                )
+            }
+            else -> Unit
+        }
     }
 
     /**
@@ -146,7 +190,10 @@ class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
      * a second one.
      */
     override fun leaveEvent() {
+        if (disposed) return
         engine.leaveEvent()
+        discoveryOnlyScanOwned = false
+        nearbyDiscovery.reset()
         scanPhase = applyStopSensing()
         accounting.reset()
         _state.value = EventJoinUiState.Idle
@@ -155,15 +202,46 @@ class EventJoinCoordinator(private val activity: Activity) : EventJoinSession {
     override fun openAppSettings() = engine.openAppSettings()
 
     override fun requestBluetoothPermission(onComplete: () -> Unit) {
-        engine.requestPermissions { _ -> onComplete() }
+        if (disposed) return
+        engine.requestPermissions { result ->
+            if (disposed) return@requestPermissions
+            if (result is BarnardPermissionResult.Granted && result.status.canScan) {
+                startNearbyEventDiscoveryIfIdle()
+            }
+            onComplete()
+        }
+    }
+
+    private fun startNearbyEventDiscoveryIfIdle() {
+        if (disposed || scanPhase != ScanPhase.Idle || discoveryOnlyScanOwned) return
+        val engineState = engine.getState()
+        if (engineState.isScanning || engineState.isAdvertising) return
+        engine.startScan()
+        discoveryOnlyScanOwned = true
+    }
+
+    fun stopNearbyEventDiscovery() {
+        val isAdvertising = !disposed && engine.getState().isAdvertising
+        val shouldStopScan = discoveryOnlyScanOwned &&
+            scanPhase == ScanPhase.Idle &&
+            !disposed &&
+            !isAdvertising
+        discoveryOnlyScanOwned = false
+        nearbyDiscovery.reset()
+        if (shouldStopScan) engine.stopScan()
     }
 
     fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean =
-        engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        !disposed && engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
     /** Explicit stop/reset at Activity teardown — mirrors iOS's `endSensing(stopEngine: true)`. */
     fun dispose() {
+        if (disposed) return
+        disposed = true
+        discoveryOnlyScanOwned = false
+        nearbyDiscovery.dispose()
         scanPhase = applyStopSensing()
+        engine.onEvent = null
         engine.dispose()
     }
 

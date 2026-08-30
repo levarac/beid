@@ -400,6 +400,34 @@ final class SensingCoordinator: ObservableObject {
   /// under demo mode too.
   private var demoWindowEnin = 0
 
+  // MARK: - Nearby event discovery state (B005 pre-join hints, gh#100 Stage 1)
+  //
+  // Deliberately *not* per-session protocol state: a B005 hint is an
+  // unauthenticated pre-join observation, so it is owned here rather than in
+  // `resetSessionState()`, which also runs mid-session (`startSensing`,
+  // `beginEventFoundSessionState`) and would wrongly discard candidates the
+  // user is still choosing from. Cleared only by `endSensing(stopEngine:)`.
+
+  /// Observer-local discovery state. Every decision about grouping,
+  /// deduplication, expiry, and ordering lives in `shared/`
+  /// (`org.levarac.parallax.discovery`) so iOS and Android answer
+  /// "what is nearby" identically; this file only performs effects.
+  private let nearbyDiscoveryStore:
+    ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore
+
+  /// Immutable snapshot of the current discovery session. A candidate's
+  /// `registryStatus` is always `UNAVAILABLE_FROM_EVENT_CODE_HASH`: an
+  /// 8-byte B005 hash is not a 32-byte registry Event ID and must never be
+  /// padded, truncated, or otherwise coerced into one.
+  @Published private(set) var nearbyEventCandidates:
+    ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates
+
+  /// Epoch-milliseconds source, injected so tests drive expiry deterministically.
+  private let nearbyDiscoveryClock: () -> Int64
+
+  /// At most one in-flight expiry wake-up, rescheduled on every publish.
+  private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
+
   // MARK: - Per-session protocol state
   //
   // Reset at the start of every new event (`beginEventFound`) and on
@@ -820,7 +848,10 @@ final class SensingCoordinator: ObservableObject {
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
-    initialLedgerFailure: Error? = nil
+    initialLedgerFailure: Error? = nil,
+    nearbyDiscoveryClock: @escaping () -> Int64 = {
+      Int64((Date().timeIntervalSince1970 * 1000).rounded())
+    }
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     var ledgerFailure = initialLedgerFailure
@@ -852,6 +883,11 @@ final class SensingCoordinator: ObservableObject {
     self.sensingCryptography = sensingCryptography
     self.reportSubmissionRuntime = reportSubmissionRuntime
     self.eventIdentityVerificationSource = eventIdentityVerificationSource
+    self.nearbyDiscoveryClock = nearbyDiscoveryClock
+    let nearbyDiscoveryStore = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .createNearbyEventDiscoveryStore()
+    self.nearbyDiscoveryStore = nearbyDiscoveryStore
+    self.nearbyEventCandidates = nearbyDiscoveryStore.snapshot
     if let ledgerFailure {
       ledgerHealth = .degraded(reason: ledgerFailure, since: Date())
     }
@@ -864,8 +900,10 @@ final class SensingCoordinator: ObservableObject {
 
   deinit {
     let request = eventIdentityVerificationRequest
+    let expiryTask = nearbyDiscoveryExpiryTask
     Task { @MainActor in
       request?.cancel()
+      expiryTask?.cancel()
     }
   }
 
@@ -880,6 +918,15 @@ final class SensingCoordinator: ObservableObject {
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
         reporterRpid: detection.reporterRpid
+      )
+    case .eventInfoHint(let hint):
+      handleEventInfoHint(
+        peripheralId: hint.peripheralId.uuidString,
+        eventDisplayName: hint.eventInfo.eventDisplayName,
+        eventCodeHash: hint.eventInfo.eventCodeHash,
+        census: hint.eventInfo.census,
+        additionalNamesOmitted: hint.additionalNamesOmitted,
+        additionalEventsOmitted: hint.additionalEventsOmitted
       )
     default:
       break
@@ -1333,6 +1380,10 @@ final class SensingCoordinator: ObservableObject {
     engine.leaveEvent()
     joinedEventCode = engine.getCurrentEventCode()
     joinedCanonicalEventIdHex = nil
+    // Mirrors Android's `EventJoinCoordinator.leaveEvent()`: candidates
+    // observed before a join are stale once that join is given up, and
+    // clearing them must not depend on a separate discovery-stop call.
+    clearNearbyEventDiscovery()
   }
 
   /// Retries the current real event's registry lookup only after a terminal
@@ -1459,6 +1510,7 @@ final class SensingCoordinator: ObservableObject {
     closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
+    clearNearbyEventDiscovery()
     if stopEngine {
       engine.stopAuto()
     }
@@ -1494,6 +1546,96 @@ final class SensingCoordinator: ObservableObject {
     bindingState = .none
     recordingCeremonyShown = false
     entranceCeremonyFinished = false
+  }
+
+  // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
+
+  /// Not `private`: `BarnardEventInfoHintEvent` has no public initializer
+  /// (Barnard module boundary), so `BeidTests` cannot construct one to drive
+  /// this path — taking the fields it actually needs as plain arguments
+  /// instead lets tests exercise the real hint path directly. Mirrors the
+  /// same seam `handleDetection(enin:rpid:detectedDisplayId:reporterRpid:)`
+  /// already uses, and the JVM seam Android's `EventJoinCoordinator` uses.
+  /// Production code only ever reaches this via `handle(_:)`, already
+  /// MainActor-isolated by `engine.onEvent`'s `Task { @MainActor in }`.
+  ///
+  /// This converts native fields once, calls the shared reducer once, and
+  /// publishes what it returns. It deliberately does none of the following:
+  /// call `joinEvent`, read or write `phase`/`bindingState`/`activeCommit`/
+  /// `activeProofId`/window/report/self-proof state, or start a scan. A hint
+  /// is only ever an observation that a nearby event *might* exist.
+  ///
+  /// `observedAtEpochMillis` defaults to `nearbyDiscoveryClock()`; tests pass
+  /// it explicitly so expiry is deterministic rather than wall-clock bound.
+  func handleEventInfoHint(
+    peripheralId: String,
+    eventDisplayName: String,
+    eventCodeHash: Data,
+    census: Data?,
+    additionalNamesOmitted: Bool,
+    additionalEventsOmitted: Bool,
+    observedAtEpochMillis: Int64? = nil
+  ) {
+    // One time value drives both the record and the expiry schedule below.
+    // Reading the clock a second time for scheduling would let a caller-
+    // supplied `observedAtEpochMillis` disagree with "now", which collapses
+    // every delay to zero and immediately expires what was just recorded.
+    let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
+    let update = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHintFromHex(
+      store: nearbyDiscoveryStore,
+      peripheralId: peripheralId,
+      eventDisplayName: eventDisplayName,
+      eventCodeHashHex: eventCodeHash.lowercaseHexString,
+      censusHex: census?.lowercaseHexString,
+      additionalNamesOmitted: additionalNamesOmitted,
+      additionalEventsOmitted: additionalEventsOmitted,
+      observedAtEpochMillis: observedAt
+    )
+    publishNearbyEventDiscovery(update.snapshot, asOf: observedAt)
+  }
+
+  /// Publishes one snapshot and rearms the single expiry wake-up from the
+  /// snapshot's own `nextExpiryAtEpochMillis`, so the published list stops
+  /// showing an event whose sources have gone quiet even when no further
+  /// hint ever arrives to drive a refresh.
+  private func publishNearbyEventDiscovery(
+    _ snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates,
+    asOf now: Int64
+  ) {
+    nearbyEventCandidates = snapshot
+    nearbyDiscoveryExpiryTask?.cancel()
+    nearbyDiscoveryExpiryTask = nil
+
+    guard let nextExpiryAtEpochMillis = snapshot.nextExpiryAtEpochMillis else { return }
+    let delayMillis = nextExpiryAtEpochMillis <= now ? 0 : nextExpiryAtEpochMillis - now
+    // `expiryAt` saturates at `Long.MAX_VALUE` in shared, so the nanosecond
+    // conversion is done saturating rather than trapping.
+    let delayNanos = UInt64(clamping: delayMillis).multipliedReportingOverflow(by: 1_000_000)
+    nearbyDiscoveryExpiryTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(
+        nanoseconds: delayNanos.overflow ? UInt64.max : delayNanos.partialValue
+      )
+      guard !Task.isCancelled, let self else { return }
+      self.nearbyDiscoveryExpiryTask = nil
+      let refreshedAt = self.nearbyDiscoveryClock()
+      let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+        .refreshNearbyEventDiscovery(
+          store: self.nearbyDiscoveryStore,
+          nowEpochMillis: refreshedAt
+        )
+      self.publishNearbyEventDiscovery(update.snapshot, asOf: refreshedAt)
+    }
+  }
+
+  /// Ends the current discovery session: cancels the pending expiry wake-up
+  /// and clears candidates together with the global omission/eviction facts.
+  /// Named to avoid being confused with the shared free function it calls.
+  private func clearNearbyEventDiscovery() {
+    nearbyDiscoveryExpiryTask?.cancel()
+    nearbyDiscoveryExpiryTask = nil
+    nearbyEventCandidates = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .resetNearbyEventDiscovery(store: nearbyDiscoveryStore)
+      .snapshot
   }
 
   // MARK: - Shared phase transitions
@@ -2544,6 +2686,10 @@ final class SensingCoordinator: ObservableObject {
 }
 
 private extension Data {
+  var lowercaseHexString: String {
+    map { String(format: "%02x", $0) }.joined()
+  }
+
   /// Decodes a `0x`-prefixed (or bare) hex string into raw bytes; `nil` if
   /// malformed (odd length, non-hex characters) — used to turn the wallet
   /// address/signature strings the connector layer hands over as opaque
