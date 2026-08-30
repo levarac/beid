@@ -233,6 +233,44 @@ public fun recordNearbyEventHint(
     )
 }
 
+/**
+ * Swift Export boundary for native byte buffers.
+ *
+ * Swift Export currently emits trapping `ByteArray` constructors, so Swift
+ * callers pass their exact bytes as lowercase hexadecimal text and Kotlin
+ * reconstructs the arrays before entering the byte-oriented reducer above.
+ */
+public fun recordNearbyEventHintFromHex(
+    store: NearbyEventDiscoveryStore,
+    peripheralId: String,
+    eventDisplayName: String,
+    eventCodeHashHex: String,
+    censusHex: String?,
+    additionalNamesOmitted: Boolean,
+    additionalEventsOmitted: Boolean,
+    observedAtEpochMillis: Long,
+): NearbyEventDiscoveryUpdate = recordNearbyEventHint(
+    store = store,
+    peripheralId = peripheralId,
+    eventDisplayName = eventDisplayName,
+    eventCodeHash = eventCodeHashHex.decodeHexBytes(),
+    census = censusHex?.decodeHexBytes(),
+    additionalNamesOmitted = additionalNamesOmitted,
+    additionalEventsOmitted = additionalEventsOmitted,
+    observedAtEpochMillis = observedAtEpochMillis,
+)
+
+private fun String.decodeHexBytes(): ByteArray {
+    require(length % 2 == 0) { "hex value must contain complete bytes" }
+    return ByteArray(length / 2) { index ->
+        val high = this[index * 2].digitToIntOrNull(16)
+            ?: throw IllegalArgumentException("hex value contains a non-hex character")
+        val low = this[index * 2 + 1].digitToIntOrNull(16)
+            ?: throw IllegalArgumentException("hex value contains a non-hex character")
+        ((high shl 4) or low).toByte()
+    }
+}
+
 /** Expires sources and omission facts at the exact 300,000 ms boundary. */
 public fun refreshNearbyEventDiscovery(
     store: NearbyEventDiscoveryStore,

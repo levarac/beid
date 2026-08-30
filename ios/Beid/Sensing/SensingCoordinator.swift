@@ -1581,12 +1581,12 @@ final class SensingCoordinator: ObservableObject {
     // supplied `observedAtEpochMillis` disagree with "now", which collapses
     // every delay to zero and immediately expires what was just recorded.
     let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
-    let update = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHint(
+    let update = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHintFromHex(
       store: nearbyDiscoveryStore,
       peripheralId: peripheralId,
       eventDisplayName: eventDisplayName,
-      eventCodeHash: kotlinByteArray(fromData: eventCodeHash),
-      census: census.map { kotlinByteArray(fromData: $0) },
+      eventCodeHashHex: eventCodeHash.lowercaseHexString,
+      censusHex: census?.lowercaseHexString,
       additionalNamesOmitted: additionalNamesOmitted,
       additionalEventsOmitted: additionalEventsOmitted,
       observedAtEpochMillis: observedAt
@@ -2686,6 +2686,10 @@ final class SensingCoordinator: ObservableObject {
 }
 
 private extension Data {
+  var lowercaseHexString: String {
+    map { String(format: "%02x", $0) }.joined()
+  }
+
   /// Decodes a `0x`-prefixed (or bare) hex string into raw bytes; `nil` if
   /// malformed (odd length, non-hex characters) — used to turn the wallet
   /// address/signature strings the connector layer hands over as opaque
@@ -2706,25 +2710,4 @@ private extension Data {
     }
     self = Data(bytes)
   }
-}
-
-
-/// Write-direction counterpart of `ReportSubmissionRuntime.swift`'s
-/// `Data(bytesFromKotlinByteArray:)`, using the same `Int32` subscript and
-/// `Int8`/`UInt8` bit-pattern reinterpretation in reverse.
-///
-/// Deliberately a free function rather than an initializer in an extension:
-/// Swift Export's representation of `kotlin.ByteArray` is not something this
-/// repository has pinned down, and an `init` in an extension must be spelled
-/// `convenience` for a class and must *not* be for a struct. A free function
-/// compiles either way, and spelling the type at both call sites also keeps
-/// type inference out of `Optional.map`'s return position.
-private func kotlinByteArray(
-  fromData data: Data
-) -> ExportedKotlinPackages.kotlin.ByteArray {
-  let bytes = ExportedKotlinPackages.kotlin.ByteArray(size: Int32(data.count))
-  for (index, byte) in data.enumerated() {
-    bytes[Int32(index)] = Int8(bitPattern: byte)
-  }
-  return bytes
 }
