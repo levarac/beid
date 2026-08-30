@@ -85,6 +85,40 @@ iteration by selecting a suite or method; it is not the final regression gate
 for modified production code. Run the full covering suite after the focused
 loop.
 
+For the test action itself, the local wrapper suppresses successful
+`xcodebuild` internals and per-test pass lines while retaining the complete raw
+log and `.xcresult`:
+
+```sh
+# A clean Simulator run whose result you intend to interpret.
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  python3 scripts/run_local_tests.py ios \
+  --udid <SIMULATOR_UDID> \
+  --erase-simulator
+
+# A focused iteration after build-for-testing; not the final regression gate.
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  python3 scripts/run_local_tests.py ios \
+  --udid <SIMULATOR_UDID> \
+  --keep-simulator-state \
+  --action test-without-building \
+  --only-testing 'BeidTests/<TestClass>/<testMethod>'
+```
+
+Replace the `DEVELOPER_DIR` value with the installed Xcode application's
+`Contents/Developer` path when the app has a different name, such as
+`Xcode-beta.app`.
+
+Every run prints one Simulator evidence line with the concrete UDID, its state,
+and whether the wrapper erased it, followed by target and aggregate test
+counts. The raw log, structured JSON, and `.xcresult` are retained under
+`build/local-test-runs/`. Zero tests or missing/malformed structured evidence
+is an `EVIDENCE WARNING`, not GREEN. On `xcodebuild` failure the complete raw
+log, errors, and stack traces are printed, and the original exit code is
+preserved. Choosing `--keep-simulator-state` is explicit acknowledgment that
+existing app state may contaminate the result; use `--erase-simulator` before
+interpreting a failure.
+
 Deployment target is iOS 17.0 (bumped from the barnard example's 16.0 —
 `navigationDestination(item:)` for the item-detail push requires it).
 
