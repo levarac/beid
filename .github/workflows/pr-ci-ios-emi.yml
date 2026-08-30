@@ -26,6 +26,12 @@ jobs:
     runs-on: [self-hosted, emi]
     timeout-minutes: 30
     steps:
+      - name: Initialize CI output path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -90,7 +96,6 @@ jobs:
             echo "KMP_JAVA_HOME=$kmp_java_home"
             echo "JAVA_HOME=$kmp_java_home"
             echo "SIMULATOR_UDID=$simulator_udid"
-            printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           } >> "$GITHUB_ENV"
 
       - name: Verify XcodeGen pin and generated project
