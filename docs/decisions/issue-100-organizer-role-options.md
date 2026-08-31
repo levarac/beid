@@ -3,6 +3,22 @@
 **Status:** decision proposal, not an implementation specification
 **Scope:** the one organizer-role question still open in [issue #100](https://github.com/thegreeting/beid/issues/100)
 
+**Correction (2026-08-31, Fable-audited against primary sources):** the original
+Option 3 below targeted the wrong on-chain primitive and priced it as a
+from-scratch design. `registrar`/`operator` are chain-write roles only (append
+event-definition anchors / commitment anchors — see
+`parallax/protocol/spec/v0.1/ethereum.md`). The actual designed "who speaks for
+this event" primitive is the **authority key set** (`EventKeySetV1`), a
+threshold-1 set of secp256k1 keys whose digest is baked into the eventId at
+registration (`parallax/protocol/spec/v0.1/event-definition.md`). Most of the
+plumbing to read and verify it already exists in beid (fetch, on-chain digest
+check, CBOR decode, secp256k1 verify, and the device already holds a
+compatible owner key). A demo-appropriate version of this gate — a local check
+that the venue device's own key is in the event's key set — is on the order of
+days, not a separate production feature. The corrected Option 3 below reflects
+this; **the demo recommendation is unchanged (Option 1 for 9/1)**, only the
+production-path cost and primitive are corrected.
+
 ## What is already settled
 
 The issue's original questions should not be reopened here:
@@ -88,33 +104,62 @@ how rotation/revocation works.
   new credential lifecycle that is not backed by EventRegistry and may become
   throwaway work.
 
-## Option 3 — require proof of EventRegistry authority
+## Option 3 — require proof of EventRegistry authority key-set membership (corrected)
 
-Permit organizer mode only after the device proves control of the event's
-on-chain `registrarHex` or `operatorHex` address. The app would resolve the
-canonical event, request a domain-separated signature over an organizer
-authorization challenge (including event ID, venue device key, scope, and
-expiry), and verify it against the selected registry authority. For venue
-operations, a delegatable, expiring authorization is preferable to requiring
-the registrar's wallet at every door device.
+Permit organizer mode only after the device proves its own key is a member of
+the event's **authority key set** (`EventKeySetV1`), the primitive
+`EventRegistry` actually designed for this ("who speaks for this event"),
+digest-committed into the eventId at registration and already fetched,
+digest-verified, and CBOR-decoded by existing shared code
+(`EventDefinitionFetcher.kt`, `EventDefinitionCborCodec.kt`). This replaces the
+original draft's target of the `registrar`/`operator` addresses, which are
+chain-write roles for definition/commitment anchors, not an event-speaking
+role — the wrong primitive.
+
+Two shapes, different cost:
+
+- **(a) Local membership gate (demo-appropriate).** The device's own owner
+  public key (already generated on-device, `OwnerKeyProvider.swift`) must
+  appear in the resolved event's `authorityKeys` list. No network round trip,
+  no signed challenge, no expiry/revocation. Needs: expose the decoded key list
+  (or a membership predicate) alongside the resolved definition — additive to
+  code that already runs; make the venue-toggle check async against that
+  resolution (the toggle is currently synchronous,
+  `VenueDeviceOrganizerViewModel.swift`); UI to show/copy the device's owner
+  public key for provisioning; and registering the demo event with the venue
+  device's key included in its key set (parallax-side, not app code — a
+  Sepolia-registered event already exists as a template,
+  `SepoliaEventRegistryIntegrationTest.kt`). **Order of days, not a separate
+  production feature.** Explicitly excluded from this shape: signed challenge,
+  replay/expiry, revocation, a delegation artifact, Android surface.
+  **Caveat:** an authority key can rotate the event's receipt key and
+  submission endpoint — putting a venue device's key in the set makes that
+  device a full event authority, not a scoped delegate. Fine for a demo run by
+  a single trusted operator; wrong as the general pattern.
+- **(b) Remote proof (production).** A wallet- or key-signed challenge proving
+  control of a specific authority key, without needing that key resident on
+  the device. This is closer to the original draft's cost estimate (signed
+  format, replay/expiry, wallet UX) and is contingent on a signature-to-pubkey
+  recovery path that was not confirmed to exist yet (Barnard's signing surface
+  exposes `verify`, not confirmed `recover`).
 
 - **Who can grief:** an ordinary attendee cannot claim organizer mode through
-  beid. A registrar/operator or a holder of a valid delegated authorization can.
-  Compromise or over-broad delegation remains harmful, and custom clients can
-  still emit unauthenticated B005, so receivers still must not treat a hint as
-  registry-authenticated.
-- **Legitimate-organizer friction:** highest at initial setup: the event must be
-  registered, the correct authority wallet must sign, and venue devices must be
-  delegated. With reusable scoped delegations, day-of-event replacement can be
-  reasonable; without them, it is operationally brittle.
-- **Cost before the demo:** high and unsuitable as a last-minute gate. The
-  current repository has registry reads but no event-registration transaction
-  UI or organizer authorization ceremony. This option needs a signed format,
-  replay/expiry rules, wallet UX, persistence, revocation semantics, native
-  adapters, and both-platform tests.
-- **Tradeoff:** aligns authority with the existing canonical registry and avoids
-  inventing a parallel organizer database, but it is a separate security and
-  provisioning feature, not a patch to `VenueDeviceOrganizerView`.
+  beid. A holder of an authority key (or, for shape (b), a valid delegated
+  proof) can. Custom clients can still emit unauthenticated B005 regardless, so
+  receivers still must not treat a hint as registry-authenticated.
+- **Legitimate-organizer friction:** shape (a) needs the venue device's key
+  included at event registration time (a provisioning step, not a day-of
+  ceremony); shape (b) needs a signing flow per activation.
+- **Cost before the demo:** shape (a) is realistically scoped to days once
+  prioritized — most of the read/verify path already exists — but was not
+  built by 9/1, so it does not change tomorrow's recommendation. Shape (b)
+  remains high-cost and is the production target.
+- **Tradeoff:** shape (a) is a cheap, real authorization check tied to a
+  primitive the protocol already designed for this, at the cost of over-broad
+  authority per device unless a scoped venue-role artifact is added later
+  (`ethereum.md` notes roles belong in signed off-chain artifacts — that
+  artifact does not exist yet and is the actual remaining production design
+  work, not the key-set check itself).
 
 ## Recommendation
 
@@ -125,14 +170,14 @@ through beid's own UI and does not make the broadcast authoritative. It must not
 be described as “authorized because the device joined”; possession of the
 attendee event code is not organizer proof.
 
-**For production authorization, target Option 3 rather than building Option 2
-as a permanent parallel credential system.** EventRegistry already identifies a
-registrar and operator, so a scoped, expiring delegation from one of those
-authorities is the most coherent long-term basis. It should be designed in a
-follow-up issue and must not block receiver-side #141 work. Option 2 is justified
-only if a near-term deployment needs a deterrent before registry-based
-provisioning exists and the team is willing to own secret distribution and
-recovery.
+**For production authorization, target Option 3 shape (a) as a near-term
+follow-up, not a distant one.** EventRegistry already designed the authority
+key set for exactly this role, and most of the read/verify path is already
+built — a scoped venue-role delegation artifact (shape (b) or better) remains
+the real longer-term work. It should be scoped in a follow-up issue and must
+not block receiver-side #141 work. Option 2 is justified only if a gate is
+needed before the key-set check lands and the team is willing to own secret
+distribution and recovery.
 
 ### Ken's decision
 
@@ -143,8 +188,10 @@ it cannot select the acceptable business risk. Ken must explicitly decide:
    impersonation risk;
 2. whether open mode is demo-only (with a removal/authorization follow-up) or an
    intentional product policy; and
-3. for the registry-backed design, whether the registrar, operator, or both may
-   issue venue-device delegations, and what operational recovery is required.
+3. whether the near-term follow-up should be Option 3 shape (a) (local
+   authority-key-set membership check, days of work, over-broad per-device
+   authority) and, if so, who owns provisioning the venue device's key into
+   the event's key set at registration time.
 
 Until that call is recorded, the accurate current-state label is **open
 self-service organizer mode**, not “organizer-authorized mode.”
