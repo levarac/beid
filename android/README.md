@@ -25,6 +25,25 @@ JAVA_HOME="$(../scripts/resolve_kmp_java_home.sh)" \
 CI selects its pinned JDK 17 separately. Do not change the repository's
 Gradle configuration merely to accommodate an unsupported ambient JDK.
 
+For local test runs, use the repository wrapper from the repository root to
+keep routine Gradle noise out of the terminal while retaining the complete
+log:
+
+```sh
+python3 scripts/run_local_tests.py android \
+  :shared:testAndroidHostTest \
+  :app:testDebugUnitTest
+```
+
+Pass fully qualified Gradle tasks. The wrapper resolves the supported JDK,
+prints each requested task outcome and fresh JUnit counts, and saves the full
+combined output under `build/local-test-runs/`. A `NO-SOURCE` task or missing,
+stale, or malformed JUnit evidence is printed as `EVIDENCE WARNING`; do not
+call that run GREEN even when Gradle returned exit 0. If Gradle fails, the
+complete raw output and stack trace are printed and Gradle's exit code is
+preserved. The wrapper reduces output only—it does not justify replacing the
+full covering suite with a focused task.
+
 Gradle also needs to know where the Android SDK is. A fresh checkout has
 neither `ANDROID_HOME`/`ANDROID_SDK_ROOT` set nor an `android/local.properties`,
 so every task that touches the Android plugin — including

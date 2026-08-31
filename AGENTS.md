@@ -175,6 +175,16 @@ the same name shadows them.
   means that task executed zero sources or tests. For every test task that
   was expected to run, require a non-`NO-SOURCE` outcome and report the test
   count; otherwise an empty test lane can look successful.
+- **Use `scripts/run_local_tests.py` when a local test log would overwhelm an
+  agent turn.** The wrapper keeps the full child output under
+  `build/local-test-runs/` and prints its path, while a successful run shows
+  only task/target outcomes, test totals, evidence warnings, and iOS Simulator
+  state. `NO-SOURCE`, zero tests, missing or stale result files, and malformed
+  structured evidence remain visible warnings; exit 0 plus one of those
+  warnings is not GREEN. On a child-command failure the wrapper prints the
+  complete raw log, including errors and stack traces, and returns the child's
+  exit code unchanged. This is an output filter, not a coverage selector: the
+  full covering-suite rule below still decides which tasks or targets to run.
 - **Run the full covering suite for any file you modified. Target individual
   tests only when you did not modify the code beneath them.** A metered CI
   lane is a reason to iterate locally and batch pushes; it is not a reason
