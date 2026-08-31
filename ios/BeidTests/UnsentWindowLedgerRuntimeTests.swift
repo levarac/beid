@@ -25,6 +25,7 @@ private final class ColdLaunchSubmissionRuntimeSpy: WindowReportSubmissionRuntim
   }
 
   func submissionState(forEventCode _: String) -> ReportSubmissionState? { nil }
+  func excludedWindowCount(forEventCode _: String) -> Int { 0 }
 }
 
 @MainActor

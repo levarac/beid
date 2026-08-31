@@ -7,9 +7,32 @@ import Foundation
 enum ReportSubmissionStoreError: Error {
   case conflictingObservation
   case conflictingCapture
+  case conflictingExclusion
   case missingObservation
   case invalidReceipt
   case invalidState
+}
+
+/// A window that was durably classified as unable to become a canonical
+/// Observation. Kept separate from submission records because count-only
+/// evidence has none of their required exact-byte or operator fields.
+struct ReportSubmissionExclusion: Identifiable, Codable, Equatable {
+  let id: UUID
+  let eventCode: String
+  let eventIdHex: String?
+  let enin: Int
+  let peerCount: Int
+  let reasonCode: String
+  let createdAt: Date
+
+  func hasSameWindowInputs(as other: ReportSubmissionExclusion) -> Bool {
+    id == other.id &&
+      eventCode == other.eventCode &&
+      eventIdHex == other.eventIdHex &&
+      enin == other.enin &&
+      peerCount == other.peerCount &&
+      reasonCode == other.reasonCode
+  }
 }
 
 /// Durable lifecycle state for one exact-byte submission.
@@ -220,19 +243,25 @@ struct ReportSubmissionRecord: Identifiable, Codable, Equatable {
 final class ReportSubmissionStore: ObservableObject {
   @Published private(set) var records: [ReportSubmissionRecord] = []
   @Published private(set) var pendingCaptures: [ReportSubmissionCapture] = []
+  @Published private(set) var exclusions: [ReportSubmissionExclusion] = []
 
   private let fileURL: URL
   private let pendingCaptureFileURL: URL
+  private let exclusionFileURL: URL
   private var loadError: Error?
   private var pendingCaptureLoadError: Error?
+  private var exclusionLoadError: Error?
 
   init(fileURL: URL? = nil) {
     let resolvedFileURL = fileURL ?? Self.defaultFileURL()
     self.fileURL = resolvedFileURL
     self.pendingCaptureFileURL = resolvedFileURL.deletingPathExtension()
       .appendingPathExtension("pending.json")
+    self.exclusionFileURL = resolvedFileURL.deletingPathExtension()
+      .appendingPathExtension("exclusions.json")
     load()
     loadPendingCaptures()
+    loadExclusions()
   }
 
   private static func defaultFileURL() -> URL {
@@ -270,6 +299,21 @@ final class ReportSubmissionStore: ObservableObject {
     try persistPendingCaptures(updated)
     pendingCaptures = updated
     return capture
+  }
+
+  @discardableResult
+  func addExclusion(_ exclusion: ReportSubmissionExclusion) throws -> ReportSubmissionExclusion {
+    try ensureWritable()
+    if let existing = exclusions.first(where: { $0.id == exclusion.id }) {
+      guard existing.hasSameWindowInputs(as: exclusion) else {
+        throw ReportSubmissionStoreError.conflictingExclusion
+      }
+      return existing
+    }
+    let updated = exclusions + [exclusion]
+    try persistExclusions(updated)
+    exclusions = updated
+    return exclusion
   }
 
   func removePendingCapture(id: UUID) throws {
@@ -379,6 +423,7 @@ final class ReportSubmissionStore: ObservableObject {
   private func ensureWritable() throws {
     if let loadError { throw loadError }
     if let pendingCaptureLoadError { throw pendingCaptureLoadError }
+    if let exclusionLoadError { throw exclusionLoadError }
   }
 
   private func persist(_ records: [ReportSubmissionRecord]) throws {
@@ -394,6 +439,14 @@ final class ReportSubmissionStore: ObservableObject {
       captures,
       to: pendingCaptureFileURL,
       stagingPrefix: ".report-submission-captures"
+    )
+  }
+
+  private func persistExclusions(_ exclusions: [ReportSubmissionExclusion]) throws {
+    try persistEncoded(
+      exclusions,
+      to: exclusionFileURL,
+      stagingPrefix: ".report-submission-exclusions"
     )
   }
 
@@ -458,6 +511,19 @@ final class ReportSubmissionStore: ObservableObject {
       )
     } catch {
       pendingCaptureLoadError = error
+    }
+  }
+
+  private func loadExclusions() {
+    guard FileManager.default.fileExists(atPath: exclusionFileURL.path) else { return }
+    do {
+      exclusions = try JSONDecoder().decode(
+        [ReportSubmissionExclusion].self,
+        from: Data(contentsOf: exclusionFileURL)
+      )
+    } catch {
+      // Latch the error so a later write cannot replace unreadable durable data.
+      exclusionLoadError = error
     }
   }
 }

@@ -40,6 +40,10 @@ struct TransparencyView: View {
   /// published data" below it — an honest "not yet available," never a
   /// fabricated zero.
   let recordedOnDeviceCount: Int?
+  /// Tier 2 count of legacy windows that only retained a device count and
+  /// therefore can never become a canonical report-server submission.
+  /// `nil` uses the same honest-gap treatment as the adjacent count.
+  let excludedWindowCount: Int?
   /// Tier 2 (参加記録), third and fourth sub-states (送信済み / 受領確認済み):
   /// the most-advanced durable state of this event's report submissions,
   /// read from `SensingCoordinator.submissionState(forEventCode:)` (beid#292).
@@ -112,6 +116,15 @@ struct TransparencyView: View {
           label: Text(verbatim: recordedOnDeviceLabelText),
           isAvailable: recordedOnDeviceCount != nil,
           valueText: recordedOnDeviceCount.map { String($0) }
+        )
+        Divider()
+        TierRow(
+          label: Text(
+            "Not submittable (count-only record)",
+            comment: "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3)."
+          ),
+          isAvailable: excludedWindowCount != nil,
+          valueText: excludedWindowCount.map { String($0) }
         )
         Divider()
         TierRow(
@@ -301,6 +314,7 @@ private struct TierRow: View {
       eventName: "ETHGlobal Tokyo",
       hasJoined: true,
       recordedOnDeviceCount: 5,
+      excludedWindowCount: 1,
       submissionState: nil
     )
   }
@@ -312,6 +326,7 @@ private struct TierRow: View {
       eventName: "ETHGlobal Tokyo",
       hasJoined: true,
       recordedOnDeviceCount: 5,
+      excludedWindowCount: 1,
       submissionState: nil
     )
   }
@@ -324,6 +339,7 @@ private struct TierRow: View {
       eventName: "ETHGlobal Tokyo",
       hasJoined: true,
       recordedOnDeviceCount: nil,
+      excludedWindowCount: nil,
       submissionState: nil
     )
   }
@@ -335,6 +351,7 @@ private struct TierRow: View {
       eventName: "ETHGlobal Tokyo",
       hasJoined: true,
       recordedOnDeviceCount: 5,
+      excludedWindowCount: 1,
       submissionState: .submitting
     )
   }
@@ -346,6 +363,7 @@ private struct TierRow: View {
       eventName: "ETHGlobal Tokyo",
       hasJoined: true,
       recordedOnDeviceCount: 5,
+      excludedWindowCount: 1,
       submissionState: .accepted
     )
   }
