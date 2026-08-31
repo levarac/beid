@@ -23,6 +23,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField(
             "String",
             "EVENT_REGISTRY_READER_ADDRESS",
@@ -112,4 +113,33 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.15.1")
     testImplementation("androidx.test.ext:junit:1.3.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+}
+
+val verifyDeviceLabBleTests by tasks.registering {
+    group = "verification"
+    description = "Fails unless the device-lab BLE instrumentation suite exists."
+
+    doLast {
+        val testSources = fileTree("src/androidTest") {
+            include("**/*.kt", "**/*.java")
+        }
+        if (testSources.isEmpty) {
+            throw GradleException(
+                "No Android instrumented tests exist in app/src/androidTest. " +
+                    "A hardware BLE suite must be added before deviceLabBleTest can report PASS.",
+            )
+        }
+    }
+}
+
+tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
+    mustRunAfter(verifyDeviceLabBleTests)
+}
+
+tasks.register("deviceLabBleTest") {
+    group = "verification"
+    description = "Runs the debug instrumentation suite on every adb-connected device."
+    dependsOn(verifyDeviceLabBleTests, "connectedDebugAndroidTest")
 }
