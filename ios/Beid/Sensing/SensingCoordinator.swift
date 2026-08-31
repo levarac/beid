@@ -427,6 +427,10 @@ final class SensingCoordinator: ObservableObject {
 
   /// At most one in-flight expiry wake-up, rescheduled on every publish.
   private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
+  private let nearbyRegistryClient:
+    ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
+  private var nearbyRegistryRequests:
+    [ExportedKotlinPackages.org.levarac.parallax.registry.RegistryRequest] = []
 
   // MARK: - Per-session protocol state
   //
@@ -615,7 +619,8 @@ final class SensingCoordinator: ObservableObject {
       ),
       eventIdentityVerificationSource: registryClient.map {
         RegistryEventIdentityVerificationSource(client: $0)
-      }
+      },
+      nearbyRegistryClient: registryClient
     )
   }
 
@@ -851,7 +856,9 @@ final class SensingCoordinator: ObservableObject {
     initialLedgerFailure: Error? = nil,
     nearbyDiscoveryClock: @escaping () -> Int64 = {
       Int64((Date().timeIntervalSince1970 * 1000).rounded())
-    }
+    },
+    nearbyRegistryClient:
+      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     var ledgerFailure = initialLedgerFailure
@@ -884,6 +891,7 @@ final class SensingCoordinator: ObservableObject {
     self.reportSubmissionRuntime = reportSubmissionRuntime
     self.eventIdentityVerificationSource = eventIdentityVerificationSource
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
+    self.nearbyRegistryClient = nearbyRegistryClient
     let nearbyDiscoveryStore = ExportedKotlinPackages.org.levarac.parallax.discovery
       .createNearbyEventDiscoveryStore()
     self.nearbyDiscoveryStore = nearbyDiscoveryStore
@@ -1592,6 +1600,7 @@ final class SensingCoordinator: ObservableObject {
       observedAtEpochMillis: observedAt
     )
     publishNearbyEventDiscovery(update.snapshot, asOf: observedAt)
+    resolveNearbyCandidates(update.snapshot)
   }
 
   /// Publishes one snapshot and rearms the single expiry wake-up from the
@@ -1631,11 +1640,66 @@ final class SensingCoordinator: ObservableObject {
   /// and clears candidates together with the global omission/eviction facts.
   /// Named to avoid being confused with the shared free function it calls.
   private func clearNearbyEventDiscovery() {
+    nearbyRegistryRequests.forEach { $0.cancel() }
+    nearbyRegistryRequests.removeAll()
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
     nearbyEventCandidates = ExportedKotlinPackages.org.levarac.parallax.discovery
       .resetNearbyEventDiscovery(store: nearbyDiscoveryStore)
       .snapshot
+  }
+
+  private func resolveNearbyCandidates(
+    _ snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates
+  ) {
+    guard let client = nearbyRegistryClient else { return }
+    for index in 0..<snapshot.candidateCount {
+      guard let candidate = snapshot.candidateAt(index: index) else { continue }
+      let bytes = candidate.eventCodeHash
+      let hash = (0..<bytes.size).map {
+        String(format: "%02x", UInt8(bitPattern: bytes.get(index: $0)))
+      }.joined()
+      guard ExportedKotlinPackages.org.levarac.parallax.discovery
+        .beginNearbyEventRegistryResolutionFromHex(store: nearbyDiscoveryStore, eventCodeHashHex: hash)
+      else { continue }
+      let lookup = client.resolveEventIdByCodeHash(hashHex: hash) { [weak self] resolution in
+        Task { @MainActor in
+          guard let self else { return }
+          guard resolution.isSuccess, let eventID = resolution.eventIdHex else {
+            let result: ExportedKotlinPackages.org.levarac.parallax.discovery
+              .NearbyEventRegistryResolutionResult = resolution.errorCode == "event_code_lookup_not_found"
+              ? .notRegistered : .lookupUnavailable
+            let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+              .completeNearbyEventRegistryResolutionFromHex(
+                store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
+                result: result, resolvedEventIdHex: nil
+              )
+            self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+            return
+          }
+          let verification = client.resolveEventDefinition(
+            eventIdHex: eventID,
+            pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin(),
+            useTimeEpochSeconds: self.nearbyDiscoveryClock() / 1000
+          ) { [weak self] verified in
+            Task { @MainActor in
+              guard let self else { return }
+              let result: ExportedKotlinPackages.org.levarac.parallax.discovery
+                .NearbyEventRegistryResolutionResult = verified.isSuccess
+                ? .verified : .verificationUnavailable
+              let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+                .completeNearbyEventRegistryResolutionFromHex(
+                  store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
+                  result: result, resolvedEventIdHex: eventID
+                )
+              self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+            }
+          }
+          self.nearbyRegistryRequests.append(verification)
+        }
+      }
+      nearbyRegistryRequests.append(lookup)
+    }
   }
 
   // MARK: - Shared phase transitions

@@ -56,6 +56,8 @@ public class RegistryClient internal constructor(
     private val eventKeySetConfigurationError: DefinitionFetchException? = null,
     private val eventCodeLookupFetcher: EventCodeLookupFetcher? = null,
     private val eventCodeLookupConfigurationError: EventCodeLookupException? = null,
+    private val eventCodeHashLookupFetcher: EventCodeHashLookupFetcher? = null,
+    private val eventCodeHashLookupConfigurationError: EventCodeLookupException? = null,
 ) {
     public fun resolve(
         eventIdHex: String,
@@ -288,6 +290,25 @@ public class RegistryClient internal constructor(
         return RegistryRequest(job)
     }
 
+    /** Operator-attested routing only; callers must verify the returned ID with resolveEventDefinition. */
+    public fun resolveEventIdByCodeHash(hashHex: String, completion: (EventIdLookupResolution) -> Unit): RegistryRequest {
+        val job = scope.launch {
+            val resolution = try {
+                val fetcher = eventCodeHashLookupFetcher ?: throw (eventCodeHashLookupConfigurationError
+                    ?: EventCodeLookupException(EventCodeLookupError.NOT_CONFIGURED, "event code hash lookup URL template is not configured"))
+                EventIdLookupResolution(true, fetcher.fetch(hashHex), null, null)
+            } catch (error: CancellationException) {
+                EventIdLookupResolution(false, null, RegistryErrorCode.CANCELLED.wireName, "event code hash lookup was cancelled")
+            } catch (error: EventCodeLookupException) {
+                EventIdLookupResolution(false, null, error.reason.wireName, error.message)
+            } catch (_: Throwable) {
+                EventIdLookupResolution(false, null, RegistryErrorCode.PROTOCOL_ERROR.wireName, "event code hash lookup failed")
+            }
+            completion(resolution)
+        }
+        return RegistryRequest(job)
+    }
+
     public fun close() {
         scope.cancel()
     }
@@ -303,6 +324,7 @@ public fun createSepoliaRegistryClient(
     definitionUrlTemplate: String? = null,
     eventKeySetUrlTemplate: String? = null,
     eventCodeLookupUrlTemplate: String? = null,
+    eventCodeHashLookupUrlTemplate: String? = null,
 ): RegistryClient? {
     if (readerAddressHex.isBlank()) return null
     val readerAddress = try {
@@ -314,6 +336,7 @@ public fun createSepoliaRegistryClient(
     var definitionConfigurationError: DefinitionFetchException? = null
     var eventKeySetConfigurationError: DefinitionFetchException? = null
     var eventCodeLookupConfigurationError: EventCodeLookupException? = null
+    var eventCodeHashLookupConfigurationError: EventCodeLookupException? = null
     val definitionFetcher = definitionUrlTemplate
         ?.takeIf { it.isNotBlank() }
         ?.let { template ->
@@ -356,6 +379,13 @@ public fun createSepoliaRegistryClient(
                 EventCodeLookupFetcher(validated, transport)
             }
         }
+    val eventCodeHashLookupFetcher = eventCodeHashLookupUrlTemplate?.takeIf { it.isNotBlank() }?.let { template ->
+        val validated = createEventCodeHashLookupUrlTemplate(template)
+        if (validated == null) {
+            eventCodeHashLookupConfigurationError = EventCodeLookupException(EventCodeLookupError.INVALID_URL_TEMPLATE, "event code hash lookup URL template is invalid")
+            null
+        } else EventCodeHashLookupFetcher(validated, transport)
+    }
     val primary = JsonRpcEthCallAdapter(
         endpointUrl = "https://ethereum-sepolia-rpc.publicnode.com",
         readerAddressHex = readerAddress,
@@ -391,6 +421,8 @@ public fun createSepoliaRegistryClient(
         eventKeySetConfigurationError = eventKeySetConfigurationError,
         eventCodeLookupFetcher = eventCodeLookupFetcher,
         eventCodeLookupConfigurationError = eventCodeLookupConfigurationError,
+        eventCodeHashLookupFetcher = eventCodeHashLookupFetcher,
+        eventCodeHashLookupConfigurationError = eventCodeHashLookupConfigurationError,
     )
 }
 

@@ -11,5 +11,7 @@ internal object RegistryDependencies {
         etherscanApiKey = BuildConfig.ETHERSCAN_API_KEY.ifBlank { null },
         definitionUrlTemplate = BuildConfig.EVENT_DEFINITION_URL_TEMPLATE.ifBlank { null },
         eventKeySetUrlTemplate = BuildConfig.EVENT_KEY_SET_URL_TEMPLATE.ifBlank { null },
+        eventCodeLookupUrlTemplate = BuildConfig.EVENT_CODE_LOOKUP_URL_TEMPLATE.ifBlank { null },
+        eventCodeHashLookupUrlTemplate = BuildConfig.EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE.ifBlank { null },
     )
 }

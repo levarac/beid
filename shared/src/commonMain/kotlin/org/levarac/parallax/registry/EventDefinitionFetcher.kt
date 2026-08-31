@@ -78,6 +78,17 @@ public fun createEventCodeLookupUrlTemplate(
     allowInsecureLoopbackForTests = allowInsecureLoopbackForTests,
 ) { EventCodeLookupUrlTemplate(it) }
 
+public class EventCodeHashLookupUrlTemplate internal constructor(private val template: String) {
+    internal fun urlFor(hashHex: String): String = template.replace("{hash}", hashHex)
+}
+
+public fun createEventCodeHashLookupUrlTemplate(
+    template: String,
+    allowInsecureLoopbackForTests: Boolean = false,
+): EventCodeHashLookupUrlTemplate? = createUrlTemplate(
+    template, "{hash}", "event code hash lookup", allowInsecureLoopbackForTests,
+) { EventCodeHashLookupUrlTemplate(it) }
+
 private fun <T> createUrlTemplate(
     template: String,
     placeholder: String,
@@ -276,6 +287,28 @@ internal class EventCodeLookupFetcher(
                 error,
             )
         }
+    }
+}
+
+internal class EventCodeHashLookupFetcher(
+    private val template: EventCodeHashLookupUrlTemplate,
+    private val transport: RegistryHttpTransport,
+) {
+    internal suspend fun fetch(hashHex: String): String {
+        if (!Regex("^[0-9a-f]{16}$").matches(hashHex)) throw EventCodeLookupException(
+            EventCodeLookupError.INVALID_RESPONSE, "event code hash must be exactly 16 lowercase hex characters",
+        )
+        val response = try {
+            transport.execute(RegistryHttpRequest("GET", template.urlFor(hashHex), mapOf("Accept" to "application/json")))
+        } catch (error: kotlinx.coroutines.CancellationException) { throw error
+        } catch (error: Throwable) { throw EventCodeLookupException(EventCodeLookupError.HTTP_ERROR, "event code hash lookup request failed", error) }
+        if (response.statusCode == 404) throw EventCodeLookupException(EventCodeLookupError.NOT_FOUND, "no event is registered for this code hash")
+        if (response.statusCode !in 200..299) throw EventCodeLookupException(EventCodeLookupError.HTTP_ERROR, "event code hash lookup returned HTTP ${response.statusCode}")
+        val value = try { Json.parseToJsonElement(response.body).jsonObject["eventId"]?.let { it as? JsonPrimitive }?.contentOrNull }
+        catch (error: Throwable) { throw EventCodeLookupException(EventCodeLookupError.INVALID_RESPONSE, "event code hash lookup response is not valid JSON", error) }
+            ?: throw EventCodeLookupException(EventCodeLookupError.INVALID_RESPONSE, "event code hash lookup response is missing eventId")
+        return try { value.decodeHex(expectedBytes = 32).toPrefixedHex() }
+        catch (error: IllegalArgumentException) { throw EventCodeLookupException(EventCodeLookupError.INVALID_RESPONSE, "event code hash lookup response eventId is invalid", error) }
     }
 }
 
