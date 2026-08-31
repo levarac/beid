@@ -19,7 +19,7 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     let directory = try makeIsolatedDirectory(named: "beid-report-submission-exclusion-query")
     defer { try? FileManager.default.removeItem(at: directory) }
     let fileURL = directory.appendingPathComponent("report-submissions.json")
-    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL))
+    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL, provider: NeverInvokedEventDefinitionContextProvider()))
 
     runtime.captureAndQueueWindow(
       id: UUID(),
@@ -87,7 +87,7 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     )
 
     let runtime = try XCTUnwrap(
-      makeEnabledRuntime(fileURL: fileURL),
+      makeEnabledRuntime(fileURL: fileURL, provider: NeverInvokedEventDefinitionContextProvider()),
       "expected an enabled ReportSubmissionRuntime for this test bundle"
     )
 
@@ -108,14 +108,14 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     try seedStore.add(record)
     try seedStore.markSubmitting(for: record.id)
 
-    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL))
+    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL, provider: NeverInvokedEventDefinitionContextProvider()))
 
     XCTAssertEqual(runtime.submissionState(forEventCode: "EVENTA"), .submitting)
   }
 
   private func makeEnabledRuntime(
     fileURL: URL,
-    provider: any EventDefinitionContextProvider = NeverInvokedEventDefinitionContextProvider()
+    provider: any EventDefinitionContextProvider
   ) throws -> ReportSubmissionRuntime? {
     let bundleDirectory = try makeIsolatedDirectory(named: "beid-report-submission-query-bundle")
     let plist: [String: Any] = [
