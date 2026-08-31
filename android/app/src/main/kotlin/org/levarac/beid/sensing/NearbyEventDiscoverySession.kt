@@ -73,27 +73,38 @@ internal class NearbyEventDiscoverySession(
             val candidate = snapshot.candidateAt(index) ?: return@repeat
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
             if (!beginNearbyEventRegistryResolutionFromHex(store, hash)) return@repeat
+            // The whole body runs on coroutineScope's dispatcher (Main.immediate,
+            // set by the caller), matching the iOS adapter's `Task { @MainActor }`
+            // wrapping. This confines every registryRequests mutation to one
+            // thread (resolveEventIdByCodeHash/resolveEventDefinition complete on
+            // a background dispatcher per RegistryClient's own scope) and, since
+            // launch{} never runs synchronously inline, guarantees `lookup`/
+            // `verification` are assigned before this block can read them even
+            // on a completion path that calls back before the outer function
+            // returns.
             lateinit var lookup: RegistryRequest
             lookup = client.resolveEventIdByCodeHash(hash) { resolution ->
-                registryRequests.remove(lookup)
-                val eventId = resolution.eventIdHex
-                if (!resolution.isSuccess || eventId == null) {
-                    val result = if (resolution.errorCode == "event_code_lookup_not_found")
-                        NearbyEventRegistryResolutionResult.NOT_REGISTERED
-                    else NearbyEventRegistryResolutionResult.LOOKUP_UNAVAILABLE
-                    coroutineScope.launch { publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, null).snapshot) }
-                    return@resolveEventIdByCodeHash
-                }
-                lateinit var verification: RegistryRequest
-                verification = client.resolveEventDefinition(eventId, safeRegistryReadPin(), nowEpochMillis() / 1000L) { verified ->
-                    registryRequests.remove(verification)
-                    coroutineScope.launch {
-                        val result = if (verified.isSuccess) NearbyEventRegistryResolutionResult.VERIFIED
-                        else NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE
-                        publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, eventId).snapshot)
+                coroutineScope.launch {
+                    registryRequests.remove(lookup)
+                    val eventId = resolution.eventIdHex
+                    if (!resolution.isSuccess || eventId == null) {
+                        val result = if (resolution.errorCode == "event_code_lookup_not_found")
+                            NearbyEventRegistryResolutionResult.NOT_REGISTERED
+                        else NearbyEventRegistryResolutionResult.LOOKUP_UNAVAILABLE
+                        publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, null).snapshot)
+                        return@launch
                     }
+                    lateinit var verification: RegistryRequest
+                    verification = client.resolveEventDefinition(eventId, safeRegistryReadPin(), nowEpochMillis() / 1000L) { verified ->
+                        coroutineScope.launch {
+                            registryRequests.remove(verification)
+                            val result = if (verified.isSuccess) NearbyEventRegistryResolutionResult.VERIFIED
+                            else NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE
+                            publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, eventId).snapshot)
+                        }
+                    }
+                    registryRequests += verification
                 }
-                registryRequests += verification
             }
             registryRequests += lookup
         }

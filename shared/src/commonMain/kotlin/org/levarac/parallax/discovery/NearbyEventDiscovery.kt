@@ -57,6 +57,16 @@ public class NearbyEventCandidate internal constructor(
     public val eventCodeHash: ByteArray
         get() = eventCodeHashBytes.copyOf()
 
+    /**
+     * Lowercase hex encoding of [eventCodeHash], for native callers that need
+     * the string form (e.g. a registry lookup key) without touching Swift
+     * Export's `kotlin.ByteArray` element accessors directly.
+     */
+    public val eventCodeHashHex: String
+        get() = eventCodeHashBytes.joinToString(separator = "") {
+            (it.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
+
     public val sourceCount: Int
         get() = sources.size
 

@@ -1002,6 +1002,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				BEID_ETHERSCAN_API_KEY = "";
+				BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code-hash/{hash}";
 				BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}";
 				BEID_EVENT_DEFINITION_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}";
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";
@@ -1224,6 +1225,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				BEID_ETHERSCAN_API_KEY = "";
+				BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code-hash/{hash}";
 				BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}";
 				BEID_EVENT_DEFINITION_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}";
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";

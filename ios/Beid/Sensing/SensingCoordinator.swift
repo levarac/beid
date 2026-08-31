@@ -680,7 +680,9 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
-    eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
+    eventIdentityVerificationSource: (any EventIdentityVerificationSource)?,
+    nearbyRegistryClient:
+      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil
   ) {
     self.init(
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
@@ -692,7 +694,8 @@ final class SensingCoordinator: ObservableObject {
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
-      initialLedgerFailure: nil
+      initialLedgerFailure: nil,
+      nearbyRegistryClient: nearbyRegistryClient
     )
     // Only this initializer chain is actually loading — see
     // `isLedgerLoading`'s doc comment for why the default is `false`.
@@ -1655,10 +1658,7 @@ final class SensingCoordinator: ObservableObject {
     guard let client = nearbyRegistryClient else { return }
     for index in 0..<snapshot.candidateCount {
       guard let candidate = snapshot.candidateAt(index: index) else { continue }
-      let bytes = candidate.eventCodeHash
-      let hash = (0..<bytes.size).map {
-        String(format: "%02x", UInt8(bitPattern: bytes.get(index: $0)))
-      }.joined()
+      let hash = candidate.eventCodeHashHex
       guard ExportedKotlinPackages.org.levarac.parallax.discovery
         .beginNearbyEventRegistryResolutionFromHex(store: nearbyDiscoveryStore, eventCodeHashHex: hash)
       else { continue }
@@ -1668,7 +1668,7 @@ final class SensingCoordinator: ObservableObject {
           guard resolution.isSuccess, let eventID = resolution.eventIdHex else {
             let result: ExportedKotlinPackages.org.levarac.parallax.discovery
               .NearbyEventRegistryResolutionResult = resolution.errorCode == "event_code_lookup_not_found"
-              ? .notRegistered : .lookupUnavailable
+              ? .NOT_REGISTERED : .LOOKUP_UNAVAILABLE
             let update = ExportedKotlinPackages.org.levarac.parallax.discovery
               .completeNearbyEventRegistryResolutionFromHex(
                 store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
@@ -1686,7 +1686,7 @@ final class SensingCoordinator: ObservableObject {
               guard let self else { return }
               let result: ExportedKotlinPackages.org.levarac.parallax.discovery
                 .NearbyEventRegistryResolutionResult = verified.isSuccess
-                ? .verified : .verificationUnavailable
+                ? .VERIFIED : .VERIFICATION_UNAVAILABLE
               let update = ExportedKotlinPackages.org.levarac.parallax.discovery
                 .completeNearbyEventRegistryResolutionFromHex(
                   store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
