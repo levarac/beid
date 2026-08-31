@@ -1,0 +1,37 @@
+name: Release version consistency
+
+on:
+  push:
+    branches:
+      - "release/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Match branch and marketing version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare release branch with project version
+        env:
+          RELEASE_BRANCH: ${{ github.ref_name }}
+        run: |
+          ruby <<'RUBY'
+          require "yaml"
+
+          branch = ENV.fetch("RELEASE_BRANCH")
+          match = branch.match(%r{\Arelease/(\d+\.\d+\.\d+)\z})
+          abort "::error::Release branch must be named release/X.Y.Z; got #{branch.inspect}" unless match
+
+          project = YAML.safe_load(File.read("ios/project.yml"), aliases: true)
+          version = project.dig("targets", "Beid", "settings", "base", "MARKETING_VERSION")&.to_s
+          abort "::error::ios/project.yml targets.Beid.settings.base.MARKETING_VERSION is missing" if version.nil? || version.empty?
+
+          expected = match[1]
+          abort "::error::Release branch version #{expected} does not match ios/project.yml MARKETING_VERSION #{version}" unless version == expected
+
+          puts "Release branch #{branch} matches MARKETING_VERSION #{version}"
+          RUBY

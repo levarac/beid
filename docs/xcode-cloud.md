@@ -82,6 +82,57 @@ Both `/testflight` (this repo's Claude Code skill) and hand edits follow this
 same file-per-branch-type convention — see `~/.claude/skills/testflight/SKILL.md`
 if you're driving this with that skill.
 
+## Release branches and store-submission procedure
+
+The branch model is `main` as the development trunk and `release/X.Y.Z` as a
+stabilization branch for one store version. Fixes made on a release branch are
+integrated back into `main` regularly with a `--no-ff` merge of the release
+branch; do not cherry-pick them individually. GitHub does not close issues from
+a PR merged into a non-default branch, so manually close each issue named by a
+release PR after confirming the release-branch merge.
+
+`MARKETING_VERSION` in `ios/project.yml` is the only repository source of
+truth for the store version. A push to `release/**` runs
+`.github/workflows/release-version-consistency.yml`, which compares an exact
+`release/X.Y.Z` branch name with that value and fails on a mismatch. The check
+is deliberately read-only: it never changes `project.yml` or any generated
+file. Build numbers remain managed by Xcode Cloud (or by Apple's export-time
+assignment in the temporary GitHub Actions lane); do not change
+`CURRENT_PROJECT_VERSION` as part of a release.
+
+A PR that changes `release_notes.json` receives an automated warning that the
+file is App Store release copy, not the internal TestFlight tester notes.
+Changing or uploading `release_notes.json` is not evidence that testers have
+received a build.
+
+### First `release/1.0.0` checklist
+
+- [ ] Set and confirm `targets.Beid.settings.base.MARKETING_VERSION` in
+  `ios/project.yml` is exactly `1.0.0`, then create `release/1.0.0` from the
+  intended `main` commit. Do not alter `CURRENT_PROJECT_VERSION`.
+- [ ] Rewrite `release_notes.json` completely for version 1.0.0 and confirm
+  its locale entries pass the repository note validation.
+- [ ] Push the release branch and confirm both the read-only version check and
+  the **Release Build** workflow triggered for the exact commit. In the
+  temporary delivery lane, also confirm `Release TestFlight Delivery` ran if
+  `GHA_DELIVERY` is `on`.
+- [ ] Wait for App Store Connect processing. A build whose processing state is
+  merely `VALID` has been uploaded, not necessarily distributed. Confirm the
+  intended build reports `internalBuildState = IN_BETA_TESTING` before stating
+  that internal TestFlight delivery is complete.
+- [ ] Merge the stabilized release branch back to `main` with `--no-ff`, and
+  manually close issues whose release PRs targeted the non-default branch.
+
+### Verification-date discipline
+
+The ASC Release Build start condition was last recorded from the configured
+workflow on **2026-08-31** as branch changes matching `release/*` plus a
+`release_notes.json` files-changed filter. ASC is the live source of truth for
+that GUI-managed configuration. Whenever anyone changes an ASC workflow in the
+GUI, update this section immediately with the exact setting, observation date,
+and any end-to-end run evidence; do not leave a known-stale trigger description
+for a later documentation pass.
+
 ## What the repo-side scripts do
 
 `ios/ci_scripts/` (Xcode Cloud's fixed hook location, `.sh` files must be
