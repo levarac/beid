@@ -22,10 +22,25 @@ class ScanDeviceAccounting {
     val coPresentDeviceCount: Int get() = coPresentRpids.size
     val distinctDeviceCount: Int get() = distinctDeviceIds.size
 
+    /**
+     * First ENIN this session crossed a co-presence window boundary at —
+     * `null` until the first [record] call. First-set-wins: never moves
+     * once set. Feeds the self-proof ENIN range (beid#125) — mirrors iOS's
+     * `SensingCoordinator.firstWindowEnin`.
+     */
+    var firstWindowEnin: Long? = null
+        private set
+
+    /** Most recent ENIN this session crossed a co-presence window boundary at. Mirrors iOS's `SensingCoordinator.lastWindowEnin`. */
+    var lastWindowEnin: Long? = null
+        private set
+
     fun reset() {
         lastEnin = null
         coPresentRpids.clear()
         distinctDeviceIds.clear()
+        firstWindowEnin = null
+        lastWindowEnin = null
     }
 
     /**
@@ -48,6 +63,10 @@ class ScanDeviceAccounting {
         if (coPresenceWindowBoundaryCrossed(lastEnin, enin)) {
             coPresentRpids.clear()
             lastEnin = enin
+            lastWindowEnin = enin
+            if (firstWindowEnin == null) {
+                firstWindowEnin = enin
+            }
         }
         coPresentRpids.add(rpid)
 

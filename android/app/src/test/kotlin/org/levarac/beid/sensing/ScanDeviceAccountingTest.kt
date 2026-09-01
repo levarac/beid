@@ -64,4 +64,47 @@ class ScanDeviceAccountingTest {
         accounting.record(enin = 1, rpid = "rpid-a", detectedDisplayId = "ABCD")
         assertEquals(1, accounting.coPresentDeviceCount)
     }
+
+    /**
+     * `firstWindowEnin`/`lastWindowEnin` feed the self-proof ENIN range
+     * (beid#125) — mirrors iOS's `SensingCoordinator.firstWindowEnin`/
+     * `lastWindowEnin`, set at the same co-presence window boundary this
+     * class already detects for [ScanDeviceAccounting.record]'s own
+     * bookkeeping (not a second, independent shared-decision call site).
+     */
+    @Test
+    fun windowEninRangeIsUnsetBeforeAnyDetection() {
+        val accounting = ScanDeviceAccounting()
+
+        assertEquals(null, accounting.firstWindowEnin)
+        assertEquals(null, accounting.lastWindowEnin)
+    }
+
+    @Test
+    fun firstWindowEninIsFixedAtTheFirstBoundaryAndLastWindowEninTracksEachNewOne() {
+        val accounting = ScanDeviceAccounting()
+
+        accounting.record(enin = 10, rpid = "rpid-a", detectedDisplayId = null)
+        assertEquals(10L, accounting.firstWindowEnin)
+        assertEquals(10L, accounting.lastWindowEnin)
+
+        accounting.record(enin = 10, rpid = "rpid-b", detectedDisplayId = null)
+        assertEquals(10L, accounting.firstWindowEnin, "no boundary crossed — must not move")
+        assertEquals(10L, accounting.lastWindowEnin)
+
+        accounting.record(enin = 12, rpid = "rpid-c", detectedDisplayId = null)
+        assertEquals(10L, accounting.firstWindowEnin, "first-set-wins")
+        assertEquals(12L, accounting.lastWindowEnin)
+    }
+
+    @Test
+    fun resetClearsTheWindowEninRange() {
+        val accounting = ScanDeviceAccounting()
+        accounting.record(enin = 10, rpid = "rpid-a", detectedDisplayId = null)
+
+        accounting.reset()
+
+        assertEquals(null, accounting.firstWindowEnin)
+        assertEquals(null, accounting.lastWindowEnin)
+    }
 }

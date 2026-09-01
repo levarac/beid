@@ -1,0 +1,65 @@
+# beid-side BindingRecord/SelfProofRecord field-mapping vectors (beid gh#125).
+#
+# Format: same key=value convention as levarac/barnard's test-vectors/README.md
+# (UTF-8, LF, `#`/blank = comment, first `=` splits key/value, lowercase hex,
+# no 0x prefix unless noted). Consumed by BindingSelfProofRecordVectorTest.kt.
+#
+# What this file proves, and what it does not:
+#
+# Every crypto value below (event signing / owner public keys, self-proof
+# signature, wallet-ack signature) is copied VERBATIM from levarac/barnard's
+# own test-vectors/owner-key-v1.txt (v0.5.0) — never independently
+# re-derived here. Primitive-level conformance (does Android's call into
+# Barnard produce these exact bytes) is already established directly against
+# that file's values by OwnerKeyProviderTest.kt/BindingMessageTest.kt/
+# SelfProofMessageLayoutTest.kt in this module. This file's job is narrower:
+# given those already-conformance-proven bytes as fixed inputs, does beid's
+# own BindingRecord/SelfProofRecord constructor (ios/Beid/Persistence/
+# BindingRecord.swift, SelfProofRecord.swift; this module's
+# BindingRecord.kt/SelfProofRecord.kt) map them into the right hex fields —
+# lowercase, no 0x prefix except walletAddress/walletSignatureHex, which
+# both platforms store verbatim as supplied. Both platforms' constructors
+# use the identical field semantics (cross-referenced against the iOS
+# source above, not run), so this file is the "same result for same
+# inputs" (criterion 3) anchor without needing an iOS Simulator run.
+#
+# The binding_* group below and the walletack_* group are independent
+# fixtures in Barnard's own suite (different wallet addresses/keys) — they
+# are NOT a single coherent wallet-binding ceremony, only two independently
+# barnard-pinned field-mapping checks. Do not read
+# binding_wallet_signature_hex as cryptographically valid for
+# binding_device_signature_*; it is a placeholder input for the mapping
+# check only (walletSignatureHex is stored verbatim, uninterpreted, by
+# design — Android does not verify wallet signatures, spec-133's own
+# Non-goal).
+
+# --- SelfProofRecord (owner-key-v1.txt's selfproof_* group verbatim) -------
+# ownerPrivateKey/ownerPublicKey here are the fixed scalarOne/generatorCompressed
+# pair barnard's own selfproof_* vectors use directly — NOT derived via
+# deriveOwnerKeyPair from any seed (see owner-key-v1.txt's own comment).
+selfproof_event_code=BEID-VECTOR-EVENT
+selfproof_event_id_hash=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+selfproof_event_signing_public_key=02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+selfproof_enin_start=12
+selfproof_enin_end=34
+selfproof_owner_public_key=0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+selfproof_signature_r=61a5c17538920d8129030611976278ef32cd938b6ddff2c878a35f37a6b453ba
+selfproof_signature_s=28260168d623191d83fc9dfc160e984b8452573a1a0450226859f188cf23e6b1
+selfproof_signature_v=1
+
+# --- BindingRecord, canonical-text fields (owner-key-v1.txt's binding_* group verbatim) ---
+binding_event_code=BEID-VECTOR-EVENT
+binding_wallet_address=0x14791697260e4c9a71f18484c9f997b308e59325
+binding_event_signing_public_key=02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+binding_owner_public_key=03879beac8b548009124867a99a358aeb34ff42f957f868bbc83339568b16d9c67
+binding_chain_id=1
+binding_nonce=000102030405060708090a0b0c0d0e0f
+binding_issued_at=2026-07-30T09:00:00Z
+binding_wallet_signature_hex=0x00
+
+# --- BindingRecord, device-countersignature fields (owner-key-v1.txt's walletack_* group verbatim) ---
+# A separate, independently-pinned field-mapping check — see header note.
+binding_ack_wallet_address=0x202122232425262728292a2b2c2d2e2f30313233
+binding_ack_device_signature_r=ff288f4744a3977c74c6b2743992115a460deb46ff6ad92e57ffc70257d017a9
+binding_ack_device_signature_s=76e7b55c7505aab7e832a289fdf032825722ca745f9bf299d50418e6e3aaca67
+binding_ack_device_signature_v=0
