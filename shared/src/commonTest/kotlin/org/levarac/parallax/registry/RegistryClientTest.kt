@@ -8,6 +8,19 @@ import kotlin.test.assertFalse
 
 class RegistryClientTest {
     @Test
+    fun resolveEventIdByCodeHashWithoutTemplateIsFailClosed() = runTest {
+        val client = requireNotNull(createSepoliaRegistryClient(RegistryTestFixtures.READER, null))
+        val resolution = CompletableDeferred<EventIdLookupResolution>()
+        try {
+            client.resolveEventIdByCodeHash("0011223344556677") { resolution.complete(it) }
+            val result = resolution.await()
+            assertFalse(result.isSuccess)
+            assertEquals("event_code_lookup_not_configured", result.errorCode)
+        } finally {
+            client.close()
+        }
+    }
+    @Test
     fun invalidDefinitionTemplateSurfacesTypedConfigurationError() = runTest {
         assertInvalidDefinitionTemplate("http://defs.example/{definitionHash}")
     }

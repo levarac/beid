@@ -4,6 +4,8 @@
 <dict>
 	<key>BeidEtherscanAPIKey</key>
 	<string>$(BEID_ETHERSCAN_API_KEY)</string>
+	<key>BeidEventCodeHashLookupURLTemplate</key>
+	<string>$(BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE)</string>
 	<key>BeidEventCodeLookupURLTemplate</key>
 	<string>$(BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE)</string>
 	<key>BeidEventDefinitionURLTemplate</key>

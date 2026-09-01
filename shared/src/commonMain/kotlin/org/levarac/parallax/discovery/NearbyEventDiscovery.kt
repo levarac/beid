@@ -9,9 +9,21 @@ public enum class NearbyEventTrustStatus {
     UNAUTHENTICATED_B005_HINT,
 }
 
-/** An 8-byte B005/B004 hash cannot be substituted for a 32-byte registry Event ID. */
+/**
+ * Registry state for a nearby hint. The hash-to-event-ID lookup is
+ * operator-attested routing, not a cryptographic binding. Only
+ * [REGISTERED_VIA_OPERATOR_LOOKUP] means the routed ID subsequently passed
+ * the registry's full on-chain and authority-signature definition verification.
+ */
 public enum class NearbyEventRegistryStatus {
-    UNAVAILABLE_FROM_EVENT_CODE_HASH,
+    UNRESOLVED,
+    LOOKUP_UNAVAILABLE,
+    NOT_REGISTERED,
+    REGISTERED_VIA_OPERATOR_LOOKUP,
+}
+
+public enum class NearbyEventRegistryResolutionResult {
+    LOOKUP_UNAVAILABLE, NOT_REGISTERED, VERIFICATION_UNAVAILABLE, VERIFIED,
 }
 
 /** One peripheral's latest B005 facts for one event-code hash. */
@@ -36,12 +48,24 @@ public class NearbyEventCandidate internal constructor(
     public val lastSeenAtEpochMillis: Long,
     private val sources: List<NearbyEventSourceObservation>,
     private val displayNames: List<String>,
+    public val registryStatus: NearbyEventRegistryStatus,
+    public val resolvedEventIdHex: String?,
 ) {
     private val eventCodeHashBytes: ByteArray = eventCodeHash.copyOf()
 
     /** Returns a defensive copy so callers cannot mutate candidate identity. */
     public val eventCodeHash: ByteArray
         get() = eventCodeHashBytes.copyOf()
+
+    /**
+     * Lowercase hex encoding of [eventCodeHash], for native callers that need
+     * the string form (e.g. a registry lookup key) without touching Swift
+     * Export's `kotlin.ByteArray` element accessors directly.
+     */
+    public val eventCodeHashHex: String
+        get() = eventCodeHashBytes.joinToString(separator = "") {
+            (it.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
 
     public val sourceCount: Int
         get() = sources.size
@@ -59,8 +83,6 @@ public class NearbyEventCandidate internal constructor(
     public val trustStatus: NearbyEventTrustStatus
         get() = NearbyEventTrustStatus.UNAUTHENTICATED_B005_HINT
 
-    public val registryStatus: NearbyEventRegistryStatus
-        get() = NearbyEventRegistryStatus.UNAVAILABLE_FROM_EVENT_CODE_HASH
 }
 
 /** Immutable, deterministically ordered view of the current discovery session. */
@@ -95,10 +117,17 @@ public class NearbyEventDiscoveryStore internal constructor() {
     internal var additionalNamesOmittedAtEpochMillis: Long? = null
     internal var additionalEventsOmittedAtEpochMillis: Long? = null
     internal var locallyEvictedSources: Boolean = false
+    internal val registry: MutableMap<EventHash, RegistryRecord> = mutableMapOf()
 
     public val snapshot: NearbyEventCandidates
         get() = buildSnapshot()
 }
+
+internal data class RegistryRecord(
+    var status: NearbyEventRegistryStatus = NearbyEventRegistryStatus.UNRESOLVED,
+    var eventIdHex: String? = null,
+    var inFlight: Boolean = false,
+)
 
 internal class EventHash(bytes: ByteArray) : Comparable<EventHash> {
     private val value: ByteArray = bytes.copyOf()
@@ -207,6 +236,10 @@ public fun recordNearbyEventHint(
         )
         changed = true
     } else {
+        if (store.registry[eventHash]?.status == NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE) {
+            store.registry[eventHash] = RegistryRecord()
+            changed = true
+        }
         val censusChanged = !nullableByteArraysEqual(existing.censusCopy(), census)
         if (existing.eventDisplayName != eventDisplayName) {
             existing.eventDisplayName = eventDisplayName
@@ -231,6 +264,52 @@ public fun recordNearbyEventHint(
         changed = changed,
         snapshot = store.snapshot,
     )
+}
+
+/** Claims the one in-flight resolution slot for a live candidate. */
+public fun beginNearbyEventRegistryResolutionFromHex(
+    store: NearbyEventDiscoveryStore,
+    eventCodeHashHex: String,
+): Boolean {
+    val bytes = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull() ?: return false
+    if (bytes.size != EVENT_CODE_HASH_BYTES) return false
+    val hash = EventHash(bytes)
+    if (store.sources.keys.none { it.eventHash == hash }) return false
+    val record = store.registry.getOrPut(hash) { RegistryRecord() }
+    if (record.inFlight || record.status != NearbyEventRegistryStatus.UNRESOLVED) return false
+    record.inFlight = true
+    return true
+}
+
+/** Delivers a native-executed lookup/verification effect back to shared state. */
+public fun completeNearbyEventRegistryResolutionFromHex(
+    store: NearbyEventDiscoveryStore,
+    eventCodeHashHex: String,
+    result: NearbyEventRegistryResolutionResult,
+    resolvedEventIdHex: String?,
+): NearbyEventDiscoveryUpdate {
+    val bytes = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull()
+        ?: return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
+    val hash = EventHash(bytes)
+    val record = store.registry[hash]
+    if (bytes.size != EVENT_CODE_HASH_BYTES || record?.inFlight != true ||
+        store.sources.keys.none { it.eventHash == hash }) {
+        return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
+    }
+    record.inFlight = false
+    record.status = when (result) {
+        NearbyEventRegistryResolutionResult.NOT_REGISTERED -> NearbyEventRegistryStatus.NOT_REGISTERED
+        NearbyEventRegistryResolutionResult.VERIFIED -> NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
+        else -> NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE
+    }
+    record.eventIdHex = resolvedEventIdHex.takeIf {
+        result == NearbyEventRegistryResolutionResult.VERIFIED &&
+            it != null && Regex("^(0x)?[0-9a-fA-F]{64}$").matches(it)
+    }
+    if (record.status == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP && record.eventIdHex == null) {
+        record.status = NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE
+    }
+    return NearbyEventDiscoveryUpdate(false, true, store.snapshot)
 }
 
 /**
@@ -296,6 +375,7 @@ public fun resetNearbyEventDiscovery(
         store.additionalEventsOmittedAtEpochMillis != null ||
         store.locallyEvictedSources
     store.sources.clear()
+    store.registry.clear()
     store.additionalNamesOmittedAtEpochMillis = null
     store.additionalEventsOmittedAtEpochMillis = null
     store.locallyEvictedSources = false
@@ -348,6 +428,8 @@ private fun expireAt(store: NearbyEventDiscoveryStore, nowEpochMillis: Long): Bo
         .keys
     if (expiredKeys.isNotEmpty()) {
         expiredKeys.forEach(store.sources::remove)
+        val liveHashes = store.sources.keys.map { it.eventHash }.toSet()
+        store.registry.keys.retainAll(liveHashes)
         changed = true
     }
 
@@ -391,6 +473,8 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
                 lastSeenAtEpochMillis = records.maxOf { source -> source.lastSeenAtEpochMillis },
                 sources = orderedSources,
                 displayNames = records.map { source -> source.eventDisplayName }.distinct().sorted(),
+                registryStatus = registry[eventHash]?.status ?: NearbyEventRegistryStatus.UNRESOLVED,
+                resolvedEventIdHex = registry[eventHash]?.eventIdHex,
             )
         }
 

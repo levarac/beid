@@ -45,7 +45,7 @@ class NearbyEventDiscoveryTest {
         assertTrue(candidate.hasDisplayNameConflict)
         assertEquals(NearbyEventTrustStatus.UNAUTHENTICATED_B005_HINT, candidate.trustStatus)
         assertEquals(
-            NearbyEventRegistryStatus.UNAVAILABLE_FROM_EVENT_CODE_HASH,
+            NearbyEventRegistryStatus.UNRESOLVED,
             candidate.registryStatus,
             "an 8-byte B005 hash must never be presented as a resolved 32-byte registry Event ID",
         )

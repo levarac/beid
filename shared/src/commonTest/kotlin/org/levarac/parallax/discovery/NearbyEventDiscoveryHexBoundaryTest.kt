@@ -61,7 +61,7 @@ class NearbyEventDiscoveryHexBoundaryTest {
         assertContentEquals(census, assertNotNull(actualSource.census))
         assertEquals(expected.registryStatus, actual.registryStatus)
         assertEquals(
-            NearbyEventRegistryStatus.UNAVAILABLE_FROM_EVENT_CODE_HASH,
+            NearbyEventRegistryStatus.UNRESOLVED,
             actual.registryStatus,
         )
     }

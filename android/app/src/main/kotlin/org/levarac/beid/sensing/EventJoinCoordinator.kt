@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.parallax.discovery.NearbyEventCandidates
+import org.levarac.parallax.registry.RegistryClient
+import org.levarac.beid.registry.RegistryDependencies
 
 /**
  * UI-facing state for [EventJoinCoordinator]. Mirrors the shape of iOS's
@@ -59,17 +61,20 @@ class EventJoinCoordinator internal constructor(
     private val engine: EventJoinEngine,
     nowEpochMillis: () -> Long,
     coroutineScope: CoroutineScope,
+    registryClient: RegistryClient? = null,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
         nowEpochMillis = System::currentTimeMillis,
         coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+        registryClient = RegistryDependencies.createClient(),
     )
 
     private val accounting = ScanDeviceAccounting()
     private val nearbyDiscovery = NearbyEventDiscoverySession(
         nowEpochMillis = nowEpochMillis,
         coroutineScope = coroutineScope,
+        registryClient = registryClient,
     )
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)

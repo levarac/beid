@@ -12,6 +12,10 @@ val registryReaderAddress = providers.gradleProperty("beid.registryReaderAddress
 val etherscanApiKey = providers.gradleProperty("beid.etherscanApiKey").orElse("")
 val definitionUrlTemplate = providers.gradleProperty("beid.definitionUrlTemplate").orElse("")
 val eventKeySetUrlTemplate = providers.gradleProperty("beid.eventKeySetUrlTemplate").orElse("")
+val eventCodeLookupUrlTemplate = providers.gradleProperty("beid.eventCodeLookupUrlTemplate")
+    .orElse("https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}")
+val eventCodeHashLookupUrlTemplate = providers.gradleProperty("beid.eventCodeHashLookupUrlTemplate")
+    .orElse("https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code-hash/{hash}")
 
 android {
     namespace = "org.levarac.beid"
@@ -29,6 +33,8 @@ android {
             "EVENT_REGISTRY_READER_ADDRESS",
             registryReaderAddress.get().asBuildConfigString(),
         )
+        buildConfigField("String", "EVENT_CODE_LOOKUP_URL_TEMPLATE", eventCodeLookupUrlTemplate.get().asBuildConfigString())
+        buildConfigField("String", "EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE", eventCodeHashLookupUrlTemplate.get().asBuildConfigString())
         buildConfigField(
             "String",
             "ETHERSCAN_API_KEY",

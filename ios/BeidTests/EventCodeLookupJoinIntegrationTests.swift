@@ -187,7 +187,8 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
         etherscanApiKey: nil,
         definitionUrlTemplate: nil,
         eventKeySetUrlTemplate: nil,
-        eventCodeLookupUrlTemplate: eventCodeLookupUrlTemplate
+        eventCodeLookupUrlTemplate: eventCodeLookupUrlTemplate,
+        eventCodeHashLookupUrlTemplate: nil
       )
     )
     return AppCoordinator(registryClient: registryClient)
