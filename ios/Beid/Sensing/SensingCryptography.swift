@@ -64,7 +64,7 @@ final class BarnardSensingCryptography: SensingCryptography {
   /// with no place on the `SensingCryptography` protocol itself, since
   /// every other implementation (test fakes) has no owner-key storage to
   /// report on.
-  let ownerKeyProvider = OwnerKeyProvider()
+  let ownerKeyProvider = OwnerKeyProvider(keyStorage: BeidKeychainKeyStorage())
 
   func eventSigningPublicKey(eventCode: String) -> Data {
     identity.signingPublicKey(eventCode: eventCode)
