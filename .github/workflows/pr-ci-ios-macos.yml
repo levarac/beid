@@ -1,9 +1,9 @@
-name: PR iOS CI (emi, informational)
+name: PR iOS CI (self-hosted macOS, informational)
 
 on:
   pull_request:
     paths:
-      - ".github/workflows/pr-ci-ios-emi.yml"
+      - ".github/workflows/pr-ci-ios-macos.yml"
       - "ios/**"
       - "shared/**"
       - "android/build.gradle.kts"
@@ -17,13 +17,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-ios-emi-${{ github.ref }}
+  group: pr-ios-macos-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   ios-simulator:
-    name: iOS simulator (emi, informational)
-    runs-on: [self-hosted, emi]
+    name: iOS simulator (self-hosted macOS, informational)
+    # Routing lives in the repo variable RUNS_ON_MACOS, not here (same pattern
+    # as ShiokazeHD/umidori's pr-ci.yml). A variable applies to every branch at
+    # once; a label baked into this file would need a separate PR per branch
+    # to change, and ties the workflow to one machine's name instead of a
+    # capability. RUNS_ON_MACOS is currently ["self-hosted","macOS","ARM64","emi"]
+    # (repo settings), matching only the emi runner; the fallback below is the
+    # generic self-hosted-macOS label set so this workflow still resolves if
+    # the variable is ever unset, and so any additional self-hosted Mac can be
+    # brought in later by widening the variable rather than editing this file.
+    # fromJSON is required because runs-on treats a plain string variable as
+    # ONE label; it does not split on commas.
+    runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
     timeout-minutes: 60
     steps:
       - name: Initialize CI output path
