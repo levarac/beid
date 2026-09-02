@@ -1,5 +1,6 @@
 package org.levarac.beid.sensing
 
+import java.util.UUID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -107,6 +108,45 @@ class EventJoinCoordinatorSelfProofTest {
         coordinator.leaveEvent()
 
         assertTrue(store.records.isEmpty(), "EventFound/Sensing never produced a Proof")
+    }
+
+    @Test
+    fun onProofSignatureStateChangedFiresFromLeaveEventWithNoPriorBinding() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
+        coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
+
+        coordinator.joinEvent("SELF-PROOF-EVENT")
+        confirmRecording(engine)
+        coordinator.leaveEvent()
+
+        val (_, hasSelfProof, hasBinding) = calls.single()
+        assertTrue(hasSelfProof, "the self-proof this call just persisted")
+        assertTrue(!hasBinding, "no binding was ever attempted this session")
+    }
+
+    @Test
+    fun onProofSignatureStateChangedFiresFromLeaveEventWithBindingAlreadyPresent() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
+        coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
+        val walletAddress = "0x14791697260e4c9a71f18484c9f997b308e59325"
+
+        coordinator.joinEvent("SELF-PROOF-EVENT")
+        confirmRecording(engine)
+        coordinator.beginBinding(walletAddress, chainId = 1)
+        coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))
+        coordinator.leaveEvent()
+
+        assertEquals(2, calls.size, "one from completeBinding, one from leaveEvent's finalizeSelfProofIfNeeded")
+        val (_, hasSelfProofAtBindingTime, hasBindingAtBindingTime) = calls[0]
+        assertTrue(!hasSelfProofAtBindingTime, "no self-proof exists yet when completeBinding fires")
+        assertTrue(hasBindingAtBindingTime)
+        val (_, hasSelfProofAtLeaveTime, hasBindingAtLeaveTime) = calls[1]
+        assertTrue(hasSelfProofAtLeaveTime)
+        assertTrue(hasBindingAtLeaveTime, "the binding recorded earlier this session must still be reported")
     }
 
     private fun confirmRecording(engine: FakeEventJoinEngine) {

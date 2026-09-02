@@ -13,6 +13,11 @@ import java.io.File
 internal class FakeSensingCryptography(
     private val eventSigningPublicKeyResult: ByteArray = byteArrayOf(0x02) + ByteArray(32) { 0x33.toByte() },
     private val ownerPublicKeyResult: ByteArray = byteArrayOf(0x03) + ByteArray(32) { 0x44.toByte() },
+    private val signWindowReportResult: SensingRecoverableSignature = SensingRecoverableSignature(
+        r = ByteArray(32) { 0x11.toByte() },
+        s = ByteArray(32) { 0x22.toByte() },
+        v = 0,
+    ),
     private val selfProofSignatureResult: SensingRecoverableSignature? = SensingRecoverableSignature(
         r = ByteArray(32) { 0x55.toByte() },
         s = ByteArray(32) { 0x66.toByte() },
@@ -28,6 +33,7 @@ internal class FakeSensingCryptography(
     sealed class Call {
         data class EventSigningPublicKey(val eventCode: String) : Call()
         data object OwnerPublicKey : Call()
+        data class SignWindowReport(val eventCode: String, val bytes: ByteArray) : Call()
         data class SignSelfProof(
             val eventIdHash: ByteArray,
             val eventSigningPublicKey: ByteArray,
@@ -55,6 +61,11 @@ internal class FakeSensingCryptography(
     override fun ownerPublicKey(): ByteArray {
         calls += Call.OwnerPublicKey
         return ownerPublicKeyResult
+    }
+
+    override fun signWindowReport(eventCode: String, bytes: ByteArray): SensingRecoverableSignature {
+        calls += Call.SignWindowReport(eventCode, bytes)
+        return signWindowReportResult
     }
 
     override fun signSelfProof(
