@@ -453,9 +453,23 @@ dates). The contract every agent must know before touching delivery files:
   - SwiftLint: `scripts/lint.sh`
   - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証
 
-  native iOS の build / test はこの GitHub Actions workflow では実行せず、
-  Xcode Cloud が担当する。他の文書はこの分担を複製せず、この subsection
-  と実行定義を参照する。
+  **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
+  この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
+
+  - **Xcode Cloud** — required check。branch protection と merge 判断の対象。
+    ただし 2026-08-19 以降 compute 枠の枯渇で cancelled が続いており、
+    **実質的に停止している**(下の「Local and CI evidence traps」を参照)。
+  - **`.github/workflows/pr-ci-ios-macos.yml`(#301、2026-09-02 追加)** —
+    self-hosted runner `emi` 上の **informational-only** lane。job 名は
+    `iOS simulator (self-hosted macOS, informational)`。`ios/` `shared/`
+    Android build 関連パスの変更でのみ起動し、**required ではない**。
+    Xcode Cloud への依存を段階的に減らすための実績積みの段階であり、
+    Xcode Cloud の設定・branch protection・他の workflow は変更していない。
+
+  **`scripts/check_pr_ci_doc_drift.py` はこの 2 本目を検査していない。**
+  同スクリプトは `.github/workflows/pr-ci.yml` のみを対象としており、
+  **iOS lane が変わってもこの記述は緑のまま古くなる**。lane を触る変更は、
+  検査に頼らずこの subsection を手で更新すること。
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、
   上の KMP review gate を免除しない。KMP の independent review は作業上の
