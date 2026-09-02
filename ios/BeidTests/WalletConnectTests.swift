@@ -14,8 +14,14 @@ import XCTest
 final class WalletConnectTests: XCTestCase {
   func testCompleteWalletConnectSetsAddressAndAdvancesScreen() {
     let coordinator = AppCoordinator()
-    coordinator.completeWalletConnect(address: "0xREALADDRESS")
+    coordinator.completeWalletConnect(
+      address: LiveWalletAddress.fromConnectorResult(address: "0xREALADDRESS", chainId: "eip155:1")
+    )
     XCTAssertEqual(coordinator.walletAddress, "0xREALADDRESS")
+    XCTAssertEqual(
+      coordinator.liveWalletAddress,
+      LiveWalletAddress.fromConnectorResult(address: "0xREALADDRESS", chainId: "eip155:1")
+    )
     XCTAssertEqual(coordinator.screen, .bluetoothPermission)
   }
 
@@ -35,15 +41,35 @@ final class WalletConnectTests: XCTestCase {
     coordinator.disconnectWallet()
 
     XCTAssertNil(coordinator.walletAddress)
+    XCTAssertNil(coordinator.liveWalletAddress)
     // No connector was ever recorded on this coordinator, so
     // disconnectWallet() falls back to MetaMaskConnector.shared — this
     // asserts that fallback doesn't crash and leaves the singleton idle.
     XCTAssertEqual(MetaMaskConnector.shared.state, .idle)
   }
 
+  /// `AppCoordinator.disconnectWallet()` is the one production call site
+  /// that clears `WalletHintStore` (beid#315 / dispatch#26 condition 3) —
+  /// it hardcodes `UserDefaults.standard`, same as `hasCompletedOnboardingKey`
+  /// elsewhere in `AppCoordinator`, so this test cleans that one real key up
+  /// around itself rather than injecting an isolated store, matching
+  /// `AppCoordinatorRestoreTests`' existing convention for that key.
+  func testDisconnectWalletClearsThePersistedHint() {
+    let hintKey = "beid.walletConnect.lastAddressHint"
+    UserDefaults.standard.removeObject(forKey: hintKey)
+    defer { UserDefaults.standard.removeObject(forKey: hintKey) }
+    WalletHintStore().save(CachedWalletHint(address: "0xREALADDRESS", chainId: "eip155:1"))
+    XCTAssertNotNil(WalletHintStore().load(), "precondition: a hint is cached before disconnecting")
+
+    let coordinator = AppCoordinator()
+    coordinator.disconnectWallet()
+
+    XCTAssertNil(WalletHintStore().load())
+  }
+
   func testMetaMaskConnectDoesNotStartHandshakeWhenWalletIsMissing() async {
     let transport = FakeMetaMaskTransport(isWalletInstalled: false)
-    let connector = MetaMaskConnector(transport: transport)
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
 
     await connector.connect()
 
@@ -57,13 +83,85 @@ final class WalletConnectTests: XCTestCase {
     transport.connectResult = .success(
       MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
     )
-    let connector = MetaMaskConnector(transport: transport)
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
 
     await connector.connect()
 
-    XCTAssertEqual(connector.state, .connected(address: "0xMETAMASK"))
+    XCTAssertEqual(
+      connector.state,
+      .connected(LiveWalletAddress.fromConnectorResult(address: "0xMETAMASK", chainId: "eip155:1"))
+    )
     XCTAssertEqual(connector.address, "0xMETAMASK")
     XCTAssertEqual(connector.chainId, "eip155:1")
+  }
+
+  func testMetaMaskConnectSavesTheHintForNextLaunch() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
+    )
+    let store = makeIsolatedHintStore()
+    let connector = MetaMaskConnector(transport: transport, hintStore: store)
+
+    await connector.connect()
+
+    XCTAssertEqual(store.load(), CachedWalletHint(address: "0xMETAMASK", chainId: "eip155:1"))
+  }
+
+  /// dispatch#26 condition 1: a fresh `MetaMaskConnector` reads whatever
+  /// hint its store already has and starts at `.restored`, before any
+  /// `connect()`/network call.
+  func testMetaMaskConnectorStartsRestoredWhenAHintExists() {
+    let store = makeIsolatedHintStore()
+    store.save(CachedWalletHint(address: "0xPREVIOUS", chainId: "eip155:1"))
+
+    let connector = MetaMaskConnector(transport: FakeMetaMaskTransport(isWalletInstalled: true), hintStore: store)
+
+    XCTAssertEqual(connector.state, .restored(CachedWalletHint(address: "0xPREVIOUS", chainId: "eip155:1")))
+  }
+
+  func testMetaMaskConnectorStartsIdleWithNoHint() {
+    let connector = MetaMaskConnector(
+      transport: FakeMetaMaskTransport(isWalletInstalled: true),
+      hintStore: makeIsolatedHintStore()
+    )
+
+    XCTAssertEqual(connector.state, .idle)
+  }
+
+  /// dispatch#26 condition 3: `disconnect()` is what every Cancel/Try
+  /// Again/Start Over path in `WalletConnectPairingView` calls — it must
+  /// reset the connector's in-memory session without touching the
+  /// persisted hint. Only `AppCoordinator.disconnectWallet()` ("Disconnect
+  /// Wallet") does that; see `testDisconnectWalletClearsThePersistedHint`.
+  func testMetaMaskDisconnectDoesNotClearThePersistedHint() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
+    )
+    let store = makeIsolatedHintStore()
+    let connector = MetaMaskConnector(transport: transport, hintStore: store)
+    await connector.connect()
+    XCTAssertNotNil(store.load(), "precondition: connect() cached a hint")
+
+    connector.disconnect()
+
+    XCTAssertEqual(store.load(), CachedWalletHint(address: "0xMETAMASK", chainId: "eip155:1"))
+  }
+
+  /// `.restored` and `.connected` must never compare equal even when they
+  /// describe the "same" address — `WalletConnectPairingView`'s exhaustive
+  /// switch (and any future one) depends on the compiler, not a runtime
+  /// check, to force a distinct branch for each; this pins the `Equatable`
+  /// behavior that makes that possible.
+  func testRestoredStateIsNeverEqualToConnectedStateForTheSameAddress() {
+    let restored = WalletConnectorState.restored(
+      CachedWalletHint(address: "0xSAME", chainId: "eip155:1")
+    )
+    let connected = WalletConnectorState.connected(
+      LiveWalletAddress.fromConnectorResult(address: "0xSAME", chainId: "eip155:1")
+    )
+    XCTAssertNotEqual(restored, connected)
   }
 
   func testMetaMaskDisconnectClearsOwnedStateEvenWhenSDKRemainsConnected() async {
@@ -71,7 +169,7 @@ final class WalletConnectTests: XCTestCase {
     transport.connectResult = .success(
       MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
     )
-    let connector = MetaMaskConnector(transport: transport)
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
     await connector.connect()
 
     connector.disconnect()
@@ -89,7 +187,7 @@ final class WalletConnectTests: XCTestCase {
       MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
     )
     transport.signatureResult = .success("0xSIGNATURE")
-    let connector = MetaMaskConnector(transport: transport)
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
     await connector.connect()
 
     var dispatched = false
@@ -106,7 +204,7 @@ final class WalletConnectTests: XCTestCase {
   func testMetaMaskLateConnectResultCannotRestoreDisconnectedSession() async {
     let transport = FakeMetaMaskTransport(isWalletInstalled: true)
     transport.suspendConnect = true
-    let connector = MetaMaskConnector(transport: transport)
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
     let connectTask = Task { await connector.connect() }
     await transport.waitUntilConnectStarts()
 
@@ -121,6 +219,70 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertNil(connector.address)
     XCTAssertEqual(connector.chainId, "eip155:1")
   }
+
+  // MARK: - `connectAndSign` (dispatch#26 condition 2)
+
+  func testConnectAndSignPublishesConnectedStateAndReturnsSignature() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectAndSignResult = .success(
+      (MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1"), "0xSIGNATURE")
+    )
+    let store = makeIsolatedHintStore()
+    let connector = MetaMaskConnector(transport: transport, hintStore: store)
+
+    var dispatched = false
+    let result = await connector.connectAndSign(messageHex: "0xMESSAGE") { dispatched = true }
+
+    guard case .success(let (live, signature)) = result else {
+      XCTFail("expected success, got \(result)")
+      return
+    }
+    XCTAssertEqual(live, LiveWalletAddress.fromConnectorResult(address: "0xMETAMASK", chainId: "eip155:1"))
+    XCTAssertEqual(signature, "0xSIGNATURE")
+    XCTAssertTrue(dispatched)
+    XCTAssertEqual(connector.state, .connected(live))
+    XCTAssertEqual(transport.connectAndSignMessage, "0xMESSAGE")
+    XCTAssertEqual(
+      store.load(),
+      CachedWalletHint(address: "0xMETAMASK", chainId: "eip155:1"),
+      "a successful connectAndSign refreshes the hint just like a plain connect() does"
+    )
+  }
+
+  /// The address `connectAndSign` reports connected may differ from
+  /// whatever guess a caller built its message with (the user switched
+  /// accounts inside the wallet) — callers must use this returned address,
+  /// never their own guess, past this point (dispatch#26 condition 4).
+  func testConnectAndSignReturnsWhicheverAccountTheWalletActuallyConnected() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectAndSignResult = .success(
+      (MetaMaskWalletAccount(address: "0xACTUAL", chainId: "eip155:1"), "0xSIGNATURE")
+    )
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+
+    let result = await connector.connectAndSign(messageHex: "0xMESSAGE")
+
+    guard case .success(let (live, _)) = result else {
+      XCTFail("expected success, got \(result)")
+      return
+    }
+    XCTAssertEqual(live.address, "0xACTUAL")
+  }
+
+  func testConnectAndSignMapsRejectionToFailedState() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectAndSignResult = .failure(.rejected)
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+
+    let result = await connector.connectAndSign(messageHex: "0xMESSAGE")
+
+    guard case .failure(let error) = result else {
+      XCTFail("expected failure, got \(result)")
+      return
+    }
+    XCTAssertEqual(error, .rejected)
+    XCTAssertEqual(connector.state, .failed("Connection declined"))
+  }
 }
 
 @MainActor
@@ -128,6 +290,8 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   let isWalletInstalled: Bool
   var connectResult: Result<MetaMaskWalletAccount, MetaMaskTransportError> =
     .failure(.failed("No connect result"))
+  var connectAndSignResult: Result<(MetaMaskWalletAccount, String), MetaMaskTransportError> =
+    .failure(.failed("No connectAndSign result"))
   var signatureResult: Result<String, MetaMaskTransportError> =
     .failure(.failed("No signature result"))
   var suspendConnect = false
@@ -136,6 +300,7 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   private(set) var sdkConnected = false
   private(set) var requestedAddress: String?
   private(set) var requestedMessage: String?
+  private(set) var connectAndSignMessage: String?
   private var connectContinuation:
     CheckedContinuation<Result<MetaMaskWalletAccount, MetaMaskTransportError>, Never>?
 
@@ -150,6 +315,14 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
     return await withCheckedContinuation { continuation in
       connectContinuation = continuation
     }
+  }
+
+  func connectAndSign(
+    messageHex: String
+  ) async -> Result<(MetaMaskWalletAccount, String), MetaMaskTransportError> {
+    connectAndSignMessage = messageHex
+    sdkConnected = true
+    return connectAndSignResult
   }
 
   func requestPersonalSign(
@@ -183,4 +356,16 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
     connectContinuation?.resume(returning: result)
     connectContinuation = nil
   }
+}
+
+/// Isolated `WalletHintStore` per test — mirrors
+/// `OwnerKeyProviderTests.makeIsolatedDefaults()`'s `UserDefaults(suiteName:)`
+/// pattern, so `MetaMaskConnector` tests never read or write the real
+/// `UserDefaults.standard` wallet-hint key.
+@MainActor
+private func makeIsolatedHintStore() -> WalletHintStore {
+  let suiteName = "WalletConnectTests.\(UUID().uuidString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
+  defaults.removePersistentDomain(forName: suiteName)
+  return WalletHintStore(defaults: defaults)
 }

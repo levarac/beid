@@ -29,7 +29,9 @@ final class OnboardingFlagTests: XCTestCase {
     coordinator.beginOnboarding()
     XCTAssertEqual(coordinator.screen, .walletConnect)
 
-    coordinator.completeWalletConnect(address: "0xREALADDRESS")
+    coordinator.completeWalletConnect(
+      address: LiveWalletAddress.fromConnectorResult(address: "0xREALADDRESS", chainId: "eip155:1")
+    )
     XCTAssertEqual(coordinator.walletAddress, "0xREALADDRESS")
     XCTAssertEqual(coordinator.screen, .bluetoothPermission)
   }

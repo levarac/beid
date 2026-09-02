@@ -19,6 +19,14 @@ enum MetaMaskTransportError: Error, Equatable {
 protocol MetaMaskTransport: AnyObject {
   var isWalletInstalled: Bool { get }
   func connect() async -> Result<MetaMaskWalletAccount, MetaMaskTransportError>
+  /// Connect and sign in one SDK round trip (`Ethereum.connectAndSign`,
+  /// pinned metamask-ios-sdk 0.8.10) — the account/chain the wallet actually
+  /// connected with is read back from `sdk.account`/`sdk.chainId` after the
+  /// signature settles, since `connectAndSign` itself only returns the
+  /// signature.
+  func connectAndSign(
+    messageHex: String
+  ) async -> Result<(MetaMaskWalletAccount, String), MetaMaskTransportError>
   func requestPersonalSign(
     address: String,
     messageHex: String
@@ -36,7 +44,14 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   static let shared = MetaMaskConnector(transport: MetaMaskSDKTransport())
   static let appStoreURL = URL(string: "https://apps.apple.com/app/id1438144202")!
 
-  @Published private(set) var state: WalletConnectorState = .idle
+  /// Starts at `.restored(hint)` instead of `.idle` when a cached hint
+  /// exists (beid#315 / dispatch#26 condition 1) — read once here, at
+  /// construction, never re-derived from a live connect. `hintStore` is
+  /// this instance's single owner of hint persistence: every successful
+  /// `connect()`/`connectAndSign()` below refreshes it, and no other type
+  /// writes to it in production (see `AppCoordinator.disconnectWallet()`
+  /// for the one place that clears it).
+  @Published private(set) var state: WalletConnectorState
 
   var address: String? {
     account?.address
@@ -47,14 +62,21 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   }
 
   private let transport: MetaMaskTransport
+  private let hintStore: WalletHintStore
   private var account: MetaMaskWalletAccount?
   private var connectionAttemptID: UUID?
   private var sessionID: UUID?
   private var signAttemptID: UUID?
   private var signGate: MetaMaskSignResultGate?
 
-  init(transport: MetaMaskTransport) {
+  init(transport: MetaMaskTransport, hintStore: WalletHintStore = WalletHintStore()) {
     self.transport = transport
+    self.hintStore = hintStore
+    if let hint = hintStore.load() {
+      state = .restored(hint)
+    } else {
+      state = .idle
+    }
   }
 
   func configureIfNeeded() {}
@@ -80,7 +102,9 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
     case .success(let account):
       self.account = account
       sessionID = UUID()
-      state = .connected(address: account.address)
+      let live = LiveWalletAddress.fromConnectorResult(address: account.address, chainId: account.chainId)
+      state = .connected(live)
+      hintStore.save(CachedWalletHint(address: live.address, chainId: live.chainId))
     case .failure(.rejected):
       account = nil
       sessionID = nil
@@ -89,6 +113,57 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
       account = nil
       sessionID = nil
       state = .failed(message)
+    }
+  }
+
+  /// Single-round-trip connect+sign (dispatch#26 condition 2) — see
+  /// `WalletConnector.connectAndSign`'s doc comment. The address in the
+  /// returned `LiveWalletAddress` is read back from the transport's account
+  /// after the signature settles, not from whatever hint the caller used to
+  /// build `messageHex`; a caller building a binding message from a
+  /// `.restored` hint before this call must still treat the returned
+  /// address, not the hint, as the true connected address for anything
+  /// past this point (dispatch#26 condition 4).
+  func connectAndSign(
+    messageHex: String,
+    responseTimeout: TimeInterval = 90,
+    onDispatched: (() -> Void)? = nil
+  ) async -> Result<(LiveWalletAddress, String), WalletConnectorError> {
+    guard transport.isWalletInstalled else {
+      account = nil
+      sessionID = nil
+      state = .unavailable(.walletNotInstalled)
+      return .failure(.relayFailure("MetaMask is not installed"))
+    }
+
+    let attemptID = UUID()
+    connectionAttemptID = attemptID
+    state = .connecting
+    state = .awaitingApproval(uri: nil)
+    onDispatched?()
+
+    let result = await transport.connectAndSign(messageHex: messageHex)
+    guard connectionAttemptID == attemptID else { return .failure(.notConnected) }
+    connectionAttemptID = nil
+
+    switch result {
+    case .success(let (account, signature)):
+      self.account = account
+      sessionID = UUID()
+      let live = LiveWalletAddress.fromConnectorResult(address: account.address, chainId: account.chainId)
+      state = .connected(live)
+      hintStore.save(CachedWalletHint(address: live.address, chainId: live.chainId))
+      return .success((live, signature))
+    case .failure(.rejected):
+      account = nil
+      sessionID = nil
+      state = .failed("Connection declined")
+      return .failure(.rejected)
+    case .failure(.failed(let message)):
+      account = nil
+      sessionID = nil
+      state = .failed(message)
+      return .failure(.relayFailure(message))
     }
   }
 
@@ -219,6 +294,27 @@ private final class MetaMaskSDKTransport: MetaMaskTransport {
         address: address,
         chainId: Self.caip2ChainId(sdk.chainId)
       ))
+    case .failure(let error):
+      return error.code == 4001
+        ? .failure(.rejected)
+        : .failure(.failed(error.localizedDescription))
+    }
+  }
+
+  func connectAndSign(
+    messageHex: String
+  ) async -> Result<(MetaMaskWalletAccount, String), MetaMaskTransportError> {
+    switch await sdk.connectAndSign(message: messageHex) {
+    case .success(let signature):
+      let address = sdk.account
+      guard !address.isEmpty else {
+        return .failure(.failed("MetaMask returned no account"))
+      }
+      let account = MetaMaskWalletAccount(
+        address: address,
+        chainId: Self.caip2ChainId(sdk.chainId)
+      )
+      return .success((account, signature))
     case .failure(let error):
       return error.code == 4001
         ? .failure(.rejected)

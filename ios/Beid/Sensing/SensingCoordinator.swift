@@ -1900,6 +1900,20 @@ final class SensingCoordinator: ObservableObject {
     return record
   }
 
+  /// Discards the pending binding message without changing `bindingState`.
+  /// The only sanctioned caller is a mid-attempt rebuild for a different
+  /// wallet address than the attempt started with (beid#315: the
+  /// restored-hint one-trip path can discover the wallet actually
+  /// connected a different account than the cached guess after signing
+  /// completes; the signed text embedded the guess, so that signature
+  /// cannot be reused for the corrected address — it must be discarded
+  /// and rebuilt). Unlike `failBinding`/`declineBinding`, the caller here
+  /// is still mid-`.connecting` and must stay there, so `bindingState` is
+  /// left untouched — the very next `beginBinding` call re-sets it anyway.
+  func discardPendingBindingMessage() {
+    pendingBindingMessage = nil
+  }
+
   /// The wallet declined, or a transport/timeout error occurred. Distinct
   /// from `declineBinding()`: this is the round trip failing, not the user
   /// dismissing the sheet before starting one.

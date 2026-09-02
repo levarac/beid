@@ -919,6 +919,39 @@
           }
         }
       }
+    },
+    "wallet.restored.subtitle": {
+      "comment": "Subtitle shown under the restored-wallet heading when a cached wallet address exists from a previous launch. %@ is the truncated wallet address, e.g. '0x1234...5678'. This address is a reference only, not a verified signer, until the user approves again in their wallet (dispatch#26 condition 4).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ was used last time — shown for reference. Approve in your wallet to continue."
+          }
+        }
+      }
+    },
+    "wallet.restored.continueButton": {
+      "comment": "Primary button that resumes a previously connected wallet without picking it again. %@ is the truncated wallet address, e.g. '0x1234...5678'.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue as %@"
+          }
+        }
+      }
+    },
+    "wallet.restored.connectDifferent": {
+      "comment": "Secondary button next to a restored-wallet suggestion, for a user who wants to pick a different wallet instead of continuing with the one shown.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect a different wallet"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

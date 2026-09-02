@@ -52,12 +52,19 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   @Environment(\.openURL) private var openURL
   @StateObject private var client: Connector
   @State private var hasStarted = false
-  let onConnected: (String, any WalletConnector) -> Void
+  /// View-local only, never persisted: set when the user explicitly taps
+  /// "Connect a different wallet" off a `.restored` hint, so this mount of
+  /// the view falls through to `providerSelectionContent` instead of
+  /// re-showing the hint. Does not touch `WalletHintStore` — dispatch#26
+  /// condition 3 requires the cache to survive exactly this kind of light,
+  /// non-destructive choice.
+  @State private var bypassRestoredHint = false
+  let onConnected: (LiveWalletAddress, any WalletConnector) -> Void
   let secondaryAction: (title: LocalizedStringKey, action: () -> Void)?
 
   init(
     client: Connector = MetaMaskConnector.shared,
-    onConnected: @escaping (String, any WalletConnector) -> Void,
+    onConnected: @escaping (LiveWalletAddress, any WalletConnector) -> Void,
     secondaryAction: (title: LocalizedStringKey, action: () -> Void)? = nil
   ) {
     _client = StateObject(wrappedValue: client)
@@ -71,7 +78,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   fileprivate init(
     client: Connector = MetaMaskConnector.shared,
     startedImmediately: Bool,
-    onConnected: @escaping (String, any WalletConnector) -> Void,
+    onConnected: @escaping (LiveWalletAddress, any WalletConnector) -> Void,
     secondaryAction: (title: LocalizedStringKey, action: () -> Void)? = nil
   ) {
     _client = StateObject(wrappedValue: client)
@@ -84,6 +91,11 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   var body: some View {
     VStack(spacing: DS.Space.l) {
       if hasStarted {
+        connectorContent
+      } else if !bypassRestoredHint, case .restored = client.state {
+        // dispatch#26 condition 1: show the hint immediately, before any
+        // tap and before any network/deep-link call — `providerSelectionContent`
+        // below is what every other (non-restored) first appearance shows.
         connectorContent
       } else {
         providerSelectionContent
@@ -100,8 +112,8 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
       deliverConnectedState()
     }
     .onChange(of: client.state) { _, newState in
-      if hasStarted, case .connected(let address) = newState {
-        onConnected(address, client)
+      if hasStarted, case .connected(let live) = newState {
+        onConnected(live, client)
       }
     }
   }
@@ -113,6 +125,8 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
       notConfiguredContent
     case .unavailable(.walletNotInstalled):
       walletNotInstalledContent
+    case .restored(let hint):
+      restoredContent(hint: hint)
     case .idle:
       connectingContent
         .task { await client.connect() }
@@ -120,8 +134,8 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
       connectingContent
     case .awaitingApproval(let uri):
       awaitingApprovalContent(uri: uri)
-    case .connected(let address):
-      connectedContent(address: address)
+    case .connected(let live):
+      connectedContent(address: live.address)
     case .failed(let message):
       failedContent(message: message)
     }
@@ -167,6 +181,43 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
         }
         .tint(DS.Color.actionPrimary)
         .padding(.top, DS.Space.s)
+
+        if let secondaryAction {
+          BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)
+            .tint(DS.Color.actionPrimary)
+        }
+      }
+    }
+  }
+
+  /// dispatch#26 condition 1/4: shows the previous session's address
+  /// immediately as a reference, with an explicit path both to resume it
+  /// (a real `connect()` round trip, same as `providerSelectionContent`'s
+  /// button — this view has no signature to collapse into that trip, see
+  /// `EventBindingSheetView`'s own restored-hint handling for the
+  /// connect+sign collapse) and to bypass it for a fresh connection.
+  private func restoredContent(hint: CachedWalletHint) -> some View {
+    VStack(spacing: DS.Space.l) {
+      BeidHeroHeader(
+        systemImage: "wallet.pass.fill",
+        title: "Continue with your wallet",
+        subtitle: LocalizedStringKey(restoredHintSubtitle(hint: hint)),
+        tint: DS.Color.actionPrimary
+      )
+      VStack(spacing: DS.Space.s) {
+        BeidPrimaryButton(
+          LocalizedStringKey(continueAsButtonTitle(hint: hint)),
+          systemImage: "wallet.pass"
+        ) {
+          hasStarted = true
+          Task { await client.connect() }
+        }
+        .tint(DS.Color.actionPrimary)
+
+        BeidSecondaryButton(title: LocalizedStringKey(connectDifferentWalletTitle)) {
+          bypassRestoredHint = true
+        }
+        .tint(DS.Color.actionPrimary)
 
         if let secondaryAction {
           BeidSecondaryButton(title: secondaryAction.title, action: secondaryAction.action)
@@ -302,9 +353,35 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   }
 
   private func deliverConnectedState() {
-    guard !hasStarted, case .connected(let address) = client.state else { return }
+    guard !hasStarted, case .connected(let live) = client.state else { return }
     hasStarted = true
-    onConnected(address, client)
+    onConnected(live, client)
+  }
+
+  // MARK: - Localized copy (restored-hint content)
+
+  private func restoredHintSubtitle(hint: CachedWalletHint) -> String {
+    String(
+      localized: "wallet.restored.subtitle",
+      defaultValue: "\(hint.truncatedAddress) was used last time — shown for reference. Approve in your wallet to continue.",
+      comment: "Subtitle shown under the restored-wallet heading when a cached wallet address exists from a previous launch. %@ is the truncated wallet address, e.g. '0x1234...5678'. This address is a reference only, not a verified signer, until the user approves again in their wallet (dispatch#26 condition 4)."
+    )
+  }
+
+  private func continueAsButtonTitle(hint: CachedWalletHint) -> String {
+    String(
+      localized: "wallet.restored.continueButton",
+      defaultValue: "Continue as \(hint.truncatedAddress)",
+      comment: "Primary button that resumes a previously connected wallet without picking it again. %@ is the truncated wallet address, e.g. '0x1234...5678'."
+    )
+  }
+
+  private var connectDifferentWalletTitle: String {
+    String(
+      localized: "wallet.restored.connectDifferent",
+      defaultValue: "Connect a different wallet",
+      comment: "Secondary button next to a restored-wallet suggestion, for a user who wants to pick a different wallet instead of continuing with the one shown."
+    )
   }
 }
 
@@ -325,7 +402,7 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
   }
 
   var address: String? {
-    if case .connected(let address) = state { return address }
+    if case .connected(let live) = state { return live.address }
     return nil
   }
 
@@ -340,6 +417,14 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
     responseTimeout: TimeInterval,
     onDispatched: (() -> Void)?
   ) async -> Result<String, WalletConnectorError> {
+    .failure(.notConnected)
+  }
+
+  func connectAndSign(
+    messageHex: String,
+    responseTimeout: TimeInterval,
+    onDispatched: (() -> Void)?
+  ) async -> Result<(LiveWalletAddress, String), WalletConnectorError> {
     .failure(.notConnected)
   }
 
@@ -387,9 +472,25 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
 #Preview("Connected") {
   WalletConnectPairingView(
     client: PreviewWalletConnector(
-      state: .connected(address: "0x1234567890abcdef1234567890abcdef12345678")
+      state: .connected(LiveWalletAddress.fromConnectorResult(
+        address: "0x1234567890abcdef1234567890abcdef12345678",
+        chainId: "eip155:8453"
+      ))
     ),
     startedImmediately: true,
+    onConnected: { _, _ in }
+  )
+  .padding(.horizontal, DS.Space.pageMargin)
+}
+
+#Preview("Restored") {
+  WalletConnectPairingView(
+    client: PreviewWalletConnector(
+      state: .restored(CachedWalletHint(
+        address: "0x1234567890abcdef1234567890abcdef12345678",
+        chainId: "eip155:8453"
+      ))
+    ),
     onConnected: { _, _ in }
   )
   .padding(.horizontal, DS.Space.pageMargin)
