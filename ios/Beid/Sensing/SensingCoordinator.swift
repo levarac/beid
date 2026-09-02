@@ -253,6 +253,12 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.submissionState(forEventCode: eventCode)
   }
 
+  /// Count-only windows durably marked as ineligible for canonical report
+  /// submission. A disabled runtime remains an honest unavailable value.
+  func excludedWindowCount(forEventCode eventCode: String) -> Int? {
+    reportSubmissionRuntime?.excludedWindowCount(forEventCode: eventCode)
+  }
+
   /// beid#143's Participation summary screen entry point. Forwards to the
   /// privately-owned `sessionAggregateSnapshotStore` that
   /// `persistSessionAggregateSnapshotIfNeeded()` writes at session end

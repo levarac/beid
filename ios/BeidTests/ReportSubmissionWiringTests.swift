@@ -47,14 +47,29 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
   }
 
   var submissionStateByEventCode: [String: ReportSubmissionState] = [:]
+  var excludedCountByEventCode: [String: Int] = [:]
 
   func submissionState(forEventCode eventCode: String) -> ReportSubmissionState? {
     submissionStateByEventCode[eventCode]
+  }
+
+  func excludedWindowCount(forEventCode eventCode: String) -> Int {
+    excludedCountByEventCode[eventCode, default: 0]
   }
 }
 
 @MainActor
 final class ReportSubmissionWiringTests: XCTestCase {
+  func testCoordinatorForwardsExclusionCountAndKeepsDisabledRuntimeUnavailable() {
+    let runtime = ReportSubmissionRuntimeSpy()
+    runtime.excludedCountByEventCode["EVENTA"] = 2
+    let enabled = makeIsolatedSensingCoordinator(for: self, reportSubmissionRuntime: runtime)
+    let disabled = makeIsolatedSensingCoordinator(for: self)
+
+    XCTAssertEqual(enabled.excludedWindowCount(forEventCode: "EVENTA"), 2)
+    XCTAssertNil(disabled.excludedWindowCount(forEventCode: "EVENTA"))
+  }
+
   func testWindowCloseCapturesLosslessInputsOnceAcrossForegroundAndBackgroundTriggers() {
     let runtime = ReportSubmissionRuntimeSpy()
     let coordinator = makeIsolatedSensingCoordinator(

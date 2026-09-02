@@ -156,6 +156,7 @@ struct ItemDetailView: View {
         // implies "joined."
         hasJoined: true,
         recordedOnDeviceCount: recordedOnDeviceCount,
+        excludedWindowCount: excludedWindowCount,
         submissionState: submissionState
       )
     } label: {
@@ -184,6 +185,13 @@ struct ItemDetailView: View {
   private var recordedOnDeviceCount: Int? {
     guard let eventCode = proof.eventCode else { return nil }
     return coordinator.sensingCoordinator.recordedWindowCount(forEventCode: eventCode)
+  }
+
+  /// `nil` for a legacy proof without an event code, or while report
+  /// submission is gated off; both are honest unavailable states.
+  private var excludedWindowCount: Int? {
+    guard let eventCode = proof.eventCode else { return nil }
+    return coordinator.sensingCoordinator.excludedWindowCount(forEventCode: eventCode)
   }
 
   /// `nil` when `proof.eventCode` is absent — same reason and same

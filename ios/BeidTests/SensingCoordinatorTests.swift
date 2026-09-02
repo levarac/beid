@@ -709,6 +709,8 @@ private final class DiscoveryIsolationReportRuntimeSpy: WindowReportSubmissionRu
   func submissionState(forEventCode eventCode: String) -> ReportSubmissionState? {
     nil
   }
+
+  func excludedWindowCount(forEventCode _: String) -> Int { 0 }
 }
 
 private extension Data {
