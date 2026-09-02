@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.levarac.barnard.BarnardIdentity
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
@@ -43,6 +44,24 @@ class BarnardSensingCryptographyTest {
         assertEquals(33, first.size)
         assertTrue(first.contentEquals(second))
         assertTrue(!first.contentEquals(other))
+    }
+
+    @Test
+    fun signWindowReportDelegatesToIdentitySignAndLosslesslyMapsTheResult() {
+        val bytes = sequentialBytes(0x50, 40)
+
+        val viaFacade = cryptography.signWindowReport("WINDOW-REPORT-EVENT", bytes)
+        val viaIdentityDirectly = BarnardIdentity(context).sign("WINDOW-REPORT-EVENT", bytes).toSensingSignature()
+
+        assertEquals(viaIdentityDirectly, viaFacade, "the facade must forward to the same BarnardIdentity.sign(eventCode, bytes) call, not a second signing path")
+    }
+
+    @Test
+    fun signWindowReportProducesASignatureDistinguishingItsBytes() {
+        val first = cryptography.signWindowReport("WINDOW-REPORT-EVENT", sequentialBytes(0x00, 8))
+        val second = cryptography.signWindowReport("WINDOW-REPORT-EVENT", sequentialBytes(0x01, 8))
+
+        assertTrue(!first.r.contentEquals(second.r) || !first.s.contentEquals(second.s), "different report bytes must sign differently")
     }
 
     @Test

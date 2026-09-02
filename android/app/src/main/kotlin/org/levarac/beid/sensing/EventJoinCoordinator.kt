@@ -114,6 +114,94 @@ class EventJoinCoordinator internal constructor(
     /** Fixed once per binding attempt and reused across the wallet signature and the later owner-key wallet-ack — see [beginBinding]. */
     private var pendingBindingMessage: BindingMessage? = null
 
+    /**
+     * Fired exactly once per session, the instant [scanPhase] first confirms
+     * into [ScanPhase.Recording] and this session's `Proof` identity
+     * ([activeProofId]) is created — mirrors iOS's `onProofCollected`
+     * (`ios/Beid/Sensing/SensingCoordinator.swift`). Carries the just-created
+     * [activeProofId], the recording session's `eventCode`, and the
+     * `peersVerified` count at the moment of confirmation.
+     *
+     * **Why this exact position (immediately after [activeProofId] is
+     * assigned in [onPhaseDecided], before any other side effect) matters:**
+     * Android has no counterpart to iOS's `SelfProofCheckpointStore` — PR
+     * #314 disclosed that a process kill before [leaveEvent]/[dispose]
+     * silently drops the self-proof for the whole session. Firing this at
+     * the earliest possible point lets a future consumer (this issue's own
+     * still-open ledger-writer fork decision) create its durable row for
+     * the session right away, degrading the worst-case loss from "the
+     * session disappears entirely" to "the session is recorded, only its
+     * self-proof is missing."
+     *
+     * **Threading, verified (not assumed):** always Android's main thread.
+     * This fires from [onPhaseDecided], called from [handleDetection],
+     * called from [handleBarnardEvent] — which is [engine]'s `onEvent`
+     * (Barnard's `BarnardEngine.onEvent`, `org.levarac.barnard` 0.5.0). No
+     * contract for this is documented anywhere in this repository or in
+     * barnard's shipped artifact; the answer below comes from disassembling
+     * the actual resolved `barnard-0.5.0.aar`'s `classes.jar` in this
+     * project's Gradle cache (`javap -p -c org.levarac.barnard.BarnardEngine`):
+     * `BarnardEngine` constructs `private val mainHandler =
+     * Handler(Looper.getMainLooper())` once in its constructor, and every one
+     * of its `emit*` methods (`emitState`, `emitConstraint`, `emitError`,
+     * `emitEventInfoHint`, `emitDetection`, `emitRssiUpdate` — the
+     * `BarnardEvent.Detection` case this hook cares about included) posts the
+     * actual `onEvent.invoke(...)` call through `mainHandler.post { ... }`
+     * before returning, regardless of which underlying thread triggered the
+     * emit (BLE/GATT callback threads are never the main thread). This is a
+     * different callback source than `RegistryClient`, whose completion
+     * callbacks run on `Dispatchers.Default` and needed the
+     * `coroutineScope.launch { }` wrapping fixed in `1c7db20` — do not assume
+     * the two share a dispatcher just because both are Barnard-adjacent.
+     */
+    var onProofCollected: ((proofId: UUID, eventCode: String, peersVerified: Int) -> Unit)? = null
+
+    /**
+     * Fired every time [scanPhase] stays [ScanPhase.Recording] across a
+     * detection but its `peersVerified` count changes — mirrors iOS's
+     * `onPeersVerifiedChanged`. Never fires on the detection that first
+     * confirms `Recording` ([onProofCollected] owns that transition), and
+     * never fires while [scanPhase] is anything other than `Recording`
+     * both before and after the detection (`EventFound`/`Sensing`/`Idle`/
+     * `SignalLost` transitions are excluded by construction — see
+     * [onPhaseDecided]).
+     *
+     * **Threading:** identical guarantee to [onProofCollected] — this also
+     * fires from [onPhaseDecided]/[handleDetection]/[handleBarnardEvent],
+     * i.e. always on Android's main thread per the verified `BarnardEngine`
+     * `mainHandler.post` contract documented on [onProofCollected]'s doc
+     * comment; see there for the evidence.
+     */
+    var onPeersVerifiedChanged: ((proofId: UUID, peersVerified: Int) -> Unit)? = null
+
+    /**
+     * Fired whenever this session's self-proof and/or binding on-device
+     * record changes existence — from [finalizeSelfProofIfNeeded] right
+     * after a self-proof is persisted, and from [completeBinding] right
+     * after a binding is persisted. Both booleans are recomputed from the
+     * stores this class already holds ([selfProofRecordStore]/
+     * [bindingRecordStore]), never from a second store instance over the
+     * same file — a second instance would silently miss the other
+     * instance's writes, since the underlying `JsonRecordFileStore` loads
+     * once at construction.
+     *
+     * **Threading, verified per call site (not assumed):**
+     * - [finalizeSelfProofIfNeeded]'s two call sites are ordinary method
+     *   calls, not Barnard callbacks: [leaveEvent] is invoked from
+     *   `AccountScreen.kt`'s "Leave Event" button
+     *   (`onClick = viewModel::leaveEvent`, a Compose click handler, which
+     *   Compose always dispatches on the main thread), and [dispose] is
+     *   invoked from `MainActivity.onDestroy()` (an Activity lifecycle
+     *   callback, also always the main thread). Both confirmed by reading
+     *   their actual callers, not inferred by analogy.
+     * - [completeBinding] has no production caller yet — #124 (wallet-connect
+     *   UI) has not landed, so this branch is reachable only from tests
+     *   today. Once #124 wires a caller, that caller's own thread must be
+     *   checked again before relying on this being main-thread there; do
+     *   not assume it inherits this guarantee without rechecking.
+     */
+    var onProofSignatureStateChanged: ((proofId: UUID, hasSelfProof: Boolean, hasBinding: Boolean) -> Unit)? = null
+
     init {
         engine.onEvent = ::handleBarnardEvent
     }
@@ -210,8 +298,14 @@ class EventJoinCoordinator internal constructor(
      */
     private fun onPhaseDecided(previousPhase: ScanPhase) {
         val recording = scanPhase as? ScanPhase.Recording ?: return
-        if (previousPhase is ScanPhase.Recording) return
+        if (previousPhase is ScanPhase.Recording) {
+            if (previousPhase.peersVerified != recording.peersVerified) {
+                activeProofId?.let { onPeersVerifiedChanged?.invoke(it, recording.peersVerified) }
+            }
+            return
+        }
         activeProofId = UUID.randomUUID()
+        onProofCollected?.invoke(activeProofId!!, recording.session.eventCode, recording.peersVerified)
         bindingState = EventBindingState.PendingConnect(recording.session)
     }
 
@@ -317,6 +411,7 @@ class EventJoinCoordinator internal constructor(
             signature = signature,
         )
         selfProofRecordStore.add(record)
+        onProofSignatureStateChanged?.invoke(proofId, true, bindingRecordStore.recordForProofId(proofId) != null)
         return record
     }
 
@@ -396,6 +491,7 @@ class EventJoinCoordinator internal constructor(
             deviceSignature = ackSignature,
         )
         bindingRecordStore.add(record)
+        onProofSignatureStateChanged?.invoke(proofId, selfProofRecordStore.recordForProofId(proofId) != null, true)
         bindingState = EventBindingState.Bound(record)
         pendingBindingMessage = null
         return record

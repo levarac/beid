@@ -22,13 +22,20 @@ internal fun BarnardRecoverableSignature.toSensingSignature(): SensingRecoverabl
 
 /**
  * Pure indirection over the cryptographic operations used by owner-key
- * binding/self-proof. Callers retain every lifecycle, payload, validation,
- * and persistence decision; implementations only forward one operation and
- * map its result. Mirrors iOS's `SensingCryptography` protocol
+ * binding/self-proof and per-event report signing. Callers retain every
+ * lifecycle, payload, validation, and persistence decision; implementations
+ * only forward one operation and map its result. Mirrors iOS's
+ * `SensingCryptography` protocol
  * (`ios/Beid/Sensing/SensingCryptography.swift`) at the subset this slice
- * needs — the per-event report-signing method (`signWindowReport`) is
- * unrelated to owner-key/binding/self-proof and out of this task's scope
- * (deferred with the rest of report-ledger wiring, beid#121).
+ * needs.
+ *
+ * [signWindowReport] is the signing primitive that per-event report/
+ * observation signing needs; it is added now so it is usable by whichever
+ * future slice
+ * builds the ledger writer, per gh#235's still-open fork decision on what
+ * artifact backs the ledger's `persistedObservationReference` (not settled
+ * here, and not named here since no fork has been chosen). Building the
+ * ledger writer itself remains out of scope for this change.
  *
  * [buildAccountBindingText] has no iOS counterpart on this protocol: iOS
  * calls `BarnardCoreSigning.buildAccountBindingText` as a static function
@@ -42,6 +49,15 @@ interface SensingCryptography {
     fun eventSigningPublicKey(eventCode: String): ByteArray
 
     fun ownerPublicKey(): ByteArray
+
+    /**
+     * Signs the exact bytes of one already-assembled per-event report
+     * (e.g. a window report/observation payload) under the event's signing
+     * key. Non-nullable, mirroring iOS's `signWindowReport` — the one
+     * signing method on that protocol that returns non-optional, unlike
+     * [signSelfProof]/[signWalletAcknowledgement].
+     */
+    fun signWindowReport(eventCode: String, bytes: ByteArray): SensingRecoverableSignature
 
     fun signSelfProof(
         eventIdHash: ByteArray,
@@ -85,6 +101,9 @@ class BarnardSensingCryptography(context: Context) : SensingCryptography {
         identity.signingPublicKey(eventCode).hexToByteArray()
 
     override fun ownerPublicKey(): ByteArray = ownerKeyProvider.publicKeyCompressed()
+
+    override fun signWindowReport(eventCode: String, bytes: ByteArray): SensingRecoverableSignature =
+        identity.sign(eventCode, bytes).toSensingSignature()
 
     override fun signSelfProof(
         eventIdHash: ByteArray,

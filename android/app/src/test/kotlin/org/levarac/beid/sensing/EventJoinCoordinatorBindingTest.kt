@@ -1,9 +1,11 @@
 package org.levarac.beid.sensing
 
+import java.util.UUID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
+import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -107,6 +109,56 @@ class EventJoinCoordinatorBindingTest {
         assertEquals(walletAddress, record.walletAddress)
         assertEquals(listOf(record), store.records)
         assertEquals(EventBindingState.Bound(record), coordinator.bindingState)
+    }
+
+    @Test
+    fun completeBindingFiresOnProofSignatureStateChangedWithNoPriorSelfProof() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
+        coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
+        coordinator.joinEvent("BIND-EVENT")
+        confirmRecording(engine)
+        coordinator.beginBinding(walletAddress, chainId = 1)
+
+        coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))
+
+        val (_, hasSelfProof, hasBinding) = calls.single()
+        assertTrue(!hasSelfProof, "self-proof is only persisted at session end — none exists yet")
+        assertTrue(hasBinding, "the binding this call just persisted")
+    }
+
+    @Test
+    fun completeBindingFiresOnProofSignatureStateChangedWithSelfProofAlreadyPresent() = runTest {
+        val engine = FakeEventJoinEngine()
+        val selfProofStore = SelfProofRecordStore(newTempRecordFile("self-proofs"))
+        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = selfProofStore)
+        val proofIds = mutableListOf<UUID>()
+        coordinator.onProofCollected = { proofId, _, _ -> proofIds += proofId }
+        coordinator.joinEvent("BIND-EVENT")
+        confirmRecording(engine)
+        val proofId = proofIds.single()
+        selfProofStore.add(
+            SelfProofRecord(
+                proofId = proofId,
+                eventCode = "BIND-EVENT",
+                eventIdHash = EventIdHash.compute("BIND-EVENT"),
+                eventSigningPublicKey = sequentialBytes(0x02, 33),
+                eninStart = 1,
+                eninEnd = 3,
+                ownerPublicKey = sequentialBytes(0x03, 33),
+                signature = SensingRecoverableSignature(r = sequentialBytes(0x10, 32), s = sequentialBytes(0x20, 32), v = 0),
+            ),
+        )
+        val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
+        coordinator.onProofSignatureStateChanged = { id, hasSelfProof, hasBinding -> calls += Triple(id, hasSelfProof, hasBinding) }
+        coordinator.beginBinding(walletAddress, chainId = 1)
+
+        coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))
+
+        val (_, hasSelfProof, hasBinding) = calls.single()
+        assertTrue(hasSelfProof, "a self-proof for this Proof was already persisted before completeBinding ran")
+        assertTrue(hasBinding)
     }
 
     @Test
