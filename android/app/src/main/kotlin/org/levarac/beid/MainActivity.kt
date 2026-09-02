@@ -34,11 +34,7 @@ class MainActivity : ComponentActivity() {
         // EventJoinCoordinator owns, unlike SelfProofRecordStore/BindingRecordStore.
         val proofRecordStore = ProofRecordStore(ProofRecordStore.defaultFile(filesDir))
         val proofRecordingBridge = ProofRecordingBridge(proofRecordStore)
-        // TODO(#235): once EventJoinCoordinator exposes onProofCollected/
-        // onPeersVerifiedChanged/onProofSignatureStateChanged, wire them here:
-        // eventJoinCoordinator.onProofCollected = proofRecordingBridge::onProofCollected
-        // eventJoinCoordinator.onPeersVerifiedChanged = proofRecordingBridge::onPeersVerifiedChanged
-        // eventJoinCoordinator.onProofSignatureStateChanged = proofRecordingBridge::onProofSignatureStateChanged
+        wireProofRecording(eventJoinCoordinator, proofRecordingBridge)
 
         setContent {
             BeidAppTheme {
@@ -65,4 +61,32 @@ class MainActivity : ComponentActivity() {
         eventJoinCoordinator.dispose()
         super.onDestroy()
     }
+}
+
+/**
+ * Connects [EventJoinCoordinator]'s three proof-recording callback
+ * properties (gh#235, `EventJoinCoordinator.kt`, landed in PR #321) to
+ * [bridge] — the wiring beid#121 was blocked on until #235 landed. A
+ * top-level function rather than inline in [MainActivity.onCreate] so it
+ * has a seam testable independent of `Activity`/Robolectric construction:
+ * [EventJoinCoordinator]'s `Activity`-based constructor pulls in a live
+ * `BarnardEventJoinEngine`, Keystore-backed `BarnardSensingCryptography`,
+ * and Bluetooth permission plumbing that this repository's existing tests
+ * never construct through Robolectric (they use
+ * [EventJoinCoordinator]'s `internal` test constructor with fakes
+ * instead — see `EventJoinCoordinatorSelfProofTest`/
+ * `EventJoinCoordinatorBindingTest` for the established pattern). This
+ * function is that same testable seam: it takes an already-constructed
+ * [EventJoinCoordinator] (real or fake-backed) and only asserts the
+ * three-property assignment itself — see `MainActivityWiringTest` for the
+ * coverage this seam provides and what it deliberately does not cover
+ * (namely, `MainActivity.onCreate()`'s own construction of the real
+ * `Activity`-backed [EventJoinCoordinator]/[ProofRecordStore]/[bridge]
+ * instances, which stays unverified by a unit test in this repository's
+ * current Robolectric setup).
+ */
+internal fun wireProofRecording(coordinator: EventJoinCoordinator, bridge: ProofRecordingBridge) {
+    coordinator.onProofCollected = bridge::onProofCollected
+    coordinator.onPeersVerifiedChanged = bridge::onPeersVerifiedChanged
+    coordinator.onProofSignatureStateChanged = bridge::onProofSignatureStateChanged
 }
