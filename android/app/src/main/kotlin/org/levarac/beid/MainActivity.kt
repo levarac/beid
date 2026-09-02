@@ -4,8 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import org.levarac.beid.navigation.AppNavHost
+import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.registry.RegistryDependencies
 import org.levarac.beid.sensing.EventJoinCoordinator
+import org.levarac.beid.sensing.ProofRecordingBridge
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.parallax.registry.RegistryClient
 
@@ -27,9 +29,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         registryClient = RegistryDependencies.createClient()
         eventJoinCoordinator = EventJoinCoordinator(this)
+
+        // Sibling store MainActivity owns directly (beid#121) — not something
+        // EventJoinCoordinator owns, unlike SelfProofRecordStore/BindingRecordStore.
+        val proofRecordStore = ProofRecordStore(ProofRecordStore.defaultFile(filesDir))
+        val proofRecordingBridge = ProofRecordingBridge(proofRecordStore)
+        // TODO(#235): once EventJoinCoordinator exposes onProofCollected/
+        // onPeersVerifiedChanged/onProofSignatureStateChanged, wire them here:
+        // eventJoinCoordinator.onProofCollected = proofRecordingBridge::onProofCollected
+        // eventJoinCoordinator.onPeersVerifiedChanged = proofRecordingBridge::onPeersVerifiedChanged
+        // eventJoinCoordinator.onProofSignatureStateChanged = proofRecordingBridge::onProofSignatureStateChanged
+
         setContent {
             BeidAppTheme {
-                AppNavHost(eventJoinCoordinator)
+                AppNavHost(eventJoinCoordinator, proofRecordStore)
             }
         }
     }

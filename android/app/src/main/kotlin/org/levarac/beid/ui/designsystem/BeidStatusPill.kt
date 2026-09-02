@@ -36,7 +36,20 @@ import org.levarac.beid.ui.theme.BeidTheme
  * accessibility element.
  */
 object BeidStatusPill {
-    enum class Tone { Active, Paused }
+    /**
+     * [Neutral]/[Sealed] added for [org.levarac.beid.ui.screens.RecordsScreen]'s
+     * three-state signature-status pill (beid#121: not-yet-signed / self-proof
+     * recorded / bound). [Neutral] reuses the existing "off/absent" semantic
+     * ([org.levarac.beid.ui.theme.BeidColorScheme.statusOff]) rather than
+     * [Paused]'s warning accent — an unsigned proof isn't a problem state, just
+     * an absent one. [Sealed] reuses [org.levarac.beid.ui.theme.BeidColorScheme.proofSeal],
+     * the same token iOS already uses for "fully verified/sealed" (see
+     * `EventIdentityVerificationRow.swift`'s `usesProofSeal`), so "bound" reads
+     * as the strongest of the three states on both platforms. [Active] doubles
+     * as "self-proof recorded" (a positive, in-progress state) — no separate
+     * case needed there.
+     */
+    enum class Tone { Active, Paused, Neutral, Sealed }
 
     @Composable
     operator fun invoke(
@@ -47,6 +60,8 @@ object BeidStatusPill {
         val dotColor = when (tone) {
             Tone.Active -> BeidTheme.colors.signalActive
             Tone.Paused -> BeidTheme.colors.signalWarning
+            Tone.Neutral -> BeidTheme.colors.statusOff
+            Tone.Sealed -> BeidTheme.colors.proofSeal
         }
 
         Row(

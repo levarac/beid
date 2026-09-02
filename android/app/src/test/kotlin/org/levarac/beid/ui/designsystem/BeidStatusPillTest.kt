@@ -52,4 +52,34 @@ class BeidStatusPillTest {
 
         composeTestRule.onNodeWithText("Sensing paused").assertIsDisplayed()
     }
+
+    @Test
+    fun neutralToneRendersItsCallerSuppliedLabel() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                BeidStatusPill(
+                    label = "Not yet signed",
+                    tone = BeidStatusPill.Tone.Neutral,
+                    modifier = Modifier.testTag("status_pill"),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Not yet signed").assertIsDisplayed()
+    }
+
+    @Test
+    fun sealedToneRendersItsCallerSuppliedLabel() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                BeidStatusPill(
+                    label = "Bound",
+                    tone = BeidStatusPill.Tone.Sealed,
+                    modifier = Modifier.testTag("status_pill"),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Bound").assertIsDisplayed()
+    }
 }

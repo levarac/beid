@@ -39,6 +39,7 @@ import org.levarac.beid.ui.theme.BeidTheme
 object AccountScreenTestTags {
     const val BLUETOOTH_STATUS_TEXT = "account_bluetooth_status_text"
     const val LEAVE_EVENT_BUTTON = "account_leave_event_button"
+    const val RECORDS_BUTTON = "account_records_button"
 }
 
 /**
@@ -52,7 +53,7 @@ object AccountScreenTestTags {
  * tests can render directly against a fake session.
  */
 @Composable
-fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean) {
+fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRecords: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     val isSessionActive = uiState.sessionState is EventJoinUiState.Sensing
 
@@ -106,6 +107,17 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean) {
                 }
             }
 
+            // Mirrors iOS AccountSheetView's "Past Events" row placement/precedent (beid#121)
+            // — the records list is reached from here, not promoted to replace EventJoin as
+            // home. See RecordsScreen.kt's kdoc for the full placement reasoning.
+            BeidSecondaryButton(
+                text = stringResource(R.string.account_records_button),
+                contentColor = BeidTheme.colors.textPrimary,
+                borderColor = BeidTheme.colors.strokeHairline,
+                onClick = onOpenRecords,
+                modifier = Modifier.testTag(AccountScreenTestTags.RECORDS_BUTTON),
+            )
+
             // No motif accent (DESIGN.md §5: account is outside sensing/ceremony/recovery
             // moments) and no destructive-colored tint (no ratified DS.Color for that,
             // see the PR report) — same neutral secondary-button treatment EventJoinScreen
@@ -131,10 +143,10 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean) {
  * state in this codebase.
  */
 @Composable
-fun AccountRoute(session: EventJoinSession) {
+fun AccountRoute(session: EventJoinSession, onOpenRecords: () -> Unit) {
     val context = LocalContext.current
     val bluetoothMonitor = remember { BluetoothRadioMonitor(context) }
     val isBluetoothOn = remember { bluetoothMonitor.isOn }
     val viewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(session))
-    AccountScreen(viewModel = viewModel, isBluetoothOn = isBluetoothOn)
+    AccountScreen(viewModel = viewModel, isBluetoothOn = isBluetoothOn, onOpenRecords = onOpenRecords)
 }

@@ -64,4 +64,17 @@
     <string name="account_bluetooth_status_off">Off</string>
     <!-- Destructive-named (not destructive-colored) action: leaves the currently joined event. -->
     <string name="account_leave_event_button">Leave Event</string>
+    <!-- Nav row on the Account screen (mirrors iOS's AccountSheetView "Past Events" row) that opens the Records screen. -->
+    <string name="account_records_button">Records</string>
+
+    <!-- Records screen (beid#121): flat, reverse-chronological list of collected proofs, reached from Account. Reduced scope — no event grouping, no tap-to-detail; see RecordsScreen.kt's kdoc. -->
+    <string name="records_title">Records</string>
+    <!-- Empty state, shown when this device has never recorded a proof. -->
+    <string name="records_empty_message">Proofs you collect will appear here.</string>
+    <!-- Signature status pill — no self-proof or binding evidence recorded yet for this proof. -->
+    <string name="records_signature_status_not_signed">Not yet signed</string>
+    <!-- Signature status pill — an owner-key self-proof has been recorded, but no wallet binding yet. -->
+    <string name="records_signature_status_self_proof">Self-proof recorded</string>
+    <!-- Signature status pill — a wallet binding has been recorded for this proof, the strongest of the three states. -->
+    <string name="records_signature_status_bound">Bound</string>
 </resources>

@@ -69,6 +69,23 @@ internal class JsonRecordFileStore<T>(
 
     fun recordMatching(predicate: (T) -> Boolean): T? = records.firstOrNull(predicate)
 
+    /**
+     * Replaces the first record matching [predicate] with [transform]'s
+     * result and persists it. No-op (returns `false`) if no record matches,
+     * or if [isPersistenceSuspended] — saving would overwrite bytes this
+     * instance never actually captured.
+     */
+    fun updateRecord(predicate: (T) -> Boolean, transform: (T) -> T): Boolean {
+        synchronized(lock) {
+            if (isPersistenceSuspended) return false
+            val index = records.indexOfFirst(predicate)
+            if (index == -1) return false
+            records = records.toMutableList().also { it[index] = transform(it[index]) }
+            save()
+            return true
+        }
+    }
+
     private fun load() {
         if (!file.exists()) return
         val root = try {
