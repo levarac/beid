@@ -28,8 +28,8 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
   @Published private(set) var state: WalletConnectorState = .idle
 
   var address: String? {
-    guard case .connected(let address) = state else { return nil }
-    return address
+    guard case .connected(let live) = state else { return nil }
+    return live.address
   }
 
   var chainId: String { "eip155:1" }
@@ -41,7 +41,7 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
   func connect() async {
     state = .connecting
     try? await Task.sleep(nanoseconds: 400_000_000)
-    state = .connected(address: Self.demoAddress)
+    state = .connected(LiveWalletAddress.fromConnectorResult(address: Self.demoAddress, chainId: chainId))
   }
 
   func requestPersonalSign(
@@ -53,6 +53,26 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
     onDispatched?()
     try? await Task.sleep(nanoseconds: 400_000_000)
     return .success("0x" + String(repeating: "d", count: 130))
+  }
+
+  /// DEBUG-only parity with `MetaMaskConnector.connectAndSign` (dispatch#26
+  /// condition 2) — no `.restored` cache-hint round trip exists for this
+  /// connector (it is never wired to `WalletHintStore`, see the type doc
+  /// comment above), so this exists only so `EventBindingSheetView`'s demo
+  /// escape hatch keeps compiling against the shared `WalletConnector`
+  /// protocol, not because the demo path exercises the restored-hint UI.
+  func connectAndSign(
+    messageHex: String,
+    responseTimeout: TimeInterval = 90,
+    onDispatched: (() -> Void)? = nil
+  ) async -> Result<(LiveWalletAddress, String), WalletConnectorError> {
+    state = .connecting
+    try? await Task.sleep(nanoseconds: 400_000_000)
+    let live = LiveWalletAddress.fromConnectorResult(address: Self.demoAddress, chainId: chainId)
+    state = .connected(live)
+    onDispatched?()
+    try? await Task.sleep(nanoseconds: 400_000_000)
+    return .success((live, "0x" + String(repeating: "d", count: 130)))
   }
 
   func disconnect() {

@@ -20,6 +20,16 @@ struct EventBindingSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensing: SensingCoordinator
   @Environment(\.dismiss) private var dismiss
+  /// Observed directly (not just via `coordinator.walletConnector`, which is
+  /// only set once a connection is recorded this run) so the restored-hint
+  /// fast path below can react to `.restored` immediately on appearance —
+  /// dispatch#26 condition 1. Only the production MetaMask path offers this
+  /// fast path; `DemoWalletConnector`'s escape hatch below is unaffected.
+  @ObservedObject private var metaMaskConnector = MetaMaskConnector.shared
+  /// View-local only, mirrors `WalletConnectPairingView`'s own flag — lets
+  /// the user bypass the restored-hint suggestion for a fresh connect
+  /// without touching `WalletHintStore` (dispatch#26 condition 3).
+  @State private var bypassRestoredHint = false
 
   var body: some View {
     NavigationStack {
@@ -114,11 +124,17 @@ struct EventBindingSheetView: View {
       ProgressView()
         .tint(DS.Color.actionPrimary)
         .padding(.top, DS.Space.s)
-    } else if let address = coordinator.walletAddress, let connector = coordinator.walletConnector {
+    } else if let address = coordinator.liveWalletAddress, let connector = coordinator.walletConnector {
+      // Already connected this run (onboarding, Account sheet, or an
+      // earlier binding attempt) — `liveWalletAddress` only ever holds a
+      // value that came from a connector's own live session, never a
+      // `CachedWalletHint` (beid#315 structural containment).
       BeidPrimaryButton("Seal with connected wallet", systemImage: "checkmark.seal") {
         Task { await performBinding(address: address, connector: connector) }
       }
       .tint(DS.Color.actionPrimary)
+    } else if !bypassRestoredHint, case .restored(let hint) = metaMaskConnector.state {
+      restoredHintContent(hint: hint)
     } else {
       WalletConnectPairingView { address, connector in
         coordinator.recordWalletConnection(address: address, connector: connector)
@@ -132,6 +148,32 @@ struct EventBindingSheetView: View {
         .tint(DS.Color.actionPrimary)
       }
       #endif
+    }
+  }
+
+  /// dispatch#26 condition 1 (address visible immediately) + condition 2
+  /// (collapse connect+sign into one MetaMask round trip when a restored
+  /// hint exists) — see `MetaMaskConnector.connectAndSign`'s doc comment
+  /// for why the address actually recorded may differ from `hint`.
+  private func restoredHintContent(hint: CachedWalletHint) -> some View {
+    VStack(spacing: DS.Space.s) {
+      Text(LocalizedStringKey(restoredHintSubtitle(hint: hint)))
+        .font(DS.Font.meta)
+        .foregroundStyle(DS.Color.textSecondary)
+        .multilineTextAlignment(.center)
+
+      BeidPrimaryButton(
+        LocalizedStringKey(continueAsButtonTitle(hint: hint)),
+        systemImage: "checkmark.seal"
+      ) {
+        Task { await continueFromRestoredHint(hint) }
+      }
+      .tint(DS.Color.actionPrimary)
+
+      BeidSecondaryButton(title: LocalizedStringKey(connectDifferentWalletTitle)) {
+        bypassRestoredHint = true
+      }
+      .tint(DS.Color.actionPrimary)
     }
   }
 
@@ -173,42 +215,100 @@ struct EventBindingSheetView: View {
 
   // MARK: - Binding round trip
   //
-  // Two wallet-side approvals (connect, then sign) over the existing
-  // `WalletConnector` protocol — the pinned Coinbase Wallet Mobile SDK
-  // can't bundle `personal_sign` into `initiateHandshake(initialActions:)`
-  // without already knowing the address it would sign for, so a uniform
-  // 2-step round trip (rather than a per-provider special case) is what's
-  // actually available through the shared connector surface
-  // `WalletConnectPairingView` already reuses.
+  // Two paths, both over the shared `WalletConnector` protocol:
+  //
+  // - `performBinding` below: two wallet-side approvals (connect, then
+  //   sign). Used whenever there is no already-known address to build the
+  //   binding message from ahead of time — a fresh `WalletConnectPairingView`
+  //   connect, or the DEBUG demo escape hatch.
+  // - `continueFromRestoredHint`: one wallet-side approval
+  //   (`connectAndSign`), used only when a `.restored` cache hint already
+  //   supplies a guessed address to build the message with (dispatch#26
+  //   condition 2). `address` passed to `sensing.completeBinding` below is
+  //   always taken from the connector's own live result, never from
+  //   `hint`/`coordinator.walletAddress` — see `LiveWalletAddress`'s doc
+  //   comment in `WalletConnector.swift`.
 
   @MainActor
-  private func performBinding(address: String, connector: any WalletConnector) async {
-    guard let messageHex = sensing.beginBinding(walletAddress: address, chainId: connector.chainId) else { return }
+  private func performBinding(address: LiveWalletAddress, connector: any WalletConnector) async {
+    guard let messageHex = sensing.beginBinding(walletAddress: address.address, chainId: address.chainId) else {
+      return
+    }
     let result = await connector.requestPersonalSign(messageHex: messageHex) {
       sensing.markBindingAwaitingApproval()
     }
     switch result {
     case .success(let signatureHex):
-      sensing.completeBinding(walletAddress: address, walletSignatureHex: signatureHex)
-    case .failure(.rejected):
+      sensing.completeBinding(walletAddress: address.address, walletSignatureHex: signatureHex)
+    case .failure(let error):
+      failBinding(for: error)
+    }
+  }
+
+  /// dispatch#26 condition 2's collapse: builds the binding message from
+  /// the cache hint's guessed address (there is no other address to build
+  /// it from before the wallet round trip starts), then dispatches a single
+  /// `connectAndSign` trip. The signed message text unavoidably embeds
+  /// `hint.address` (the message must exist before the wallet round trip
+  /// can start) — so once the wallet reports back which account actually
+  /// connected (`live`), the two addresses are compared case-insensitively
+  /// (EIP-55 checksum casing can differ between sources without being a
+  /// real account change):
+  /// - **Match**: `live` signed exactly what was sent; complete as normal.
+  /// - **Mismatch** (beid#315 Phase 3): the user switched accounts inside
+  ///   the wallet between caching the hint and approving. The signature
+  ///   just obtained cannot back a record claiming `live.address` — its
+  ///   signed text embeds `hint.address`, not `live.address` — so it must
+  ///   not be persisted. The stale pending message (still embedding
+  ///   `hint.address`) is discarded and `performBinding` runs the
+  ///   two-trip path fresh for `live`, costing one extra wallet approval
+  ///   (a `personal_sign`, not a second `connect` — the connector is
+  ///   already connected). This still doesn't cryptographically confirm
+  ///   the claimed address matches the signature on the match path; that
+  ///   remains #316's job (explicitly out of scope here).
+  @MainActor
+  private func continueFromRestoredHint(_ hint: CachedWalletHint) async {
+    guard let messageHex = sensing.beginBinding(walletAddress: hint.address, chainId: hint.chainId) else {
+      return
+    }
+    let result = await metaMaskConnector.connectAndSign(messageHex: messageHex) {
+      sensing.markBindingAwaitingApproval()
+    }
+    switch result {
+    case .success(let (live, signatureHex)):
+      coordinator.recordWalletConnection(address: live, connector: metaMaskConnector)
+      if live.address.caseInsensitiveCompare(hint.address) == .orderedSame {
+        sensing.completeBinding(walletAddress: live.address, walletSignatureHex: signatureHex)
+      } else {
+        sensing.discardPendingBindingMessage()
+        await performBinding(address: live, connector: metaMaskConnector)
+      }
+    case .failure(let error):
+      failBinding(for: error)
+    }
+  }
+
+  private func failBinding(for error: WalletConnectorError) {
+    switch error {
+    case .rejected:
       sensing.failBinding(reason: String(
         localized: "scan.binding.declined",
         defaultValue: "Declined in wallet",
         comment: "Reason shown when the user's wallet app declines the binding signature request."
       ))
-    case .failure(.notConnected):
+    case .notConnected:
       sensing.failBinding(reason: String(
         localized: "scan.binding.notConnected",
         defaultValue: "Wallet not connected",
         comment: "Reason shown when the binding signature request has no connected wallet session to use."
       ))
-    case .failure(.timedOut):
+    case .timedOut:
       sensing.failBinding(reason: String(
         localized: "scan.binding.timedOut",
         defaultValue: "Wallet did not respond in time",
         comment: "Reason shown when the wallet app never responds to the binding signature request within the timeout."
       ))
-    case .failure(.relayFailure(let message)):
+    case .relayFailure(let message):
       sensing.failBinding(reason: message)
     }
   }
@@ -244,6 +344,33 @@ struct EventBindingSheetView: View {
     )
   }
 
+  /// Shared with `WalletConnectPairingView.restoredContent` — same meaning
+  /// (a cached address is a reference only, per dispatch#26 condition 4),
+  /// same key, reused rather than duplicated per AGENTS.md's key-reuse rule.
+  private func restoredHintSubtitle(hint: CachedWalletHint) -> String {
+    String(
+      localized: "wallet.restored.subtitle",
+      defaultValue: "\(hint.truncatedAddress) was used last time — shown for reference. Approve in your wallet to continue.",
+      comment: "Subtitle shown under the restored-wallet heading when a cached wallet address exists from a previous launch. %@ is the truncated wallet address, e.g. '0x1234...5678'. This address is a reference only, not a verified signer, until the user approves again in their wallet (dispatch#26 condition 4)."
+    )
+  }
+
+  private func continueAsButtonTitle(hint: CachedWalletHint) -> String {
+    String(
+      localized: "wallet.restored.continueButton",
+      defaultValue: "Continue as \(hint.truncatedAddress)",
+      comment: "Primary button that resumes a previously connected wallet without picking it again. %@ is the truncated wallet address, e.g. '0x1234...5678'."
+    )
+  }
+
+  private var connectDifferentWalletTitle: String {
+    String(
+      localized: "wallet.restored.connectDifferent",
+      defaultValue: "Connect a different wallet",
+      comment: "Secondary button next to a restored-wallet suggestion, for a user who wants to pick a different wallet instead of continuing with the one shown."
+    )
+  }
+
   private func sealedSubtitle(event: EventSession) -> String {
     String(
       localized: "scan.binding.sealedSubtitle",
@@ -272,7 +399,13 @@ struct EventBindingSheetView: View {
 
 #Preview("Already connected") {
   let coordinator = AppCoordinator()
-  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  coordinator.recordWalletConnection(
+    address: LiveWalletAddress.fromConnectorResult(
+      address: "0x1234567890abcdef1234567890abcdef12345678",
+      chainId: "eip155:1"
+    ),
+    connector: DemoWalletConnector.shared
+  )
   coordinator.sensingCoordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
   return EventBindingSheetView(sensing: coordinator.sensingCoordinator)
     .environmentObject(coordinator)
@@ -281,7 +414,13 @@ struct EventBindingSheetView: View {
 
 #Preview("Already connected (Dark)") {
   let coordinator = AppCoordinator()
-  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+  coordinator.recordWalletConnection(
+    address: LiveWalletAddress.fromConnectorResult(
+      address: "0x1234567890abcdef1234567890abcdef12345678",
+      chainId: "eip155:1"
+    ),
+    connector: DemoWalletConnector.shared
+  )
   coordinator.sensingCoordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
   return EventBindingSheetView(sensing: coordinator.sensingCoordinator)
     .environmentObject(coordinator)

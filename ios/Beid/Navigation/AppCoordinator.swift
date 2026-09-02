@@ -11,6 +11,14 @@ import Foundation
 final class AppCoordinator: ObservableObject {
   @Published var screen: AppScreen = .welcome
   @Published var walletAddress: String?
+  /// The address from this process's live connector session, if any — the
+  /// only wallet-address value `EventBindingSheetView.performBinding` is
+  /// allowed to read for its "already connected" fast path (beid#315
+  /// structural containment; see `LiveWalletAddress`'s doc comment in
+  /// `WalletConnector.swift`). `walletAddress` above stays a plain,
+  /// freely-settable `String?` for display only (previews/tests already
+  /// assign it directly) and is never read on that path.
+  @Published private(set) var liveWalletAddress: LiveWalletAddress?
   @Published var scanPresented = false
   @Published var selectedProof: Proof?
   @Published var accountSheetPresented = false
@@ -124,16 +132,24 @@ final class AppCoordinator: ObservableObject {
 
   /// `address` is supplied by `WalletConnectPairingView` (MetaMask) once a
   /// session settles.
-  func completeWalletConnect(address: String, connector: (any WalletConnector)? = nil) {
+  func completeWalletConnect(address: LiveWalletAddress, connector: (any WalletConnector)? = nil) {
     recordWalletConnection(address: address, connector: connector)
     screen = .bluetoothPermission
   }
 
-  func recordWalletConnection(address: String, connector: (any WalletConnector)? = nil) {
+  /// Takes `LiveWalletAddress`, not a plain `String` — every production
+  /// caller already has one, straight from a connector's own successful
+  /// `connect()`/`connectAndSign()` (see `WalletConnectPairingView.onConnected`
+  /// and `EventBindingSheetView`'s restored-hint fast path). This is part of
+  /// beid#315's structural containment: a bare `String` (e.g. read from a
+  /// `CachedWalletHint`) cannot be passed here without first being wrapped in
+  /// a visible `LiveWalletAddress(...)` construction.
+  func recordWalletConnection(address: LiveWalletAddress, connector: (any WalletConnector)? = nil) {
     if let connector {
       walletConnector = connector
     }
-    walletAddress = address
+    liveWalletAddress = address
+    walletAddress = address.address
   }
 
   /// Wallet-optional fallback from `WalletConnectView`'s secondary action:
@@ -400,10 +416,19 @@ final class AppCoordinator: ObservableObject {
   /// the "Connect Wallet" button again instead of a stale `.connected`
   /// screen. Does not tear down the underlying wallet session with the
   /// wallet (session teardown is out of scope for this slice).
+  ///
+  /// This is the one production call site that clears the persisted
+  /// `CachedWalletHint` (beid#315 / dispatch#26 condition 3) — the
+  /// explicit "Disconnect Wallet" action in `AccountSheetView`. Cancel, Try
+  /// Again, Start Over, and sheet dismissal all route through
+  /// `WalletConnector.disconnect()` or `SensingCoordinator.declineBinding()`
+  /// instead, neither of which touches `WalletHintStore`.
   func disconnectWallet() {
     walletAddress = nil
+    liveWalletAddress = nil
     (walletConnector ?? MetaMaskConnector.shared).disconnect()
     walletConnector = nil
+    WalletHintStore().clear()
   }
 
   // MARK: - Scan flow
