@@ -7,12 +7,15 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.levarac.beid.onboarding.OnboardingPreferences
+import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.screens.AccountScreenTestTags
@@ -20,6 +23,7 @@ import org.levarac.beid.ui.screens.BluetoothOffScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothPermissionScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
+import org.levarac.beid.ui.screens.RecordsScreenTestTags
 import org.levarac.beid.ui.screens.WelcomeScreenTestTags
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
@@ -41,8 +45,12 @@ class AppNavHostTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     private val context: Context get() = ApplicationProvider.getApplicationContext()
     private val shadowAdapter: ShadowBluetoothAdapter get() = shadowOf(BluetoothAdapter.getDefaultAdapter())
+    private fun proofRecordStore() = ProofRecordStore(File(tempFolder.root, "proof-records-v1.json"))
 
     @Test
     fun firstRunWalksWelcomeThroughBluetoothPermissionToBluetoothOffThenToHomeOnceRadioIsEnabled() {
@@ -50,7 +58,7 @@ class AppNavHostTest {
         val session = FakeEventJoinSession()
 
         composeTestRule.setContent {
-            BeidAppTheme { AppNavHost(session) }
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
         }
 
         // 1. Welcome -> tap Get Started -> BluetoothPermission screen shown.
@@ -82,7 +90,7 @@ class AppNavHostTest {
         val session = FakeEventJoinSession()
 
         composeTestRule.setContent {
-            BeidAppTheme { AppNavHost(session) }
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
         }
 
         composeTestRule.onNodeWithTag(BluetoothOffScreenTestTags.OPEN_SETTINGS_BUTTON).assertIsDisplayed()
@@ -96,7 +104,7 @@ class AppNavHostTest {
         val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing))
 
         composeTestRule.setContent {
-            BeidAppTheme { AppNavHost(session) }
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
         }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).assertIsDisplayed()
@@ -106,5 +114,21 @@ class AppNavHostTest {
         composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performClick()
 
         assertEquals(1, session.leaveEventCallCount)
+    }
+
+    @Test
+    fun openingRecordsFromAccountShowsTheEmptyRecordsState() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession()
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performClick()
+
+        composeTestRule.onNodeWithTag(RecordsScreenTestTags.EMPTY_STATE).assertIsDisplayed()
     }
 }

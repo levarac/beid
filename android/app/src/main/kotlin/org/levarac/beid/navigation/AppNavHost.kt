@@ -10,12 +10,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import org.levarac.beid.onboarding.OnboardingPreferences
+import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.BluetoothRadioMonitor
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.ui.screens.AccountRoute
 import org.levarac.beid.ui.screens.BluetoothOffScreen
 import org.levarac.beid.ui.screens.BluetoothPermissionScreen
 import org.levarac.beid.ui.screens.EventJoinRoute
+import org.levarac.beid.ui.screens.RecordsRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
 
 /**
@@ -31,7 +33,7 @@ import org.levarac.beid.ui.screens.WelcomeScreen
  * not be dropped on Home with a dead radio.
  */
 @Composable
-fun AppNavHost(session: EventJoinSession) {
+fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val onboardingPreferences = remember { OnboardingPreferences(context) }
@@ -87,7 +89,11 @@ fun AppNavHost(session: EventJoinSession) {
         }
 
         composable(Screen.Account.route) {
-            AccountRoute(session)
+            AccountRoute(session, onOpenRecords = { navController.navigate(Screen.Records.route) })
+        }
+
+        composable(Screen.Records.route) {
+            RecordsRoute(proofRecordStore)
         }
     }
 }

@@ -40,7 +40,7 @@ class AccountScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true)
+                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
             }
         }
 
@@ -53,7 +53,7 @@ class AccountScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = false)
+                AccountScreen(viewModel = viewModel, isBluetoothOn = false, onOpenRecords = {})
             }
         }
 
@@ -66,7 +66,7 @@ class AccountScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true)
+                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
             }
         }
 
@@ -80,7 +80,7 @@ class AccountScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true)
+                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
             }
         }
 
@@ -98,10 +98,27 @@ class AccountScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                AccountScreen(viewModel = viewModel, isBluetoothOn = true)
+                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
             }
         }
 
         composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).assertIsEnabled()
+    }
+
+    @Test
+    fun recordsButtonNavigatesToRecords() {
+        val viewModel = AccountViewModel(FakeEventJoinSession())
+        var openRecordsCallCount = 0
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = { openRecordsCallCount++ })
+            }
+        }
+
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performClick()
+
+        assertEquals(1, openRecordsCallCount)
     }
 }
