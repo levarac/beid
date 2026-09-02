@@ -1,0 +1,257 @@
+name: PR iOS CI (self-hosted macOS, informational)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pr-ci-ios-macos.yml"
+      - "ios/**"
+      - "shared/**"
+      - "android/build.gradle.kts"
+      - "android/settings.gradle.kts"
+      - "android/gradle.properties"
+      - "android/gradlew"
+      - "android/gradle/wrapper/**"
+      - "scripts/resolve_kmp_java_home.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ios-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-simulator:
+    name: iOS simulator (self-hosted macOS, informational)
+    # Routing lives in the repo variable RUNS_ON_MACOS, not here (same pattern
+    # as ShiokazeHD/umidori's pr-ci.yml). A variable applies to every branch at
+    # once; a label baked into this file would need a separate PR per branch
+    # to change, and ties the workflow to one machine's name instead of a
+    # capability. RUNS_ON_MACOS is currently ["self-hosted","macOS","ARM64","emi"]
+    # (repo settings), matching only the emi runner; the fallback below is the
+    # generic self-hosted-macOS label set so this workflow still resolves if
+    # the variable is ever unset, and so any additional self-hosted Mac can be
+    # brought in later by widening the variable rather than editing this file.
+    # fromJSON is required because runs-on treats a plain string variable as
+    # ONE label; it does not split on commas.
+    runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
+    timeout-minutes: 60
+    steps:
+      - name: Initialize CI output path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Point KMP JDK resolver at setup-java
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'KMP_JAVA_HOME=%s\n' "$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Resolve Xcode, JDK, and iOS 26.5 simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          candidates=()
+          if [[ -n "${DEVELOPER_DIR:-}" ]]; then
+            candidates+=("$DEVELOPER_DIR")
+          fi
+          for app in /Applications/Xcode*.app; do
+            candidates+=("$app/Contents/Developer")
+          done
+
+          selected_developer_dir=""
+          for candidate in "${candidates[@]}"; do
+            if [[ ! -x "$candidate/usr/bin/xcodebuild" ]]; then
+              continue
+            fi
+            if DEVELOPER_DIR="$candidate" xcrun simctl list runtimes --json \
+              | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 26.5" for item in runtimes) else 1)'; then
+              selected_developer_dir="$candidate"
+              break
+            fi
+          done
+
+          if [[ -z "$selected_developer_dir" ]]; then
+            echo "error: no full Xcode installation with the iOS 26.5 runtime is available" >&2
+            exit 1
+          fi
+          export DEVELOPER_DIR="$selected_developer_dir"
+
+          simulator_udid="$(xcrun simctl list devices available --json | python3 -c '
+          import json
+          import sys
+
+          devices = json.load(sys.stdin)["devices"]
+          runtime = next((key for key in devices if key.endswith(".iOS-26-5")), None)
+          if runtime is None:
+              raise SystemExit("no iOS 26.5 simulator runtime found")
+          iphones = sorted(
+              (device for device in devices[runtime]
+               if device.get("isAvailable") and "iPhone" in device.get("deviceTypeIdentifier", "")),
+              key=lambda device: (device.get("name", ""), device.get("udid", "")),
+          )
+          if not iphones:
+              raise SystemExit("no available iPhone simulator for iOS 26.5")
+          print(iphones[0]["udid"])
+          ')"
+
+          kmp_java_home="$(scripts/resolve_kmp_java_home.sh)"
+          "$kmp_java_home/bin/java" -version
+          xcodebuild -version
+          xcrun simctl list devices | grep -F "$simulator_udid"
+
+          {
+            echo "DEVELOPER_DIR=$selected_developer_dir"
+            echo "KMP_JAVA_HOME=$kmp_java_home"
+            echo "JAVA_HOME=$kmp_java_home"
+            echo "SIMULATOR_UDID=$simulator_udid"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify XcodeGen pin and generated project
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_version="$(tr -d '[:space:]' < ios/ci_scripts/XCODEGEN_VERSION)"
+          installed_version=""
+          if command -v xcodegen >/dev/null 2>&1; then
+            installed_version="$(xcodegen --version | awk '{print $2}')"
+          fi
+          if [[ "$installed_version" != "$expected_version" ]]; then
+            echo "error: XcodeGen $expected_version is required; found ${installed_version:-none}" >&2
+            exit 1
+          fi
+
+          echo "Using XcodeGen: $(xcodegen --version)"
+          (
+            cd ios
+            xcodegen generate
+            if [[ -n "$(git status --porcelain -- Beid.xcodeproj)" ]]; then
+              echo "error: Beid.xcodeproj is out of sync with project.yml" >&2
+              git status --porcelain -- Beid.xcodeproj >&2
+              exit 1
+            fi
+          )
+
+      - name: Erase and boot simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
+          xcrun simctl erase "$SIMULATOR_UDID"
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      - name: Build for testing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_OUTPUT_ROOT"
+          xcodebuild \
+            -project ios/Beid.xcodeproj \
+            -scheme Beid \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            build-for-testing
+
+      - name: Test without rebuilding
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios/Beid.xcodeproj \
+            -scheme Beid \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            test-without-building
+
+      - name: Summarize structured test results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          result_bundle="$CI_OUTPUT_ROOT/Tests.xcresult"
+          summary_json="$CI_OUTPUT_ROOT/test-summary.json"
+
+          if [[ ! -d "$result_bundle" ]]; then
+            echo "### iOS simulator tests" >> "$GITHUB_STEP_SUMMARY"
+            echo "Result bundle missing; tests did not produce verifiable results." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if ! xcrun xcresulttool get test-results summary --path "$result_bundle" --compact > "$summary_json"; then
+            echo "### iOS simulator tests" >> "$GITHUB_STEP_SUMMARY"
+            echo "Result bundle could not be parsed." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          python3 - "$summary_json" "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          summary_path = pathlib.Path(sys.argv[1])
+          job_summary_path = pathlib.Path(sys.argv[2])
+          try:
+              summary = json.loads(summary_path.read_text(encoding="utf-8"))
+              result = summary["result"]
+              counts = {
+                  "total": summary["totalTestCount"],
+                  "passed": summary["passedTests"],
+                  "failed": summary["failedTests"],
+                  "skipped": summary["skippedTests"],
+                  "expected failures": summary["expectedFailures"],
+              }
+              if any(isinstance(value, bool) or not isinstance(value, int) for value in counts.values()):
+                  raise TypeError("test counts must be integers")
+              total = counts["total"]
+              passed = counts["passed"]
+              failed = counts["failed"]
+              skipped = counts["skipped"]
+              expected_failures = counts["expected failures"]
+              if any(value < 0 for value in counts.values()):
+                  raise ValueError("test counts must be nonnegative")
+              if any(value > total for name, value in counts.items() if name != "total"):
+                  raise ValueError("a test category exceeds the total test count")
+              if passed + failed + skipped + expected_failures != total:
+                  raise ValueError("test categories do not account for the total test count")
+          except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+              with job_summary_path.open("a", encoding="utf-8") as output:
+                  output.write("### iOS simulator tests\n\nStructured result data is corrupt or incomplete.\n")
+              raise SystemExit(f"invalid xcresult summary: {error}")
+
+          with job_summary_path.open("a", encoding="utf-8") as output:
+              output.write("### iOS simulator tests\n\n")
+              output.write("| Result | Total | Passed | Failed | Skipped | Expected failures |\n")
+              output.write("| --- | ---: | ---: | ---: | ---: | ---: |\n")
+              output.write(
+                  f"| {result} | {total} | {passed} | {failed} | {skipped} | {expected_failures} |\n"
+              )
+
+          if total <= 0:
+              raise SystemExit("xcresult contains zero tests")
+          if failed != 0 or result != "Passed":
+              raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
+          PY
+
+      - name: Shutdown simulator
+        if: always()
+        shell: bash
+        run: xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true

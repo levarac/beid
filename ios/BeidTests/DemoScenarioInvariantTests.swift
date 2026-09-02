@@ -45,6 +45,7 @@ private final class DemoScenarioSubmissionRuntimeSpy: WindowReportSubmissionRunt
   }
 
   func submissionState(forEventCode _: String) -> ReportSubmissionState? { nil }
+  func excludedWindowCount(forEventCode _: String) -> Int { 0 }
 }
 
 @MainActor

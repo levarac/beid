@@ -8,10 +8,10 @@ import Security
 /// App-generated secp256k1 owner key — the cross-event identity anchor in
 /// `commit = H(event signing key ‖ owner key ‖ salt)` (whitepaper §3.2,
 /// `docs/specs/scan-protocol-model.md` §5). Resolved 2026-07-30 (D1): no
-/// continuity for v1 — the key regenerates per device/reinstall, stored at
-/// the same level `BarnardIdentity`'s `DeviceSecret` uses today (plain
-/// `UserDefaults`, not Keychain/iCloud; that migration is a deferred slice
-/// per `docs/specs/scan-slice2-redesign.md` §9.1).
+/// continuity for v1 — the key regenerates after a reinstall that does not
+/// restore an encrypted backup. The seed lives in a non-synchronizable
+/// Keychain item whose accessibility class permits OS-standard encrypted
+/// backup and device-to-device migration.
 ///
 /// Reuses `BarnardCoreSigning`'s already-tested secp256k1 derivation
 /// (`BarnardCore` is the same pinned `Barnard` package/version already in
@@ -30,14 +30,9 @@ final class OwnerKeyProvider {
 
   private let keyStorage: any BarnardCoreKeyStorage
   private let randomSource: any BarnardCoreRandomSource
-  /// The owner key is stable for the device's lifetime (until reinstall) —
-  /// cached after first derivation so repeated `SensingCoordinator
-  /// .beginEventFound` calls (once per scan session) don't re-run
-  /// secp256k1 scalar multiplication every time.
-  private var cachedKeyPair: BarnardCoreSigningKeyPair?
 
   init(
-    keyStorage: any BarnardCoreKeyStorage = BeidUserDefaultsKeyStorage(),
+    keyStorage: any BarnardCoreKeyStorage = BeidKeychainKeyStorage(),
     randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   ) {
     self.keyStorage = keyStorage
@@ -95,19 +90,34 @@ final class OwnerKeyProvider {
   }
 
   private func keyPair() -> BarnardCoreSigningKeyPair {
-    if let cachedKeyPair {
-      return cachedKeyPair
+    let seed: [UInt8]
+    do {
+      seed = try resolveSeed()
+    } catch {
+      preconditionFailure("Owner key seed resolution failed: \(error)")
     }
-    let seed = BarnardCoreKeyManager.loadOrCreate(
+
+    // Deliberately derive per operation after re-reading the seed. The
+    // private key pair therefore has method-call scope instead of remaining
+    // resident for this provider's lifetime.
+    return BarnardCoreSigning.deriveOwnerKeyPair(accountSecret: seed)
+  }
+
+  func resolveSeed() throws -> [UInt8] {
+    if let resolvingStorage = keyStorage as? any OwnerKeySeedResolving {
+      return try resolvingStorage.resolveSeed(
+        forKey: Self.seedKey,
+        randomSource: randomSource
+      )
+    }
+
+    return BarnardCoreKeyManager.loadOrCreate(
       key: Self.seedKey,
       minimumByteCount: 32,
       generatedByteCount: 32,
       storage: keyStorage,
       randomSource: randomSource
     )
-    let keyPair = BarnardCoreSigning.deriveOwnerKeyPair(accountSecret: seed)
-    cachedKeyPair = keyPair
-    return keyPair
   }
 }
 
@@ -158,6 +168,10 @@ final class BeidUserDefaultsKeyStorage: BarnardCoreKeyStorage, OwnerKeySeedQuara
 
   func setBytes(_ bytes: [UInt8], forKey key: String) {
     defaults.set(Data(bytes), forKey: key)
+  }
+
+  func removeBytes(forKey key: String) {
+    defaults.removeObject(forKey: key)
   }
 
   /// Preserves whatever raw value is stored under `key` (wrong type or

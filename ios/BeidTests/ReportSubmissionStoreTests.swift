@@ -7,6 +7,43 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
+  func testExclusionIsIdempotentRejectsConflictsAndSurvivesReload() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-exclusion")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let exclusion = ReportSubmissionExclusion(
+      id: UUID(),
+      eventCode: "EVENTA",
+      eventIdHex: String(repeating: "11", count: 32),
+      enin: 42,
+      peerCount: 3,
+      reasonCode: "legacy-count-only",
+      createdAt: Date(timeIntervalSince1970: 123)
+    )
+    let store = ReportSubmissionStore(fileURL: fileURL)
+
+    XCTAssertEqual(try store.addExclusion(exclusion), exclusion)
+    XCTAssertEqual(try store.addExclusion(exclusion), exclusion)
+    XCTAssertEqual(store.exclusions.count, 1)
+
+    let conflicting = ReportSubmissionExclusion(
+      id: exclusion.id,
+      eventCode: exclusion.eventCode,
+      eventIdHex: exclusion.eventIdHex,
+      enin: exclusion.enin,
+      peerCount: 4,
+      reasonCode: exclusion.reasonCode,
+      createdAt: exclusion.createdAt
+    )
+    XCTAssertThrowsError(try store.addExclusion(conflicting)) { error in
+      guard case ReportSubmissionStoreError.conflictingExclusion = error else {
+        return XCTFail("expected conflictingExclusion, got \(error)")
+      }
+    }
+
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).exclusions, [exclusion])
+  }
+
   func testExactObservationBytesAndVerifiedReceiptSurviveReload() throws {
     let directory = try makeIsolatedDirectory(named: "beid-report-submission-store")
     defer { try? FileManager.default.removeItem(at: directory) }

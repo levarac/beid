@@ -103,6 +103,7 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   /// no submission has ever been queued for it. A pure read of already-
   /// persisted state — never triggers a network call or a write.
   func submissionState(forEventCode eventCode: String) -> ReportSubmissionState?
+  func excludedWindowCount(forEventCode eventCode: String) -> Int
 }
 
 /// Native composition boundary for the inactive-by-default report pipeline.
@@ -175,6 +176,24 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     // an Observation from the peer count.
     guard let reporterRpid else {
       Self.log.error("Skipped canonical submission for a window without reporter RPID")
+      let exclusion = ReportSubmissionExclusion(
+        id: id,
+        eventCode: eventCode,
+        eventIdHex: eventIdHex,
+        enin: enin,
+        peerCount: peerRpids.count,
+        // ObservationModels.kt's LEGACY_COUNT_ONLY wire name; the exported
+        // factory cannot accept nil reporter RPID, so classification is native.
+        reasonCode: "legacy-count-only",
+        createdAt: Date()
+      )
+      do {
+        try store.addExclusion(exclusion)
+      } catch {
+        Self.log.error(
+          "Unable to persist count-only exclusion: \(String(describing: error), privacy: .public)"
+        )
+      }
       submitPending()
       return
     }
@@ -329,6 +348,10 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       .filter { $0.eventCode == eventCode }
       .max { $0.submissionState.progressRank < $1.submissionState.progressRank }?
       .submissionState
+  }
+
+  func excludedWindowCount(forEventCode eventCode: String) -> Int {
+    store.exclusions.filter { $0.eventCode == eventCode }.count
   }
 
   func submitPending() {

@@ -102,6 +102,7 @@
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
 		B31E5C4B7FFA24E8138EC93F /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC3BF967894221C74134CEB6 /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift */; };
 		B3A230BA5775F3098FF6595B /* AppCoordinatorRestoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73260B2E5EA447B3E800555C /* AppCoordinatorRestoreTests.swift */; };
+		B54AA6D7B539F061A77F6CAC /* OwnerKeyKeychainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B034A3268DF912DD68B68873 /* OwnerKeyKeychainTests.swift */; };
 		BD424B0B114CBB6F3FE6BA8E /* WindowReportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00C453FB39D62870ECDBCBF0 /* WindowReportStore.swift */; };
 		BD46FC0A3EC1EDBD5A73C24B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00B88F37F569ED386AB057A8 /* Assets.xcassets */; };
 		BDE0B0D8E4FAB885CD25F9B8 /* OwnerKeyProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A10CCB8E5D80E54CF5B4291 /* OwnerKeyProviderTests.swift */; };
@@ -111,6 +112,7 @@
 		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
 		C681656D4F0FBFB5973E28A4 /* ProofTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C78211E54CB26A88AE8857 /* ProofTests.swift */; };
 		C9D57E857A49E7EE593B6365 /* EventIdentityVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36546FA758ACEADAB6A72464 /* EventIdentityVerification.swift */; };
+		CAFE8F781147CAA5382816E2 /* BeidKeychainKeyStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EF2389970BED4997DBC2826 /* BeidKeychainKeyStorage.swift */; };
 		CB158153C98D8C18CBAFFEF8 /* SessionAggregateExposureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EAEB0CA3E864A05492129FB /* SessionAggregateExposureTests.swift */; };
 		CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */; };
 		CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */; };
@@ -188,6 +190,7 @@
 		0A10CCB8E5D80E54CF5B4291 /* OwnerKeyProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyProviderTests.swift; sourceTree = "<group>"; };
 		0CBBE87F0D227CFFF2509D9E /* VenueDeviceBroadcasting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceBroadcasting.swift; sourceTree = "<group>"; };
 		0EEF1F2BB12006126E6A11FF /* CachedWalletHint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedWalletHint.swift; sourceTree = "<group>"; };
+		0EF2389970BED4997DBC2826 /* BeidKeychainKeyStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidKeychainKeyStorage.swift; sourceTree = "<group>"; };
 		0FF3951149A1DFC77B3017D8 /* BindingMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingMessageTests.swift; sourceTree = "<group>"; };
 		1000D4B43F2D5A1703701E95 /* EventCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCardView.swift; sourceTree = "<group>"; };
 		10807372081AA25A74942BE3 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
@@ -275,6 +278,7 @@
 		AC3BF967894221C74134CEB6 /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift; sourceTree = "<group>"; };
 		AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothMonitor.swift; sourceTree = "<group>"; };
 		B0333AAF8319263B67E8FE36 /* EventSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSession.swift; sourceTree = "<group>"; };
+		B034A3268DF912DD68B68873 /* OwnerKeyKeychainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyKeychainTests.swift; sourceTree = "<group>"; };
 		B07FD0202575465DCF463745 /* EventFoundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventFoundView.swift; sourceTree = "<group>"; };
 		B2A0822EAE8F243702AA4F1C /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		B3E95383AD24579017E2EF0B /* DailySummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySummaryView.swift; sourceTree = "<group>"; };
@@ -352,6 +356,7 @@
 			isa = PBXGroup;
 			children = (
 				A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */,
+				0EF2389970BED4997DBC2826 /* BeidKeychainKeyStorage.swift */,
 				DE886DB77235ACE898E6D2CF /* BindingMessage.swift */,
 				AD2B0B39DC4167EB52865BF7 /* BluetoothMonitor.swift */,
 				85156AD558E5D8E621CA49B2 /* DailyRollupRuntime.swift */,
@@ -547,6 +552,7 @@
 				A66AC8F313C43F47575480DE /* EventRejoinTests.swift */,
 				C637EA719C58481853B15B91 /* LocalizationContractTests.swift */,
 				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
+				B034A3268DF912DD68B68873 /* OwnerKeyKeychainTests.swift */,
 				0A10CCB8E5D80E54CF5B4291 /* OwnerKeyProviderTests.swift */,
 				C199A4E7880D919E1D6F5B72 /* ParticipationSummaryDataTests.swift */,
 				AC3BF967894221C74134CEB6 /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift */,
@@ -811,6 +817,7 @@
 				98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */,
 				C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */,
 				95A3A750404DCA7A584953FC /* BeidConfig.swift in Sources */,
+				CAFE8F781147CAA5382816E2 /* BeidKeychainKeyStorage.swift in Sources */,
 				82B5B9723A9965F700F395FA /* BindingMessage.swift in Sources */,
 				8FDC27D2283A74EB215D9DE0 /* BindingRecord.swift in Sources */,
 				D6D222534D0B2F3B27077CA3 /* BindingRecordStore.swift in Sources */,
@@ -913,6 +920,7 @@
 				ECD429DD4E52BAAED0CB39A2 /* FakeVenueDeviceBroadcasting.swift in Sources */,
 				388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */,
 				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
+				B54AA6D7B539F061A77F6CAC /* OwnerKeyKeychainTests.swift in Sources */,
 				BDE0B0D8E4FAB885CD25F9B8 /* OwnerKeyProviderTests.swift in Sources */,
 				0EC4037E7127223ED39102C2 /* ParticipationSummaryDataTests.swift in Sources */,
 				B31E5C4B7FFA24E8138EC93F /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift in Sources */,
@@ -972,17 +980,9 @@
 		1CAA137A8FA07B75B4255E63 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidTests;
-				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Beid.app/Beid";
 			};
 			name = Debug;
@@ -990,17 +990,9 @@
 		28EC0AA015C2508FC1D7EE6F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidUITests;
-				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Beid;
 			};
 			name = Release;
@@ -1016,16 +1008,11 @@
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";
 				BEID_EVENT_REGISTRY_READER_ADDRESS = 0xd4852f8526A1555A1b2C34145f0eCDA412a53c51;
 				BEID_REPORT_SUBMISSION_ENABLED = NO;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Beid/App/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -1036,7 +1023,6 @@
 					"-ObjC",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
-				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1046,80 +1032,17 @@
 		5CB986D050BC61ECBB6A3109 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"$(inherited)",
-					"DEBUG=1",
-				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
 		6AC6C283A3FA63D9D88483D2 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidTests;
-				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Beid.app/Beid";
 			};
 			name = Release;
@@ -1127,103 +1050,33 @@
 		6F15815AF101021FDE8AEC66 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidMetaMaskSupport;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
 		93771CE171B67BE7BE8F0C8E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidMetaMaskSupport;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
 		A7A45C387D9E9EEAD0977B8D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
 		C19F4FFEFF325CB0253C97EE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidUITests;
-				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Beid;
 			};
 			name = Debug;
@@ -1239,16 +1092,11 @@
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";
 				BEID_EVENT_REGISTRY_READER_ADDRESS = 0xd4852f8526A1555A1b2C34145f0eCDA412a53c51;
 				BEID_REPORT_SUBMISSION_ENABLED = NO;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Beid/App/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -1260,7 +1108,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				PROVISIONING_PROFILE_SPECIFIER = "$(BEID_PROVISIONING_PROFILE)";
-				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

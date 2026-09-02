@@ -13,17 +13,21 @@ import Foundation
 /// `docs/kmp-shared-foundation.md`'s ownership boundary puts a persistence
 /// format in `shared/` when both iOS and Android must produce the same
 /// answer for it (see e.g. `UnsentWindowLedgerSnapshot.kt`, shared for
-/// exactly that reason). These four files have only one reader today:
-/// Android's proof/binding/self-proof persistence does not exist yet
-/// (beid#121, beid#122), and the foundation manual's family ledger does not
-/// list these types at all — starting a new shared family inside a bug-fix
-/// PR would violate that manual's §1 classify-before-code process, not
-/// follow it. Revisit this placement, starting with that §1 classification
-/// process rather than with code, when either becomes true: (a) Android
-/// grows its own proof/binding/self-proof persistence (beid#121/#122), or
-/// (b) cross-device sync of these stores (beid#198) lands — either creates
-/// a second reader of these exact bytes, which is the actual trigger for
-/// `shared/` ownership.
+/// exactly that reason). These four files have only one reader today, and
+/// the foundation manual's family ledger does not list these types at all —
+/// starting a new shared family inside a bug-fix PR would violate that
+/// manual's §1 classify-before-code process, not follow it. The trigger is
+/// worded by cause, not by a proxy for it: a second platform independently
+/// persisting its own binding/self-proof records, in its own format, on its
+/// own device (as Android now does) is a second platform, not a second
+/// reader of these exact bytes — it does not, by itself, trip this
+/// condition. Revisit this placement, starting with that §1 classification
+/// process rather than with code, when either becomes true: (a) cross-device
+/// sync of these stores (beid#198 — device-to-device data-ownership sync
+/// policy, decided but unimplemented) lands, or (b) device-migration
+/// backup/restore (dispatch#23) ships — either is a different build, on
+/// different hardware, actually reading these same persisted bytes, which
+/// is the actual trigger for `shared/` ownership.
 ///
 /// ## Direction this solves
 ///

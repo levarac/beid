@@ -920,6 +920,17 @@
         }
       }
     },
+    "Not submittable (count-only record)": {
+      "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not submittable (count-only record)"
+          }
+        }
+      }
+    },
     "wallet.restored.subtitle": {
       "comment": "Subtitle shown under the restored-wallet heading when a cached wallet address exists from a previous launch. %@ is the truncated wallet address, e.g. '0x1234...5678'. This address is a reference only, not a verified signer, until the user approves again in their wallet (dispatch#26 condition 4).",
       "localizations": {

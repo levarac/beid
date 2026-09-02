@@ -15,6 +15,63 @@ import XCTest
 /// code.
 @MainActor
 final class ReportSubmissionStateQueryTests: XCTestCase {
+  func testCountOnlyCaptureIsDurableScopedAndDoesNotCreateSubmissionWork() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-exclusion-query")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL, provider: NeverInvokedEventDefinitionContextProvider()))
+
+    runtime.captureAndQueueWindow(
+      id: UUID(),
+      eventCode: "EVENTA",
+      eventIdHex: nil,
+      enin: 7,
+      peerRpids: ["peer-a", "peer-b"],
+      reporterRpid: nil,
+      participantCommitment: nil
+    )
+
+    XCTAssertEqual(runtime.excludedWindowCount(forEventCode: "EVENTA"), 1)
+    XCTAssertEqual(runtime.excludedWindowCount(forEventCode: "EVENTB"), 0)
+    let reloaded = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.exclusions.first?.peerCount, 2)
+    XCTAssertEqual(reloaded.exclusions.first?.reasonCode, "legacy-count-only")
+    XCTAssertTrue(reloaded.pendingCaptures.isEmpty)
+    XCTAssertTrue(reloaded.records.isEmpty)
+  }
+
+  func testCountOnlyCaptureStillRetriesPreviouslyPendingCaptures() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-exclusion-retry")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    try store.addPendingCapture(
+      ReportSubmissionCapture(
+        id: UUID(),
+        eventCode: "EARLIER",
+        eventIdHex: String(repeating: "11", count: 32),
+        enin: 6,
+        peerRpids: ["peer"],
+        reporterRpid: "reporter",
+        participantCommitment: nil
+      )
+    )
+    let provider = CountingEventDefinitionContextProvider()
+    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL, provider: provider))
+
+    runtime.captureAndQueueWindow(
+      id: UUID(),
+      eventCode: "COUNT-ONLY",
+      eventIdHex: nil,
+      enin: 7,
+      peerRpids: ["peer"],
+      reporterRpid: nil,
+      participantCommitment: nil
+    )
+
+    XCTAssertEqual(provider.resolveCallCount, 1)
+  }
+
   func testSubmissionStateReflectsRealStoredAcceptanceAndIsScopedByEventCode() throws {
     let directory = try makeIsolatedDirectory(named: "beid-report-submission-query")
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -30,7 +87,7 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     )
 
     let runtime = try XCTUnwrap(
-      makeEnabledRuntime(fileURL: fileURL),
+      makeEnabledRuntime(fileURL: fileURL, provider: NeverInvokedEventDefinitionContextProvider()),
       "expected an enabled ReportSubmissionRuntime for this test bundle"
     )
 
@@ -51,12 +108,15 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     try seedStore.add(record)
     try seedStore.markSubmitting(for: record.id)
 
-    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL))
+    let runtime = try XCTUnwrap(makeEnabledRuntime(fileURL: fileURL, provider: NeverInvokedEventDefinitionContextProvider()))
 
     XCTAssertEqual(runtime.submissionState(forEventCode: "EVENTA"), .submitting)
   }
 
-  private func makeEnabledRuntime(fileURL: URL) throws -> ReportSubmissionRuntime? {
+  private func makeEnabledRuntime(
+    fileURL: URL,
+    provider: any EventDefinitionContextProvider
+  ) throws -> ReportSubmissionRuntime? {
     let bundleDirectory = try makeIsolatedDirectory(named: "beid-report-submission-query-bundle")
     let plist: [String: Any] = [
       "CFBundleIdentifier": "org.levarac.beid.tests.\(UUID().uuidString)",
@@ -73,7 +133,7 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
     return ReportSubmissionRuntime.makeIfEnabled(
       bundle: bundle,
       eventSigningCryptography: NeverInvokedSensingCryptography(),
-      definitionProvider: NeverInvokedEventDefinitionContextProvider(),
+      definitionProvider: provider,
       fileURL: fileURL
     )
   }
@@ -99,6 +159,19 @@ final class ReportSubmissionStateQueryTests: XCTestCase {
       .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory
+  }
+}
+
+@MainActor
+private final class CountingEventDefinitionContextProvider: EventDefinitionContextProvider {
+  private(set) var resolveCallCount = 0
+
+  func resolve(
+    eventIdHex _: String,
+    completion: @escaping (VerifiedSubmissionDefinition?) -> Void
+  ) {
+    resolveCallCount += 1
+    completion(nil)
   }
 }
 
