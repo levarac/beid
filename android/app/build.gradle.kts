@@ -103,6 +103,12 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.8")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    // Manual JsonObject/JsonPrimitive tree building (no @Serializable, no
+    // kotlin("plugin.serialization") compiler plugin needed) — same version
+    // and usage style already established by shared/build.gradle.kts and
+    // e.g. EtherscanRestAdapter.kt, extended to :app for BindingRecordStore/
+    // SelfProofRecordStore (beid#125).
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation(kotlin("test"))
