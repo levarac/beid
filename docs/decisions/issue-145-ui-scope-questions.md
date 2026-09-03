@@ -3,6 +3,13 @@
 **Status:** decision-input for `#291`/`dispatch#17` and `#292`/`dispatch#20` only;
 not a schema or protocol decision
 
+> **Answered.** Questions 2, 3 and 8 were decided by the owner on
+> 2026-09-03, and question 10 was ratified. See
+> [`issue-145-ui-scope-decisions.md`](issue-145-ui-scope-decisions.md) —
+> read it before writing any scope copy, because it also carries the
+> claims copy must **not** make and one parameter (the suppression
+> threshold) that is deliberately still open.
+
 **Read this before** `docs/decisions/issue-145-privacy-schema.md` (the audit,
 PR #306). That document's 13 open questions (§8) gate a public-blob
 **implementation**. This one answers a narrower question: which of those 13
