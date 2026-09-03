@@ -16,6 +16,17 @@ trap cleanup EXIT
 
 cd "$REPO_ROOT"
 
+TESTFLIGHT_NOTES_SOURCE="${TESTFLIGHT_NOTES_SOURCE:?TESTFLIGHT_NOTES_SOURCE must identify the tester-note JSON}"
+TESTFLIGHT_NOTES_DIR="$DELIVERY_TMP/testflight-notes"
+NOTES_PREPARE_ARGS=(
+  --source "$TESTFLIGHT_NOTES_SOURCE"
+  --output-dir "$TESTFLIGHT_NOTES_DIR"
+)
+if [[ -n "${TESTFLIGHT_NOTES_FALLBACK_SOURCE:-}" ]]; then
+  NOTES_PREPARE_ARGS+=(--fallback-source "$TESTFLIGHT_NOTES_FALLBACK_SOURCE")
+fi
+python3 scripts/prepare_testflight_notes.py "${NOTES_PREPARE_ARGS[@]}"
+
 XCODEGEN_VERSION="$(< ios/ci_scripts/XCODEGEN_VERSION)"
 INSTALLED_VERSION=""
 if command -v xcodegen >/dev/null 2>&1; then
@@ -133,6 +144,7 @@ plutil -insert provisioningProfiles -dictionary "$EXPORT_OPTIONS"
 plutil -insert teamID -string "$BEID_TEAM_ID" "$EXPORT_OPTIONS"
 plutil -insert manageAppVersionAndBuildNumber -bool YES "$EXPORT_OPTIONS"
 
+UPLOAD_STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "Uploading archive to App Store Connect..."
 xcodebuild \
   -quiet \
@@ -145,4 +157,6 @@ xcodebuild \
   -authenticationKeyID "$ASC_KEY_ID" \
   -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-echo "TestFlight upload completed. App Store Connect processing may continue after this job exits."
+scripts/gha/publish-testflight-notes.sh "$TESTFLIGHT_NOTES_DIR" "$UPLOAD_STARTED_AT"
+
+echo "TestFlight upload and tester-note publication completed."

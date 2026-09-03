@@ -23,7 +23,7 @@ jobs:
             const body = [
               marker,
               "> [!WARNING]",
-              "> `release_notes.json` is reserved for App Store release copy. Changing it does **not** deliver notes or a build to TestFlight testers; use `what_to_test.json` for internal TestFlight delivery.",
+              "> `release_notes.json` is reserved for `release/**` TestFlight and App Store release copy. It does **not** trigger internal TestFlight delivery; use `what_to_test.json` for that lane.",
             ].join("\n");
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;

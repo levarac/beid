@@ -53,23 +53,27 @@ The GitHub Actions export also uses manual signing and maps
 `org.levarac.beid` to that profile in `provisioningProfiles`, so export uses
 the runner-local identity and profile instead of ASC cloud signing.
 
-This GitHub Actions upload does **not** currently publish TestFlight "What to
-Test" notes. Xcode Cloud supplies those notes through
-`ci_post_xcodebuild.sh`; an API-uploaded build needs a separate ASC API update
-after processing. That notes update is a follow-up, not part of this temporary
-upload lane.
+The GitHub Actions lane validates and converts its note source before archive,
+then waits for the build uploaded during that run to finish ASC processing.
+Using the same runner-local API key, `asc builds test-notes create` upserts every
+prepared locale onto that exact build ID. A missing/invalid source, processing
+failure, or note request failure makes the lane fail. Because the binary may
+already be uploaded when a note request fails, retry notes against the logged
+build ID rather than uploading the same binary again. Xcode Cloud keeps its
+separate `ci_post_xcodebuild.sh` file-based note mechanism.
 
 ## Two convention files, two audiences
 
 | File | Repo location | Audience | Updated when |
 |---|---|---|---|
-| `what_to_test.json` | root | Internal testers | Any PR / feature branch / main push where you want a TestFlight build |
-| `release_notes.json` | root | External testers / eventual App Store copy | `release/*` branch pushes |
+| `what_to_test.json` | root | Internal testers | Any pushed branch where you want both internal delivery lanes |
+| `what_to_test.ios.json` | root (optional fallback) | Internal iOS testers | iOS-only trigger; read only when the common file is absent |
+| `release_notes.json` | root | External testers / eventual App Store copy | `release/**` branch pushes that change this file |
 
 Both are arrays of `{"language": "<ASC locale>", "text": "..."}`. Use ASC's
 locale identifiers, not Xcode's String Catalog locale ids. Beid's current
-settled locale set is `en-US` and `ja` (String Catalog uses `en` for English).
-Both entries are required.
+settled tester-note locale set is `en-US` only (String Catalog uses `en` for
+English). One non-empty entry is required for each current target locale.
 
 - **`what_to_test.json`**: what to check in *this* build. Rewrite it each
   time — don't accumulate history. 1–3 plain-language sentences, no PR/issue
@@ -81,9 +85,8 @@ Both entries are required.
   copy. Rewrite completely per release, don't diff against the previous
   version.
 
-Both `/testflight` (this repo's Claude Code skill) and hand edits follow this
-same file-per-branch-type convention — see `~/.claude/skills/testflight/SKILL.md`
-if you're driving this with that skill.
+The project-local `.claude/skills/beid-testflight/SKILL.md` and hand edits
+follow this same file-per-branch-type convention.
 
 ## Release branches and store-submission procedure
 

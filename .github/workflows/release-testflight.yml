@@ -21,6 +21,8 @@ jobs:
     if: ${{ vars.GHA_DELIVERY == 'on' }}
     runs-on: [self-hosted, emi]
     timeout-minutes: 90
+    env:
+      TESTFLIGHT_NOTES_SOURCE: release_notes.json
     steps:
       - uses: actions/checkout@v4
       # The delivery script resolves its JDK through

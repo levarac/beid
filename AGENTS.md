@@ -471,6 +471,7 @@ localization mechanism — they are not meant to overlap.
 The platform delivery docs are `docs/xcode-cloud.md` for iOS and
 `docs/google-play.md` for Android (canonical, each carries verification
 dates). The contract every agent must know before touching delivery files:
+Project-local delivery operations use [`.claude/skills/beid-testflight/SKILL.md`](.claude/skills/beid-testflight/SKILL.md).
 
 ### PR CI
 
@@ -551,9 +552,12 @@ dates). The contract every agent must know before touching delivery files:
 - GitHub Actionsのexportもmanual signingとし、ExportOptionsの
   `provisioningProfiles`で`org.levarac.beid`を同profileへ対応づける。これにより
   ASC cloud signing permissionに依存せず、runner-localのidentity/profileを使う。
-- GitHub Actions upload は現時点で TestFlight の **What to Test を反映しない**。
-  API upload 後に ASC API で notes を設定する処理は別 follow-up であり、この
-  temporary lane の upload 成否と混同しない。
+- GitHub Actions は archive 前に対象 JSON を検証・変換し、upload 後に同じ
+  runner-local ASC API key を `asc` CLI へ渡す。今回の upload 開始時刻以降に
+  現れた build の exact ID を待ち、その build に全 locale の **What to Test**
+  を upsert する。source 不在・形式不正・build 特定失敗・notes upload 失敗は
+  lane を失敗させる。notes step が失敗しても build 自体は既に upload 済みの
+  場合があるため、再試行で同じ binary を重複 upload しない。
 
 ### Temporary Android delivery lane (GitHub Actions)
 
@@ -581,16 +585,18 @@ dates). The contract every agent must know before touching delivery files:
 
 - **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
   root). The temporary GitHub Actions lane triggers from this change on any
-  pushed branch, but does not yet copy the file into tester-facing "What to Test"
-  notes. Xcode Cloud does both when it is the active delivery path. Rewrite
-  the file wholesale each time — what to check in *this* build
+  pushed branch and publishes it as tester-facing "What to Test" notes after
+  ASC finishes processing the uploaded build. If the common file is absent,
+  the iOS lane falls back to `what_to_test.ios.json`. Xcode Cloud retains its
+  separate file-based note mechanism. Rewrite the file wholesale each time —
+  what to check in *this* build
   only, 1-3 plain sentences (ASC locale: `en-US` only), no PR
   numbers, no internal jargon, no accumulated history.
 - **`release_notes.json` is App Store "What's New" copy.** On non-release
   branches it is never delivered to testers and editing it neither
-  triggers nor annotates test builds. Caveat: on `release/*` branches the
-  current `ci_post_xcodebuild.sh` sources TestFlight notes from
-  `release_notes.json` instead (a legacy pattern slated for revision in
+  triggers nor annotates test builds. On `release/*` branches both the
+  GitHub Actions release lane and `ci_post_xcodebuild.sh` source TestFlight
+  notes from `release_notes.json` (a legacy pattern slated for revision in
   issue #55 — the sister project that originated it abandoned it after
   shipping stale tester notes for 19 hours through exactly this file
   confusion). When in doubt, the file you want is `what_to_test.json`.
