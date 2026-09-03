@@ -239,7 +239,7 @@ struct EventBindingSheetView: View {
     }
     switch result {
     case .success(let signatureHex):
-      sensing.completeBinding(walletAddress: address.address, walletSignatureHex: signatureHex)
+      completeBindingOrFailVerification(walletAddress: address.address, walletSignatureHex: signatureHex)
     case .failure(let error):
       failBinding(for: error)
     }
@@ -278,13 +278,38 @@ struct EventBindingSheetView: View {
     case .success(let (live, signatureHex)):
       coordinator.recordWalletConnection(address: live, connector: metaMaskConnector)
       if live.address.caseInsensitiveCompare(hint.address) == .orderedSame {
-        sensing.completeBinding(walletAddress: live.address, walletSignatureHex: signatureHex)
+        completeBindingOrFailVerification(walletAddress: live.address, walletSignatureHex: signatureHex)
       } else {
         sensing.discardPendingBindingMessage()
         await performBinding(address: live, connector: metaMaskConnector)
       }
     case .failure(let error):
       failBinding(for: error)
+    }
+  }
+
+  /// `sensing.completeBinding` returns `nil` (no state change) both for
+  /// stale/malformed inputs and — since beid#316 — a genuine signer
+  /// mismatch the coordinator's own verification caught. Before beid#316
+  /// only the former could happen here (both call sites above only ever
+  /// reach this after a wallet round trip already succeeded), so the `nil`
+  /// case was effectively dead code; now it's a realistic outcome, and
+  /// without this, `bindingState` would never leave `.connecting`/
+  /// `.awaitingApproval`, leaving the sheet stuck on its spinner with no
+  /// way to dismiss (`isInFlight` disables swipe-dismiss and hides Cancel
+  /// for both those states).
+  @MainActor
+  private func completeBindingOrFailVerification(walletAddress: String, walletSignatureHex: String) {
+    guard sensing.completeBinding(walletAddress: walletAddress, walletSignatureHex: walletSignatureHex) != nil else {
+      sensing.failBinding(reason: String(
+        localized: "scan.binding.verificationFailed",
+        defaultValue: "Couldn't verify this wallet",
+        comment: """
+        Reason shown when the wallet's signature doesn't match the address it claimed to sign with, so beid \
+        could not verify the wallet actually owns that address. The user can try again.
+        """
+      ))
+      return
     }
   }
 

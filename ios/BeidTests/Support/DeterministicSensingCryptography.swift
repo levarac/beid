@@ -23,7 +23,16 @@ final class DeterministicSensingCryptography: SensingCryptography {
   let ownerPublicKeyResult: Data
   let windowReportSignatureResult: SensingRecoverableSignature
   let selfProofSignatureResult: SensingRecoverableSignature?
-  let walletAcknowledgementSignatureResult: SensingRecoverableSignature?
+  /// `var`, unlike this type's other injected results: beid#316 needs
+  /// exactly one caller (`SensingCryptographyTests
+  /// .testCoordinatorRoutesBindingAndSelfProofCryptographyThroughInjectedFacade`)
+  /// to overwrite this after construction but before `completeBinding` runs
+  /// — the real acknowledgement it needs to inject depends on a wallet
+  /// signature only known once `beginBinding` has already returned a
+  /// message embedding a runtime nonce/timestamp, so it cannot be supplied
+  /// through `init` like every other result here. The default value and
+  /// every other test's usage are unaffected.
+  var walletAcknowledgementSignatureResult: SensingRecoverableSignature?
   private(set) var calls: [Call] = []
 
   init(

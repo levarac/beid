@@ -100,43 +100,79 @@ final class SensingCryptographyTests: XCTestCase {
     )
   }
 
+  /// beid#316: `completeBinding` now verifies the wallet ack signature for
+  /// real (piece b, delegated to `BarnardCoreSigning.verifyWalletBinding`),
+  /// so the injected `ownerPublicKey`/acknowledgement and the wallet
+  /// address/signature below must be genuinely consistent with each
+  /// other — arbitrary fabricated bytes (this test's shape before #316)
+  /// would now make `completeBinding` correctly reject the record, which
+  /// would defeat this test's actual purpose (proving the facade's return
+  /// values route into the persisted records and self-proof unmodified).
+  /// The wallet signature itself can only be computed after `beginBinding`
+  /// returns (it embeds a runtime nonce/timestamp this test doesn't
+  /// control), and the acknowledgement `DeterministicSensingCryptography`
+  /// must return depends on that wallet signature's exact bytes — hence
+  /// `walletAcknowledgementSignatureResult` is set post-construction rather
+  /// than through `init` like this double's other injected results.
   @MainActor
   func testCoordinatorRoutesBindingAndSelfProofCryptographyThroughInjectedFacade() async {
     let eventSigningPublicKey = Data([0x02] + [UInt8](repeating: 0xa1, count: 32))
-    let ownerPublicKey = Data([
-      0x02, 0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb,
-      0xac, 0x55, 0xa0, 0x62, 0x95, 0xce, 0x87, 0x0b,
-      0x07, 0x02, 0x9b, 0xfc, 0xdb, 0x2d, 0xce, 0x28,
-      0xd9, 0x59, 0xf2, 0x81, 0x5b, 0x16, 0xf8, 0x17,
-      0x98,
-    ])
+    let ownerKeyPair = BarnardCoreSigning.deriveOwnerKeyPair(
+      accountSecret: [UInt8](repeating: 0x31, count: 32)
+    )
+    let ownerPublicKey = Data(ownerKeyPair.publicKeyCompressed)
+    // Independent synthetic wallet keypair — not the owner key above.
+    let walletKeyPair = BarnardCoreSigning.deriveOwnerKeyPair(
+      accountSecret: [UInt8](repeating: 0x32, count: 32)
+    )
+    guard
+      let walletAddressBytes = BarnardCoreSigning.ethereumAddress(
+        publicKeyCompressed: walletKeyPair.publicKeyCompressed
+      )
+    else {
+      XCTFail("expected walletKeyPair to yield a valid Ethereum address")
+      return
+    }
+    let walletAddress = "0x" + walletAddressBytes.map { String(format: "%02x", $0) }.joined()
     let selfProofSignature = SensingRecoverableSignature(
       r: Data([0x00] + [UInt8](repeating: 0xc3, count: 31)),
       s: Data([0x00, 0x00] + [UInt8](repeating: 0xd4, count: 30)),
       v: 3
     )
-    let walletAcknowledgementSignature = SensingRecoverableSignature(
-      r: Data([0x00] + [UInt8](repeating: 0xe5, count: 31)),
-      s: Data([0x00, 0x00] + [UInt8](repeating: 0xf6, count: 30)),
-      v: 2
-    )
     let cryptography = DeterministicSensingCryptography(
       eventSigningPublicKey: eventSigningPublicKey,
       ownerPublicKey: ownerPublicKey,
-      selfProofSignature: selfProofSignature,
-      walletAcknowledgementSignature: walletAcknowledgementSignature
+      selfProofSignature: selfProofSignature
     )
     let coordinator = makeIsolatedSensingCoordinator(
       for: self,
       sensingCryptography: cryptography
     )
     let event = EventSession(id: "FACADE-EVENT", name: "Facade Event", venue: nil)
-    let walletAddress = "0x" + String(repeating: "12", count: 20)
-    let walletSignatureHex = "0x" + String(repeating: "ab", count: 65)
 
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    XCTAssertNotNil(coordinator.beginBinding(walletAddress: walletAddress, chainId: "eip155:1"))
+    guard let messageHex = coordinator.beginBinding(walletAddress: walletAddress, chainId: "eip155:1") else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
+
+    let walletSignatureBytes = Self.signEip191(messageHex: messageHex, privateKey: walletKeyPair.privateKey)
+    let walletSignatureHex = "0x" + walletSignatureBytes.map { String(format: "%02x", $0) }.joined()
+
+    guard
+      let acknowledgement = BarnardCoreSigning.signWalletAcknowledgement(
+        ownerPrivateKey: ownerKeyPair.privateKey,
+        walletAddress: walletAddressBytes,
+        walletSignature: walletSignatureBytes
+      )
+    else {
+      XCTFail("expected a valid wallet acknowledgement signature")
+      return
+    }
+    let walletAcknowledgementSignature = SensingRecoverableSignature(barnardCore: acknowledgement)
+    cryptography.walletAcknowledgementSignatureResult = walletAcknowledgementSignature
+
     let bindingRecord = coordinator.completeBinding(
       walletAddress: walletAddress,
       walletSignatureHex: walletSignatureHex
@@ -174,8 +210,8 @@ final class SensingCryptographyTests: XCTestCase {
         .ownerPublicKey,
         .ownerPublicKey,
         .signWalletAcknowledgement(
-          walletAddress: Data(repeating: 0x12, count: 20),
-          walletSignature: Data(repeating: 0xab, count: 65)
+          walletAddress: Data(walletAddressBytes),
+          walletSignature: Data(walletSignatureBytes)
         ),
         .eventSigningPublicKey(eventCode: event.id),
         .eventSigningPublicKey(eventCode: event.id),
@@ -188,6 +224,30 @@ final class SensingCryptographyTests: XCTestCase {
         ),
       ]
     )
+  }
+
+  private static func signEip191(messageHex: String, privateKey: [UInt8]) -> [UInt8] {
+    let digest = BarnardCoreSigning.computeEip191Digest(messageBytes: decodeHex(messageHex))
+    let signature = BarnardCoreSigning.signRecoverable(privateKey: privateKey, messageHash32: digest)
+    return signature.r + signature.s + [UInt8(signature.v)]
+  }
+
+  private static func decodeHex(_ string: String) -> [UInt8] {
+    let stripped = string.hasPrefix("0x") || string.hasPrefix("0X")
+      ? String(string.dropFirst(2))
+      : string
+    var bytes = [UInt8]()
+    bytes.reserveCapacity(stripped.count / 2)
+    var index = stripped.startIndex
+    while index < stripped.endIndex {
+      let next = stripped.index(index, offsetBy: 2)
+      guard let byte = UInt8(stripped[index..<next], radix: 16) else {
+        preconditionFailure("messageHex must be well-formed hex")
+      }
+      bytes.append(byte)
+      index = next
+    }
+    return bytes
   }
 
   func testDeterministicFakeReturnsConfiguredValuesAndRecordsCallsInOrder() {
