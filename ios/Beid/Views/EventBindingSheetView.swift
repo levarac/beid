@@ -445,6 +445,7 @@ struct EventBindingSheetView: View {
     .preferredColorScheme(.dark)
 }
 
+#if DEBUG
 #Preview("Already connected") {
   let coordinator = AppCoordinator()
   coordinator.recordWalletConnection(
@@ -475,3 +476,4 @@ struct EventBindingSheetView: View {
     .task { await coordinator.sensingCoordinator.waitForDemoSequenceToFinish() }
     .preferredColorScheme(.dark)
 }
+#endif

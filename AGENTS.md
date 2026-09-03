@@ -500,6 +500,10 @@ dates). The contract every agent must know before touching delivery files:
     self-hosted runner `emi` 上の **informational-only** lane。job 名は
     `iOS simulator (self-hosted macOS, informational)`。`ios/` `shared/`
     Android build 関連パスの変更でのみ起動し、**required ではない**。
+    Debug simulator build/test の集計後、テスト結果にかかわらず Release device
+    build (`CODE_SIGNING_ALLOWED=NO`) も実行し、Release-only の compile regression
+    を検出する。個々の step を `continue-on-error` にはせず、lane 全体が
+    informational-only である既存の境界を保つ。
     Xcode Cloud への依存を段階的に減らすための実績積みの段階であり、
     Xcode Cloud の設定・branch protection・他の workflow は変更していない。
 

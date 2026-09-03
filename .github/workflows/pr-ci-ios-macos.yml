@@ -251,6 +251,20 @@ jobs:
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY
 
+      - name: Build Release for device (informational)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios/Beid.xcodeproj \
+            -scheme Beid \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -sdk iphoneos \
+            build \
+            CODE_SIGNING_ALLOWED=NO
+
       - name: Shutdown simulator
         if: always()
         shell: bash
