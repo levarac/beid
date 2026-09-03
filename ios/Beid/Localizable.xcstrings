@@ -167,6 +167,83 @@
     "On": {},
     "On-device first": {},
     "Only anonymous proofs are exchanged, never your identity.": {},
+    "ownerKeyRestoration.dismiss": {
+      "comment": "Button that closes an owner-key restoration warning after the user has read it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close warning"
+          }
+        }
+      }
+    },
+    "ownerKeyRestoration.identityReset.message": {
+      "comment": "Alert message explaining that an unreadable proof-signing identity was replaced and the previous identity is no longer usable on this device.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid could not restore the identity this device used to sign proofs, so it created a new one. This device can no longer use the previous identity."
+          }
+        }
+      }
+    },
+    "ownerKeyRestoration.identityReset.title": {
+      "comment": "Alert title shown when beid could not restore the device identity used to sign proofs and created a new one.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proof identity was reset"
+          }
+        }
+      }
+    },
+    "ownerKeyRestoration.identityResetWithRecords.message": {
+      "comment": "Alert message explaining both the replacement of an unreadable proof-signing identity and the effect on saved proof-related records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid created a new identity because the saved one could not be restored. Some saved proof records still refer to the previous identity; they still exist, but this device can no longer sign as that identity."
+          }
+        }
+      }
+    },
+    "ownerKeyRestoration.identityResetWithRecords.title": {
+      "comment": "Alert title shown when beid both replaced an unreadable proof-signing identity and found saved records that use the previous identity.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proof identity could not be restored"
+          }
+        }
+      }
+    },
+    "ownerKeyRestoration.savedRecordsMismatch.message": {
+      "comment": "Alert message explaining that saved proof-related records remain on disk but refer to an owner identity this device no longer controls.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some saved proof records were created with a different identity. They still exist, but this device can no longer sign as that identity."
+          }
+        }
+      }
+    },
+    "ownerKeyRestoration.savedRecordsMismatch.title": {
+      "comment": "Alert title shown when saved proof-related records refer to an owner identity different from the device's current identity.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some proof records use a previous identity"
+          }
+        }
+      }
+    },
     "Open Settings": {},
     "Pairing URI": {},
     "Peers": {},

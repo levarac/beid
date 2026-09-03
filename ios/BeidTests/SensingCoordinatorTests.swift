@@ -686,6 +686,166 @@ final class SensingCoordinatorTests: XCTestCase {
 }
 
 @MainActor
+final class OwnerKeyRestorationNoticeTests: XCTestCase {
+  func testSignalAExplainsThatThePreviousProofIdentityWasLost() {
+    let notice = OwnerKeyRestorationNotice.classify(
+      quarantinedSeedKey: "beid.ownerKeySeed.quarantine.test",
+      ownerPublicKeyMismatchDetected: false
+    )
+
+    XCTAssertEqual(notice, .identityWasReset)
+    XCTAssertEqual(notice?.title, "Proof identity was reset")
+    XCTAssertEqual(
+      notice?.message,
+      "beid could not restore the identity this device used to sign proofs, so it created a new one. This device can no longer use the previous identity."
+    )
+  }
+
+  func testSignalBExplainsThatSavedRecordsUseThePreviousIdentity() {
+    let notice = OwnerKeyRestorationNotice.classify(
+      quarantinedSeedKey: nil,
+      ownerPublicKeyMismatchDetected: true
+    )
+
+    XCTAssertEqual(notice, .savedRecordsUsePreviousIdentity)
+    XCTAssertEqual(notice?.title, "Some proof records use a previous identity")
+    XCTAssertEqual(
+      notice?.message,
+      "Some saved proof records were created with a different identity. They still exist, but this device can no longer sign as that identity."
+    )
+  }
+
+  func testBothSignalsExplainTheResetAndAffectedRecordsTogether() {
+    let notice = OwnerKeyRestorationNotice.classify(
+      quarantinedSeedKey: "beid.ownerKeySeed.quarantine.test",
+      ownerPublicKeyMismatchDetected: true
+    )
+
+    XCTAssertEqual(notice, .identityWasResetWithSavedRecords)
+    XCTAssertEqual(notice?.title, "Proof identity could not be restored")
+    XCTAssertEqual(
+      notice?.message,
+      "beid created a new identity because the saved one could not be restored. Some saved proof records still refer to the previous identity; they still exist, but this device can no longer sign as that identity."
+    )
+  }
+
+  func testNoSignalProducesNoNotice() {
+    XCTAssertNil(
+      OwnerKeyRestorationNotice.classify(
+        quarantinedSeedKey: nil,
+        ownerPublicKeyMismatchDetected: false
+      )
+    )
+  }
+
+  func testMismatchNoticeSurvivesBackgroundLoadUntilAcknowledged() async {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("owner-key-restoration-notice-test-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+    let crypto = DeterministicSensingCryptography()
+    let defaultsSuiteName = "org.levarac.beid.tests.ownerKeyRestorationNotice.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: defaultsSuiteName)!
+    addTeardownBlock { defaults.removePersistentDomain(forName: defaultsSuiteName) }
+    let bindingStore = BindingRecordStore(
+      fileURL: directory.appendingPathComponent("binding-records.json")
+    )
+    bindingStore.add(makeBindingRecord(ownerPublicKey: Data(repeating: 0x09, count: 33)))
+
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: crypto,
+      ownerKeyRestorationAcknowledgementDefaults: defaults
+    )
+
+    XCTAssertNil(coordinator.ownerKeyRestorationNotice)
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertEqual(
+      coordinator.ownerKeyRestorationNotice,
+      .savedRecordsUsePreviousIdentity,
+      "the startup warning must remain available after the asynchronous load reaches the UI"
+    )
+
+    coordinator.acknowledgeOwnerKeyRestorationNotice()
+
+    XCTAssertNil(
+      coordinator.ownerKeyRestorationNotice,
+      "the explicit acknowledgement must deterministically clear the warning"
+    )
+
+    let relaunchedCoordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: DeterministicSensingCryptography(),
+      ownerKeyRestorationAcknowledgementDefaults: defaults
+    )
+    await relaunchedCoordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertNil(
+      relaunchedCoordinator.ownerKeyRestorationNotice,
+      "an acknowledged warning must not interrupt the user again on every launch while the same current identity remains active"
+    )
+  }
+
+  func testSignalAIsCapturedAfterOwnerKeyResolutionQuarantinesTheSeed() async {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("owner-key-restoration-signal-a-test-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+    let defaultsSuiteName = "org.levarac.beid.tests.ownerKeyRestorationSignalA.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: defaultsSuiteName)!
+    addTeardownBlock { defaults.removePersistentDomain(forName: defaultsSuiteName) }
+    defaults.set("unreadable-owner-key-seed", forKey: "beid.ownerKeySeed")
+
+    let ownerKeyProvider = OwnerKeyProvider(
+      keyStorage: BeidUserDefaultsKeyStorage(defaults: defaults),
+      randomSource: FixedOwnerKeyRandomSource()
+    )
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: BarnardSensingCryptography(ownerKeyProvider: ownerKeyProvider),
+      ownerKeyRestorationAcknowledgementDefaults: defaults
+    )
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertEqual(
+      coordinator.ownerKeyRestorationNotice,
+      .identityWasReset,
+      "Signal A must be read after owner-key resolution has had the chance to quarantine and replace an unreadable seed"
+    )
+  }
+
+  private func makeBindingRecord(ownerPublicKey: Data) -> BindingRecord {
+    BindingRecord(
+      proofId: UUID(),
+      eventCode: "TEST-EVENT",
+      walletAddress: "0x0000000000000000000000000000000000000001",
+      eventSigningPublicKey: Data(repeating: 0x02, count: 33),
+      ownerPublicKey: ownerPublicKey,
+      chainId: 1,
+      nonce: Data(repeating: 0x04, count: 16),
+      issuedAt: "2026-01-01T00:00:00Z",
+      walletSignatureHex: String(repeating: "0a", count: 65),
+      deviceSignature: BarnardCoreRecoverableSignature(
+        r: [UInt8](repeating: 1, count: 32),
+        s: [UInt8](repeating: 2, count: 32),
+        v: 0
+      )
+    )
+  }
+}
+
+private struct FixedOwnerKeyRandomSource: BarnardCoreRandomSource {
+  func randomBytes(count: Int) -> [UInt8] {
+    [UInt8](repeating: 0x42, count: count)
+  }
+}
+
+@MainActor
 private final class DiscoveryIsolationReportRuntimeSpy: WindowReportSubmissionRuntimeProtocol {
   private(set) var captureCalls = 0
   private(set) var submitCalls = 0
