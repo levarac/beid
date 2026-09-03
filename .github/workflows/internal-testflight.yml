@@ -3,7 +3,7 @@ name: Internal TestFlight Delivery
 on:
   push:
     branches:
-      - main
+      - "**"
     paths:
       - what_to_test.json
       - what_to_test.ios.json

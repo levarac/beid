@@ -4,11 +4,11 @@ This document is the source of truth for beid's temporary Android delivery
 lane. It records repository behavior, runner-local prerequisites, and the
 manual activation steps that must be completed before API uploads can work.
 
-## Current temporary status — 2026-08-28
+## Current temporary status — 2026-09-03
 
 `.github/workflows/internal-google-play.yml` builds a signed Android App
 Bundle and uploads it to Google Play internal testing. It runs on pushes to
-`main` that change `what_to_test.json` or `what_to_test.android.json`, and can
+any branch that change `what_to_test.json` or `what_to_test.android.json`, and can
 also be started manually. The job runs only when the repository variable
 `GHA_DELIVERY` is exactly `on`, uses the self-hosted `emi` runner, and keeps
 Android deliveries serialized without cancelling an in-progress upload.

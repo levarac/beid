@@ -3,7 +3,7 @@ name: Internal Google Play Delivery
 on:
   push:
     branches:
-      - main
+      - "**"
     paths:
       - what_to_test.json
       - what_to_test.android.json

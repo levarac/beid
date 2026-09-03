@@ -5,7 +5,7 @@ the retained Xcode Cloud configuration reviewable and records the temporary
 GitHub Actions lane used while the Xcode Cloud budget is exhausted. Beid's
 scope is TestFlight only; App Store submission automation is not included.
 
-## Current temporary status — 2026-08-20
+## Current temporary status — 2026-09-03
 
 The Xcode Cloud workflows remain configured but are not the active delivery
 path while their compute budget is exhausted. Two repository workflows provide
@@ -13,14 +13,17 @@ the temporary path:
 
 | Workflow | Automatic trigger | Manual trigger |
 |---|---|---|
-| `.github/workflows/internal-testflight.yml` | Push to `main` changing `what_to_test.json` or `what_to_test.ios.json` | Yes |
-| `.github/workflows/release-testflight.yml` | Push to `release/**` | Yes |
+| `.github/workflows/internal-testflight.yml` | Push to any branch changing `what_to_test.json` or `what_to_test.ios.json` | Yes |
+| `.github/workflows/release-testflight.yml` | Push to `release/**` changing `release_notes.json` | Yes |
 
 Both jobs run only when the repository variable `GHA_DELIVERY` is exactly
 `on`. They share the fixed `beid-ios-delivery` concurrency group, do not cancel
 an in-progress delivery, and run on the self-hosted `emi` runner. Set the
 variable to `off` to silence both workflows when the Xcode Cloud budget
 returns; no Xcode Cloud setting needs to be removed for this temporary lane.
+When a workflow specifies both branch and path filters, GitHub requires both
+to match the same push; the release lane therefore ignores release-branch
+pushes that do not change `release_notes.json`.
 
 `scripts/gha/build-and-upload-ios.sh` installs the XcodeGen version pinned by
 `ios/ci_scripts/XCODEGEN_VERSION`, checks that generation leaves the committed

@@ -523,11 +523,13 @@ dates). The contract every agent must know before touching delivery files:
   せず、そのまま保持する。budget が戻ったら repository variable
   `GHA_DELIVERY` を `off` にして GitHub Actions lane を止め、Xcode Cloud を
   再び delivery path として使う。
-- `.github/workflows/internal-testflight.yml` は `main` への push のうち
+- `.github/workflows/internal-testflight.yml` は任意の branch への push のうち
   `what_to_test.json` または `what_to_test.ios.json` が変わった時と、手動実行で
   起動する。`.github/workflows/release-testflight.yml` は `release/**` branch
-  への push と手動実行で起動する。両方とも `GHA_DELIVERY == on` の時だけ
-  self-hosted runner `emi` 上で動き、同じ concurrency group で直列化する。
+  への push で `release_notes.json` が変わった時と、手動実行で起動する。
+  branch と path の両方が一致する必要がある。両方とも
+  `GHA_DELIVERY == on` の時だけ self-hosted runner `emi` 上で動き、同じ
+  concurrency group で直列化する。
 - 共通処理は `scripts/gha/build-and-upload-ios.sh` に置く。XcodeGen の pin と
   drift guard は Xcode Cloud の `ci_post_clone.sh` と同じ契約を守り、Release
   archive をtemporary lane内だけManual / Apple Distributionで署名して生成し、
@@ -555,7 +557,7 @@ dates). The contract every agent must know before touching delivery files:
 
 ### Temporary Android delivery lane (GitHub Actions)
 
-- `.github/workflows/internal-google-play.yml` は `main` への push のうち
+- `.github/workflows/internal-google-play.yml` は任意の branch への push のうち
   `what_to_test.json` または `what_to_test.android.json` が変わった時と、
   手動実行で起動する。`GHA_DELIVERY == on` の時だけ self-hosted runner `emi`
   上でAABをbuild・署名し、Google Play internal testingへuploadする。
@@ -578,8 +580,8 @@ dates). The contract every agent must know before touching delivery files:
   Ken側activation手順は`docs/google-play.md`を参照する。
 
 - **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
-  root). The temporary GitHub Actions lane triggers from this change on
-  `main`, but does not yet copy the file into tester-facing "What to Test"
+  root). The temporary GitHub Actions lane triggers from this change on any
+  pushed branch, but does not yet copy the file into tester-facing "What to Test"
   notes. Xcode Cloud does both when it is the active delivery path. Rewrite
   the file wholesale each time — what to check in *this* build
   only, 1-3 plain sentences (ASC locale: `en-US` only), no PR
