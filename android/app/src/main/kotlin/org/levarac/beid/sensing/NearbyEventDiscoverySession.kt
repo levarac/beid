@@ -14,6 +14,7 @@ import org.levarac.parallax.discovery.refreshNearbyEventDiscovery
 import org.levarac.parallax.discovery.resetNearbyEventDiscovery
 import org.levarac.parallax.discovery.beginNearbyEventRegistryResolutionFromHex
 import org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex
+import org.levarac.parallax.discovery.isNearbyEventRegistryResolutionAttemptActive
 import org.levarac.parallax.discovery.NearbyEventRegistryResolutionResult
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.parallax.registry.RegistryRequest
@@ -32,6 +33,7 @@ internal class NearbyEventDiscoverySession(
     private val _candidates = MutableStateFlow(store.snapshot)
     private var expiryJob: Job? = null
     private var disposed = false
+    private var callbackGeneration = 0L
     private val registryRequests = mutableSetOf<RegistryRequest>()
 
     val candidates: StateFlow<NearbyEventCandidates> = _candidates.asStateFlow()
@@ -60,6 +62,7 @@ internal class NearbyEventDiscoverySession(
     }
 
     fun reset() {
+        callbackGeneration += 1
         registryRequests.forEach { it.cancel() }
         registryRequests.clear()
         expiryJob?.cancel()
@@ -72,7 +75,8 @@ internal class NearbyEventDiscoverySession(
         repeat(snapshot.candidateCount) { index ->
             val candidate = snapshot.candidateAt(index) ?: return@repeat
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
-            if (!beginNearbyEventRegistryResolutionFromHex(store, hash)) return@repeat
+            val attempt = beginNearbyEventRegistryResolutionFromHex(store, hash) ?: return@repeat
+            val generation = callbackGeneration
             // The whole body runs on coroutineScope's dispatcher (Main.immediate,
             // set by the caller), matching the iOS adapter's `Task { @MainActor }`
             // wrapping. This confines every registryRequests mutation to one
@@ -86,21 +90,45 @@ internal class NearbyEventDiscoverySession(
             lookup = client.resolveEventIdByCodeHash(hash) { resolution ->
                 coroutineScope.launch {
                     registryRequests.remove(lookup)
+                    if (disposed || generation != callbackGeneration ||
+                        !isNearbyEventRegistryResolutionAttemptActive(store, attempt)) return@launch
                     val eventId = resolution.eventIdHex
                     if (!resolution.isSuccess || eventId == null) {
                         val result = if (resolution.errorCode == "event_code_lookup_not_found")
                             NearbyEventRegistryResolutionResult.NOT_REGISTERED
                         else NearbyEventRegistryResolutionResult.LOOKUP_UNAVAILABLE
-                        publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, null).snapshot)
+                        publishAndSchedule(
+                            completeNearbyEventRegistryResolutionFromHex(
+                                store = store,
+                                attempt = attempt,
+                                result = result,
+                                resolvedEventIdHex = null,
+                                verifiedDefinitionJoinMode = null,
+                                verifiedDefinitionEventIdHex = null,
+                                verifiedDefinitionEventCodeHashHex = null,
+                            ).snapshot,
+                        )
                         return@launch
                     }
                     lateinit var verification: RegistryRequest
                     verification = client.resolveEventDefinition(eventId, safeRegistryReadPin(), nowEpochMillis() / 1000L) { verified ->
                         coroutineScope.launch {
                             registryRequests.remove(verification)
+                            if (disposed || generation != callbackGeneration ||
+                                !isNearbyEventRegistryResolutionAttemptActive(store, attempt)) return@launch
                             val result = if (verified.isSuccess) NearbyEventRegistryResolutionResult.VERIFIED
                             else NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE
-                            publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, eventId).snapshot)
+                            publishAndSchedule(
+                                completeNearbyEventRegistryResolutionFromHex(
+                                    store = store,
+                                    attempt = attempt,
+                                    result = result,
+                                    resolvedEventIdHex = eventId,
+                                    verifiedDefinitionJoinMode = verified.context?.joinMode,
+                                    verifiedDefinitionEventIdHex = verified.context?.eventIdHex,
+                                    verifiedDefinitionEventCodeHashHex = verified.context?.eventCodeHashHex,
+                                ).snapshot,
+                            )
                         }
                     }
                     registryRequests += verification

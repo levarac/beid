@@ -33,6 +33,7 @@ internal object EventDefinitionCborCodec {
     private const val PUBLIC_KEY_BYTES: Int = 33
     private const val SIGNATURE_BYTES: Int = 64
     private const val KID_BYTES: Int = 8
+    private const val EVENT_CODE_HASH_BYTES: Int = 8
     private const val MAX_AUTHORITY_KEYS: Int = 1_024
     private val ZERO_DIGEST = ByteArray(HASH_BYTES)
 
@@ -213,7 +214,10 @@ internal object EventDefinitionCborCodec {
 
     private fun decodeDefinitionPayload(bytes: ByteArray): RawDefinition {
         val reader = StrictCborReader(bytes)
-        reader.expectMap(13)
+        val fieldCount = reader.readMapLength()
+        require(fieldCount in 13..15) {
+            "Event Definition must contain 13 legacy, 14 gated, or 15 open fields"
+        }
         reader.expectUnsignedKey(1L)
         val version = reader.readUnsigned()
         if (version != EVENT_DEFINITION_VERSION) {
@@ -247,7 +251,38 @@ internal object EventDefinitionCborCodec {
         val validFrom = reader.readProtocolUInt("validFrom")
         reader.expectUnsignedKey(13L)
         val validUntil = reader.readProtocolUInt("validUntil")
+        val joinMode = if (fieldCount >= 14) {
+            reader.expectUnsignedKey(14L)
+            when (reader.readUnsigned()) {
+                0L -> EventJoinMode.OPEN
+                1L -> EventJoinMode.GATED
+                else -> fail(DefinitionDecodeError.MALFORMED, "Event Definition joinMode is unknown")
+            }
+        } else {
+            null
+        }
+        val eventCodeHash = if (fieldCount == 15) {
+            reader.expectUnsignedKey(15L)
+            reader.readByteString(EVENT_CODE_HASH_BYTES)
+        } else {
+            null
+        }
         reader.requireFinished()
+
+        when (joinMode) {
+            EventJoinMode.OPEN -> {
+                if (eventCodeHash == null) {
+                    fail(DefinitionDecodeError.MALFORMED, "open Event Definition requires eventCodeHash")
+                }
+                if (!eventCodeHash.contentEquals(eventCodeHashForOpenEventV1(eventId))) {
+                    fail(DefinitionDecodeError.MALFORMED, "open Event Definition eventCodeHash is not canonical")
+                }
+            }
+            EventJoinMode.GATED -> if (eventCodeHash != null) {
+                fail(DefinitionDecodeError.MALFORMED, "gated Event Definition forbids eventCodeHash")
+            }
+            null -> Unit
+        }
 
         if (sequence.value < 1L) {
             fail(DefinitionDecodeError.INVALID_VALIDITY, "Event Definition sequence must start at one")
@@ -281,6 +316,8 @@ internal object EventDefinitionCborCodec {
             submissionEndpoint = submissionEndpoint,
             validFrom = validFrom,
             validUntil = validUntil,
+            joinMode = joinMode,
+            eventCodeHash = eventCodeHash,
         )
     }
 
@@ -538,6 +575,8 @@ internal object EventDefinitionCborCodec {
             validFrom = validFrom,
             validUntil = validUntil,
             authorityPublicKey = authorityKey,
+            joinMode = joinMode,
+            eventCodeHash = eventCodeHash,
         )
 
     private data class ProtectedHeaders(val kid: ByteArray)
@@ -564,6 +603,8 @@ internal object EventDefinitionCborCodec {
         val submissionEndpoint: String,
         val validFrom: ProtocolUInt,
         val validUntil: ProtocolUInt,
+        val joinMode: EventJoinMode?,
+        val eventCodeHash: ByteArray?,
     )
 
     private fun fail(reason: DefinitionDecodeError, message: String): Nothing =
@@ -585,6 +626,8 @@ internal object EventDefinitionCborCodec {
         fun expectMap(expectedLength: Int) {
             require(readLength(5) == expectedLength) { "unexpected CBOR map length" }
         }
+
+        fun readMapLength(): Int = readLength(5)
 
         fun expectUnsignedKey(expected: Long) {
             require(readUnsigned() == expected) { "unknown, duplicate, or out-of-order CBOR map key" }
