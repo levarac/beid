@@ -220,6 +220,114 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertEqual(connector.chainId, "eip155:1")
   }
 
+  // MARK: - `cancelPendingOperation()` (dispatch#26 condition 3)
+  //
+  // The light, in-app cancel used by Cancel/Try Again/Start Over — unlike
+  // `disconnect()`, it must never reach the SDK's own persisted session
+  // (`transport.disconnectCount` staying 0 is the proof of that) or clear
+  // `WalletHintStore`.
+
+  /// Mirrors `testMetaMaskLateConnectResultCannotRestoreDisconnectedSession`,
+  /// but for the light cancel path: a stale late `connect()` response must
+  /// not resurrect `.connected` after `cancelPendingOperation()`, and the
+  /// SDK's own session must never have been touched.
+  func testCancelPendingOperationDuringConnectLeavesTheSDKSessionAlone() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.suspendConnect = true
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    let connectTask = Task { await connector.connect() }
+    await transport.waitUntilConnectStarts()
+
+    connector.cancelPendingOperation()
+
+    XCTAssertEqual(transport.disconnectCount, 0)
+    XCTAssertEqual(connector.state, .idle)
+    XCTAssertNil(connector.address)
+
+    transport.completeConnect(
+      with: .success(MetaMaskWalletAccount(address: "0xLATE", chainId: "eip155:8453"))
+    )
+    await connectTask.value
+
+    XCTAssertEqual(connector.state, .idle)
+    XCTAssertNil(connector.address)
+    XCTAssertEqual(transport.disconnectCount, 0)
+  }
+
+  /// Mirrors `testMetaMaskDisconnectDoesNotClearThePersistedHint` — the
+  /// light cancel path must be at least as non-destructive as `disconnect()`
+  /// already is, and additionally must never touch the SDK session at all.
+  func testCancelPendingOperationNeverClearsTheHint() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
+    )
+    let store = makeIsolatedHintStore()
+    let connector = MetaMaskConnector(transport: transport, hintStore: store)
+    await connector.connect()
+    XCTAssertNotNil(store.load(), "precondition: connect() cached a hint")
+
+    connector.cancelPendingOperation()
+
+    XCTAssertEqual(store.load(), CachedWalletHint(address: "0xMETAMASK", chainId: "eip155:1"))
+    XCTAssertEqual(transport.disconnectCount, 0)
+  }
+
+  /// A pending sign request that gets cancelled must resolve `.cancelled` —
+  /// not `.rejected` (a wallet-side decline), `.notConnected` (implies the
+  /// session itself is gone), or `.timedOut` (implies the wallet never
+  /// responded) — and must not touch the SDK's own session either.
+  func testCancelPendingOperationDuringSignResolvesCancelledNotRejectedOrNotConnected() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xMETAMASK", chainId: "eip155:1")
+    )
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    await connector.connect()
+    transport.suspendPersonalSign = true
+
+    let signTask = Task { await connector.requestPersonalSign(messageHex: "0xMESSAGE") }
+    await transport.waitUntilPersonalSignStarts()
+
+    connector.cancelPendingOperation()
+
+    let result = await signTask.value
+    XCTAssertEqual(result, .failure(.cancelled))
+    XCTAssertEqual(transport.disconnectCount, 0)
+  }
+
+  /// Positive mirror: the property under test is "light paths leave the SDK
+  /// session and hint alone, the ONE explicit path still tears both down" —
+  /// a suite that only proved the light paths above would also pass for a
+  /// regression that made every path non-destructive. Exercised at the
+  /// `AppCoordinator` level (not just `MetaMaskConnector` directly) since
+  /// `disconnectWallet()` is the actual production "Disconnect Wallet"
+  /// entry point. Deliberately uses the real `UserDefaults.standard`-backed
+  /// `WalletHintStore()` for the hint assertions (matching
+  /// `testDisconnectWalletClearsThePersistedHint`'s existing convention):
+  /// `AppCoordinator.disconnectWallet()` clears via its own fresh
+  /// `WalletHintStore()`, not whatever hintStore was injected into the
+  /// connector, so an isolated hintStore on the connector would not prove
+  /// anything about the clear.
+  func testDisconnectWalletStillDisconnectsTransportAndClearsHint() async {
+    let hintKey = "beid.walletConnect.lastAddressHint"
+    UserDefaults.standard.removeObject(forKey: hintKey)
+    defer { UserDefaults.standard.removeObject(forKey: hintKey) }
+    WalletHintStore().save(CachedWalletHint(address: "0xREALADDRESS", chainId: "eip155:1"))
+    XCTAssertNotNil(WalletHintStore().load(), "precondition: a hint is cached before disconnecting")
+
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.connectResult = .success(MetaMaskWalletAccount(address: "0xREALADDRESS", chainId: "eip155:1"))
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    await connector.connect()
+    let coordinator = AppCoordinator(walletConnector: connector)
+
+    coordinator.disconnectWallet()
+
+    XCTAssertEqual(transport.disconnectCount, 1)
+    XCTAssertNil(WalletHintStore().load())
+  }
+
   // MARK: - `connectAndSign` (dispatch#26 condition 2)
 
   func testConnectAndSignPublishesConnectedStateAndReturnsSignature() async {
@@ -295,6 +403,7 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   var signatureResult: Result<String, MetaMaskTransportError> =
     .failure(.failed("No signature result"))
   var suspendConnect = false
+  var suspendPersonalSign = false
   private(set) var connectCount = 0
   private(set) var disconnectCount = 0
   private(set) var sdkConnected = false
@@ -303,6 +412,8 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   private(set) var connectAndSignMessage: String?
   private var connectContinuation:
     CheckedContinuation<Result<MetaMaskWalletAccount, MetaMaskTransportError>, Never>?
+  private var personalSignContinuation:
+    CheckedContinuation<Result<String, MetaMaskTransportError>, Never>?
 
   init(isWalletInstalled: Bool) {
     self.isWalletInstalled = isWalletInstalled
@@ -331,7 +442,10 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   ) async -> Result<String, MetaMaskTransportError> {
     requestedAddress = address
     requestedMessage = messageHex
-    return signatureResult
+    guard suspendPersonalSign else { return signatureResult }
+    return await withCheckedContinuation { continuation in
+      personalSignContinuation = continuation
+    }
   }
 
   func disconnect() {
@@ -355,6 +469,17 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   ) {
     connectContinuation?.resume(returning: result)
     connectContinuation = nil
+  }
+
+  func waitUntilPersonalSignStarts() async {
+    while requestedMessage == nil {
+      await Task.yield()
+    }
+  }
+
+  func completePersonalSign(with result: Result<String, MetaMaskTransportError>) {
+    personalSignContinuation?.resume(returning: result)
+    personalSignContinuation = nil
   }
 }
 

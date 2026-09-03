@@ -68,6 +68,24 @@ enum WalletConnectorError: Error, Equatable {
   case rejected
   case timedOut
   case relayFailure(String)
+  /// When `cancelPendingOperation()` runs while a `requestPersonalSign()`
+  /// call is in flight (`signGate` non-nil), it MUST resolve that gate's
+  /// `CheckedContinuation` with some value before dropping the reference —
+  /// an unresumed continuation traps on deallocation, so the awaiting
+  /// caller either crashes (debug) or hangs forever (release). Of the other
+  /// three existing cases, none is a truthful value to resolve it with:
+  /// `.rejected` means MetaMask error 4001, a wallet-side decline, which
+  /// never happened; `.notConnected` is the literal string
+  /// `EventBindingSheetView` shows a user ("Wallet not connected"), which
+  /// overclaims — it reads as "your wallet link is broken, reconnect from
+  /// zero," when the SDK session is deliberately left intact; `.timedOut`
+  /// claims a response timer lapsed, which also never happened. `.cancelled`
+  /// is the only honest value available — this justifies the case's
+  /// existence on its own, independent of whether any UI path reaches it
+  /// today. It is also the correct description of what happened: the user
+  /// stopped this specific operation from beid's own UI (Cancel, Try Again,
+  /// Start Over) before it reached — or heard back from — the wallet.
+  case cancelled
 }
 
 /// Common wallet surface used by onboarding and AttendanceProof/v1 signing.
@@ -99,7 +117,19 @@ protocol WalletConnector: ObservableObject {
     responseTimeout: TimeInterval,
     onDispatched: (() -> Void)?
   ) async -> Result<(LiveWalletAddress, String), WalletConnectorError>
+  /// Tears down the wallet SDK's own persisted session (e.g.
+  /// `sdk.disconnect()`/`sdk.clearSession()`) in addition to this
+  /// connector's in-memory state. This is the destructive one — reserve it
+  /// for an explicit "forget this wallet" action (`AppCoordinator
+  /// .disconnectWallet()`'s "Disconnect Wallet"). A user cancelling out of
+  /// beid's own UI should call `cancelPendingOperation()` instead.
   func disconnect()
+  /// Aborts whatever connect/sign attempt is currently in flight and returns
+  /// to `.idle`, without touching the wallet SDK's own persisted session or
+  /// `WalletHintStore` (dispatch#26 condition 3). Use this for a user
+  /// cancelling out of beid's own UI (Cancel, Try Again, Start Over) —
+  /// reserve `disconnect()` for an explicit "forget this wallet" action.
+  func cancelPendingOperation()
   @discardableResult func handle(url: URL) -> Bool
 }
 

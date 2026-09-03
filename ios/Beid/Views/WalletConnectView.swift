@@ -302,7 +302,9 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
         .multilineTextAlignment(.center)
       VStack(spacing: DS.Space.s) {
         BeidSecondaryButton(title: "Try Again") {
-          client.disconnect()
+          // Light in-app cancel, not forget-wallet (dispatch#26 condition 3)
+          // — leaves the SDK session and cached hint alone.
+          client.cancelPendingOperation()
           Task { await client.connect() }
         }
         .tint(DS.Color.actionPrimary)
@@ -348,7 +350,9 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   }
 
   private func chooseAnotherWallet() {
-    client.disconnect()
+    // Light in-app cancel, not forget-wallet (dispatch#26 condition 3) —
+    // leaves the SDK session and cached hint alone.
+    client.cancelPendingOperation()
     hasStarted = false
   }
 
@@ -429,6 +433,8 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
   }
 
   func disconnect() {}
+
+  func cancelPendingOperation() {}
 
   @discardableResult
   func handle(url: URL) -> Bool { false }

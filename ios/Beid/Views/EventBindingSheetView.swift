@@ -335,6 +335,29 @@ struct EventBindingSheetView: View {
       ))
     case .relayFailure(let message):
       sensing.failBinding(reason: message)
+    case .cancelled:
+      // The user stopped this from beid's own UI (Cancel/Try Again/Start
+      // Over on the wallet-connect step), not a wallet-side rejection or a
+      // stuck request. failedContent's header ("Couldn't seal attendance",
+      // a red X) is unconditionally alarming regardless of the reason text
+      // below it, so routing this through failBinding(reason:) would tell
+      // a user who cancelled themselves that something went wrong.
+      // declineBinding() is the same neutral "attempt not completed, no
+      // error" transition this sheet's own Cancel toolbar button and
+      // swipe-dismiss already use — reuse it instead of inventing new
+      // failure chrome for a case that, as of this change, no live Cancel
+      // affordance in this screen can actually trigger (see
+      // cancelPendingOperation()'s callers).
+      //
+      // declineBinding() is not just a neutral reset: it also discards
+      // pendingBindingMessage. That discard is load-bearing, not
+      // incidental — beginBinding() silently reuses a still-present
+      // pendingBindingMessage and ignores the address it was just handed,
+      // which is exactly the stale-message trap beid#316 exists to close.
+      // A cancel that left pendingBindingMessage in place would reopen
+      // that trap. Do not replace this with a plain bindingState reset
+      // that skips the discard.
+      sensing.declineBinding()
     }
   }
 

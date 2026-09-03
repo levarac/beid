@@ -226,10 +226,17 @@ hits the same failure and needs the same `ONLY_ACTIVE_ARCH=YES` override,
 since Release defaults to building all architectures.
 
 `MetaMaskConnector` owns the active account, chain, connection-attempt ID, and
-session ID. It deliberately never reads the SDK's `connected` property because
-0.8.10 can leave that value true after disconnect. Unit tests cover an absent
-MetaMask installation, disconnect cleanup despite stale SDK state, and a late
-connect response after cancellation.
+connection-generation ID. It deliberately never reads the SDK's `connected`
+property because 0.8.10 can leave that value true after disconnect. Unit
+tests cover an absent MetaMask installation, disconnect cleanup despite stale
+SDK state, and a late connect response after cancellation.
+
+`cancelPendingOperation()` (dispatch#26 condition 3) is a separate, lighter
+primitive from `disconnect()`: it is what Cancel/Try Again/Start Over in
+onboarding, the Account sheet, and the connect+binding interstitial call, and
+it leaves the wallet SDK's own persisted session and the cached
+`WalletHintStore` hint alone. `disconnect()` is reserved for the explicit
+"Disconnect Wallet" action — it is the one that tears down both.
 
 **Still requires a physical-device E2E, and it is a release gate, not a
 nice-to-have:** install a current MetaMask Mobile build and a beid build,

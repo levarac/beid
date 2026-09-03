@@ -198,7 +198,9 @@ private struct WalletConnectSheetView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel", role: .cancel) {
-            MetaMaskConnector.shared.disconnect()
+            // Light in-app cancel, not forget-wallet (dispatch#26
+            // condition 3) — leaves the SDK session and cached hint alone.
+            MetaMaskConnector.shared.cancelPendingOperation()
             coordinator.walletConnectSheetPresented = false
           }
         }
