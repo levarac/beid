@@ -420,6 +420,17 @@
         }
       }
     },
+    "scan.binding.verificationFailed": {
+      "comment": "Reason shown when the wallet's signature doesn't match the address it claimed to sign with, so beid could not verify the wallet actually owns that address. The user can try again.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't verify this wallet"
+          }
+        }
+      }
+    },
     "DETECTED": {
       "comment": "Status badge on the event card during BLE sensing, not audio/video recording."
     },

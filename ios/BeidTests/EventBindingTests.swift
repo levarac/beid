@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BarnardCore
 import XCTest
 @testable import Beid
 
@@ -8,7 +9,16 @@ import XCTest
 final class EventBindingTests: XCTestCase {
   private let testWalletAddress = "0x1234567890123456789012345678901234567890"
   private let testChainId = "eip155:1"
+  /// Not a real signature — only satisfies decode/shape checks. Used only by
+  /// tests that are expected to fail before reaching piece (b)'s Barnard
+  /// verification (malformed-hex, no-pending-attempt, decline/fail-race,
+  /// and the piece (a) trap test), where there is nothing for a real
+  /// signature to prove. Tests that assert a `BindingRecord` is actually
+  /// produced use `TestWallet.sign(messageHex:)` instead (see below).
   private let testWalletSignatureHex = "0x" + String(repeating: "ab", count: 65)
+  /// A genuinely valid EOA address (`TestWallet`'s own derived address) for
+  /// tests that need `completeBinding` to actually succeed end-to-end.
+  private let realWalletAddress = TestWallet.address
 
   func testBeginBindingReturnsNilWhenNotRecording() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
@@ -117,7 +127,10 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testCompleteBindingBuildsAndPersistsBindingRecord() async {
-    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     var collectedProof: Proof?
     coordinator.onProofCollected = { collectedProof = $0 }
@@ -125,11 +138,15 @@ final class EventBindingTests: XCTestCase {
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
-    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+    guard let messageHex = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
     coordinator.markBindingAwaitingApproval()
+    let walletSignatureHex = TestWallet.sign(messageHex: messageHex)
     let record = coordinator.completeBinding(
-      walletAddress: testWalletAddress,
-      walletSignatureHex: testWalletSignatureHex
+      walletAddress: realWalletAddress,
+      walletSignatureHex: walletSignatureHex
     )
 
     guard let record else {
@@ -137,8 +154,8 @@ final class EventBindingTests: XCTestCase {
       return
     }
     XCTAssertEqual(record.eventCode, event.id)
-    XCTAssertEqual(record.walletAddress, testWalletAddress)
-    XCTAssertEqual(record.walletSignatureHex, testWalletSignatureHex)
+    XCTAssertEqual(record.walletAddress, realWalletAddress)
+    XCTAssertEqual(record.walletSignatureHex, walletSignatureHex)
     XCTAssertEqual(
       record.proofId,
       collectedProof?.id,
@@ -168,15 +185,117 @@ final class EventBindingTests: XCTestCase {
     XCTAssertNil(coordinator.completeBinding(walletAddress: testWalletAddress, walletSignatureHex: "not-hex"))
   }
 
-  func testBindingRecordRoundTripsThroughCodable() async throws {
+  // MARK: - Signer address verification at binding time (beid#316)
+
+  /// Closes the exact hole `testBeginBindingIgnoresANewAddressWhilePendingMessageExists`
+  /// documents at the `beginBinding` level: if `discardPendingBindingMessage()`
+  /// is ever skipped (e.g. `continueFromRestoredHint`'s mismatch branch is
+  /// deleted or becomes buggy), `pendingBindingMessage` still embeds the
+  /// stale address while `completeBinding` may be called with a disagreeing
+  /// argument address. `completeBinding` itself must refuse to produce a
+  /// record in that case. Piece (a) is a cheap comparison that must
+  /// short-circuit before any cryptography runs, so this deliberately stays
+  /// on the plain fake signature/crypto double — there is nothing for real
+  /// crypto to prove here.
+  func testCompleteBindingRejectsArgumentAddressDisagreeingWithPendingMessage() async {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+
+    let addressA = "0x1111111111111111111111111111111111111111"
+    let addressB = "0x2222222222222222222222222222222222222222"
+
+    XCTAssertNotNil(coordinator.beginBinding(walletAddress: addressA, chainId: testChainId))
+    // No discardPendingBindingMessage() call here — simulates the regression.
+
+    XCTAssertNil(
+      coordinator.completeBinding(walletAddress: addressB, walletSignatureHex: testWalletSignatureHex),
+      """
+      completeBinding must reject an argument address that disagrees with \
+      the pending message's embedded address, regardless of whether the \
+      signature would otherwise be valid for anything
+      """
+    )
+  }
+
+  /// The opposite trap: `beginBinding` reusing `pendingBindingMessage`
+  /// across repeated calls for the SAME address (a legitimate retry, e.g.
+  /// after a `markBindingAwaitingApproval` race or UI re-entry) must NOT be
+  /// rejected by the new address check — only a genuinely disagreeing
+  /// argument address should be. Guards against an address check that
+  /// accidentally compares against a freshly rebuilt message instead of the
+  /// actual `pendingBindingMessage` in play. Uses real crypto/signature so a
+  /// verification bug that always happens to pass couldn't hide behind a
+  /// fake signature piece (b) never actually checks.
+  func testCompleteBindingSucceedsAfterBeginBindingCalledTwiceForSameAddress() async {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    let first = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId)
+    let second = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId)
+    XCTAssertEqual(first, second, "sanity: repeated calls for the same address must reuse the pending message")
+
+    guard let messageHex = second else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
+
+    let record = coordinator.completeBinding(
+      walletAddress: realWalletAddress,
+      walletSignatureHex: TestWallet.sign(messageHex: messageHex)
+    )
+
+    XCTAssertNotNil(record, "a legitimate retry for the same address must still succeed")
+  }
+
+  /// Piece (b): the argument address and the pending message's embedded
+  /// address agree (piece (a) passes), but the wallet signature bytes were
+  /// actually produced by a DIFFERENT private key than the one
+  /// `realWalletAddress` derives from — simulating a wallet/connector that
+  /// reported the right address but signed with the wrong key (e.g. an
+  /// account switch mid-flow the connector didn't reflect in what it
+  /// reported). Only `BarnardCoreSigning.verifyWalletBinding`'s own
+  /// signature recovery can catch this — it's exactly why piece (b) exists.
+  func testCompleteBindingRejectsWalletSignatureFromADifferentPrivateKey() async {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    guard let messageHex = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
+
+    let wrongSignatureHex = TestWallet.signWrong(messageHex: messageHex)
+
+    XCTAssertNil(
+      coordinator.completeBinding(walletAddress: realWalletAddress, walletSignatureHex: wrongSignatureHex),
+      "a wallet signature that doesn't actually recover to the claimed address must be rejected"
+    )
+  }
+
+  func testBindingRecordRoundTripsThroughCodable() async throws {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    guard let messageHex = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
 
     guard let record = coordinator.completeBinding(
-      walletAddress: testWalletAddress,
-      walletSignatureHex: testWalletSignatureHex
+      walletAddress: realWalletAddress,
+      walletSignatureHex: TestWallet.sign(messageHex: messageHex)
     ) else {
       XCTFail("expected a BindingRecord")
       return
@@ -257,13 +376,19 @@ final class EventBindingTests: XCTestCase {
   }
 
   func testResetClearsBindingStateAfterASuccessfulBinding() async {
-    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
     coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+    guard let messageHex = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
     XCTAssertNotNil(coordinator.completeBinding(
-      walletAddress: testWalletAddress,
-      walletSignatureHex: testWalletSignatureHex
+      walletAddress: realWalletAddress,
+      walletSignatureHex: TestWallet.sign(messageHex: messageHex)
     ))
 
     coordinator.reset()
@@ -277,13 +402,19 @@ final class EventBindingTests: XCTestCase {
     // coordinator (as `AppCoordinator` reuses one `SensingCoordinator`
     // across `startScan()`/`finishScan()`) must not leak the previous
     // event's binding state into the new one.
-    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
     coordinator.startSensing(demoEvent: .demoSample)
     await coordinator.waitForDemoSequenceToFinish()
-    _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
+    guard let messageHex = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
     XCTAssertNotNil(coordinator.completeBinding(
-      walletAddress: testWalletAddress,
-      walletSignatureHex: testWalletSignatureHex
+      walletAddress: realWalletAddress,
+      walletSignatureHex: TestWallet.sign(messageHex: messageHex)
     ))
     coordinator.reset()
 
@@ -304,7 +435,14 @@ final class EventBindingTests: XCTestCase {
   /// `CachedWalletHint`/`WalletHintStore` instead.
   func testLiveWalletAddressFromDemoConnectorFlowsIntoBindingRecordUnmodified() async throws {
     #if DEBUG
-    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    // Real crypto: `DemoWalletConnector` now produces a genuinely valid
+    // wallet signature (beid#316), so `completeBinding`'s piece (b)
+    // verification against a fake owner-key double would otherwise reject
+    // this end-to-end record.
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
@@ -386,19 +524,24 @@ final class EventBindingTests: XCTestCase {
   /// stale one, and via the signer's captured message matching the fresh
   /// hex.
   func testRestoredHintMismatchDiscardsStaleMessageAndBindsToLiveAddress() async {
-    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
     let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
 
     let hintAddress = "0x1111111111111111111111111111111111111111"
-    let liveAddress = "0x2222222222222222222222222222222222222222"
+    // A genuinely valid address (unlike the discarded stale signature
+    // below, this one must actually verify — it's what the *final*
+    // `completeBinding` call at the bottom of this test checks).
+    let liveAddress = TestWallet.address
     let connector = FakeRestoredHintConnector()
     connector.connectAndSignResult = .success((
       LiveWalletAddress.fromConnectorResult(address: liveAddress, chainId: testChainId),
       testWalletSignatureHex
     ))
-    connector.requestPersonalSignResult = .success(testWalletSignatureHex)
 
     guard let staleMessageHex = coordinator.beginBinding(walletAddress: hintAddress, chainId: testChainId) else {
       XCTFail("expected beginBinding to succeed for the hint address")
@@ -424,6 +567,12 @@ final class EventBindingTests: XCTestCase {
       "a rebuilt message must differ from the stale one (different embedded address, and a new random nonce)"
     )
 
+    // A real signature for the freshly rebuilt message — piece (b)'s
+    // `verifyWalletBinding` recovers the actual signer, so a canned fake
+    // (as `staleMessageHex`'s discarded signature above still is) would no
+    // longer satisfy the final `completeBinding` call below.
+    connector.requestPersonalSignResult = .success(TestWallet.sign(messageHex: freshMessageHex))
+
     let signResult = await connector.requestPersonalSign(messageHex: freshMessageHex)
     guard case .success(let signatureHex) = signResult else {
       XCTFail("expected requestPersonalSign to succeed")
@@ -442,6 +591,141 @@ final class EventBindingTests: XCTestCase {
       liveAddress,
       "the persisted record must carry the wallet's actual address, never the stale hint"
     )
+  }
+}
+
+/// Synthetic EOA wallet keypairs for tests that need genuinely valid wallet
+/// signatures — `testWalletSignatureHex` above is not a real signature, it
+/// only satisfies decode/shape checks and never Barnard's own signature
+/// recovery. Derived deterministically via `BarnardCoreSigning
+/// .deriveOwnerKeyPair` purely because that's the existing fixed-seed-to-
+/// keypair primitive of the right shape already used in this test target
+/// (`SelfProofCheckpointRecoveryTests.swift`'s `BarnardBackedSelfProofCryptography`)
+/// — these are ordinary synthetic test wallets, not beid owner keys.
+private enum TestWallet {
+  private static let keyPair = BarnardCoreSigning.deriveOwnerKeyPair(
+    accountSecret: [UInt8](repeating: 0x13, count: 32)
+  )
+  /// A second, distinct keypair for the "signed by the wrong key" test —
+  /// its own derived address is never used, only its private key, to
+  /// produce a signature that recovers to an address other than
+  /// `TestWallet.address`.
+  private static let wrongKeyPair = BarnardCoreSigning.deriveOwnerKeyPair(
+    accountSecret: [UInt8](repeating: 0x17, count: 32)
+  )
+
+  static let address: String = ethereumAddress(for: keyPair)
+
+  /// Signs `messageHex` (the `0x`-prefixed hex `beginBinding` returns) with
+  /// `keyPair`'s private key, producing the 65-byte wallet-format signature
+  /// (`r ‖ s ‖ v`) `BarnardCoreSigning.verifyWalletBinding` expects — the
+  /// signature a wallet that actually owns `address` would have produced.
+  static func sign(messageHex: String) -> String {
+    sign(messageHex: messageHex, privateKey: keyPair.privateKey)
+  }
+
+  /// Same signing recipe, but with `wrongKeyPair`'s private key — the
+  /// signature a DIFFERENT wallet would have produced, so it never
+  /// recovers to `address`.
+  static func signWrong(messageHex: String) -> String {
+    sign(messageHex: messageHex, privateKey: wrongKeyPair.privateKey)
+  }
+
+  private static func sign(messageHex: String, privateKey: [UInt8]) -> String {
+    let digest = BarnardCoreSigning.computeEip191Digest(messageBytes: decodeHex(messageHex))
+    let signature = BarnardCoreSigning.signRecoverable(privateKey: privateKey, messageHash32: digest)
+    let signatureBytes = signature.r + signature.s + [UInt8(signature.v)]
+    return "0x" + signatureBytes.map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func ethereumAddress(for pair: BarnardCoreSigningKeyPair) -> String {
+    guard let addressBytes = BarnardCoreSigning.ethereumAddress(publicKeyCompressed: pair.publicKeyCompressed) else {
+      preconditionFailure("TestWallet's fixed keypair must yield a valid Ethereum address")
+    }
+    return "0x" + addressBytes.map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func decodeHex(_ string: String) -> [UInt8] {
+    let stripped = string.hasPrefix("0x") || string.hasPrefix("0X")
+      ? String(string.dropFirst(2))
+      : string
+    var bytes = [UInt8]()
+    bytes.reserveCapacity(stripped.count / 2)
+    var index = stripped.startIndex
+    while index < stripped.endIndex {
+      let next = stripped.index(index, offsetBy: 2)
+      guard let byte = UInt8(stripped[index..<next], radix: 16) else {
+        preconditionFailure("messageHex must be well-formed hex")
+      }
+      bytes.append(byte)
+      index = next
+    }
+    return bytes
+  }
+}
+
+/// A `SensingCryptography` facade whose owner-key half is backed by a real
+/// `OwnerKeyProvider` over a fixed seed, so `signWalletAcknowledgement`
+/// produces signatures `BarnardCoreSigning.verifyWalletBinding` actually
+/// accepts — unlike `DeterministicSensingCryptography`, which returns a
+/// fabricated, non-cryptographic owner public key and acknowledgement.
+/// Mirrors `SelfProofCheckpointRecoveryTests.swift`'s
+/// `BarnardBackedSelfProofCryptography`, except `signWalletAcknowledgement`
+/// actually delegates to the real `ownerKeyProvider` here — that suite's
+/// double returns `nil` there because it never needs it.
+private final class BarnardBackedBindingCryptography: SensingCryptography {
+  private let ownerKeyProvider = OwnerKeyProvider(
+    keyStorage: FixedSeedBindingKeyStorage(seed: Data(repeating: 0x21, count: 32)),
+    randomSource: NeverCalledBindingRandomSource()
+  )
+  private let fixedEventSigningPublicKey = Data([0x02] + [UInt8](repeating: 0x09, count: 32))
+
+  func eventSigningPublicKey(eventCode: String) -> Data {
+    fixedEventSigningPublicKey
+  }
+
+  func ownerPublicKey() -> Data {
+    ownerKeyProvider.publicKeyCompressed()
+  }
+
+  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
+    SensingRecoverableSignature(r: Data(repeating: 0, count: 32), s: Data(repeating: 0, count: 32), v: 0)
+  }
+
+  func signSelfProof(
+    eventIdHash: Data,
+    eventSigningPublicKey: Data,
+    eninStart: UInt64,
+    eninEnd: UInt64
+  ) -> SensingRecoverableSignature? {
+    nil
+  }
+
+  func signWalletAcknowledgement(
+    walletAddress: Data,
+    walletSignature: Data
+  ) -> SensingRecoverableSignature? {
+    ownerKeyProvider.signWalletAcknowledgement(
+      walletAddress: walletAddress,
+      walletSignature: walletSignature
+    ).map { SensingRecoverableSignature(barnardCore: $0) }
+  }
+}
+
+private struct FixedSeedBindingKeyStorage: BarnardCoreKeyStorage {
+  let seed: Data
+
+  func bytes(forKey key: String) -> [UInt8]? {
+    Array(seed)
+  }
+
+  func setBytes(_ bytes: [UInt8], forKey key: String) {}
+}
+
+private struct NeverCalledBindingRandomSource: BarnardCoreRandomSource {
+  func randomBytes(count: Int) -> [UInt8] {
+    XCTFail("randomSource must not be used when a seed is already stored")
+    return [UInt8](repeating: 0, count: count)
   }
 }
 
@@ -537,7 +821,12 @@ final class DemoWalletConnectorTests: XCTestCase {
     await connector.connect()
 
     var dispatched = false
-    let result = await connector.requestPersonalSign(messageHex: "0xMESSAGE") {
+    // Well-formed hex — beid#316: `requestPersonalSign` now actually
+    // decodes and signs the message, so (unlike the placeholder
+    // `"0xMESSAGE"` used elsewhere in this file for calls that never reach
+    // signing) this needs to be real hex, though its content is otherwise
+    // arbitrary for this test's purpose (dispatch flag + success shape).
+    let result = await connector.requestPersonalSign(messageHex: "0x1234abcd") {
       dispatched = true
     }
 
@@ -562,7 +851,9 @@ final class DemoWalletConnectorTests: XCTestCase {
     connector.disconnect()
 
     var dispatched = false
-    let result = await connector.connectAndSign(messageHex: "0xMESSAGE") {
+    // Well-formed hex, for the same reason as the `requestPersonalSign`
+    // test above (beid#316: `connectAndSign` now actually signs it too).
+    let result = await connector.connectAndSign(messageHex: "0x1234abcd") {
       dispatched = true
     }
 

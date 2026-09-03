@@ -1866,20 +1866,61 @@ final class SensingCoordinator: ObservableObject {
   /// bytes (§2.4 — the mutual-signature requirement, §4/§6: neither
   /// signature alone is a valid binding), builds and persists the
   /// `BindingRecord`, and moves to `.bound`. `nil` (no state change) if
-  /// there is no in-flight attempt to complete, or `walletSignatureHex`
-  /// isn't valid hex — defensive against a stale callback racing a
-  /// decline, or a malformed transport response.
+  /// there is no in-flight attempt to complete, `walletSignatureHex` isn't
+  /// valid hex — defensive against a stale callback racing a decline, or a
+  /// malformed transport response — or either verification below fails.
+  ///
+  /// Two checks guard against a `BindingRecord` whose stored
+  /// `walletAddress` disagrees with what was actually signed (beid#316):
+  ///
+  /// (a) — cheap, no cryptography: `walletAddress` (the caller's claim)
+  /// must byte-for-byte equal `message.walletAddress` (the address embedded
+  /// in, and covered by, the signed canonical text). Catches a caller-side
+  /// mixup — e.g. a stale `pendingBindingMessage` reused for a different
+  /// address (see `beginBinding`'s reuse behavior) — without touching
+  /// Barnard. Must short-circuit before (b) ever runs.
+  ///
+  /// (b) — delegated to Barnard (KMP-002): `BarnardCoreSigning
+  /// .verifyWalletBinding` recovers the wallet signature's actual signer
+  /// and checks it against `expectedWalletAddress`, and separately checks
+  /// the device acknowledgement against `expectedOwnerPublicKey`. Catches a
+  /// wallet/connector that signed with a different key than the address it
+  /// reported. `.smartWalletUnsupported` is treated the same as `.invalid`
+  /// here — no new persistent state for it (gh#240 removed unbacked states
+  /// from this vocabulary twice already); the failure is recoverable by
+  /// retry, so it is surfaced as copy by the caller, not new state.
   @discardableResult
   func completeBinding(walletAddress: String, walletSignatureHex: String) -> BindingRecord? {
     guard
       let message = pendingBindingMessage,
       let proofId = activeProofId,
       let event = currentBindingEvent,
+      let walletAddressBytes = Data(hexEncoded: walletAddress),
+      walletAddressBytes == message.walletAddress,
       let walletSignatureBytes = Data(hexEncoded: walletSignatureHex),
       let ackSignature = sensingCryptography.signWalletAcknowledgement(
         walletAddress: message.walletAddress,
         walletSignature: walletSignatureBytes
-      )
+      ),
+      let canonicalText = message.canonicalText()
+    else {
+      return nil
+    }
+
+    let deviceSignature = BarnardCoreRecoverableSignature(
+      r: Array(ackSignature.r),
+      s: Array(ackSignature.s),
+      v: ackSignature.v
+    )
+
+    guard
+      BarnardCoreSigning.verifyWalletBinding(
+        text: canonicalText,
+        walletSignature: Array(walletSignatureBytes),
+        expectedWalletAddress: Array(walletAddressBytes),
+        expectedOwnerPublicKey: Array(message.ownerPublicKey),
+        acknowledgement: deviceSignature
+      ) == .valid
     else {
       return nil
     }
@@ -1894,11 +1935,7 @@ final class SensingCoordinator: ObservableObject {
       nonce: message.nonce,
       issuedAt: message.issuedAt,
       walletSignatureHex: walletSignatureHex,
-      deviceSignature: BarnardCoreRecoverableSignature(
-        r: Array(ackSignature.r),
-        s: Array(ackSignature.s),
-        v: ackSignature.v
-      )
+      deviceSignature: deviceSignature
     )
     bindingRecordStore.add(record)
     bindingState = .bound(record)

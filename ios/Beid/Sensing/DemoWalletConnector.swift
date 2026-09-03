@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 #if DEBUG
+import BarnardCore
 import Combine
 import Foundation
 
@@ -17,13 +18,34 @@ import Foundation
 @MainActor
 final class DemoWalletConnector: ObservableObject, WalletConnector {
   static let shared = DemoWalletConnector()
-  // 40 hex chars after "0x" — a valid 20-byte EVM address shape. (Was
-  // previously 38 chars/19 bytes, an off-by-one-byte typo invisible while
-  // this string was only ever displayed, never decoded — sub-slice C's
-  // `BarnardCoreSigning.buildAccountBindingText` now requires exactly 20
-  // bytes, which would otherwise make the DEBUG-only "Simulate binding"
-  // path silently no-op.)
-  static let demoAddress = "0xDE0000000000000000000000000000000000DEC0"
+
+  /// Fixed synthetic EOA keypair backing the demo "wallet" — DEBUG-only,
+  /// non-custodial, and holds nothing of value. Derived deterministically
+  /// via `BarnardCoreSigning.deriveOwnerKeyPair` purely because it is the
+  /// existing fixed-seed-to-keypair primitive of the right shape; this is
+  /// an ordinary synthetic dev-tool wallet key, not beid's owner key.
+  /// Replaces the previous hardcoded vanity address string (no private key
+  /// ever backed it, so it could never produce a signature that piece (b)
+  /// verification — beid#316 — would accept), and `requestPersonalSign`/
+  /// `connectAndSign` below now actually sign with it instead of returning
+  /// a hardcoded signature string.
+  private static let demoWalletKeyPair = BarnardCoreSigning.deriveOwnerKeyPair(
+    accountSecret: [UInt8](repeating: 0xDE, count: 32)
+  )
+
+  /// Derived from `demoWalletKeyPair`, not a hand-picked literal — a real
+  /// private key backs it, so a `personal_sign` request against this
+  /// address can actually be answered with a valid signature.
+  static let demoAddress: String = {
+    guard
+      let addressBytes = BarnardCoreSigning.ethereumAddress(
+        publicKeyCompressed: demoWalletKeyPair.publicKeyCompressed
+      )
+    else {
+      preconditionFailure("demoWalletKeyPair must yield a valid Ethereum address")
+    }
+    return "0x" + addressBytes.map { String(format: "%02x", $0) }.joined()
+  }()
 
   @Published private(set) var state: WalletConnectorState = .idle
 
@@ -52,7 +74,10 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
     guard case .connected = state else { return .failure(.notConnected) }
     onDispatched?()
     try? await Task.sleep(nanoseconds: 400_000_000)
-    return .success("0x" + String(repeating: "d", count: 130))
+    guard let signatureHex = Self.sign(messageHex: messageHex) else {
+      return .failure(.relayFailure("Demo wallet could not decode the message to sign"))
+    }
+    return .success(signatureHex)
   }
 
   /// DEBUG-only parity with `MetaMaskConnector.connectAndSign` (dispatch#26
@@ -72,7 +97,10 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
     state = .connected(live)
     onDispatched?()
     try? await Task.sleep(nanoseconds: 400_000_000)
-    return .success((live, "0x" + String(repeating: "d", count: 130)))
+    guard let signatureHex = Self.sign(messageHex: messageHex) else {
+      return .failure(.relayFailure("Demo wallet could not decode the message to sign"))
+    }
+    return .success((live, signatureHex))
   }
 
   func disconnect() {
@@ -81,5 +109,39 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
 
   @discardableResult
   func handle(url: URL) -> Bool { false }
+
+  /// Signs `messageHex` (the `0x`-prefixed hex `SensingCoordinator
+  /// .beginBinding` hands every `WalletConnector`) with `demoWalletKeyPair`'s
+  /// private key, producing the 65-byte wallet-format signature (`r ‖ s ‖
+  /// v`) that `BarnardCoreSigning.verifyWalletBinding` expects. `nil` only
+  /// if `messageHex` isn't well-formed hex, which does not happen for a
+  /// message this connector itself was handed by `beginBinding`.
+  private static func sign(messageHex: String) -> String? {
+    guard let messageBytes = decodeHex(messageHex) else { return nil }
+    let digest = BarnardCoreSigning.computeEip191Digest(messageBytes: messageBytes)
+    let signature = BarnardCoreSigning.signRecoverable(
+      privateKey: demoWalletKeyPair.privateKey,
+      messageHash32: digest
+    )
+    let signatureBytes = signature.r + signature.s + [UInt8(signature.v)]
+    return "0x" + signatureBytes.map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func decodeHex(_ string: String) -> [UInt8]? {
+    let stripped = string.hasPrefix("0x") || string.hasPrefix("0X")
+      ? String(string.dropFirst(2))
+      : string
+    guard stripped.count.isMultiple(of: 2) else { return nil }
+    var bytes = [UInt8]()
+    bytes.reserveCapacity(stripped.count / 2)
+    var index = stripped.startIndex
+    while index < stripped.endIndex {
+      let next = stripped.index(index, offsetBy: 2)
+      guard let byte = UInt8(stripped[index..<next], radix: 16) else { return nil }
+      bytes.append(byte)
+      index = next
+    }
+    return bytes
+  }
 }
 #endif
