@@ -168,6 +168,30 @@ the same name shadows them.
   failure — and say which simulator state each reported number came from,
   because a test count means nothing without it. Note that #244 (UI-test
   `ProofStore` contamination) is a *within-run* instance of the same family.
+- **XcodeGen without its `SettingPresets` writes a broken project and exits
+  0.** XcodeGen loads its build-setting presets from a `SettingPresets/`
+  directory next to the binary (`../share/xcodegen/SettingPresets`;
+  Homebrew and Mint both place it there, extracting only `bin/xcodegen`
+  from a release archive does not). An installation missing it still
+  generates a project, still exits 0, and silently omits every
+  preset-derived setting — for this repository, 161 lines including
+  `BUNDLE_LOADER`, `SDKROOT`, `LD_RUNPATH_SEARCH_PATHS` and
+  `TARGETED_DEVICE_FAMILY`. The project then fails with `Could not find
+  test host for BeidTests` and `Multiple commands produce '.../.app'`. The
+  only signal is `No "..." settings found` warnings printed next to a
+  success message. **`scripts/xcodegen_generate_checked.sh` now fails on
+  those warnings, and every CI/delivery path calls it instead of
+  `xcodegen generate`** — use it locally too. Observed 2026-09-02 on
+  gh#320: this was first diagnosed as the pinned 2.45.3 being unable to
+  generate the current `project.yml`, and recorded that way in the issue
+  and in `DECISIONS.md`. It was wrong. Running **2.46.0** without its
+  presets drops the same 161 lines, and the pinned 2.45.3 on CI generates
+  them correctly. **Do not "fix" a preset-less generation by bumping
+  `XCODEGEN_VERSION` or by deleting settings from `project.yml`.** The
+  general lesson is the one already recorded for `--is-ancestor`: when two
+  runs differ, confirm which variable actually changed before recording a
+  reason — the two runs here also differed in how XcodeGen was installed,
+  and that was the one that mattered.
 - **`xcode-select` may point at CommandLineTools, breaking `simctl` and
   `xcodebuild` with no obvious connection to your change.** Do not
   `sudo xcode-select -s` — that is a host-wide change affecting every

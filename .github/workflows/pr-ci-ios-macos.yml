@@ -136,9 +136,9 @@ jobs:
           fi
 
           echo "Using XcodeGen: $(xcodegen --version)"
+          scripts/xcodegen_generate_checked.sh
           (
             cd ios
-            xcodegen generate
             if [[ -n "$(git status --porcelain -- Beid.xcodeproj)" ]]; then
               echo "error: Beid.xcodeproj is out of sync with project.yml" >&2
               git status --porcelain -- Beid.xcodeproj >&2
