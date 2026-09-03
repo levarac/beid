@@ -15,6 +15,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -41,6 +42,29 @@ object RecordsScreenTestTags {
     fun recordRow(id: UUID): String = "records_row_$id"
 }
 
+/** Read-only row model shared by the production mapper and UI fixtures. */
+data class RecordListItem(
+    val id: UUID,
+    val eventLabel: String,
+    val createdAt: Instant,
+    val peersVerified: Int,
+    val signatureStatus: RecordSignatureStatus,
+)
+
+enum class RecordSignatureStatus { NotSigned, SelfProof, Bound }
+
+fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
+    id = id,
+    eventLabel = eventCode,
+    createdAt = createdAt,
+    peersVerified = peersVerified,
+    signatureStatus = when {
+        hasBinding -> RecordSignatureStatus.Bound
+        hasSelfProof -> RecordSignatureStatus.SelfProof
+        else -> RecordSignatureStatus.NotSigned
+    },
+)
+
 /**
  * Records screen (beid#121) — Android's counterpart of iOS's
  * `Proof`/`ProofStore` + (a reduced) `CollectionHomeView`/`PastEventsView`.
@@ -50,14 +74,15 @@ object RecordsScreenTestTags {
  *
  * **Stated scope reductions** (mirrors the precedent iOS's own
  * `PastEventsView.swift` doc comment sets for its own reduced slice):
- * - No grouping by event, no artwork/gradient, no daily-summary sheet — all
- *   iOS `CollectionHomeView` features this slice does not attempt; each is
- *   its own larger, separately scoped design surface.
- * - No event display name — Android has no session-type field to source one
- *   from yet, so rows show the raw [ProofRecord.eventCode] as-is.
+ * - No grouping by event and no artwork/gradient. The separate Today entry
+ *   added by #342 remains available without changing these read-only rows.
+ * - Production rows have no event display name — Android has no session-type
+ *   field to source one from yet, so [toRecordListItem] uses the raw
+ *   [ProofRecord.eventCode]. Read-only scenarios may supply an intentionally
+ *   long display label without creating a persistable [ProofRecord].
  * - No tap-to-detail: rows carry no `clickable` modifier. The detail screen
  *   is beid#122, a separate, not-yet-built issue.
- * - Signature status is derived from [ProofRecord.hasSelfProof]/
+ * - Production signature status is mapped from [ProofRecord.hasSelfProof]/
  *   [ProofRecord.hasBinding] record *presence*, never a ported
  *   `ProofSignatureState`/wallet-`personal_sign` mirror — that mechanism is
  *   iOS-only and explicitly provisional (`ios/Beid/Models/ProofSignature.swift`,
@@ -84,7 +109,7 @@ object RecordsScreenTestTags {
  * unauthorized dependency change.
  */
 @Composable
-fun RecordsScreen(records: List<ProofRecord>, onOpenToday: () -> Unit = {}) {
+fun RecordsScreen(records: List<RecordListItem>, onOpenToday: () -> Unit = {}) {
     BeidScreen {
         Text(
             text = stringResource(R.string.records_title),
@@ -125,10 +150,10 @@ private val recordDateFormatter: DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
 
 @Composable
-private fun RecordRow(record: ProofRecord) {
+private fun RecordRow(record: RecordListItem) {
     BeidPanel(modifier = Modifier.testTag(RecordsScreenTestTags.recordRow(record.id))) {
         Text(
-            text = record.eventCode,
+            text = record.eventLabel,
             style = MaterialTheme.typography.titleMedium,
             color = BeidTheme.colors.textPrimary,
         )
@@ -146,11 +171,11 @@ private fun RecordRow(record: ProofRecord) {
 }
 
 @Composable
-private fun signatureStatusPill(record: ProofRecord) {
-    val (labelRes, tone) = when {
-        record.hasBinding -> R.string.records_signature_status_bound to BeidStatusPill.Tone.Sealed
-        record.hasSelfProof -> R.string.records_signature_status_self_proof to BeidStatusPill.Tone.Active
-        else -> R.string.records_signature_status_not_signed to BeidStatusPill.Tone.Neutral
+private fun signatureStatusPill(record: RecordListItem) {
+    val (labelRes, tone) = when (record.signatureStatus) {
+        RecordSignatureStatus.Bound -> R.string.records_signature_status_bound to BeidStatusPill.Tone.Sealed
+        RecordSignatureStatus.SelfProof -> R.string.records_signature_status_self_proof to BeidStatusPill.Tone.Active
+        RecordSignatureStatus.NotSigned -> R.string.records_signature_status_not_signed to BeidStatusPill.Tone.Neutral
     }
     BeidStatusPill(label = stringResource(labelRes), tone = tone)
 }
@@ -165,7 +190,7 @@ private fun signatureStatusPill(record: ProofRecord) {
 fun RecordsRoute(proofRecordStore: ProofRecordStore, onOpenToday: () -> Unit) {
     val viewModel: RecordsViewModel = viewModel(factory = RecordsViewModel.Factory(proofRecordStore))
     val records by viewModel.records.collectAsState()
-    RecordsScreen(records = records, onOpenToday = onOpenToday)
+    RecordsScreen(records = records.map(ProofRecord::toRecordListItem), onOpenToday = onOpenToday)
 }
 
 @Preview(name = "Empty", showBackground = true)

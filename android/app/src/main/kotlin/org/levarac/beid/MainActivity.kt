@@ -6,8 +6,13 @@ import androidx.activity.compose.setContent
 import org.levarac.beid.navigation.AppNavHost
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.registry.RegistryDependencies
+import org.levarac.beid.scenario.AndroidDataSource
+import org.levarac.beid.scenario.AndroidScenarioSnapshot
+import org.levarac.beid.scenario.selectAndroidDataSource
+import org.levarac.beid.scenario.snapshot
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.sensing.ProofRecordingBridge
+import org.levarac.beid.ui.screens.EventJoinScreen
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.parallax.registry.RegistryClient
 
@@ -22,23 +27,52 @@ import org.levarac.parallax.registry.RegistryClient
  * to resolve — see [EventJoinCoordinator]'s kdoc.
  */
 class MainActivity : ComponentActivity() {
-    private lateinit var eventJoinCoordinator: EventJoinCoordinator
+    private var eventJoinCoordinator: EventJoinCoordinator? = null
     private var registryClient: RegistryClient? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        when (
+            val dataSource = selectAndroidDataSource(
+                requestedScenario = intent.getStringExtra(DEMO_SCENARIO_EXTRA),
+                scenariosEnabled = BuildConfig.DEBUG,
+            )
+        ) {
+            AndroidDataSource.RealBle -> startRealBleApp()
+            is AndroidDataSource.ReadOnlyScenario -> startReadOnlyScenario(dataSource.scenario.snapshot())
+        }
+    }
+
+    private fun startRealBleApp() {
         registryClient = RegistryDependencies.createClient()
-        eventJoinCoordinator = EventJoinCoordinator(this)
+        val coordinator = EventJoinCoordinator(this)
+        eventJoinCoordinator = coordinator
 
         // Sibling store MainActivity owns directly (beid#121) — not something
         // EventJoinCoordinator owns, unlike SelfProofRecordStore/BindingRecordStore.
         val proofRecordStore = ProofRecordStore(ProofRecordStore.defaultFile(filesDir))
         val proofRecordingBridge = ProofRecordingBridge(proofRecordStore)
-        wireProofRecording(eventJoinCoordinator, proofRecordingBridge)
+        wireProofRecording(coordinator, proofRecordingBridge)
 
         setContent {
             BeidAppTheme {
-                AppNavHost(eventJoinCoordinator, proofRecordStore)
+                AppNavHost(coordinator, proofRecordStore)
+            }
+        }
+    }
+
+    private fun startReadOnlyScenario(snapshot: AndroidScenarioSnapshot) {
+        setContent {
+            BeidAppTheme {
+                EventJoinScreen(
+                    state = snapshot.eventJoinScreenState,
+                    onEventCodeChanged = {},
+                    onSubmit = {},
+                    onOpenSettings = {},
+                    onOpenAccount = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
             }
         }
     }
@@ -53,13 +87,18 @@ class MainActivity : ComponentActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        eventJoinCoordinator.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        eventJoinCoordinator?.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     override fun onDestroy() {
         registryClient?.close()
-        eventJoinCoordinator.dispose()
+        eventJoinCoordinator?.dispose()
         super.onDestroy()
+    }
+
+    companion object {
+        /** adb: `am start ... --es beid-demo-scenario crowdSurge` (Debug builds only). */
+        const val DEMO_SCENARIO_EXTRA = "beid-demo-scenario"
     }
 }
 

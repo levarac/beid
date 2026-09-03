@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import java.time.Instant
 import java.util.UUID
+import kotlin.test.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,14 +39,40 @@ class RecordsScreenTest {
         peersVerified: Int = 3,
         hasSelfProof: Boolean = false,
         hasBinding: Boolean = false,
-    ) = ProofRecord(
+    ) = RecordListItem(
         id = id,
-        eventCode = eventCode,
+        eventLabel = eventCode,
         createdAt = Instant.parse("2026-01-01T00:00:00Z"),
         peersVerified = peersVerified,
-        hasSelfProof = hasSelfProof,
-        hasBinding = hasBinding,
+        signatureStatus = when {
+            hasBinding -> RecordSignatureStatus.Bound
+            hasSelfProof -> RecordSignatureStatus.SelfProof
+            else -> RecordSignatureStatus.NotSigned
+        },
     )
+
+    @Test
+    fun productionProofRecordsMapToTheReadOnlyPresentationType() {
+        val proof = ProofRecord(
+            id = UUID.fromString("12345678-1234-5678-1234-567812345678"),
+            eventCode = "REAL-EVENT",
+            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            peersVerified = 7,
+            hasSelfProof = true,
+            hasBinding = false,
+        )
+
+        assertEquals(
+            RecordListItem(
+                id = proof.id,
+                eventLabel = "REAL-EVENT",
+                createdAt = proof.createdAt,
+                peersVerified = 7,
+                signatureStatus = RecordSignatureStatus.SelfProof,
+            ),
+            proof.toRecordListItem(),
+        )
+    }
 
     @Test
     fun emptyListRendersTheEmptyStateMessage() {

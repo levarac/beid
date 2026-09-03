@@ -24,6 +24,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.R
+import org.levarac.beid.scenario.AndroidDemoScenario
+import org.levarac.beid.scenario.snapshot
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanEventSession
@@ -44,6 +46,27 @@ class EventJoinScreenTest {
     val composeTestRule = createComposeRule()
 
     private val session1 = ScanEventSession(eventCode = "ABC123")
+
+    @Test
+    fun directScenarioInjectionRendersWithoutAnEventJoinCoordinator() {
+        val snapshot = AndroidDemoScenario.CrowdSurge.snapshot()
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinScreen(
+                    state = snapshot.eventJoinScreenState,
+                    onEventCodeChanged = {},
+                    onSubmit = {},
+                    onOpenSettings = {},
+                    onOpenAccount = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("40").assertIsDisplayed()
+    }
 
     @Test
     fun manualEntrySubmittingAnEmptyEventCodeShowsTheInlineErrorAndDoesNotJoin() {
