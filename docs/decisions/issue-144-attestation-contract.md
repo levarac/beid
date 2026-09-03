@@ -4,6 +4,17 @@ Status: **Accepted contract; implementation incomplete**
 Date fixed: 2026-08-31  
 Scope: beid app, Barnard SDK, report server, and independent verifier
 
+> **Partially superseded 2026-09-03.** `issue-145-ui-scope-decisions.md`
+> (Q3) rules out ever publishing participant-level rows. Stage 5's "same
+> result from the same input" and the entire §5 third-party walkthrough
+> assumed a technical outsider could eventually download raw signed
+> Observations and replay Stages 3–4 themselves — that path is now
+> closed. Stages 1–2 are unaffected. See
+> [`issue-144-tier-scope-questions.md`](issue-144-tier-scope-questions.md)
+> for what changes at Stages 3–6, which questions the owner still needs to
+> decide, and which parts depend on the operator/facilitator specification
+> rather than on anything in this repository.
+
 ## 1. Purpose and authority
 
 Participation is not established by an organizer action, a local UI state, one radio sighting, one device's report, or a server receipt. It is established only when the following six stages compose successfully:
