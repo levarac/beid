@@ -131,7 +131,18 @@ public class NearbyEventDiscoveryStore internal constructor() {
 internal data class RegistryRecord(
     var status: NearbyEventRegistryStatus = NearbyEventRegistryStatus.UNRESOLVED,
     var eventIdHex: String? = null,
-    var inFlight: Boolean = false,
+    var attempt: NearbyEventRegistryResolutionAttempt? = null,
+)
+
+/**
+ * Opaque identity for one native registry lookup and verification attempt.
+ *
+ * Native callers must return this exact object with the eventual completion.
+ * A reset or TTL expiry removes the record that owns it, so a late completion
+ * cannot attach to a newer attempt for the same B005 hash.
+ */
+public class NearbyEventRegistryResolutionAttempt internal constructor(
+    internal val eventHash: EventHash,
 )
 
 internal class EventHash(bytes: ByteArray) : Comparable<EventHash> {
@@ -275,36 +286,41 @@ public fun recordNearbyEventHint(
 public fun beginNearbyEventRegistryResolutionFromHex(
     store: NearbyEventDiscoveryStore,
     eventCodeHashHex: String,
-): Boolean {
-    val bytes = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull() ?: return false
-    if (bytes.size != EVENT_CODE_HASH_BYTES) return false
+): NearbyEventRegistryResolutionAttempt? {
+    val bytes = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull() ?: return null
+    if (bytes.size != EVENT_CODE_HASH_BYTES) return null
     val hash = EventHash(bytes)
-    if (store.sources.keys.none { it.eventHash == hash }) return false
+    if (store.sources.keys.none { it.eventHash == hash }) return null
     val record = store.registry.getOrPut(hash) { RegistryRecord() }
-    if (record.inFlight || record.status != NearbyEventRegistryStatus.UNRESOLVED) return false
-    record.inFlight = true
-    return true
+    if (record.attempt != null || record.status != NearbyEventRegistryStatus.UNRESOLVED) return null
+    return NearbyEventRegistryResolutionAttempt(hash).also { record.attempt = it }
 }
+
+/** True only while [attempt] is the current resolution for its live candidate. */
+public fun isNearbyEventRegistryResolutionAttemptActive(
+    store: NearbyEventDiscoveryStore,
+    attempt: NearbyEventRegistryResolutionAttempt,
+): Boolean = store.registry[attempt.eventHash]?.attempt === attempt &&
+    store.sources.keys.any { it.eventHash == attempt.eventHash }
 
 /** Delivers a native-executed lookup/verification effect back to shared state. */
 public fun completeNearbyEventRegistryResolutionFromHex(
     store: NearbyEventDiscoveryStore,
-    eventCodeHashHex: String,
+    attempt: NearbyEventRegistryResolutionAttempt,
     result: NearbyEventRegistryResolutionResult,
     resolvedEventIdHex: String?,
     verifiedDefinitionJoinMode: EventJoinMode?,
     verifiedDefinitionEventIdHex: String?,
     verifiedDefinitionEventCodeHashHex: String?,
 ): NearbyEventDiscoveryUpdate {
-    val bytes = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull()
-        ?: return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
-    val hash = EventHash(bytes)
+    val hash = attempt.eventHash
     val record = store.registry[hash]
-    if (bytes.size != EVENT_CODE_HASH_BYTES || record?.inFlight != true ||
-        store.sources.keys.none { it.eventHash == hash }) {
+        ?: return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
+    if (!isNearbyEventRegistryResolutionAttemptActive(store, attempt)) {
         return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
     }
-    record.inFlight = false
+    record.attempt = null
+    val bytes = hash.copyBytes()
     val signedDefinitionHash = verifiedDefinitionEventCodeHashHex
         ?.let { runCatching { it.decodeHexBytes() }.getOrNull() }
     val resolvedEventId = resolvedEventIdHex.decodeEventIdHexOrNull()

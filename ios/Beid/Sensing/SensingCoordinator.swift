@@ -437,6 +437,10 @@ final class SensingCoordinator: ObservableObject {
     ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   private var nearbyRegistryRequests:
     [ExportedKotlinPackages.org.levarac.parallax.registry.RegistryRequest] = []
+  /// Invalidates registry callbacks already queued on MainActor when a
+  /// discovery session ends; cancelling the underlying request cannot recall
+  /// a completion that was delivered before cancellation.
+  private var nearbyDiscoveryCallbackGeneration: UInt64 = 0
 
   // MARK: - Per-session protocol state
   //
@@ -1649,6 +1653,7 @@ final class SensingCoordinator: ObservableObject {
   /// and clears candidates together with the global omission/eviction facts.
   /// Named to avoid being confused with the shared free function it calls.
   private func clearNearbyEventDiscovery() {
+    nearbyDiscoveryCallbackGeneration &+= 1
     nearbyRegistryRequests.forEach { $0.cancel() }
     nearbyRegistryRequests.removeAll()
     nearbyDiscoveryExpiryTask?.cancel()
@@ -1665,19 +1670,27 @@ final class SensingCoordinator: ObservableObject {
     for index in 0..<snapshot.candidateCount {
       guard let candidate = snapshot.candidateAt(index: index) else { continue }
       let hash = candidate.eventCodeHashHex
-      guard ExportedKotlinPackages.org.levarac.parallax.discovery
+      guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
         .beginNearbyEventRegistryResolutionFromHex(store: nearbyDiscoveryStore, eventCodeHashHex: hash)
       else { continue }
+      let generation = nearbyDiscoveryCallbackGeneration
       let lookup = client.resolveEventIdByCodeHash(hashHex: hash) { [weak self] resolution in
         Task { @MainActor in
           guard let self else { return }
+          guard generation == self.nearbyDiscoveryCallbackGeneration else { return }
+          guard ExportedKotlinPackages.org.levarac.parallax.discovery
+            .isNearbyEventRegistryResolutionAttemptActive(
+              store: self.nearbyDiscoveryStore,
+              attempt: attempt
+            )
+          else { return }
           guard resolution.isSuccess, let eventID = resolution.eventIdHex else {
             let result: ExportedKotlinPackages.org.levarac.parallax.discovery
               .NearbyEventRegistryResolutionResult = resolution.errorCode == "event_code_lookup_not_found"
               ? .NOT_REGISTERED : .LOOKUP_UNAVAILABLE
             let update = ExportedKotlinPackages.org.levarac.parallax.discovery
               .completeNearbyEventRegistryResolutionFromHex(
-                store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
+                store: self.nearbyDiscoveryStore, attempt: attempt,
                 result: result, resolvedEventIdHex: nil,
                 verifiedDefinitionJoinMode: nil,
                 verifiedDefinitionEventIdHex: nil,
@@ -1693,12 +1706,19 @@ final class SensingCoordinator: ObservableObject {
           ) { [weak self] verified in
             Task { @MainActor in
               guard let self else { return }
+              guard generation == self.nearbyDiscoveryCallbackGeneration else { return }
+              guard ExportedKotlinPackages.org.levarac.parallax.discovery
+                .isNearbyEventRegistryResolutionAttemptActive(
+                  store: self.nearbyDiscoveryStore,
+                  attempt: attempt
+                )
+              else { return }
               let result: ExportedKotlinPackages.org.levarac.parallax.discovery
                 .NearbyEventRegistryResolutionResult = verified.isSuccess
                 ? .VERIFIED : .VERIFICATION_UNAVAILABLE
               let update = ExportedKotlinPackages.org.levarac.parallax.discovery
                 .completeNearbyEventRegistryResolutionFromHex(
-                  store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
+                  store: self.nearbyDiscoveryStore, attempt: attempt,
                   result: result, resolvedEventIdHex: eventID,
                   verifiedDefinitionJoinMode: verified.context?.joinMode,
                   verifiedDefinitionEventIdHex: verified.context?.eventIdHex,
