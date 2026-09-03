@@ -2,13 +2,14 @@
 
 set -euo pipefail
 
-if [[ "$#" -ne 2 ]]; then
-  echo "usage: $0 <prepared-notes-dir> <upload-started-at-rfc3339>" >&2
+if [[ "$#" -ne 3 ]]; then
+  echo "usage: $0 <prepared-notes-dir> <marketing-version> <build-number>" >&2
   exit 64
 fi
 
 NOTES_DIR="$1"
-UPLOAD_STARTED_AT="$2"
+MARKETING_VERSION="$2"
+BUILD_NUMBER="$3"
 BEID_BUNDLE_ID="${BEID_BUNDLE_ID:-org.levarac.beid}"
 RUN_TEMP_ROOT="${RUNNER_TEMP:-/tmp}"
 
@@ -46,9 +47,9 @@ trap cleanup EXIT
 
 asc builds wait \
   --app "$BEID_BUNDLE_ID" \
-  --latest \
+  --version "$MARKETING_VERSION" \
+  --build-number "$BUILD_NUMBER" \
   --platform IOS \
-  --since "$UPLOAD_STARTED_AT" \
   --timeout "${ASC_BUILD_WAIT_TIMEOUT:-30m}" \
   --poll-interval "${ASC_BUILD_POLL_INTERVAL:-30s}" \
   --fail-on-invalid \

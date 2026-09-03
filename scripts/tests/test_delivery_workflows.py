@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 PREPARE_NOTES = ROOT / "scripts" / "prepare_testflight_notes.py"
 PUBLISH_NOTES = ROOT / "scripts" / "gha" / "publish-testflight-notes.sh"
+TESTFLIGHT_SKILL = ROOT / ".claude" / "skills" / "beid-testflight" / "SKILL.md"
 
 
 def workflow_text(name: str) -> str:
@@ -141,6 +142,7 @@ class NotePreparationTests(unittest.TestCase):
                 {"language": "en-US", "text": "Second"},
             ],
             [{"language": "../en-US", "text": "Unsafe"}],
+            [{"language": "1", "text": "Numeric locales are not valid."}],
         )
         for index, payload in enumerate(invalid_sources):
             with self.subTest(payload=payload), tempfile.TemporaryDirectory() as tmp:
@@ -157,6 +159,7 @@ class NotePublicationTests(unittest.TestCase):
         asc_body: str,
         notes: dict[str, str] | None = None,
         fail_create: bool = False,
+        competing_body: str | None = None,
     ) -> tuple[subprocess.CompletedProcess[str], list[dict[str, object]]]:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -177,7 +180,17 @@ with open(os.environ["FAKE_ASC_CALLS"], "a", encoding="utf-8") as output:
         "strict_auth": os.environ.get("ASC_STRICT_AUTH"),
     }) + "\\n")
 if sys.argv[1:3] == ["builds", "wait"]:
-    print(os.environ["FAKE_ASC_WAIT_BODY"])
+    exact_selector = (
+        "--version" in sys.argv
+        and sys.argv[sys.argv.index("--version") + 1] == "1.0"
+        and "--build-number" in sys.argv
+        and sys.argv[sys.argv.index("--build-number") + 1] == "33724513679.1"
+        and "--latest" not in sys.argv
+    )
+    if exact_selector or not os.environ.get("FAKE_ASC_COMPETING_BODY"):
+        print(os.environ["FAKE_ASC_WAIT_BODY"])
+    else:
+        print(os.environ["FAKE_ASC_COMPETING_BODY"])
 elif sys.argv[1:4] == ["builds", "test-notes", "create"]:
     if os.environ.get("FAKE_ASC_FAIL_CREATE") == "1":
         raise SystemExit(23)
@@ -205,6 +218,7 @@ else:
                     "ASC_KEY_PATH": str(key),
                     "FAKE_ASC_CALLS": str(calls),
                     "FAKE_ASC_WAIT_BODY": asc_body,
+                    "FAKE_ASC_COMPETING_BODY": competing_body or "",
                     "FAKE_ASC_FAIL_CREATE": "1" if fail_create else "0",
                 }
             )
@@ -213,7 +227,8 @@ else:
                     "zsh",
                     str(PUBLISH_NOTES),
                     str(note_dir),
-                    "2026-09-03T11:30:00Z",
+                    "1.0",
+                    "33724513679.1",
                 ],
                 cwd=ROOT,
                 env=env,
@@ -236,13 +251,28 @@ else:
         self.assertEqual(len(calls), 3)
         wait = calls[0]
         self.assertEqual(wait["argv"][:2], ["builds", "wait"])
-        self.assertIn("2026-09-03T11:30:00Z", wait["argv"])
+        self.assertNotIn("--latest", wait["argv"])
+        self.assertIn("1.0", wait["argv"])
+        self.assertIn("33724513679.1", wait["argv"])
         self.assertTrue(str(wait["private_key_path"]).endswith("/AuthKey.p8"))
         self.assertEqual(wait["bypass_keychain"], "1")
         self.assertEqual(wait["strict_auth"], "true")
         for call in calls[1:]:
             self.assertEqual(call["argv"][:3], ["builds", "test-notes", "create"])
             self.assertIn("build-123", call["argv"])
+
+    def test_competing_newer_build_is_rejected_by_exact_upload_identifier(self):
+        result, calls = self.run_publisher(
+            '{"buildId":"this-run-build","processingState":"VALID"}',
+            competing_body=(
+                '{"buildId":"competing-newer-build","processingState":"VALID"}'
+            ),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[1]["argv"][:3], ["builds", "test-notes", "create"])
+        self.assertIn("this-run-build", calls[1]["argv"])
+        self.assertNotIn("competing-newer-build", calls[1]["argv"])
 
     def test_invalid_wait_output_and_note_upload_failure_are_terminal(self):
         invalid_result, invalid_calls = self.run_publisher("{}")
@@ -274,6 +304,24 @@ class NoteWorkflowWiringTests(unittest.TestCase):
         publish = script.index("publish-testflight-notes.sh")
         self.assertLess(prepare, upload)
         self.assertLess(upload, publish)
+        self.assertIn('GITHUB_RUN_ID', script)
+        self.assertIn('GITHUB_RUN_ATTEMPT', script)
+        self.assertIn('CURRENT_PROJECT_VERSION="$UPLOAD_BUILD_NUMBER"', script)
+        self.assertIn('manageAppVersionAndBuildNumber -bool NO', script)
+        self.assertIn('CFBundleShortVersionString', script)
+        self.assertIn('CFBundleVersion', script)
+        self.assertIn(
+            '"$TESTFLIGHT_NOTES_DIR" "$ARCHIVED_MARKETING_VERSION" "$ARCHIVED_BUILD_NUMBER"',
+            script,
+        )
+
+    def test_project_skill_covers_generic_note_requests_and_actual_locale_sets(self):
+        skill = TESTFLIGHT_SKILL.read_text(encoding="utf-8")
+        description = skill.split("---", 2)[1]
+        self.assertIn("tester notes", description)
+        self.assertIn("release notes", description)
+        self.assertIn("Internal tester notes: `en-US`", skill)
+        self.assertIn("Release notes: preserve `ja` and `en-US`", skill)
 
 
 if __name__ == "__main__":

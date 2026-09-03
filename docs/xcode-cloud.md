@@ -30,8 +30,10 @@ pushes that do not change `release_notes.json`.
 project clean, archives the Release scheme with command-line-only Manual /
 Apple Distribution signing overrides, and uploads it with
 `xcodebuild -exportArchive`. The repository's normal automatic signing setting
-and Xcode Cloud configuration remain unchanged. The upload asks Apple to assign
-the next build number. Authentication is runner-local: the script reads
+and Xcode Cloud configuration remain unchanged. The temporary lane derives a
+unique build number from the GitHub run ID and attempt, embeds it in the archive,
+and disables Apple's export-time build-number rewriting. Authentication is
+runner-local: the script reads
 `$ASC_CRED_DIR/env` and its referenced key file at runtime. Credentials must
 not be copied into GitHub secrets, repository files, or logs.
 
@@ -54,13 +56,16 @@ The GitHub Actions export also uses manual signing and maps
 the runner-local identity and profile instead of ASC cloud signing.
 
 The GitHub Actions lane validates and converts its note source before archive,
-then waits for the build uploaded during that run to finish ASC processing.
-Using the same runner-local API key, `asc builds test-notes create` upserts every
-prepared locale onto that exact build ID. A missing/invalid source, processing
-failure, or note request failure makes the lane fail. Because the binary may
-already be uploaded when a note request fails, retry notes against the logged
-build ID rather than uploading the same binary again. Xcode Cloud keeps its
-separate `ci_post_xcodebuild.sh` file-based note mechanism.
+then waits for the exact marketing-version/build-number pair embedded by that
+run to finish ASC processing. It does not select the latest iOS build after a
+timestamp, so a competing Xcode Cloud or manual upload cannot receive this
+run's notes. Using the same runner-local API key, `asc builds test-notes create`
+upserts every prepared locale onto the returned exact build ID. A
+missing/invalid source, processing failure, or note request failure makes the
+lane fail. Because the binary may already be uploaded when a note request
+fails, retry notes against the logged build ID rather than uploading the same
+binary again. Xcode Cloud keeps its separate `ci_post_xcodebuild.sh` file-based
+note mechanism.
 
 ## Two convention files, two audiences
 
@@ -72,8 +77,10 @@ separate `ci_post_xcodebuild.sh` file-based note mechanism.
 
 Both are arrays of `{"language": "<ASC locale>", "text": "..."}`. Use ASC's
 locale identifiers, not Xcode's String Catalog locale ids. Beid's current
-settled tester-note locale set is `en-US` only (String Catalog uses `en` for
-English). One non-empty entry is required for each current target locale.
+settled internal tester-note locale set is `en-US` only (String Catalog uses
+`en` for English). The current release copy retains `ja` and `en-US` in
+`release_notes.json`. One non-empty entry is required for each applicable
+locale.
 
 - **`what_to_test.json`**: what to check in *this* build. Rewrite it each
   time — don't accumulate history. 1–3 plain-language sentences, no PR/issue
@@ -102,9 +109,10 @@ truth for the store version. A push to `release/**` runs
 `.github/workflows/release-version-consistency.yml`, which compares an exact
 `release/X.Y.Z` branch name with that value and fails on a mismatch. The check
 is deliberately read-only: it never changes `project.yml` or any generated
-file. Build numbers remain managed by Xcode Cloud (or by Apple's export-time
-assignment in the temporary GitHub Actions lane); do not change
-`CURRENT_PROJECT_VERSION` as part of a release.
+file. Build numbers remain managed by Xcode Cloud, while the temporary GitHub
+Actions lane overrides the inert project value only for its archive with the
+GitHub run ID and attempt. Do not change `CURRENT_PROJECT_VERSION` in
+`project.yml` as part of a release.
 
 A PR that changes `release_notes.json` receives an automated warning that the
 file is App Store release copy, not the internal TestFlight tester notes.
@@ -326,9 +334,10 @@ Version/build numbers: `project.yml` hardcodes
 effect — delivered build numbers equal the Xcode Cloud run numbers
 (builds 3/7/8/9 = runs 3/7/8/9), so the repo's
 `CURRENT_PROJECT_VERSION` is inert and must not be bumped per build. The
-temporary GitHub Actions lane instead sets
-`manageAppVersionAndBuildNumber: true` during export, so Apple assigns its
-next build number without changing `project.yml`.
+temporary GitHub Actions lane instead overrides it for the archive with
+`<GITHUB_RUN_ID>.<GITHUB_RUN_ATTEMPT>` and sets
+`manageAppVersionAndBuildNumber: false` during export. This gives note
+publication an exact run-owned selector without changing `project.yml`.
 `MARKETING_VERSION` remains the single version knob, in `project.yml`
 only.
 

@@ -535,8 +535,10 @@ Project-local delivery operations use [`.claude/skills/beid-testflight/SKILL.md`
   drift guard は Xcode Cloud の `ci_post_clone.sh` と同じ契約を守り、Release
   archive をtemporary lane内だけManual / Apple Distributionで署名して生成し、
   `xcodebuild -exportArchive` で App Store Connect へuploadする。通常のproject
-  signing設定とXcode Cloudは変更しない。build number は
-  `manageAppVersionAndBuildNumber` でAppleに採番させる。
+  signing設定とXcode Cloudは変更しない。build number は GitHub run ID と
+  attempt から lane 内で一意に作り、archive 時だけ
+  `CURRENT_PROJECT_VERSION` をoverrideする。export時のAppleによる再採番は
+  無効にする。
 - ASC API key と team ID は repository secret ではなく、runner-local の
   `$ASC_CRED_DIR/env` とそこから指す key file から実行時に読む。値を workflow
   や log に出してはならない。
@@ -553,9 +555,10 @@ Project-local delivery operations use [`.claude/skills/beid-testflight/SKILL.md`
   `provisioningProfiles`で`org.levarac.beid`を同profileへ対応づける。これにより
   ASC cloud signing permissionに依存せず、runner-localのidentity/profileを使う。
 - GitHub Actions は archive 前に対象 JSON を検証・変換し、upload 後に同じ
-  runner-local ASC API key を `asc` CLI へ渡す。今回の upload 開始時刻以降に
-  現れた build の exact ID を待ち、その build に全 locale の **What to Test**
-  を upsert する。source 不在・形式不正・build 特定失敗・notes upload 失敗は
+  runner-local ASC API key を `asc` CLI へ渡す。archive に埋め込んだ exact
+  marketing version / build number の build ID だけを待ち、その build に全
+  locale の **What to Test** を upsert する。時刻以降の latest build は選ばない。
+  source 不在・形式不正・build 特定失敗・notes upload 失敗は
   lane を失敗させる。notes step が失敗しても build 自体は既に upload 済みの
   場合があるため、再試行で同じ binary を重複 upload しない。
 
@@ -603,7 +606,7 @@ Project-local delivery operations use [`.claude/skills/beid-testflight/SKILL.md`
 - **Versioning**: `MARKETING_VERSION` lives once in `ios/project.yml`
   (the project is xcodegen-generated — never hand-edit the `.xcodeproj`).
   Xcode Cloud builds use the Xcode Cloud run number. The temporary GitHub
-  Actions lane asks Apple to assign the next build number during export.
+  Actions lane uses `<GITHUB_RUN_ID>.<GITHUB_RUN_ATTEMPT>` for that archive.
   `CURRENT_PROJECT_VERSION` in `project.yml` remains an inert placeholder
   (`"1"`) in both paths — leave it, never bump it per build.
 - **"Uploaded" ≠ "delivered"**: a build can be `VALID` in App Store

@@ -88,6 +88,17 @@ set +a
 : "${BEID_TEAM_ID:?BEID_TEAM_ID is missing from the runner-local ASC environment file}"
 BEID_BUNDLE_ID='org.levarac.beid'
 BEID_PROVISIONING_PROFILE="${BEID_PROVISIONING_PROFILE:-Beid GitHub Actions App Store}"
+GITHUB_RUN_ID="${GITHUB_RUN_ID:?GITHUB_RUN_ID is required for a unique iOS build number}"
+GITHUB_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
+if [[ ! "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ || ! "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT must be positive integers." >&2
+  exit 1
+fi
+UPLOAD_BUILD_NUMBER="${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+if (( ${#UPLOAD_BUILD_NUMBER} > 18 )); then
+  echo "error: computed iOS build number exceeds Apple's 18-character limit." >&2
+  exit 1
+fi
 
 if [[ ! -r "$ASC_KEY_PATH" ]]; then
   echo "error: ASC authentication key is not readable at the configured path." >&2
@@ -130,7 +141,20 @@ xcodebuild \
   CODE_SIGN_IDENTITY='Apple Distribution' \
   DEVELOPMENT_TEAM="$BEID_TEAM_ID" \
   BEID_PROVISIONING_PROFILE="$BEID_PROVISIONING_PROFILE" \
+  CURRENT_PROJECT_VERSION="$UPLOAD_BUILD_NUMBER" \
   archive
+
+ARCHIVED_APP_INFO="$ARCHIVE_PATH/Products/Applications/Beid.app/Info.plist"
+if [[ ! -r "$ARCHIVED_APP_INFO" ]]; then
+  echo "error: archived app Info.plist is missing." >&2
+  exit 1
+fi
+ARCHIVED_MARKETING_VERSION="$(plutil -extract CFBundleShortVersionString raw "$ARCHIVED_APP_INFO")"
+ARCHIVED_BUILD_NUMBER="$(plutil -extract CFBundleVersion raw "$ARCHIVED_APP_INFO")"
+if [[ "$ARCHIVED_BUILD_NUMBER" != "$UPLOAD_BUILD_NUMBER" ]]; then
+  echo "error: archived build number does not match this workflow run." >&2
+  exit 1
+fi
 
 plutil -create xml1 "$EXPORT_OPTIONS"
 plutil -insert method -string app-store-connect "$EXPORT_OPTIONS"
@@ -142,9 +166,8 @@ plutil -insert provisioningProfiles -dictionary "$EXPORT_OPTIONS"
   -c "Add :provisioningProfiles:$BEID_BUNDLE_ID string $BEID_PROVISIONING_PROFILE" \
   "$EXPORT_OPTIONS"
 plutil -insert teamID -string "$BEID_TEAM_ID" "$EXPORT_OPTIONS"
-plutil -insert manageAppVersionAndBuildNumber -bool YES "$EXPORT_OPTIONS"
+plutil -insert manageAppVersionAndBuildNumber -bool NO "$EXPORT_OPTIONS"
 
-UPLOAD_STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "Uploading archive to App Store Connect..."
 xcodebuild \
   -quiet \
@@ -157,6 +180,7 @@ xcodebuild \
   -authenticationKeyID "$ASC_KEY_ID" \
   -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-scripts/gha/publish-testflight-notes.sh "$TESTFLIGHT_NOTES_DIR" "$UPLOAD_STARTED_AT"
+scripts/gha/publish-testflight-notes.sh \
+  "$TESTFLIGHT_NOTES_DIR" "$ARCHIVED_MARKETING_VERSION" "$ARCHIVED_BUILD_NUMBER"
 
 echo "TestFlight upload and tester-note publication completed."

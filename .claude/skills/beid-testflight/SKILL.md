@@ -1,6 +1,6 @@
 ---
 name: beid-testflight
-description: Handle beid TestFlight and Google Play internal-test delivery requests. Use for /testflight, "TestFlightに配信", "テストフライト配信", "Playに配信", "内部テストに配信", or requests to update beid What to Test notes.
+description: Handle beid TestFlight and Google Play internal-test delivery, generic tester notes, and release notes requests. Use for /testflight, "TestFlightに配信", "テストフライト配信", "Playに配信", "内部テストに配信", or requests to update beid What to Test notes or release notes.
 ---
 
 # beid tester delivery
@@ -33,10 +33,15 @@ Each file is a JSON array:
 ]
 ```
 
-Use ASC locale identifiers. Follow the locale set in `AGENTS.md` (currently
-`en-US` for tester notes), keep one non-empty entry per locale, and write only
-what a tester can perform in this build. Use 1–3 plain sentences; omit issue
-numbers, build numbers, internal file names, and accumulated history.
+Use ASC locale identifiers and keep one non-empty entry per locale.
+
+- Internal tester notes: `en-US`, following the settled target in `AGENTS.md`.
+- Release notes: preserve `ja` and `en-US`, the locale set currently present in
+  `release_notes.json`, unless an explicitly authorized release change updates
+  that file's locale set.
+
+Write only what a tester can perform in this build. Use 1–3 plain sentences;
+omit issue numbers, build numbers, internal file names, and accumulated history.
 
 ## Exact repository triggers
 
@@ -51,12 +56,14 @@ Cloud is separate, configured in ASC, and remains the required iOS check even
 while the temporary GHA delivery lane is active. Do not infer its live start
 conditions from these YAML files.
 
-The GHA iOS script prepares notes before archive/upload. After upload it waits
-for the build uploaded during that run, takes the returned exact build ID, and
-upserts every locale with `asc`. Missing/invalid source, preparation failure,
-build lookup failure, or note upload failure makes the lane fail. A red note
-step can coexist with an uploaded build; do not upload a duplicate just to retry
-notes.
+The GHA iOS script prepares notes before archive/upload. It gives the archive a
+run-unique build number derived from the GitHub run ID and attempt, then waits
+for that exact marketing-version/build-number pair after upload. It takes the
+returned exact build ID and upserts every locale with `asc`; it never selects
+the latest build after a timestamp. Missing/invalid source, preparation
+failure, build lookup failure, or note upload failure makes the lane fail. A
+red note step can coexist with an uploaded build; do not upload a duplicate
+just to retry notes.
 
 ## Execute and verify
 

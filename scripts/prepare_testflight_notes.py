@@ -13,7 +13,11 @@ import re
 from typing import Dict, List
 
 
-LOCALE_PATTERN = re.compile(r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$")
+# Canonical ASC locale shape: a lowercase ISO 639 language followed by an
+# optional title-case script and optional uppercase/numeric region.
+LOCALE_PATTERN = re.compile(
+    r"^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$"
+)
 
 
 def resolve_source(source: Path, fallback_source: Path | None = None) -> Path:
