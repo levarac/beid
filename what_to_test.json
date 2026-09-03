@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "The app icon has changed to the beid mark, so a different icon on your home screen is expected and does not mean a different app was installed. If you have not done it on an earlier build, please connect a wallet with MetaMask, approve one signature, and return to the app, then tell us exactly where it stops if it does. If you are testing with a group, everyone taking part needs to be on this build before you start."
+    "text": "This build is for the four-device field test. Everyone taking part must be on this build number before you start, so read it aloud and check it matches on every phone. Please connect a wallet with MetaMask, approve one signature request, and confirm the app comes back on its own with the signature applied, then tell us exactly where it stops if it does not. Reopening the app should now show the wallet address you used last time straight away, and asking for a signature should send you to MetaMask once rather than twice."
   }
 ]
