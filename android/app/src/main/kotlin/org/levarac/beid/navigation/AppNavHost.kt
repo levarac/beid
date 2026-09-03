@@ -6,9 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import java.util.UUID
 import org.levarac.beid.onboarding.OnboardingPreferences
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.BluetoothRadioMonitor
@@ -18,6 +21,7 @@ import org.levarac.beid.ui.screens.BluetoothOffScreen
 import org.levarac.beid.ui.screens.BluetoothPermissionScreen
 import org.levarac.beid.ui.screens.EventJoinRoute
 import org.levarac.beid.ui.screens.ManualEventCodeRoute
+import org.levarac.beid.ui.screens.RecordDetailRoute
 import org.levarac.beid.ui.screens.RecordsRoute
 import org.levarac.beid.ui.screens.TodaySummaryRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
@@ -104,11 +108,26 @@ fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore) {
             RecordsRoute(
                 proofRecordStore,
                 onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+                onOpenDetail = { recordId -> navController.navigate(Screen.RecordDetail.route(recordId)) },
             )
         }
 
         composable(Screen.TodaySummary.route) {
             TodaySummaryRoute(proofRecordStore)
+        }
+
+        composable(
+            route = Screen.RecordDetail.route,
+            arguments = listOf(navArgument(Screen.RecordDetail.RECORD_ID_ARG) { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val recordIdArg = requireNotNull(
+                backStackEntry.arguments?.getString(Screen.RecordDetail.RECORD_ID_ARG),
+            )
+            RecordDetailRoute(
+                proofRecordStore,
+                recordId = UUID.fromString(recordIdArg),
+                onRecordNotFound = { navController.popBackStack() },
+            )
         }
     }
 }

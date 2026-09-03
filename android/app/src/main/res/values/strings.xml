@@ -98,4 +98,20 @@
     <string name="today_summary_submission_title">Submission</string>
     <string name="today_summary_submission_enabled">Not sent yet.</string>
     <string name="today_summary_submission_disabled">Sending isn\'t turned on for this build.</string>
+
+    <!-- Record detail screen (beid#122), reached by tapping a Records row. Own per-row vocabulary — never reuses records_signature_status_* (the list's derived-pill vocabulary) and never claims "Verified" (beid#144 is unowned; beid#240). -->
+    <!-- Metric row label paired with a device count. "Devices", not people: distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual/reciprocal confirmation. Matches iOS's "detail.devicesSensed.label" wording on its own Proof Detail screen. -->
+    <string name="record_detail_devices_sensed_label">Devices sensed</string>
+    <!-- Independent row label: whether an owner-key self-proof has been recorded for this proof (device-signed, presence-based — see ProofRecord.hasSelfProof). Not a claim of third-party verification. -->
+    <string name="record_detail_self_proof_label">Self-proof</string>
+    <!-- Independent row label: whether a wallet owner-key binding has been recorded for this proof (presence-based — see ProofRecord.hasBinding). Not a claim of third-party verification. -->
+    <string name="record_detail_binding_label">Owner-key binding</string>
+    <!-- Independent row label: whether two devices have confirmed they mutually sensed each other for this proof. Always shows record_detail_not_yet_available — on-device mutual/reciprocal confirmation is structurally unmeasurable today, not merely uncaptured (beid#222). -->
+    <string name="record_detail_mutual_confirmation_label">Mutual confirmation</string>
+    <!-- Independent row label: the time-band buildup of devices sensed across this session. Always shows record_detail_not_yet_available — Android has no aggregation producer yet (beid#327). -->
+    <string name="record_detail_time_band_buildup_label">Time-band buildup</string>
+    <!-- Trailing value for an independent row above whose evidence has been recorded on this device. -->
+    <string name="record_detail_recorded">Recorded</string>
+    <!-- Trailing value for an independent row above with nothing to show yet — either the capability doesn\'t exist in the product yet, or it exists but hasn\'t happened for this proof yet. Means there is nothing to report, not that an attempt was made and failed; never an error/warning/declined state. -->
+    <string name="record_detail_not_yet_available">Not yet available</string>
 </resources>
