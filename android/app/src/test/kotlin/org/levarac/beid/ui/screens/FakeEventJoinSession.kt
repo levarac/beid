@@ -14,7 +14,8 @@ internal class FakeEventJoinSession(
 ) : EventJoinSession {
     private val mutableState = MutableStateFlow(initial)
     override val state: StateFlow<EventJoinUiState> = mutableState.asStateFlow()
-    override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = MutableStateFlow(nearbyEventCards).asStateFlow()
+    private val mutableNearbyEventCards = MutableStateFlow(nearbyEventCards)
+    override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = mutableNearbyEventCards.asStateFlow()
 
     var joinedCode: String? = null
         private set
@@ -62,5 +63,13 @@ internal class FakeEventJoinSession(
 
     fun emit(next: EventJoinUiState) {
         mutableState.value = next
+    }
+
+    fun emitNearbyEventCards(cards: List<NearbyEventCard>) {
+        mutableNearbyEventCards.value = cards
+    }
+
+    fun clearJoinedDiscoveredEvent() {
+        joinedDiscoveredEventId = null
     }
 }

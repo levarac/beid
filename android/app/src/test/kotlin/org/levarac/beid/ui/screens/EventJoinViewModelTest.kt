@@ -148,6 +148,7 @@ class EventJoinViewModelTest {
                     eventIdHex = eventId,
                     validFromEpochSeconds = 1_700_000_000L,
                     validUntilEpochSeconds = 1_700_003_600L,
+                    eventCodeHashHex = "1111111111111111",
                 ),
             ),
         )
@@ -157,5 +158,31 @@ class EventJoinViewModelTest {
         viewModel.joinSelectedNearbyEvent()
 
         assertEquals(eventId, session.joinedDiscoveredEventId)
+    }
+
+    @Test
+    fun selectionStaysWithItsCandidateAcrossInsertionAndReorderThenFailsClosedAfterExpiry() = runTest {
+        val first = NearbyEventCard("First", "0x01", 100L, 200L, "1111111111111111")
+        val selected = NearbyEventCard("Selected", "0x02", 100L, 200L, "2222222222222222")
+        val inserted = NearbyEventCard("Inserted", "0x03", 100L, 200L, "3333333333333333")
+        val session = FakeEventJoinSession(nearbyEventCards = listOf(first, selected))
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.selectNearbyEvent(selected.eventCodeHashHex)
+        session.emitNearbyEventCards(listOf(inserted, selected, first))
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.joinSelectedNearbyEvent()
+
+        assertEquals("0x02", session.joinedDiscoveredEventId)
+        assertEquals(selected.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
+
+        session.clearJoinedDiscoveredEvent()
+        session.emitNearbyEventCards(listOf(inserted, first))
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.joinSelectedNearbyEvent()
+
+        assertNull(session.joinedDiscoveredEventId, "an expired selection must not retarget another card")
+        assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)
     }
 }

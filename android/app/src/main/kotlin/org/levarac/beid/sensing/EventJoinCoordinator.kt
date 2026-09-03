@@ -95,7 +95,7 @@ class EventJoinCoordinator internal constructor(
     private val nearbyDiscovery = NearbyEventDiscoverySession(
         nowEpochMillis = nowEpochMillis,
         coroutineScope = coroutineScope,
-        registryClient = registryClient,
+        registry = registryClient?.let(::RegistryClientNearbyEventRegistry),
     )
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)

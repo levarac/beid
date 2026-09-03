@@ -2,6 +2,7 @@ package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.R
@@ -53,6 +55,8 @@ object EventJoinScreenTestTags {
     const val ACCOUNT_ENTRY = "event_join_account_entry"
     const val NEARBY_EVENT_LIST = "nearby_event_list"
     const val JOIN_NEARBY_EVENT_BUTTON = "join_nearby_event_button"
+
+    fun nearbyEventCard(eventCodeHashHex: String): String = "nearby_event_card_$eventCodeHashHex"
 }
 
 @Composable
@@ -105,7 +109,7 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
 
             NearbyEventCards(
                 cards = uiState.nearbyEventCards,
-                selectedIndex = uiState.selectedNearbyEventIndex,
+                selectedEventHashHex = uiState.selectedNearbyEventHashHex,
                 onSelected = viewModel::selectNearbyEvent,
             )
 
@@ -191,7 +195,9 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
                         contentColor = BeidTheme.colors.surfaceCanvas,
                         onClick = if (uiState.nearbyEventCards.isEmpty()) viewModel::submit else viewModel::joinSelectedNearbyEvent,
                         enabled = uiState.sessionState !is EventJoinUiState.RequestingPermission &&
-                            (uiState.nearbyEventCards.isEmpty() || uiState.nearbyEventCards.getOrNull(uiState.selectedNearbyEventIndex)?.eventIdHex != null),
+                            (uiState.nearbyEventCards.isEmpty() || uiState.nearbyEventCards
+                                .firstOrNull { it.eventCodeHashHex == uiState.selectedNearbyEventHashHex }
+                                ?.eventIdHex != null),
                         modifier = Modifier.testTag(if (uiState.nearbyEventCards.isEmpty()) EventJoinScreenTestTags.SUBMIT_BUTTON else EventJoinScreenTestTags.JOIN_NEARBY_EVENT_BUTTON),
                     )
                 }
@@ -203,8 +209,8 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
 @Composable
 private fun NearbyEventCards(
     cards: List<org.levarac.beid.sensing.NearbyEventCard>,
-    selectedIndex: Int,
-    onSelected: (Int) -> Unit,
+    selectedEventHashHex: String?,
+    onSelected: (String) -> Unit,
 ) {
     if (cards.isEmpty()) {
         Text(
@@ -219,8 +225,17 @@ private fun NearbyEventCards(
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
         modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
     ) {
-        cards.forEachIndexed { index, card ->
-            BeidPanel(modifier = Modifier.clickable { onSelected(index) }) {
+        cards.forEach { card ->
+            val selected = card.eventCodeHashHex == selectedEventHashHex
+            BeidPanel(
+                modifier = Modifier
+                    .selectable(
+                        selected = selected,
+                        onClick = { onSelected(card.eventCodeHashHex) },
+                        role = Role.RadioButton,
+                    )
+                    .testTag(EventJoinScreenTestTags.nearbyEventCard(card.eventCodeHashHex)),
+            ) {
                 Text(
                     text = stringResource(R.string.event_join_beacon_name_label),
                     style = MaterialTheme.typography.labelSmall,
@@ -241,7 +256,7 @@ private fun NearbyEventCards(
                     style = MaterialTheme.typography.labelSmall,
                     color = BeidTheme.colors.textSecondary,
                 )
-                if (index == selectedIndex) Text(
+                if (selected) Text(
                     text = stringResource(R.string.event_join_selected),
                     style = MaterialTheme.typography.labelSmall,
                     color = BeidTheme.colors.textSecondary,

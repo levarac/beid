@@ -17,9 +17,80 @@ import org.levarac.parallax.discovery.beginNearbyEventRegistryResolutionFromHex
 import org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex
 import org.levarac.parallax.discovery.isNearbyEventRegistryResolutionAttemptActive
 import org.levarac.parallax.discovery.NearbyEventRegistryResolutionResult
+import org.levarac.parallax.registry.EventJoinMode
 import org.levarac.parallax.registry.RegistryClient
-import org.levarac.parallax.registry.RegistryRequest
 import org.levarac.parallax.registry.safeRegistryReadPin
+
+internal fun interface NearbyEventRegistryRequest {
+    fun cancel()
+}
+
+internal data class NearbyEventIdLookup(
+    val isSuccess: Boolean,
+    val eventIdHex: String?,
+    val errorCode: String?,
+)
+
+internal data class NearbyEventDefinitionVerification(
+    val isSuccess: Boolean,
+    val joinMode: EventJoinMode?,
+    val eventIdHex: String?,
+    val eventCodeHashHex: String?,
+    val validFromEpochSeconds: Long?,
+    val validUntilEpochSeconds: Long?,
+)
+
+/** Native effect seam; the shared reducer below remains the trust authority. */
+internal interface NearbyEventRegistry {
+    fun resolveEventIdByCodeHash(
+        hashHex: String,
+        completion: (NearbyEventIdLookup) -> Unit,
+    ): NearbyEventRegistryRequest
+
+    fun resolveEventDefinition(
+        eventIdHex: String,
+        useTimeEpochSeconds: Long,
+        completion: (NearbyEventDefinitionVerification) -> Unit,
+    ): NearbyEventRegistryRequest
+}
+
+internal class RegistryClientNearbyEventRegistry(
+    private val client: RegistryClient,
+) : NearbyEventRegistry {
+    override fun resolveEventIdByCodeHash(
+        hashHex: String,
+        completion: (NearbyEventIdLookup) -> Unit,
+    ): NearbyEventRegistryRequest {
+        val request = client.resolveEventIdByCodeHash(hashHex) {
+            completion(NearbyEventIdLookup(it.isSuccess, it.eventIdHex, it.errorCode))
+        }
+        return NearbyEventRegistryRequest(request::cancel)
+    }
+
+    override fun resolveEventDefinition(
+        eventIdHex: String,
+        useTimeEpochSeconds: Long,
+        completion: (NearbyEventDefinitionVerification) -> Unit,
+    ): NearbyEventRegistryRequest {
+        val request = client.resolveEventDefinition(
+            eventIdHex,
+            safeRegistryReadPin(),
+            useTimeEpochSeconds,
+        ) {
+            completion(
+                NearbyEventDefinitionVerification(
+                    isSuccess = it.isSuccess,
+                    joinMode = it.context?.joinMode,
+                    eventIdHex = it.context?.eventIdHex,
+                    eventCodeHashHex = it.context?.eventCodeHashHex,
+                    validFromEpochSeconds = it.context?.validFrom?.value,
+                    validUntilEpochSeconds = it.context?.validUntil?.value,
+                ),
+            )
+        }
+        return NearbyEventRegistryRequest(request::cancel)
+    }
+}
 
 /**
  * Android lifecycle owner for the shared, pure nearby-event discovery store.
@@ -28,7 +99,7 @@ import org.levarac.parallax.registry.safeRegistryReadPin
 internal class NearbyEventDiscoverySession(
     private val nowEpochMillis: () -> Long,
     private val coroutineScope: CoroutineScope,
-    private val registryClient: RegistryClient? = null,
+    private val registry: NearbyEventRegistry? = null,
 ) {
     private val store = createNearbyEventDiscoveryStore()
     private val _candidates = MutableStateFlow(store.snapshot)
@@ -37,7 +108,7 @@ internal class NearbyEventDiscoverySession(
     private var expiryJob: Job? = null
     private var disposed = false
     private var callbackGeneration = 0L
-    private val registryRequests = mutableSetOf<RegistryRequest>()
+    private val registryRequests = mutableSetOf<NearbyEventRegistryRequest>()
 
     val candidates: StateFlow<NearbyEventCandidates> = _candidates.asStateFlow()
     val cards: StateFlow<List<NearbyEventCard>> = _cards.asStateFlow()
@@ -77,7 +148,7 @@ internal class NearbyEventDiscoverySession(
     }
 
     private fun resolveUnresolvedCandidates(snapshot: NearbyEventCandidates) {
-        val client = registryClient ?: return
+        val client = registry ?: return
         repeat(snapshot.candidateCount) { index ->
             val candidate = snapshot.candidateAt(index) ?: return@repeat
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
@@ -92,7 +163,7 @@ internal class NearbyEventDiscoverySession(
             // `verification` are assigned before this block can read them even
             // on a completion path that calls back before the outer function
             // returns.
-            lateinit var lookup: RegistryRequest
+            lateinit var lookup: NearbyEventRegistryRequest
             lookup = client.resolveEventIdByCodeHash(hash) { resolution ->
                 coroutineScope.launch {
                     registryRequests.remove(lookup)
@@ -116,8 +187,8 @@ internal class NearbyEventDiscoverySession(
                         )
                         return@launch
                     }
-                    lateinit var verification: RegistryRequest
-                    verification = client.resolveEventDefinition(eventId, safeRegistryReadPin(), nowEpochMillis() / 1000L) { verified ->
+                    lateinit var verification: NearbyEventRegistryRequest
+                    verification = client.resolveEventDefinition(eventId, nowEpochMillis() / 1000L) { verified ->
                         coroutineScope.launch {
                             registryRequests.remove(verification)
                             if (disposed || generation != callbackGeneration ||
@@ -129,11 +200,17 @@ internal class NearbyEventDiscoverySession(
                                     attempt = attempt,
                                     result = result,
                                     resolvedEventIdHex = eventId,
-                                    verifiedDefinitionJoinMode = verified.context?.joinMode,
-                                    verifiedDefinitionEventIdHex = verified.context?.eventIdHex,
-                                    verifiedDefinitionEventCodeHashHex = verified.context?.eventCodeHashHex,
+                                    verifiedDefinitionJoinMode = verified.joinMode,
+                                    verifiedDefinitionEventIdHex = verified.eventIdHex,
+                                    verifiedDefinitionEventCodeHashHex = verified.eventCodeHashHex,
                                 )
-                            updateVerifiedCard(hash, eventId, verified.context?.validFrom?.value, verified.context?.validUntil?.value, update.snapshot)
+                            updateVerifiedCard(
+                                hash,
+                                eventId,
+                                verified.validFromEpochSeconds,
+                                verified.validUntilEpochSeconds,
+                                update.snapshot,
+                            )
                             publishAndSchedule(update.snapshot)
                         }
                     }
@@ -166,6 +243,7 @@ internal class NearbyEventDiscoverySession(
                             eventIdHex = verified?.eventIdHex,
                             validFromEpochSeconds = verified?.validFromEpochSeconds,
                             validUntilEpochSeconds = verified?.validUntilEpochSeconds,
+                            eventCodeHashHex = candidate.eventCodeHashHex,
                         ),
                     )
                 }

@@ -36,7 +36,7 @@ data class EventJoinScreenState(
     val fieldError: EventJoinFieldError? = null,
     val sessionState: EventJoinUiState = EventJoinUiState.Idle,
     val nearbyEventCards: List<org.levarac.beid.sensing.NearbyEventCard> = emptyList(),
-    val selectedNearbyEventIndex: Int = 0,
+    val selectedNearbyEventHashHex: String? = null,
 )
 
 /**
@@ -61,9 +61,16 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
         viewModelScope.launch {
             session.nearbyEventCards.collect { cards ->
                 _uiState.update {
+                    val selectedHash = when {
+                        cards.isEmpty() -> null
+                        it.nearbyEventCards.isEmpty() -> cards.first().eventCodeHashHex
+                        cards.any { card -> card.eventCodeHashHex == it.selectedNearbyEventHashHex } ->
+                            it.selectedNearbyEventHashHex
+                        else -> null
+                    }
                     it.copy(
                         nearbyEventCards = cards,
-                        selectedNearbyEventIndex = it.selectedNearbyEventIndex.coerceIn(0, (cards.size - 1).coerceAtLeast(0)),
+                        selectedNearbyEventHashHex = selectedHash,
                     )
                 }
             }
@@ -87,14 +94,15 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun openAppSettings() = session.openAppSettings()
 
-    fun selectNearbyEvent(index: Int) {
-        if (index in _uiState.value.nearbyEventCards.indices) {
-            _uiState.update { it.copy(selectedNearbyEventIndex = index) }
+    fun selectNearbyEvent(eventCodeHashHex: String) {
+        if (_uiState.value.nearbyEventCards.any { it.eventCodeHashHex == eventCodeHashHex }) {
+            _uiState.update { it.copy(selectedNearbyEventHashHex = eventCodeHashHex) }
         }
     }
 
     fun joinSelectedNearbyEvent() {
-        _uiState.value.nearbyEventCards.getOrNull(_uiState.value.selectedNearbyEventIndex)
+        _uiState.value.nearbyEventCards
+            .firstOrNull { it.eventCodeHashHex == _uiState.value.selectedNearbyEventHashHex }
             ?.eventIdHex
             ?.let(session::joinNearbyEvent)
     }

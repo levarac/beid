@@ -1,8 +1,14 @@
 package org.levarac.beid.ui.screens
 
 import android.content.Context
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -154,7 +160,9 @@ class EventJoinScreenTest {
     fun oneVerifiedNearbyCandidateIsSelectedAndJoinsWithItsExactEventId() {
         val eventId = "0x0123456789abcdef"
         val session = FakeEventJoinSession(
-            nearbyEventCards = listOf(NearbyEventCard("Beacon name", eventId, 100L, 200L)),
+            nearbyEventCards = listOf(
+                NearbyEventCard("Beacon name", eventId, 100L, 200L, "1111111111111111"),
+            ),
         )
         val viewModel = EventJoinViewModel(session)
 
@@ -163,9 +171,13 @@ class EventJoinScreenTest {
         }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("1111111111111111"))
+            .assertIsSelected()
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
         composeTestRule.runOnIdle {
             assertEquals(eventId, viewModel.uiState.value.nearbyEventCards.single().eventIdHex)
-            assertEquals(0, viewModel.uiState.value.selectedNearbyEventIndex)
+            assertEquals("1111111111111111", viewModel.uiState.value.selectedNearbyEventHashHex)
         }
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.JOIN_NEARBY_EVENT_BUTTON)
             .performScrollTo()

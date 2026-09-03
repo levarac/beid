@@ -12,6 +12,8 @@ data class NearbyEventCard(
     val eventIdHex: String? = null,
     val validFromEpochSeconds: Long? = null,
     val validUntilEpochSeconds: Long? = null,
+    /** Stable B005 candidate identity; unlike list position, it survives reordering. */
+    val eventCodeHashHex: String,
 )
 
 /**
