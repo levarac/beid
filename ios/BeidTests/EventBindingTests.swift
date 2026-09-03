@@ -778,6 +778,10 @@ private final class FakeRestoredHintConnector: ObservableObject, WalletConnector
     state = .idle
   }
 
+  func cancelPendingOperation() {
+    state = .idle
+  }
+
   @discardableResult
   func handle(url: URL) -> Bool { false }
 }

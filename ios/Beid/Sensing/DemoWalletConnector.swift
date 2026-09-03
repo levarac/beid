@@ -107,6 +107,10 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
     state = .idle
   }
 
+  func cancelPendingOperation() {
+    state = .idle
+  }
+
   @discardableResult
   func handle(url: URL) -> Bool { false }
 

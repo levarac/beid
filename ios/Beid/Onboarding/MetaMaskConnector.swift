@@ -65,7 +65,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   private let hintStore: WalletHintStore
   private var account: MetaMaskWalletAccount?
   private var connectionAttemptID: UUID?
-  private var sessionID: UUID?
+  private var connectionGenerationID: UUID?
   private var signAttemptID: UUID?
   private var signGate: MetaMaskSignResultGate?
 
@@ -84,7 +84,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   func connect() async {
     guard transport.isWalletInstalled else {
       account = nil
-      sessionID = nil
+      connectionGenerationID = nil
       state = .unavailable(.walletNotInstalled)
       return
     }
@@ -101,17 +101,17 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
     switch result {
     case .success(let account):
       self.account = account
-      sessionID = UUID()
+      connectionGenerationID = UUID()
       let live = LiveWalletAddress.fromConnectorResult(address: account.address, chainId: account.chainId)
       state = .connected(live)
       hintStore.save(CachedWalletHint(address: live.address, chainId: live.chainId))
     case .failure(.rejected):
       account = nil
-      sessionID = nil
+      connectionGenerationID = nil
       state = .failed("Connection declined")
     case .failure(.failed(let message)):
       account = nil
-      sessionID = nil
+      connectionGenerationID = nil
       state = .failed(message)
     }
   }
@@ -131,7 +131,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   ) async -> Result<(LiveWalletAddress, String), WalletConnectorError> {
     guard transport.isWalletInstalled else {
       account = nil
-      sessionID = nil
+      connectionGenerationID = nil
       state = .unavailable(.walletNotInstalled)
       return .failure(.relayFailure("MetaMask is not installed"))
     }
@@ -143,25 +143,34 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
     onDispatched?()
 
     let result = await transport.connectAndSign(messageHex: messageHex)
+    // Known overclaim, tracked at beid#329, deliberately not fixed here: a
+    // light cancel during this await would also fall into this branch and
+    // report .notConnected, same overclaiming problem .cancelled exists to
+    // fix elsewhere. Unlike requestPersonalSign()'s signGate, there is no
+    // dedicated gate/continuation object for connectAndSign, so
+    // cancelPendingOperation() has nothing to attribute a precise cause to
+    // at this line — building that machinery for a path no current UI
+    // affordance can reach would be premature. See beid#329 for the full
+    // reasoning.
     guard connectionAttemptID == attemptID else { return .failure(.notConnected) }
     connectionAttemptID = nil
 
     switch result {
     case .success(let (account, signature)):
       self.account = account
-      sessionID = UUID()
+      connectionGenerationID = UUID()
       let live = LiveWalletAddress.fromConnectorResult(address: account.address, chainId: account.chainId)
       state = .connected(live)
       hintStore.save(CachedWalletHint(address: live.address, chainId: live.chainId))
       return .success((live, signature))
     case .failure(.rejected):
       account = nil
-      sessionID = nil
+      connectionGenerationID = nil
       state = .failed("Connection declined")
       return .failure(.rejected)
     case .failure(.failed(let message)):
       account = nil
-      sessionID = nil
+      connectionGenerationID = nil
       state = .failed(message)
       return .failure(.relayFailure(message))
     }
@@ -172,7 +181,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
     responseTimeout: TimeInterval = 90,
     onDispatched: (() -> Void)? = nil
   ) async -> Result<String, WalletConnectorError> {
-    guard let account, let sessionID else {
+    guard let account, let connectionGenerationID else {
       return .failure(.notConnected)
     }
     guard transport.isWalletInstalled else {
@@ -188,7 +197,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
 
       gate.requestTask = Task { @MainActor [weak self, weak gate] in
         guard let self, let gate else { return }
-        guard self.sessionID == sessionID, self.signAttemptID == attemptID else {
+        guard self.connectionGenerationID == connectionGenerationID, self.signAttemptID == attemptID else {
           gate.finish(.failure(.notConnected))
           return
         }
@@ -198,7 +207,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
           address: account.address,
           messageHex: messageHex
         )
-        guard self.sessionID == sessionID, self.signAttemptID == attemptID else {
+        guard self.connectionGenerationID == connectionGenerationID, self.signAttemptID == attemptID else {
           gate.finish(.failure(.notConnected))
           return
         }
@@ -229,11 +238,21 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
 
   func disconnect() {
     connectionAttemptID = nil
-    sessionID = nil
+    connectionGenerationID = nil
     signAttemptID = nil
     signGate?.finish(.failure(.notConnected))
     signGate = nil
     transport.disconnect()
+    account = nil
+    state = .idle
+  }
+
+  func cancelPendingOperation() {
+    connectionAttemptID = nil
+    connectionGenerationID = nil
+    signAttemptID = nil
+    signGate?.finish(.failure(.cancelled))
+    signGate = nil
     account = nil
     state = .idle
   }

@@ -420,9 +420,13 @@ final class AppCoordinator: ObservableObject {
   /// This is the one production call site that clears the persisted
   /// `CachedWalletHint` (beid#315 / dispatch#26 condition 3) — the
   /// explicit "Disconnect Wallet" action in `AccountSheetView`. Cancel, Try
-  /// Again, Start Over, and sheet dismissal all route through
-  /// `WalletConnector.disconnect()` or `SensingCoordinator.declineBinding()`
-  /// instead, neither of which touches `WalletHintStore`.
+  /// Again, and Start Over all route through
+  /// `WalletConnector.cancelPendingOperation()` instead (dispatch#26
+  /// condition 3); the binding sheet's own decline path routes through
+  /// `SensingCoordinator.declineBinding()`, which never touches the
+  /// connector at all. Neither touches `WalletHintStore`, and
+  /// `cancelPendingOperation()` additionally never reaches the wallet
+  /// SDK's own persisted session, unlike `disconnect()`.
   func disconnectWallet() {
     walletAddress = nil
     liveWalletAddress = nil
