@@ -1,6 +1,8 @@
 package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +29,7 @@ import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.designsystem.BeidMetricRow
+import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
 import org.levarac.beid.ui.designsystem.BeidStatusPill
@@ -48,6 +51,8 @@ object EventJoinScreenTestTags {
     const val RESUME_BUTTON = "event_join_resume_button"
     const val SIMULATE_SIGNAL_LOST_BUTTON = "event_join_simulate_signal_lost_button"
     const val ACCOUNT_ENTRY = "event_join_account_entry"
+    const val NEARBY_EVENT_LIST = "nearby_event_list"
+    const val JOIN_NEARBY_EVENT_BUTTON = "join_nearby_event_button"
 }
 
 @Composable
@@ -74,7 +79,8 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(BeidSpacing.pageMargin),
+                .padding(BeidSpacing.pageMargin)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
         ) {
             // Plain clickable text — this screen's only entry point into the new Account
@@ -95,6 +101,12 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
                 text = stringResource(R.string.event_join_title),
                 style = MaterialTheme.typography.headlineLarge,
                 color = BeidTheme.colors.textPrimary,
+            )
+
+            NearbyEventCards(
+                cards = uiState.nearbyEventCards,
+                selectedIndex = uiState.selectedNearbyEventIndex,
+                onSelected = viewModel::selectNearbyEvent,
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
@@ -174,14 +186,66 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
                 }
                 else -> {
                     BeidPrimaryButton(
-                        text = stringResource(R.string.event_join_button),
+                        text = stringResource(if (uiState.nearbyEventCards.isEmpty()) R.string.event_join_button else R.string.event_join_nearby_button),
                         containerColor = BeidTheme.colors.actionPrimary,
                         contentColor = BeidTheme.colors.surfaceCanvas,
-                        onClick = viewModel::submit,
-                        enabled = uiState.sessionState !is EventJoinUiState.RequestingPermission,
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
+                        onClick = if (uiState.nearbyEventCards.isEmpty()) viewModel::submit else viewModel::joinSelectedNearbyEvent,
+                        enabled = uiState.sessionState !is EventJoinUiState.RequestingPermission &&
+                            (uiState.nearbyEventCards.isEmpty() || uiState.nearbyEventCards.getOrNull(uiState.selectedNearbyEventIndex)?.eventIdHex != null),
+                        modifier = Modifier.testTag(if (uiState.nearbyEventCards.isEmpty()) EventJoinScreenTestTags.SUBMIT_BUTTON else EventJoinScreenTestTags.JOIN_NEARBY_EVENT_BUTTON),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NearbyEventCards(
+    cards: List<org.levarac.beid.sensing.NearbyEventCard>,
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+) {
+    if (cards.isEmpty()) {
+        Text(
+            text = stringResource(R.string.event_join_searching_nearby),
+            style = MaterialTheme.typography.bodyMedium,
+            color = BeidTheme.colors.textSecondary,
+            modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
+        )
+        return
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
+        modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
+    ) {
+        cards.forEachIndexed { index, card ->
+            BeidPanel(modifier = Modifier.clickable { onSelected(index) }) {
+                Text(
+                    text = stringResource(R.string.event_join_beacon_name_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = BeidTheme.colors.textSecondary,
+                )
+                Text(
+                    text = card.beaconDisplayName ?: stringResource(R.string.event_join_beacon_name_missing),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = BeidTheme.colors.textPrimary,
+                )
+                if (card.validFromEpochSeconds != null && card.validUntilEpochSeconds != null) Text(
+                    text = stringResource(R.string.event_join_validity_period, card.validFromEpochSeconds, card.validUntilEpochSeconds),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BeidTheme.colors.textSecondary,
+                )
+                if (card.eventIdHex == null) Text(
+                    text = stringResource(R.string.event_join_not_joinable_yet),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = BeidTheme.colors.textSecondary,
+                )
+                if (index == selectedIndex) Text(
+                    text = stringResource(R.string.event_join_selected),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = BeidTheme.colors.textSecondary,
+                )
             }
         }
     }

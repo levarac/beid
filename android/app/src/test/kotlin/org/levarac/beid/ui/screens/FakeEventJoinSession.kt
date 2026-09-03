@@ -5,13 +5,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.NearbyEventCard
 
 /** Shared test double for [EventJoinSession] — no real `Activity`/`BarnardEngine` involved. */
-internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState.Idle) : EventJoinSession {
+internal class FakeEventJoinSession(
+    initial: EventJoinUiState = EventJoinUiState.Idle,
+    nearbyEventCards: List<NearbyEventCard> = emptyList(),
+) : EventJoinSession {
     private val mutableState = MutableStateFlow(initial)
     override val state: StateFlow<EventJoinUiState> = mutableState.asStateFlow()
+    override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = MutableStateFlow(nearbyEventCards).asStateFlow()
 
     var joinedCode: String? = null
+        private set
+    var joinedDiscoveredEventId: String? = null
         private set
     var openedAppSettings: Boolean = false
         private set
@@ -26,6 +33,10 @@ internal class FakeEventJoinSession(initial: EventJoinUiState = EventJoinUiState
 
     override fun joinEvent(code: String) {
         joinedCode = code
+    }
+
+    override fun joinNearbyEvent(eventIdHex: String) {
+        joinedDiscoveredEventId = eventIdHex
     }
 
     override fun openAppSettings() {

@@ -100,6 +100,7 @@ class EventJoinCoordinator internal constructor(
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
+    override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = nearbyDiscovery.cards
     val nearbyEventCandidates: StateFlow<NearbyEventCandidates> = nearbyDiscovery.candidates
 
     /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
@@ -243,6 +244,8 @@ class EventJoinCoordinator internal constructor(
             }
         }
     }
+
+    override fun joinNearbyEvent(eventIdHex: String) = joinEvent(eventIdHex)
 
     private fun startSensing() {
         resetSessionState()

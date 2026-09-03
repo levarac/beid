@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.levarac.parallax.discovery.NearbyEventCandidates
+import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.discovery.createNearbyEventDiscoveryStore
 import org.levarac.parallax.discovery.recordNearbyEventHint
 import org.levarac.parallax.discovery.refreshNearbyEventDiscovery
@@ -31,12 +32,15 @@ internal class NearbyEventDiscoverySession(
 ) {
     private val store = createNearbyEventDiscoveryStore()
     private val _candidates = MutableStateFlow(store.snapshot)
+    private val _cards = MutableStateFlow<List<NearbyEventCard>>(emptyList())
+    private val verifiedMetadataByHash = mutableMapOf<String, VerifiedNearbyEventMetadata>()
     private var expiryJob: Job? = null
     private var disposed = false
     private var callbackGeneration = 0L
     private val registryRequests = mutableSetOf<RegistryRequest>()
 
     val candidates: StateFlow<NearbyEventCandidates> = _candidates.asStateFlow()
+    val cards: StateFlow<List<NearbyEventCard>> = _cards.asStateFlow()
 
     fun recordHint(
         peripheralId: String,
@@ -68,6 +72,8 @@ internal class NearbyEventDiscoverySession(
         expiryJob?.cancel()
         expiryJob = null
         _candidates.value = resetNearbyEventDiscovery(store).snapshot
+        verifiedMetadataByHash.clear()
+        _cards.value = emptyList()
     }
 
     private fun resolveUnresolvedCandidates(snapshot: NearbyEventCandidates) {
@@ -118,8 +124,7 @@ internal class NearbyEventDiscoverySession(
                                 !isNearbyEventRegistryResolutionAttemptActive(store, attempt)) return@launch
                             val result = if (verified.isSuccess) NearbyEventRegistryResolutionResult.VERIFIED
                             else NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE
-                            publishAndSchedule(
-                                completeNearbyEventRegistryResolutionFromHex(
+                            val update = completeNearbyEventRegistryResolutionFromHex(
                                     store = store,
                                     attempt = attempt,
                                     result = result,
@@ -127,8 +132,9 @@ internal class NearbyEventDiscoverySession(
                                     verifiedDefinitionJoinMode = verified.context?.joinMode,
                                     verifiedDefinitionEventIdHex = verified.context?.eventIdHex,
                                     verifiedDefinitionEventCodeHashHex = verified.context?.eventCodeHashHex,
-                                ).snapshot,
-                            )
+                                )
+                            updateVerifiedCard(hash, eventId, verified.context?.validFrom?.value, verified.context?.validUntil?.value, update.snapshot)
+                            publishAndSchedule(update.snapshot)
                         }
                     }
                     registryRequests += verification
@@ -146,6 +152,25 @@ internal class NearbyEventDiscoverySession(
 
     private fun publishAndSchedule(snapshot: NearbyEventCandidates) {
         _candidates.value = snapshot
+        val liveHashes = buildSet {
+            repeat(snapshot.candidateCount) { index -> snapshot.candidateAt(index)?.let { add(it.eventCodeHashHex) } }
+        }
+        verifiedMetadataByHash.keys.retainAll(liveHashes)
+        _cards.value = buildList {
+            repeat(snapshot.candidateCount) { index ->
+                snapshot.candidateAt(index)?.let { candidate ->
+                    val verified = verifiedMetadataByHash[candidate.eventCodeHashHex]
+                    add(
+                        NearbyEventCard(
+                            beaconDisplayName = candidate.displayNameAt(0),
+                            eventIdHex = verified?.eventIdHex,
+                            validFromEpochSeconds = verified?.validFromEpochSeconds,
+                            validUntilEpochSeconds = verified?.validUntilEpochSeconds,
+                        ),
+                    )
+                }
+            }
+        }
         expiryJob?.cancel()
         expiryJob = null
 
@@ -160,4 +185,34 @@ internal class NearbyEventDiscoverySession(
             publishAndSchedule(update.snapshot)
         }
     }
+
+    /**
+     * The shared reducer remains the sole trust predicate. Native code only
+     * carries period fields from the already verified context after that
+     * reducer exposes REGISTERED_VIA_OPERATOR_LOOKUP for the same candidate.
+     */
+    private fun updateVerifiedCard(
+        hash: String,
+        eventIdHex: String,
+        validFrom: Long?,
+        validUntil: Long?,
+        snapshot: NearbyEventCandidates,
+    ) {
+        val candidate = (0 until snapshot.candidateCount)
+            .mapNotNull(snapshot::candidateAt)
+            .firstOrNull { it.eventCodeHashHex == hash }
+        if (candidate?.registryStatus == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP &&
+            candidate.resolvedEventIdHex == eventIdHex && validFrom != null && validUntil != null
+        ) {
+            verifiedMetadataByHash[hash] = VerifiedNearbyEventMetadata(eventIdHex, validFrom, validUntil)
+        } else {
+            verifiedMetadataByHash.remove(hash)
+        }
+    }
+
+    private data class VerifiedNearbyEventMetadata(
+        val eventIdHex: String,
+        val validFromEpochSeconds: Long,
+        val validUntilEpochSeconds: Long,
+    )
 }

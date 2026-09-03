@@ -35,6 +35,8 @@ data class EventJoinScreenState(
     val eventCode: String = "",
     val fieldError: EventJoinFieldError? = null,
     val sessionState: EventJoinUiState = EventJoinUiState.Idle,
+    val nearbyEventCards: List<org.levarac.beid.sensing.NearbyEventCard> = emptyList(),
+    val selectedNearbyEventIndex: Int = 0,
 )
 
 /**
@@ -56,6 +58,16 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
                 _uiState.update { it.copy(sessionState = sessionState) }
             }
         }
+        viewModelScope.launch {
+            session.nearbyEventCards.collect { cards ->
+                _uiState.update {
+                    it.copy(
+                        nearbyEventCards = cards,
+                        selectedNearbyEventIndex = it.selectedNearbyEventIndex.coerceIn(0, (cards.size - 1).coerceAtLeast(0)),
+                    )
+                }
+            }
+        }
     }
 
     fun onEventCodeChanged(code: String) {
@@ -74,6 +86,18 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
     }
 
     fun openAppSettings() = session.openAppSettings()
+
+    fun selectNearbyEvent(index: Int) {
+        if (index in _uiState.value.nearbyEventCards.indices) {
+            _uiState.update { it.copy(selectedNearbyEventIndex = index) }
+        }
+    }
+
+    fun joinSelectedNearbyEvent() {
+        _uiState.value.nearbyEventCards.getOrNull(_uiState.value.selectedNearbyEventIndex)
+            ?.eventIdHex
+            ?.let(session::joinNearbyEvent)
+    }
 
     fun simulateSignalLost() = session.simulateSignalLost()
 

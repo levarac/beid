@@ -3,6 +3,18 @@ package org.levarac.beid.sensing
 import kotlinx.coroutines.flow.StateFlow
 
 /**
+ * A nearby beacon candidate. Its name is an unauthenticated B005 announcement;
+ * the optional ID and period exist only after the shared reducer accepts the
+ * OPEN definition, its hash binding, and the operator lookup route.
+ */
+data class NearbyEventCard(
+    val beaconDisplayName: String?,
+    val eventIdHex: String? = null,
+    val validFromEpochSeconds: Long? = null,
+    val validUntilEpochSeconds: Long? = null,
+)
+
+/**
  * The narrow surface [EventJoinViewModel][org.levarac.beid.ui.screens.EventJoinViewModel]
  * needs from a join session — [EventJoinCoordinator]'s production
  * implementation, or a fake in tests. Exists because [EventJoinCoordinator]
@@ -15,7 +27,13 @@ import kotlinx.coroutines.flow.StateFlow
 interface EventJoinSession {
     val state: StateFlow<EventJoinUiState>
 
+    /** Every nearby candidate is displayable; only cards with an Event ID are joinable. */
+    val nearbyEventCards: StateFlow<List<NearbyEventCard>>
+
     fun joinEvent(code: String)
+
+    /** Starts the existing native join sequence with the shared-verified Event ID verbatim. */
+    fun joinNearbyEvent(eventIdHex: String)
 
     fun openAppSettings()
 

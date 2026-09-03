@@ -2,18 +2,22 @@ package org.levarac.beid.ui.screens
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import kotlin.test.assertNull
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.R
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanEventSession
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -101,7 +105,10 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
         composeTestRule.onNodeWithText("2").assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         assertTrue(session.signalLostSimulated)
     }
 
@@ -136,7 +143,38 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_signal_lost)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         assertTrue(session.sensingResumed)
+    }
+
+    @Test
+    fun oneVerifiedNearbyCandidateIsSelectedAndJoinsWithItsExactEventId() {
+        val eventId = "0x0123456789abcdef"
+        val session = FakeEventJoinSession(
+            nearbyEventCards = listOf(NearbyEventCard("Beacon name", eventId, 100L, 200L)),
+        )
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent {
+            BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals(eventId, viewModel.uiState.value.nearbyEventCards.single().eventIdHex)
+            assertEquals(0, viewModel.uiState.value.selectedNearbyEventIndex)
+        }
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.JOIN_NEARBY_EVENT_BUTTON)
+            .performScrollTo()
+            .assertIsEnabled()
+            .assertIsDisplayed()
+            .performClick()
+
+        composeTestRule.runOnIdle {
+            assertEquals(eventId, session.joinedDiscoveredEventId)
+        }
     }
 }

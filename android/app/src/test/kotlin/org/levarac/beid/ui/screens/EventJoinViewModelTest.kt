@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanPhase
 
 /**
@@ -135,5 +136,26 @@ class EventJoinViewModelTest {
         viewModel.resumeSensing()
 
         assertTrue(session.sensingResumed)
+    }
+
+    @Test
+    fun joiningThePreselectedVerifiedOpenCardPassesItsExactEventIdToTheSession() = runTest {
+        val eventId = "0x0123456789abcdef"
+        val session = FakeEventJoinSession(
+            nearbyEventCards = listOf(
+                NearbyEventCard(
+                    beaconDisplayName = "Beacon name",
+                    eventIdHex = eventId,
+                    validFromEpochSeconds = 1_700_000_000L,
+                    validUntilEpochSeconds = 1_700_003_600L,
+                ),
+            ),
+        )
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.joinSelectedNearbyEvent()
+
+        assertEquals(eventId, session.joinedDiscoveredEventId)
     }
 }
