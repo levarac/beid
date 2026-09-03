@@ -7,6 +7,12 @@ import org.levarac.parallax.observation.ProtocolUInt
 
 internal const val MAX_EVENT_DEFINITION_PAYLOAD_BYTES: Int = 512 * 1_024
 
+/** Admission mode explicitly covered by an EventDefinition v1 authority signature. */
+public enum class EventJoinMode {
+    OPEN,
+    GATED,
+}
+
 /** A defensive-copy Ethereum address used by the canonical event preimage. */
 public class Address20 internal constructor(bytes: ByteArray) :
     ImmutableBytes(bytes.requireLength(20, "Ethereum address"))
@@ -49,6 +55,8 @@ public class EventDefinition internal constructor(
     public val validUntil: ProtocolUInt,
     /** The authority key that verified the COSE signature for this definition. */
     public val authorityPublicKey: CompressedSecp256k1PublicKey,
+    /** Null only for legacy key-1-through-13 definitions, which are never open-discoverable. */
+    public val joinMode: EventJoinMode? = null,
     eventCodeHash: ByteArray? = null,
 ) {
     private val eventCodeHashBytes: ByteArray? = eventCodeHash?.copyOf()
@@ -108,6 +116,9 @@ public class EventDefinitionContext internal constructor(
 
     public val validUntil: ProtocolUInt
         get() = definition.validUntil
+
+    public val joinMode: EventJoinMode?
+        get() = definition.joinMode
 
     public val eventCodeHashHex: String?
         get() = definition.eventCodeHashHex

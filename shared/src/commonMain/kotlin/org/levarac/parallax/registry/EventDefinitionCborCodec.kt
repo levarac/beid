@@ -215,8 +215,8 @@ internal object EventDefinitionCborCodec {
     private fun decodeDefinitionPayload(bytes: ByteArray): RawDefinition {
         val reader = StrictCborReader(bytes)
         val fieldCount = reader.readMapLength()
-        require(fieldCount == 13 || fieldCount == 14) {
-            "Event Definition must contain 13 legacy fields or 14 hash-bound fields"
+        require(fieldCount in 13..15) {
+            "Event Definition must contain 13 legacy, 14 gated, or 15 open fields"
         }
         reader.expectUnsignedKey(1L)
         val version = reader.readUnsigned()
@@ -251,13 +251,38 @@ internal object EventDefinitionCborCodec {
         val validFrom = reader.readProtocolUInt("validFrom")
         reader.expectUnsignedKey(13L)
         val validUntil = reader.readProtocolUInt("validUntil")
-        val eventCodeHash = if (fieldCount == 14) {
+        val joinMode = if (fieldCount >= 14) {
             reader.expectUnsignedKey(14L)
+            when (reader.readUnsigned()) {
+                0L -> EventJoinMode.OPEN
+                1L -> EventJoinMode.GATED
+                else -> fail(DefinitionDecodeError.MALFORMED, "Event Definition joinMode is unknown")
+            }
+        } else {
+            null
+        }
+        val eventCodeHash = if (fieldCount == 15) {
+            reader.expectUnsignedKey(15L)
             reader.readByteString(EVENT_CODE_HASH_BYTES)
         } else {
             null
         }
         reader.requireFinished()
+
+        when (joinMode) {
+            EventJoinMode.OPEN -> {
+                if (eventCodeHash == null) {
+                    fail(DefinitionDecodeError.MALFORMED, "open Event Definition requires eventCodeHash")
+                }
+                if (!eventCodeHash.contentEquals(eventCodeHashForOpenEventV1(eventId))) {
+                    fail(DefinitionDecodeError.MALFORMED, "open Event Definition eventCodeHash is not canonical")
+                }
+            }
+            EventJoinMode.GATED -> if (eventCodeHash != null) {
+                fail(DefinitionDecodeError.MALFORMED, "gated Event Definition forbids eventCodeHash")
+            }
+            null -> Unit
+        }
 
         if (sequence.value < 1L) {
             fail(DefinitionDecodeError.INVALID_VALIDITY, "Event Definition sequence must start at one")
@@ -291,6 +316,7 @@ internal object EventDefinitionCborCodec {
             submissionEndpoint = submissionEndpoint,
             validFrom = validFrom,
             validUntil = validUntil,
+            joinMode = joinMode,
             eventCodeHash = eventCodeHash,
         )
     }
@@ -549,6 +575,7 @@ internal object EventDefinitionCborCodec {
             validFrom = validFrom,
             validUntil = validUntil,
             authorityPublicKey = authorityKey,
+            joinMode = joinMode,
             eventCodeHash = eventCodeHash,
         )
 
@@ -576,6 +603,7 @@ internal object EventDefinitionCborCodec {
         val submissionEndpoint: String,
         val validFrom: ProtocolUInt,
         val validUntil: ProtocolUInt,
+        val joinMode: EventJoinMode?,
         val eventCodeHash: ByteArray?,
     )
 

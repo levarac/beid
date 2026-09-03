@@ -1,5 +1,6 @@
 package org.levarac.parallax.discovery
 
+import org.levarac.parallax.registry.EventJoinMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -8,27 +9,30 @@ import kotlin.test.assertTrue
 
 class NearbyEventRegistryResolutionTest {
     @Test
-    fun matchingVerifiedDefinitionHashPublishesRegisteredEventId() {
+    fun openDefinitionWhoseB005SignedAndRecomputedHashesMatchPublishesRegisteredEventId() {
         val store = createNearbyEventDiscoveryStore()
-        recordNearbyEventHint(store, "p", "Event", ByteArray(8) { it.toByte() }, null, false, false, 1L)
-        val hash = "0001020304050607"
+        val eventId = (0..31).joinToString("") { it.toString(16).padStart(2, '0') }
+        val hash = "6c86c6aac5fb24bc"
+        recordNearbyEventHint(store, "p", "Event", hash.hexBytes(), null, false, false, 1L)
         assertTrue(beginNearbyEventRegistryResolutionFromHex(store, hash))
         assertFalse(beginNearbyEventRegistryResolutionFromHex(store, hash))
         val update = completeNearbyEventRegistryResolutionFromHex(
             store = store,
             eventCodeHashHex = hash,
             result = NearbyEventRegistryResolutionResult.VERIFIED,
-            resolvedEventIdHex = "0x" + "ab".repeat(32),
+            resolvedEventIdHex = "0x$eventId",
+            verifiedDefinitionJoinMode = EventJoinMode.OPEN,
+            verifiedDefinitionEventIdHex = eventId,
             verifiedDefinitionEventCodeHashHex = hash,
         )
         val candidate = update.snapshot.candidateAt(0)!!
         assertEquals(NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP, candidate.registryStatus)
-        assertEquals("0x" + "ab".repeat(32), candidate.resolvedEventIdHex)
+        assertEquals("0x$eventId", candidate.resolvedEventIdHex)
     }
 
     @Test
     fun missingVerifiedDefinitionHashNeverPublishesRegisteredStatus() {
-        val candidate = completeVerifiedDefinition(eventCodeHash = "0001020304050607", definitionHash = null)
+        val candidate = completeVerifiedOpenDefinition(definitionHash = null)
 
         assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate.registryStatus)
         assertNull(candidate.resolvedEventIdHex)
@@ -36,9 +40,45 @@ class NearbyEventRegistryResolutionTest {
 
     @Test
     fun mismatchedVerifiedDefinitionHashNeverPublishesRegisteredStatus() {
+        val candidate = completeVerifiedOpenDefinition(definitionHash = "08090a0b0c0d0e0f")
+
+        assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate.registryStatus)
+        assertNull(candidate.resolvedEventIdHex)
+    }
+
+    @Test
+    fun gatedAndLegacyDefinitionsRemainNonDiscoverable() {
+        listOf(EventJoinMode.GATED, null).forEach { mode ->
+            val candidate = completeVerifiedDefinition(
+                eventCodeHash = CANONICAL_HASH,
+                definitionHash = CANONICAL_HASH,
+                joinMode = mode,
+            )
+
+            assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate.registryStatus)
+            assertNull(candidate.resolvedEventIdHex)
+        }
+    }
+
+    @Test
+    fun matchingB005AndSignedHashCannotHideARecomputedCanonicalHashMismatch() {
         val candidate = completeVerifiedDefinition(
             eventCodeHash = "0001020304050607",
-            definitionHash = "08090a0b0c0d0e0f",
+            definitionHash = "0001020304050607",
+            joinMode = EventJoinMode.OPEN,
+        )
+
+        assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate.registryStatus)
+        assertNull(candidate.resolvedEventIdHex)
+    }
+
+    @Test
+    fun lookupEventIdMustMatchTheAuthorityVerifiedDefinitionEventId() {
+        val candidate = completeVerifiedDefinition(
+            eventCodeHash = CANONICAL_HASH,
+            definitionHash = CANONICAL_HASH,
+            joinMode = EventJoinMode.OPEN,
+            resolvedEventId = "ab".repeat(32),
         )
 
         assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate.registryStatus)
@@ -57,6 +97,8 @@ class NearbyEventRegistryResolutionTest {
             NearbyEventRegistryResolutionResult.NOT_REGISTERED,
             null,
             null,
+            null,
+            null,
         )
         refreshNearbyEventDiscovery(store, 300_000L)
         recordNearbyEventHint(store, "p2", "Event", bytes, null, false, false, 300_001L)
@@ -65,16 +107,26 @@ class NearbyEventRegistryResolutionTest {
         assertNull(candidate.resolvedEventIdHex)
     }
 
+    private fun completeVerifiedOpenDefinition(
+        definitionHash: String?,
+    ): NearbyEventCandidate = completeVerifiedDefinition(
+        eventCodeHash = CANONICAL_HASH,
+        definitionHash = definitionHash,
+        joinMode = EventJoinMode.OPEN,
+    )
+
     private fun completeVerifiedDefinition(
         eventCodeHash: String,
         definitionHash: String?,
+        joinMode: EventJoinMode?,
+        resolvedEventId: String = CANONICAL_EVENT_ID,
     ): NearbyEventCandidate {
         val store = createNearbyEventDiscoveryStore()
         recordNearbyEventHint(
             store,
             "p",
             "Event",
-            eventCodeHash.chunked(2).map { it.toInt(16).toByte() }.toByteArray(),
+            eventCodeHash.hexBytes(),
             null,
             false,
             false,
@@ -85,8 +137,19 @@ class NearbyEventRegistryResolutionTest {
             store = store,
             eventCodeHashHex = eventCodeHash,
             result = NearbyEventRegistryResolutionResult.VERIFIED,
-            resolvedEventIdHex = "0x" + "ab".repeat(32),
+            resolvedEventIdHex = "0x$resolvedEventId",
+            verifiedDefinitionJoinMode = joinMode,
+            verifiedDefinitionEventIdHex = CANONICAL_EVENT_ID,
             verifiedDefinitionEventCodeHashHex = definitionHash,
         ).snapshot.candidateAt(0)!!
     }
+
+    private companion object {
+        const val CANONICAL_EVENT_ID =
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        const val CANONICAL_HASH = "6c86c6aac5fb24bc"
+    }
 }
+
+private fun String.hexBytes(): ByteArray =
+    chunked(2).map { it.toInt(16).toByte() }.toByteArray()

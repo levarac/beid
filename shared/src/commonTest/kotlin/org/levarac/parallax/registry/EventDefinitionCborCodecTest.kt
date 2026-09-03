@@ -188,6 +188,7 @@ class EventDefinitionCborCodecTest {
         assertEquals(1L, definition.sequence.value)
         assertEquals(1_799_999_900L, definition.validFrom.value)
         assertEquals(1_800_086_400L, definition.validUntil.value)
+        assertEquals(null, definition.joinMode)
         assertEquals(null, definition.eventCodeHashHex)
         assertEquals(1, verified.keySet.authorityKeyCount)
         assertEquals(
@@ -197,40 +198,47 @@ class EventDefinitionCborCodecTest {
     }
 
     @Test
-    fun extendedDefinitionPublishesTheExactVerifiedEightByteEventCodeHash() {
+    fun openDefinitionPublishesSignedJoinModeAndCanonicalEventCodeHash() {
         val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
-        val legacyRecord = vector.definitionRecord()
-        val signed = EXTENDED_SIGNED_DEFINITION_HEX.vectorHexBytes()
-        val record = RegistryDefinitionRecord(
-            sequence = legacyRecord.sequence,
-            previousDefinitionDigestHex = legacyRecord.previousDefinitionDigestHex,
-            definitionDigestHex = EXTENDED_DEFINITION_DIGEST_HEX,
-            validFrom = legacyRecord.validFrom,
-            validUntil = legacyRecord.validUntil,
-            anchoredAt = legacyRecord.anchoredAt,
-        )
+        val verified = verifyExtendedDefinition(vector, OPEN_SIGNED_DEFINITION_HEX, OPEN_DEFINITION_DIGEST_HEX)
 
-        val verified = EventDefinitionCborCodec.verify(
-            signedBytes = signed,
-            encodedKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
-            eventId = vector.vectorEventId(),
-            registration = vector.anchorRegistration(),
-            record = record,
-            at = record.validFrom,
-        )
-
-        assertEquals("b0648ff584999ae3", verified.definition.eventCodeHashHex)
+        assertEquals(EventJoinMode.OPEN, verified.definition.joinMode)
+        assertEquals("9adc61d60dda843e", verified.definition.eventCodeHashHex)
+        assertEquals(OPEN_DEFINITION_DIGEST_HEX, verified.digest.toHexWithoutPrefix())
     }
 
     @Test
-    fun extendedDefinitionRejectsEventCodeHashesThatAreNotExactlyEightBytes() {
+    fun gatedDefinitionPublishesSignedModeWithoutAnEventCodeHash() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val verified = verifyExtendedDefinition(vector, GATED_SIGNED_DEFINITION_HEX, GATED_DEFINITION_DIGEST_HEX)
+
+        assertEquals(EventJoinMode.GATED, verified.definition.joinMode)
+        assertEquals(null, verified.definition.eventCodeHashHex)
+        assertEquals(GATED_DEFINITION_DIGEST_HEX, verified.digest.toHexWithoutPrefix())
+    }
+
+    @Test
+    fun joinModeAndHashShapeViolationsFailClosedBeforeTrust() {
         val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
         val keySet = vector.requiredString("eventKeySetHex").vectorHexBytes()
 
-        listOf(ByteArray(7), ByteArray(9)).forEach { eventCodeHash ->
+        val invalid = listOf(
+            signedDefinitionWithJoinFields(vector, joinMode = 0, eventCodeHash = null),
+            signedDefinitionWithJoinFields(vector, joinMode = 1, eventCodeHash = ByteArray(8)),
+            signedDefinitionWithJoinFields(vector, joinMode = 2, eventCodeHash = null),
+            signedDefinitionWithJoinFields(vector, joinMode = 0, eventCodeHash = ByteArray(7)),
+            signedDefinitionWithJoinFields(vector, joinMode = 0, eventCodeHash = ByteArray(9)),
+            signedDefinitionWithJoinFields(
+                vector,
+                joinMode = null,
+                eventCodeHash = null,
+                legacyKey14Hash = ByteArray(8),
+            ),
+        )
+        invalid.forEach { signed ->
             val error = assertFailsWith<DefinitionDecodeException> {
                 EventDefinitionCborCodec.verify(
-                    signedBytes = signedDefinitionWithEventCodeHash(vector, eventCodeHash),
+                    signedBytes = signed,
                     encodedKeySet = keySet,
                     eventId = vector.vectorEventId(),
                     registration = vector.anchorRegistration(),
@@ -535,33 +543,38 @@ class EventDefinitionCborCodecTest {
         )
     }
 
-    private fun signedDefinitionWithEventCodeHash(
+    private fun signedDefinitionWithJoinFields(
         vector: kotlinx.serialization.json.JsonObject,
-        eventCodeHash: ByteArray,
+        joinMode: Long?,
+        eventCodeHash: ByteArray?,
+        legacyKey14Hash: ByteArray? = null,
     ): ByteArray {
         val original = vector.requiredString("signedEventDefinitionHex").vectorHexBytes()
         val registration = vector.anchorRegistration()
-        val payload = CanonicalCbor.encode(
-            CanonicalCbor.map(
-                CanonicalCbor.uint(1) to CanonicalCbor.uint(1),
-                CanonicalCbor.uint(2) to CanonicalCbor.bytes(vector.vectorEventId()),
-                CanonicalCbor.uint(3) to CanonicalCbor.bytes(registration.registrarHex.decodeHex(20)),
-                CanonicalCbor.uint(4) to CanonicalCbor.bytes(registration.operatorHex.decodeHex(20)),
-                CanonicalCbor.uint(5) to CanonicalCbor.bytes("33".repeat(32).decodeHex()),
-                CanonicalCbor.uint(6) to CanonicalCbor.bytes(registration.keySetDigestHex.decodeHex(32)),
-                CanonicalCbor.uint(7) to CanonicalCbor.uint(1),
-                CanonicalCbor.uint(8) to CanonicalCbor.bytes(ByteArray(32)),
-                CanonicalCbor.uint(9) to CanonicalCbor.bytes(
-                    "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5".decodeHex(),
-                ),
-                CanonicalCbor.uint(10) to CanonicalCbor.bytes(
-                    "50d8f3689f95e95c30be32dc4e516460dff139c088ab1117af0c104188252949".decodeHex(),
-                ),
-                CanonicalCbor.uint(11) to CanonicalCbor.text("https://operator.example/v1/observations"),
-                CanonicalCbor.uint(12) to CanonicalCbor.uint(1_799_999_900),
-                CanonicalCbor.uint(13) to CanonicalCbor.uint(1_800_086_400),
-                CanonicalCbor.uint(14) to CanonicalCbor.bytes(eventCodeHash),
+        val fields = mutableListOf(
+            CanonicalCbor.uint(1) to CanonicalCbor.uint(1),
+            CanonicalCbor.uint(2) to CanonicalCbor.bytes(vector.vectorEventId()),
+            CanonicalCbor.uint(3) to CanonicalCbor.bytes(registration.registrarHex.decodeHex(20)),
+            CanonicalCbor.uint(4) to CanonicalCbor.bytes(registration.operatorHex.decodeHex(20)),
+            CanonicalCbor.uint(5) to CanonicalCbor.bytes("33".repeat(32).decodeHex()),
+            CanonicalCbor.uint(6) to CanonicalCbor.bytes(registration.keySetDigestHex.decodeHex(32)),
+            CanonicalCbor.uint(7) to CanonicalCbor.uint(1),
+            CanonicalCbor.uint(8) to CanonicalCbor.bytes(ByteArray(32)),
+            CanonicalCbor.uint(9) to CanonicalCbor.bytes(
+                "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5".decodeHex(),
             ),
+            CanonicalCbor.uint(10) to CanonicalCbor.bytes(
+                "50d8f3689f95e95c30be32dc4e516460dff139c088ab1117af0c104188252949".decodeHex(),
+            ),
+            CanonicalCbor.uint(11) to CanonicalCbor.text("https://operator.example/v1/observations"),
+            CanonicalCbor.uint(12) to CanonicalCbor.uint(1_799_999_900),
+            CanonicalCbor.uint(13) to CanonicalCbor.uint(1_800_086_400),
+        )
+        if (joinMode != null) fields += CanonicalCbor.uint(14) to CanonicalCbor.uint(joinMode)
+        if (legacyKey14Hash != null) fields += CanonicalCbor.uint(14) to CanonicalCbor.bytes(legacyKey14Hash)
+        if (eventCodeHash != null) fields += CanonicalCbor.uint(15) to CanonicalCbor.bytes(eventCodeHash)
+        val payload = CanonicalCbor.encode(
+            CanonicalCbor.map(*fields.toTypedArray()),
         )
         val protectedLength = original[3].toInt() and 0xff
         val protectedHeaders = original.copyOfRange(4, 4 + protectedLength)
@@ -577,11 +590,39 @@ class EventDefinitionCborCodecTest {
         )
     }
 
+    private fun verifyExtendedDefinition(
+        vector: kotlinx.serialization.json.JsonObject,
+        signedHex: String,
+        digestHex: String,
+    ): EventDefinitionCborCodec.VerifiedDefinition {
+        val legacyRecord = vector.definitionRecord()
+        val record = RegistryDefinitionRecord(
+            sequence = legacyRecord.sequence,
+            previousDefinitionDigestHex = legacyRecord.previousDefinitionDigestHex,
+            definitionDigestHex = digestHex,
+            validFrom = legacyRecord.validFrom,
+            validUntil = legacyRecord.validUntil,
+            anchoredAt = legacyRecord.anchoredAt,
+        )
+        return EventDefinitionCborCodec.verify(
+            signedBytes = signedHex.vectorHexBytes(),
+            encodedKeySet = vector.requiredString("eventKeySetHex").vectorHexBytes(),
+            eventId = vector.vectorEventId(),
+            registration = vector.anchorRegistration(),
+            record = record,
+            at = record.validFrom,
+        )
+    }
+
     private companion object {
-        const val EXTENDED_DEFINITION_DIGEST_HEX =
-            "74089590de188b861f9f774374c02699c116f9e89b6e2df9d0c12d846e905478"
-        const val EXTENDED_SIGNED_DEFINITION_HEX =
-            "d284583ea301382e03782d6170706c69636174696f6e2f766e642e6c6576617261632e6576656e742d646566696e6974696f6e2b63626f720448f5df3c6eefaf5217a0590145ae01010258205d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab319503541111111111111111111111111111111111111111045422222222222222222222222222222222222222220558203333333333333333333333333333333333333333333333333333333333333333065820cba59e50c7666ef2468a14f2e53f04decfd078933cd245a9a2d77532eb23b7000701085820000000000000000000000000000000000000000000000000000000000000000009582102c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee50a582050d8f3689f95e95c30be32dc4e516460dff139c088ab1117af0c1041882529490b782868747470733a2f2f6f70657261746f722e6578616d706c652f76312f6f62736572766174696f6e730c1a6b49d19c0d1a6b4b23800e48b0648ff584999ae358409ee6fffd786c8706a4bcc62783aa9a1a99e973e0113ecc8cbda60a2bd91cac4530ca988ab703e8f41186286ee0ce611f62973eec8ce49e0fb73120c722a0b3a9"
+        const val GATED_DEFINITION_DIGEST_HEX =
+            "8c3cee30c9bdd2982d3c6a3e19e0c71543e7e558c9f2af066238b8e39e66c100"
+        const val GATED_SIGNED_DEFINITION_HEX =
+            "d284583ea301382e03782d6170706c69636174696f6e2f766e642e6c6576617261632e6576656e742d646566696e6974696f6e2b63626f720448f5df3c6eefaf5217a059013dae01010258205d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab319503541111111111111111111111111111111111111111045422222222222222222222222222222222222222220558203333333333333333333333333333333333333333333333333333333333333333065820cba59e50c7666ef2468a14f2e53f04decfd078933cd245a9a2d77532eb23b7000701085820000000000000000000000000000000000000000000000000000000000000000009582102c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee50a582050d8f3689f95e95c30be32dc4e516460dff139c088ab1117af0c1041882529490b782868747470733a2f2f6f70657261746f722e6578616d706c652f76312f6f62736572766174696f6e730c1a6b49d19c0d1a6b4b23800e0158402fe1ac328efc01dfa6e728171d6aff971fee83be06a71b4a92496f3926cc741e30e805dd27f66640976d68367a0d638a53e7c32a8d4d32c6deb1016ac99332bb"
+        const val OPEN_DEFINITION_DIGEST_HEX =
+            "534c58ee5752f3835863892eee4388ac99b2ecec8ef1287efb902d179e454026"
+        const val OPEN_SIGNED_DEFINITION_HEX =
+            "d284583ea301382e03782d6170706c69636174696f6e2f766e642e6c6576617261632e6576656e742d646566696e6974696f6e2b63626f720448f5df3c6eefaf5217a0590147af01010258205d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab319503541111111111111111111111111111111111111111045422222222222222222222222222222222222222220558203333333333333333333333333333333333333333333333333333333333333333065820cba59e50c7666ef2468a14f2e53f04decfd078933cd245a9a2d77532eb23b7000701085820000000000000000000000000000000000000000000000000000000000000000009582102c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee50a582050d8f3689f95e95c30be32dc4e516460dff139c088ab1117af0c1041882529490b782868747470733a2f2f6f70657261746f722e6578616d706c652f76312f6f62736572766174696f6e730c1a6b49d19c0d1a6b4b23800e000f489adc61d60dda843e584057ed6756de81dd41140f2606dee0893c16aac6d8d6df90f29037a785641cb0c7385acd9190cf092af925865d6548601174a8f878d25e1b9b3b1f6f0f44d38c38"
     }
 }
 

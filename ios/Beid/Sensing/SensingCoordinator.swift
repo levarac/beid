@@ -1679,6 +1679,8 @@ final class SensingCoordinator: ObservableObject {
               .completeNearbyEventRegistryResolutionFromHex(
                 store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
                 result: result, resolvedEventIdHex: nil,
+                verifiedDefinitionJoinMode: nil,
+                verifiedDefinitionEventIdHex: nil,
                 verifiedDefinitionEventCodeHashHex: nil
               )
             self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
@@ -1698,6 +1700,8 @@ final class SensingCoordinator: ObservableObject {
                 .completeNearbyEventRegistryResolutionFromHex(
                   store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
                   result: result, resolvedEventIdHex: eventID,
+                  verifiedDefinitionJoinMode: verified.context?.joinMode,
+                  verifiedDefinitionEventIdHex: verified.context?.eventIdHex,
                   verifiedDefinitionEventCodeHashHex: verified.context?.eventCodeHashHex
                 )
               self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())

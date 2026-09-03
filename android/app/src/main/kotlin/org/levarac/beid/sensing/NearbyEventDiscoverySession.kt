@@ -97,6 +97,8 @@ internal class NearbyEventDiscoverySession(
                                 eventCodeHashHex = hash,
                                 result = result,
                                 resolvedEventIdHex = null,
+                                verifiedDefinitionJoinMode = null,
+                                verifiedDefinitionEventIdHex = null,
                                 verifiedDefinitionEventCodeHashHex = null,
                             ).snapshot,
                         )
@@ -114,6 +116,8 @@ internal class NearbyEventDiscoverySession(
                                     eventCodeHashHex = hash,
                                     result = result,
                                     resolvedEventIdHex = eventId,
+                                    verifiedDefinitionJoinMode = verified.context?.joinMode,
+                                    verifiedDefinitionEventIdHex = verified.context?.eventIdHex,
                                     verifiedDefinitionEventCodeHashHex = verified.context?.eventCodeHashHex,
                                 ).snapshot,
                             )
