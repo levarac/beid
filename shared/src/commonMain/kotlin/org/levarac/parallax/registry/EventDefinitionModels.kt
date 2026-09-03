@@ -49,7 +49,10 @@ public class EventDefinition internal constructor(
     public val validUntil: ProtocolUInt,
     /** The authority key that verified the COSE signature for this definition. */
     public val authorityPublicKey: CompressedSecp256k1PublicKey,
+    eventCodeHash: ByteArray? = null,
 ) {
+    private val eventCodeHashBytes: ByteArray? = eventCodeHash?.copyOf()
+
     public val eventIdHex: String
         get() = eventId.toByteArray().toPrefixedHex()
 
@@ -64,6 +67,10 @@ public class EventDefinition internal constructor(
 
     public val previousDefinitionDigestHex: String
         get() = previousDefinitionDigest.toByteArray().toPrefixedHex()
+
+    /** The optional B005 event-code hash cryptographically covered by this definition. */
+    public val eventCodeHashHex: String?
+        get() = eventCodeHashBytes?.toPrefixedHex()?.removePrefix("0x")
 }
 
 private fun ByteArray.requireLength(expected: Int, name: String): ByteArray {
@@ -101,6 +108,9 @@ public class EventDefinitionContext internal constructor(
 
     public val validUntil: ProtocolUInt
         get() = definition.validUntil
+
+    public val eventCodeHashHex: String?
+        get() = definition.eventCodeHashHex
 }
 
 public enum class DefinitionDecodeError {

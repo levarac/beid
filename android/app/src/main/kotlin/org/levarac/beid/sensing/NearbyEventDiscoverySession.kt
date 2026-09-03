@@ -91,7 +91,15 @@ internal class NearbyEventDiscoverySession(
                         val result = if (resolution.errorCode == "event_code_lookup_not_found")
                             NearbyEventRegistryResolutionResult.NOT_REGISTERED
                         else NearbyEventRegistryResolutionResult.LOOKUP_UNAVAILABLE
-                        publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, null).snapshot)
+                        publishAndSchedule(
+                            completeNearbyEventRegistryResolutionFromHex(
+                                store = store,
+                                eventCodeHashHex = hash,
+                                result = result,
+                                resolvedEventIdHex = null,
+                                verifiedDefinitionEventCodeHashHex = null,
+                            ).snapshot,
+                        )
                         return@launch
                     }
                     lateinit var verification: RegistryRequest
@@ -100,7 +108,15 @@ internal class NearbyEventDiscoverySession(
                             registryRequests.remove(verification)
                             val result = if (verified.isSuccess) NearbyEventRegistryResolutionResult.VERIFIED
                             else NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE
-                            publishAndSchedule(completeNearbyEventRegistryResolutionFromHex(store, hash, result, eventId).snapshot)
+                            publishAndSchedule(
+                                completeNearbyEventRegistryResolutionFromHex(
+                                    store = store,
+                                    eventCodeHashHex = hash,
+                                    result = result,
+                                    resolvedEventIdHex = eventId,
+                                    verifiedDefinitionEventCodeHashHex = verified.context?.eventCodeHashHex,
+                                ).snapshot,
+                            )
                         }
                     }
                     registryRequests += verification

@@ -33,6 +33,7 @@ internal object EventDefinitionCborCodec {
     private const val PUBLIC_KEY_BYTES: Int = 33
     private const val SIGNATURE_BYTES: Int = 64
     private const val KID_BYTES: Int = 8
+    private const val EVENT_CODE_HASH_BYTES: Int = 8
     private const val MAX_AUTHORITY_KEYS: Int = 1_024
     private val ZERO_DIGEST = ByteArray(HASH_BYTES)
 
@@ -213,7 +214,10 @@ internal object EventDefinitionCborCodec {
 
     private fun decodeDefinitionPayload(bytes: ByteArray): RawDefinition {
         val reader = StrictCborReader(bytes)
-        reader.expectMap(13)
+        val fieldCount = reader.readMapLength()
+        require(fieldCount == 13 || fieldCount == 14) {
+            "Event Definition must contain 13 legacy fields or 14 hash-bound fields"
+        }
         reader.expectUnsignedKey(1L)
         val version = reader.readUnsigned()
         if (version != EVENT_DEFINITION_VERSION) {
@@ -247,6 +251,12 @@ internal object EventDefinitionCborCodec {
         val validFrom = reader.readProtocolUInt("validFrom")
         reader.expectUnsignedKey(13L)
         val validUntil = reader.readProtocolUInt("validUntil")
+        val eventCodeHash = if (fieldCount == 14) {
+            reader.expectUnsignedKey(14L)
+            reader.readByteString(EVENT_CODE_HASH_BYTES)
+        } else {
+            null
+        }
         reader.requireFinished()
 
         if (sequence.value < 1L) {
@@ -281,6 +291,7 @@ internal object EventDefinitionCborCodec {
             submissionEndpoint = submissionEndpoint,
             validFrom = validFrom,
             validUntil = validUntil,
+            eventCodeHash = eventCodeHash,
         )
     }
 
@@ -538,6 +549,7 @@ internal object EventDefinitionCborCodec {
             validFrom = validFrom,
             validUntil = validUntil,
             authorityPublicKey = authorityKey,
+            eventCodeHash = eventCodeHash,
         )
 
     private data class ProtectedHeaders(val kid: ByteArray)
@@ -564,6 +576,7 @@ internal object EventDefinitionCborCodec {
         val submissionEndpoint: String,
         val validFrom: ProtocolUInt,
         val validUntil: ProtocolUInt,
+        val eventCodeHash: ByteArray?,
     )
 
     private fun fail(reason: DefinitionDecodeError, message: String): Nothing =
@@ -585,6 +598,8 @@ internal object EventDefinitionCborCodec {
         fun expectMap(expectedLength: Int) {
             require(readLength(5) == expectedLength) { "unexpected CBOR map length" }
         }
+
+        fun readMapLength(): Int = readLength(5)
 
         fun expectUnsignedKey(expected: Long) {
             require(readUnsigned() == expected) { "unknown, duplicate, or out-of-order CBOR map key" }

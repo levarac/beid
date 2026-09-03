@@ -1678,7 +1678,8 @@ final class SensingCoordinator: ObservableObject {
             let update = ExportedKotlinPackages.org.levarac.parallax.discovery
               .completeNearbyEventRegistryResolutionFromHex(
                 store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
-                result: result, resolvedEventIdHex: nil
+                result: result, resolvedEventIdHex: nil,
+                verifiedDefinitionEventCodeHashHex: nil
               )
             self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
             return
@@ -1696,7 +1697,8 @@ final class SensingCoordinator: ObservableObject {
               let update = ExportedKotlinPackages.org.levarac.parallax.discovery
                 .completeNearbyEventRegistryResolutionFromHex(
                   store: self.nearbyDiscoveryStore, eventCodeHashHex: hash,
-                  result: result, resolvedEventIdHex: eventID
+                  result: result, resolvedEventIdHex: eventID,
+                  verifiedDefinitionEventCodeHashHex: verified.context?.eventCodeHashHex
                 )
               self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
             }

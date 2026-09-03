@@ -13,7 +13,8 @@ public enum class NearbyEventTrustStatus {
  * Registry state for a nearby hint. The hash-to-event-ID lookup is
  * operator-attested routing, not a cryptographic binding. Only
  * [REGISTERED_VIA_OPERATOR_LOOKUP] means the routed ID subsequently passed
- * the registry's full on-chain and authority-signature definition verification.
+ * the registry's full on-chain and authority-signature definition verification,
+ * and its signed EventDefinition hash exactly matched the B005 hash.
  */
 public enum class NearbyEventRegistryStatus {
     UNRESOLVED,
@@ -287,6 +288,7 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     eventCodeHashHex: String,
     result: NearbyEventRegistryResolutionResult,
     resolvedEventIdHex: String?,
+    verifiedDefinitionEventCodeHashHex: String?,
 ): NearbyEventDiscoveryUpdate {
     val bytes = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull()
         ?: return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
@@ -297,13 +299,21 @@ public fun completeNearbyEventRegistryResolutionFromHex(
         return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
     }
     record.inFlight = false
+    val verifiedDefinitionHashMatches = verifiedDefinitionEventCodeHashHex
+        ?.let { runCatching { it.decodeHexBytes() }.getOrNull() }
+        ?.let { it.size == EVENT_CODE_HASH_BYTES && it.contentEquals(bytes) }
+        ?: false
     record.status = when (result) {
         NearbyEventRegistryResolutionResult.NOT_REGISTERED -> NearbyEventRegistryStatus.NOT_REGISTERED
-        NearbyEventRegistryResolutionResult.VERIFIED -> NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
+        NearbyEventRegistryResolutionResult.VERIFIED -> if (verifiedDefinitionHashMatches) {
+            NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
+        } else {
+            NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE
+        }
         else -> NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE
     }
     record.eventIdHex = resolvedEventIdHex.takeIf {
-        result == NearbyEventRegistryResolutionResult.VERIFIED &&
+        result == NearbyEventRegistryResolutionResult.VERIFIED && verifiedDefinitionHashMatches &&
             it != null && Regex("^(0x)?[0-9a-fA-F]{64}$").matches(it)
     }
     if (record.status == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP && record.eventIdHex == null) {
