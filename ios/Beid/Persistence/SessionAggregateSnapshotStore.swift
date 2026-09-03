@@ -117,7 +117,7 @@ final class SessionAggregateSnapshotStore: ObservableObject {
       return record
     }
 
-    let data = try JSONEncoder().encode(updatedRecords)
+    let data = try RecordSchemaEnvelope.encodeRecords(updatedRecords)
     try FileManager.default.createDirectory(
       at: fileURL.deletingLastPathComponent(),
       withIntermediateDirectories: true
@@ -131,7 +131,7 @@ final class SessionAggregateSnapshotStore: ObservableObject {
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
     do {
       let data = try Data(contentsOf: fileURL)
-      records = try JSONDecoder().decode([SessionAggregateSnapshotRecord].self, from: data)
+      records = try RecordSchemaEnvelope.decodeRecords(SessionAggregateSnapshotRecord.self, from: data)
     } catch {
       let outcome = CorruptStoreQuarantine.resolve(
         loadFailure: error,

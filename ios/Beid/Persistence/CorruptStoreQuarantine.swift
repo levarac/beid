@@ -3,9 +3,11 @@
 
 import Foundation
 
-/// Corrupt-file policy for the proof-bearing flat-JSON stores
+/// Corrupt-file policy for the flat-JSON stores that route a decode
+/// failure through this type: the four proof-bearing stores
 /// (`ProofStore`, `BindingRecordStore`, `SelfProofStore`,
-/// `SelfProofCheckpointStore`).
+/// `SelfProofCheckpointStore`) plus `VenueDeviceAssignmentStore` and
+/// `SessionAggregateSnapshotStore` (beid#281).
 ///
 /// The mechanism is the one `WindowReportStore.recoveringCorruptReports`
 /// and `UnsentWindowLedgerStore.recoveringCorruptSnapshot` already use: the
