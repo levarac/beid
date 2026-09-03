@@ -67,7 +67,7 @@ echo "Using KMP JDK: $KMP_JAVA_HOME"
 "$KMP_JAVA_HOME/bin/java" -version
 
 echo "Regenerating Beid.xcodeproj from project.yml..."
-xcodegen generate
+"$CI_PRIMARY_REPOSITORY_PATH/scripts/xcodegen_generate_checked.sh"
 
 if [[ -n "$(git status --porcelain -- Beid.xcodeproj)" ]]; then
   echo "error: Beid.xcodeproj is out of sync with project.yml." >&2

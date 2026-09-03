@@ -45,10 +45,7 @@ echo "Using KMP JDK: $JAVA_HOME"
 "$JAVA_HOME/bin/java" -version
 
 echo "Regenerating Beid.xcodeproj from project.yml..."
-(
-  cd ios
-  xcodegen generate
-)
+scripts/xcodegen_generate_checked.sh
 
 if [[ -n "$(git status --porcelain -- ios/Beid.xcodeproj)" ]]; then
   echo "error: ios/Beid.xcodeproj is out of sync with ios/project.yml." >&2
