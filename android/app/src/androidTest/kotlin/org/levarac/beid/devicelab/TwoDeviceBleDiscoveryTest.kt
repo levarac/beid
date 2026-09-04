@@ -18,6 +18,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
+import org.junit.rules.TestRule
+import org.junit.runners.model.Statement
 import org.levarac.barnard.BarnardEvent
 import org.levarac.beid.MainActivity
 import org.levarac.beid.persistence.BindingRecordStore
@@ -28,11 +31,35 @@ import org.levarac.beid.sensing.EventJoinCoordinator
 
 /** Two-device physical-BLE entry point selected by the device-lab runner. */
 class TwoDeviceBleDiscoveryTest {
-    @get:Rule(order = 0)
-    val runtimePermissionRule: GrantPermissionRule = GrantPermissionRule.grant(*runtimePermissions())
+    private val resultRole = AtomicReference("unknown")
+    private val pendingPassResult = AtomicReference<String?>()
+    private val resultBoundaryRule = TestRule { base, _ ->
+        object : Statement() {
+            override fun evaluate() {
+                try {
+                    val rawRole = InstrumentationRegistry.getArguments().getString(ARG_ROLE)
+                    resultRole.set(resultToken(rawRole ?: "missing"))
+                    base.evaluate()
+                    val passResult = pendingPassResult.get()
+                        ?: fail("Test completed without recording a PASS result")
+                    emitRunnerSignal("RESULT $passResult")
+                } catch (failure: Throwable) {
+                    emitRunnerSignal(
+                        "RESULT role=${resultRole.get()} status=FAIL reason=" +
+                            resultToken(failure.message ?: failure.javaClass.simpleName),
+                    )
+                    throw failure
+                }
+            }
+        }
+    }
+    private val runtimePermissionRule = GrantPermissionRule.grant(*runtimePermissions())
+    private val activityRule = ActivityScenarioRule(MainActivity::class.java)
 
-    @get:Rule(order = 1)
-    val activityRule = ActivityScenarioRule(MainActivity::class.java)
+    @get:Rule
+    val ruleChain: RuleChain = RuleChain.outerRule(resultBoundaryRule)
+        .around(runtimePermissionRule)
+        .around(activityRule)
 
     @Test
     fun discoversPeerOverBle() {
@@ -40,10 +67,7 @@ class TwoDeviceBleDiscoveryTest {
         val rawRole = arguments.getString(ARG_ROLE)
         val role = when (rawRole) {
             ROLE_ADVERTISER, ROLE_SCANNER -> rawRole
-            else -> {
-                emitRunnerSignal("RESULT role=${resultToken(rawRole ?: "missing")} status=FAIL reason=invalid_role")
-                fail("Instrumentation argument $ARG_ROLE must be advertiser or scanner, got '$rawRole'")
-            }
+            else -> fail("Instrumentation argument $ARG_ROLE must be advertiser or scanner, got '$rawRole'")
         }
         var activeHarness: Harness? = null
         try {
@@ -56,11 +80,6 @@ class TwoDeviceBleDiscoveryTest {
                 ROLE_ADVERTISER -> runAdvertiser(harness, eventCode, holdSeconds, timeoutSeconds)
                 ROLE_SCANNER -> runScanner(harness, eventCode, timeoutSeconds)
             }
-        } catch (failure: Throwable) {
-            emitRunnerSignal(
-                "RESULT role=$role status=FAIL reason=${resultToken(failure.message ?: failure.javaClass.simpleName)}",
-            )
-            throw failure
         } finally {
             activeHarness?.let { harness ->
                 activityRule.scenario.onActivity { harness.coordinator.dispose() }
@@ -98,10 +117,9 @@ class TwoDeviceBleDiscoveryTest {
         if (!startFinished.await(timeoutSeconds, TimeUnit.SECONDS) || !advertisingConfirmed.get()) {
             fail(startFailure.get() ?: "Advertiser did not confirm start within $timeoutSeconds seconds")
         }
-
         emitRunnerSignal("DEVICE_LAB_ROLE=advertiser READY")
         Thread.sleep(TimeUnit.SECONDS.toMillis(holdSeconds))
-        emitPassResult(ROLE_ADVERTISER, "holdSeconds=$holdSeconds")
+        recordPassResult(ROLE_ADVERTISER, "holdSeconds=$holdSeconds")
     }
 
     private fun runScanner(harness: Harness, eventCode: String, timeoutSeconds: Long) {
@@ -156,7 +174,7 @@ class TwoDeviceBleDiscoveryTest {
         val shortId = peer.detectedDisplayId?.takeIf(String::isNotBlank) ?: peer.rpid
         val elapsedMillis = SystemClock.elapsedRealtime() - startedAt
         emitRunnerSignal("DEVICE_LAB_BLE_PASS peer=${shortId.take(SHORT_ID_LENGTH)} ms=$elapsedMillis")
-        emitPassResult(
+        recordPassResult(
             ROLE_SCANNER,
             "peer=${resultToken(shortId.take(SHORT_ID_LENGTH))} ms=$elapsedMillis",
         )
@@ -192,6 +210,12 @@ class TwoDeviceBleDiscoveryTest {
 
     private fun fail(message: String): Nothing = throw AssertionError(message)
 
+    private fun recordPassResult(role: String, details: String) {
+        if (!pendingPassResult.compareAndSet(null, "role=$role status=PASS $details")) {
+            fail("PASS result was recorded more than once")
+        }
+    }
+
     private data class Harness(
         val coordinator: EventJoinCoordinator,
         val engine: BarnardEventJoinEngine,
@@ -222,10 +246,6 @@ class TwoDeviceBleDiscoveryTest {
         fun emitRunnerSignal(message: String) {
             Log.i(TAG, message)
             println(message)
-        }
-
-        fun emitPassResult(role: String, details: String) {
-            emitRunnerSignal("RESULT role=$role status=PASS $details")
         }
 
         fun resultToken(value: String): String = value

@@ -21,7 +21,10 @@ BLE scan callback, then reports
 `BarnardEvent.Detection`. A raw `ble_discovery_result` proves that scanning is
 delivering results but is not a PASS: the stronger Detection event shows that
 Barnard completed peer resolution for the joined event. Each invocation also
-prints and logs a whitespace-free `RESULT role=... status=PASS|FAIL ...` line.
+prints and logs one terminal, whitespace-free
+`RESULT role=... status=PASS|FAIL ...` line. Its outer test boundary includes
+runtime-permission setup, Activity launch, the test body, and Activity teardown,
+so a failure in any of those phases produces a FAIL line before it propagates.
 
 The suite grants runtime BLE permissions before `MainActivity` launches. On
 API 26 and 27 this is `ACCESS_FINE_LOCATION`, matching the permission merged
