@@ -37,21 +37,34 @@ class TwoDeviceBleDiscoveryTest {
     @Test
     fun discoversPeerOverBle() {
         val arguments = InstrumentationRegistry.getArguments()
-        val role = arguments.getString(ARG_ROLE)
-            ?: fail("Missing instrumentation argument: $ARG_ROLE must be advertiser or scanner")
-        val eventCode = arguments.getString(ARG_EVENT_CODE) ?: DEFAULT_EVENT_CODE
-        val holdSeconds = positiveLongArgument(ARG_HOLD_SECONDS, DEFAULT_HOLD_SECONDS)
-        val timeoutSeconds = positiveLongArgument(ARG_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS)
-        val harness = createHarness()
-
+        val rawRole = arguments.getString(ARG_ROLE)
+        val role = when (rawRole) {
+            ROLE_ADVERTISER, ROLE_SCANNER -> rawRole
+            else -> {
+                emitRunnerSignal("RESULT role=${resultToken(rawRole ?: "missing")} status=FAIL reason=invalid_role")
+                fail("Instrumentation argument $ARG_ROLE must be advertiser or scanner, got '$rawRole'")
+            }
+        }
+        var activeHarness: Harness? = null
         try {
+            val eventCode = arguments.getString(ARG_EVENT_CODE) ?: DEFAULT_EVENT_CODE
+            val holdSeconds = positiveLongArgument(ARG_HOLD_SECONDS, DEFAULT_HOLD_SECONDS)
+            val timeoutSeconds = positiveLongArgument(ARG_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS)
+            val harness = createHarness()
+            activeHarness = harness
             when (role) {
                 ROLE_ADVERTISER -> runAdvertiser(harness, eventCode, holdSeconds, timeoutSeconds)
                 ROLE_SCANNER -> runScanner(harness, eventCode, timeoutSeconds)
-                else -> fail("Invalid instrumentation role '$role': expected advertiser or scanner")
             }
+        } catch (failure: Throwable) {
+            emitRunnerSignal(
+                "RESULT role=$role status=FAIL reason=${resultToken(failure.message ?: failure.javaClass.simpleName)}",
+            )
+            throw failure
         } finally {
-            activityRule.scenario.onActivity { harness.coordinator.dispose() }
+            activeHarness?.let { harness ->
+                activityRule.scenario.onActivity { harness.coordinator.dispose() }
+            }
         }
     }
 
@@ -61,20 +74,41 @@ class TwoDeviceBleDiscoveryTest {
         holdSeconds: Long,
         timeoutSeconds: Long,
     ) {
+        val startFinished = CountDownLatch(1)
+        val advertisingConfirmed = AtomicBoolean(false)
+        val startFailure = AtomicReference<String?>()
+        val coordinatorOnEvent = harness.engine.onEvent
+
+        harness.engine.onEvent = { event ->
+            coordinatorOnEvent?.invoke(event)
+            if (event is BarnardEvent.Error && event.error.code == "advertise_failed") {
+                startFailure.compareAndSet(null, event.error.message)
+                startFinished.countDown()
+            }
+        }
+        harness.engine.onDebugEvent = { event ->
+            if (event.name == "advertise_started") {
+                advertisingConfirmed.set(true)
+                startFinished.countDown()
+            }
+        }
         harness.engine.joinEvent(eventCode)
         harness.engine.startAuto()
 
-        if (!waitUntil(timeoutSeconds) { harness.engine.getState().isAdvertising }) {
-            fail("Advertiser did not start within $timeoutSeconds seconds")
+        if (!startFinished.await(timeoutSeconds, TimeUnit.SECONDS) || !advertisingConfirmed.get()) {
+            fail(startFailure.get() ?: "Advertiser did not confirm start within $timeoutSeconds seconds")
         }
 
         emitRunnerSignal("DEVICE_LAB_ROLE=advertiser READY")
         Thread.sleep(TimeUnit.SECONDS.toMillis(holdSeconds))
+        emitPassResult(ROLE_ADVERTISER, "holdSeconds=$holdSeconds")
     }
 
     private fun runScanner(harness: Harness, eventCode: String, timeoutSeconds: Long) {
         val startedAt = SystemClock.elapsedRealtime()
         val advertisementSeen = AtomicBoolean(false)
+        val scanFailure = AtomicReference<String?>()
+        val scanObserved = CountDownLatch(1)
         val detection = AtomicReference<BarnardEvent.Detection?>()
         val peerObserved = CountDownLatch(1)
         val coordinatorOnEvent = harness.engine.onEvent
@@ -82,7 +116,10 @@ class TwoDeviceBleDiscoveryTest {
         harness.engine.onEvent = { event ->
             coordinatorOnEvent?.invoke(event)
             when (event) {
-                is BarnardEvent.RssiUpdate -> advertisementSeen.set(true)
+                is BarnardEvent.Error -> if (event.error.code == "scan_failed") {
+                    scanFailure.compareAndSet(null, event.error.message)
+                    scanObserved.countDown()
+                }
                 is BarnardEvent.Detection -> {
                     if (detection.compareAndSet(null, event)) {
                         peerObserved.countDown()
@@ -91,16 +128,18 @@ class TwoDeviceBleDiscoveryTest {
                 else -> Unit
             }
         }
+        harness.engine.onDebugEvent = { event ->
+            if (event.name == "ble_discovery_result" && advertisementSeen.compareAndSet(false, true)) {
+                scanObserved.countDown()
+            }
+        }
         harness.engine.joinEvent(eventCode)
         harness.engine.startScan()
 
-        val scanningStarted = waitUntil(timeoutSeconds) { harness.engine.getState().isScanning }
-        if (!scanningStarted) {
-            fail(
-                "Scanner did not start within $timeoutSeconds seconds; " +
-                    "advertisementSeen=${advertisementSeen.get()}",
-            )
+        if (!scanObserved.await(timeoutSeconds, TimeUnit.SECONDS) || !advertisementSeen.get()) {
+            fail(scanFailure.get() ?: "Scanner received no BLE callback within $timeoutSeconds seconds")
         }
+        emitRunnerSignal("DEVICE_LAB_ROLE=scanner READY")
 
         val elapsedBeforeWait = SystemClock.elapsedRealtime() - startedAt
         val remainingMillis = (TimeUnit.SECONDS.toMillis(timeoutSeconds) - elapsedBeforeWait).coerceAtLeast(0L)
@@ -117,6 +156,10 @@ class TwoDeviceBleDiscoveryTest {
         val shortId = peer.detectedDisplayId?.takeIf(String::isNotBlank) ?: peer.rpid
         val elapsedMillis = SystemClock.elapsedRealtime() - startedAt
         emitRunnerSignal("DEVICE_LAB_BLE_PASS peer=${shortId.take(SHORT_ID_LENGTH)} ms=$elapsedMillis")
+        emitPassResult(
+            ROLE_SCANNER,
+            "peer=${resultToken(shortId.take(SHORT_ID_LENGTH))} ms=$elapsedMillis",
+        )
     }
 
     private fun createHarness(): Harness {
@@ -147,15 +190,6 @@ class TwoDeviceBleDiscoveryTest {
             ?: fail("Instrumentation argument $name must be a positive integer, got '$raw'")
     }
 
-    private fun waitUntil(timeoutSeconds: Long, condition: () -> Boolean): Boolean {
-        val deadline = SystemClock.elapsedRealtime() + TimeUnit.SECONDS.toMillis(timeoutSeconds)
-        while (SystemClock.elapsedRealtime() < deadline) {
-            if (condition()) return true
-            Thread.sleep(POLL_INTERVAL_MILLIS)
-        }
-        return condition()
-    }
-
     private fun fail(message: String): Nothing = throw AssertionError(message)
 
     private data class Harness(
@@ -175,7 +209,6 @@ class TwoDeviceBleDiscoveryTest {
         const val DEFAULT_HOLD_SECONDS = 90L
         const val DEFAULT_TIMEOUT_SECONDS = 60L
         const val SHORT_ID_LENGTH = 8
-        const val POLL_INTERVAL_MILLIS = 100L
 
         fun runtimePermissions(): Array<String> = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> arrayOf(
@@ -190,5 +223,14 @@ class TwoDeviceBleDiscoveryTest {
             Log.i(TAG, message)
             println(message)
         }
+
+        fun emitPassResult(role: String, details: String) {
+            emitRunnerSignal("RESULT role=$role status=PASS $details")
+        }
+
+        fun resultToken(value: String): String = value
+            .trim()
+            .replace(Regex("[^A-Za-z0-9._:-]+"), "_")
+            .ifEmpty { "unknown" }
     }
 }
