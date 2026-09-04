@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import java.io.File
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -9,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.parallax.discovery.NearbyEventCandidates
@@ -17,6 +19,7 @@ import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
+import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.registry.RegistryDependencies
 
 /**
@@ -65,13 +68,16 @@ fun mapPermissionResultToState(result: BarnardPermissionResult): EventJoinUiStat
  */
 class EventJoinCoordinator internal constructor(
     private val engine: EventJoinEngine,
-    nowEpochMillis: () -> Long,
-    coroutineScope: CoroutineScope,
-    registryClient: RegistryClient? = null,
+    private val nowEpochMillis: () -> Long,
+    private val coroutineScope: CoroutineScope,
+    private val registryClient: RegistryClient? = null,
     private val sensingCryptography: SensingCryptography,
     private val selfProofRecordStore: SelfProofRecordStore,
     private val bindingRecordStore: BindingRecordStore,
     private val randomSource: OwnerKeyRandomSource = SecureRandomOwnerKeySource(),
+    ledgerFilesDir: File? = null,
+    injectedWindowAccumulator: WindowObservationAccumulator? = null,
+    windowObservationRuntimeOwner: WindowObservationRuntimeOwner? = null,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -81,6 +87,8 @@ class EventJoinCoordinator internal constructor(
         sensingCryptography = BarnardSensingCryptography(activity.applicationContext),
         selfProofRecordStore = SelfProofRecordStore(SelfProofRecordStore.defaultFile(activity.filesDir)),
         bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(activity.filesDir)),
+        ledgerFilesDir = activity.filesDir,
+        windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
     )
 
     private val accounting = ScanDeviceAccounting()
@@ -98,6 +106,18 @@ class EventJoinCoordinator internal constructor(
     private var scanPhase: ScanPhase = ScanPhase.Idle
     private var discoveryOnlyScanOwned = false
     private var disposed = false
+    @Volatile
+    private var observationContextRequestOwner: Any? = null
+    private val windowObservationRuntime = if (injectedWindowAccumulator == null && ledgerFilesDir != null) {
+        (windowObservationRuntimeOwner ?: WindowObservationRuntimeOwner()).acquire(
+            filesDir = ledgerFilesDir,
+            cryptography = sensingCryptography,
+            nowEpochSeconds = { nowEpochMillis() / 1_000.0 },
+        )
+    } else {
+        null
+    }
+    private val windowAccumulator = injectedWindowAccumulator ?: windowObservationRuntime?.accumulator
 
     /**
      * Set the instant this session's [ScanPhase] first confirms into
@@ -213,6 +233,7 @@ class EventJoinCoordinator internal constructor(
             if (disposed) return@requestPermissions
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
                 engine.joinEvent(code)
+                resolveObservationContext(code)
                 discoveryOnlyScanOwned = false
                 engine.startAuto()
                 startSensing()
@@ -248,6 +269,7 @@ class EventJoinCoordinator internal constructor(
                     enin = detection.enin,
                     rpid = detection.rpid,
                     detectedDisplayId = detection.detectedDisplayId,
+                    reporterRpid = detection.reporterRpid,
                 )
             }
             else -> Unit
@@ -263,7 +285,7 @@ class EventJoinCoordinator internal constructor(
      * duplicating that "ignore" branch natively would be exactly the kind
      * of re-derived transition AGENTS.md's ownership boundary forbids.
      */
-    private fun handleDetection(enin: Long, rpid: String, detectedDisplayId: String?) {
+    private fun handleDetection(enin: Long, rpid: String, detectedDisplayId: String?, reporterRpid: String?) {
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
 
         val session = when (val phase = scanPhase) {
@@ -284,6 +306,12 @@ class EventJoinCoordinator internal constructor(
             eventConfirmThreshold = BeidConfig.eventConfirmThreshold,
         )
         onPhaseDecided(previousPhase)
+        windowAccumulator?.observe(
+            enin = enin,
+            rpid = rpid,
+            reporterRpid = reporterRpid,
+            recording = scanPhase is ScanPhase.Recording,
+        )
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }
 
@@ -370,6 +398,7 @@ class EventJoinCoordinator internal constructor(
      */
     override fun leaveEvent() {
         if (disposed) return
+        windowAccumulator?.close()
         finalizeSelfProofIfNeeded()
         engine.leaveEvent()
         discoveryOnlyScanOwned = false
@@ -377,6 +406,41 @@ class EventJoinCoordinator internal constructor(
         scanPhase = applyStopSensing()
         resetSessionState()
         _state.value = EventJoinUiState.Idle
+    }
+
+    private fun resolveObservationContext(eventCode: String) {
+        windowObservationRuntime?.updateContext(null)
+        val requestOwner = Any()
+        observationContextRequestOwner = requestOwner
+        val client = registryClient ?: return
+        client.resolveEventId(eventCode) { lookup ->
+            if (observationContextRequestOwner !== requestOwner) return@resolveEventId
+            val eventId = lookup.eventIdHex ?: return@resolveEventId
+            client.resolveEventDefinition(eventId, org.levarac.parallax.registry.safeRegistryReadPin(), nowEpochMillis() / 1_000L) { result ->
+                val verified = result.context ?: return@resolveEventDefinition
+                coroutineScope.launch {
+                    acceptVerifiedObservationContext(
+                        WindowObservationContext(
+                            eventCode = eventCode,
+                            eventIdHex = verified.eventIdHex,
+                            eventDefinitionDigestHex = verified.definitionHashHex,
+                        ),
+                        requestOwner,
+                    )
+                }
+            }
+        }
+    }
+
+    internal fun acceptVerifiedObservationContext(context: WindowObservationContext) {
+        val requestOwner = observationContextRequestOwner ?: return
+        acceptVerifiedObservationContext(context, requestOwner)
+    }
+
+    private fun acceptVerifiedObservationContext(context: WindowObservationContext, requestOwner: Any) {
+        if (!disposed && observationContextRequestOwner === requestOwner && engine.getCurrentEventCode() == context.eventCode) {
+            windowObservationRuntime?.updateContext(context)
+        }
     }
 
     /**
@@ -550,16 +614,15 @@ class EventJoinCoordinator internal constructor(
         !disposed && engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
     /**
-     * Explicit stop/reset at Activity teardown — mirrors iOS's
-     * `endSensing(stopEngine: true)`/`stopSensing()`. A teardown safety
-     * net for self-proof, not the primary trigger: [leaveEvent] (the
-     * Account screen's real "Leave Event" action) already finalizes and
-     * resets per-session state in the common case, so this is idempotent
-     * with it via the same [activeProofId] gate.
+     * Releases Activity-owned transport resources. This is not an ENIN or
+     * session boundary: configuration destruction must not create, sign, or
+     * close a durable observation window. [leaveEvent] and an observed ENIN
+     * rollover are the business boundaries for [windowAccumulator].
      */
     fun dispose() {
         if (disposed) return
         disposed = true
+        observationContextRequestOwner = null
         finalizeSelfProofIfNeeded()
         discoveryOnlyScanOwned = false
         nearbyDiscovery.dispose()
@@ -574,3 +637,5 @@ class EventJoinCoordinator internal constructor(
         const val UNKNOWN_EVENT_CODE = "Unknown Event"
     }
 }
+
+private val ProcessWindowObservationRuntimeOwner = WindowObservationRuntimeOwner()
