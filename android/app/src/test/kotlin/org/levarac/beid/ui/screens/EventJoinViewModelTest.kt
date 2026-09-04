@@ -155,7 +155,7 @@ class EventJoinViewModelTest {
         val viewModel = EventJoinViewModel(session)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        viewModel.joinSelectedNearbyEvent()
+        viewModel.joinNearbyEvent("1111111111111111")
 
         assertEquals(eventId, session.joinedDiscoveredEventId)
     }
@@ -169,10 +169,9 @@ class EventJoinViewModelTest {
         val viewModel = EventJoinViewModel(session)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        viewModel.selectNearbyEvent(selected.eventCodeHashHex)
         session.emitNearbyEventCards(listOf(inserted, selected, first))
         testDispatcher.scheduler.advanceUntilIdle()
-        viewModel.joinSelectedNearbyEvent()
+        viewModel.joinNearbyEvent(selected.eventCodeHashHex)
 
         assertEquals("0x02", session.joinedDiscoveredEventId)
         assertEquals(selected.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
@@ -180,7 +179,7 @@ class EventJoinViewModelTest {
         session.clearJoinedDiscoveredEvent()
         session.emitNearbyEventCards(listOf(inserted, first))
         testDispatcher.scheduler.advanceUntilIdle()
-        viewModel.joinSelectedNearbyEvent()
+        viewModel.joinNearbyEvent(selected.eventCodeHashHex)
 
         assertNull(session.joinedDiscoveredEventId, "an expired selection must not retarget another card")
         assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)

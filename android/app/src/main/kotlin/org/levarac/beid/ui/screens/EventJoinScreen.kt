@@ -54,7 +54,6 @@ object EventJoinScreenTestTags {
     const val SIMULATE_SIGNAL_LOST_BUTTON = "event_join_simulate_signal_lost_button"
     const val ACCOUNT_ENTRY = "event_join_account_entry"
     const val NEARBY_EVENT_LIST = "nearby_event_list"
-    const val JOIN_NEARBY_EVENT_BUTTON = "join_nearby_event_button"
 
     fun nearbyEventCard(eventCodeHashHex: String): String = "nearby_event_card_$eventCodeHashHex"
 }
@@ -110,66 +109,16 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
             NearbyEventCards(
                 cards = uiState.nearbyEventCards,
                 selectedEventHashHex = uiState.selectedNearbyEventHashHex,
-                onSelected = viewModel::selectNearbyEvent,
+                onJoin = viewModel::joinNearbyEvent,
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
-                OutlinedTextField(
-                    value = uiState.eventCode,
-                    onValueChange = viewModel::onEventCodeChanged,
-                    label = { Text(stringResource(R.string.event_join_code_label)) },
-                    isError = uiState.fieldError != null,
-                    singleLine = true,
-                    shape = RoundedCornerShape(BeidRadius.control),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = BeidTheme.colors.textPrimary,
-                        unfocusedTextColor = BeidTheme.colors.textPrimary,
-                        errorTextColor = BeidTheme.colors.textPrimary,
-                        focusedContainerColor = BeidTheme.colors.surfaceRaised,
-                        unfocusedContainerColor = BeidTheme.colors.surfaceRaised,
-                        errorContainerColor = BeidTheme.colors.surfaceRaised,
-                        // iOS's EventCodeEntryView never varies the field's own border/label/
-                        // cursor color on error — only the message below it changes — so the
-                        // error variants mirror the unfocused/normal ones instead of Material3's
-                        // stock red, keeping this control visually identical to iOS on error.
-                        focusedBorderColor = BeidTheme.colors.actionPrimary,
-                        unfocusedBorderColor = BeidTheme.colors.strokeHairline,
-                        errorBorderColor = BeidTheme.colors.strokeHairline,
-                        errorLabelColor = BeidTheme.colors.textSecondary,
-                        cursorColor = BeidTheme.colors.actionPrimary,
-                        errorCursorColor = BeidTheme.colors.actionPrimary,
-                        errorSupportingTextColor = BeidTheme.colors.textPrimary,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
+            if (uiState.sessionState !is EventJoinUiState.Idle) {
+                Text(
+                    text = statusText(uiState.sessionState),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BeidTheme.colors.textSecondary,
                 )
-
-                uiState.fieldError?.let { error ->
-                    // iOS renders this row in DS.Color.textPrimary (plain ink), not a warning
-                    // accent — DESIGN.md §5's accent map reserves signalWarning for BLE
-                    // signal-loss recovery screens, and a validation/join error isn't that.
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
-                    ) {
-                        Text(
-                            text = "⚠",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BeidTheme.colors.textPrimary,
-                        )
-                        Text(
-                            text = error.message(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BeidTheme.colors.textPrimary,
-                        )
-                    }
-                }
             }
-
-            Text(
-                text = statusText(uiState.sessionState),
-                style = MaterialTheme.typography.bodyMedium,
-                color = BeidTheme.colors.textSecondary,
-            )
 
             when (val sessionState = uiState.sessionState) {
                 is EventJoinUiState.PermissionDenied -> {
@@ -188,37 +137,82 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
                         onResumeSensing = viewModel::resumeSensing,
                     )
                 }
-                else -> {
-                    BeidPrimaryButton(
-                        text = stringResource(if (uiState.nearbyEventCards.isEmpty()) R.string.event_join_button else R.string.event_join_nearby_button),
-                        containerColor = BeidTheme.colors.actionPrimary,
-                        contentColor = BeidTheme.colors.surfaceCanvas,
-                        onClick = if (uiState.nearbyEventCards.isEmpty()) viewModel::submit else viewModel::joinSelectedNearbyEvent,
-                        enabled = uiState.sessionState !is EventJoinUiState.RequestingPermission &&
-                            (uiState.nearbyEventCards.isEmpty() || uiState.nearbyEventCards
-                                .firstOrNull { it.eventCodeHashHex == uiState.selectedNearbyEventHashHex }
-                                ?.eventIdHex != null),
-                        modifier = Modifier.testTag(if (uiState.nearbyEventCards.isEmpty()) EventJoinScreenTestTags.SUBMIT_BUTTON else EventJoinScreenTestTags.JOIN_NEARBY_EVENT_BUTTON),
-                    )
-                }
+                else -> Unit
             }
         }
     }
 }
 
 @Composable
+fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+    Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(BeidSpacing.pageMargin),
+            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
+        ) {
+            Text(stringResource(R.string.event_join_code_label), style = MaterialTheme.typography.headlineLarge)
+            OutlinedTextField(
+                value = uiState.eventCode,
+                onValueChange = viewModel::onEventCodeChanged,
+                label = { Text(stringResource(R.string.event_join_code_label)) },
+                isError = uiState.fieldError != null,
+                singleLine = true,
+                shape = RoundedCornerShape(BeidRadius.control),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = BeidTheme.colors.textPrimary,
+                    unfocusedTextColor = BeidTheme.colors.textPrimary,
+                    errorTextColor = BeidTheme.colors.textPrimary,
+                    focusedContainerColor = BeidTheme.colors.surfaceRaised,
+                    unfocusedContainerColor = BeidTheme.colors.surfaceRaised,
+                    errorContainerColor = BeidTheme.colors.surfaceRaised,
+                    focusedBorderColor = BeidTheme.colors.actionPrimary,
+                    unfocusedBorderColor = BeidTheme.colors.strokeHairline,
+                    errorBorderColor = BeidTheme.colors.strokeHairline,
+                    errorLabelColor = BeidTheme.colors.textSecondary,
+                    cursorColor = BeidTheme.colors.actionPrimary,
+                    errorCursorColor = BeidTheme.colors.actionPrimary,
+                    errorSupportingTextColor = BeidTheme.colors.textPrimary,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            uiState.fieldError?.let { error ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
+                ) {
+                    Text("⚠", color = BeidTheme.colors.textPrimary)
+                    Text(error.message(), color = BeidTheme.colors.textPrimary)
+                }
+            }
+            BeidPrimaryButton(
+                text = stringResource(R.string.event_join_button),
+                containerColor = BeidTheme.colors.actionPrimary,
+                contentColor = BeidTheme.colors.surfaceCanvas,
+                onClick = viewModel::submit,
+                modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
+            )
+        }
+    }
+}
+
+@Composable
+fun ManualEventCodeRoute(session: EventJoinSession) {
+    val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
+    ManualEventCodeScreen(viewModel)
+}
+
+@Composable
 private fun NearbyEventCards(
     cards: List<org.levarac.beid.sensing.NearbyEventCard>,
     selectedEventHashHex: String?,
-    onSelected: (String) -> Unit,
+    onJoin: (String) -> Unit,
 ) {
     if (cards.isEmpty()) {
-        Text(
-            text = stringResource(R.string.event_join_searching_nearby),
-            style = MaterialTheme.typography.bodyMedium,
-            color = BeidTheme.colors.textSecondary,
-            modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
-        )
+        Column(modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST)) {
+            Text(stringResource(R.string.event_join_searching_nearby), color = BeidTheme.colors.textSecondary)
+            Text(stringResource(R.string.event_join_rescue_guidance), color = BeidTheme.colors.textSecondary)
+        }
         return
     }
     Column(
@@ -231,7 +225,7 @@ private fun NearbyEventCards(
                 modifier = Modifier
                     .selectable(
                         selected = selected,
-                        onClick = { onSelected(card.eventCodeHashHex) },
+                        onClick = { onJoin(card.eventCodeHashHex) },
                         role = Role.RadioButton,
                     )
                     .testTag(EventJoinScreenTestTags.nearbyEventCard(card.eventCodeHashHex)),

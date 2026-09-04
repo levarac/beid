@@ -94,17 +94,12 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun openAppSettings() = session.openAppSettings()
 
-    fun selectNearbyEvent(eventCodeHashHex: String) {
-        if (_uiState.value.nearbyEventCards.any { it.eventCodeHashHex == eventCodeHashHex }) {
-            _uiState.update { it.copy(selectedNearbyEventHashHex = eventCodeHashHex) }
-        }
-    }
-
-    fun joinSelectedNearbyEvent() {
-        _uiState.value.nearbyEventCards
-            .firstOrNull { it.eventCodeHashHex == _uiState.value.selectedNearbyEventHashHex }
-            ?.eventIdHex
-            ?.let(session::joinNearbyEvent)
+    fun joinNearbyEvent(eventCodeHashHex: String) {
+        val card = _uiState.value.nearbyEventCards
+            .firstOrNull { it.eventCodeHashHex == eventCodeHashHex }
+            ?: return
+        _uiState.update { it.copy(selectedNearbyEventHashHex = eventCodeHashHex) }
+        card.eventIdHex?.let(session::joinNearbyEvent)
     }
 
     fun simulateSignalLost() = session.simulateSignalLost()

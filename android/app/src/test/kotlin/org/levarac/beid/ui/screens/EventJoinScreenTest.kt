@@ -44,13 +44,13 @@ class EventJoinScreenTest {
     private val session1 = ScanEventSession(eventCode = "ABC123")
 
     @Test
-    fun submittingAnEmptyEventCodeShowsTheInlineErrorAndDoesNotJoin() {
+    fun manualEntrySubmittingAnEmptyEventCodeShowsTheInlineErrorAndDoesNotJoin() {
         val session = FakeEventJoinSession()
         val viewModel = EventJoinViewModel(session)
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel, onOpenAccount = {})
+                ManualEventCodeScreen(viewModel)
             }
         }
 
@@ -61,6 +61,16 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.FIELD_ERROR).assertIsDisplayed()
         composeTestRule.onNodeWithText(expectedError).assertIsDisplayed()
         assertNull(session.joinedCode)
+    }
+
+    @Test
+    fun zeroCandidatesShowsSearchingAndRescueWithoutManualEntry() {
+        val viewModel = EventJoinViewModel(FakeEventJoinSession())
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+
+        composeTestRule.onNodeWithText("Searching for nearby events…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("You can enter a code from Account if no event appears.").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
     }
 
     @Test
@@ -175,18 +185,14 @@ class EventJoinScreenTest {
             .assertIsSelected()
             .assertHasClickAction()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+            .performClick()
         composeTestRule.runOnIdle {
             assertEquals(eventId, viewModel.uiState.value.nearbyEventCards.single().eventIdHex)
             assertEquals("1111111111111111", viewModel.uiState.value.selectedNearbyEventHashHex)
         }
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.JOIN_NEARBY_EVENT_BUTTON)
-            .performScrollTo()
-            .assertIsEnabled()
-            .assertIsDisplayed()
-            .performClick()
-
         composeTestRule.runOnIdle {
             assertEquals(eventId, session.joinedDiscoveredEventId)
         }
     }
+
 }

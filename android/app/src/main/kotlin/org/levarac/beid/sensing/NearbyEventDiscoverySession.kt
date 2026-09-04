@@ -228,6 +228,9 @@ internal class NearbyEventDiscoverySession(
     }
 
     private fun publishAndSchedule(snapshot: NearbyEventCandidates) {
+        val now = nowEpochMillis()
+        val nowEpochSeconds = now / 1_000L
+        verifiedMetadataByHash.entries.removeAll { it.value.validUntilEpochSeconds < nowEpochSeconds }
         _candidates.value = snapshot
         val liveHashes = buildSet {
             repeat(snapshot.candidateCount) { index -> snapshot.candidateAt(index)?.let { add(it.eventCodeHashHex) } }
@@ -252,8 +255,10 @@ internal class NearbyEventDiscoverySession(
         expiryJob?.cancel()
         expiryJob = null
 
-        val nextExpiryAt = snapshot.nextExpiryAtEpochMillis ?: return
-        val now = nowEpochMillis()
+        val definitionExpiryAt = verifiedMetadataByHash.values.minOfOrNull {
+            firstEpochMillisAfter(it.validUntilEpochSeconds)
+        }
+        val nextExpiryAt = listOfNotNull(snapshot.nextExpiryAtEpochMillis, definitionExpiryAt).minOrNull() ?: return
         val delayMillis = if (nextExpiryAt <= now) 0L else nextExpiryAt - now
         expiryJob = coroutineScope.launch {
             delay(delayMillis)
@@ -293,4 +298,10 @@ internal class NearbyEventDiscoverySession(
         val validFromEpochSeconds: Long,
         val validUntilEpochSeconds: Long,
     )
+
+    private fun firstEpochMillisAfter(epochSecond: Long): Long {
+        val latestConvertibleSecond = Long.MAX_VALUE / 1_000L
+        return if (epochSecond >= latestConvertibleSecond) Long.MAX_VALUE
+        else (epochSecond + 1L) * 1_000L
+    }
 }

@@ -3,6 +3,7 @@ package org.levarac.beid.sensing
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceTimeBy
 import org.levarac.parallax.registry.EventJoinMode
 import org.levarac.parallax.registry.eventCodeHashForOpenEventV1
 import kotlin.test.Test
@@ -94,6 +95,36 @@ class NearbyEventDiscoverySessionTest {
             ),
         )
         runCurrent()
+
+        assertNull(session.cards.value.single().eventIdHex)
+    }
+
+    @Test
+    fun verifiedCardExpiresAtDefinitionValidUntilEvenWhileBeaconHintsContinue() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry)
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
+        runCurrent()
+        registry.completeDefinition(
+            NearbyEventDefinitionVerification(true, EventJoinMode.OPEN, EVENT_ID_HEX, EVENT_HASH.toHex(), 0L, 1L),
+        )
+        runCurrent()
+        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+
+        advanceTimeBy(1_000L)
+        runCurrent()
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+
+        advanceTimeBy(999L)
+        runCurrent()
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+
+        advanceTimeBy(1L)
+        runCurrent()
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
 
         assertNull(session.cards.value.single().eventIdHex)
     }
