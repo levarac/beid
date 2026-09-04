@@ -66,6 +66,28 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n org.levarac.beid/.MainActivity
 ```
 
+### Read-only UI scenarios
+
+Debug builds accept an optional intent extra equivalent to iOS's
+`-beid-demo-scenario <name>` launch argument:
+
+```sh
+adb shell am start -n org.levarac.beid/.MainActivity \
+  --es beid-demo-scenario crowdSurge
+```
+
+The exact identifiers are `zeroPeersForever`, `crowdSurge`,
+`longDisplayNames`, `unidentifiedHeavy`, `signalLostMidway`, and
+`appReviewGolden`. A missing or unknown value uses the ordinary real-BLE
+application root. Release builds ignore the extra and also use real BLE.
+
+Compose previews inject the same named snapshots directly; see
+`scenario/ScenarioPreviews.kt` for representative Event Join and Records
+previews. Scenario snapshots contain only screen state and read-only record
+rows. The scenario branch does not construct `EventJoinCoordinator`,
+`ProofRecordStore`, a signing implementation, ledger machinery, or a
+submission path, so fixture data has no writable production input.
+
 ## Barnard SDK dependency
 
 beid consumes [levarac/barnard](https://github.com/levarac/barnard) from

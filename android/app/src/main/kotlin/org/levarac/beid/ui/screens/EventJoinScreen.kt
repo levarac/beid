@@ -87,6 +87,71 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
         ) {
+            Text(
+                text = stringResource(R.string.account_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = BeidTheme.colors.textPrimary,
+                modifier = Modifier
+                    .clickable(onClick = onOpenAccount)
+                    .testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
+            )
+            Text(
+                text = stringResource(R.string.event_join_title),
+                style = MaterialTheme.typography.headlineLarge,
+                color = BeidTheme.colors.textPrimary,
+            )
+            NearbyEventCards(
+                cards = uiState.nearbyEventCards,
+                selectedEventHashHex = uiState.selectedNearbyEventHashHex,
+                enabled = uiState.sessionState is EventJoinUiState.Idle,
+                onJoin = viewModel::joinNearbyEvent,
+            )
+            if (uiState.sessionState !is EventJoinUiState.Idle) {
+                Text(
+                    text = statusText(uiState.sessionState),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BeidTheme.colors.textSecondary,
+                )
+            }
+            when (val sessionState = uiState.sessionState) {
+                is EventJoinUiState.PermissionDenied -> BeidPrimaryButton(
+                    text = stringResource(R.string.event_join_open_settings),
+                    containerColor = BeidTheme.colors.actionPrimary,
+                    contentColor = BeidTheme.colors.surfaceCanvas,
+                    onClick = viewModel::openAppSettings,
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
+                )
+                is EventJoinUiState.Sensing -> ScanPhaseDetail(
+                    phase = sessionState.phase,
+                    onSimulateSignalLost = viewModel::simulateSignalLost,
+                    onResumeSensing = viewModel::resumeSensing,
+                )
+                else -> Unit
+            }
+        }
+    }
+}
+
+/** Pure rendering seam used by read-only scenarios without constructing a coordinator. */
+@Composable
+fun EventJoinScreen(
+    state: EventJoinScreenState,
+    onEventCodeChanged: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAccount: () -> Unit,
+    onSimulateSignalLost: () -> Unit,
+    onResumeSensing: () -> Unit,
+) {
+    Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(BeidSpacing.pageMargin)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
+        ) {
             // Plain clickable text — this screen's only entry point into the new Account
             // screen (beid#126). iOS has no direct equivalent to mirror here (its Account
             // sheet opens from a CollectionHomeView toolbar button that doesn't exist on
@@ -107,39 +172,91 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
                 color = BeidTheme.colors.textPrimary,
             )
 
-            NearbyEventCards(
-                cards = uiState.nearbyEventCards,
-                selectedEventHashHex = uiState.selectedNearbyEventHashHex,
-                enabled = uiState.sessionState is EventJoinUiState.Idle,
-                onJoin = viewModel::joinNearbyEvent,
-            )
-
-            if (uiState.sessionState !is EventJoinUiState.Idle) {
-                Text(
-                    text = statusText(uiState.sessionState),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = BeidTheme.colors.textSecondary,
+            Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
+                OutlinedTextField(
+                    value = state.eventCode,
+                    onValueChange = onEventCodeChanged,
+                    label = { Text(stringResource(R.string.event_join_code_label)) },
+                    isError = state.fieldError != null,
+                    singleLine = true,
+                    shape = RoundedCornerShape(BeidRadius.control),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = BeidTheme.colors.textPrimary,
+                        unfocusedTextColor = BeidTheme.colors.textPrimary,
+                        errorTextColor = BeidTheme.colors.textPrimary,
+                        focusedContainerColor = BeidTheme.colors.surfaceRaised,
+                        unfocusedContainerColor = BeidTheme.colors.surfaceRaised,
+                        errorContainerColor = BeidTheme.colors.surfaceRaised,
+                        // iOS's EventCodeEntryView never varies the field's own border/label/
+                        // cursor color on error — only the message below it changes — so the
+                        // error variants mirror the unfocused/normal ones instead of Material3's
+                        // stock red, keeping this control visually identical to iOS on error.
+                        focusedBorderColor = BeidTheme.colors.actionPrimary,
+                        unfocusedBorderColor = BeidTheme.colors.strokeHairline,
+                        errorBorderColor = BeidTheme.colors.strokeHairline,
+                        errorLabelColor = BeidTheme.colors.textSecondary,
+                        cursorColor = BeidTheme.colors.actionPrimary,
+                        errorCursorColor = BeidTheme.colors.actionPrimary,
+                        errorSupportingTextColor = BeidTheme.colors.textPrimary,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
                 )
+
+                state.fieldError?.let { error ->
+                    // iOS renders this row in DS.Color.textPrimary (plain ink), not a warning
+                    // accent — DESIGN.md §5's accent map reserves signalWarning for BLE
+                    // signal-loss recovery screens, and a validation/join error isn't that.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
+                    ) {
+                        Text(
+                            text = "⚠",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = BeidTheme.colors.textPrimary,
+                        )
+                        Text(
+                            text = error.message(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = BeidTheme.colors.textPrimary,
+                        )
+                    }
+                }
             }
 
-            when (val sessionState = uiState.sessionState) {
+            Text(
+                text = statusText(state.sessionState),
+                style = MaterialTheme.typography.bodyMedium,
+                color = BeidTheme.colors.textSecondary,
+            )
+
+            when (val sessionState = state.sessionState) {
                 is EventJoinUiState.PermissionDenied -> {
                     BeidPrimaryButton(
                         text = stringResource(R.string.event_join_open_settings),
                         containerColor = BeidTheme.colors.actionPrimary,
                         contentColor = BeidTheme.colors.surfaceCanvas,
-                        onClick = { viewModel.openAppSettings() },
+                        onClick = onOpenSettings,
                         modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
                     )
                 }
                 is EventJoinUiState.Sensing -> {
                     ScanPhaseDetail(
                         phase = sessionState.phase,
-                        onSimulateSignalLost = viewModel::simulateSignalLost,
-                        onResumeSensing = viewModel::resumeSensing,
+                        onSimulateSignalLost = onSimulateSignalLost,
+                        onResumeSensing = onResumeSensing,
                     )
                 }
-                else -> Unit
+                else -> {
+                    BeidPrimaryButton(
+                        text = stringResource(R.string.event_join_button),
+                        containerColor = BeidTheme.colors.actionPrimary,
+                        contentColor = BeidTheme.colors.surfaceCanvas,
+                        onClick = onSubmit,
+                        enabled = state.sessionState !is EventJoinUiState.RequestingPermission,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
+                    )
+                }
             }
         }
     }
@@ -246,7 +363,11 @@ private fun NearbyEventCards(
                     color = BeidTheme.colors.textPrimary,
                 )
                 if (card.validFromEpochSeconds != null && card.validUntilEpochSeconds != null) Text(
-                    text = stringResource(R.string.event_join_validity_period, card.validFromEpochSeconds, card.validUntilEpochSeconds),
+                    text = stringResource(
+                        R.string.event_join_validity_period,
+                        card.validFromEpochSeconds,
+                        card.validUntilEpochSeconds,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = BeidTheme.colors.textSecondary,
                 )
