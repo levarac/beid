@@ -1,123 +1,93 @@
+import json
 import re
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[2]
+PROPER_NOUNS = {"Bluetooth", "Coinbase", "MetaMask"}
+ACRONYMS = {"URI"}
+
+
+def balanced_calls(text, names):
+    out = []
+    for m in re.finditer(r"\b(?:" + "|".join(names) + r")\s*\(", text):
+        start, depth, quote, escaped = m.start(), 0, False, False
+        for i in range(m.end() - 1, len(text)):
+            ch = text[i]
+            if quote:
+                if escaped: escaped = False
+                elif ch == "\\": escaped = True
+                elif ch == '"': quote = False
+            elif ch == '"': quote = True
+            elif ch == "(": depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    out.append(text[start:i + 1]); break
+    return out
+
+
+def sentence_case(value):
+    words = re.findall(r"[A-Za-z]+", value)
+    for i, word in enumerate(words[1:], 1):
+        if word in PROPER_NOUNS or word in ACRONYMS or (word == "Wallet" and words[i - 1] == "Coinbase"):
+            continue
+        if word[0].isupper():
+            return False
+    return True
+
+
+def swift_cta_literals(root):
+    values = []
+    for path in (root / "ios/Beid").rglob("*.swift"):
+        text = path.read_text()
+        for body in balanced_calls(text, ["BeidPrimaryButton", "BeidSecondaryButton", "Button"]):
+            values += re.findall(r'"([^"\n]+)"', body)
+        for m in re.finditer(r"\bButton\s*\{", text):
+            values += re.findall(r'\bLabel\s*\(\s*"([^"\n]+)"', text[m.start():m.start() + 900])
+    return values
+
+
+def android_cta_resources(root):
+    xml = (root / "android/app/src/main/res/values/strings.xml").read_text()
+    values = dict(re.findall(r'<string name="([^"]+)">(.*?)</string>', xml))
+    refs = set()
+    for path in (root / "android/app/src/main/kotlin").rglob("*.kt"):
+        for body in balanced_calls(path.read_text(), ["BeidPrimaryButton", "BeidSecondaryButton", "Button"]):
+            refs.update(re.findall(r"R\.string\.([A-Za-z0-9_]+)", body))
+    return {name: values[name] for name in refs if name in values}
 
 
 class SentenceCaseCTAContractTests(unittest.TestCase):
-    """Keep the reviewed button/CTA surface in sentence case.
+    def test_all_ios_cta_literals_are_sentence_case(self):
+        values = swift_cta_literals(ROOT)
+        self.assertGreater(len(values), 10)
+        self.assertTrue(all(sentence_case(v) for v in values), values)
 
-    The patterns intentionally inspect only SwiftUI button constructors,
-    action labels/accessibility labels, and Android resources used by the
-    known CTA resource names; ordinary body copy is out of scope.
-    """
+    def test_all_android_cta_resources_are_sentence_case(self):
+        values = android_cta_resources(ROOT)
+        self.assertGreater(len(values), 10)
+        self.assertTrue(all(sentence_case(v.replace("\\'", "'")) for v in values.values()), values)
 
-    IOS_EXPECTED = {
-        "Get Started": "Get started",
-        "Sense Event": "Sense event",
-        "Join Event": "Join event",
-        "Connect Wallet": "Connect wallet",
-        "Disconnect Wallet": "Disconnect wallet",
-        "Leave Event": "Leave event",
-        "Start Over": "Start over",
-        "Copy URI": "Copy URI",
-        "Try Again": "Try again",
-        "Simulate Signal Lost": "Simulate signal lost",
-        "Open Settings": "Open settings",
-    }
+    def test_all_ui_test_button_selectors_are_sentence_case(self):
+        selectors = []
+        for path in (ROOT / "ios/BeidUITests").rglob("*.swift"):
+            selectors += re.findall(r'app\.buttons\["([^"]+)"\]', path.read_text())
+        self.assertGreater(len(selectors), 20)
+        self.assertTrue(all(sentence_case(v) for v in selectors), selectors)
 
-    ANDROID_EXPECTED = {
-        "welcome_get_started": "Get started",
-        "bluetooth_permission_allow_button": "Allow Bluetooth",
-        "bluetooth_off_open_settings_button": "Open settings",
-        "bluetooth_off_turned_on_button": "I've turned it on",
-        "event_join_button": "Join event",
-        "event_join_open_settings": "Open settings",
-        "account_leave_event_button": "Leave event",
-    }
+    def test_catalog_contains_all_literal_ctas(self):
+        keys = json.loads((ROOT / "ios/Beid/Localizable.xcstrings").read_text())["strings"]
+        for value in swift_cta_literals(ROOT):
+            if value not in {"Cancel", "Done", "Close"} and " " in value and "(demo)" not in value:
+                self.assertIn(value, keys, value)
 
-    IOS_EXPLICIT = {
-        "account.joinEvent.label": "Join event",
-        "account.pastEvents.label": "Past events",
-    }
-
-    IOS_CATALOG_KEYS = {
-        "Get started",
-        "Join event",
-        "Sense event",
-        "Connect wallet",
-        "Disconnect wallet",
-        "Venue device",
-        "Leave event",
-        "Start over",
-        "Try again",
-        "Simulate signal lost",
-        "Open settings",
-    }
-
-    IOS_UI_TEST_SELECTORS = {
-        "Get Started": "Get started",
-        "Sense Event": "Sense event",
-        "Simulate Signal Lost": "Simulate signal lost",
-        "Connect Wallet": "Connect wallet",
-        "Join Event": "Join event",
-        "Leave Event": "Leave event",
-    }
-
-    def test_ios_reviewed_button_literals_are_sentence_case(self):
-        views = "\n".join(
-            p.read_text() for p in (ROOT / "ios/Beid/Views").glob("*.swift")
-        )
-        patterns = (
-            r"(?:Beid(?:Primary|Secondary)Button|Button\(|Label\(|\.accessibilityLabel\()[^\n]*?\"([^\"]+)\""
-        )
-        literals = set()
-        for match in re.finditer(patterns, views):
-            literals.add(match.group(1))
-        for old, new in self.IOS_EXPECTED.items():
-            if old != new:
-                self.assertNotIn(old, literals, f"iOS CTA remains title case: {old}")
-            self.assertIn(new, literals, f"iOS CTA missing sentence-case form: {new}")
-
-    def test_android_reviewed_button_resources_are_sentence_case(self):
-        text = (ROOT / "android/app/src/main/res/values/strings.xml").read_text()
-        for name, expected in self.ANDROID_EXPECTED.items():
-            match = re.search(rf'<string name="{name}">(.*?)</string>', text)
-            self.assertIsNotNone(match, f"missing Android CTA resource: {name}")
-            self.assertEqual(expected.replace("'", "\\'"), match.group(1), name)
-
-    def test_ios_explicit_button_keys_are_sentence_case(self):
-        import json
-
-        catalog = json.loads((ROOT / "ios/Beid/Localizable.xcstrings").read_text())
-        self.assertTrue(self.IOS_CATALOG_KEYS <= catalog["strings"].keys())
-        for key, expected in self.IOS_EXPLICIT.items():
-            value = catalog["strings"][key]["localizations"]["en"]["stringUnit"]["value"]
-            self.assertEqual(expected, value, key)
-
-        account_source = (ROOT / "ios/Beid/Views/AccountSheetView.swift").read_text()
-        past_events_source = (ROOT / "ios/Beid/Views/PastEventsView.swift").read_text()
-        self.assertIn('defaultValue: "Join event"', account_source)
-        self.assertIn('defaultValue: "Past events"', account_source)
-        self.assertIn('localized: "account.pastEvents.title", defaultValue: "Past Events"', past_events_source)
-
-    def test_android_cta_resources_are_referenced_by_production_ui(self):
-        source = "\n".join(
-            p.read_text()
-            for p in (ROOT / "android/app/src/main/kotlin").rglob("*.kt")
-        )
-        for name in self.ANDROID_EXPECTED:
-            self.assertIn(f"R.string.{name}", source, name)
-
-    def test_ios_ui_test_selectors_follow_sentence_case_ctas(self):
-        selectors = set()
-        for path in (ROOT / "ios/BeidUITests").glob("*.swift"):
-            selectors.update(re.findall(r'app\.buttons\["([^"]+)"\]', path.read_text()))
-        for old, new in self.IOS_UI_TEST_SELECTORS.items():
-            self.assertNotIn(old, selectors, f"stale UI-test selector: {old}")
-            self.assertIn(new, selectors, f"missing UI-test selector: {new}")
+    def test_mutations_fail_for_unlisted_surfaces(self):
+        self.assertFalse(sentence_case("Enter Event Code"))
+        self.assertFalse(sentence_case("Join Event"))
+        self.assertFalse(sentence_case("stale Selector"))
+        self.assertTrue(sentence_case("Connect with MetaMask"))
+        self.assertTrue(sentence_case("Copy URI"))
 
 
 if __name__ == "__main__":

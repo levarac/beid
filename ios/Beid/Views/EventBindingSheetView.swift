@@ -142,7 +142,7 @@ struct EventBindingSheetView: View {
       }
       #if DEBUG
       if sensing.useDemoEventMode {
-        BeidSecondaryButton(title: "Simulate binding (Demo)") {
+        BeidSecondaryButton(title: "Simulate binding (demo)") {
           Task { await simulateDemoBinding() }
         }
         .tint(DS.Color.actionPrimary)
