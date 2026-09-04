@@ -34,12 +34,27 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
         "bluetooth_off_open_settings_button": "Open settings",
         "bluetooth_off_turned_on_button": "I've turned it on",
         "event_join_button": "Join event",
+        "event_join_open_settings": "Open settings",
         "account_leave_event_button": "Leave event",
     }
 
     IOS_EXPLICIT = {
         "account.joinEvent.label": "Join event",
         "account.pastEvents.label": "Past events",
+    }
+
+    IOS_CATALOG_KEYS = {
+        "Get started",
+        "Join event",
+        "Sense event",
+        "Connect wallet",
+        "Disconnect wallet",
+        "Venue device",
+        "Leave event",
+        "Start over",
+        "Try again",
+        "Simulate signal lost",
+        "Open settings",
     }
 
     def test_ios_reviewed_button_literals_are_sentence_case(self):
@@ -68,6 +83,7 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
         import json
 
         catalog = json.loads((ROOT / "ios/Beid/Localizable.xcstrings").read_text())
+        self.assertTrue(self.IOS_CATALOG_KEYS <= catalog["strings"].keys())
         for key, expected in self.IOS_EXPLICIT.items():
             value = catalog["strings"][key]["localizations"]["en"]["stringUnit"]["value"]
             self.assertEqual(expected, value, key)
@@ -76,7 +92,15 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
         past_events_source = (ROOT / "ios/Beid/Views/PastEventsView.swift").read_text()
         self.assertIn('defaultValue: "Join event"', account_source)
         self.assertIn('defaultValue: "Past events"', account_source)
-        self.assertIn('defaultValue: "Past events"', past_events_source)
+        self.assertIn('localized: "account.pastEvents.title", defaultValue: "Past Events"', past_events_source)
+
+    def test_android_cta_resources_are_referenced_by_production_ui(self):
+        source = "\n".join(
+            p.read_text()
+            for p in (ROOT / "android/app/src/main/kotlin").rglob("*.kt")
+        )
+        for name in self.ANDROID_EXPECTED:
+            self.assertIn(f"R.string.{name}", source, name)
 
 
 if __name__ == "__main__":

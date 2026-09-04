@@ -21,10 +21,10 @@ final class EventMembershipUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Get started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Sense event"].waitForExistence(timeout: 5))
 
     app.buttons["Account"].tap()
     XCTAssertTrue(app.staticTexts["Account"].waitForExistence(timeout: 5))
@@ -34,12 +34,12 @@ final class EventMembershipUITests: XCTestCase {
     // accessibility tree until scrolled into view, so scroll the List down
     // before looking for anything past "Venue Device".
     let list = app.collectionViews.firstMatch
-    scrollUntilExists(app.buttons["Join Event"], in: list)
+    scrollUntilExists(app.buttons["Join event"], in: list)
 
     // Only one "Join Event" element exists in the tree here — the nested
     // event-code sheet is not presented yet, so there's no collision with
     // EventCodeEntryView's own "Join Event" submit button.
-    let joinEventRow = app.buttons["Join Event"]
+    let joinEventRow = app.buttons["Join event"]
     XCTAssertTrue(joinEventRow.exists)
     XCTAssertTrue(joinEventRow.isEnabled)
     joinEventRow.tap()
@@ -53,12 +53,12 @@ final class EventMembershipUITests: XCTestCase {
     codeField.typeText("ETHTOKYO2026\n")
 
     // Back on the Account sheet: the nested sheet dismissed on success.
-    scrollUntilExists(app.buttons["Leave Event"], in: list)
-    let leaveEventRow = app.buttons["Leave Event"]
+    scrollUntilExists(app.buttons["Leave event"], in: list)
+    let leaveEventRow = app.buttons["Leave event"]
     XCTAssertTrue(leaveEventRow.exists)
     XCTAssertTrue(leaveEventRow.isEnabled, "Leave Event should be enabled once an event is joined")
     XCTAssertFalse(
-      app.buttons["Join Event"].isEnabled,
+      app.buttons["Join event"].isEnabled,
       "Join Event should be disabled while an event is already joined"
     )
 
@@ -67,9 +67,9 @@ final class EventMembershipUITests: XCTestCase {
     // The regression assertion: pre-fix, AccountSheetView never invalidates
     // when SensingCoordinator.joinedEventCode changes, so this stays
     // disabled. Post-fix it re-enables immediately.
-    scrollUntilExists(app.buttons["Join Event"], in: list)
+    scrollUntilExists(app.buttons["Join event"], in: list)
     XCTAssertTrue(
-      app.buttons["Join Event"].isEnabled,
+      app.buttons["Join event"].isEnabled,
       "Join Event should re-enable immediately after leaving the event"
     )
   }

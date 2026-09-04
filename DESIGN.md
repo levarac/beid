@@ -486,7 +486,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Purpose: Sequential numbered instructions in a bordered card — one filled
   index badge + one line per step.
 - Use when: A recovery/setup screen needs an ordered short sequence
-  (`BluetoothOffView`'s "Open Settings / Tap Bluetooth / Switch it on").
+  (`BluetoothOffView`'s "Open settings / Tap Bluetooth / Switch it on").
 - Don't use when: The list isn't ordered (use `BeidBulletRow` instead) or
   has more than a handful of steps (this is not a scrolling list).
 - API: `BeidNumberedStepList(steps: [LocalizedStringKey], labelColor: Color = DS.Color.surfaceCanvas)`.
@@ -540,7 +540,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 ### Pattern: Primary CTA button
 
 - Purpose: The one main action per screen ("Get Started", "Sense Event",
-  "Try Again", "Done"). A convention, not a reusable component (yet).
+  "Try again", "Done"). A convention, not a reusable component (yet).
 - Rules: `.borderedProminent`, label `DS.Font.cta`, full width inside
   `DS.Space.pageMargin` (compact-width state screens, §7). Tint follows the
   §5 accent map exactly: `signalActive` on sensing screens, `proofSeal` at
@@ -698,8 +698,8 @@ lives in `AGENTS.md`.
   tense. Second person only when instructing.
 - Error formula: what happened + why + one action. Model:
   "beid lost the connection to {event}. Move closer and we'll pick it back
-  up automatically." + "Try Again".
-- CTAs are verb-first and specific: "Start sensing", "Open Settings",
+  up automatically." + "Try again".
+- CTAs are verb-first and specific: "Start sensing", "Open settings",
   "Connect wallet". FORBIDDEN as generic action labels: "OK", "Submit".
   "Continue" MAY be used where the next step is genuinely a continuation
   (multi-step onboarding), with a stated reason; never as a lazy default.

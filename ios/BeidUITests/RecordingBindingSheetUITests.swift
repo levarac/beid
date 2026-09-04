@@ -40,7 +40,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testBindingSheetAutoPresentsOnRecordingAndDoesNotReopenAfterDismissal() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["Sense event"].tap()
 
     // Reaching `.recording` fires `beginRecording`, which sets
     // `bindingState = .pendingConnect(event)` fresh from `.none`
@@ -150,7 +150,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["Sense event"].tap()
 
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
@@ -177,7 +177,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
         "On iPad the mistimed tap lands on the form sheet's backdrop and should dismiss the binding sheet"
       )
       XCTAssertTrue(
-        app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5),
+        app.buttons["Simulate signal lost"].waitForExistence(timeout: 5),
         "The backdrop-dismissed sheet should reveal a live RecordingView, not a dead screen"
       )
 
@@ -197,7 +197,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
       XCTAssertFalse(cancelButton.exists, "Cancel should dismiss the binding sheet")
       XCTAssertTrue(
-        app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5),
+        app.buttons["Simulate signal lost"].waitForExistence(timeout: 5),
         "Cancel must land the user on a live RecordingView, not a dead screen"
       )
 
@@ -208,14 +208,14 @@ final class RecordingBindingSheetUITests: XCTestCase {
     let cancelStillGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: cancelButton)
     let senseEventHittable = expectation(
       for: NSPredicate(format: "isHittable == true"),
-      evaluatedWith: app.buttons["Sense Event"]
+      evaluatedWith: app.buttons["Sense event"]
     )
     wait(for: [closeGone, cancelStillGone, senseEventHittable], timeout: 8)
 
     XCTAssertFalse(closeButton.exists, "Close should dismiss the scan flow")
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not remain presented")
     XCTAssertTrue(
-      app.buttons["Sense Event"].isHittable,
+      app.buttons["Sense event"].isHittable,
       "The final real Close tap must reach Collection Home"
     )
   }
@@ -230,9 +230,9 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-threshold-override", "1"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Get started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Sense event"].waitForExistence(timeout: 5))
   }
 }

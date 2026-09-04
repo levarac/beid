@@ -60,13 +60,10 @@ struct PastEventsView: View {
     .navigationBarTitleDisplayMode(.inline)
   }
 
-  /// Reuses `account.pastEvents.label` rather than a second, separately
-  /// translatable "Past Events" key — the Account sheet's row label and
-  /// this screen's nav title are the same English text for the same
-  /// concept, so per AGENTS.md's key-reuse rule this is an explicit-key
-  /// case, not two one-off literals.
+  /// The navigation title keeps its title-style noun phrase, separate from
+  /// the Account sheet's sentence-case action label.
   private var navigationTitle: String {
-    String(localized: "account.pastEvents.label", defaultValue: "Past events")
+    String(localized: "account.pastEvents.title", defaultValue: "Past Events")
   }
 
   @ViewBuilder

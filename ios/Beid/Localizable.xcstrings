@@ -21,6 +21,7 @@
       "comment": "Accessibility label for the scan flow's toolbar close (X) button that dismisses the scan modal."
     },
     "Connect Wallet": {},
+    "Connect wallet": {},
     "Connect Your Wallet": {},
     "Connect wallet instead": {},
     "Connect with MetaMask": {
@@ -67,7 +68,7 @@
         }
       }
     },
-    "Disconnect Wallet": {},
+    "Disconnect wallet": {},
     "Done": {},
     "Enable Bluetooth": {},
     "Enter Event Code": {},
@@ -674,13 +675,14 @@
       }
     },
     "Venue Device": {},
+    "Venue device": {},
     "Assignment": {
       "comment": "Section header on the venue-device organizer screen (gh#138) for the label + validity-period fields — not a task/homework assignment."
     },
     "Label": {
       "comment": "Text field on the venue-device organizer screen: the display name this device broadcasts to nearby attendees (Barnard B005 eventDisplayName), not a generic UI label element."
     },
-    "Leave Event": {},
+    "Leave event": {},
     "e.g. Doorway A": {
       "comment": "Placeholder example shown inside the empty venue-device label field."
     },
@@ -860,6 +862,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Past events"
+          }
+        }
+      }
+    },
+    "account.pastEvents.title": {
+      "comment": "Navigation title for the Past Events screen; noun phrase, not an action label.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Past Events"
           }
         }
       }

@@ -17,18 +17,18 @@ final class EventIdentityVerificationUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Get started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["Sense event"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
 
     XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)
 
-    let simulateSignalLost = app.buttons["Simulate Signal Lost"]
+    let simulateSignalLost = app.buttons["Simulate signal lost"]
     XCTAssertTrue(simulateSignalLost.waitForExistence(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)
     simulateSignalLost.tap()

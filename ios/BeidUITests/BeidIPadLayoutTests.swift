@@ -25,7 +25,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.launch()
 
     assertWelcomeLayout(named: "welcome-\(orientation)")
-    app.buttons["Get Started"].tap()
+    app.buttons["Get started"].tap()
 
     // OnboardingMode.current is .guestFirst (event-first, the default — see
     // OnboardingFlagTests): Welcome's CTA routes straight to the
@@ -34,7 +34,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "bluetooth-permission-\(orientation)")
 
     app.buttons["Allow Bluetooth"].tap()
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["Sense event"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-empty-\(orientation)")
 
@@ -43,7 +43,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "account-\(orientation)")
     app.buttons["Done"].tap()
 
-    let resumedSenseEvent = app.buttons["Sense Event"]
+    let resumedSenseEvent = app.buttons["Sense event"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
     XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
@@ -57,7 +57,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     // terminal screen to wait for anymore. Threshold-confirm auto-flips
     // into `.recording` in the background; the "Simulate Signal Lost"
     // affordance existing is the earliest reliable signal that happened.
-    let signalLost = app.buttons["Simulate Signal Lost"]
+    let signalLost = app.buttons["Simulate signal lost"]
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     capture(named: "recording-\(orientation)")
 
@@ -202,17 +202,17 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Get started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["Sense event"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
     XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
     XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
 
-    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.buttons["Simulate signal lost"].waitForExistence(timeout: 30))
   }
 
   /// Ends the session `reachRecordingScreen()` just started, landing on
@@ -222,7 +222,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     reachRecordingScreen()
     app.buttons["Close"].tap()
 
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Sense event"].waitForExistence(timeout: 5))
   }
 
   /// Opens the DemoEvent proof `navigateToCollectionWithProof` just left on
@@ -233,7 +233,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func assertWelcomeLayout(named name: String) {
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Get started"]
     let appWindow = app.windows.firstMatch
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     XCTAssertTrue(appWindow.exists)

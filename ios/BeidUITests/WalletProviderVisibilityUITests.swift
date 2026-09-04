@@ -53,7 +53,7 @@ final class WalletProviderVisibilityUITests: XCTestCase {
     app.buttons["Cancel"].tap()
     XCTAssertFalse(app.buttons["Connect with MetaMask"].exists, "Sheet should dismiss after Cancel")
 
-    app.buttons["Connect Wallet"].tap()
+    app.buttons["Connect wallet"].tap()
 
     XCTAssertTrue(
       app.buttons["Connect with MetaMask"].waitForExistence(timeout: 5),
@@ -66,13 +66,13 @@ final class WalletProviderVisibilityUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Get started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
     XCTAssertTrue(app.buttons["Account"].waitForExistence(timeout: 5))
 
     app.buttons["Account"].tap()
-    XCTAssertTrue(app.buttons["Connect Wallet"].waitForExistence(timeout: 5))
-    app.buttons["Connect Wallet"].tap()
+    XCTAssertTrue(app.buttons["Connect wallet"].waitForExistence(timeout: 5))
+    app.buttons["Connect wallet"].tap()
   }
 }

@@ -34,7 +34,7 @@
     <string name="event_join_status_requesting_permission">Requesting Bluetooth permission…</string>
     <string name="event_join_status_sensing">Sensing for nearby peers…</string>
     <string name="event_join_status_permission_denied">beid needs Bluetooth permission to sense nearby peers. Open Settings to grant it.</string>
-    <string name="event_join_open_settings">Open Settings</string>
+    <string name="event_join_open_settings">Open settings</string>
     <string name="event_join_error_empty_code">Enter an event code to continue. Ask the event organizer for it.</string>
     <string name="event_join_error_join_failed">beid couldn\'t join that event. Check the code and try again.</string>
     <string name="event_join_searching_nearby">Searching for nearby events…</string>
