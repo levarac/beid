@@ -23,33 +23,21 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         for name in ("Build for testing", "Test without rebuilding"):
             with self.subTest(step=name):
                 block = step_block(text, name)
-                self.assertIn("SWIFT_OPTIMIZATION_LEVEL=-O", block)
+                self.assertEqual(block.count("SWIFT_OPTIMIZATION_LEVEL=-O"), 1)
 
-    def test_release_build_runs_in_the_background_with_a_stable_id(self) -> None:
-        block = step_block(workflow_text(), "Build Release for device (informational)")
-
-        self.assertIn("        id: release-device-build\n", block)
-        self.assertIn("        background: true\n", block)
-
-    def test_release_build_overlaps_tests_and_is_waited_for_before_summary(self) -> None:
+    def test_release_build_remains_sequential_and_informational(self) -> None:
         text = workflow_text()
-        release = text.index("      - name: Build Release for device (informational)\n")
-        tests = text.index("      - name: Test without rebuilding\n")
-        wait = text.index("      - name: Wait for informational Release device build\n")
         summary = text.index("      - name: Summarize structured test results\n")
+        release = text.index("      - name: Build Release for device (informational)\n")
+        shutdown = text.index("      - name: Shutdown simulator\n")
+        block = step_block(text, "Build Release for device (informational)")
 
-        self.assertLess(release, tests)
-        self.assertLess(tests, wait)
-        self.assertLess(wait, summary)
-        self.assertIn(
-            "        wait: release-device-build\n",
-            step_block(text, "Wait for informational Release device build"),
-        )
-
-    def test_wait_step_has_no_condition_that_can_hide_release_failure(self) -> None:
-        block = step_block(workflow_text(), "Wait for informational Release device build")
-
-        self.assertNotIn("        if:", block)
+        self.assertLess(summary, release)
+        self.assertLess(release, shutdown)
+        self.assertIn("        if: ${{ !cancelled() }}\n", block)
+        self.assertNotIn("        id:", block)
+        self.assertNotIn("        background:", block)
+        self.assertNotIn("wait: release-device-build", text)
 
 
 if __name__ == "__main__":

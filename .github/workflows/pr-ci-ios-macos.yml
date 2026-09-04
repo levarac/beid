@@ -160,8 +160,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          # The full Test step measured 43m with -Onone and 8m10s with -O.
-          # -O only strips bare assert() checks; the repository has no such Swift calls.
           xcodebuild \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
@@ -169,24 +167,8 @@ jobs:
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
-            build-for-testing \
-            SWIFT_OPTIMIZATION_LEVEL=-O
-
-      - name: Build Release for device (informational)
-        id: release-device-build
-        if: ${{ !cancelled() }}
-        background: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project ios/Beid.xcodeproj \
-            -scheme Beid \
-            -configuration Release \
-            -destination "generic/platform=iOS" \
-            -sdk iphoneos \
-            build \
-            CODE_SIGNING_ALLOWED=NO
+            SWIFT_OPTIMIZATION_LEVEL=-O \
+            build-for-testing
 
       - name: Test without rebuilding
         shell: bash
@@ -200,11 +182,8 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
-            test-without-building \
-            SWIFT_OPTIMIZATION_LEVEL=-O
-
-      - name: Wait for informational Release device build
-        wait: release-device-build
+            SWIFT_OPTIMIZATION_LEVEL=-O \
+            test-without-building
 
       - name: Summarize structured test results
         if: always()
@@ -273,6 +252,20 @@ jobs:
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY
+
+      - name: Build Release for device (informational)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios/Beid.xcodeproj \
+            -scheme Beid \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -sdk iphoneos \
+            build \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Shutdown simulator
         if: always()
