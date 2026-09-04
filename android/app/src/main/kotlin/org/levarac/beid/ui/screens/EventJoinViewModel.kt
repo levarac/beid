@@ -61,11 +61,12 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
         viewModelScope.launch {
             session.nearbyEventCards.collect { cards ->
                 _uiState.update {
+                    val joinableCards = cards.filter { card -> card.eventIdHex != null }
                     val selectedHash = when {
-                        cards.isEmpty() -> null
-                        cards.any { card -> card.eventCodeHashHex == it.selectedNearbyEventHashHex } ->
+                        joinableCards.isEmpty() -> null
+                        joinableCards.any { card -> card.eventCodeHashHex == it.selectedNearbyEventHashHex } ->
                             it.selectedNearbyEventHashHex
-                        cards.size == 1 -> cards.single().eventCodeHashHex
+                        joinableCards.size == 1 -> joinableCards.single().eventCodeHashHex
                         else -> null
                     }
                     it.copy(
@@ -98,8 +99,9 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
         val card = _uiState.value.nearbyEventCards
             .firstOrNull { it.eventCodeHashHex == eventCodeHashHex }
             ?: return
+        val eventIdHex = card.eventIdHex ?: return
         _uiState.update { it.copy(selectedNearbyEventHashHex = eventCodeHashHex) }
-        card.eventIdHex?.let(session::joinNearbyEvent)
+        session.joinNearbyEvent(eventIdHex)
     }
 
     fun simulateSignalLost() = session.simulateSignalLost()

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -193,6 +194,29 @@ class EventJoinScreenTest {
         }
         composeTestRule.runOnIdle {
             assertEquals(eventId, session.joinedDiscoveredEventId)
+        }
+    }
+
+    @Test
+    fun unverifiedNearbyCandidateIsDisplayOnlyAndCannotBecomeSelectedOrJoin() {
+        val eventCodeHash = "1111111111111111"
+        val session = FakeEventJoinSession(
+            nearbyEventCards = listOf(
+                NearbyEventCard("Unverified beacon", null, null, null, eventCodeHash),
+            ),
+        )
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(eventCodeHash))
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+            .assertIsNotSelected()
+            .performClick()
+        composeTestRule.runOnIdle {
+            assertNull(session.joinedDiscoveredEventId)
+            assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)
         }
     }
 

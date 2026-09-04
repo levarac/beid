@@ -223,12 +223,13 @@ private fun NearbyEventCards(
         modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
     ) {
         cards.forEach { card ->
-            val selected = card.eventCodeHashHex == selectedEventHashHex
+            val cardEnabled = enabled && card.eventIdHex != null
+            val selected = cardEnabled && card.eventCodeHashHex == selectedEventHashHex
             BeidPanel(
                 modifier = Modifier
                     .selectable(
                         selected = selected,
-                        enabled = enabled,
+                        enabled = cardEnabled,
                         onClick = { onJoin(card.eventCodeHashHex) },
                         role = Role.RadioButton,
                     )
