@@ -1,6 +1,8 @@
 import json
 import re
 import unittest
+import tempfile
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -27,6 +29,22 @@ def balanced_calls(text, names):
     return out
 
 
+def balanced_brace(text, start):
+    depth, quote, escaped = 0, False, False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if quote:
+            if escaped: escaped = False
+            elif ch == "\\": escaped = True
+            elif ch == '"': quote = False
+        elif ch == '"': quote = True
+        elif ch == "{": depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0: return text[start:i + 1]
+    return ""
+
+
 def sentence_case(value):
     words = re.findall(r"[A-Za-z]+", value)
     for i, word in enumerate(words[1:], 1):
@@ -44,7 +62,23 @@ def swift_cta_literals(root):
         for body in balanced_calls(text, ["BeidPrimaryButton", "BeidSecondaryButton", "Button"]):
             values += re.findall(r'"([^"\n]+)"', body)
         for m in re.finditer(r"\bButton\s*\{", text):
-            values += re.findall(r'\bLabel\s*\(\s*"([^"\n]+)"', text[m.start():m.start() + 900])
+            action = balanced_brace(text, text.find("{", m.start()))
+            tail_start = m.start() + len(m.group(0)) + len(action)
+            label = re.search(r"\blabel\s*:\s*\{", text[tail_start:])
+            if label:
+                label_start = tail_start + label.end() - 1
+                body = balanced_brace(text, label_start)
+                values += re.findall(r'\b(?:Label|Text)\s*\(\s*"([^"\n]+)"', body)
+                end = label_start + len(body)
+                # Modifiers belong to the trailing label closure's Button
+                # chain. Stop at its closing declaration, not a character
+                # window, so a later unrelated control is never included.
+                modifier_tail = text[end:]
+                boundary = re.search(r"\n\s*\}\n", modifier_tail)
+                if boundary:
+                    modifier_tail = modifier_tail[:boundary.start()]
+                values += re.findall(r'\.accessibilityLabel\s*\(\s*(?:Text\s*\(\s*)?"([^"\n]+)"', modifier_tail)
+            values += re.findall(r'\.accessibilityLabel\s*\(\s*(?:Text\s*\(\s*)?"([^"\n]+)"', action)
     return values
 
 
@@ -72,7 +106,7 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
     def test_all_ui_test_button_selectors_are_sentence_case(self):
         selectors = []
         for path in (ROOT / "ios/BeidUITests").rglob("*.swift"):
-            selectors += re.findall(r'app\.buttons\["([^"]+)"\]', path.read_text())
+            selectors += re.findall(r'app\s*\.\s*buttons\s*\[\s*"([^"\n]+)"\s*\]', path.read_text())
         self.assertGreater(len(selectors), 20)
         self.assertTrue(all(sentence_case(v) for v in selectors), selectors)
 
@@ -88,6 +122,29 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
         self.assertFalse(sentence_case("stale Selector"))
         self.assertTrue(sentence_case("Connect with MetaMask"))
         self.assertTrue(sentence_case("Copy URI"))
+
+    def test_real_source_mutations_are_discovered_and_red(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel in ["ios/Beid/Views/AccountSheetView.swift", "ios/Beid/Views/ScanFlowView.swift"]:
+                dst = root / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_text((ROOT / rel).read_text())
+            account = root / "ios/Beid/Views/AccountSheetView.swift"
+            account.write_text(account.read_text().replace('Label("Connect wallet", systemImage:', 'Text("Connect Wallet")\n              // mutation\n              Label("Connect wallet", systemImage:', 1))
+            scan = root / "ios/Beid/Views/ScanFlowView.swift"
+            scan.write_text(scan.read_text().replace('.accessibilityLabel("Close")', '.accessibilityLabel(\n              Text("Close Panel")\n            )', 1))
+            self.assertIn("Connect Wallet", swift_cta_literals(root))
+            self.assertIn("Close Panel", swift_cta_literals(root))
+            self.assertFalse(sentence_case("Connect Wallet"))
+            self.assertFalse(sentence_case("Close Panel"))
+
+            ui = root / "ios/BeidUITests/Mutation.swift"
+            ui.parent.mkdir(parents=True)
+            ui.write_text('app\n  .buttons[\n    "Get Started"\n  ]')
+            selectors = re.findall(r'app\s*\.\s*buttons\s*\[\s*"([^"\n]+)"\s*\]', ui.read_text())
+            self.assertEqual(["Get Started"], selectors)
+            self.assertFalse(sentence_case(selectors[0]))
 
 
 if __name__ == "__main__":
