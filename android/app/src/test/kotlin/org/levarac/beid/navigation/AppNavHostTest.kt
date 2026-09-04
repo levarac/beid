@@ -24,6 +24,7 @@ import org.levarac.beid.ui.screens.BluetoothPermissionScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
 import org.levarac.beid.ui.screens.RecordsScreenTestTags
+import org.levarac.beid.ui.screens.TodaySummaryScreenTestTags
 import org.levarac.beid.ui.screens.WelcomeScreenTestTags
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
@@ -130,5 +131,21 @@ class AppNavHostTest {
         composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performClick()
 
         composeTestRule.onNodeWithTag(RecordsScreenTestTags.EMPTY_STATE).assertIsDisplayed()
+    }
+
+    @Test
+    fun openingTodayFromRecordsShowsTheSeparateDailySummaryEmptyState() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(FakeEventJoinSession(), proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(RecordsScreenTestTags.TODAY_BUTTON).performClick()
+
+        composeTestRule.onNodeWithTag(TodaySummaryScreenTestTags.EMPTY_STATE).assertIsDisplayed()
     }
 }

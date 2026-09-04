@@ -24,4 +24,5 @@ sealed class Screen(val route: String) {
      * separate navigation decision belonging to #141).
      */
     data object Records : Screen("records")
+    data object TodaySummary : Screen("today_summary")
 }

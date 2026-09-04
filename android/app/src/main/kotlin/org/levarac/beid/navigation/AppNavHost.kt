@@ -18,6 +18,7 @@ import org.levarac.beid.ui.screens.BluetoothOffScreen
 import org.levarac.beid.ui.screens.BluetoothPermissionScreen
 import org.levarac.beid.ui.screens.EventJoinRoute
 import org.levarac.beid.ui.screens.RecordsRoute
+import org.levarac.beid.ui.screens.TodaySummaryRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
 
 /**
@@ -93,7 +94,14 @@ fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore) {
         }
 
         composable(Screen.Records.route) {
-            RecordsRoute(proofRecordStore)
+            RecordsRoute(
+                proofRecordStore,
+                onOpenToday = { navController.navigate(Screen.TodaySummary.route) },
+            )
+        }
+
+        composable(Screen.TodaySummary.route) {
+            TodaySummaryRoute(proofRecordStore)
         }
     }
 }
