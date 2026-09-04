@@ -468,6 +468,13 @@ localization mechanism — they are not meant to overlap.
 
 ## Delivery / CI contract (GitHub Actions + Xcode Cloud)
 
+## PR と issue の紐付け (Development 欄)
+
+1. issue を閉じる PR は本文に `Closes #N` (複数可) を書く。base が main なら link は自動で付く。merge 後に本文を編集しても付く。
+2. base が main でない PR (stacked PR、release/* 向け) では Closes は評価されない。`gh pr edit <n> --base main` で一時的に main に付け替え、GraphQL (`issue.closedByPullRequestsReferences`) で link を確認してから元の base に戻す。link は base を戻しても残る。base の付け替えは CI (`pull_request` の既定 type) を起動しない。
+3. merge 前の確認コメント (レビュー結果と検証結果を PR コメントに残す) に「Development link: 済」と書く。issue を閉じない PR だけ「該当 issue なし」。
+4. コメントや mention は link ではない。確認は GraphQL で行う。
+
 The platform delivery docs are `docs/xcode-cloud.md` for iOS and
 `docs/google-play.md` for Android (canonical, each carries verification
 dates). The contract every agent must know before touching delivery files:
