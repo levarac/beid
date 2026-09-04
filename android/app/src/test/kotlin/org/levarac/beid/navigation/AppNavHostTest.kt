@@ -81,7 +81,7 @@ class AppNavHostTest {
         // the EventJoin/Home screen.
         shadowAdapter.setEnabled(true)
         composeTestRule.onNodeWithTag(BluetoothOffScreenTestTags.TURNED_ON_BUTTON).performClick()
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
     }
 
     @Test
@@ -96,6 +96,20 @@ class AppNavHostTest {
 
         composeTestRule.onNodeWithTag(BluetoothOffScreenTestTags.OPEN_SETTINGS_BUTTON).assertIsDisplayed()
         composeTestRule.onNodeWithTag(WelcomeScreenTestTags.GET_STARTED_BUTTON).assertDoesNotExist()
+    }
+
+    @Test
+    fun restoringAnOnboardedUserWithRadioOnStartsNearbyDiscoveryFromEventJoinEntry() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession()
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls)
     }
 
     @Test
@@ -147,5 +161,19 @@ class AppNavHostTest {
         composeTestRule.onNodeWithTag(RecordsScreenTestTags.TODAY_BUTTON).performClick()
 
         composeTestRule.onNodeWithTag(TodaySummaryScreenTestTags.EMPTY_STATE).assertIsDisplayed()
+    }
+
+    @Test
+    fun manualEventCodeEntryIsReachableOnlyThroughAccount() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession()
+        composeTestRule.setContent { BeidAppTheme { AppNavHost(session, proofRecordStore()) } }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.MANUAL_EVENT_CODE_BUTTON).performClick()
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertIsDisplayed()
     }
 }

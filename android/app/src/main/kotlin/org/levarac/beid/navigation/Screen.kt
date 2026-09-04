@@ -13,6 +13,7 @@ sealed class Screen(val route: String) {
     data object BluetoothOff : Screen("bluetooth_off")
     data object EventJoin : Screen("event_join")
     data object Account : Screen("account")
+    data object ManualEventCode : Screen("manual_event_code")
 
     /**
      * Flat, reverse-chronological list of collected proofs (beid#121) — see

@@ -35,6 +35,8 @@ data class EventJoinScreenState(
     val eventCode: String = "",
     val fieldError: EventJoinFieldError? = null,
     val sessionState: EventJoinUiState = EventJoinUiState.Idle,
+    val nearbyEventCards: List<org.levarac.beid.sensing.NearbyEventCard> = emptyList(),
+    val selectedNearbyEventHashHex: String? = null,
 )
 
 /**
@@ -56,6 +58,24 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
                 _uiState.update { it.copy(sessionState = sessionState) }
             }
         }
+        viewModelScope.launch {
+            session.nearbyEventCards.collect { cards ->
+                _uiState.update {
+                    val joinableCards = cards.filter { card -> card.eventIdHex != null }
+                    val selectedHash = when {
+                        joinableCards.isEmpty() -> null
+                        joinableCards.any { card -> card.eventCodeHashHex == it.selectedNearbyEventHashHex } ->
+                            it.selectedNearbyEventHashHex
+                        joinableCards.size == 1 -> joinableCards.single().eventCodeHashHex
+                        else -> null
+                    }
+                    it.copy(
+                        nearbyEventCards = cards,
+                        selectedNearbyEventHashHex = selectedHash,
+                    )
+                }
+            }
+        }
     }
 
     fun onEventCodeChanged(code: String) {
@@ -74,6 +94,15 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
     }
 
     fun openAppSettings() = session.openAppSettings()
+
+    fun joinNearbyEvent(eventCodeHashHex: String) {
+        val card = _uiState.value.nearbyEventCards
+            .firstOrNull { it.eventCodeHashHex == eventCodeHashHex }
+            ?: return
+        val eventIdHex = card.eventIdHex ?: return
+        _uiState.update { it.copy(selectedNearbyEventHashHex = eventCodeHashHex) }
+        session.joinNearbyEvent(eventIdHex)
+    }
 
     fun simulateSignalLost() = session.simulateSignalLost()
 

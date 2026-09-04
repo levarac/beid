@@ -37,6 +37,13 @@
     <string name="event_join_open_settings">Open Settings</string>
     <string name="event_join_error_empty_code">Enter an event code to continue. Ask the event organizer for it.</string>
     <string name="event_join_error_join_failed">beid couldn\'t join that event. Check the code and try again.</string>
+    <string name="event_join_searching_nearby">Searching for nearby events…</string>
+    <string name="event_join_rescue_guidance">You can enter a code from Account if no event appears.</string>
+    <string name="event_join_beacon_name_label">Name announced by nearby beacon</string>
+    <string name="event_join_beacon_name_missing">No name announced by nearby beacon</string>
+    <string name="event_join_validity_period">Valid from %1$d to %2$d</string>
+    <string name="event_join_not_joinable_yet">Waiting for event verification</string>
+    <string name="event_join_selected">Selected</string>
 
     <!-- Peer first detected but not yet confirmed as a real event (below the confirm threshold). -->
     <string name="event_join_status_event_found">Event found — waiting to confirm…</string>
@@ -55,6 +62,7 @@
 
     <!-- Reused for both the nav entry-point label on EventJoinScreen (tap target that opens the Account screen) and the Account screen's own title, so both say the same word. -->
     <string name="account_title">Account</string>
+    <string name="account_manual_event_code_button">Enter event code</string>
 
     <!-- Screen 09-equivalent: Account (mirrors iOS's AccountSheetView, minus wallet/Venue Device/Past Events — see beid#126). -->
     <string name="account_bluetooth_label">Bluetooth</string>

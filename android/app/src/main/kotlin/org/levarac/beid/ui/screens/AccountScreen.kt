@@ -40,20 +40,21 @@ object AccountScreenTestTags {
     const val BLUETOOTH_STATUS_TEXT = "account_bluetooth_status_text"
     const val LEAVE_EVENT_BUTTON = "account_leave_event_button"
     const val RECORDS_BUTTON = "account_records_button"
+    const val MANUAL_EVENT_CODE_BUTTON = "account_manual_event_code_button"
 }
 
 /**
  * Account screen (beid#126) — mirrors iOS's `AccountSheetView` at the subset
  * currently in scope on Android: Bluetooth radio status and Leave Event.
- * Wallet, Venue Device, Past Events, and a second Join Event entry are
- * deliberately absent — see the PR description for the row-by-row mapping.
+ * Manual EventCode rescue and Past Events use the existing Account list;
+ * Wallet and Venue Device remain outside this Android slice.
  *
  * State lives in [viewModel], not here — same split as [EventJoinScreen]/
  * [EventJoinViewModel], so this composable stays a pure function that Compose
  * tests can render directly against a fake session.
  */
 @Composable
-fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRecords: () -> Unit) {
+fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRecords: () -> Unit, onOpenManualEventCode: () -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsState()
     val isSessionActive = uiState.sessionState is EventJoinUiState.Sensing
 
@@ -118,6 +119,14 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRec
                 modifier = Modifier.testTag(AccountScreenTestTags.RECORDS_BUTTON),
             )
 
+            BeidSecondaryButton(
+                text = stringResource(R.string.account_manual_event_code_button),
+                contentColor = BeidTheme.colors.textPrimary,
+                borderColor = BeidTheme.colors.strokeHairline,
+                onClick = onOpenManualEventCode,
+                modifier = Modifier.testTag(AccountScreenTestTags.MANUAL_EVENT_CODE_BUTTON),
+            )
+
             // No motif accent (DESIGN.md §5: account is outside sensing/ceremony/recovery
             // moments) and no destructive-colored tint (no ratified DS.Color for that,
             // see the PR report) — same neutral secondary-button treatment EventJoinScreen
@@ -143,10 +152,10 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRec
  * state in this codebase.
  */
 @Composable
-fun AccountRoute(session: EventJoinSession, onOpenRecords: () -> Unit) {
+fun AccountRoute(session: EventJoinSession, onOpenRecords: () -> Unit, onOpenManualEventCode: () -> Unit) {
     val context = LocalContext.current
     val bluetoothMonitor = remember { BluetoothRadioMonitor(context) }
     val isBluetoothOn = remember { bluetoothMonitor.isOn }
     val viewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(session))
-    AccountScreen(viewModel = viewModel, isBluetoothOn = isBluetoothOn, onOpenRecords = onOpenRecords)
+    AccountScreen(viewModel, isBluetoothOn, onOpenRecords, onOpenManualEventCode)
 }

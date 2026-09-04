@@ -1,19 +1,31 @@
 package org.levarac.beid.ui.screens
 
 import android.content.Context
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import kotlin.test.assertNull
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.levarac.beid.R
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanEventSession
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -34,13 +46,13 @@ class EventJoinScreenTest {
     private val session1 = ScanEventSession(eventCode = "ABC123")
 
     @Test
-    fun submittingAnEmptyEventCodeShowsTheInlineErrorAndDoesNotJoin() {
+    fun manualEntrySubmittingAnEmptyEventCodeShowsTheInlineErrorAndDoesNotJoin() {
         val session = FakeEventJoinSession()
         val viewModel = EventJoinViewModel(session)
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel, onOpenAccount = {})
+                ManualEventCodeScreen(viewModel)
             }
         }
 
@@ -51,6 +63,16 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.FIELD_ERROR).assertIsDisplayed()
         composeTestRule.onNodeWithText(expectedError).assertIsDisplayed()
         assertNull(session.joinedCode)
+    }
+
+    @Test
+    fun zeroCandidatesShowsSearchingAndRescueWithoutManualEntry() {
+        val viewModel = EventJoinViewModel(FakeEventJoinSession())
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+
+        composeTestRule.onNodeWithText("Searching for nearby events…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("You can enter a code from Account if no event appears.").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
     }
 
     @Test
@@ -101,7 +123,10 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
         composeTestRule.onNodeWithText("2").assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         assertTrue(session.signalLostSimulated)
     }
 
@@ -136,7 +161,86 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_signal_lost)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         assertTrue(session.sensingResumed)
     }
+
+    @Test
+    fun oneVerifiedNearbyCandidateIsSelectedAndJoinsWithItsExactEventId() {
+        val eventId = "0x0123456789abcdef"
+        val session = FakeEventJoinSession(
+            nearbyEventCards = listOf(
+                NearbyEventCard("Beacon name", eventId, 100L, 200L, "1111111111111111"),
+            ),
+        )
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent {
+            BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("1111111111111111"))
+            .assertIsSelected()
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+            .performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(eventId, viewModel.uiState.value.nearbyEventCards.single().eventIdHex)
+            assertEquals("1111111111111111", viewModel.uiState.value.selectedNearbyEventHashHex)
+        }
+        composeTestRule.runOnIdle {
+            assertEquals(eventId, session.joinedDiscoveredEventId)
+        }
+    }
+
+    @Test
+    fun unverifiedNearbyCandidateIsDisplayOnlyAndCannotBecomeSelectedOrJoin() {
+        val eventCodeHash = "1111111111111111"
+        val session = FakeEventJoinSession(
+            nearbyEventCards = listOf(
+                NearbyEventCard("Unverified beacon", null, null, null, eventCodeHash),
+            ),
+        )
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(eventCodeHash))
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+            .assertIsNotSelected()
+            .performClick()
+        composeTestRule.runOnIdle {
+            assertNull(session.joinedDiscoveredEventId)
+            assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)
+        }
+    }
+
+    @Test
+    fun activeProofDisablesCandidateRetapAndKeepsTheFirstJoin() {
+        val firstEventId = "0x01"
+        val secondEventId = "0x02"
+        val session = FakeEventJoinSession(
+            initial = EventJoinUiState.Sensing(ScanPhase.Recording(session1, peersVerified = 2)),
+            nearbyEventCards = listOf(
+                NearbyEventCard("Other beacon", secondEventId, 100L, 200L, "2222222222222222"),
+            ),
+        )
+        session.joinNearbyEvent(firstEventId)
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("2222222222222222"))
+            .assertIsNotEnabled()
+            .performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(firstEventId, session.joinedDiscoveredEventId)
+        }
+    }
+
 }

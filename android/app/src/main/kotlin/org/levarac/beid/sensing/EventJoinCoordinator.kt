@@ -95,11 +95,12 @@ class EventJoinCoordinator internal constructor(
     private val nearbyDiscovery = NearbyEventDiscoverySession(
         nowEpochMillis = nowEpochMillis,
         coroutineScope = coroutineScope,
-        registryClient = registryClient,
+        registry = registryClient?.let(::RegistryClientNearbyEventRegistry),
     )
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
+    override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = nearbyDiscovery.cards
     val nearbyEventCandidates: StateFlow<NearbyEventCandidates> = nearbyDiscovery.candidates
 
     /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
@@ -227,10 +228,12 @@ class EventJoinCoordinator internal constructor(
     }
 
     override fun joinEvent(code: String) {
-        if (disposed) return
+        if (!canBeginJoin()) return
         _state.value = EventJoinUiState.RequestingPermission
         engine.requestPermissions { result ->
-            if (disposed) return@requestPermissions
+            if (disposed || scanPhase != ScanPhase.Idle || _state.value != EventJoinUiState.RequestingPermission) {
+                return@requestPermissions
+            }
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
                 windowObservationRuntime?.beginEvent(code)
                 engine.joinEvent(code)
@@ -243,6 +246,14 @@ class EventJoinCoordinator internal constructor(
             }
         }
     }
+
+    private fun canBeginJoin(): Boolean =
+        !disposed &&
+            scanPhase == ScanPhase.Idle &&
+            _state.value !is EventJoinUiState.RequestingPermission &&
+            _state.value !is EventJoinUiState.Sensing
+
+    override fun joinNearbyEvent(eventIdHex: String) = joinEvent(eventIdHex)
 
     private fun startSensing() {
         resetSessionState()
@@ -592,6 +603,8 @@ class EventJoinCoordinator internal constructor(
             onComplete()
         }
     }
+
+    override fun startNearbyEventDiscovery() = startNearbyEventDiscoveryIfIdle()
 
     private fun startNearbyEventDiscoveryIfIdle() {
         if (disposed || scanPhase != ScanPhase.Idle || discoveryOnlyScanOwned) return
