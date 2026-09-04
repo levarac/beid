@@ -14,10 +14,10 @@ criteria applied to UI PRs.
 
 **Proposal tags.** Brand-defining values start as
 `PROPOSAL — Ken ratification pending` and lose the tag when ratified. On
-2026-07-10 Ken ratified the palette direction, the tone thesis, all four
-motifs, and the locale set (see §C decision log). Remaining `PROPOSAL` tags
-mark the values still genuinely undecided (type ramp choice, exact secondary
-hex values, CTA sentence-case grandfathering). Structural and enforcement
+2026-07-10 Ken ratified the palette direction, the tone thesis, and all four
+motifs (see §C decision log). Remaining `PROPOSAL` tags mark the values still
+genuinely undecided (type ramp choice and exact secondary hex values).
+Structural and enforcement
 rules carry no tag and are not pending.
 
 ---
@@ -127,7 +127,7 @@ DO:
 Empty state uses the `encounter-field-empty` Encounter Field asset,
 title "No proofs yet",
 body "Start sensing at an event to collect your first proof.",
-CTA "Sense Event",
+CTA "Sense event",
 background DS.Color.surfaceCanvas.
 
 DON'T:
@@ -539,7 +539,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Pattern: Primary CTA button
 
-- Purpose: The one main action per screen ("Get Started", "Sense Event",
+- Purpose: The one main action per screen ("Get started", "Sense event",
   "Try again", "Done"). A convention, not a reusable component (yet).
 - Rules: `.borderedProminent`, label `DS.Font.cta`, full width inside
   `DS.Space.pageMargin` (compact-width state screens, §7). Tint follows the
@@ -562,16 +562,16 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   benefits as short icon bullets (`BluetoothPermissionView`). Permission
   requests explain value *before* the system prompt.
 - **Collection home (04)**: `NavigationStack` + adaptive `LazyVGrid` of
-  `ProofCardView`; account entry top-trailing; "Sense Event" CTA in the
+  `ProofCardView`; account entry top-trailing; "Sense event" CTA in the
   bottom bar. Empty state (04b) follows the §3 do/don't.
 - **Scan flow (05–06d)**: `fullScreenCover` — sensing is a modal session with
   a clear exit (a trailing close (X) button). Phase progression is linear;
   `SignalLostView` (06d) is the recovery branch and MUST always offer "Try
-  Again".
+  again".
 - **Detail (08)**: push via `navigationDestination(item:)` from the grid.
 - **Account (09)**: `.sheet` with `List` + inline title; wallet
   connect/disconnect lives here in guest-first mode. Destructive actions
-  (`Disconnect Wallet`) use `role: .destructive` and MUST confirm via
+  (`Disconnect wallet`) use `role: .destructive` and MUST confirm via
   `.confirmationDialog`. The current `AccountSheetView` performs the
   disconnect directly; that review-level violation is migration debt, not
   precedent.
@@ -665,23 +665,17 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 ## 15. Copywriting Voice
 
 Language model (Ken decision, 2026-07-10): the app's primary language is
-**English**, localized via String Catalogs to the confirmed locale set
-`en` (source) + `ja`, `zh-Hans`, `es`, `fr` — the full localization process
-lives in `AGENTS.md`.
+**English**, localized via String Catalogs. The current target locale set is
+`en` only, per the owner decision recorded in `AGENTS.md`; no non-English
+translation payloads are part of this phase.
 
 - MUST: All copy is authored in English as the source language; the voice,
   vocabulary, and forbidden-term rules below are defined against English.
-- MUST: Translations preserve the register per locale (calm/factual,
-  ceremonial, recovery — §3); the forbidden-term list maps per language
-  (e.g. the Japanese equivalents of "mint"/"NFT" jargon are equally
-  forbidden).
+- MUST: Any future translations preserve the register per locale
+  (calm/factual, ceremonial, recovery — §3) and map the forbidden-term list
+  for that language.
 - MUST: User-facing strings go through the String Catalog — no hardcoded
   display strings that bypass localization.
-- Per-locale term mapping, Japanese (Ken decision, 2026-07-10): the UI terms
-  are **検知** for "Sensing" and **証明** for "Proof". Do NOT "correct" these
-  to the team-internal vocabulary (センシング / 証) — plain-user readability
-  wins over internal jargon. Future translators: this is a deliberate,
-  ratified choice, not an oversight.
 
 - Vocabulary: "proof", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A proof is **collected** or **sealed**, never "minted",
@@ -822,12 +816,12 @@ inventory evidence. Naming remains governed by §12.
 | 2026-07-09 | Token structure (DS namespace + xcassets), lint rules, section skeleton | Adopted (structural) |
 | 2026-07-10 | Revision round 1 (GPT-Pro audit): lint activation via `only_rules: [custom_rules]` + TEMP-DEBT model, 5 lint rules, `DS.Artwork.proofCardGradient`, accent map + `actionPrimary`, Liquid Glass availability wording, illustrations/custom-symbol split, English-primary copy (String Catalogs) | Adopted (structural; PROPOSAL tags unchanged) |
 | 2026-07 (Figma MTG) | Organizer mode, organizer thresholds, event-code rescue check-in, pre-check-in status transitions flagged as future surfaces (Koya Onodera comments on Minimal v4) | Recorded — out of scope for this slice, see §11 |
-| 2026-07-10 | **Ken ratification**: (1) palette direction — deep ink + quiet teal (`#18C7A7` family) + violet proof seal; Figma Minimal v4 blue resolved against; (2) tone thesis "quiet field instrument" + all four motifs (Encounter Field / Proof Seal / Ledger Trace / Event Artifact) as-is; (3) locale set `en` + `ja`/`zh-Hans`/`es`/`fr`; (4) Japanese UI terms 検知 (Sensing) / 証明 (Proof), not team-internal センシング/証 | Ratified — PROPOSAL tags removed on these four areas; exact secondary hexes, type ramp, CTA sentence-case grandfathering remain PROPOSAL |
+| 2026-07-10 | **Ken ratification**: (1) palette direction — deep ink + quiet teal (`#18C7A7` family) + violet proof seal; Figma Minimal v4 blue resolved against; (2) tone thesis "quiet field instrument" + all four motifs (Encounter Field / Proof Seal / Ledger Trace / Event Artifact) as-is; (3) English as the source language; (4) sentence case for every button and CTA, with proper nouns retaining their casing (for example, MetaMask) | Ratified — all button and CTA casing rules are adopted; exact secondary hexes and type ramp remain PROPOSAL |
 | 2026-07-10 | Revision round 2 (GPT-Pro re-audit, final): TEMP-DEBT path exclusions replaced by checked-in violation-level baseline (`.swiftlint-baseline.json`); regex FP fixes (blanket `.shadow(color:)` scoped, `minLength:` scoped to `Spacer(`, bare `duration:` branch dropped) and FN fixes (`Font.custom`, `.font(Font.…)`); long-tail patterns explicitly demoted to review-level MUST (§16); pinned SwiftLint + `lint-fixtures/` proof pair; `abs(seed)` → `seed.magnitude`; `DS.Motion.sensingPulse` sanctioned token; §2 lint claim scoped to common surface forms | Adopted (enforcement) |
 | 2026-07-10 | Revision round 3 (Fable audit): SwiftLint 0.65 baselines store absolute paths, so the checked-in baseline is replaced by a portable template (`lint/baseline.template.json`, `__REPO_ROOT__` placeholder) + `scripts/lint.sh` that materializes the gitignored per-checkout `.swiftlint-baseline.json` and runs swiftlint; shrink-only policy governs the template | Adopted (enforcement) |
 | 2026-07-12 | Proof-signing feature adds `DS.Color.statusCaution` (declined/timed-out/failed wallet-signature status, deliberately separate from `signalWarning`'s BLE-only scope) and documents `ProofCardView`'s "default only" states note as superseded by `ItemDetailView` and the then-current Screen 07 carrying the new signature states instead of the card itself. Scan Slice-2 later retired separate Screen 07; `ItemDetailView` is the current signing-control surface. | PROPOSAL — Ken ratification pending for the exact `statusCaution` hex values, same as other secondary hexes |
 | 2026-07-27 | Account sheet reskin (Figma `104:463`, `docs/specs/account-redesign.md`) adds `DS.Color.statusOn`/`DS.Color.statusOff` (binary Bluetooth on/off status pair, deliberately separate from `signalWarning`'s BLE-signal-*quality*-only scope, `statusCaution`'s signature-failure-only scope, and `signalActive`'s reserved sensing-screen-accent scope), replacing `AccountSheetView`'s raw `.orange`/`.green` (Non-Negotiable #1 fix). `statusOn`'s hue is sourced from Figma's Bluetooth badge (`#34C759`) but darkened for light mode to clear WCAG AA text contrast (the raw Figma value measures ~2:1 on white, well under the 4.5:1 text minimum); `statusOff` has no Figma reference (Figma's mock never draws the "off" state) and uses a neutral gray pair instead of an alarm hue, since Bluetooth-off in the Account sheet is a neutral toggle state, not the degraded-signal alarm `signalWarning` already owns | PROPOSAL — Ken ratification pending for the exact `statusOn`/`statusOff` hex values, same as other secondary hexes |
-| 2026-07-28 | Collection Home reskin (Figma `104:300`, `docs/specs/collection-redesign.md`) adds `DS.Size.proofCardArtwork` (76 pt) and wires the previously-unused `DS.Artwork.proofCardGradient(seed:)` into `ProofCardView` as a centered circular avatar, replacing the seal icon/checkmark/divider/Peers-verified row (peers count stays on `ItemDetailView`). Bottom "Sense Event" CTA becomes icon-only once proofs exist (labeled CTA retained on the 04b empty state per §3's first-run-discoverability rule); the existing localized "Sense Event" string is retained as the icon button's `.accessibilityLabel`, not removed. `CollectionHomeView`'s empty-state icon fixed to the 32 pt cap (see §12) | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
+| 2026-07-28 | Collection Home reskin (Figma `104:300`, `docs/specs/collection-redesign.md`) adds `DS.Size.proofCardArtwork` (76 pt) and wires the previously-unused `DS.Artwork.proofCardGradient(seed:)` into `ProofCardView` as a centered circular avatar, replacing the seal icon/checkmark/divider/Peers-verified row (peers count stays on `ItemDetailView`). Bottom "Sense event" CTA becomes icon-only once proofs exist (labeled CTA retained on the 04b empty state per §3's first-run-discoverability rule); the existing localized "Sense event" string is retained as the icon button's `.accessibilityLabel`, not removed. `CollectionHomeView`'s empty-state icon fixed to the 32 pt cap (see §12) | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 | 2026-07-28 | Item Detail reskin (Figma `104:407`, `docs/specs/itemdetail-redesign.md`) adds `DS.Size.itemDetailArtwork` (190 pt) and reuses `DS.Artwork.proofCardGradient(seed:)` in `ItemDetailView` at detail scale, replacing the former seal-glyph + "Verified"-label header. The Method/Peers-verified/Status panel drops its plain "Proof" section title and pairs the Status row with a `checkmark.circle.fill` glyph; Status stays a fixed, unconditional "Verified" deliberately decoupled from `Proof.signatureState` (that state has its own distinct readout in `ProofSignatureControlsView` directly below), and Figma's "on-chain" qualifier is dropped as unmodeled and forbidden copy (§15). Figma's venue text ("Tokyo Big Sight") is not rendered — no backing `Proof` field — and the date caption drops to date-only (medium style, no time), matching `ProofCardView`. Figma's custom back/share nav pills are not adopted (standard back button kept; no share action exists in the app). `ProofSignatureControlsView`/`ProofSignatureState`/`Proof`/`ProofStore` are untouched — reskin is display-chrome only, pending Option C. **Superseded (2026-08-11):** Option C landed (gh#88), and the provisional signing path this row names (`ProofSignatureControlsView`) was removed per gh#196 — see the 2026-08-11 row below | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 | 2026-08-11 | AttendanceProof/v1 manual signing path removed (`docs/specs/attendance-proof-v1-removal.md`, gh#196): `ProofSignatureControlsView` (and its call site in `ItemDetailView`, and `AppCoordinator.signProof(_:)`) deleted outright. `Proof.signatureState`, `ProofSignatureState`, `SignatureRecord`, and `SignaturePayload` are kept as-is (Codable-compatibility for historical local data, per `DECISIONS.md`'s 2026-08-09 schema-migration ruling) — they simply never transition again. Item Detail gains no replacement control; the Barnard-conformant binding model (gh#88) is the real protocol-level self-proof mechanism now, surfaced during the connect+binding interstitial, not on this screen | Adopted |
 

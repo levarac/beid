@@ -57,6 +57,15 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
         "Open settings",
     }
 
+    IOS_UI_TEST_SELECTORS = {
+        "Get Started": "Get started",
+        "Sense Event": "Sense event",
+        "Simulate Signal Lost": "Simulate signal lost",
+        "Connect Wallet": "Connect wallet",
+        "Join Event": "Join event",
+        "Leave Event": "Leave event",
+    }
+
     def test_ios_reviewed_button_literals_are_sentence_case(self):
         views = "\n".join(
             p.read_text() for p in (ROOT / "ios/Beid/Views").glob("*.swift")
@@ -101,6 +110,14 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
         )
         for name in self.ANDROID_EXPECTED:
             self.assertIn(f"R.string.{name}", source, name)
+
+    def test_ios_ui_test_selectors_follow_sentence_case_ctas(self):
+        selectors = set()
+        for path in (ROOT / "ios/BeidUITests").glob("*.swift"):
+            selectors.update(re.findall(r'app\.buttons\["([^"]+)"\]', path.read_text()))
+        for old, new in self.IOS_UI_TEST_SELECTORS.items():
+            self.assertNotIn(old, selectors, f"stale UI-test selector: {old}")
+            self.assertIn(new, selectors, f"missing UI-test selector: {new}")
 
 
 if __name__ == "__main__":
