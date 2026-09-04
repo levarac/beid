@@ -39,20 +39,55 @@ data class AndroidScenarioSnapshot(
     val records: List<RecordListItem>,
 )
 
+/** How the read-only renderer may leave a scenario frame. */
+enum class AndroidScenarioAdvance {
+    Automatic,
+    Resume,
+}
+
+data class AndroidScenarioFrame(
+    val snapshot: AndroidScenarioSnapshot,
+    val advance: AndroidScenarioAdvance?,
+)
+
+data class AndroidScenarioPlayback(
+    val scenario: AndroidDemoScenario,
+    val frames: List<AndroidScenarioFrame>,
+)
+
+enum class AndroidScenarioSurface(val identifier: String) {
+    EventJoin("eventJoin"),
+    Records("records"),
+    ;
+
+    companion object {
+        fun named(identifier: String): AndroidScenarioSurface? = entries.firstOrNull { it.identifier == identifier }
+    }
+}
+
 /** The only two application roots MainActivity may select. */
 sealed interface AndroidDataSource {
     data object RealBle : AndroidDataSource
-    data class ReadOnlyScenario(val scenario: AndroidDemoScenario) : AndroidDataSource
+    data class ReadOnlyScenario(
+        val scenario: AndroidDemoScenario,
+        val surface: AndroidScenarioSurface = AndroidScenarioSurface.EventJoin,
+    ) : AndroidDataSource
 }
 
 /**
  * Resolves the Android equivalent of `-beid-demo-scenario <name>`.
  * Missing/unknown values and every non-Debug call remain on real BLE.
  */
-fun selectAndroidDataSource(requestedScenario: String?, scenariosEnabled: Boolean): AndroidDataSource {
+fun selectAndroidDataSource(
+    requestedScenario: String?,
+    scenariosEnabled: Boolean,
+    requestedSurface: String? = null,
+): AndroidDataSource {
     if (!scenariosEnabled) return AndroidDataSource.RealBle
     val scenario = requestedScenario?.let(AndroidDemoScenario::named) ?: return AndroidDataSource.RealBle
-    return AndroidDataSource.ReadOnlyScenario(scenario)
+    val surface = requestedSurface?.let(AndroidScenarioSurface::named)
+        ?: if (requestedSurface == null) AndroidScenarioSurface.EventJoin else return AndroidDataSource.RealBle
+    return AndroidDataSource.ReadOnlyScenario(scenario, surface)
 }
 
 fun AndroidDemoScenario.snapshot(): AndroidScenarioSnapshot {
@@ -74,10 +109,50 @@ fun AndroidDemoScenario.snapshot(): AndroidScenarioSnapshot {
         AndroidDemoScenario.AppReviewGolden -> 5
     }
     val session = ScanEventSession(eventCode)
-    val phase = when (this) {
+    val terminalPhase = when (this) {
         AndroidDemoScenario.ZeroPeersForever -> ScanPhase.Sensing
         AndroidDemoScenario.SignalLostMidway -> ScanPhase.SignalLost(session, peerCount)
         else -> ScanPhase.Recording(session, peerCount)
+    }
+    return snapshot(terminalPhase, peerCount)
+}
+
+/**
+ * A small Android-native rendering sequence mirroring only iOS's proven
+ * phase/park concept. It has no clock, coroutine, coordinator, or effectful
+ * dependency; the Compose host decides when to request the next frame.
+ */
+fun AndroidDemoScenario.playback(): AndroidScenarioPlayback {
+    val terminal = snapshot()
+    val session = ScanEventSession(terminal.eventJoinScreenState.eventCode)
+    val frames = when (this) {
+        AndroidDemoScenario.ZeroPeersForever -> listOf(AndroidScenarioFrame(terminal, null))
+        AndroidDemoScenario.SignalLostMidway -> listOf(
+            AndroidScenarioFrame(snapshot(ScanPhase.Sensing, 0), AndroidScenarioAdvance.Automatic),
+            AndroidScenarioFrame(snapshot(ScanPhase.EventFound(session), 0), AndroidScenarioAdvance.Automatic),
+            AndroidScenarioFrame(snapshot(ScanPhase.Recording(session, 12), 12), AndroidScenarioAdvance.Automatic),
+            AndroidScenarioFrame(snapshot(ScanPhase.SignalLost(session, 12), 12), AndroidScenarioAdvance.Resume),
+            AndroidScenarioFrame(snapshot(ScanPhase.Recording(session, 13), 13), null),
+        )
+        else -> listOf(
+            AndroidScenarioFrame(snapshot(ScanPhase.Sensing, 0), AndroidScenarioAdvance.Automatic),
+            AndroidScenarioFrame(snapshot(ScanPhase.EventFound(session), 0), AndroidScenarioAdvance.Automatic),
+            AndroidScenarioFrame(snapshot(ScanPhase.Recording(session, 1), 1), AndroidScenarioAdvance.Automatic),
+            AndroidScenarioFrame(terminal, null),
+        )
+    }
+    return AndroidScenarioPlayback(this, frames)
+}
+
+private fun AndroidDemoScenario.snapshot(phase: ScanPhase, peerCount: Int): AndroidScenarioSnapshot {
+    val eventCode = when (this) {
+        AndroidDemoScenario.ZeroPeersForever -> "ZERO-PEERS"
+        AndroidDemoScenario.CrowdSurge -> "CROWD-SURGE-2026"
+        AndroidDemoScenario.LongDisplayNames ->
+            "The International Gathering for Open, Verifiable and Durable Local Participation 🌏"
+        AndroidDemoScenario.UnidentifiedHeavy -> "UNIDENTIFIED-HEAVY"
+        AndroidDemoScenario.SignalLostMidway -> "SIGNAL-LOST-MIDWAY"
+        AndroidDemoScenario.AppReviewGolden -> "APP-REVIEW-GOLDEN"
     }
     val records = if (this == AndroidDemoScenario.ZeroPeersForever) {
         emptyList()
