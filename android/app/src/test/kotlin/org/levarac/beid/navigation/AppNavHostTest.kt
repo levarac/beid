@@ -99,6 +99,20 @@ class AppNavHostTest {
     }
 
     @Test
+    fun restoringAnOnboardedUserWithRadioOnStartsNearbyDiscoveryFromEventJoinEntry() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession()
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
+        assertEquals(1, session.nearbyEventDiscoveryStartCalls)
+    }
+
+    @Test
     fun openingAccountFromEventJoinAndLeavingAnActiveSessionCallsSessionLeaveEvent() {
         OnboardingPreferences(context).hasCompletedOnboarding = true
         shadowAdapter.setEnabled(true)

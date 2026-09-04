@@ -32,6 +32,9 @@ interface EventJoinSession {
     /** Every nearby candidate is displayable; only cards with an Event ID are joinable. */
     val nearbyEventCards: StateFlow<List<NearbyEventCard>>
 
+    /** Starts passive nearby-event discovery when the EventJoin surface becomes active. */
+    fun startNearbyEventDiscovery()
+
     fun joinEvent(code: String)
 
     /** Starts the existing native join sequence with the shared-verified Event ID verbatim. */

@@ -596,6 +596,8 @@ class EventJoinCoordinator internal constructor(
         }
     }
 
+    override fun startNearbyEventDiscovery() = startNearbyEventDiscoveryIfIdle()
+
     private fun startNearbyEventDiscoveryIfIdle() {
         if (disposed || scanPhase != ScanPhase.Idle || discoveryOnlyScanOwned) return
         val engineState = engine.getState()

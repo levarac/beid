@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -109,6 +110,7 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
             NearbyEventCards(
                 cards = uiState.nearbyEventCards,
                 selectedEventHashHex = uiState.selectedNearbyEventHashHex,
+                enabled = uiState.sessionState is EventJoinUiState.Idle,
                 onJoin = viewModel::joinNearbyEvent,
             )
 
@@ -206,6 +208,7 @@ fun ManualEventCodeRoute(session: EventJoinSession) {
 private fun NearbyEventCards(
     cards: List<org.levarac.beid.sensing.NearbyEventCard>,
     selectedEventHashHex: String?,
+    enabled: Boolean,
     onJoin: (String) -> Unit,
 ) {
     if (cards.isEmpty()) {
@@ -225,6 +228,7 @@ private fun NearbyEventCards(
                 modifier = Modifier
                     .selectable(
                         selected = selected,
+                        enabled = enabled,
                         onClick = { onJoin(card.eventCodeHashHex) },
                         role = Role.RadioButton,
                     )
@@ -332,6 +336,7 @@ private fun ScanPhaseDetail(
  */
 @Composable
 fun EventJoinRoute(session: EventJoinSession, onOpenAccount: () -> Unit) {
+    LaunchedEffect(session) { session.startNearbyEventDiscovery() }
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
     EventJoinScreen(viewModel, onOpenAccount)
 }

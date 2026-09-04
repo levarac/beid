@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -192,6 +193,29 @@ class EventJoinScreenTest {
         }
         composeTestRule.runOnIdle {
             assertEquals(eventId, session.joinedDiscoveredEventId)
+        }
+    }
+
+    @Test
+    fun activeProofDisablesCandidateRetapAndKeepsTheFirstJoin() {
+        val firstEventId = "0x01"
+        val secondEventId = "0x02"
+        val session = FakeEventJoinSession(
+            initial = EventJoinUiState.Sensing(ScanPhase.Recording(session1, peersVerified = 2)),
+            nearbyEventCards = listOf(
+                NearbyEventCard("Other beacon", secondEventId, 100L, 200L, "2222222222222222"),
+            ),
+        )
+        session.joinNearbyEvent(firstEventId)
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("2222222222222222"))
+            .assertIsNotEnabled()
+            .performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(firstEventId, session.joinedDiscoveredEventId)
         }
     }
 

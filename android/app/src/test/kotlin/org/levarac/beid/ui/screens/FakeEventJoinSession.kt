@@ -29,6 +29,8 @@ internal class FakeEventJoinSession(
         private set
     var permissionRequested: Boolean = false
         private set
+    var nearbyEventDiscoveryStartCalls: Int = 0
+        private set
     var leaveEventCallCount: Int = 0
         private set
 
@@ -47,6 +49,10 @@ internal class FakeEventJoinSession(
     override fun requestBluetoothPermission(onComplete: () -> Unit) {
         permissionRequested = true
         onComplete()
+    }
+
+    override fun startNearbyEventDiscovery() {
+        nearbyEventDiscoveryStartCalls += 1
     }
 
     override fun simulateSignalLost() {

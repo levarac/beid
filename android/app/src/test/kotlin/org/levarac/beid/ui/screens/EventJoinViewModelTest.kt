@@ -184,4 +184,19 @@ class EventJoinViewModelTest {
         assertNull(session.joinedDiscoveredEventId, "an expired selection must not retarget another card")
         assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)
     }
+
+    @Test
+    fun disappearingSelectionFallsBackToTheOnlyRemainingCandidate() = runTest {
+        val selected = NearbyEventCard("Selected", "0x01", 100L, 200L, "1111111111111111")
+        val remaining = NearbyEventCard("Remaining", "0x02", 100L, 200L, "2222222222222222")
+        val session = FakeEventJoinSession(nearbyEventCards = listOf(selected, remaining))
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(selected.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
+
+        session.emitNearbyEventCards(listOf(remaining))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(remaining.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
+    }
 }
