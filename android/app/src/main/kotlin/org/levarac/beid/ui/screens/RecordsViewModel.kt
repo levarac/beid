@@ -19,6 +19,7 @@ import org.levarac.beid.persistence.ProofRecordStore
  * kdoc).
  */
 class RecordsViewModel(proofRecordStore: ProofRecordStore) : ViewModel() {
+    // TODO(beid#341/#122): merge canonical ledger windows when the detail model can represent them.
     private val _records = MutableStateFlow(sortedByRecency(proofRecordStore.recordsFlow.value))
     val records: StateFlow<List<ProofRecord>> = _records.asStateFlow()
 

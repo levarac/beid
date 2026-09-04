@@ -10,7 +10,7 @@ import java.io.File
  * [BindingMessageTest]/[SelfProofMessageLayoutTest]/
  * [BarnardSensingCryptographyTest].
  */
-internal class FakeSensingCryptography(
+internal open class FakeSensingCryptography(
     private val eventSigningPublicKeyResult: ByteArray = byteArrayOf(0x02) + ByteArray(32) { 0x33.toByte() },
     private val ownerPublicKeyResult: ByteArray = byteArrayOf(0x03) + ByteArray(32) { 0x44.toByte() },
     private val signWindowReportResult: SensingRecoverableSignature = SensingRecoverableSignature(
@@ -63,7 +63,7 @@ internal class FakeSensingCryptography(
         return ownerPublicKeyResult
     }
 
-    override fun signWindowReport(eventCode: String, bytes: ByteArray): SensingRecoverableSignature {
+    override open fun signWindowReport(eventCode: String, bytes: ByteArray): SensingRecoverableSignature {
         calls += Call.SignWindowReport(eventCode, bytes)
         return signWindowReportResult
     }

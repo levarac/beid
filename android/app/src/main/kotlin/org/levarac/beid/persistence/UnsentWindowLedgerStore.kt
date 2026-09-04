@@ -140,6 +140,8 @@ internal class UnsentWindowLedgerStore private constructor(
         private const val MAX_QUARANTINED_SNAPSHOT_COUNT = 5
         private const val QUARANTINE_INFIX = ".corrupt-"
 
+        fun defaultFile(filesDir: File): File = File(filesDir, "unsent-window-ledger-v1.snapshot")
+
         private fun lockFor(path: String): Any = locksByPath.computeIfAbsent(path) { Any() }
 
         private fun canonicalPathKey(file: File): String =
