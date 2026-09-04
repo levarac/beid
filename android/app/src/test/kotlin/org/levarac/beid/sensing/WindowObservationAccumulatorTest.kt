@@ -1,5 +1,6 @@
 package org.levarac.beid.sensing
 
+import java.io.IOException
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.Test
@@ -7,6 +8,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertFailsWith
 import org.levarac.beid.shared.report.confirmUnsentWindowLedgerPersistence
 import org.levarac.beid.shared.report.createUnsentWindowLedger
 import org.levarac.beid.shared.report.openUnsentWindow
@@ -77,6 +79,29 @@ class WindowObservationAccumulatorTest {
     }
 
     @Test
+    fun boundaryPersistsEligibleBufferedWindowWhenVerifiedContextArrivedAfterItsLastDetection() {
+        val directory = Files.createTempDirectory("window-late-context-boundary").toFile()
+        val ledgerFile = directory.resolve("ledger.snapshot")
+        var observationContext: WindowObservationContext? = null
+        val cryptography = VectorCryptography()
+        val accumulator = WindowObservationAccumulator(
+            context = { observationContext }, cryptography = cryptography,
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile), observationDirectory = directory.resolve("observations"),
+            nowEpochSeconds = { 1_800_000_000.75 },
+            newWindowId = sequenceIds(), ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
+        )
+        accumulator.observe(6_000_000, RPID_TWO, REPORTER_RPID, recording = true)
+        accumulator.observe(6_000_000, RPID_ONE, REPORTER_RPID, recording = true)
+
+        observationContext = VECTOR_CONTEXT
+        accumulator.observe(6_000_001, RPID_ONE, REPORTER_RPID, recording = false)
+
+        assertContentEquals(EXPECTED_SIGNATURE_STRUCTURE.hexBytes(), cryptography.signedBytes)
+        assertEquals(2L, assertNotNull(UnsentWindowLedgerStore(ledgerFile).load()).persistenceRevision)
+        assertEquals(1, directory.resolve("observations").listFiles().orEmpty().size)
+    }
+
+    @Test
     fun ineligibleEvidenceDoesNotCreateADurableOpenWindow() {
         val directory = Files.createTempDirectory("window-ineligible").toFile()
         val ledgerFile = directory.resolve("ledger.snapshot")
@@ -91,6 +116,32 @@ class WindowObservationAccumulatorTest {
         accumulator.close()
 
         assertFalse(ledgerFile.exists(), "shared-ineligible evidence must never create an uncloseable durable row")
+    }
+
+    @Test
+    fun failedOpenPersistenceDoesNotAdvanceMemoryAndCanRetryTheSameWindow() {
+        val directory = Files.createTempDirectory("window-open-persistence-retry").toFile()
+        val ledgerFile = directory.resolve("ledger.snapshot")
+        val accumulator = WindowObservationAccumulator(
+            context = { VECTOR_CONTEXT }, cryptography = VectorCryptography(),
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile), observationDirectory = directory.resolve("observations"),
+            nowEpochSeconds = { 1_800_000_000.75 },
+            newWindowId = { UUID.fromString(WINDOW_ID) },
+            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
+        )
+        check(ledgerFile.mkdir())
+
+        assertFailsWith<IOException> {
+            accumulator.observe(6_000_000, RPID_ONE, REPORTER_RPID, recording = true)
+        }
+
+        check(ledgerFile.delete())
+        accumulator.observe(6_000_000, RPID_ONE, REPORTER_RPID, recording = true)
+        accumulator.observe(6_000_000, RPID_TWO, REPORTER_RPID, recording = true)
+        accumulator.close()
+
+        assertEquals(2L, assertNotNull(UnsentWindowLedgerStore(ledgerFile).load()).persistenceRevision)
+        assertEquals(1, directory.resolve("observations").listFiles().orEmpty().size)
     }
 
     @Test

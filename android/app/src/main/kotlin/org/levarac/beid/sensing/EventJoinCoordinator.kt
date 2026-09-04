@@ -232,6 +232,7 @@ class EventJoinCoordinator internal constructor(
         engine.requestPermissions { result ->
             if (disposed) return@requestPermissions
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
+                windowObservationRuntime?.beginEvent(code)
                 engine.joinEvent(code)
                 resolveObservationContext(code)
                 discoveryOnlyScanOwned = false
@@ -311,6 +312,7 @@ class EventJoinCoordinator internal constructor(
             rpid = rpid,
             reporterRpid = reporterRpid,
             recording = scanPhase is ScanPhase.Recording,
+            eventCode = engine.getCurrentEventCode(),
         )
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }

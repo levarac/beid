@@ -16,6 +16,38 @@ import org.levarac.beid.shared.report.reconcileUnsentWindowLedgerAfterRelaunch
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorWindowLedgerTest {
     @Test
+    fun joiningAnotherEventClosesTheOpenWindowBeforeAcceptingItsDetections() = runTest {
+        val directory = Files.createTempDirectory("window-event-change").toFile()
+        val owner = WindowObservationRuntimeOwner(
+            newWindowId = { java.util.UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },
+            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
+        )
+        val cryptography = vectorCryptography()
+        val firstEngine = FakeEventJoinEngine()
+        val first = coordinator(firstEngine, directory, owner, cryptography)
+        first.joinEvent("event-a")
+        first.acceptVerifiedObservationContext(EVENT_A_VECTOR_CONTEXT)
+        emitRecordingWindow(firstEngine)
+        first.dispose()
+
+        val replacementEngine = FakeEventJoinEngine()
+        val replacement = coordinator(replacementEngine, directory, owner, cryptography)
+        replacement.joinEvent("event-b")
+        replacement.acceptVerifiedObservationContext(EVENT_B_DISTINCT_CONTEXT)
+        replacementEngine.emitDetection(6_000_000, RPID_THREE, "device-b", REPORTER_RPID)
+        replacement.leaveEvent()
+
+        val sign = cryptography.calls.filterIsInstance<FakeSensingCryptography.Call.SignWindowReport>().single()
+        assertEquals("event-a", sign.eventCode)
+        val signatureStructureHex = sign.bytes.toHexString()
+        assertTrue(EVENT_A_VECTOR_CONTEXT.eventIdHex in signatureStructureHex)
+        assertTrue(EVENT_A_VECTOR_CONTEXT.eventDefinitionDigestHex in signatureStructureHex)
+        assertFalse(EVENT_B_DISTINCT_CONTEXT.eventIdHex in signatureStructureHex)
+        assertFalse(EVENT_B_DISTINCT_CONTEXT.eventDefinitionDigestHex in signatureStructureHex)
+        assertFalse(RPID_THREE in signatureStructureHex, "event-B RPID must not be added to event-A's signed window")
+    }
+
+    @Test
     fun disposedCoordinatorCannotReplaceTheReplacementEventContextWithALateCompletion() = runTest {
         val directory = Files.createTempDirectory("window-late-context").toFile()
         val owner = WindowObservationRuntimeOwner(
@@ -156,11 +188,14 @@ class EventJoinCoordinatorWindowLedgerTest {
         const val REPORTER_RPID = "0110101010101010101010101010101010"
         const val RPID_ONE = "0111111111111111111111111111111111"
         const val RPID_TWO = "0122222222222222222222222222222222"
+        const val RPID_THREE = "0133333333333333333333333333333333"
         const val SIGNATURE_R = "d9b39668ed2e92db7226461f059a1ecd06a732bd5bfdae0b23d43390a8025349"
         const val SIGNATURE_S = "462b3ecfaa8305881ad1a8b8960e9f3f1e6770683e0c178543613de942c8b765"
         val VECTOR_CONTEXT = WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
+        val EVENT_A_VECTOR_CONTEXT = WindowObservationContext("event-a", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
         val EVENT_A_CONTEXT = WindowObservationContext("event-a", "31".repeat(32), "32".repeat(32), "ab".repeat(32))
         val EVENT_B_CONTEXT = WindowObservationContext("event-b", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
+        val EVENT_B_DISTINCT_CONTEXT = WindowObservationContext("event-b", "41".repeat(32), "42".repeat(32), "ab".repeat(32))
     }
 }
 

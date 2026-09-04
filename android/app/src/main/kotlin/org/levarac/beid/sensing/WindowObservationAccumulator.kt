@@ -38,6 +38,8 @@ internal class WindowObservationRuntime internal constructor(
     fun updateContext(context: WindowObservationContext?) {
         contextState.value = context
     }
+
+    fun beginEvent(eventCode: String): Boolean = accumulator.beginEvent(eventCode)
 }
 
 /** Owns the Activity-independent open-window runtime for one Android process. */
@@ -100,13 +102,26 @@ internal class WindowObservationAccumulator(
     private var openedWindowId: UUID? = null
     private var openedContext: WindowObservationContext? = null
     private var openedReporterRpid: String? = null
+    private var activeEventCode: String? = null
+    private var recordingObserved = false
 
     init {
         if (reconcileAfterRelaunch) reconcileDurableArtifactsAfterRelaunch()
     }
 
-    fun observe(enin: Long, rpid: String, reporterRpid: String?, recording: Boolean) {
-        if (this.enin != null && this.enin != enin && !closeCurrentWindow()) return
+    fun beginEvent(eventCode: String): Boolean {
+        val previousEventCode = activeEventCode ?: openedContext?.eventCode ?: context()?.eventCode
+        if (previousEventCode != null && previousEventCode != eventCode && !close()) return false
+        activeEventCode = eventCode
+        return true
+    }
+
+    fun observe(enin: Long, rpid: String, reporterRpid: String?, recording: Boolean, eventCode: String? = context()?.eventCode) {
+        if (eventCode != null && !beginEvent(eventCode)) return
+        if (this.enin != null && this.enin != enin) {
+            openCurrentWindowIfEligible()
+            if (!closeCurrentWindow()) return
+        }
         if (this.enin == null) this.enin = enin
         val normalizedRpid = rpid.lowercase()
         val openedId = openedWindowId
@@ -122,20 +137,30 @@ internal class WindowObservationAccumulator(
         }
         if (acceptedRpid) rpids += normalizedRpid
         if (this.reporterRpid == null) this.reporterRpid = reporterRpid?.lowercase()
-        if (recording && openedWindowId == null) {
-            val id = newWindowId()
-            val openingContext = context() ?: return
-            val openingReporter = this.reporterRpid ?: return
-            if (preparedObservation(id, openingContext, openingReporter, rpids) == null) return
-            apply(openUnsentWindow(ledger, id.toString().lowercase()))
-            openedWindowId = id
-            openedContext = openingContext
-            openedReporterRpid = openingReporter
-        }
+        recordingObserved = recordingObserved || recording
+        openCurrentWindowIfEligible()
     }
 
     /** Closes only an actual ENIN/session boundary. Lifecycle cleanup must not call this. */
-    fun close(): Boolean = closeCurrentWindow()
+    fun close(): Boolean {
+        openCurrentWindowIfEligible()
+        return closeCurrentWindow()
+    }
+
+    private fun openCurrentWindowIfEligible(): Boolean {
+        if (openedWindowId != null) return true
+        if (!recordingObserved) return false
+        val openingContext = context() ?: return false
+        if (activeEventCode != null && openingContext.eventCode != activeEventCode) return false
+        val openingReporter = reporterRpid ?: return false
+        val id = newWindowId()
+        if (preparedObservation(id, openingContext, openingReporter, rpids) == null) return false
+        apply(openUnsentWindow(ledger, id.toString().lowercase()))
+        openedWindowId = id
+        openedContext = openingContext
+        openedReporterRpid = openingReporter
+        return true
+    }
 
     private fun closeCurrentWindow(): Boolean {
         val id = openedWindowId
@@ -188,14 +213,17 @@ internal class WindowObservationAccumulator(
         openedWindowId = null
         openedContext = null
         openedReporterRpid = null
+        recordingObserved = false
     }
 
     private fun apply(transition: org.levarac.beid.shared.report.UnsentWindowLedgerTransition) {
         check(transition.isSuccess) { "Shared ledger rejected transition: ${transition.errorCode}" }
-        ledger = transition.ledger
-        if (!transition.changed) return
+        if (!transition.changed) {
+            ledger = transition.ledger
+            return
+        }
         val revision = ledgerStore.persist(transition)
-        ledger = confirmUnsentWindowLedgerPersistence(ledger, revision).ledger
+        ledger = confirmUnsentWindowLedgerPersistence(transition.ledger, revision).ledger
     }
 
     private fun persistObservation(windowIdHex: String, digest: String, bytes: ByteArray) {
