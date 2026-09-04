@@ -3,17 +3,18 @@
 
 import Foundation
 
-/// Generic, file-level version envelope for the proof-bearing on-device
-/// JSON stores this project treats as one group (`ProofStore`,
-/// `BindingRecordStore`, `SelfProofStore`, `SelfProofCheckpointStore` —
-/// beid#155, beid#135).
+/// Generic, file-level version envelope for the on-device JSON stores this
+/// project treats as one group: the four proof-bearing stores wired in
+/// beid#155/beid#135 (`ProofStore`, `BindingRecordStore`, `SelfProofStore`,
+/// `SelfProofCheckpointStore`) plus `VenueDeviceAssignmentStore` and
+/// `SessionAggregateSnapshotStore`, wired in beid#281.
 ///
 /// ## Why native Swift, not a `shared/` KMP family
 ///
 /// `docs/kmp-shared-foundation.md`'s ownership boundary puts a persistence
 /// format in `shared/` when both iOS and Android must produce the same
 /// answer for it (see e.g. `UnsentWindowLedgerSnapshot.kt`, shared for
-/// exactly that reason). These four files have only one reader today, and
+/// exactly that reason). These six files have only one reader today, and
 /// the foundation manual's family ledger does not list these types at all —
 /// starting a new shared family inside a bug-fix PR would violate that
 /// manual's §1 classify-before-code process, not follow it. The trigger is
@@ -36,7 +37,7 @@ import Foundation
 /// a *newer* build wrote (e.g. one already containing an enum case this
 /// build does not know). That reverse direction is not live today — there
 /// is no supported app-downgrade path, and no cross-device sync of these
-/// four stores exists yet. If cross-device sync (beid#198) ships, that
+/// six stores exists yet. If cross-device sync (beid#198) ships, that
 /// direction becomes live, and this envelope alone will not cover it: it
 /// would need forward-compatible tolerant decoding (e.g. an unknown enum
 /// case mapped to an explicit fallback rather than thrown) or a

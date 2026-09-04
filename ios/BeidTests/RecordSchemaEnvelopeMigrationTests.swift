@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import BarnardCore
+import BeidSharedKit
 import Foundation
 import XCTest
 @testable import Beid
@@ -241,5 +242,138 @@ final class RecordSchemaEnvelopeMigrationTests: XCTestCase {
     // The file on disk must be untouched -- still the schemaVersion:999
     // envelope, not rewritten or removed.
     XCTAssertEqual(try Data(contentsOf: fileURL), futureVersionFixture)
+  }
+
+  // MARK: - VenueDeviceAssignment (array-of-records store)
+
+  func testVenueDeviceAssignmentStoreV0FixtureMigratesToVersionedEnvelopeOnNextSave() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-migration-venue-device-assignment")
+    let fileURL = directory.appendingPathComponent("venue-device-assignments.json")
+    let recordID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    let v0Fixture = Data("""
+    [{"id":"11111111-1111-1111-1111-111111111111","label":"Entrance A","validityStart":730000000,"validityEnd":730003600,"assignedAt":730000000}]
+    """.utf8)
+    try v0Fixture.write(to: fileURL, options: .atomic)
+
+    // (a) the v0 fixture loads, unquarantined.
+    let store = VenueDeviceAssignmentStore(fileURL: fileURL)
+    XCTAssertEqual(store.records.count, 1)
+    XCTAssertEqual(store.records.first?.id, recordID)
+    XCTAssertEqual(store.records.first?.label, "Entrance A")
+    XCTAssertNil(store.quarantinedFileURL)
+
+    // (b) triggering a save rewrites the file as the versioned envelope.
+    let now = Date()
+    store.add(
+      VenueDeviceAssignmentRecord(
+        label: "Side Door",
+        validityStart: now,
+        validityEnd: now.addingTimeInterval(3600),
+        assignedAt: now
+      )
+    )
+    try assertFileIsNowVersionedEnvelope(at: fileURL)
+
+    // (c) a fresh store against the now-rewritten file reloads correctly.
+    let reloaded = VenueDeviceAssignmentStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.records.count, 2)
+    XCTAssertTrue(reloaded.records.contains { $0.id == recordID && $0.label == "Entrance A" })
+    XCTAssertTrue(reloaded.records.contains { $0.label == "Side Door" })
+    XCTAssertNil(reloaded.quarantinedFileURL)
+  }
+
+  func testVenueDeviceAssignmentStoreMalformedV0FileIsQuarantinedNotSilentlyEmptied() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-migration-venue-device-assignment-malformed")
+    let fileURL = directory.appendingPathComponent("venue-device-assignments.json")
+    // Valid JSON array syntax, but missing the required `label` field -- must
+    // still be treated as corrupt (a `DecodingError`), not as an empty v0 file.
+    let malformedFixture = Data("""
+    [{"id":"33333333-3333-3333-3333-333333333333","validityStart":730000000,"validityEnd":730003600,"assignedAt":730000000}]
+    """.utf8)
+    try malformedFixture.write(to: fileURL, options: .atomic)
+
+    let store = VenueDeviceAssignmentStore(fileURL: fileURL)
+
+    XCTAssertTrue(store.records.isEmpty)
+    let quarantinedURL = try XCTUnwrap(store.quarantinedFileURL)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: quarantinedURL.path))
+    XCTAssertEqual(try Data(contentsOf: quarantinedURL), malformedFixture)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+  }
+
+  // MARK: - SessionAggregateSnapshot (array-of-records store)
+
+  func testSessionAggregateSnapshotStoreV0FixtureMigratesToVersionedEnvelopeOnNextSave() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-migration-session-aggregate-snapshot")
+    let fileURL = directory.appendingPathComponent("session-aggregate-snapshots.json")
+    let proofID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+    let v0Fixture = Data("""
+    [{"proofId":"22222222-2222-2222-2222-222222222222","snapshotText":"opaque-shared-encoded-text","createdAt":730000000}]
+    """.utf8)
+    try v0Fixture.write(to: fileURL, options: .atomic)
+
+    // (a) the v0 fixture loads, unquarantined.
+    let store = SessionAggregateSnapshotStore(fileURL: fileURL)
+    XCTAssertEqual(store.records.count, 1)
+    XCTAssertEqual(store.records.first?.proofId, proofID)
+    XCTAssertEqual(store.records.first?.snapshotText, "opaque-shared-encoded-text")
+    XCTAssertNil(store.quarantinedFileURL)
+
+    // (b) triggering a write via the public `persist` API rewrites the file as
+    // the versioned envelope.
+    let secondProofID = UUID()
+    try store.persist(aggregate: makeAggregate(deviceId: "device-a"), proofId: secondProofID)
+    try assertFileIsNowVersionedEnvelope(at: fileURL)
+
+    // (c) a fresh store against the now-rewritten file reloads correctly.
+    let reloaded = SessionAggregateSnapshotStore(fileURL: fileURL)
+    XCTAssertEqual(reloaded.records.count, 2)
+    XCTAssertTrue(reloaded.records.contains { $0.proofId == proofID })
+    XCTAssertTrue(reloaded.records.contains { $0.proofId == secondProofID })
+    XCTAssertNil(reloaded.quarantinedFileURL)
+  }
+
+  func testSessionAggregateSnapshotStoreMalformedV0FileIsQuarantinedNotSilentlyEmptied() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-migration-session-aggregate-snapshot-malformed")
+    let fileURL = directory.appendingPathComponent("session-aggregate-snapshots.json")
+    // Valid JSON array syntax, but missing the required `snapshotText` field --
+    // must still be treated as corrupt (a `DecodingError`), not as an empty v0
+    // file.
+    let malformedFixture = Data("""
+    [{"proofId":"44444444-4444-4444-4444-444444444444","createdAt":730000000}]
+    """.utf8)
+    try malformedFixture.write(to: fileURL, options: .atomic)
+
+    let store = SessionAggregateSnapshotStore(fileURL: fileURL)
+
+    XCTAssertTrue(store.records.isEmpty)
+    let quarantinedURL = try XCTUnwrap(store.quarantinedFileURL)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: quarantinedURL.path))
+    XCTAssertEqual(try Data(contentsOf: quarantinedURL), malformedFixture)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+  }
+
+  // MARK: - Helpers
+
+  /// Reproduced from `SessionAggregateSnapshotStoreTests.makeAggregate`
+  /// rather than imported across test files -- builds a minimal
+  /// successfully-aggregated `SessionAggregate` for `persist(aggregate:
+  /// proofId:)` to encode.
+  private func makeAggregate(
+    deviceId: String? = nil,
+    windowIndex: Int64 = 100
+  ) -> BeidSharedKit.aggregation.SessionAggregate {
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    _ = BeidSharedKit.aggregation.addAggregationObservation(
+      input: input,
+      windowIndex: windowIndex,
+      peerKey: "peer-\(windowIndex)",
+      displayId: deviceId,
+      mutual: false
+    )
+    return BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input,
+      windowsPerBand: 4
+    )
   }
 }

@@ -44,7 +44,7 @@ final class VenueDeviceAssignmentStore: ObservableObject {
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
     do {
       let data = try Data(contentsOf: fileURL)
-      records = try JSONDecoder().decode([VenueDeviceAssignmentRecord].self, from: data)
+      records = try RecordSchemaEnvelope.decodeRecords(VenueDeviceAssignmentRecord.self, from: data)
     } catch {
       let outcome = CorruptStoreQuarantine.resolve(
         loadFailure: error,
@@ -58,7 +58,7 @@ final class VenueDeviceAssignmentStore: ObservableObject {
 
   private func save() {
     guard !isPersistenceSuspended else { return }
-    guard let data = try? JSONEncoder().encode(records) else { return }
+    guard let data = try? RecordSchemaEnvelope.encodeRecords(records) else { return }
     try? data.write(to: fileURL, options: .atomic)
   }
 }

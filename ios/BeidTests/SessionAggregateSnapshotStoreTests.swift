@@ -29,8 +29,8 @@ final class SessionAggregateSnapshotStoreTests: XCTestCase {
     XCTAssertEqual(restored.windowCount, aggregate.windowCount)
     XCTAssertEqual(restored.bandCount, aggregate.bandCount)
 
-    let onDiskRecords = try JSONDecoder().decode(
-      [SessionAggregateSnapshotRecord].self,
+    let onDiskRecords = try RecordSchemaEnvelope.decodeRecords(
+      SessionAggregateSnapshotRecord.self,
       from: Data(contentsOf: fileURL)
     )
     let onDiskRecord = try XCTUnwrap(onDiskRecords.first { $0.proofId == proofId })
