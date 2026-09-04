@@ -10,10 +10,16 @@ import SwiftUI
 /// `docs/specs/visibility-aggregation-ui.md` §4 for the full design
 /// rationale and the acceptance-criteria mapping.
 ///
-/// iOS-only for now: Android has no post-join screen flow at all yet
-/// (AGENTS.md's current-state paragraph — `EventJoinCoordinator` stops at
-/// `Idle`/`RequestingPermission`/`Sensing`/`PermissionDenied`), so there is
-/// no Android surface for this to extend.
+/// iOS-only for now: Android's own record-detail screen
+/// (`RecordDetailScreen`, `android/.../ui/screens/RecordDetailScreen.kt`,
+/// beid#122) covers this same content — a devices-sensed metric row and a
+/// time-band buildup section (unconditionally "Not yet available" today,
+/// tracked by beid#327) — but was ported separately as a Compose composable
+/// rather than sharing this SwiftUI view, per AGENTS.md's ownership boundary
+/// (`shared/` owns decisions both platforms must answer identically; UI and
+/// its presentation are native/product concerns on each side). This view
+/// still has no Android counterpart being *shared*, only a
+/// separately-implemented one with the same content.
 ///
 /// Historically scoped, per `Proof.id` (beid#166 Phase 1,
 /// `SessionAggregateSnapshotStore.snapshot(proofId:)`) — reachable from

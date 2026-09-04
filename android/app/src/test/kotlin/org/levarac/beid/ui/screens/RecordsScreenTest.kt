@@ -1,7 +1,6 @@
 package org.levarac.beid.ui.screens
 
 import android.content.Context
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -77,7 +76,7 @@ class RecordsScreenTest {
     @Test
     fun emptyListRendersTheEmptyStateMessage() {
         composeTestRule.setContent {
-            BeidAppTheme { RecordsScreen(records = emptyList()) }
+            BeidAppTheme { RecordsScreen(records = emptyList(), onOpenDetail = {}) }
         }
 
         composeTestRule.onNodeWithText(context.getString(R.string.records_empty_message)).assertIsDisplayed()
@@ -102,7 +101,7 @@ class RecordsScreenTest {
         val record = record(eventCode = "DEVCON-SEA", peersVerified = 5)
 
         composeTestRule.setContent {
-            BeidAppTheme { RecordsScreen(records = listOf(record)) }
+            BeidAppTheme { RecordsScreen(records = listOf(record), onOpenDetail = {}) }
         }
 
         composeTestRule.onNodeWithText("DEVCON-SEA").assertIsDisplayed()
@@ -114,7 +113,7 @@ class RecordsScreenTest {
         val record = record(hasSelfProof = false, hasBinding = false)
 
         composeTestRule.setContent {
-            BeidAppTheme { RecordsScreen(records = listOf(record)) }
+            BeidAppTheme { RecordsScreen(records = listOf(record), onOpenDetail = {}) }
         }
 
         composeTestRule.onNodeWithText(context.getString(R.string.records_signature_status_not_signed)).assertIsDisplayed()
@@ -125,7 +124,7 @@ class RecordsScreenTest {
         val record = record(hasSelfProof = true, hasBinding = false)
 
         composeTestRule.setContent {
-            BeidAppTheme { RecordsScreen(records = listOf(record)) }
+            BeidAppTheme { RecordsScreen(records = listOf(record), onOpenDetail = {}) }
         }
 
         composeTestRule.onNodeWithText(context.getString(R.string.records_signature_status_self_proof)).assertIsDisplayed()
@@ -136,22 +135,28 @@ class RecordsScreenTest {
         val record = record(hasSelfProof = true, hasBinding = true)
 
         composeTestRule.setContent {
-            BeidAppTheme { RecordsScreen(records = listOf(record)) }
+            BeidAppTheme { RecordsScreen(records = listOf(record), onOpenDetail = {}) }
         }
 
         composeTestRule.onNodeWithText(context.getString(R.string.records_signature_status_bound)).assertIsDisplayed()
     }
 
-    /** No tap-to-detail on this slice (beid#122 is a separate, not-yet-built issue) — rows are inert. */
+    /** Tap-to-detail (beid#122): tapping a row navigates to the detail screen for that row's own record id, never another row's. */
     @Test
-    fun rowsHaveNoClickAction() {
-        val record = record()
+    fun tappingARowInvokesOnOpenDetailWithThatRowsRecordId() {
+        val tapped = record(eventCode = "TAPPED")
+        val other = record(eventCode = "OTHER")
+        val openedIds = mutableListOf<UUID>()
 
         composeTestRule.setContent {
-            BeidAppTheme { RecordsScreen(records = listOf(record)) }
+            BeidAppTheme {
+                RecordsScreen(records = listOf(tapped, other), onOpenDetail = { openedIds += it })
+            }
         }
 
-        composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(record.id)).assertHasNoClickAction()
+        composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(tapped.id)).performClick()
+
+        assertEquals(listOf(tapped.id), openedIds)
     }
 
     @Test
@@ -160,7 +165,7 @@ class RecordsScreenTest {
         val second = record(eventCode = "SECOND")
 
         composeTestRule.setContent {
-            BeidAppTheme { RecordsScreen(records = listOf(first, second)) }
+            BeidAppTheme { RecordsScreen(records = listOf(first, second), onOpenDetail = {}) }
         }
 
         composeTestRule.onNodeWithText("FIRST").assertIsDisplayed()

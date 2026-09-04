@@ -8,6 +8,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
+import java.time.Instant
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Rule
@@ -15,6 +17,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.levarac.beid.onboarding.OnboardingPreferences
+import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.ScanPhase
@@ -23,6 +26,7 @@ import org.levarac.beid.ui.screens.BluetoothOffScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothPermissionScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
+import org.levarac.beid.ui.screens.RecordDetailScreenTestTags
 import org.levarac.beid.ui.screens.RecordsScreenTestTags
 import org.levarac.beid.ui.screens.TodaySummaryScreenTestTags
 import org.levarac.beid.ui.screens.WelcomeScreenTestTags
@@ -161,6 +165,35 @@ class AppNavHostTest {
         composeTestRule.onNodeWithTag(RecordsScreenTestTags.TODAY_BUTTON).performClick()
 
         composeTestRule.onNodeWithTag(TodaySummaryScreenTestTags.EMPTY_STATE).assertIsDisplayed()
+    }
+
+    /** Tap-to-detail (beid#122), end-to-end through the real nav graph, not just the pure composable. */
+    @Test
+    fun tappingARecordRowFromRecordsOpensItsOwnDetailScreen() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession()
+        val store = proofRecordStore()
+        val record = ProofRecord(
+            id = UUID.randomUUID(),
+            eventCode = "ETHTOKYO2026",
+            createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            peersVerified = 5,
+            hasSelfProof = true,
+            hasBinding = false,
+        )
+        store.add(record)
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session, store) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.RECORDS_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(RecordsScreenTestTags.recordRow(record.id)).performClick()
+
+        composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.SELF_PROOF_VALUE).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.BINDING_VALUE).assertIsDisplayed()
     }
 
     @Test

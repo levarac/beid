@@ -1,5 +1,7 @@
 package org.levarac.beid.navigation
 
+import java.util.UUID
+
 /**
  * Navigation destinations — the Compose-Navigation equivalent of iOS's
  * `AppScreen` enum (`ios/Beid/Navigation/AppScreen.swift`). [EventJoin]
@@ -26,4 +28,18 @@ sealed class Screen(val route: String) {
      */
     data object Records : Screen("records")
     data object TodaySummary : Screen("today_summary")
+
+    /**
+     * Detail screen for one collected proof (beid#122), reached by tapping a
+     * [Records] row. Carries the record's id as a path segment — the first
+     * parameterized route in this file — rather than passing the whole
+     * [org.levarac.beid.persistence.ProofRecord] through the nav graph, so
+     * the destination always re-reads current store state instead of a
+     * stale snapshot captured at navigation time.
+     */
+    data object RecordDetail : Screen("records/{recordId}") {
+        const val RECORD_ID_ARG: String = "recordId"
+
+        fun route(recordId: UUID): String = "records/$recordId"
+    }
 }

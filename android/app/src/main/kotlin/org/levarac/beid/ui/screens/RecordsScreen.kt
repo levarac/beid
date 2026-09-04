@@ -1,5 +1,6 @@
 package org.levarac.beid.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
@@ -80,8 +81,6 @@ fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
  *   field to source one from yet, so [toRecordListItem] uses the raw
  *   [ProofRecord.eventCode]. Read-only scenarios may supply an intentionally
  *   long display label without creating a persistable [ProofRecord].
- * - No tap-to-detail: rows carry no `clickable` modifier. The detail screen
- *   is beid#122, a separate, not-yet-built issue.
  * - Production signature status is mapped from [ProofRecord.hasSelfProof]/
  *   [ProofRecord.hasBinding] record *presence*, never a ported
  *   `ProofSignatureState`/wallet-`personal_sign` mirror — that mechanism is
@@ -107,9 +106,18 @@ fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
  * plain, centered `Text` idiom iOS's own `PastEventsView` already uses for
  * this exact case (no icon), rather than inventing new UI or an
  * unauthorized dependency change.
+ *
+ * **Tap-to-detail** (beid#122): each row is clickable and navigates to
+ * [RecordDetailScreen] carrying the tapped [ProofRecord.id], via
+ * [onOpenDetail] — the same callback-threading shape [AccountRoute]'s
+ * `onOpenRecords` already established.
  */
 @Composable
-fun RecordsScreen(records: List<RecordListItem>, onOpenToday: () -> Unit = {}) {
+fun RecordsScreen(
+    records: List<RecordListItem>,
+    onOpenToday: () -> Unit = {},
+    onOpenDetail: (UUID) -> Unit = {},
+) {
     BeidScreen {
         Text(
             text = stringResource(R.string.records_title),
@@ -140,18 +148,25 @@ fun RecordsScreen(records: List<RecordListItem>, onOpenToday: () -> Unit = {}) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
             ) {
-                items(records, key = { it.id.toString() }) { record -> RecordRow(record) }
+                items(records, key = { it.id.toString() }) { record ->
+                    RecordRow(record, onClick = { onOpenDetail(record.id) })
+                }
             }
         }
     }
 }
 
-private val recordDateFormatter: DateTimeFormatter =
+/** Shared with [RecordDetailScreen] (same package) so both screens format a date identically. */
+internal val recordDateFormatter: DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
 
 @Composable
-private fun RecordRow(record: RecordListItem) {
-    BeidPanel(modifier = Modifier.testTag(RecordsScreenTestTags.recordRow(record.id))) {
+private fun RecordRow(record: RecordListItem, onClick: () -> Unit) {
+    BeidPanel(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .testTag(RecordsScreenTestTags.recordRow(record.id)),
+    ) {
         Text(
             text = record.eventLabel,
             style = MaterialTheme.typography.titleMedium,
@@ -187,16 +202,24 @@ private fun signatureStatusPill(record: RecordListItem) {
  * [EventJoinRoute]/[AccountRoute].
  */
 @Composable
-fun RecordsRoute(proofRecordStore: ProofRecordStore, onOpenToday: () -> Unit) {
+fun RecordsRoute(
+    proofRecordStore: ProofRecordStore,
+    onOpenToday: () -> Unit,
+    onOpenDetail: (UUID) -> Unit,
+) {
     val viewModel: RecordsViewModel = viewModel(factory = RecordsViewModel.Factory(proofRecordStore))
     val records by viewModel.records.collectAsState()
-    RecordsScreen(records = records.map(ProofRecord::toRecordListItem), onOpenToday = onOpenToday)
+    RecordsScreen(
+        records = records.map(ProofRecord::toRecordListItem),
+        onOpenToday = onOpenToday,
+        onOpenDetail = onOpenDetail,
+    )
 }
 
 @Preview(name = "Empty", showBackground = true)
 @Composable
 private fun RecordsScreenEmptyPreview() {
     BeidAppTheme {
-        RecordsScreen(records = emptyList())
+        RecordsScreen(records = emptyList(), onOpenDetail = {})
     }
 }
