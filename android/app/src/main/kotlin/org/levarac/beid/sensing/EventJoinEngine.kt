@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import org.levarac.barnard.BarnardDebugEvent
 import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardPermissionResult
@@ -56,6 +57,12 @@ internal class BarnardEventJoinEngine(activity: Activity) : EventJoinEngine {
         get() = engine.onEvent
         set(value) {
             engine.onEvent = value
+        }
+
+    internal var onDebugEvent: ((BarnardDebugEvent) -> Unit)?
+        get() = engine.onDebugEvent
+        set(value) {
+            engine.onDebugEvent = value
         }
 
     override fun requestPermissions(callback: (BarnardPermissionResult) -> Unit) {
