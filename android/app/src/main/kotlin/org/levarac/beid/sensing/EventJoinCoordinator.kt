@@ -228,10 +228,12 @@ class EventJoinCoordinator internal constructor(
     }
 
     override fun joinEvent(code: String) {
-        if (disposed) return
+        if (!canBeginJoin()) return
         _state.value = EventJoinUiState.RequestingPermission
         engine.requestPermissions { result ->
-            if (disposed) return@requestPermissions
+            if (disposed || scanPhase != ScanPhase.Idle || _state.value != EventJoinUiState.RequestingPermission) {
+                return@requestPermissions
+            }
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
                 windowObservationRuntime?.beginEvent(code)
                 engine.joinEvent(code)
@@ -244,6 +246,12 @@ class EventJoinCoordinator internal constructor(
             }
         }
     }
+
+    private fun canBeginJoin(): Boolean =
+        !disposed &&
+            scanPhase == ScanPhase.Idle &&
+            _state.value !is EventJoinUiState.RequestingPermission &&
+            _state.value !is EventJoinUiState.Sensing
 
     override fun joinNearbyEvent(eventIdHex: String) = joinEvent(eventIdHex)
 

@@ -186,11 +186,29 @@ class EventJoinViewModelTest {
     }
 
     @Test
+    fun emptyToMultipleCandidatesRemainsUnselected() = runTest {
+        val first = NearbyEventCard("First", "0x01", 100L, 200L, "1111111111111111")
+        val second = NearbyEventCard("Second", "0x02", 100L, 200L, "2222222222222222")
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        session.emitNearbyEventCards(listOf(first, second))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)
+    }
+
+    @Test
     fun disappearingSelectionFallsBackToTheOnlyRemainingCandidate() = runTest {
         val selected = NearbyEventCard("Selected", "0x01", 100L, 200L, "1111111111111111")
         val remaining = NearbyEventCard("Remaining", "0x02", 100L, 200L, "2222222222222222")
-        val session = FakeEventJoinSession(nearbyEventCards = listOf(selected, remaining))
+        val session = FakeEventJoinSession(nearbyEventCards = listOf(selected))
         val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(selected.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
+
+        session.emitNearbyEventCards(listOf(selected, remaining))
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(selected.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
 

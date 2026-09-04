@@ -3,6 +3,7 @@ package org.levarac.beid.sensing
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -41,6 +42,34 @@ private fun fakeStatus(canScan: Boolean, canAdvertise: Boolean): BarnardPermissi
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorHooksTest {
+    @Test
+    fun staleJoinActionCannotReplaceAnActiveProofOrResetItsAccountingAndBinding() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val proofIds = mutableListOf<UUID>()
+        val peerUpdates = mutableListOf<Pair<UUID, Int>>()
+        coordinator.onProofCollected = { proofId, _, _ -> proofIds += proofId }
+        coordinator.onPeersVerifiedChanged = { proofId, peersVerified -> peerUpdates += proofId to peersVerified }
+
+        coordinator.joinEvent("FIRST-EVENT")
+        assertEquals("FIRST-EVENT", engine.getCurrentEventCode(), "an Idle session must still admit the initial join")
+        assertEquals(1, engine.startAutoCalls)
+        confirmRecording(engine)
+        val firstProofId = proofIds.single()
+        val firstBinding = assertIs<EventBindingState.PendingConnect>(coordinator.bindingState)
+
+        coordinator.joinNearbyEvent("SECOND-EVENT")
+
+        assertEquals("FIRST-EVENT", engine.getCurrentEventCode(), "a stale action must not replace the active engine event")
+        assertEquals(1, engine.startAutoCalls, "a stale action must not restart the engine")
+        assertEquals(firstBinding, coordinator.bindingState, "a stale action must not clear the active proof's binding state")
+
+        engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
+
+        assertEquals(listOf(firstProofId to 4), peerUpdates, "the first proof identity and its device accounting must survive")
+        assertEquals(listOf(firstProofId), proofIds, "the stale action must not create a replacement proof")
+    }
+
     @Test
     fun onProofCollectedFiresExactlyOnceAtFirstConfirmWithTheCorrectValues() = runTest {
         val engine = FakeEventJoinEngine()

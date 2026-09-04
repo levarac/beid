@@ -66,7 +66,6 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
                         cards.any { card -> card.eventCodeHashHex == it.selectedNearbyEventHashHex } ->
                             it.selectedNearbyEventHashHex
                         cards.size == 1 -> cards.single().eventCodeHashHex
-                        it.nearbyEventCards.isEmpty() -> cards.first().eventCodeHashHex
                         else -> null
                     }
                     it.copy(
