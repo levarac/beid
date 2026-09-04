@@ -2,7 +2,6 @@ import json
 import re
 import unittest
 import tempfile
-import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -59,27 +58,62 @@ def swift_cta_literals(root):
     values = []
     for path in (root / "ios/Beid").rglob("*.swift"):
         text = path.read_text()
-        for body in balanced_calls(text, ["BeidPrimaryButton", "BeidSecondaryButton", "Button"]):
-            values += re.findall(r'"([^"\n]+)"', body)
-        for m in re.finditer(r"\bButton\s*\{", text):
-            action = balanced_brace(text, text.find("{", m.start()))
-            tail_start = m.start() + len(m.group(0)) + len(action)
-            label = re.search(r"\blabel\s*:\s*\{", text[tail_start:])
-            if label:
-                label_start = tail_start + label.end() - 1
-                body = balanced_brace(text, label_start)
-                values += re.findall(r'\b(?:Label|Text)\s*\(\s*"([^"\n]+)"', body)
-                end = label_start + len(body)
-                # Modifiers belong to the trailing label closure's Button
-                # chain. Stop at its closing declaration, not a character
-                # window, so a later unrelated control is never included.
-                modifier_tail = text[end:]
-                boundary = re.search(r"\n\s*\}\n", modifier_tail)
-                if boundary:
-                    modifier_tail = modifier_tail[:boundary.start()]
-                values += re.findall(r'\.accessibilityLabel\s*\(\s*(?:Text\s*\(\s*)?"([^"\n]+)"', modifier_tail)
-            values += re.findall(r'\.accessibilityLabel\s*\(\s*(?:Text\s*\(\s*)?"([^"\n]+)"', action)
+        for m in re.finditer(r"\b(?:BeidPrimaryButton|BeidSecondaryButton|Button)\b", text):
+            pos = m.end()
+            had_call = False
+            while pos < len(text) and text[pos].isspace(): pos += 1
+            if pos < len(text) and text[pos] == "(":
+                bodies = balanced_calls(text[m.start():], [m.group(0)])
+                if bodies:
+                    body = bodies[0]
+                    values += re.findall(r'"([^"\n]+)"', body)
+                    pos = m.start() + len(body)
+                    had_call = True
+            while pos < len(text) and text[pos].isspace(): pos += 1
+            if pos < len(text) and text[pos] == "{":
+                first = balanced_brace(text, pos)
+                pos += len(first)
+                label_match = re.match(r"\s*label\s*:\s*\{", text[pos:])
+                if label_match:
+                    label_start = pos + label_match.end() - 1
+                    label = balanced_brace(text, label_start)
+                    pos = label_start + len(label)
+                    values += re.findall(r'\b(?:Label|Text)\s*\(\s*"([^"\n]+)"', label)
+                elif had_call:
+                    label = first
+                    values += re.findall(r'\b(?:Label|Text)\s*\(\s*"([^"\n]+)"', label)
+                values += re.findall(r'\.accessibilityLabel\s*\(\s*(?:Text\s*\(\s*)?"([^"\n]+)"', text[pos:pos + 500])
     return values
+
+
+def ui_test_selectors(root):
+    selectors = []
+    for path in (root / "ios/BeidUITests").rglob("*.swift"):
+        text = path.read_text()
+        for m in re.finditer(r"app\s*\.\s*buttons\s*\[", text):
+            start = m.end(); depth = 1; quote = False; escaped = False
+            for i in range(start, len(text)):
+                ch = text[i]
+                if quote:
+                    if escaped: escaped = False
+                    elif ch == "\\": escaped = True
+                    elif ch == '"': quote = False
+                elif ch == '"': quote = True
+                elif ch == "[": depth += 1
+                elif ch == "]":
+                    depth -= 1
+                    if depth == 0:
+                        expr = text[start:i].strip()
+                        literal = re.fullmatch(r'"([^"\n]*)"', expr)
+                        if literal:
+                            selectors.append(literal.group(1)); break
+                        strings = balanced_calls(expr, ["String"])
+                        if strings:
+                            inner = re.search(r'"([^"\n]*)"', strings[0])
+                            if inner:
+                                selectors.append(inner.group(1)); break
+                        raise AssertionError(f"uninspectable selector: {expr}")
+    return selectors
 
 
 def android_cta_resources(root):
@@ -104,9 +138,7 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
         self.assertTrue(all(sentence_case(v.replace("\\'", "'")) for v in values.values()), values)
 
     def test_all_ui_test_button_selectors_are_sentence_case(self):
-        selectors = []
-        for path in (ROOT / "ios/BeidUITests").rglob("*.swift"):
-            selectors += re.findall(r'app\s*\.\s*buttons\s*\[\s*"([^"\n]+)"\s*\]', path.read_text())
+        selectors = ui_test_selectors(ROOT)
         self.assertGreater(len(selectors), 20)
         self.assertTrue(all(sentence_case(v) for v in selectors), selectors)
 
@@ -142,9 +174,23 @@ class SentenceCaseCTAContractTests(unittest.TestCase):
             ui = root / "ios/BeidUITests/Mutation.swift"
             ui.parent.mkdir(parents=True)
             ui.write_text('app\n  .buttons[\n    "Get Started"\n  ]')
-            selectors = re.findall(r'app\s*\.\s*buttons\s*\[\s*"([^"\n]+)"\s*\]', ui.read_text())
+            selectors = ui_test_selectors(root)
             self.assertEqual(["Get Started"], selectors)
             self.assertFalse(sentence_case(selectors[0]))
+
+            standard = root / "ios/Beid/Views/Standard.swift"
+            standard.write_text('Button(action: { }) {\n  VStack { Text("Join Event") }\n}')
+            self.assertIn("Join Event", swift_cta_literals(root))
+
+            android_xml = root / "android/app/src/main/res/values/strings.xml"
+            android_xml.parent.mkdir(parents=True, exist_ok=True)
+            android_xml.write_text('<resources><string name="mutated">Enter Event Code</string></resources>')
+            kotlin = root / "android/app/src/main/kotlin/Mutation.kt"
+            kotlin.parent.mkdir(parents=True, exist_ok=True)
+            kotlin.write_text('BeidPrimaryButton(text = stringResource(R.string.mutated)) {}')
+            mutated = android_cta_resources(root)
+            self.assertEqual("Enter Event Code", mutated["mutated"])
+            self.assertFalse(sentence_case(mutated["mutated"]))
 
 
 if __name__ == "__main__":
