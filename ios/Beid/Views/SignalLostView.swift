@@ -48,7 +48,7 @@ struct SignalLostView: View {
       // SignalLostView to always offer it), but the handler it calls
       // resumes the same session in place — never `startSensing`, which
       // would discard `peersVerified` and re-create the `Proof` (§5.4).
-      BeidPrimaryButton("Try Again", systemImage: "arrow.clockwise", labelColor: DS.Color.labelOnWarning) {
+      BeidPrimaryButton("Try again", systemImage: "arrow.clockwise", labelColor: DS.Color.labelOnWarning) {
         coordinator.sensingCoordinator.resumeSensing()
       }
       }

@@ -134,7 +134,7 @@ struct CollectionHomeView: View {
   @ViewBuilder
   private var scanButton: some View {
     if coordinator.proofStore.proofs.isEmpty {
-      BeidPrimaryButton("Sense Event", systemImage: "dot.radiowaves.left.and.right") {
+      BeidPrimaryButton("Sense event", systemImage: "dot.radiowaves.left.and.right") {
         coordinator.startScan()
       }
     } else {
@@ -148,7 +148,7 @@ struct CollectionHomeView: View {
         }
       }
       .buttonBorderShape(.circle)
-      .accessibilityLabel("Sense Event")
+      .accessibilityLabel("Sense event")
     }
   }
 

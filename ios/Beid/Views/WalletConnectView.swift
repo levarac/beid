@@ -155,7 +155,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
         subtitle: "This wallet can't be used right now. Try again in a moment.",
         tint: DS.Color.actionPrimary
       )
-      BeidSecondaryButton(title: "Start Over") {
+      BeidSecondaryButton(title: "Start over") {
         chooseAnotherWallet()
       }
       .tint(DS.Color.actionPrimary)
@@ -301,7 +301,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
         .foregroundStyle(DS.Color.textSecondary)
         .multilineTextAlignment(.center)
       VStack(spacing: DS.Space.s) {
-        BeidSecondaryButton(title: "Try Again") {
+        BeidSecondaryButton(title: "Try again") {
           // Light in-app cancel, not forget-wallet (dispatch#26 condition 3)
           // — leaves the SDK session and cached hint alone.
           client.cancelPendingOperation()
@@ -309,7 +309,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
         }
         .tint(DS.Color.actionPrimary)
 
-        BeidSecondaryButton(title: "Start Over") {
+        BeidSecondaryButton(title: "Start over") {
           chooseAnotherWallet()
         }
         .tint(DS.Color.actionPrimary)
@@ -336,7 +336,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
         }
         .tint(DS.Color.actionPrimary)
 
-        BeidSecondaryButton(title: "Start Over") {
+        BeidSecondaryButton(title: "Start over") {
           chooseAnotherWallet()
         }
         .tint(DS.Color.actionPrimary)

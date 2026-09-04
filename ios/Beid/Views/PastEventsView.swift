@@ -66,7 +66,7 @@ struct PastEventsView: View {
   /// concept, so per AGENTS.md's key-reuse rule this is an explicit-key
   /// case, not two one-off literals.
   private var navigationTitle: String {
-    String(localized: "account.pastEvents.label", defaultValue: "Past Events")
+    String(localized: "account.pastEvents.label", defaultValue: "Past events")
   }
 
   @ViewBuilder

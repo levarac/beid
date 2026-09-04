@@ -693,9 +693,8 @@ lives in `AGENTS.md`.
   the product says so plainly where relevant — settings/about copy states
   what is and isn't cryptographically guaranteed, upfront, in one sentence.
   No overclaiming ("tamper-proof", "trustless") anywhere.
-- Grammar: sentence case everywhere, including buttons ("Sense Event" is
-  grandfathered until ratification; new CTAs use sentence case —
-  `PROPOSAL — Ken ratification pending`). No exclamation marks. Present
+- Grammar: sentence case everywhere, including all buttons and CTAs. Proper
+  nouns keep their casing, such as MetaMask. No exclamation marks. Present
   tense. Second person only when instructing.
 - Error formula: what happened + why + one action. Model:
   "beid lost the connection to {event}. Move closer and we'll pick it back

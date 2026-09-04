@@ -27,7 +27,7 @@ struct BluetoothOffView: View {
       },
       footer: {
         VStack(spacing: DS.Space.s) {
-          BeidPrimaryButton("Open Settings", systemImage: "gearshape", labelColor: DS.Color.labelOnWarning) {
+          BeidPrimaryButton("Open settings", systemImage: "gearshape", labelColor: DS.Color.labelOnWarning) {
             coordinator.sensingCoordinator.reset()
             UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
           }

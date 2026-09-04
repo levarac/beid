@@ -148,10 +148,10 @@
     "Get MetaMask": {
       "comment": "Button: opens the App Store page for MetaMask."
     },
-    "Get Started": {},
+    "Get started": {},
     "I've turned it on": {},
     "Install MetaMask to connect directly.": {},
-    "Join Event": {},
+    "Join event": {},
     "Keep beid open nearby to collect proof of attendance.": {},
     "MetaMask is not installed": {},
     "Method": {},
@@ -244,7 +244,7 @@
         }
       }
     },
-    "Open Settings": {},
+    "Open settings": {},
     "Pairing URI": {},
     "Peers": {},
     "Privacy": {},
@@ -256,7 +256,7 @@
     "Scan": {
       "comment": "Screen title for the scan/sensing flow's modal header (noun, the name of the flow, not an instruction to scan something)."
     },
-    "Sense Event": {},
+    "Sense event": {},
     "Sensing": {},
     "Sensing automatically": {},
     "Sensing paused": {
@@ -286,7 +286,7 @@
     "Signing declined": {},
     "Signing deferred": {},
     "Signing failed": {},
-    "Simulate Signal Lost": {},
+    "Simulate signal lost": {},
     "Status": {},
     "Stored": {},
     "status.recordedOnDevice": {
@@ -301,13 +301,13 @@
       }
     },
     "Switch it on": {},
-    "Start Over": {
+    "Start over": {
       "comment": "Button: abandons the current wallet-connect attempt and returns to the start of the flow."
     },
     "Tap Bluetooth": {},
     "Tap Sense Event to start collecting proof of attendance automatically.": {},
     "The request timed out. Try again once your wallet is reachable.": {},
-    "Try Again": {},
+    "Try again": {},
     "Verified": {},
     "Verifying proof": {},
     "Waiting for wallet to approve…": {},
@@ -320,12 +320,12 @@
     "Your attendance proof is ready to be added to your collection.": {},
     "Zero effort": {},
     "account.joinEvent.label": {
-      "comment": "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages.",
+      "comment": "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join event\" in English but is a separate translation unit and may need different wording in other languages.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Join Event"
+            "value": "Join event"
           }
         }
       }
@@ -859,7 +859,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Past Events"
+            "value": "Past events"
           }
         }
       }

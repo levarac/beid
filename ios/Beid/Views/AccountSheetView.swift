@@ -51,7 +51,7 @@ struct AccountSheetView: View {
               BeidDesign.haptic()
               coordinator.connectWalletFromAccountSheet()
             } label: {
-              Label("Connect Wallet", systemImage: "wallet.pass")
+              Label("Connect wallet", systemImage: "wallet.pass")
             }
           }
         }
@@ -77,7 +77,7 @@ struct AccountSheetView: View {
           NavigationLink {
             VenueDeviceOrganizerView(sensingCoordinator: coordinator.sensingCoordinator)
           } label: {
-            Label("Venue Device", systemImage: "antenna.radiowaves.left.and.right")
+            Label("Venue device", systemImage: "antenna.radiowaves.left.and.right")
           }
         }
 
@@ -86,7 +86,7 @@ struct AccountSheetView: View {
             BeidDesign.haptic(.medium)
             coordinator.disconnectWallet()
           } label: {
-            Label("Disconnect Wallet", systemImage: "rectangle.portrait.and.arrow.right")
+            Label("Disconnect wallet", systemImage: "rectangle.portrait.and.arrow.right")
           }
           .disabled(coordinator.walletAddress == nil)
         }
@@ -288,7 +288,7 @@ private struct EventMembershipSections: View {
           BeidDesign.haptic(.medium)
           coordinator.leaveEvent()
         } label: {
-          Label("Leave Event", systemImage: "rectangle.portrait.and.arrow.right")
+          Label("Leave event", systemImage: "rectangle.portrait.and.arrow.right")
         }
         .disabled(sensingCoordinator.joinedEventCode == nil)
       }
@@ -298,7 +298,7 @@ private struct EventMembershipSections: View {
   private var joinEventLabel: String {
     String(
       localized: "account.joinEvent.label",
-      defaultValue: "Join Event",
+      defaultValue: "Join event",
       comment: "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages."
     )
   }
@@ -306,7 +306,7 @@ private struct EventMembershipSections: View {
   private var pastEventsLabel: String {
     String(
       localized: "account.pastEvents.label",
-      defaultValue: "Past Events",
+      defaultValue: "Past events",
       comment: "Menu row in the Account sheet that opens the list of previously joined events (beid#230), for rejoining one without retyping its code."
     )
   }

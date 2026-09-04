@@ -99,7 +99,7 @@ struct RecordingView: View {
       // recording indefinitely otherwise.
       #if DEBUG
       if sensing.useDemoEventMode {
-        Button("Simulate Signal Lost", role: .destructive) {
+        Button("Simulate signal lost", role: .destructive) {
           BeidDesign.haptic(.medium)
           sensing.simulateSignalLost()
         }

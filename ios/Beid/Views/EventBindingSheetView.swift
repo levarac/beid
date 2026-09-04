@@ -206,7 +206,7 @@ struct EventBindingSheetView: View {
         .font(DS.Font.meta)
         .foregroundStyle(DS.Color.textSecondary)
         .multilineTextAlignment(.center)
-      BeidSecondaryButton(title: "Try Again") {
+      BeidSecondaryButton(title: "Try again") {
         sensing.declineBinding()
       }
       .tint(DS.Color.actionPrimary)

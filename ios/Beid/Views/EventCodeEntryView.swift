@@ -95,7 +95,7 @@ struct EventCodeEntryView: View {
         Spacer()
 
         VStack(spacing: DS.Space.s) {
-          BeidPrimaryButton("Join Event", systemImage: "checkmark.circle", action: submit)
+          BeidPrimaryButton("Join event", systemImage: "checkmark.circle", action: submit)
             .tint(DS.Color.actionPrimary)
 
           if mode == .onboarding {

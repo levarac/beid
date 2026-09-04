@@ -4,7 +4,7 @@
     <!-- Screen 01: Welcome (mirrors iOS's WelcomeView). -->
     <string name="welcome_title">beid</string>
     <string name="welcome_subtitle">Prove you were there. Automatically.</string>
-    <string name="welcome_get_started">Get Started</string>
+    <string name="welcome_get_started">Get started</string>
 
     <!-- Screen 02: Bluetooth-permission explanation (mirrors iOS's BluetoothPermissionView). -->
     <string name="bluetooth_permission_title">Enable Bluetooth</string>
@@ -24,7 +24,7 @@
     <string name="bluetooth_off_step_open_settings">Open Settings</string>
     <string name="bluetooth_off_step_tap_bluetooth">Tap Bluetooth</string>
     <string name="bluetooth_off_step_switch_on">Switch it on</string>
-    <string name="bluetooth_off_open_settings_button">Open Settings</string>
+    <string name="bluetooth_off_open_settings_button">Open settings</string>
     <string name="bluetooth_off_turned_on_button">I\'ve turned it on</string>
 
     <string name="event_join_title">Join an event</string>
@@ -71,7 +71,7 @@
     <!-- Bluetooth status badge text: the phone's Bluetooth radio is powered off. -->
     <string name="account_bluetooth_status_off">Off</string>
     <!-- Destructive-named (not destructive-colored) action: leaves the currently joined event. -->
-    <string name="account_leave_event_button">Leave Event</string>
+    <string name="account_leave_event_button">Leave event</string>
     <!-- Nav row on the Account screen (mirrors iOS's AccountSheetView "Past Events" row) that opens the Records screen. -->
     <string name="account_records_button">Records</string>
 

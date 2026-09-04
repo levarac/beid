@@ -20,7 +20,7 @@ struct WelcomeView: View {
         subtitle: "Prove you were there. Automatically."
       )
     } footer: {
-      BeidPrimaryButton("Get Started", systemImage: "arrow.right") {
+      BeidPrimaryButton("Get started", systemImage: "arrow.right") {
         coordinator.beginOnboarding()
       }
     }
