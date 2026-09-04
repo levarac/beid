@@ -1,11 +1,15 @@
 package org.levarac.beid.ui.screens
 
 import android.content.Context
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.time.Instant
@@ -132,6 +136,31 @@ class RecordDetailScreenTest {
 
         composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.TIME_BAND_BUILDUP_VALUE)
             .assertTextEquals(notYetAvailableText)
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w320dp-h240dp")
+    fun allFiveRowsRemainReachableByScrollingAtLargeFontInAShortWindow() {
+        composeTestRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = density.density, fontScale = 2f),
+            ) {
+                BeidAppTheme { RecordDetailScreen(record = record()) }
+            }
+        }
+
+        listOf(
+            R.string.record_detail_devices_sensed_label,
+            R.string.record_detail_self_proof_label,
+            R.string.record_detail_binding_label,
+            R.string.record_detail_mutual_confirmation_label,
+            R.string.record_detail_time_band_buildup_label,
+        ).forEach { labelRes ->
+            composeTestRule.onNodeWithText(context.getString(labelRes))
+                .performScrollTo()
+                .assertIsDisplayed()
+        }
     }
 
     @Test
