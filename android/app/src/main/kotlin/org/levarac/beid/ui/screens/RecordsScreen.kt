@@ -24,6 +24,7 @@ import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.ui.designsystem.BeidMetricRow
 import org.levarac.beid.ui.designsystem.BeidPanel
+import org.levarac.beid.ui.designsystem.BeidSecondaryButton
 import org.levarac.beid.ui.designsystem.BeidScreen
 import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -36,6 +37,7 @@ import org.levarac.beid.ui.theme.BeidTheme
  */
 object RecordsScreenTestTags {
     const val EMPTY_STATE = "records_empty_state"
+    const val TODAY_BUTTON = "records_today_button"
     fun recordRow(id: UUID): String = "records_row_$id"
 }
 
@@ -82,12 +84,20 @@ object RecordsScreenTestTags {
  * unauthorized dependency change.
  */
 @Composable
-fun RecordsScreen(records: List<ProofRecord>) {
+fun RecordsScreen(records: List<ProofRecord>, onOpenToday: () -> Unit = {}) {
     BeidScreen {
         Text(
             text = stringResource(R.string.records_title),
             style = MaterialTheme.typography.headlineLarge,
             color = BeidTheme.colors.textPrimary,
+        )
+
+        BeidSecondaryButton(
+            text = stringResource(R.string.records_today_button),
+            contentColor = BeidTheme.colors.textPrimary,
+            borderColor = BeidTheme.colors.strokeHairline,
+            onClick = onOpenToday,
+            modifier = Modifier.testTag(RecordsScreenTestTags.TODAY_BUTTON),
         )
 
         if (records.isEmpty()) {
@@ -152,10 +162,10 @@ private fun signatureStatusPill(record: ProofRecord) {
  * [EventJoinRoute]/[AccountRoute].
  */
 @Composable
-fun RecordsRoute(proofRecordStore: ProofRecordStore) {
+fun RecordsRoute(proofRecordStore: ProofRecordStore, onOpenToday: () -> Unit) {
     val viewModel: RecordsViewModel = viewModel(factory = RecordsViewModel.Factory(proofRecordStore))
     val records by viewModel.records.collectAsState()
-    RecordsScreen(records = records)
+    RecordsScreen(records = records, onOpenToday = onOpenToday)
 }
 
 @Preview(name = "Empty", showBackground = true)

@@ -77,4 +77,17 @@
     <string name="records_signature_status_self_proof">Self-proof recorded</string>
     <!-- Signature status pill — a wallet binding has been recorded for this proof, the strongest of the three states. -->
     <string name="records_signature_status_bound">Bound</string>
+
+    <!-- Entry from Records into a separate day-scoped summary surface (beid#342). -->
+    <string name="records_today_button">Today</string>
+    <string name="today_summary_title">Today</string>
+    <plurals name="today_summary_record_count">
+        <item quantity="one">%d proof collected today</item>
+        <item quantity="other">%d proofs collected today</item>
+    </plurals>
+    <string name="today_summary_empty_title">No proofs yet today</string>
+    <string name="today_summary_empty_message">Proofs you collect today will show up here.</string>
+    <string name="today_summary_submission_title">Submission</string>
+    <string name="today_summary_submission_enabled">Not sent yet.</string>
+    <string name="today_summary_submission_disabled">Sending isn\'t turned on for this build.</string>
 </resources>

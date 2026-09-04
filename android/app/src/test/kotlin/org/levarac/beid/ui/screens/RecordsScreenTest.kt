@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import java.time.Instant
 import java.util.UUID
@@ -53,6 +54,20 @@ class RecordsScreenTest {
         }
 
         composeTestRule.onNodeWithText(context.getString(R.string.records_empty_message)).assertIsDisplayed()
+    }
+
+    @Test
+    fun todayEntryOpensTheSeparateDailySummarySurface() {
+        var openTodayCallCount = 0
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordsScreen(records = emptyList(), onOpenToday = { openTodayCallCount++ })
+            }
+        }
+
+        composeTestRule.onNodeWithTag(RecordsScreenTestTags.TODAY_BUTTON).performClick()
+
+        kotlin.test.assertEquals(1, openTodayCallCount)
     }
 
     @Test
