@@ -146,6 +146,10 @@ struct EventCodeEntryView: View {
       return "Enter an event code to continue. Ask the event organizer for it."
     case .joinFailed:
       return "beid couldn't join that event. Check the code and try again."
+    #if DEBUG || BEID_INTERNAL_DEMO
+    case .reservedDemoCodeUnavailable:
+      return "That demo scenario is not available in this build."
+    #endif
     }
   }
 }

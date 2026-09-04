@@ -114,6 +114,13 @@ final class SensingCoordinator: ObservableObject {
   /// event-definition resolution completes; event codes are not sufficient to
   /// derive this value locally.
   @Published private(set) var joinedCanonicalEventIdHex: String?
+  #if DEBUG || BEID_INTERNAL_DEMO
+  /// Reserved-code scenario selected before sensing starts, if any.
+  @Published private(set) var pendingDemoScenarioIdentifier: String?
+  /// Reserved-code scenario currently driving the presentation.
+  @Published private(set) var activeDemoScenarioIdentifier: String?
+  private var pendingReservedDemoScenario: DemoScenario?
+  #endif
   /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
   /// played for the current session. Lives here rather than as view-local
   /// `@State` because `.recording` can be interrupted by `.signalLost` and
@@ -565,7 +572,7 @@ final class SensingCoordinator: ObservableObject {
   private var pendingBindingMessage: BindingMessage?
 
   private var demoStepDelayNanos: UInt64 {
-    #if DEBUG
+    #if DEBUG || BEID_INTERNAL_DEMO
     if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
       return 2_000_000_000
     }
@@ -573,7 +580,7 @@ final class SensingCoordinator: ObservableObject {
     return 700_000_000
   }
 
-  #if DEBUG
+  #if DEBUG || BEID_INTERNAL_DEMO
   /// Forced on for the simulator (no BLE radio); can be overridden for
   /// tests and controlled demo walkthroughs.
   var useDemoEventMode: Bool = {
@@ -1438,12 +1445,25 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
+    #if DEBUG || BEID_INTERNAL_DEMO
+    let reservedDemoScenario = pendingReservedDemoScenario
+    #endif
     let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
     pendingCanonicalEventIdHex = canonicalEventIdHex
     reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
+    #if DEBUG || BEID_INTERNAL_DEMO
+    if let reservedDemoScenario {
+      pendingReservedDemoScenario = nil
+      pendingDemoScenarioIdentifier = nil
+      activeDemoScenarioIdentifier = reservedDemoScenario.identifier
+      useDemoEventMode = true
+      runDemoScenario(reservedDemoScenario, stepDelayNanos: demoStepDelayNanos)
+      return
+    }
+    #endif
     if useDemoEventMode {
       var selectedScenario = demoScenario ?? BeidConfig.demoScenario()
       if let demoEvent {
@@ -1526,6 +1546,16 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func endSensing(stopEngine: Bool) -> SelfProofRecord? {
+    #if DEBUG || BEID_INTERNAL_DEMO
+    if activeDemoScenarioIdentifier != nil {
+      demoTask?.cancel()
+      demoTask = nil
+      clearNearbyEventDiscovery()
+      resetSessionState()
+      phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
+      return nil
+    }
+    #endif
     let selfProof = finalizeSelfProofIfNeeded()
     persistSessionAggregateSnapshotIfNeeded()
     closeFinalWindowIfNeeded()
@@ -1567,7 +1597,21 @@ final class SensingCoordinator: ObservableObject {
     bindingState = .none
     recordingCeremonyShown = false
     entranceCeremonyFinished = false
+    #if DEBUG || BEID_INTERNAL_DEMO
+    pendingReservedDemoScenario = nil
+    pendingDemoScenarioIdentifier = nil
+    activeDemoScenarioIdentifier = nil
+    #endif
   }
+
+  #if DEBUG || BEID_INTERNAL_DEMO
+  /// Selects an internal walkthrough without joining Barnard or persisting
+  /// the reserved code as real event membership.
+  func prepareReservedDemoScenario(_ scenario: DemoScenario) {
+    pendingReservedDemoScenario = scenario
+    pendingDemoScenarioIdentifier = scenario.identifier
+  }
+  #endif
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
 
@@ -1750,7 +1794,16 @@ final class SensingCoordinator: ObservableObject {
   /// drives the same transition through the same shared reducer via
   /// `applyPhaseDecision`).
   private func beginEventFoundSessionState(_ session: EventSession) {
+    #if DEBUG || BEID_INTERNAL_DEMO
+    let reservedDemoIdentifier = activeDemoScenarioIdentifier
+    #endif
     resetSessionState()
+    #if DEBUG || BEID_INTERNAL_DEMO
+    if let reservedDemoIdentifier {
+      activeDemoScenarioIdentifier = reservedDemoIdentifier
+      return
+    }
+    #endif
     let eventSigningKey = sensingCryptography.eventSigningPublicKey(eventCode: session.id)
     let ownerKey = sensingCryptography.ownerPublicKey()
     let salt = Data(randomSource.randomBytes(count: 16))
@@ -1763,6 +1816,9 @@ final class SensingCoordinator: ObservableObject {
   /// consumes this; 2a only sets the state).
   private func beginRecording(event: EventSession, peersVerified: Int) {
     phase = .recording(event: event, peersVerified: peersVerified)
+    #if DEBUG || BEID_INTERNAL_DEMO
+    guard activeDemoScenarioIdentifier == nil else { return }
+    #endif
     let proofId = UUID()
     activeProofId = proofId
     let proof = Proof(id: proofId, eventName: event.name, date: Date(), peersVerified: peersVerified, eventCode: event.id)

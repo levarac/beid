@@ -23,12 +23,22 @@ struct RootView: View {
         CollectionHomeView()
       }
     }
+    #if DEBUG || BEID_INTERNAL_DEMO
+    .overlay {
+      InternalDemoBannerOverlay(sensing: coordinator.sensingCoordinator)
+    }
+    #endif
     .tint(DS.Color.actionPrimary)
     .animation(BeidDesign.Animation.soft, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
-      ScanFlowView(sensing: coordinator.sensingCoordinator)
-        .tint(DS.Color.actionPrimary)
-        .presentationBackground(.regularMaterial)
+      ZStack {
+        ScanFlowView(sensing: coordinator.sensingCoordinator)
+          .tint(DS.Color.actionPrimary)
+          .presentationBackground(.regularMaterial)
+        #if DEBUG || BEID_INTERNAL_DEMO
+        InternalDemoBannerOverlay(sensing: coordinator.sensingCoordinator)
+        #endif
+      }
     }
   }
 }

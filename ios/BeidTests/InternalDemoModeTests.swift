@@ -6,7 +6,6 @@ import XCTest
 @testable import Beid
 
 #if DEBUG || BEID_INTERNAL_DEMO
-@MainActor
 private final class InternalDemoCryptographySpy: SensingCryptography {
   private(set) var operationCount = 0
 
@@ -120,15 +119,50 @@ final class InternalDemoModeTests: XCTestCase {
     XCTAssertNil(coordinator.sensingCoordinator.pendingDemoScenarioIdentifier)
   }
 
+  func testAccountSheetReservedCodeIsInterceptedAndDismissesEntrySheet() async {
+    let coordinator = AppCoordinator(registryClient: nil)
+    coordinator.eventCodeEntrySheetPresented = true
+    var lookupCallCount = 0
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      lookupCallCount += 1
+      return nil
+    }
+
+    let outcome = await coordinator.joinEventFromAccountSheetResolvingCanonicalId(
+      code: "demo-longDisplayNames"
+    )
+
+    XCTAssertEqual(outcome, .completed(nil))
+    XCTAssertEqual(lookupCallCount, 0)
+    XCTAssertFalse(coordinator.eventCodeEntrySheetPresented)
+    XCTAssertNil(coordinator.sensingCoordinator.joinedEventCode)
+    XCTAssertEqual(
+      coordinator.sensingCoordinator.pendingDemoScenarioIdentifier,
+      "longDisplayNames"
+    )
+  }
+
   func testBannerStatePersistsThroughScenarioCompletionSignalLossAndResumeThenClearsOnExit() async {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
     coordinator.prepareReservedDemoScenario(.signalLostMidway)
+
+    XCTAssertTrue(
+      DemoBannerPresentation.isVisible(
+        pendingScenarioIdentifier: coordinator.pendingDemoScenarioIdentifier,
+        activeScenarioIdentifier: coordinator.activeDemoScenarioIdentifier
+      )
+    )
 
     coordinator.startSensing()
     await coordinator.waitForDemoSequenceToFinish()
 
     XCTAssertEqual(coordinator.activeDemoScenarioIdentifier, "signalLostMidway")
-    XCTAssertTrue(DemoBannerPresentation.isVisible(activeScenarioIdentifier: coordinator.activeDemoScenarioIdentifier))
+    XCTAssertTrue(
+      DemoBannerPresentation.isVisible(
+        pendingScenarioIdentifier: coordinator.pendingDemoScenarioIdentifier,
+        activeScenarioIdentifier: coordinator.activeDemoScenarioIdentifier
+      )
+    )
     guard case .signalLost = coordinator.phase else {
       XCTFail("expected signal-lost checkpoint, got \(coordinator.phase)")
       return
@@ -138,13 +172,23 @@ final class InternalDemoModeTests: XCTestCase {
     await coordinator.waitForDemoSequenceToFinish()
 
     XCTAssertEqual(coordinator.activeDemoScenarioIdentifier, "signalLostMidway")
-    XCTAssertTrue(DemoBannerPresentation.isVisible(activeScenarioIdentifier: coordinator.activeDemoScenarioIdentifier))
+    XCTAssertTrue(
+      DemoBannerPresentation.isVisible(
+        pendingScenarioIdentifier: coordinator.pendingDemoScenarioIdentifier,
+        activeScenarioIdentifier: coordinator.activeDemoScenarioIdentifier
+      )
+    )
 
     coordinator.reset()
 
     XCTAssertNil(coordinator.activeDemoScenarioIdentifier)
     XCTAssertNil(coordinator.pendingDemoScenarioIdentifier)
-    XCTAssertFalse(DemoBannerPresentation.isVisible(activeScenarioIdentifier: coordinator.activeDemoScenarioIdentifier))
+    XCTAssertFalse(
+      DemoBannerPresentation.isVisible(
+        pendingScenarioIdentifier: coordinator.pendingDemoScenarioIdentifier,
+        activeScenarioIdentifier: coordinator.activeDemoScenarioIdentifier
+      )
+    )
   }
 
   func testEveryReservedScenarioHasZeroCryptographyOrProofEffects() async {

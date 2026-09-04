@@ -295,6 +295,18 @@ final class AppCoordinator: ObservableObject {
   func joinEventResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
     joinAttemptGeneration += 1
     let generation = joinAttemptGeneration
+    #if DEBUG || BEID_INTERNAL_DEMO
+    if ReservedDemoEventCode.isReserved(code) {
+      switch ReservedDemoEventCode.classify(code, executionEnabled: true) {
+      case .scenario(let scenario):
+        sensingCoordinator.prepareReservedDemoScenario(scenario)
+        screen = .bluetoothPermission
+        return .completed(nil)
+      case .rejected:
+        return .completed(.reservedDemoCodeUnavailable)
+      }
+    }
+    #endif
     let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
     guard generation == joinAttemptGeneration else { return .superseded }
     return .completed(joinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex))
@@ -305,6 +317,18 @@ final class AppCoordinator: ObservableObject {
   func joinEventFromAccountSheetResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
     joinAttemptGeneration += 1
     let generation = joinAttemptGeneration
+    #if DEBUG || BEID_INTERNAL_DEMO
+    if ReservedDemoEventCode.isReserved(code) {
+      switch ReservedDemoEventCode.classify(code, executionEnabled: true) {
+      case .scenario(let scenario):
+        sensingCoordinator.prepareReservedDemoScenario(scenario)
+        eventCodeEntrySheetPresented = false
+        return .completed(nil)
+      case .rejected:
+        return .completed(.reservedDemoCodeUnavailable)
+      }
+    }
+    #endif
     let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
     guard generation == joinAttemptGeneration else { return .superseded }
     return .completed(joinEventFromAccountSheet(code: code, canonicalEventIdHex: canonicalEventIdHex))

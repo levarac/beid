@@ -11,4 +11,8 @@ enum EventCodeJoinError: Equatable {
   case emptyCode
   /// `BarnardEngine.joinEvent(_:)` did not take effect for the entered code.
   case joinFailed
+  #if DEBUG || BEID_INTERNAL_DEMO
+  /// A reserved internal-demo code named no supported deterministic scenario.
+  case reservedDemoCodeUnavailable
+  #endif
 }
