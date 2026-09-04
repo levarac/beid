@@ -97,6 +97,15 @@ class AndroidDeviceLabHarnessContractTests(unittest.TestCase):
         self.assertIn("adb -s <advertiser-serial>", self.doc)
         self.assertIn("adb -s <scanner-serial>", self.doc)
 
+    def test_docs_list_every_result_line_form(self):
+        docs = self.doc
+        self.assertIn("RESULT role=advertiser status=PASS holdSeconds=N", docs)
+        self.assertIn("RESULT role=scanner status=PASS peer=SHORT_ID ms=ELAPSED", docs)
+        self.assertIn("RESULT role=ROLE status=FAIL reason=TOKEN", docs)
+        self.assertIn('"role=$role status=PASS $details"', self.harness)
+        self.assertIn('recordPassResult(ROLE_ADVERTISER, "holdSeconds=$holdSeconds")', self.harness)
+        self.assertIn('status=FAIL reason=', self.harness)
+
 
 if __name__ == "__main__":
     unittest.main()

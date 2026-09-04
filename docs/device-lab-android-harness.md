@@ -21,8 +21,15 @@ BLE scan callback, then reports
 `BarnardEvent.Detection`. A raw `ble_discovery_result` proves that scanning is
 delivering results but is not a PASS: the stronger Detection event shows that
 Barnard completed peer resolution for the joined event. Each invocation also
-prints and logs one terminal, whitespace-free
-`RESULT role=... status=PASS|FAIL ...` line. Its outer test boundary includes
+prints and logs exactly one terminal `RESULT` line made of space-separated
+`key=value` tokens whose values contain no whitespace (any other character is
+replaced by `_`). The three complete forms are:
+
+- `RESULT role=advertiser status=PASS holdSeconds=N`
+- `RESULT role=scanner status=PASS peer=SHORT_ID ms=ELAPSED`
+- `RESULT role=ROLE status=FAIL reason=TOKEN`
+
+Its outer test boundary includes
 runtime-permission setup, Activity launch, the test body, and Activity teardown,
 so a failure in any of those phases produces a FAIL line before it propagates.
 
