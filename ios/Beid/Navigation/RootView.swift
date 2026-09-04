@@ -23,6 +23,9 @@ struct RootView: View {
         CollectionHomeView()
       }
     }
+    .modifier(OwnerKeyRestorationNoticePresenter(
+      sensingCoordinator: coordinator.sensingCoordinator
+    ))
     .tint(DS.Color.actionPrimary)
     .animation(BeidDesign.Animation.soft, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
@@ -30,5 +33,42 @@ struct RootView: View {
         .tint(DS.Color.actionPrimary)
         .presentationBackground(.regularMaterial)
     }
+  }
+}
+
+/// Observes `SensingCoordinator` directly because `AppCoordinator` owns it as
+/// a plain property and does not republish nested changes. Keeping the alert
+/// at the root lets a startup notice appear on whichever onboarding or home
+/// screen is current without changing any route.
+private struct OwnerKeyRestorationNoticePresenter: ViewModifier {
+  @ObservedObject var sensingCoordinator: SensingCoordinator
+
+  func body(content: Content) -> some View {
+    content.alert(item: noticeBinding) { notice in
+      Alert(
+        title: Text(verbatim: notice.title),
+        message: Text(verbatim: notice.message),
+        dismissButton: .default(Text(closeWarningTitle))
+      )
+    }
+  }
+
+  private var noticeBinding: Binding<OwnerKeyRestorationNotice?> {
+    Binding(
+      get: { sensingCoordinator.ownerKeyRestorationNotice },
+      set: { notice in
+        if notice == nil {
+          sensingCoordinator.acknowledgeOwnerKeyRestorationNotice()
+        }
+      }
+    )
+  }
+
+  private var closeWarningTitle: String {
+    String(
+      localized: "ownerKeyRestoration.dismiss",
+      defaultValue: "Close warning",
+      comment: "Button that closes an owner-key restoration warning after the user has read it."
+    )
   }
 }

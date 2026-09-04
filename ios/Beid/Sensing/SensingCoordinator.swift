@@ -87,6 +87,80 @@ enum DemoInterpreterCheckpoint: Equatable {
   case completed
 }
 
+/// User-facing outcome of the two owner-key restoration signals detected at
+/// startup (beid#311). The three non-nil cases keep Signal A, Signal B, and
+/// their overlap distinct without exposing storage keys or cryptographic
+/// implementation details in the UI.
+enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
+  case identityWasReset
+  case savedRecordsUsePreviousIdentity
+  case identityWasResetWithSavedRecords
+
+  var id: String { rawValue }
+
+  static func classify(
+    quarantinedSeedKey: String?,
+    ownerPublicKeyMismatchDetected: Bool
+  ) -> Self? {
+    switch (quarantinedSeedKey != nil, ownerPublicKeyMismatchDetected) {
+    case (true, true):
+      return .identityWasResetWithSavedRecords
+    case (true, false):
+      return .identityWasReset
+    case (false, true):
+      return .savedRecordsUsePreviousIdentity
+    case (false, false):
+      return nil
+    }
+  }
+
+  var title: String {
+    switch self {
+    case .identityWasReset:
+      return String(
+        localized: "ownerKeyRestoration.identityReset.title",
+        defaultValue: "Proof identity was reset",
+        comment: "Alert title shown when beid could not restore the device identity used to sign proofs and created a new one."
+      )
+    case .savedRecordsUsePreviousIdentity:
+      return String(
+        localized: "ownerKeyRestoration.savedRecordsMismatch.title",
+        defaultValue: "Some proof records use a previous identity",
+        comment: "Alert title shown when saved proof-related records refer to an owner identity different from the device's current identity."
+      )
+    case .identityWasResetWithSavedRecords:
+      return String(
+        localized: "ownerKeyRestoration.identityResetWithRecords.title",
+        defaultValue: "Proof identity could not be restored",
+        comment: "Alert title shown when beid both replaced an unreadable proof-signing identity and found saved records that use the previous identity."
+      )
+    }
+  }
+
+  var message: String {
+    switch self {
+    case .identityWasReset:
+      return String(
+        localized: "ownerKeyRestoration.identityReset.message",
+        defaultValue: "beid could not restore the identity this device used to sign proofs, so it created a new one. This device can no longer use the previous identity.",
+        comment: "Alert message explaining that an unreadable proof-signing identity was replaced and the previous identity is no longer usable on this device."
+      )
+    case .savedRecordsUsePreviousIdentity:
+      return String(
+        localized: "ownerKeyRestoration.savedRecordsMismatch.message",
+        defaultValue: "Some saved proof records were created with a different identity. They still exist, but this device can no longer sign as that identity.",
+        comment: "Alert message explaining that saved proof-related records remain on disk but refer to an owner identity this device no longer controls."
+      )
+    case .identityWasResetWithSavedRecords:
+      return String(
+        localized: "ownerKeyRestoration.identityResetWithRecords.message",
+        defaultValue: "beid created a new identity because the saved one could not be restored. Some saved proof records still refer to the previous identity; they still exist, but this device can no longer sign as that identity.",
+        comment: "Alert message explaining both the replacement of an unreadable proof-signing identity and the effect on saved proof-related records."
+      )
+    }
+  }
+}
+
 /// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
 /// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
 /// state machine. The facade — not `BarnardIdentity` directly — is what this
@@ -101,6 +175,10 @@ final class SensingCoordinator: ObservableObject {
   @Published private(set) var phase: ScanPhase = .idle
   @Published private(set) var isScanning = false
   @Published private(set) var isAdvertising = false
+  /// Latched after startup checks finish so an alert presenter can observe it
+  /// even when the asynchronous load completed before that UI appeared.
+  /// Cleared only by explicit user acknowledgement.
+  @Published private(set) var ownerKeyRestorationNotice: OwnerKeyRestorationNotice?
   /// Wallet connect+binding lifecycle for the event currently being
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
   /// `.pendingConnect`; the interstitial that drives the rest is 2b.
@@ -294,6 +372,10 @@ final class SensingCoordinator: ObservableObject {
   private let sensingCryptography: any SensingCryptography
   private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
   private let eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
+  private let ownerKeyRestorationAcknowledgementDefaults: UserDefaults
+  private var ownerKeyRestorationIdentityFingerprint: Data?
+  private static let acknowledgedOwnerKeyRestorationIdentityKey =
+    "beid.acknowledgedOwnerKeyRestorationIdentity"
   private let randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
   private var windowReportStore: WindowReportStore
   private var unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?
@@ -649,7 +731,8 @@ final class SensingCoordinator: ObservableObject {
     loadingFromDirectory directory: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
-    eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil
+    eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
+    ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard
   ) {
     self.init(
       windowReportFileURL: directory.appendingPathComponent("window-reports.json"),
@@ -660,7 +743,8 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
-      eventIdentityVerificationSource: eventIdentityVerificationSource
+      eventIdentityVerificationSource: eventIdentityVerificationSource,
+      ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults
     )
   }
 
@@ -691,6 +775,7 @@ final class SensingCoordinator: ObservableObject {
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)?,
+    ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     nearbyRegistryClient:
       ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil
   ) {
@@ -704,6 +789,7 @@ final class SensingCoordinator: ObservableObject {
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
+      ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
       initialLedgerFailure: nil,
       nearbyRegistryClient: nearbyRegistryClient
     )
@@ -809,18 +895,54 @@ final class SensingCoordinator: ObservableObject {
   /// that already calls `reconcileSelfProofCheckpointIfNeeded()`, after the
   /// real stores are assigned and before `isLedgerLoading` flips `false` or
   /// the detection queue drains, so the check completes before any new
-  /// detection-driven record could be created. Signal A/B are only
-  /// informative at this scope — no UI/UX response is designed yet (§11) —
-  /// so this only logs, the same posture `CorruptStoreQuarantine` and this
-  /// type's own reconciliation failures already take for a
-  /// detected-but-unsurfaced condition.
+  /// detection-driven record could be created. Signal A/B remain logged for
+  /// device diagnostics, and the same facts are latched as one user-facing
+  /// notice (beid#311). The notice stays queryable until acknowledged; this
+  /// slice deliberately adds no restoration operation.
   private func logOwnerKeyRegenerationSignalsIfNeeded() {
-    if let quarantinedSeedKey = quarantinedOwnerKeySeedKey {
+    // Resolve the owner key before reading Signal A. Quarantine happens
+    // during that resolution, so reading `quarantinedOwnerKeySeedKey` first
+    // can miss the event that this very startup check triggers.
+    let activeOwnerPublicKey = sensingCryptography.ownerPublicKey()
+    let mismatchDetected = OwnerKeyRegenerationDetector.ownerPublicKeyMismatchDetected(
+      activeOwnerPublicKey: activeOwnerPublicKey,
+      selfProofRecords: selfProofStore.records,
+      bindingRecords: bindingRecordStore.records
+    )
+    let quarantinedSeedKey = quarantinedOwnerKeySeedKey
+    let detectedNotice = OwnerKeyRestorationNotice.classify(
+      quarantinedSeedKey: quarantinedSeedKey,
+      ownerPublicKeyMismatchDetected: mismatchDetected
+    )
+    let acknowledgedIdentity = ownerKeyRestorationAcknowledgementDefaults.data(
+      forKey: Self.acknowledgedOwnerKeyRestorationIdentityKey
+    )
+    if detectedNotice != nil, acknowledgedIdentity != activeOwnerPublicKey {
+      ownerKeyRestorationNotice = detectedNotice
+      ownerKeyRestorationIdentityFingerprint = activeOwnerPublicKey
+    }
+
+    if let quarantinedSeedKey {
       Self.ledgerLog.error("Owner key seed was quarantined and regenerated this session at \(quarantinedSeedKey, privacy: .public)")
     }
-    if ownerPublicKeyMismatchDetected {
+    if mismatchDetected {
       Self.ledgerLog.error("Owner public key does not match some already-persisted self-proof/binding record")
     }
+  }
+
+  func acknowledgeOwnerKeyRestorationNotice() {
+    if let ownerKeyRestorationIdentityFingerprint {
+      // This is a public key, not secret key material. Using it as the
+      // acknowledgement fingerprint suppresses repeat alerts only while the
+      // same current identity remains active; a later replacement gets a new
+      // public key and therefore surfaces a fresh warning.
+      ownerKeyRestorationAcknowledgementDefaults.set(
+        ownerKeyRestorationIdentityFingerprint,
+        forKey: Self.acknowledgedOwnerKeyRestorationIdentityKey
+      )
+    }
+    ownerKeyRestorationNotice = nil
+    ownerKeyRestorationIdentityFingerprint = nil
   }
 
   /// Explicit storage seam for tests and controlled hosts. Unlike the
@@ -866,6 +988,7 @@ final class SensingCoordinator: ObservableObject {
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
+    ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     initialLedgerFailure: Error? = nil,
     nearbyDiscoveryClock: @escaping () -> Int64 = {
       Int64((Date().timeIntervalSince1970 * 1000).rounded())
@@ -903,6 +1026,7 @@ final class SensingCoordinator: ObservableObject {
     self.sensingCryptography = sensingCryptography
     self.reportSubmissionRuntime = reportSubmissionRuntime
     self.eventIdentityVerificationSource = eventIdentityVerificationSource
+    self.ownerKeyRestorationAcknowledgementDefaults = ownerKeyRestorationAcknowledgementDefaults
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
     self.nearbyRegistryClient = nearbyRegistryClient
     let nearbyDiscoveryStore = ExportedKotlinPackages.org.levarac.parallax.discovery
