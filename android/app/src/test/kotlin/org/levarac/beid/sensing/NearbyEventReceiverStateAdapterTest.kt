@@ -1,10 +1,12 @@
 package org.levarac.beid.sensing
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.barnard.BarnardEventDefinitionV1
 import org.levarac.parallax.discovery.NearbyEventReceiverState
+import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.registry.EventJoinMode
 import org.levarac.parallax.registry.eventCodeHashForOpenEventV1
 import kotlin.test.Test
@@ -103,6 +105,48 @@ class NearbyEventReceiverStateAdapterTest {
         assertEquals(100L, session.cards.value.single().validFromEpochSeconds)
     }
 
+    /**
+     * The RADIO_SELF_VERIFIED branch of the join gate is not decoration.
+     *
+     * Verified card metadata is keyed by event-code hash and pruned only
+     * against the hashes still live in the published snapshot, while the
+     * registry record and the receiver tier are cleared by the shared TTL. So
+     * when a candidate's sources expire and the same hash is re-observed
+     * inside the same reducer call, the metadata survives while the
+     * registration behind it does not: the candidate is RADIO_SELF_VERIFIED
+     * with no operator lookup, holding an event identity that a now-cleared
+     * registry read had published. Without the branch, that stale identity
+     * would be served as joinable.
+     *
+     * The definition's validity window is far in the future so that the only
+     * expiry in play is the discovery TTL, and the wake-up scheduled at
+     * exactly that boundary is deliberately not run: the re-observation
+     * arrives first, which is the ordering that produces this state.
+     */
+    @Test
+    fun aRetainedDefinitionIsWithheldOnceItsRegistrationHasExpired() = runTest {
+        val registry = FakeRegistry()
+        val session = session(registry)
+        session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
+        registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
+        runCurrent()
+        registry.completeDefinition(verification(validUntilEpochSeconds = 10_000L))
+        runCurrent()
+        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+
+        // Lands exactly on the TTL boundary without running the wake-up
+        // scheduled there, so the re-observation is what expires the old
+        // source and clears the registration.
+        advanceTimeBy(300_000L)
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
+
+        val candidate = candidate(session)
+        assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
+        assertEquals(NearbyEventRegistryStatus.UNRESOLVED, candidate.registryStatus)
+        assertNull(session.cards.value.single().eventIdHex)
+        assertNull(session.cards.value.single().validUntilEpochSeconds)
+    }
+
     @Test
     fun barnardIsAskedWithTheDefinitionThisHostRead() = runTest {
         val registry = FakeRegistry()
@@ -197,13 +241,14 @@ class NearbyEventReceiverStateAdapterTest {
     private fun verification(
         isSuccess: Boolean = true,
         keySetDigestHex: String? = KEY_SET_DIGEST_HEX,
+        validUntilEpochSeconds: Long = 200L,
     ) = NearbyEventDefinitionVerification(
         isSuccess = isSuccess,
         joinMode = EventJoinMode.OPEN,
         eventIdHex = EVENT_ID_HEX,
         eventCodeHashHex = EVENT_HASH.toHex(),
         validFromEpochSeconds = 100L,
-        validUntilEpochSeconds = 200L,
+        validUntilEpochSeconds = validUntilEpochSeconds,
         keySetDigestHex = keySetDigestHex,
     )
 
