@@ -6,15 +6,20 @@ import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.levarac.barnard.BarnardB005EnvelopeV2
+import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardEventInfoEnvelopeV2Event
 import org.levarac.barnard.BarnardRegistryAgreement
+import org.levarac.barnard.BarnardRelayDecision
+import org.levarac.barnard.BarnardRelayDecisionEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.registry.RegistryClient
@@ -81,6 +86,13 @@ class EventJoinCoordinator internal constructor(
     ledgerFilesDir: File? = null,
     injectedWindowAccumulator: WindowObservationAccumulator? = null,
     windowObservationRuntimeOwner: WindowObservationRuntimeOwner? = null,
+    /**
+     * Discovery's registry seam, injected only by tests. Production derives it
+     * from [registryClient]; a test needs it because reaching
+     * `REGISTRY_VERIFIED` -- the tier the relay gate requires -- means
+     * answering a real lookup, and there is no other way in.
+     */
+    nearbyRegistry: NearbyEventRegistry? = null,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -98,13 +110,50 @@ class EventJoinCoordinator internal constructor(
     private val nearbyDiscovery = NearbyEventDiscoverySession(
         nowEpochMillis = nowEpochMillis,
         coroutineScope = coroutineScope,
-        registry = registryClient?.let(::RegistryClientNearbyEventRegistry),
+        registry = nearbyRegistry ?: registryClient?.let(::RegistryClientNearbyEventRegistry),
     )
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
     override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = nearbyDiscovery.cards
     val nearbyEventCandidates: StateFlow<NearbyEventCandidates> = nearbyDiscovery.candidates
+
+    /**
+     * Everything barnard's relay verifier is allowed to read, republished on
+     * the main thread whenever discovery state or the joined event moves.
+     *
+     * `@Volatile` because the verifier runs inline on whichever thread the
+     * GATT read arrived on. The value is immutable, so a verifier either sees
+     * the previous gate state or the next one, never a half-built one.
+     */
+    @Volatile
+    private var relayGateState = ParticipantRelayGateState(
+        candidates = nearbyDiscovery.candidates.value,
+        verifiedDefinitionsByHash = emptyMap(),
+        joinedEventIdHex = null,
+    )
+
+    /** The relay verifier, configured on join and cleared on every stop. */
+    private val relayVerifier = ParticipantRelayVerifier { relayGateState }
+
+    /**
+     * The gate's current joined event id, as the verifier would read it.
+     * Exposed for tests, mirroring iOS's property of the same shape; nothing
+     * in the app reads it.
+     */
+    internal val relayGateJoinedEventIdHexForTesting: String?
+        get() = relayGateState.joinedEventIdHex
+
+    /** Repeating 30-second wake-up that runs the relay's lease decisions. */
+    private var relayCadenceJob: Job? = null
+
+    /**
+     * The most recent spec 134 decision, for visibility only. It never feeds a
+     * card, a tally, or a phase: hop counts and relay volume say nothing about
+     * an event (spec 134, "Security and abuse considerations").
+     */
+    internal var lastRelayDecision: ParticipantRelayDecision? = null
+        private set
 
     /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
     private var scanPhase: ScanPhase = ScanPhase.Idle
@@ -236,6 +285,55 @@ class EventJoinCoordinator internal constructor(
 
     init {
         engine.onEvent = ::handleBarnardEvent
+        // Definitions are written before the snapshot that reflects them is
+        // emitted, so collecting the snapshot picks up both together.
+        coroutineScope.launch {
+            nearbyDiscovery.candidates.collect { republishRelayGateState(candidates = it) }
+        }
+    }
+
+    /**
+     * Rebuilds the immutable value the relay verifier reads. Called on the
+     * main thread only.
+     */
+    private fun republishRelayGateState(
+        candidates: NearbyEventCandidates = relayGateState.candidates,
+        joinedEventIdHex: String? = relayGateState.joinedEventIdHex,
+    ) {
+        relayGateState = ParticipantRelayGateState(
+            candidates = candidates,
+            verifiedDefinitionsByHash = nearbyDiscovery.verifiedDefinitionsByHash(),
+            joinedEventIdHex = joinedEventIdHex,
+        )
+    }
+
+    /**
+     * Turns relay on for this session. Called only once permissions are
+     * granted for both Scan and Advertise: a device that cannot advertise
+     * cannot re-broadcast anything, and offering to would be a lie.
+     */
+    private fun startParticipantRelay() {
+        engine.configureParticipantRelay(relayVerifier)
+        relayCadenceJob?.cancel()
+        relayCadenceJob = coroutineScope.launch {
+            while (true) {
+                delay(RELAY_DECISION_BOUNDARY_MILLIS)
+                engine.advanceParticipantRelay()
+            }
+        }
+    }
+
+    /**
+     * Turns relay off. Idempotent, and called from every exit: leaving the
+     * event, ending the session, a permission refusal, and disposal. Passing
+     * a null verifier is what makes barnard drop the lease, the density
+     * handles and the cached envelope.
+     */
+    private fun stopParticipantRelay() {
+        relayCadenceJob?.cancel()
+        relayCadenceJob = null
+        engine.configureParticipantRelay(null)
+        republishRelayGateState(joinedEventIdHex = null)
     }
 
     override fun joinEvent(code: String) {
@@ -251,8 +349,10 @@ class EventJoinCoordinator internal constructor(
                 resolveObservationContext(code)
                 discoveryOnlyScanOwned = false
                 engine.startAuto()
+                startParticipantRelay()
                 startSensing()
             } else {
+                stopParticipantRelay()
                 _state.value = mapPermissionResultToState(result)
             }
         }
@@ -289,6 +389,9 @@ class EventJoinCoordinator internal constructor(
             is BarnardEvent.EventInfoEnvelopeV2 -> {
                 handleEventInfoEnvelopeV2(event.envelope)
             }
+            is BarnardEvent.RelayDecision -> {
+                handleRelayDecision(event.relay)
+            }
             is BarnardEvent.Detection -> {
                 val detection = event.detection
                 handleDetection(
@@ -319,6 +422,23 @@ class EventJoinCoordinator internal constructor(
      * comparison bound to this envelope. This host never re-implements it, and
      * never assigns `REGISTRY_VERIFIED` itself outside the shared reducer.
      */
+    /**
+     * Records the latest spec 134 decision so relay is observable at all.
+     *
+     * Visibility only. Nothing downstream reads it, and nothing may: a relayed
+     * candidate is an ordinary card, its hop count is never shown, and relay
+     * volume is never evidence about an event.
+     */
+    internal fun handleRelayDecision(event: BarnardRelayDecisionEvent) {
+        lastRelayDecision = ParticipantRelayDecision(
+            decision = event.decision,
+            payloadDigestHex = event.payloadDigest
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) },
+            hop = event.hop,
+            reason = event.reason,
+        )
+    }
+
     private fun handleEventInfoEnvelopeV2(event: BarnardEventInfoEnvelopeV2Event) {
         val envelope = event.verifiedEnvelope
         if (envelope == null) {
@@ -459,6 +579,7 @@ class EventJoinCoordinator internal constructor(
         windowAccumulator?.close()
         finalizeSelfProofIfNeeded()
         engine.leaveEvent()
+        stopParticipantRelay()
         discoveryOnlyScanOwned = false
         nearbyDiscovery.reset()
         scanPhase = applyStopSensing()
@@ -498,6 +619,12 @@ class EventJoinCoordinator internal constructor(
     private fun acceptVerifiedObservationContext(context: WindowObservationContext, requestOwner: Any) {
         if (!disposed && observationContextRequestOwner === requestOwner && engine.getCurrentEventCode() == context.eventCode) {
             windowObservationRuntime?.updateContext(context)
+            // The relay gate opens here and nowhere else. This is the only
+            // point where the joined event has a canonical id that came from
+            // this host's own authenticated registry read, and relaying an
+            // event this device cannot name that precisely is exactly what
+            // "one device, one event" forbids.
+            republishRelayGateState(joinedEventIdHex = context.eventIdHex)
         }
     }
 
@@ -685,6 +812,7 @@ class EventJoinCoordinator internal constructor(
         disposed = true
         observationContextRequestOwner = null
         finalizeSelfProofIfNeeded()
+        stopParticipantRelay()
         discoveryOnlyScanOwned = false
         nearbyDiscovery.dispose()
         scanPhase = applyStopSensing()
@@ -693,9 +821,16 @@ class EventJoinCoordinator internal constructor(
         engine.dispose()
     }
 
-    private companion object {
+    internal companion object {
         /** Mirrors iOS's `SensingCoordinator.handleDetection`'s `"Unknown Event"` fallback. */
         const val UNKNOWN_EVENT_CODE = "Unknown Event"
+
+        /**
+         * Spec 134's `T`, taken from barnard rather than restated, so the two
+         * cannot drift. barnard self-ticks as well, so this cadence is
+         * belt-and-braces rather than the only thing keeping a lease honest.
+         */
+        val RELAY_DECISION_BOUNDARY_MILLIS = BarnardEngine.RELAY_DECISION_BOUNDARY_MS
     }
 }
 

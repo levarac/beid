@@ -71,6 +71,13 @@ struct AccountSheetView: View {
                 .foregroundStyle(bluetoothStatusColor)
             }
           }
+        } footer: {
+          // Relay is on whenever this phone is sensing at an event it joined
+          // (beid#367). It belongs on screen rather than hidden, because the
+          // phone is transmitting on someone else's behalf.
+          Text(relayNoteText)
+            .font(DS.Font.supporting)
+            .foregroundStyle(DS.Color.textSecondary)
         }
 
         Section {
@@ -135,6 +142,17 @@ struct AccountSheetView: View {
 
   private var bluetoothStatusText: LocalizedStringKey {
     coordinator.bluetoothMonitor.isPoweredOff ? "Off" : "Active"
+  }
+
+  private var relayNoteText: String {
+    String(
+      localized: "account.bluetooth.relayNote",
+      defaultValue:
+        """
+        While this phone is at an event, beid can pass the event's details on to phones \
+        nearby, so people across the venue can still find it.
+        """
+    )
   }
 
   private var connectedViaText: String {

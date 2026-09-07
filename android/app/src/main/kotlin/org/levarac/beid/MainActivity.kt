@@ -71,6 +71,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The scenario root, and the invariant it exists to hold.
+     *
+     * **A scenario never reaches a radio.** This branch constructs no
+     * [EventJoinCoordinator] and no `EventJoinEngine`, so nothing on it can
+     * join an event, seed discovery, or arm the spec 134 participant relay
+     * (beid#367). Scenario frames are fabricated, relay puts bytes on a real
+     * radio on an event's behalf, and the two must never meet.
+     *
+     * The guarantee is structural rather than conditional: it holds because
+     * this function has no engine to hand anywhere, not because a flag is
+     * checked somewhere downstream. `ReadOnlyScenarioContent` takes immutable
+     * frames and a surface, and that is the whole of its input.
+     * `ParticipantRelayIsolationTest` pins it, iOS states the same
+     * property inside `SensingCoordinator.startParticipantRelay()`, and the
+     * one thing that would break it is passing a coordinator into this branch
+     * to make some scenario render "more realistically".
+     */
     private fun startReadOnlyScenario(dataSource: AndroidDataSource.ReadOnlyScenario) {
         setContent {
             BeidAppTheme {

@@ -135,6 +135,16 @@ internal class NearbyEventDiscoverySession(
     val candidates: StateFlow<NearbyEventCandidates> = _candidates.asStateFlow()
     val cards: StateFlow<List<NearbyEventCard>> = _cards.asStateFlow()
 
+    /**
+     * The verified definitions behind the current candidates, copied.
+     *
+     * barnard's relay verifier runs on the thread a GATT read arrived on, so
+     * it must never read this session's mutable maps. Copying is what makes
+     * the hand-off safe, and the map is bounded by the live candidate set.
+     */
+    fun verifiedDefinitionsByHash(): Map<String, BarnardEventDefinitionV1> =
+        verifiedDefinitionByHash.toMap()
+
     fun recordHint(
         peripheralId: String,
         eventDisplayName: String,

@@ -41,6 +41,7 @@ object AccountScreenTestTags {
     const val LEAVE_EVENT_BUTTON = "account_leave_event_button"
     const val RECORDS_BUTTON = "account_records_button"
     const val MANUAL_EVENT_CODE_BUTTON = "account_manual_event_code_button"
+    const val RELAY_NOTE = "account_relay_note"
 }
 
 /**
@@ -107,6 +108,16 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRec
                     )
                 }
             }
+
+            // Relay is on whenever this phone is sensing at an event it joined
+            // (beid#367). It is stated here rather than hidden, because the
+            // phone is transmitting on someone else's behalf.
+            Text(
+                text = stringResource(R.string.account_relay_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = BeidTheme.colors.textSecondary,
+                modifier = Modifier.testTag(AccountScreenTestTags.RELAY_NOTE),
+            )
 
             // Mirrors iOS AccountSheetView's "Past Events" row placement/precedent (beid#121)
             // — the records list is reached from here, not promoted to replace EventJoin as

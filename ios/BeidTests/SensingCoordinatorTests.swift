@@ -10,7 +10,9 @@ import XCTest
 func makeIsolatedSensingCoordinator(
   for testCase: XCTestCase,
   sensingCryptography: any SensingCryptography = DeterministicSensingCryptography(),
-  reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
+  reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+  participantRelayControl: (any ParticipantRelayControlling)? = nil,
+  relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
 ) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
     .appendingPathComponent("sensing-coordinator-test-\(UUID().uuidString)", isDirectory: true)
@@ -40,12 +42,58 @@ func makeIsolatedSensingCoordinator(
     ),
     unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
     sensingCryptography: sensingCryptography,
-    reportSubmissionRuntime: reportSubmissionRuntime
+    reportSubmissionRuntime: reportSubmissionRuntime,
+    participantRelayControl: participantRelayControl,
+    relayCadenceNanoseconds: relayCadenceNanoseconds
   )
 }
 
 @MainActor
 final class SensingCoordinatorTests: XCTestCase {
+  // MARK: - Demo mode never arms the relay
+
+  /// Demo candidates are fabricated and relay puts bytes on a real radio, so
+  /// the two must never meet (beid#367). The guard lives inside
+  /// `startParticipantRelay` rather than in `startSensing`'s control flow,
+  /// because that method, `runDemoScenario` and `useDemoEventMode` are all
+  /// reachable from outside the coordinator. This asserts the structural
+  /// property: with demo mode on, no verifier is ever handed to Barnard, for
+  /// every scenario the app ships and for a bare call besides.
+  func testDemoModeNeverArmsTheRelayForAnyScenario() async {
+    for scenario in DemoScenario.allScenarios {
+      let control = RecordingParticipantRelayControl()
+      let coordinator = makeIsolatedSensingCoordinator(for: self, participantRelayControl: control)
+      coordinator.useDemoEventMode = true
+
+      coordinator.runDemoScenario(scenario, stepDelayNanos: 1_000)
+      coordinator.startSensing(demoScenario: scenario)
+      coordinator.startParticipantRelay()
+
+      XCTAssertNil(
+        control.verifier,
+        "\(scenario.identifier) armed the relay while demo mode fabricates its candidates"
+      )
+      XCTAssertEqual(
+        control.advanceCalls,
+        0,
+        "\(scenario.identifier) ran the relay forward in demo mode"
+      )
+      _ = coordinator.reset()
+    }
+  }
+
+  /// The same property without a scenario: demo mode alone is enough to keep
+  /// the relay unarmed, whatever calls into it.
+  func testDemoModeNeverArmsTheRelay() {
+    let control = RecordingParticipantRelayControl()
+    let coordinator = makeIsolatedSensingCoordinator(for: self, participantRelayControl: control)
+    coordinator.useDemoEventMode = true
+
+    coordinator.startParticipantRelay()
+
+    XCTAssertNil(control.verifier)
+  }
+
   /// Stand-in B005 v2 container bytes. Nothing here parses them: barnard has
   /// already verified whatever these tests hand across the seam, and the host
   /// keeps them only so a spec 134 relay can re-send them unchanged.
