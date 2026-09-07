@@ -36,14 +36,20 @@ class NearbyEventReceiverStateAdapterTest {
         assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
     }
 
+    /**
+     * A verified-but-unregistered envelope withdraws join only from a
+     * candidate that had nothing else to stand on. With no operator lookup
+     * behind it this candidate has nothing, so it stays unjoinable.
+     */
     @Test
-    fun radioSelfVerifiedEnvelopeIsNotJoinableUntilTheRegistryAgrees() = runTest {
+    fun aV2OnlyCandidateWithoutAnOperatorLookupStaysUnjoinable() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
         session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
-
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
-        resolveVerifiedOpenDefinition(registry)
+
+        registry.completeLookup(NearbyEventIdLookup(false, null, "event_code_lookup_not_found"))
+        runCurrent()
 
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
         assertNull(session.cards.value.single().eventIdHex)
@@ -75,13 +81,15 @@ class NearbyEventReceiverStateAdapterTest {
     }
 
     /**
-     * The gate must be re-evaluated when the tier changes, not only when the
-     * registry read completes: a disagreeing envelope arriving after a
-     * successful resolution would otherwise leave the already-published
-     * verified metadata on a card that is no longer allowed to be joinable.
+     * Spec 122 step 7 binds the event-code hash to the event ID for OPEN
+     * events only, so an attacker can forge a self-consistent envelope
+     * carrying a GATED event's hash. It verifies and raises the tier. If that
+     * withdrew the genuine operator-lookup registration, the forgery would be
+     * a cheap denial of service lasting until the discovery TTL. It must
+     * still be denied promotion.
      */
     @Test
-    fun aDisagreeingEnvelopeArrivingAfterResolutionRevokesJoinability() = runTest {
+    fun aDisagreeingEnvelopeNeitherPromotesNorRevokesAnOperatorLookupRegistration() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
@@ -91,8 +99,8 @@ class NearbyEventReceiverStateAdapterTest {
         session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
 
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
-        assertNull(session.cards.value.single().eventIdHex)
-        assertNull(session.cards.value.single().validFromEpochSeconds)
+        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+        assertEquals(100L, session.cards.value.single().validFromEpochSeconds)
     }
 
     @Test

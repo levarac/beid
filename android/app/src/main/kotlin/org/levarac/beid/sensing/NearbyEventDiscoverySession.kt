@@ -12,7 +12,6 @@ import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.discovery.NearbyEventReceiverState
 import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.discovery.createNearbyEventDiscoveryStore
-import org.levarac.parallax.discovery.applyNearbyEventRegistryAgreementFromHex
 import org.levarac.parallax.discovery.recordNearbyEventHint
 import org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelope
 import org.levarac.parallax.discovery.recordNearbyEventUnverifiedEnvelope
@@ -196,15 +195,10 @@ internal class NearbyEventDiscoverySession(
         )
         if (!update.acceptedHint) return
         envelopeAgreementByHash[hash] = registryAgreement
-        // The registry resolution for a hash completes exactly once, so an
-        // envelope that lands after it has no completion callback left to ride
-        // on and must promote through the standalone agreement entry.
-        val promoted = if (verifiedDefinitionByHash.containsKey(hash)) {
-            applyNearbyEventRegistryAgreementFromHex(store, hash, agrees).snapshot
-        } else {
-            null
-        }
-        publishAndSchedule(promoted ?: update.snapshot)
+        // No second call for the late-arrival order: the record above already
+        // acted on `agrees`, under the same guard the standalone agreement
+        // entry uses.
+        publishAndSchedule(update.snapshot)
         resolveUnresolvedCandidates(update.snapshot)
     }
 
@@ -345,12 +339,38 @@ internal class NearbyEventDiscoverySession(
             repeat(snapshot.candidateCount) { index ->
                 snapshot.candidateAt(index)?.let { candidate ->
                     // The gate is evaluated here, not only on the resolution
-                    // path: a candidate can reach RADIO_SELF_VERIFIED *after*
-                    // its registry read already published verified metadata,
-                    // and that metadata would otherwise keep the card joinable
-                    // at a tier that must not be joinable.
+                    // path: a candidate can change tier *after* its registry
+                    // read already published verified metadata, and that
+                    // metadata would otherwise keep the card joinable at a
+                    // tier that must not be joinable.
+                    //
+                    // Exhaustive on purpose, with no `else`: a fourth receiver
+                    // state must not silently inherit either answer.
+                    val joinable = when (candidate.receiverState) {
+                        // Never observed a v2 envelope, so the pre-existing v1
+                        // gate is the only one that can apply.
+                        NearbyEventReceiverState.UNVERIFIED -> true
+                        // This host's own registry read agreed with the
+                        // envelope. The strongest tier there is.
+                        NearbyEventReceiverState.REGISTRY_VERIFIED -> true
+                        // A verified-but-unregistered envelope withdraws join
+                        // only from a candidate that had nothing else to stand
+                        // on. Spec 122 step 7 binds the event-code hash to the
+                        // event ID for OPEN events only, so an attacker can
+                        // forge a self-consistent envelope carrying a GATED
+                        // event's hash: it verifies, raises this tier, and
+                        // would otherwise withdraw the genuine operator-lookup
+                        // registration until the discovery TTL expires. An
+                        // agreeing envelope never reaches this branch, because
+                        // agreement promotes to REGISTRY_VERIFIED, so honouring
+                        // the operator lookup here is strictly no worse than
+                        // before v2 existed and the forgery buys nothing.
+                        NearbyEventReceiverState.RADIO_SELF_VERIFIED ->
+                            candidate.registryStatus ==
+                                NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
+                    }
                     val verified = verifiedMetadataByHash[candidate.eventCodeHashHex]
-                        ?.takeIf { candidate.receiverState != NearbyEventReceiverState.RADIO_SELF_VERIFIED }
+                        ?.takeIf { joinable }
                     add(
                         NearbyEventCard(
                             beaconDisplayName = candidate.displayNameAt(0),

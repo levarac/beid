@@ -343,11 +343,20 @@ public fun recordNearbyEventHint(
  *
  * [agreesWithRegistry] is barnard's `registryAgreement` for THIS envelope
  * against a definition the host had already read for this hash, or false when
- * the host has no such definition yet. It never raises the tier -- only
- * [applyNearbyEventRegistryAgreementFromHex] and the resolution completion do
- * that -- and it decides one thing: whether this envelope is allowed to
- * replace the container retained for a hash that is already
- * [NearbyEventReceiverState.REGISTRY_VERIFIED].
+ * the host has no such definition yet. It decides two things, so no caller has
+ * to remember a second call: whether this envelope may replace the container
+ * retained for a hash that is already
+ * [NearbyEventReceiverState.REGISTRY_VERIFIED], and, when the hash is already
+ * registered via operator lookup, whether this envelope promotes it. Promotion
+ * still runs through the same guard
+ * [applyNearbyEventRegistryAgreementFromHex] uses, so an envelope can never
+ * promote a hash the registry has not vouched for.
+ *
+ * An empty [rawContainer] is rejected rather than stored. Zero bytes are not
+ * what came off the wire, and a spec 134 relay re-sending an empty container
+ * is worse than one relaying nothing: the candidate would claim to hold bytes
+ * it does not have. Such a call is counted as a drop, exactly as a
+ * verification failure is.
  */
 public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     store: NearbyEventDiscoveryStore,
@@ -360,6 +369,7 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
 ): NearbyEventDiscoveryUpdate {
+    if (rawContainer.isEmpty()) return recordNearbyEventUnverifiedEnvelope(store)
     val update = recordObservation(
         store = store,
         peripheralId = peripheralId,
@@ -396,7 +406,14 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     val containerChanged = mayReplaceContainer &&
         !store.rawEnvelopeContainers[hash].contentEqualsOrNull(rawContainer)
     if (containerChanged) store.rawEnvelopeContainers[hash] = rawContainer.copyOf()
-    if (!raised && !containerChanged) return update
+    // Folded in so a caller cannot record an agreeing envelope and forget to
+    // promote it. A hash resolves against the registry exactly once, so an
+    // envelope arriving after that completion has no callback left to ride on,
+    // and this is the only place left that can act on its verdict. The guard
+    // is the shared one: no promotion without a registry read that already
+    // published REGISTERED_VIA_OPERATOR_LOOKUP for this hash.
+    val promoted = store.promoteToRegistryVerified(hash, agreesWithRegistry)
+    if (!raised && !containerChanged && !promoted) return update
     return NearbyEventDiscoveryUpdate(
         acceptedHint = true,
         changed = true,
@@ -412,14 +429,12 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
  * hash, no display name, and no candidate to attach to. Counting it is what
  * keeps a dropped envelope observable instead of silent.
  *
- * Reports `changed = false`. No candidate, source, omission fact or expiry
- * time moved, so a host must not rebuild its card list or re-arm its expiry
- * wake-up for this: a peer transmitting garbage would otherwise drive an
- * unbounded rebuild-and-rearm loop on every receiving device, and re-arming
- * from a snapshot whose expiry times did not change is how a scheduled
- * refresh gets pushed around by traffic that means nothing. The tally is on
- * the returned snapshot for a host that wants to surface it; the returned
- * snapshot is not a reason to republish.
+ * Reports `changed = false`, because no candidate, source, omission fact or
+ * expiry time moved. Publish the returned snapshot if you surface the tally,
+ * but do not rebuild cards or re-arm the expiry wake-up from it: a peer
+ * transmitting garbage would otherwise drive both on every received packet,
+ * and re-arming from a snapshot whose expiry times did not change is how a
+ * scheduled refresh gets pushed around by traffic that means nothing.
  */
 public fun recordNearbyEventUnverifiedEnvelope(
     store: NearbyEventDiscoveryStore,
@@ -447,15 +462,14 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
 ): NearbyEventDiscoveryUpdate {
-    // A container that does not survive the hex boundary is rejected, not
-    // stored empty. Zero bytes are not what came off the wire, and a spec 134
-    // relay re-sending an empty container is worse than one relaying nothing:
-    // the candidate would claim to hold bytes it does not have. Counted as a
-    // drop for the same reason a verification failure is -- it is the only
-    // trace the envelope can leave.
+    // A container that does not survive the hex boundary is rejected and
+    // counted, for the same reason a verification failure is: it is the only
+    // trace the envelope can leave. An empty result is rejected one layer
+    // down, in the byte-taking entry, so a host calling that directly
+    // inherits the same rule.
     val eventCodeHash = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull()
     val rawContainer = runCatching { rawContainerHex.decodeHexBytes() }.getOrNull()
-    if (eventCodeHash == null || rawContainer == null || rawContainer.isEmpty()) {
+    if (eventCodeHash == null || rawContainer == null) {
         return recordNearbyEventUnverifiedEnvelope(store)
     }
     return recordNearbyEventRadioSelfVerifiedEnvelope(

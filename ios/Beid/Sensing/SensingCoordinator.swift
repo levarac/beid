@@ -1815,19 +1815,10 @@ final class SensingCoordinator: ObservableObject {
       )
     guard update.acceptedHint else { return }
     nearbyEnvelopeAgreements[hash] = registryAgreement
-    // A hash's registry resolution completes exactly once, so an envelope
-    // landing after that completion has no callback left to ride on and must
-    // promote through the standalone agreement entry instead.
-    var snapshot = update.snapshot
-    if nearbyVerifiedDefinitions[hash] != nil {
-      snapshot = ExportedKotlinPackages.org.levarac.parallax.discovery
-        .applyNearbyEventRegistryAgreementFromHex(
-          store: nearbyDiscoveryStore,
-          eventCodeHashHex: hash,
-          agrees: agrees
-        ).snapshot
-    }
-    publishNearbyEventDiscovery(snapshot, asOf: observedAt)
+    // No second call for the late-arrival order: the record above already
+    // acted on `agrees`, under the same guard the standalone agreement entry
+    // uses.
+    publishNearbyEventDiscovery(update.snapshot, asOf: observedAt)
     resolveNearbyCandidates(update.snapshot)
   }
 

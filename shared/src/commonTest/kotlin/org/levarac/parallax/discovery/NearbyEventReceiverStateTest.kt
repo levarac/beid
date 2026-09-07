@@ -68,6 +68,55 @@ class NearbyEventReceiverStateTest {
         assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate.receiverState)
     }
 
+    /**
+     * The record call acts on the verdict itself, so a host cannot record an
+     * agreeing envelope and forget the promotion. This is the late-arrival
+     * order: the hash resolved before the envelope was ever seen.
+     */
+    @Test
+    fun recordingAnAgreeingEnvelopePromotesWithoutASecondCall() {
+        val store = createNearbyEventDiscoveryStore()
+        recordNearbyEventHint(store, "p", "Event", HASH.hexBytes(), null, false, false, 1L)
+        resolveRegistry(store, agrees = false)
+
+        val update = recordEnvelope(store, observedAt = 2L, agreesWithRegistry = true)
+
+        assertTrue(update.changed)
+        assertEquals(
+            NearbyEventReceiverState.REGISTRY_VERIFIED,
+            assertNotNull(update.snapshot.candidateAt(0)).receiverState,
+        )
+    }
+
+    /**
+     * The fold does not weaken the guard: an agreeing envelope for a hash the
+     * registry never vouched for still promotes nothing.
+     */
+    @Test
+    fun recordingAnAgreeingEnvelopeWithoutARegistryReadPromotesNothing() {
+        val store = createNearbyEventDiscoveryStore()
+
+        val update = recordEnvelope(store, observedAt = 1L, agreesWithRegistry = true)
+
+        assertEquals(
+            NearbyEventReceiverState.RADIO_SELF_VERIFIED,
+            assertNotNull(update.snapshot.candidateAt(0)).receiverState,
+        )
+    }
+
+    /** The empty-container rejection lives in the byte entry, so a host
+     * calling it directly inherits it. */
+    @Test
+    fun anEmptyContainerIsRejectedByTheByteEntryToo() {
+        val store = createNearbyEventDiscoveryStore()
+
+        val update = recordEnvelope(store, observedAt = 1L, rawContainer = ByteArray(0))
+
+        assertFalse(update.acceptedHint)
+        assertEquals(0, update.snapshot.candidateCount)
+        assertEquals(1, update.snapshot.unverifiedEnvelopeCount)
+    }
+
     @Test
     fun disagreementNeverPromotes() {
         val store = createNearbyEventDiscoveryStore()
