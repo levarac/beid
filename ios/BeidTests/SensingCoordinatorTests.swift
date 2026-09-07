@@ -609,6 +609,124 @@ final class SensingCoordinatorTests: XCTestCase {
     )
   }
 
+  /// A B005 v2 envelope barnard reported as radio-self-verified becomes a
+  /// candidate at exactly that tier, and at no higher one: only this host's
+  /// own registry read can promote it, and none has happened here.
+  ///
+  /// The agreement closure is stubbed rather than driven through barnard's
+  /// real `registryAgreement`, because `BarnardB005VerifiedEnvelope` has no
+  /// public initializer on either platform and no test can fabricate one. The
+  /// promotion matrix itself is asserted in the shared reducer's tests, which
+  /// run on the iOS targets as well.
+  func testRadioSelfVerifiedEnvelopeAppearsAtItsOwnTierWithoutMutatingJoinedSessionState() throws {
+    let reportRuntime = DiscoveryIsolationReportRuntimeSpy()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      reportSubmissionRuntime: reportRuntime
+    )
+    var collectedProof = false
+    coordinator.onProofCollected = { _ in collectedProof = true }
+    let hash = Data([0, 1, 2, 3, 4, 5, 6, 7])
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_000
+    )
+
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertNil(coordinator.joinedEventCode)
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+    XCTAssertFalse(collectedProof)
+    XCTAssertEqual(reportRuntime.captureCalls, 0)
+    XCTAssertEqual(reportRuntime.submitCalls, 0)
+
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(candidate.receiverState, .RADIO_SELF_VERIFIED)
+    XCTAssertEqual(candidate.registryStatus, .UNRESOLVED)
+    XCTAssertEqual(Data(bytesFromKotlinByteArray: candidate.eventCodeHash), hash)
+    XCTAssertEqual(candidate.displayNameAt(index: 0), "Community night")
+    XCTAssertEqual(try XCTUnwrap(candidate.sourceAt(index: 0)).peripheralId, "peripheral-a")
+  }
+
+  /// A v2 envelope carries no census, so recording one must not erase the
+  /// census a v1 hint already published for the same source.
+  func testRadioSelfVerifiedEnvelopeKeepsTheCensusAV1HintRecorded() throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let hash = Data([0, 1, 2, 3, 4, 5, 6, 7])
+    let census = Data([9, 8])
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      census: census,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_000
+    )
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_001
+    )
+
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(candidate.receiverState, .RADIO_SELF_VERIFIED)
+    let source = try XCTUnwrap(candidate.sourceAt(index: 0))
+    XCTAssertEqual(
+      Data(bytesFromKotlinByteArray: try XCTUnwrap(source.census)),
+      census
+    )
+  }
+
+  /// A candidate assembled from v1 hints alone can never leave UNVERIFIED, and
+  /// ending the session clears the tier along with everything else.
+  func testHintOnlyCandidateStaysUnverifiedAndResetClearsAnEstablishedTier() throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let hash = Data([0, 1, 2, 3, 4, 5, 6, 7])
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      census: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_000
+    )
+    XCTAssertEqual(
+      try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0)).receiverState,
+      .UNVERIFIED
+    )
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_001
+    )
+    coordinator.reset()
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      census: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_002
+    )
+
+    XCTAssertEqual(
+      try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0)).receiverState,
+      .UNVERIFIED
+    )
+  }
+
   /// Barnard's overflow marker carries no candidate identity. Its global
   /// omission facts still cross the adapter, then reset with the discovery
   /// session; the marker itself must never be shown as an event.
