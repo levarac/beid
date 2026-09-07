@@ -35,11 +35,19 @@ final class ParticipantRelayIsolationTests: XCTestCase {
   /// seed discovery or arm the relay would put fabricated candidates on a real
   /// radio.
   func testTheScenarioSourcesNameNothingThatSeedsDiscoveryOrArmsTheRelay() throws {
-    try assertSources(
-      Self.scenarioSources,
-      avoid: Self.discoverySeedingAndRelayArming,
-      role: "scenario"
-    )
+    let sources = try Self.scenarioSources()
+    // Naming the files the walk must find, so a broken path cannot pass by
+    // checking nothing. The list is a floor, not a ceiling: new demo sources
+    // are picked up without touching this test, which is the whole point of
+    // walking rather than listing.
+    for expected in ["Beid/Models/DemoScenario.swift", "Beid/Models/DemoEvent.swift"] {
+      XCTAssertTrue(
+        sources.contains(expected),
+        "the demo-source walk did not find \(expected); found \(sources)"
+      )
+    }
+
+    try assertSources(sources, avoid: Self.discoverySeedingAndRelayArming, role: "scenario")
   }
 
   private func assertSources(
@@ -48,13 +56,7 @@ final class ParticipantRelayIsolationTests: XCTestCase {
     role: String
   ) throws {
     for relativePath in relativePaths {
-      // `#filePath` is this file inside the checkout, which is the only way a
-      // test bundle can reach app source at all.
-      let source = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent(relativePath)
-      let text = try String(contentsOf: source, encoding: .utf8)
+      let text = try String(contentsOf: Self.appSource(relativePath), encoding: .utf8)
 
       for name in forbidden {
         XCTAssertFalse(
@@ -65,13 +67,43 @@ final class ParticipantRelayIsolationTests: XCTestCase {
     }
   }
 
+  /// `#filePath` is this file inside the checkout, which is the only way a
+  /// test bundle can reach app source at all.
+  private static func appSource(_ relativePath: String) -> URL {
+    URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent(relativePath)
+  }
+
   private static let relaySources = [
     "Beid/Sensing/ParticipantRelayVerifier.swift"
   ]
 
-  private static let scenarioSources = [
-    "Beid/Models/DemoScenario.swift"
-  ]
+  /// Every demo or scenario source, found by walking the app rather than
+  /// listed by hand, mirroring how Android checks its whole `scenario`
+  /// package. A hand-written list would have covered the one file someone
+  /// thought of, and the demo surface is spread across several: a new
+  /// `DemoSomething.swift` is exactly the file most likely to reach for a
+  /// discovery seed to look convincing, and exactly the one a fixed list
+  /// would miss.
+  private static func scenarioSources() throws -> [String] {
+    let root = appSource("Beid")
+    let enumerator = FileManager.default.enumerator(
+      at: root,
+      includingPropertiesForKeys: nil
+    )
+    var found: [String] = []
+    while let url = enumerator?.nextObject() as? URL {
+      guard url.pathExtension == "swift" else { continue }
+      let name = url.deletingPathExtension().lastPathComponent
+      guard name.localizedCaseInsensitiveContains("demo")
+        || name.localizedCaseInsensitiveContains("scenario")
+      else { continue }
+      found.append("Beid/" + url.path.components(separatedBy: "/Beid/").dropFirst().joined(separator: "/Beid/"))
+    }
+    return found.sorted()
+  }
 
   /// Names owned by the paths relay is fenced off from: the observation
   /// ledger, self-proof signing, and report submission. Keep identical to

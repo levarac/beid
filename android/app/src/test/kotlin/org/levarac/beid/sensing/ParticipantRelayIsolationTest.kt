@@ -66,27 +66,118 @@ class ParticipantRelayIsolationTest {
     }
 
     /**
-     * The text between a declaration's opening brace and its matching close.
-     * Brace counting is enough here: the function it reads has no string
-     * literal or comment containing an unbalanced brace, and a test that
-     * silently read the wrong range would fail loudly on the names above
-     * rather than pass by accident.
+     * A brace inside a comment or a string must not end the extracted range.
+     *
+     * The first version of the helper below counted braces over raw text,
+     * which had exactly this hole: a stray `}` in a comment truncated the
+     * range, and any coordinator added after that point would have passed the
+     * test silently. The failure would have been invisible -- a green test
+     * asserting almost nothing -- so the helper is exercised on a fixture
+     * rather than trusted.
      */
-    private fun String.functionBody(declaration: String): String {
-        val start = indexOf(declaration)
+    @Test
+    fun `the body reader is not fooled by braces in comments or strings`() {
+        val fixture = """
+            private fun startReadOnlyScenario(dataSource: Any) {
+                // a closing brace in a comment: }
+                /* and in a block comment: } */
+                val text = "and in a string: }"
+                render(text)
+            }
+
+            private fun somethingElse() {
+                EventJoinCoordinator(this)
+            }
+        """.trimIndent()
+
+        val body = fixture.functionBody("private fun startReadOnlyScenario(", indent = "")
+
+        assertTrue("the range stopped early: $body", body.contains("render(text)"))
+        assertTrue(
+            "the range ran past the function: $body",
+            !body.contains("EventJoinCoordinator"),
+        )
+    }
+
+    /**
+     * The text between a declaration's opening brace and its matching close.
+     *
+     * Two independent guards, because one is not enough. Comments and string
+     * literals are blanked before any brace is counted, so a brace inside
+     * either cannot be mistaken for code. Then the closing brace is required
+     * to sit on a line that is exactly [indent] plus `}` -- the function's own
+     * closing line -- so a range that ended early, at some deeper nesting
+     * level, fails rather than quietly returning a fragment.
+     *
+     * Blanking preserves length and newlines, so every index still refers to
+     * the same character in the original text and the returned body is the
+     * real source, comments and all.
+     */
+    private fun String.functionBody(declaration: String, indent: String = "    "): String {
+        val scannable = blankCommentsAndStrings()
+        val start = scannable.indexOf(declaration)
         require(start >= 0) { "declaration not found: $declaration" }
-        val open = indexOf('{', start)
+        val open = scannable.indexOf('{', start)
         var depth = 0
         for (index in open until length) {
-            when (this[index]) {
+            when (scannable[index]) {
                 '{' -> depth += 1
                 '}' -> {
                     depth -= 1
-                    if (depth == 0) return substring(open, index + 1)
+                    if (depth == 0) {
+                        val lineStart = lastIndexOf('\n', index).let { if (it < 0) 0 else it + 1 }
+                        val closingLine = substring(lineStart, index + 1)
+                        check(closingLine == "$indent}") {
+                            "the body ended at \"$closingLine\" rather than the function's own " +
+                                "closing line, so the extracted range is not the whole function"
+                        }
+                        return substring(open, index + 1)
+                    }
                 }
             }
         }
         throw IllegalStateException("unbalanced braces after: $declaration")
+    }
+
+    /**
+     * The same text with every comment and string literal replaced by spaces,
+     * keeping length and line breaks so indices stay aligned with the original.
+     */
+    private fun String.blankCommentsAndStrings(): String {
+        val out = toCharArray()
+        var index = 0
+        fun blankUntil(end: Int) {
+            for (position in index until minOf(end, length)) {
+                if (out[position] != '\n') out[position] = ' '
+            }
+            index = minOf(end, length)
+        }
+        while (index < length) {
+            val rest = length - index
+            when {
+                rest >= 2 && this[index] == '/' && this[index + 1] == '/' -> {
+                    val end = indexOf('\n', index).let { if (it < 0) length else it }
+                    blankUntil(end)
+                }
+                rest >= 2 && this[index] == '/' && this[index + 1] == '*' -> {
+                    val end = indexOf("*/", index).let { if (it < 0) length else it + 2 }
+                    blankUntil(end)
+                }
+                rest >= 3 && startsWith("\"\"\"", index) -> {
+                    val end = indexOf("\"\"\"", index + 3).let { if (it < 0) length else it + 3 }
+                    blankUntil(end)
+                }
+                this[index] == '"' -> {
+                    var end = index + 1
+                    while (end < length && this[end] != '"' && this[end] != '\n') {
+                        end += if (this[end] == '\\') 2 else 1
+                    }
+                    blankUntil(minOf(end + 1, length))
+                }
+                else -> index += 1
+            }
+        }
+        return String(out)
     }
 
     private fun assertSourcesAvoid(paths: List<String>, forbidden: List<String>, role: String) {
