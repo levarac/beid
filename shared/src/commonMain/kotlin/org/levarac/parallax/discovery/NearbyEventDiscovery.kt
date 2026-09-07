@@ -31,6 +31,59 @@ public enum class NearbyEventRegistryResolutionResult {
     LOOKUP_UNAVAILABLE, NOT_REGISTERED, VERIFICATION_UNAVAILABLE, VERIFIED,
 }
 
+/**
+ * Barnard's three-tier B005 v2 receiver state (spec 122, "Receiver policy"),
+ * mirrored 1:1 into shared discovery state.
+ *
+ * This answers "is this envelope verified", which is a different question from
+ * [NearbyEventRegistryStatus]'s "does a definition exist for this hash". A
+ * candidate can be registered without ever having carried a v2 envelope, and
+ * an envelope can be radio-self-verified for a hash the registry does not know.
+ *
+ * - [UNVERIFIED] is the default, and the only state a candidate assembled from
+ *   v1 `eventInfoHint` traffic alone can ever reach. A v2 container whose
+ *   receipt is unverified carries no parsed identity at all -- barnard's
+ *   `verify` returns nothing for both a malformed container and a bad
+ *   signature -- so it has no event-code hash to key on and never becomes a
+ *   candidate here.
+ * - [RADIO_SELF_VERIFIED] means barnard's own signature and self-consistency
+ *   checks passed. Registration is NOT confirmed and this MUST NOT be shown to
+ *   a user as "verified".
+ * - [REGISTRY_VERIFIED] is assigned only by this host, and only after its own
+ *   authenticated registry read agreed with the envelope through barnard's
+ *   pure `registryAgreement`. The SDK never assigns it.
+ *
+ * The state is monotonically raised within one discovery session and is
+ * cleared with the rest of the session by TTL expiry or reset: a later
+ * observation, including a hostile one, can never lower a tier already
+ * established for a hash.
+ *
+ * ## Which gate applies to which candidate
+ *
+ * The join / key-use / recording / relay gate is split by whether a candidate
+ * has ever carried a v2 envelope, because the two kinds of candidate cannot be
+ * held to the same bar:
+ *
+ * - **A candidate with a v2 envelope observed** ([RADIO_SELF_VERIFIED] or
+ *   above) must reach [REGISTRY_VERIFIED]. [RADIO_SELF_VERIFIED] is never
+ *   enough, and must never be presented to a user as "verified".
+ * - **A candidate assembled from v1 `eventInfoHint` traffic alone** stays at
+ *   [UNVERIFIED] forever, since nothing can raise it, and so keeps the
+ *   pre-existing [NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP]
+ *   gate. Holding it to [REGISTRY_VERIFIED] would make it permanently
+ *   unjoinable and regress the shipped v1 join path.
+ *
+ * This split is temporary by design. It exists only while v1 traffic is still
+ * the common case; once organizers serve their own v2 containers, the v1
+ * fallback retires and the single [REGISTRY_VERIFIED] bar applies to every
+ * candidate. A host must not build anything on the v1 branch surviving.
+ */
+public enum class NearbyEventReceiverState {
+    UNVERIFIED,
+    RADIO_SELF_VERIFIED,
+    REGISTRY_VERIFIED,
+}
+
 /** One peripheral's latest B005 facts for one event-code hash. */
 public class NearbyEventSourceObservation internal constructor(
     public val peripheralId: String,
@@ -55,8 +108,35 @@ public class NearbyEventCandidate internal constructor(
     private val displayNames: List<String>,
     public val registryStatus: NearbyEventRegistryStatus,
     public val resolvedEventIdHex: String?,
+    public val receiverState: NearbyEventReceiverState,
+    rawEnvelopeContainer: ByteArray?,
 ) {
     private val eventCodeHashBytes: ByteArray = eventCodeHash.copyOf()
+    private val rawEnvelopeContainerBytes: ByteArray? = rawEnvelopeContainer?.copyOf()
+
+    /**
+     * The B005 v2 container exactly as it came off the wire, for the last
+     * radio-self-verified envelope observed for this hash, or null when this
+     * candidate has only ever carried v1 hints.
+     *
+     * Retained because spec 134 re-broadcast is signature-preserving: a relay
+     * serves these bytes back with only `relayHopCount` changed, never a
+     * re-encode and never a re-signing, and the later relay verifier needs the
+     * exact bytes too. Session state only, held for the discovery TTL and
+     * dropped on expiry or reset; nothing here is persisted.
+     *
+     * Returns a defensive copy, like every other byte accessor on this type:
+     * the bytes are what a signature was computed over and must not be
+     * mutable in place after the fact.
+     */
+    public val rawEnvelopeContainer: ByteArray?
+        get() = rawEnvelopeContainerBytes?.copyOf()
+
+    /** Lowercase hex encoding of [rawEnvelopeContainer], for native callers. */
+    public val rawEnvelopeContainerHex: String?
+        get() = rawEnvelopeContainerBytes?.joinToString(separator = "") {
+            (it.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
 
     /** Returns a defensive copy so callers cannot mutate candidate identity. */
     public val eventCodeHash: ByteArray
@@ -97,6 +177,8 @@ public class NearbyEventCandidates internal constructor(
     public val additionalEventsOmitted: Boolean,
     public val hasLocallyEvictedSources: Boolean,
     public val nextExpiryAtEpochMillis: Long?,
+    /** See [NearbyEventDiscoveryStore.unverifiedEnvelopeCount]. */
+    public val unverifiedEnvelopeCount: Int,
 ) {
     public val candidateCount: Int
         get() = candidates.size
@@ -123,6 +205,31 @@ public class NearbyEventDiscoveryStore internal constructor() {
     internal var additionalEventsOmittedAtEpochMillis: Long? = null
     internal var locallyEvictedSources: Boolean = false
     internal val registry: MutableMap<EventHash, RegistryRecord> = mutableMapOf()
+
+    /**
+     * Held apart from [registry] on purpose. `recordNearbyEventHint` replaces a
+     * whole [RegistryRecord] to retry a failed lookup, and a receiver state
+     * stored inside that record would be silently downgraded by an ordinary
+     * re-observation after a flaky registry read.
+     */
+    internal val receiverStates: MutableMap<EventHash, NearbyEventReceiverState> = mutableMapOf()
+
+    /**
+     * Signature-preserving relay needs the exact container bytes, so they are
+     * held for the session beside the tier they belong to. Same lifetime as
+     * [receiverStates]: dropped on TTL expiry and on reset, never persisted.
+     */
+    internal val rawEnvelopeContainers: MutableMap<EventHash, ByteArray> = mutableMapOf()
+
+    /**
+     * How many B005 v2 containers this session saw that barnard could not
+     * verify. Such a container has no parsed identity and becomes no
+     * candidate, so this tally is the only trace it leaves; it exists so a
+     * dropped envelope is observable in tests and in a host's diagnostics
+     * rather than vanishing silently. A session tally, cleared by reset like
+     * the eviction fact, not by TTL.
+     */
+    internal var unverifiedEnvelopeCount: Int = 0
 
     public val snapshot: NearbyEventCandidates
         get() = buildSnapshot()
@@ -206,6 +313,240 @@ public fun recordNearbyEventHint(
     additionalNamesOmitted: Boolean,
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
+): NearbyEventDiscoveryUpdate = recordObservation(
+    store = store,
+    peripheralId = peripheralId,
+    eventDisplayName = eventDisplayName,
+    eventCodeHash = eventCodeHash,
+    census = census,
+    censusProvided = true,
+    additionalNamesOmitted = additionalNamesOmitted,
+    additionalEventsOmitted = additionalEventsOmitted,
+    observedAtEpochMillis = observedAtEpochMillis,
+)
+
+/**
+ * Records one B005 v2 observation whose receipt was `RADIO_SELF_VERIFIED`.
+ *
+ * The host does not decode the container: barnard has already verified the
+ * signature and the self-consistency of `eventId`, and these are the fields it
+ * parsed out. Source bookkeeping is identical to [recordNearbyEventHint] --
+ * the same TTL, eviction, omission and identity rules apply -- and the only
+ * added effect is raising this hash's [NearbyEventReceiverState] to
+ * [NearbyEventReceiverState.RADIO_SELF_VERIFIED].
+ *
+ * A v2 envelope carries no census, so this never clears a census a v1 hint
+ * already recorded for the same source.
+ *
+ * A receipt that is not radio-self-verified must not reach here at all: it has
+ * no parsed event-code hash to key on, and so has no candidate to describe.
+ *
+ * [agreesWithRegistry] is barnard's `registryAgreement` for THIS envelope
+ * against a definition the host had already read for this hash, or false when
+ * the host has no such definition yet. It decides two things, so no caller has
+ * to remember a second call: whether this envelope may replace the container
+ * retained for a hash that is already
+ * [NearbyEventReceiverState.REGISTRY_VERIFIED], and, when the hash is already
+ * registered via operator lookup, whether this envelope promotes it. Promotion
+ * still runs through the same guard
+ * [applyNearbyEventRegistryAgreementFromHex] uses, so an envelope can never
+ * promote a hash the registry has not vouched for.
+ *
+ * An empty [rawContainer] is rejected rather than stored. Zero bytes are not
+ * what came off the wire, and a spec 134 relay re-sending an empty container
+ * is worse than one relaying nothing: the candidate would claim to hold bytes
+ * it does not have. Such a call is counted as a drop, exactly as a
+ * verification failure is.
+ */
+public fun recordNearbyEventRadioSelfVerifiedEnvelope(
+    store: NearbyEventDiscoveryStore,
+    peripheralId: String,
+    eventDisplayName: String,
+    eventCodeHash: ByteArray,
+    rawContainer: ByteArray,
+    agreesWithRegistry: Boolean,
+    additionalNamesOmitted: Boolean,
+    additionalEventsOmitted: Boolean,
+    observedAtEpochMillis: Long,
+): NearbyEventDiscoveryUpdate {
+    if (rawContainer.isEmpty()) return recordNearbyEventUnverifiedEnvelope(store)
+    val update = recordObservation(
+        store = store,
+        peripheralId = peripheralId,
+        eventDisplayName = eventDisplayName,
+        eventCodeHash = eventCodeHash,
+        census = null,
+        censusProvided = false,
+        additionalNamesOmitted = additionalNamesOmitted,
+        additionalEventsOmitted = additionalEventsOmitted,
+        observedAtEpochMillis = observedAtEpochMillis,
+    )
+    if (!update.acceptedHint) return update
+    val hash = EventHash(eventCodeHash)
+    val raised = store.raiseReceiverState(hash, NearbyEventReceiverState.RADIO_SELF_VERIFIED)
+    // Below REGISTRY_VERIFIED the newest container simply wins: spec 134
+    // elects by hop among what a device can currently observe, so the freshest
+    // bytes are what a relay decision should be made from, and an older copy
+    // of the same event is not more authoritative for being older.
+    //
+    // At REGISTRY_VERIFIED that rule would be a hole. Barnard's radio
+    // self-check is satisfied by any envelope that is internally consistent,
+    // including one carrying a different key set for the same event-code hash.
+    // Such an envelope cannot lower the tier and its disagreement is dropped
+    // by `promoteToRegistryVerified`'s tier guard, so under a newest-wins rule
+    // it would quietly replace the retained bytes and leave a candidate
+    // reading REGISTRY_VERIFIED while holding bytes no registry read ever
+    // vouched for -- the exact bytes a spec 134 relay re-sends. So once the
+    // tier is REGISTRY_VERIFIED, only an envelope that itself agrees with the
+    // registry may replace what is held. A genuine relayed copy of the same
+    // envelope still qualifies: `registryAgreement` compares the signed
+    // fields, and `relayHopCount` is not one of them.
+    val registryVerified = store.receiverStates[hash] == NearbyEventReceiverState.REGISTRY_VERIFIED
+    val mayReplaceContainer = !registryVerified || agreesWithRegistry
+    val containerChanged = mayReplaceContainer &&
+        !store.rawEnvelopeContainers[hash].contentEqualsOrNull(rawContainer)
+    if (containerChanged) store.rawEnvelopeContainers[hash] = rawContainer.copyOf()
+    // Folded in so a caller cannot record an agreeing envelope and forget to
+    // promote it. A hash resolves against the registry exactly once, so an
+    // envelope arriving after that completion has no callback left to ride on,
+    // and this is the only place left that can act on its verdict. The guard
+    // is the shared one: no promotion without a registry read that already
+    // published REGISTERED_VIA_OPERATOR_LOOKUP for this hash.
+    val promoted = store.promoteToRegistryVerified(hash, agreesWithRegistry)
+    if (!raised && !containerChanged && !promoted) return update
+    return NearbyEventDiscoveryUpdate(
+        acceptedHint = true,
+        changed = true,
+        snapshot = store.snapshot,
+    )
+}
+
+/**
+ * Records that barnard could not verify a B005 v2 container.
+ *
+ * There is nothing else to record: `verify` returns nothing for both a
+ * malformed container and a bad signature, so the container has no event-code
+ * hash, no display name, and no candidate to attach to. Counting it is what
+ * keeps a dropped envelope observable instead of silent.
+ *
+ * Reports `changed = false`, because no candidate, source, omission fact or
+ * expiry time moved. Publish the returned snapshot if you surface the tally,
+ * but do not rebuild cards or re-arm the expiry wake-up from it: a peer
+ * transmitting garbage would otherwise drive both on every received packet,
+ * and re-arming from a snapshot whose expiry times did not change is how a
+ * scheduled refresh gets pushed around by traffic that means nothing.
+ */
+public fun recordNearbyEventUnverifiedEnvelope(
+    store: NearbyEventDiscoveryStore,
+): NearbyEventDiscoveryUpdate {
+    store.unverifiedEnvelopeCount += 1
+    return NearbyEventDiscoveryUpdate(
+        acceptedHint = false,
+        changed = false,
+        snapshot = store.snapshot,
+    )
+}
+
+private fun ByteArray?.contentEqualsOrNull(other: ByteArray): Boolean =
+    this != null && this.contentEquals(other)
+
+/** Swift Export boundary for [recordNearbyEventRadioSelfVerifiedEnvelope]. */
+public fun recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
+    store: NearbyEventDiscoveryStore,
+    peripheralId: String,
+    eventDisplayName: String,
+    eventCodeHashHex: String,
+    rawContainerHex: String,
+    agreesWithRegistry: Boolean,
+    additionalNamesOmitted: Boolean,
+    additionalEventsOmitted: Boolean,
+    observedAtEpochMillis: Long,
+): NearbyEventDiscoveryUpdate {
+    // A container that does not survive the hex boundary is rejected and
+    // counted, for the same reason a verification failure is: it is the only
+    // trace the envelope can leave. An empty result is rejected one layer
+    // down, in the byte-taking entry, so a host calling that directly
+    // inherits the same rule.
+    val eventCodeHash = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull()
+    val rawContainer = runCatching { rawContainerHex.decodeHexBytes() }.getOrNull()
+    if (eventCodeHash == null || rawContainer == null) {
+        return recordNearbyEventUnverifiedEnvelope(store)
+    }
+    return recordNearbyEventRadioSelfVerifiedEnvelope(
+        store = store,
+        peripheralId = peripheralId,
+        eventDisplayName = eventDisplayName,
+        eventCodeHash = eventCodeHash,
+        rawContainer = rawContainer,
+        agreesWithRegistry = agreesWithRegistry,
+        additionalNamesOmitted = additionalNamesOmitted,
+        additionalEventsOmitted = additionalEventsOmitted,
+        observedAtEpochMillis = observedAtEpochMillis,
+    )
+}
+
+/**
+ * Promotes one hash to [NearbyEventReceiverState.REGISTRY_VERIFIED].
+ *
+ * [agrees] is the verdict of barnard's pure `registryAgreement(verified,
+ * definition)`, run by the host against the definition its own authenticated
+ * registry read returned. Promotion additionally requires that this host has
+ * already published [NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP]
+ * for the hash and that the hash is currently
+ * [NearbyEventReceiverState.RADIO_SELF_VERIFIED]. Disagreement, an absent
+ * envelope, an absent or unverified registry read, and a resolution that
+ * arrived for a session that has since been reset or expired all leave the
+ * state untouched.
+ *
+ * Exposed separately from [completeNearbyEventRegistryResolutionFromHex]
+ * because the two inputs arrive in either order: the registry resolution for a
+ * hash starts on its first v1 hint and completes exactly once, so an envelope
+ * that lands after that completion has no resolution callback left to ride on.
+ */
+public fun applyNearbyEventRegistryAgreementFromHex(
+    store: NearbyEventDiscoveryStore,
+    eventCodeHashHex: String,
+    agrees: Boolean,
+): NearbyEventDiscoveryUpdate {
+    val bytes = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull()
+    if (bytes == null || bytes.size != EVENT_CODE_HASH_BYTES) {
+        return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
+    }
+    val changed = store.promoteToRegistryVerified(EventHash(bytes), agrees)
+    return NearbyEventDiscoveryUpdate(false, changed, store.snapshot)
+}
+
+internal fun NearbyEventDiscoveryStore.raiseReceiverState(
+    hash: EventHash,
+    state: NearbyEventReceiverState,
+): Boolean {
+    if (sources.keys.none { it.eventHash == hash }) return false
+    val current = receiverStates[hash] ?: NearbyEventReceiverState.UNVERIFIED
+    if (current.ordinal >= state.ordinal) return false
+    receiverStates[hash] = state
+    return true
+}
+
+internal fun NearbyEventDiscoveryStore.promoteToRegistryVerified(
+    hash: EventHash,
+    agrees: Boolean,
+): Boolean {
+    if (!agrees) return false
+    if (registry[hash]?.status != NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP) return false
+    if (receiverStates[hash] != NearbyEventReceiverState.RADIO_SELF_VERIFIED) return false
+    return raiseReceiverState(hash, NearbyEventReceiverState.REGISTRY_VERIFIED)
+}
+
+private fun recordObservation(
+    store: NearbyEventDiscoveryStore,
+    peripheralId: String,
+    eventDisplayName: String,
+    eventCodeHash: ByteArray,
+    census: ByteArray?,
+    censusProvided: Boolean,
+    additionalNamesOmitted: Boolean,
+    additionalEventsOmitted: Boolean,
+    observedAtEpochMillis: Long,
 ): NearbyEventDiscoveryUpdate {
     if (observedAtEpochMillis < 0L) {
         return NearbyEventDiscoveryUpdate(
@@ -256,7 +597,7 @@ public fun recordNearbyEventHint(
             store.registry[eventHash] = RegistryRecord()
             changed = true
         }
-        val censusChanged = !nullableByteArraysEqual(existing.censusCopy(), census)
+        val censusChanged = censusProvided && !nullableByteArraysEqual(existing.censusCopy(), census)
         if (existing.eventDisplayName != eventDisplayName) {
             existing.eventDisplayName = eventDisplayName
             changed = true
@@ -312,6 +653,7 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     verifiedDefinitionJoinMode: EventJoinMode?,
     verifiedDefinitionEventIdHex: String?,
     verifiedDefinitionEventCodeHashHex: String?,
+    envelopeAgreesWithRegistry: Boolean,
 ): NearbyEventDiscoveryUpdate {
     val hash = attempt.eventHash
     val record = store.registry[hash]
@@ -346,6 +688,9 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     if (record.status == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP && record.eventIdHex == null) {
         record.status = NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE
     }
+    // Runs after `record.status` is final, and is a no-op unless a
+    // radio-self-verified envelope for this same hash is already on record.
+    store.promoteToRegistryVerified(hash, envelopeAgreesWithRegistry)
     return NearbyEventDiscoveryUpdate(false, true, store.snapshot)
 }
 
@@ -416,9 +761,13 @@ public fun resetNearbyEventDiscovery(
     val changed = store.sources.isNotEmpty() ||
         store.additionalNamesOmittedAtEpochMillis != null ||
         store.additionalEventsOmittedAtEpochMillis != null ||
-        store.locallyEvictedSources
+        store.locallyEvictedSources ||
+        store.unverifiedEnvelopeCount != 0
     store.sources.clear()
     store.registry.clear()
+    store.receiverStates.clear()
+    store.rawEnvelopeContainers.clear()
+    store.unverifiedEnvelopeCount = 0
     store.additionalNamesOmittedAtEpochMillis = null
     store.additionalEventsOmittedAtEpochMillis = null
     store.locallyEvictedSources = false
@@ -473,6 +822,8 @@ private fun expireAt(store: NearbyEventDiscoveryStore, nowEpochMillis: Long): Bo
         expiredKeys.forEach(store.sources::remove)
         val liveHashes = store.sources.keys.map { it.eventHash }.toSet()
         store.registry.keys.retainAll(liveHashes)
+        store.receiverStates.keys.retainAll(liveHashes)
+        store.rawEnvelopeContainers.keys.retainAll(liveHashes)
         changed = true
     }
 
@@ -518,6 +869,8 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
                 displayNames = records.map { source -> source.eventDisplayName }.distinct().sorted(),
                 registryStatus = registry[eventHash]?.status ?: NearbyEventRegistryStatus.UNRESOLVED,
                 resolvedEventIdHex = registry[eventHash]?.eventIdHex,
+                receiverState = receiverStates[eventHash] ?: NearbyEventReceiverState.UNVERIFIED,
+                rawEnvelopeContainer = rawEnvelopeContainers[eventHash],
             )
         }
 
@@ -532,6 +885,7 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
         additionalEventsOmitted = additionalEventsOmittedAtEpochMillis != null,
         hasLocallyEvictedSources = locallyEvictedSources,
         nextExpiryAtEpochMillis = expiryTimes.minOrNull(),
+        unverifiedEnvelopeCount = unverifiedEnvelopeCount,
     )
 }
 

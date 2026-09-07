@@ -25,6 +25,7 @@ class NearbyEventRegistryResolutionTest {
             verifiedDefinitionJoinMode = EventJoinMode.OPEN,
             verifiedDefinitionEventIdHex = eventId,
             verifiedDefinitionEventCodeHashHex = hash,
+            envelopeAgreesWithRegistry = false,
         )
         val candidate = update.snapshot.candidateAt(0)!!
         assertEquals(NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP, candidate.registryStatus)
@@ -100,6 +101,7 @@ class NearbyEventRegistryResolutionTest {
             null,
             null,
             null,
+            false,
         )
         refreshNearbyEventDiscovery(store, 300_000L)
         recordNearbyEventHint(store, "p2", "Event", bytes, null, false, false, 300_001L)
@@ -151,6 +153,7 @@ class NearbyEventRegistryResolutionTest {
             verifiedDefinitionJoinMode = null,
             verifiedDefinitionEventIdHex = null,
             verifiedDefinitionEventCodeHashHex = null,
+            envelopeAgreesWithRegistry = false,
         )
         assertFalse(stale.changed)
         assertEquals(
@@ -200,6 +203,7 @@ class NearbyEventRegistryResolutionTest {
             verifiedDefinitionJoinMode = joinMode,
             verifiedDefinitionEventIdHex = CANONICAL_EVENT_ID,
             verifiedDefinitionEventCodeHashHex = definitionHash,
+            envelopeAgreesWithRegistry = false,
         ).snapshot.candidateAt(0)!!
     }
 
@@ -214,6 +218,7 @@ class NearbyEventRegistryResolutionTest {
         verifiedDefinitionJoinMode = EventJoinMode.OPEN,
         verifiedDefinitionEventIdHex = CANONICAL_EVENT_ID,
         verifiedDefinitionEventCodeHashHex = CANONICAL_HASH,
+        envelopeAgreesWithRegistry = false,
     )
 
     private companion object {

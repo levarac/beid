@@ -11,7 +11,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.levarac.barnard.BarnardB005EnvelopeV2
 import org.levarac.barnard.BarnardEvent
+import org.levarac.barnard.BarnardEventInfoEnvelopeV2Event
+import org.levarac.barnard.BarnardRegistryAgreement
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.registry.RegistryClient
@@ -283,6 +286,9 @@ class EventJoinCoordinator internal constructor(
                     additionalEventsOmitted = hint.additionalEventsOmitted,
                 )
             }
+            is BarnardEvent.EventInfoEnvelopeV2 -> {
+                handleEventInfoEnvelopeV2(event.envelope)
+            }
             is BarnardEvent.Detection -> {
                 val detection = event.detection
                 handleDetection(
@@ -294,6 +300,37 @@ class EventJoinCoordinator internal constructor(
             }
             else -> Unit
         }
+    }
+
+    /**
+     * Mirrors iOS's `SensingCoordinator.handleEventInfoEnvelopeV2`.
+     *
+     * A receipt that is not `RADIO_SELF_VERIFIED` becomes no candidate:
+     * barnard's `verify` returns nothing for both a malformed container and a
+     * bad signature, so an unverified receipt has no event-code hash, no
+     * display name, and nothing to describe. It is counted rather than
+     * silently discarded, so the drop stays observable.
+     *
+     * The raw container travels with the verified receipt because spec 134
+     * re-broadcast is signature-preserving: the relay serves these exact bytes
+     * with only `relayHopCount` changed.
+     *
+     * The agreement closure handed downstream is barnard's own pure
+     * comparison bound to this envelope. This host never re-implements it, and
+     * never assigns `REGISTRY_VERIFIED` itself outside the shared reducer.
+     */
+    private fun handleEventInfoEnvelopeV2(event: BarnardEventInfoEnvelopeV2Event) {
+        val envelope = event.verifiedEnvelope
+        if (envelope == null) {
+            nearbyDiscovery.recordUnverifiedEnvelope()
+            return
+        }
+        nearbyDiscovery.recordRadioSelfVerifiedEnvelope(
+            peripheralId = event.peripheralId,
+            eventDisplayName = envelope.eventDisplayName,
+            eventCodeHash = envelope.eventCodeHash,
+            rawContainer = event.rawContainer,
+        ) { definition -> BarnardB005EnvelopeV2.registryAgreement(envelope, definition) is BarnardRegistryAgreement.Agrees }
     }
 
     /**

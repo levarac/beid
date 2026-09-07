@@ -40,6 +40,24 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         assertContentEquals(byteArrayOf(1, 2), assertNotNull(assertNotNull(candidate.sourceAt(0)).census))
     }
 
+    /**
+     * An unverified receipt carries no parsed identity at all: barnard's
+     * `verify` returns nothing for both a malformed container and a bad
+     * signature, so there is no event-code hash to key a candidate on.
+     */
+    @Test
+    fun anUnverifiedB005V2EnvelopeNeverBecomesACandidate() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.requestBluetoothPermission {}
+
+        engine.emitUnverifiedEnvelopeV2("peripheral-a")
+
+        assertEquals(0, coordinator.nearbyEventCandidates.value.candidateCount)
+        assertEquals(1, coordinator.nearbyEventCandidates.value.unverifiedEnvelopeCount)
+        assertEquals(EventJoinUiState.Idle, coordinator.state.value)
+    }
+
     @Test
     fun expiryUsesTheInjectedClockAndCoroutineScope() = runTest {
         val engine = FakeEventJoinEngine()

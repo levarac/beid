@@ -7,10 +7,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.levarac.barnard.BarnardEventDefinitionV1
 import org.levarac.parallax.discovery.NearbyEventCandidates
+import org.levarac.parallax.discovery.NearbyEventReceiverState
 import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.discovery.createNearbyEventDiscoveryStore
 import org.levarac.parallax.discovery.recordNearbyEventHint
+import org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelope
+import org.levarac.parallax.discovery.recordNearbyEventUnverifiedEnvelope
 import org.levarac.parallax.discovery.refreshNearbyEventDiscovery
 import org.levarac.parallax.discovery.resetNearbyEventDiscovery
 import org.levarac.parallax.discovery.beginNearbyEventRegistryResolutionFromHex
@@ -38,6 +42,7 @@ internal data class NearbyEventDefinitionVerification(
     val eventCodeHashHex: String?,
     val validFromEpochSeconds: Long?,
     val validUntilEpochSeconds: Long?,
+    val keySetDigestHex: String? = null,
 )
 
 /** Native effect seam; the shared reducer below remains the trust authority. */
@@ -85,6 +90,7 @@ internal class RegistryClientNearbyEventRegistry(
                     eventCodeHashHex = it.context?.eventCodeHashHex,
                     validFromEpochSeconds = it.context?.validFrom?.value,
                     validUntilEpochSeconds = it.context?.validUntil?.value,
+                    keySetDigestHex = it.context?.definition?.keySetDigestHex,
                 ),
             )
         }
@@ -105,6 +111,22 @@ internal class NearbyEventDiscoverySession(
     private val _candidates = MutableStateFlow(store.snapshot)
     private val _cards = MutableStateFlow<List<NearbyEventCard>>(emptyList())
     private val verifiedMetadataByHash = mutableMapOf<String, VerifiedNearbyEventMetadata>()
+
+    /**
+     * Barnard's `registryAgreement` for the radio-self-verified envelope last
+     * seen for a hash, held as a closure because `BarnardB005VerifiedEnvelope`
+     * has no public constructor and so cannot be carried across a test seam.
+     * The host never re-implements the comparison; it only decides *when* to
+     * ask barnard for it.
+     */
+    private val envelopeAgreementByHash = mutableMapOf<String, (BarnardEventDefinitionV1) -> Boolean>()
+
+    /**
+     * The definition this host's own authenticated registry read returned,
+     * kept so an envelope arriving *after* a hash's single registry resolution
+     * completed still has something to be compared against.
+     */
+    private val verifiedDefinitionByHash = mutableMapOf<String, BarnardEventDefinitionV1>()
     private var expiryJob: Job? = null
     private var disposed = false
     private var callbackGeneration = 0L
@@ -136,6 +158,67 @@ internal class NearbyEventDiscoverySession(
         resolveUnresolvedCandidates(update.snapshot)
     }
 
+    /**
+     * Records a B005 v2 envelope barnard reported as `RADIO_SELF_VERIFIED`.
+     *
+     * [registryAgreement] is barnard's own pure comparison bound to this
+     * envelope. It is invoked only against a definition this host read from
+     * the registry itself, never against anything off the radio.
+     *
+     * An `UNVERIFIED` receipt must not reach here: barnard's `verify` returns
+     * nothing for both a malformed container and a bad signature, so such a
+     * receipt has no event-code hash and describes no candidate.
+     */
+    fun recordRadioSelfVerifiedEnvelope(
+        peripheralId: String,
+        eventDisplayName: String,
+        eventCodeHash: ByteArray,
+        rawContainer: ByteArray,
+        registryAgreement: (BarnardEventDefinitionV1) -> Boolean,
+    ) {
+        if (disposed) return
+        val hash = eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        // Asked before recording, because the reducer needs this envelope's
+        // own verdict to decide whether it may replace the container retained
+        // for a hash that is already REGISTRY_VERIFIED.
+        val agrees = verifiedDefinitionByHash[hash]?.let(registryAgreement) == true
+        val update = recordNearbyEventRadioSelfVerifiedEnvelope(
+            store = store,
+            peripheralId = peripheralId,
+            eventDisplayName = eventDisplayName,
+            eventCodeHash = eventCodeHash,
+            rawContainer = rawContainer,
+            agreesWithRegistry = agrees,
+            additionalNamesOmitted = false,
+            additionalEventsOmitted = false,
+            observedAtEpochMillis = nowEpochMillis(),
+        )
+        if (!update.acceptedHint) return
+        envelopeAgreementByHash[hash] = registryAgreement
+        // No second call for the late-arrival order: the record above already
+        // acted on `agrees`, under the same guard the standalone agreement
+        // entry uses.
+        publishAndSchedule(update.snapshot)
+        resolveUnresolvedCandidates(update.snapshot)
+    }
+
+    /**
+     * Records that barnard could not verify a container this session saw.
+     *
+     * There is nothing else to record -- an unverified receipt has no parsed
+     * identity at all -- so this tally is the only trace the drop leaves, and
+     * it is what makes the drop observable rather than silent.
+     */
+    fun recordUnverifiedEnvelope() {
+        if (disposed) return
+        // Publishes the candidates flow so the tally is observable, and stops
+        // there. Deliberately not publishAndSchedule: no candidate, source or
+        // expiry time moved, so rebuilding the card list and re-arming the
+        // expiry wake-up would let a peer transmitting garbage drive both on
+        // every received packet.
+        _candidates.value = recordNearbyEventUnverifiedEnvelope(store).snapshot
+    }
+
     fun reset() {
         callbackGeneration += 1
         registryRequests.forEach { it.cancel() }
@@ -144,6 +227,8 @@ internal class NearbyEventDiscoverySession(
         expiryJob = null
         _candidates.value = resetNearbyEventDiscovery(store).snapshot
         verifiedMetadataByHash.clear()
+        envelopeAgreementByHash.clear()
+        verifiedDefinitionByHash.clear()
         _cards.value = emptyList()
     }
 
@@ -183,6 +268,7 @@ internal class NearbyEventDiscoverySession(
                                 verifiedDefinitionJoinMode = null,
                                 verifiedDefinitionEventIdHex = null,
                                 verifiedDefinitionEventCodeHashHex = null,
+                                envelopeAgreesWithRegistry = false,
                             ).snapshot,
                         )
                         return@launch
@@ -195,6 +281,16 @@ internal class NearbyEventDiscoverySession(
                                 !isNearbyEventRegistryResolutionAttemptActive(store, attempt)) return@launch
                             val result = if (verified.isSuccess) NearbyEventRegistryResolutionResult.VERIFIED
                             else NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE
+                            val definition = verified.toBarnardDefinition()
+                            if (definition != null && result == NearbyEventRegistryResolutionResult.VERIFIED) {
+                                verifiedDefinitionByHash[hash] = definition
+                            } else {
+                                verifiedDefinitionByHash.remove(hash)
+                            }
+                            // Barnard owns the comparison. This decides only that
+                            // it is asked with a definition this host read itself.
+                            val agrees = definition != null &&
+                                envelopeAgreementByHash[hash]?.invoke(definition) == true
                             val update = completeNearbyEventRegistryResolutionFromHex(
                                     store = store,
                                     attempt = attempt,
@@ -203,6 +299,7 @@ internal class NearbyEventDiscoverySession(
                                     verifiedDefinitionJoinMode = verified.joinMode,
                                     verifiedDefinitionEventIdHex = verified.eventIdHex,
                                     verifiedDefinitionEventCodeHashHex = verified.eventCodeHashHex,
+                                    envelopeAgreesWithRegistry = agrees,
                                 )
                             updateVerifiedCard(
                                 hash,
@@ -236,10 +333,44 @@ internal class NearbyEventDiscoverySession(
             repeat(snapshot.candidateCount) { index -> snapshot.candidateAt(index)?.let { add(it.eventCodeHashHex) } }
         }
         verifiedMetadataByHash.keys.retainAll(liveHashes)
+        envelopeAgreementByHash.keys.retainAll(liveHashes)
+        verifiedDefinitionByHash.keys.retainAll(liveHashes)
         _cards.value = buildList {
             repeat(snapshot.candidateCount) { index ->
                 snapshot.candidateAt(index)?.let { candidate ->
+                    // The gate is evaluated here, not only on the resolution
+                    // path: a candidate can change tier *after* its registry
+                    // read already published verified metadata, and that
+                    // metadata would otherwise keep the card joinable at a
+                    // tier that must not be joinable.
+                    //
+                    // Exhaustive on purpose, with no `else`: a fourth receiver
+                    // state must not silently inherit either answer.
+                    val joinable = when (candidate.receiverState) {
+                        // Never observed a v2 envelope, so the pre-existing v1
+                        // gate is the only one that can apply.
+                        NearbyEventReceiverState.UNVERIFIED -> true
+                        // This host's own registry read agreed with the
+                        // envelope. The strongest tier there is.
+                        NearbyEventReceiverState.REGISTRY_VERIFIED -> true
+                        // A verified-but-unregistered envelope withdraws join
+                        // only from a candidate that had nothing else to stand
+                        // on. Spec 122 step 7 binds the event-code hash to the
+                        // event ID for OPEN events only, so an attacker can
+                        // forge a self-consistent envelope carrying a GATED
+                        // event's hash: it verifies, raises this tier, and
+                        // would otherwise withdraw the genuine operator-lookup
+                        // registration until the discovery TTL expires. An
+                        // agreeing envelope never reaches this branch, because
+                        // agreement promotes to REGISTRY_VERIFIED, so honouring
+                        // the operator lookup here is strictly no worse than
+                        // before v2 existed and the forgery buys nothing.
+                        NearbyEventReceiverState.RADIO_SELF_VERIFIED ->
+                            candidate.registryStatus ==
+                                NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
+                    }
                     val verified = verifiedMetadataByHash[candidate.eventCodeHashHex]
+                        ?.takeIf { joinable }
                     add(
                         NearbyEventCard(
                             beaconDisplayName = candidate.displayNameAt(0),
@@ -273,6 +404,10 @@ internal class NearbyEventDiscoverySession(
      * The shared reducer remains the sole trust predicate. Native code only
      * carries period fields from the already verified context after that
      * reducer exposes REGISTERED_VIA_OPERATOR_LOOKUP for the same candidate.
+     *
+     * Whether those fields reach a card is decided in [publishAndSchedule], so
+     * that a candidate reaching RADIO_SELF_VERIFIED after this ran is still
+     * withheld from joining.
      */
     private fun updateVerifiedCard(
         hash: String,
@@ -290,6 +425,42 @@ internal class NearbyEventDiscoverySession(
             verifiedMetadataByHash[hash] = VerifiedNearbyEventMetadata(eventIdHex, validFrom, validUntil)
         } else {
             verifiedMetadataByHash.remove(hash)
+        }
+    }
+
+    /**
+     * Builds barnard's `BarnardEventDefinitionV1` from a verified registry
+     * read. `joinMode` is the wire value the Event Definition CBOR carries
+     * (`0` open, `1` gated), not an enum ordinal that happens to match. Any
+     * missing or malformed field yields null, which can only ever withhold
+     * promotion.
+     */
+    private fun NearbyEventDefinitionVerification.toBarnardDefinition(): BarnardEventDefinitionV1? {
+        val eventId = eventIdHex.hexBytesOrNull(32) ?: return null
+        val keySetDigest = keySetDigestHex.hexBytesOrNull(32) ?: return null
+        val codeHash = eventCodeHashHex.hexBytesOrNull(8) ?: return null
+        val mode = when (joinMode) {
+            EventJoinMode.OPEN -> 0
+            EventJoinMode.GATED -> 1
+            null -> return null
+        }
+        return BarnardEventDefinitionV1(
+            eventId = eventId,
+            keySetDigest = keySetDigest,
+            joinMode = mode,
+            eventCodeHash = codeHash,
+            validFromUnixSeconds = validFromEpochSeconds ?: return null,
+            validUntilUnixSeconds = validUntilEpochSeconds ?: return null,
+        )
+    }
+
+    private fun String?.hexBytesOrNull(expectedBytes: Int): ByteArray? {
+        val value = this?.removePrefix("0x") ?: return null
+        if (value.length != expectedBytes * 2) return null
+        return ByteArray(expectedBytes) { index ->
+            val high = value[index * 2].digitToIntOrNull(16) ?: return null
+            val low = value[index * 2 + 1].digitToIntOrNull(16) ?: return null
+            ((high shl 4) or low).toByte()
         }
     }
 

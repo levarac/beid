@@ -524,6 +524,19 @@ final class SensingCoordinator: ObservableObject {
   /// a completion that was delivered before cancellation.
   private var nearbyDiscoveryCallbackGeneration: UInt64 = 0
 
+  /// Barnard's `registryAgreement` for the radio-self-verified envelope last
+  /// seen for an event-code hash, held as a closure because
+  /// `BarnardB005VerifiedEnvelope` has no public initializer and so cannot be
+  /// carried across a test seam. This file never re-implements the
+  /// comparison; it decides only *when* barnard is asked for it, and asks
+  /// only with a definition this host read from the registry itself.
+  private var nearbyEnvelopeAgreements: [String: (BarnardEventDefinitionV1) -> Bool] = [:]
+
+  /// The definition this host's own authenticated registry read returned,
+  /// kept so an envelope arriving *after* a hash's single registry resolution
+  /// completed still has something to be compared against.
+  private var nearbyVerifiedDefinitions: [String: BarnardEventDefinitionV1] = [:]
+
   // MARK: - Per-session protocol state
   //
   // Reset at the start of every new event (`beginEventFound`) and on
@@ -1063,6 +1076,27 @@ final class SensingCoordinator: ObservableObject {
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
         reporterRpid: detection.reporterRpid
+      )
+    case .eventInfoEnvelopeV2(let envelopeEvent):
+      guard let envelope = envelopeEvent.verifiedEnvelope else {
+        // An unverified receipt carries no parsed identity: barnard's
+        // `verify` returns nothing for both a malformed container and a bad
+        // signature, so there is no event-code hash to key a candidate on.
+        // Counting it keeps the drop observable rather than silent.
+        Self.log.debug(
+          "b005 v2 envelope failed verification, container bytes: \(envelopeEvent.rawContainer.count, privacy: .public)"
+        )
+        handleUnverifiedEventInfoEnvelopeV2()
+        break
+      }
+      handleEventInfoEnvelopeV2(
+        peripheralId: envelopeEvent.peripheralId.uuidString,
+        eventDisplayName: envelope.eventDisplayName,
+        eventCodeHash: Data(envelope.eventCodeHash),
+        rawContainer: envelopeEvent.rawContainer,
+        registryAgreement: { definition in
+          BarnardB005EnvelopeV2.registryAgreement(envelope, definition: definition) == .agrees
+        }
       )
     case .eventInfoHint(let hint):
       handleEventInfoHint(
@@ -1740,6 +1774,70 @@ final class SensingCoordinator: ObservableObject {
     resolveNearbyCandidates(update.snapshot)
   }
 
+  /// Records a B005 v2 envelope barnard reported as `RADIO_SELF_VERIFIED`.
+  ///
+  /// Not `private`, and taking plain fields plus an agreement closure rather
+  /// than barnard's event type, for the same reason
+  /// `handleEventInfoHint(peripheralId:...)` does: `BarnardB005VerifiedEnvelope`
+  /// has no public initializer, so `BeidTests` could otherwise not drive this
+  /// path at all. Production code only ever reaches it from `handle(_:)`,
+  /// already MainActor-isolated by `engine.onEvent`'s `Task { @MainActor in }`.
+  ///
+  /// This records an observation and raises the hash's receiver tier. It never
+  /// joins, never touches session state, and never assigns REGISTRY_VERIFIED
+  /// itself -- the shared reducer owns that, and only once this host's own
+  /// registry read agrees.
+  func handleEventInfoEnvelopeV2(
+    peripheralId: String,
+    eventDisplayName: String,
+    eventCodeHash: Data,
+    rawContainer: Data,
+    registryAgreement: @escaping (BarnardEventDefinitionV1) -> Bool,
+    observedAtEpochMillis: Int64? = nil
+  ) {
+    let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
+    let hash = eventCodeHash.lowercaseHexString
+    // Asked before recording, because the reducer needs this envelope's own
+    // verdict to decide whether it may replace the container retained for a
+    // hash that is already REGISTRY_VERIFIED.
+    let agrees = nearbyVerifiedDefinitions[hash].map(registryAgreement) ?? false
+    let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
+        store: nearbyDiscoveryStore,
+        peripheralId: peripheralId,
+        eventDisplayName: eventDisplayName,
+        eventCodeHashHex: hash,
+        rawContainerHex: rawContainer.lowercaseHexString,
+        agreesWithRegistry: agrees,
+        additionalNamesOmitted: false,
+        additionalEventsOmitted: false,
+        observedAtEpochMillis: observedAt
+      )
+    guard update.acceptedHint else { return }
+    nearbyEnvelopeAgreements[hash] = registryAgreement
+    // No second call for the late-arrival order: the record above already
+    // acted on `agrees`, under the same guard the standalone agreement entry
+    // uses.
+    publishNearbyEventDiscovery(update.snapshot, asOf: observedAt)
+    resolveNearbyCandidates(update.snapshot)
+  }
+
+  /// Records that barnard could not verify a container this session saw.
+  ///
+  /// There is nothing else to record -- an unverified receipt has no parsed
+  /// identity at all -- so this tally is the only trace the drop leaves.
+  /// Not `private`, for the same test-seam reason as the two handlers above.
+  func handleUnverifiedEventInfoEnvelopeV2() {
+    // Publishes the snapshot so the tally is observable, and stops there.
+    // Deliberately not `publishNearbyEventDiscovery`: no candidate, source or
+    // expiry time moved, so rebuilding from it and re-arming the expiry
+    // wake-up would let a peer transmitting garbage drive both on every
+    // received packet.
+    nearbyEventCandidates = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .recordNearbyEventUnverifiedEnvelope(store: nearbyDiscoveryStore)
+      .snapshot
+  }
+
   /// Publishes one snapshot and rearms the single expiry wake-up from the
   /// snapshot's own `nextExpiryAtEpochMillis`, so the published list stops
   /// showing an event whose sources have gone quiet even when no further
@@ -1749,6 +1847,17 @@ final class SensingCoordinator: ObservableObject {
     asOf now: Int64
   ) {
     nearbyEventCandidates = snapshot
+    // Mirrors the Android session's prune: a hash whose sources have expired
+    // keeps neither its cached agreement nor its cached definition, so neither
+    // map grows without bound across a long discovery session.
+    var liveHashes = Set<String>()
+    for index in 0..<snapshot.candidateCount {
+      if let candidate = snapshot.candidateAt(index: index) {
+        liveHashes.insert(candidate.eventCodeHashHex)
+      }
+    }
+    nearbyEnvelopeAgreements = nearbyEnvelopeAgreements.filter { liveHashes.contains($0.key) }
+    nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter { liveHashes.contains($0.key) }
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
 
@@ -1780,6 +1889,8 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryCallbackGeneration &+= 1
     nearbyRegistryRequests.forEach { $0.cancel() }
     nearbyRegistryRequests.removeAll()
+    nearbyEnvelopeAgreements.removeAll()
+    nearbyVerifiedDefinitions.removeAll()
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
     nearbyEventCandidates = ExportedKotlinPackages.org.levarac.parallax.discovery
@@ -1818,7 +1929,8 @@ final class SensingCoordinator: ObservableObject {
                 result: result, resolvedEventIdHex: nil,
                 verifiedDefinitionJoinMode: nil,
                 verifiedDefinitionEventIdHex: nil,
-                verifiedDefinitionEventCodeHashHex: nil
+                verifiedDefinitionEventCodeHashHex: nil,
+                envelopeAgreesWithRegistry: false
               )
             self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
             return
@@ -1840,13 +1952,23 @@ final class SensingCoordinator: ObservableObject {
               let result: ExportedKotlinPackages.org.levarac.parallax.discovery
                 .NearbyEventRegistryResolutionResult = verified.isSuccess
                 ? .VERIFIED : .VERIFICATION_UNAVAILABLE
+              let definition = verified.context.flatMap(Self.barnardDefinition(from:))
+              if result == .VERIFIED, let definition {
+                self.nearbyVerifiedDefinitions[hash] = definition
+              } else {
+                self.nearbyVerifiedDefinitions.removeValue(forKey: hash)
+              }
+              // Barnard owns the comparison. This decides only that it is
+              // asked with a definition this host read itself.
+              let agrees = definition.map { self.nearbyEnvelopeAgreements[hash]?($0) ?? false } ?? false
               let update = ExportedKotlinPackages.org.levarac.parallax.discovery
                 .completeNearbyEventRegistryResolutionFromHex(
                   store: self.nearbyDiscoveryStore, attempt: attempt,
                   result: result, resolvedEventIdHex: eventID,
                   verifiedDefinitionJoinMode: verified.context?.joinMode,
                   verifiedDefinitionEventIdHex: verified.context?.eventIdHex,
-                  verifiedDefinitionEventCodeHashHex: verified.context?.eventCodeHashHex
+                  verifiedDefinitionEventCodeHashHex: verified.context?.eventCodeHashHex,
+                  envelopeAgreesWithRegistry: agrees
                 )
               self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
             }
@@ -1856,6 +1978,63 @@ final class SensingCoordinator: ObservableObject {
       }
       nearbyRegistryRequests.append(lookup)
     }
+  }
+
+  /// Builds barnard's `BarnardEventDefinitionV1` from a verified registry read.
+  ///
+  /// `joinMode` is the wire value the Event Definition CBOR carries (`0` open,
+  /// `1` gated), not an enum ordinal that happens to match. Any missing or
+  /// malformed field yields nil, which can only ever withhold promotion.
+  private static func barnardDefinition(
+    from context: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionContext
+  ) -> BarnardEventDefinitionV1? {
+    barnardDefinition(
+      eventIdHex: context.eventIdHex,
+      keySetDigestHex: context.definition.keySetDigestHex,
+      eventCodeHashHex: context.eventCodeHashHex,
+      joinMode: context.joinMode,
+      validFromUnixSeconds: context.validFrom.value,
+      validUntilUnixSeconds: context.validUntil.value
+    )
+  }
+
+  /// The whole decision, split out from the context reader above so it can be
+  /// tested: `EventDefinitionContext` has an internal Kotlin initializer and
+  /// cannot be constructed from a test, which left every rule here — the
+  /// join-mode wire mapping most of all — unexercised.
+  ///
+  /// `joinMode` is the wire value the Event Definition CBOR carries (`0` open,
+  /// `1` gated), not an enum ordinal that happens to line up with it.
+  /// Internal rather than private for the same test-seam reason; nothing
+  /// outside this type calls it.
+  static func barnardDefinition(
+    eventIdHex: String,
+    keySetDigestHex: String,
+    eventCodeHashHex: String?,
+    joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode?,
+    validFromUnixSeconds: Int64,
+    validUntilUnixSeconds: Int64
+  ) -> BarnardEventDefinitionV1? {
+    guard let eventId = eventIdHex.hexBytes(count: 32),
+      let keySetDigest = keySetDigestHex.hexBytes(count: 32),
+      let eventCodeHashHex,
+      let eventCodeHash = eventCodeHashHex.hexBytes(count: 8),
+      let joinMode
+    else { return nil }
+    let mode: UInt8
+    switch joinMode {
+    case .OPEN: mode = 0
+    case .GATED: mode = 1
+    default: return nil
+    }
+    return BarnardEventDefinitionV1(
+      eventId: eventId,
+      keySetDigest: keySetDigest,
+      joinMode: mode,
+      eventCodeHash: eventCodeHash,
+      validFromUnixSeconds: validFromUnixSeconds,
+      validUntilUnixSeconds: validUntilUnixSeconds
+    )
   }
 
   // MARK: - Shared phase transitions
@@ -2982,6 +3161,16 @@ final class SensingCoordinator: ObservableObject {
     guard nanos > 0 else { return !Task.isCancelled }
     try? await Task.sleep(nanoseconds: nanos)
     return !Task.isCancelled
+  }
+}
+
+private extension String {
+  /// Decodes exactly [count] bytes of `0x`-prefixed or bare hex; nil for any
+  /// other length or a non-hex character. Used to turn the registry's hex
+  /// fields into the raw byte arrays barnard's definition value requires.
+  func hexBytes(count: Int) -> [UInt8]? {
+    guard let data = Data(hexEncoded: self), data.count == count else { return nil }
+    return [UInt8](data)
   }
 }
 

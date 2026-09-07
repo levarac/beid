@@ -1,7 +1,9 @@
 package org.levarac.beid.sensing
 
 import org.levarac.barnard.BarnardDetectionEvent
+import org.levarac.barnard.BarnardB005EnvelopeV2Receipt
 import org.levarac.barnard.BarnardEvent
+import org.levarac.barnard.BarnardEventInfoEnvelopeV2Event
 import org.levarac.barnard.BarnardEventInfo
 import org.levarac.barnard.BarnardEventInfoHintEvent
 import org.levarac.barnard.BarnardPermissionResult
@@ -76,6 +78,27 @@ internal class FakeEventJoinEngine(
         disposeCalls += 1
         engineState = EventJoinEngineState(isScanning = false, isAdvertising = false)
         onEvent = null
+    }
+
+    /**
+     * Emits a B005 v2 envelope whose receipt is `Unverified`.
+     *
+     * Only this half of the two-case receipt can be built in a test: the
+     * `RadioSelfVerified` case wraps `BarnardB005VerifiedEnvelope`, whose
+     * constructor is private and whose only factory is barnard-internal, so a
+     * verified receipt can be produced by `BarnardB005EnvelopeV2.verify`
+     * alone. The verified path is covered at the session seam instead.
+     */
+    fun emitUnverifiedEnvelopeV2(peripheralId: String, container: ByteArray = ByteArray(4)) {
+        onEvent?.invoke(
+            BarnardEvent.EventInfoEnvelopeV2(
+                BarnardEventInfoEnvelopeV2Event(
+                    peripheralId = peripheralId,
+                    receipt = BarnardB005EnvelopeV2Receipt.Unverified,
+                    rawContainer = container,
+                ),
+            ),
+        )
     }
 
     fun emitHint(

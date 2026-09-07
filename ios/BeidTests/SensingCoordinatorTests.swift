@@ -46,6 +46,14 @@ func makeIsolatedSensingCoordinator(
 
 @MainActor
 final class SensingCoordinatorTests: XCTestCase {
+  /// Stand-in B005 v2 container bytes. Nothing here parses them: barnard has
+  /// already verified whatever these tests hand across the seam, and the host
+  /// keeps them only so a spec 134 relay can re-send them unchanged.
+  static let envelopeContainer = Data([3, 0, 1, 2])
+  static let eventIdHex = String(repeating: "ab", count: 32)
+  static let keySetDigestHex = String(repeating: "cd", count: 32)
+  static let eventCodeHashHex = String(repeating: "ef", count: 8)
+
   func testDemoEventModeRemainsOverridableInDebugSimulator() throws {
     #if DEBUG && targetEnvironment(simulator)
     let coordinator = makeIsolatedSensingCoordinator(for: self)
@@ -607,6 +615,265 @@ final class SensingCoordinatorTests: XCTestCase {
       Data(bytesFromKotlinByteArray: try XCTUnwrap(source.census)),
       census
     )
+  }
+
+  /// A B005 v2 envelope barnard reported as radio-self-verified becomes a
+  /// candidate at exactly that tier, and at no higher one: only this host's
+  /// own registry read can promote it, and none has happened here.
+  ///
+  /// The agreement closure is stubbed rather than driven through barnard's
+  /// real `registryAgreement`, because `BarnardB005VerifiedEnvelope` has no
+  /// public initializer on either platform and no test can fabricate one. The
+  /// promotion matrix itself is asserted in the shared reducer's tests, which
+  /// run on the iOS targets as well.
+  func testRadioSelfVerifiedEnvelopeAppearsAtItsOwnTierWithoutMutatingJoinedSessionState() throws {
+    let reportRuntime = DiscoveryIsolationReportRuntimeSpy()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      reportSubmissionRuntime: reportRuntime
+    )
+    var collectedProof = false
+    coordinator.onProofCollected = { _ in collectedProof = true }
+    let hash = Data([0, 1, 2, 3, 4, 5, 6, 7])
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_000
+    )
+
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertNil(coordinator.joinedEventCode)
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+    XCTAssertFalse(collectedProof)
+    XCTAssertEqual(reportRuntime.captureCalls, 0)
+    XCTAssertEqual(reportRuntime.submitCalls, 0)
+
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(candidate.receiverState, .RADIO_SELF_VERIFIED)
+    XCTAssertEqual(candidate.registryStatus, .UNRESOLVED)
+    XCTAssertEqual(Data(bytesFromKotlinByteArray: candidate.eventCodeHash), hash)
+    XCTAssertEqual(candidate.displayNameAt(index: 0), "Community night")
+    XCTAssertEqual(try XCTUnwrap(candidate.sourceAt(index: 0)).peripheralId, "peripheral-a")
+  }
+
+  /// A v2 envelope carries no census, so recording one must not erase the
+  /// census a v1 hint already published for the same source.
+  func testRadioSelfVerifiedEnvelopeKeepsTheCensusAV1HintRecorded() throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let hash = Data([0, 1, 2, 3, 4, 5, 6, 7])
+    let census = Data([9, 8])
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      census: census,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_000
+    )
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_001
+    )
+
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(candidate.receiverState, .RADIO_SELF_VERIFIED)
+    let source = try XCTUnwrap(candidate.sourceAt(index: 0))
+    XCTAssertEqual(
+      Data(bytesFromKotlinByteArray: try XCTUnwrap(source.census)),
+      census
+    )
+  }
+
+  /// A candidate assembled from v1 hints alone can never leave UNVERIFIED, and
+  /// ending the session clears the tier along with everything else.
+  func testHintOnlyCandidateStaysUnverifiedAndResetClearsAnEstablishedTier() throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let hash = Data([0, 1, 2, 3, 4, 5, 6, 7])
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      census: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_000
+    )
+    XCTAssertEqual(
+      try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0)).receiverState,
+      .UNVERIFIED
+    )
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_001
+    )
+    coordinator.reset()
+    coordinator.handleEventInfoHint(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: hash,
+      census: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_002
+    )
+
+    XCTAssertEqual(
+      try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0)).receiverState,
+      .UNVERIFIED
+    )
+  }
+
+  /// Spec 134 re-broadcast is signature-preserving, so the exact container
+  /// bytes have to survive on the candidate for a later relay decision.
+  func testRadioSelfVerifiedEnvelopeRetainsItsRawContainerBytes() throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: Data([0, 1, 2, 3, 4, 5, 6, 7]),
+      rawContainer: Self.envelopeContainer,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_000
+    )
+
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(
+      Data(bytesFromKotlinByteArray: try XCTUnwrap(candidate.rawEnvelopeContainer)),
+      Self.envelopeContainer
+    )
+  }
+
+  /// An unverified container becomes no candidate, but must not vanish
+  /// without trace: the session tally is what makes the drop observable.
+  func testUnverifiedEnvelopeIsCountedRatherThanVanishing() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.handleUnverifiedEventInfoEnvelopeV2()
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 1)
+    XCTAssertEqual(coordinator.phase, .idle)
+
+    coordinator.reset()
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 0)
+  }
+
+  // MARK: - Registry definition mapping
+  //
+  // The values handed to barnard's `registryAgreement` decide whether a
+  // candidate is promoted at all, so every rule that builds them is asserted
+  // here. Mirrors Android's `barnardIsAskedWithTheDefinitionThisHostRead`.
+
+  func testOpenDefinitionMapsToJoinModeZeroAndCarriesEveryFieldThrough() throws {
+    let definition = try XCTUnwrap(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: Self.eventIdHex,
+        keySetDigestHex: Self.keySetDigestHex,
+        eventCodeHashHex: Self.eventCodeHashHex,
+        joinMode: .OPEN,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+
+    XCTAssertEqual(definition.joinMode, 0)
+    XCTAssertEqual(Data(definition.eventId), Data(repeating: 0xab, count: 32))
+    XCTAssertEqual(Data(definition.keySetDigest), Data(repeating: 0xcd, count: 32))
+    XCTAssertEqual(Data(definition.eventCodeHash), Data(repeating: 0xef, count: 8))
+    XCTAssertEqual(definition.validFromUnixSeconds, 100)
+    XCTAssertEqual(definition.validUntilUnixSeconds, 200)
+  }
+
+  /// The wire value, not an enum ordinal. Barnard derives an open event's
+  /// code hash from its event ID and only for `joinMode == 0`, so inverting
+  /// this mapping would make agreement answer about the wrong event shape.
+  func testGatedDefinitionMapsToJoinModeOne() throws {
+    let definition = try XCTUnwrap(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: Self.eventIdHex,
+        keySetDigestHex: Self.keySetDigestHex,
+        eventCodeHashHex: Self.eventCodeHashHex,
+        joinMode: .GATED,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+
+    XCTAssertEqual(definition.joinMode, 1)
+  }
+
+  func testDefinitionWithNoJoinModeYieldsNothing() {
+    XCTAssertNil(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: Self.eventIdHex,
+        keySetDigestHex: Self.keySetDigestHex,
+        eventCodeHashHex: Self.eventCodeHashHex,
+        joinMode: nil,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+  }
+
+  /// Every hex field is length-checked, because a short or long value would
+  /// otherwise reach barnard as a differently shaped array and make agreement
+  /// answer a question nobody asked.
+  func testMisSizedOrMalformedHexFieldsYieldNothing() {
+    let cases: [(String, String, String?)] = [
+      (String(repeating: "ab", count: 31), Self.keySetDigestHex, Self.eventCodeHashHex),
+      (String(repeating: "ab", count: 33), Self.keySetDigestHex, Self.eventCodeHashHex),
+      (Self.eventIdHex, String(repeating: "cd", count: 31), Self.eventCodeHashHex),
+      (Self.eventIdHex, Self.keySetDigestHex, String(repeating: "ef", count: 7)),
+      (Self.eventIdHex, Self.keySetDigestHex, String(repeating: "ef", count: 9)),
+      (Self.eventIdHex, Self.keySetDigestHex, nil),
+      (String(repeating: "zz", count: 32), Self.keySetDigestHex, Self.eventCodeHashHex),
+    ]
+
+    for (eventId, keySetDigest, eventCodeHash) in cases {
+      XCTAssertNil(
+        SensingCoordinator.barnardDefinition(
+          eventIdHex: eventId,
+          keySetDigestHex: keySetDigest,
+          eventCodeHashHex: eventCodeHash,
+          joinMode: .OPEN,
+          validFromUnixSeconds: 100,
+          validUntilUnixSeconds: 200
+        ),
+        "expected nil for eventId \(eventId.prefix(8)), digest \(keySetDigest.prefix(8)), hash \(eventCodeHash ?? "nil")"
+      )
+    }
+  }
+
+  /// The registry hands these fields back `0x`-prefixed.
+  func testPrefixedHexIsAccepted() throws {
+    let definition = try XCTUnwrap(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: "0x" + Self.eventIdHex,
+        keySetDigestHex: "0x" + Self.keySetDigestHex,
+        eventCodeHashHex: "0x" + Self.eventCodeHashHex,
+        joinMode: .OPEN,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+
+    XCTAssertEqual(Data(definition.eventId), Data(repeating: 0xab, count: 32))
   }
 
   /// Barnard's overflow marker carries no candidate identity. Its global
