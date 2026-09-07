@@ -209,6 +209,8 @@ final class ParticipantRelayTests: XCTestCase {
       relayCadenceNanoseconds: 10_000_000
     )
 
+    // Demo mode never arms the relay, so the real path is what is under test.
+    coordinator.useDemoEventMode = false
     coordinator.startParticipantRelay()
     XCTAssertNotNil(control.verifier)
     XCTAssertEqual(control.advanceCalls, 0)
@@ -225,6 +227,7 @@ final class ParticipantRelayTests: XCTestCase {
       participantRelayControl: control,
       relayCadenceNanoseconds: 10_000_000
     )
+    coordinator.useDemoEventMode = false
     coordinator.startParticipantRelay()
 
     coordinator.leaveEvent()

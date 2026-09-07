@@ -2033,10 +2033,22 @@ final class SensingCoordinator: ObservableObject {
   /// device that cannot advertise cannot re-broadcast anything, and
   /// configuring a relay it could never serve would misreport what a peer
   /// reading B005 would actually get.
+  /// Demo mode never arms the relay, and that is checked here rather than
+  /// only in `startSensing`'s control flow. Demo candidates are fabricated,
+  /// relay puts bytes on a real radio, and the two must not meet. Leaving the
+  /// guarantee to the caller would make it a property of one branch in one
+  /// function, while this method, `runDemoScenario` and `useDemoEventMode`
+  /// are all reachable from outside this file. `SensingCoordinatorTests`
+  /// asserts it for every scenario.
+  ///
   /// Not `private`: the simulator forces demo mode, so `startSensing` never
   /// reaches the permission branch that calls this, and a test could otherwise
   /// not observe the cadence at all. Production reaches it only from there.
   func startParticipantRelay() {
+    guard !useDemoEventMode else {
+      Self.log.debug("relay not armed: demo mode fabricates candidates and must not reach a radio")
+      return
+    }
     republishRelayGateState()
     relayControl.setParticipantRelayVerifier(relayVerifier)
     relayCadenceTask?.cancel()
