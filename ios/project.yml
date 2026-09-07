@@ -159,6 +159,17 @@ targets:
     platform: iOS
     sources:
       - BeidTests
+      # The app's source tree, copied into the test bundle as a folder
+      # reference. `ParticipantRelayIsolationTests` reads app source to assert
+      # that certain names appear nowhere in it, and a test bundle cannot
+      # assume the checkout is on disk when it runs: Xcode Cloud's test action
+      # executes the built bundle on a machine where the repository is not at
+      # the path `#filePath` records. A folder reference rather than a file
+      # list, so a new `Demo*.swift` is picked up by the walk without anyone
+      # remembering to add it here.
+      - path: Beid
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: Beid
     settings:

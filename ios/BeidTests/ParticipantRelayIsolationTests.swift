@@ -67,13 +67,20 @@ final class ParticipantRelayIsolationTests: XCTestCase {
     }
   }
 
-  /// `#filePath` is this file inside the checkout, which is the only way a
-  /// test bundle can reach app source at all.
+  /// App source as it sits inside the test bundle.
+  ///
+  /// `ios/project.yml` copies the `Beid` tree in as a folder reference, which
+  /// is the only reachable copy at test time. An earlier version read
+  /// `#filePath` and walked up to the checkout; that works on a machine that
+  /// still has the checkout mounted where the file was compiled, and fails on
+  /// Xcode Cloud, which runs the built bundle somewhere else entirely. One
+  /// mechanism rather than a fallback: a fallback would have hidden the same
+  /// failure by silently checking a different copy, or none.
   private static func appSource(_ relativePath: String) -> URL {
-    URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent(relativePath)
+    guard let resources = Bundle(for: ParticipantRelayIsolationTests.self).resourceURL else {
+      preconditionFailure("the test bundle has no resource directory")
+    }
+    return resources.appendingPathComponent(relativePath)
   }
 
   private static let relaySources = [
@@ -100,7 +107,13 @@ final class ParticipantRelayIsolationTests: XCTestCase {
       guard name.localizedCaseInsensitiveContains("demo")
         || name.localizedCaseInsensitiveContains("scenario")
       else { continue }
-      found.append("Beid/" + url.path.components(separatedBy: "/Beid/").dropFirst().joined(separator: "/Beid/"))
+      // Reported relative to the bundle root, so a failure names the file the
+      // way the repository does.
+      let relative = url.path.replacingOccurrences(
+        of: root.deletingLastPathComponent().path + "/",
+        with: ""
+      )
+      found.append(relative)
     }
     return found.sorted()
   }
