@@ -99,6 +99,29 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // Icons for BeidGlyph/BeidHeroHeader/BeidStateScreen (beid#338).
+    //
+    // This artifact is carrying exactly three symbols that material-icons-core
+    // does not have: Bluetooth (BluetoothPermissionScreen), BluetoothDisabled
+    // (BluetoothOffScreen) and AutoAwesome (EventFoundScreen). Warning
+    // (SignalLostScreen) is in core and does not need this. Counts were read
+    // from the resolved jars, not the library's docs: core ships 49 Filled.*
+    // icons, extended ships 2083.
+    //
+    // Three symbols is a thin justification for 2083, and R8 does not trim
+    // the rest today — isMinifyEnabled is false on both build types below.
+    // beid#379 tracks that: enabling minification is a precondition for an
+    // App Store / Play release, not a general improvement to get to later.
+    //
+    // Hand-drawing these was considered and rejected. The illustrations in
+    // ui/designsystem/Illustrations.kt were transcribed from SVG sources in
+    // this repository; these three have no source here, so drawing them
+    // would be freehand approximation of recognizable system iconography.
+    // Transcription and approximation are not the same operation.
+    //
+    // Versioned by the same BOM platform as the rest of Compose, not an
+    // independent pin.
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.navigation:navigation-compose:2.9.8")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")

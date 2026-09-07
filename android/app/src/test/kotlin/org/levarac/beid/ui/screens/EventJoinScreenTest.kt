@@ -110,13 +110,13 @@ class EventJoinScreenTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_sensing)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_sensing_message)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON).assertDoesNotExist()
     }
 
     @Test
-    fun eventFoundPhaseRendersItsOwnStatusText() {
+    fun eventFoundPhaseRendersItsOwnTitleAndMessage() {
         val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.EventFound(session1)))
         val viewModel = EventJoinViewModel(session)
 
@@ -127,12 +127,16 @@ class EventJoinScreenTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_event_found)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_event_found_title)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_event_found_message)).assertIsDisplayed()
     }
 
     @Test
     fun recordingPhaseRendersPeersVerifiedAndASimulateSignalLostControl() {
         val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Recording(session1, peersVerified = 2)))
+        // This test covers the Recording steady state; the entrance ceremony itself
+        // (shown/skipped, dwell timing) is covered by ScanFlowScreensTest.
+        session.markRecordingCeremonyShown()
         val viewModel = EventJoinViewModel(session)
 
         composeTestRule.setContent {
@@ -142,7 +146,7 @@ class EventJoinScreenTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_recording)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_recording_ceremony_title)).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
         composeTestRule.onNodeWithText("2").assertIsDisplayed()
 
@@ -181,7 +185,7 @@ class EventJoinScreenTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        composeTestRule.onNodeWithText(context.getString(R.string.event_join_status_signal_lost)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_signal_lost_title)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESUME_BUTTON)
@@ -243,8 +247,21 @@ class EventJoinScreenTest {
         }
     }
 
+    /**
+     * Before beid#336, a nearby card stayed visible-but-disabled during an
+     * active Recording session, and this test tapped it to prove the tap
+     * was a no-op. Since #336, [ScanFlowScreen] replaces the title +
+     * [NearbyEventCards] entirely once a session reaches
+     * [EventJoinUiState.Sensing], so a nearby card can no longer be shown
+     * or tapped while a proof is active — there is nothing left to
+     * (attempt to) retap. The underlying guarantee this test protected
+     * (a stale nearby-card join cannot replace an active proof) is
+     * covered independently, and more directly, by
+     * `EventJoinCoordinatorHooksTest.staleJoinActionCannotReplaceAnActiveProofOrResetItsAccountingAndBinding`,
+     * which exercises the coordinator without any UI involved.
+     */
     @Test
-    fun activeProofDisablesCandidateRetapAndKeepsTheFirstJoin() {
+    fun activeProofHidesNearbyEventCardsAndKeepsTheFirstJoin() {
         val firstEventId = "0x01"
         val secondEventId = "0x02"
         val session = FakeEventJoinSession(
@@ -254,13 +271,13 @@ class EventJoinScreenTest {
             ),
         )
         session.joinNearbyEvent(firstEventId)
+        session.markRecordingCeremonyShown()
         val viewModel = EventJoinViewModel(session)
 
         composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
 
-        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("2222222222222222"))
-            .assertIsNotEnabled()
-            .performClick()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("2222222222222222")).assertDoesNotExist()
         composeTestRule.runOnIdle {
             assertEquals(firstEventId, session.joinedDiscoveredEventId)
         }

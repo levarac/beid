@@ -51,14 +51,25 @@
     <!-- "Signal lost" here is our own manual/simulated trigger, not a real Bluetooth radio outage. -->
     <string name="event_join_status_signal_lost">Signal lost — recording paused</string>
     <string name="event_join_peers_verified_label">Peers verified</string>
-    <!-- Status pill dot label — sensing is actively running. -->
-    <string name="event_join_status_pill_active">Active</string>
-    <!-- Status pill dot label — sensing is paused (signal lost). -->
-    <string name="event_join_status_pill_paused">Paused</string>
+    <!-- Status pill dot label — sensing is actively running (mirrors iOS's BeidStatusPill.State.sensingAutomatically). -->
+    <string name="event_join_status_pill_active">Sensing automatically</string>
+    <!-- Status pill dot label — sensing is paused (signal lost; mirrors iOS's BeidStatusPill.State.sensingPaused). -->
+    <string name="event_join_status_pill_paused">Sensing paused</string>
     <!-- Verb: resumes a paused recording session in place, does not restart it. -->
     <string name="event_join_resume_sensing">Resume</string>
     <!-- Manual affordance standing in for real signal-loss detection, which does not exist yet on Android. -->
     <string name="event_join_simulate_signal_lost">Simulate signal lost</string>
+
+    <!-- Scan flow (beid#336): Sensing/Event Found/Recording/Signal Lost full-screen bodies shown inside EventJoinScreen once a session reaches EventJoinUiState.Sensing — mirrors iOS's ScanFlowView (screens 05-07/06d). -->
+    <string name="scan_sensing_message">Walk into an event — it will show up here automatically.</string>
+    <string name="scan_event_found_title">Event Found</string>
+    <string name="scan_event_found_message">Verification starts automatically — stay nearby</string>
+    <!-- One-time entrance-ceremony header shown the instant Recording begins, mirrors iOS's retired ProofCollectedView copy. -->
+    <string name="scan_recording_ceremony_title">Proof Collected</string>
+    <string name="scan_recording_ceremony_subtitle">Added to your collection.</string>
+    <string name="scan_signal_lost_title">Signal Lost</string>
+    <!-- %1$s is the event code — Android's ScanEventSession has no event display name yet (see beid#336's data-gap note), unlike iOS's richer EventSession.name. -->
+    <string name="scan_signal_lost_message">beid lost the connection to %1$s. Move closer and we\'ll pick it back up automatically.</string>
 
     <!-- Reused for both the nav entry-point label on EventJoinScreen (tap target that opens the Account screen) and the Account screen's own title, so both say the same word. -->
     <string name="account_title">Account</string>

@@ -88,4 +88,24 @@ interface EventJoinSession {
      * availability on session activity themselves — see [state].
      */
     fun leaveEvent()
+
+    /**
+     * Whether this session's Recording-phase entrance ceremony
+     * ("Proof Collected") has already been shown — mirrors iOS's
+     * `SensingCoordinator.recordingCeremonyShown`
+     * (`ios/Beid/Sensing/SensingCoordinator.swift`). `false` for a fresh
+     * session; set once via [markRecordingCeremonyShown] and never reset by
+     * [resumeSensing] — a signal-lost → resume cycle must not replay the
+     * ceremony, only a genuinely new session (a fresh [joinEvent]/
+     * [joinNearbyEvent]) resets it.
+     */
+    val recordingCeremonyShown: Boolean
+
+    /**
+     * Marks [recordingCeremonyShown] `true` — called once the UI signals
+     * the entrance ceremony has been shown for this session's Recording
+     * phase, mirroring iOS's `RecordingView.onAppear` calling
+     * `sensing.markRecordingCeremonyShown()`.
+     */
+    fun markRecordingCeremonyShown()
 }

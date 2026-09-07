@@ -108,6 +108,11 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun resumeSensing() = session.resumeSensing()
 
+    /** See [EventJoinSession.recordingCeremonyShown]. */
+    val recordingCeremonyShown: Boolean get() = session.recordingCeremonyShown
+
+    fun markRecordingCeremonyShown() = session.markRecordingCeremonyShown()
+
     class Factory(private val session: EventJoinSession) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = EventJoinViewModel(session) as T

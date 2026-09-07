@@ -9,10 +9,11 @@ import androidx.compose.ui.unit.dp
 /**
  * Minimal hand-built [ImageVector] fixture for design-system component
  * tests. Components in this package take `icon: ImageVector` as a
- * caller-supplied parameter and bundle no icon-library dependency
- * themselves (`androidx.compose.material:material-icons-core` is not a
- * project dependency), so tests build their own trivial vector instead of
- * reaching for `Icons.Filled.*`.
+ * caller-supplied parameter and don't reach into any icon library
+ * themselves — `material-icons-extended` (beid#338) is a dependency of the
+ * production screens that choose real icons, not of this package — so
+ * tests build their own trivial vector instead of reaching for
+ * `Icons.Filled.*`.
  */
 internal val testIcon: ImageVector by lazy {
     ImageVector.Builder(

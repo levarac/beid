@@ -2,17 +2,19 @@ package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import org.levarac.beid.R
+import org.levarac.beid.ui.designsystem.BeidHeroHeader
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
 import org.levarac.beid.ui.designsystem.BeidScreen
@@ -44,11 +46,23 @@ private val bullets = listOf(
 /**
  * Screen 02: Bluetooth-permission explanation — mirrors iOS's
  * `BluetoothPermissionView` (`ios/Beid/Views/BluetoothPermissionView.swift`),
- * 3 benefit bullets with the same English copy. Header text and each
- * bullet's title+subtitle reproduce `BeidHeroHeader`'s/`BeidBulletRow`'s
- * *text* layout as plain Text/Column, without their icon roundels — see
- * [WelcomeScreen]'s kdoc for why (no material-icons dependency in this
- * scaffold).
+ * 3 benefit bullets with the same English copy. Uses [BeidHeroHeader]'s icon
+ * + title + subtitle layout now that `material-icons-extended` is a project
+ * dependency (beid#338) — the bullets themselves stay plain Text/Column
+ * ([BeidBulletRow] is a separate, unrelated migration).
+ *
+ * Composed directly from [BeidScreen] + [BeidHeroHeader] rather than
+ * [BeidStateScreen]: with the header icon roundel added, this screen's
+ * header + 3-bullet panel no longer reliably fits above the footer button
+ * on a short viewport, and [BeidStateScreen] gives its body no scroll
+ * behavior. Wrapping just the body (not the footer) in `verticalScroll`
+ * keeps the "Allow Bluetooth" CTA pinned and reachable regardless of
+ * viewport height, the same scrollable-body-plus-fixed-footer shape
+ * `EventJoinScreen` already uses. `Modifier.weight(1f, fill = false)` is
+ * required alongside `verticalScroll` here — without a bounded height from
+ * a sibling-aware `weight`, a plain `Column` measures a scrollable child
+ * with unbounded height, so it never actually caps and the footer is
+ * pushed off-screen instead of the body scrolling.
  */
 @Composable
 fun BluetoothPermissionScreen(onAllowBluetooth: () -> Unit) {
@@ -71,25 +85,18 @@ fun BluetoothPermissionScreen(onAllowBluetooth: () -> Unit) {
             }
         },
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.l)) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
-            ) {
-                Text(
-                    text = stringResource(R.string.bluetooth_permission_title),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = BeidTheme.colors.textPrimary,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    text = stringResource(R.string.bluetooth_permission_subtitle),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = BeidTheme.colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
-            }
+        Column(
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
+        ) {
+            BeidHeroHeader(
+                icon = Icons.Filled.Bluetooth,
+                title = stringResource(R.string.bluetooth_permission_title),
+                subtitle = stringResource(R.string.bluetooth_permission_subtitle),
+                tint = BeidTheme.colors.actionPrimary,
+            )
 
             BeidPanel {
                 Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.m)) {
