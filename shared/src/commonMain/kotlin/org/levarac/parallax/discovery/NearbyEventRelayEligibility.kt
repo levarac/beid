@@ -114,10 +114,20 @@ public fun isNearbyEventRelayEligible(
         joinedEventIdHex = joinedEventIdHex,
     ) == NearbyEventRelayEligibility.ELIGIBLE
 
+/**
+ * Finds the candidate for one event-code hash, comparing normalized forms on
+ * both sides.
+ *
+ * The snapshot's own hashes are lowercase today, so normalizing them changes
+ * nothing right now. It is done anyway because the failure it guards against
+ * is silent: a hash that differs only in case or an `0x` prefix would simply
+ * find no candidate, and the gate would refuse to relay with no signal that a
+ * spelling, rather than a policy, made the decision.
+ */
 private fun NearbyEventCandidates.candidateForHashHex(hashHex: String): NearbyEventCandidate? {
     for (index in 0 until candidateCount) {
         val candidate = candidateAt(index) ?: continue
-        if (candidate.eventCodeHashHex == hashHex) return candidate
+        if (candidate.eventCodeHashHex.normalizedHexOrNull() == hashHex) return candidate
     }
     return null
 }

@@ -387,7 +387,12 @@ final class SensingCoordinator: ObservableObject {
   /// The most recent spec 134 decision, for visibility only. It never feeds a
   /// card, a tally, or a phase: hop counts and relay volume say nothing about
   /// an event (spec 134, "Security and abuse considerations").
-  @Published private(set) var lastRelayDecision: ParticipantRelayDecision?
+  ///
+  /// Deliberately not `@Published`, unlike almost everything else here. A
+  /// published property is one a SwiftUI view can bind to and redraw from,
+  /// and the one fact this carries that no screen may ever show is the hop
+  /// count. Diagnostics read it; the interface cannot observe it.
+  private(set) var lastRelayDecision: ParticipantRelayDecision?
   private let sensingCryptography: any SensingCryptography
   private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
   private let eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
@@ -1598,9 +1603,13 @@ final class SensingCoordinator: ObservableObject {
   func leaveEvent() {
     invalidateEventIdentityVerification()
     engine.leaveEvent()
+    // Cleared before the relay teardown, not after: `stopParticipantRelay`
+    // republishes the gate state, and republishing it while this still holds
+    // the departed event's id would put that id back into the verifier on the
+    // way out.
+    joinedCanonicalEventIdHex = nil
     stopParticipantRelay()
     joinedEventCode = engine.getCurrentEventCode()
-    joinedCanonicalEventIdHex = nil
     // Mirrors Android's `EventJoinCoordinator.leaveEvent()`: candidates
     // observed before a join are stale once that join is given up, and
     // clearing them must not depend on a separate discovery-stop call.

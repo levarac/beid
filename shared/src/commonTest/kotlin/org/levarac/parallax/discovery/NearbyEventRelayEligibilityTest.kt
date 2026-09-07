@@ -135,6 +135,26 @@ class NearbyEventRelayEligibilityTest {
         )
     }
 
+    /**
+     * Both sides of the hash comparison are normalized, so a caller that
+     * spells the hash with different case or an `0x` prefix still finds its
+     * candidate. Without this the gate would refuse silently, and a spelling
+     * rather than a policy would have cost the relay.
+     */
+    @Test
+    fun aHashSpelledDifferentlyStillFindsItsCandidate() {
+        val snapshot = registryVerifiedSnapshot()
+
+        assertEquals(
+            NearbyEventRelayEligibility.ELIGIBLE,
+            eligibility(snapshot, joinedEventIdHex = EVENT_ID, eventCodeHashHex = HASH.uppercase()),
+        )
+        assertEquals(
+            NearbyEventRelayEligibility.ELIGIBLE,
+            eligibility(snapshot, joinedEventIdHex = EVENT_ID, eventCodeHashHex = "0x" + HASH),
+        )
+    }
+
     @Test
     fun aMalformedJoinedEventIdFailsClosed() {
         assertEquals(
