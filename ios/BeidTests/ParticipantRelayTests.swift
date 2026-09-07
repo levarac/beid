@@ -80,6 +80,20 @@ final class ParticipantRelayTests: XCTestCase {
     }
   }
 
+  /// The counterpart of Android's `the relay window never reaches past the
+  /// next ENIN`. Separate from the acceptance test above, which asserts the
+  /// value at one ENIN: this asserts the ceiling itself.
+  func testTheRelayWindowNeverReachesPastTheNextENIN() {
+    guard
+      case .registryVerified(_, _, _, let expires) =
+        verification(state: gateState(joinedEventIdHex: eventIdHex))
+    else {
+      return XCTFail("expected the envelope to be relayable")
+    }
+
+    XCTAssertEqual(expires, 1_001)
+  }
+
   func testADeviceThatIsNotJoinedRelaysNothing() {
     XCTAssertEqual(verification(state: gateState(joinedEventIdHex: nil)), .rejected)
   }

@@ -9,6 +9,7 @@ import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.barnard.BarnardPermissionStatus
 import org.levarac.barnard.BarnardRelayDecision
 import org.levarac.barnard.BarnardRelayDecisionEvent
+import org.levarac.barnard.BarnardRelayVerification
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
 import kotlin.test.Test
@@ -70,6 +71,37 @@ class EventJoinCoordinatorRelayLifecycleTest {
         coordinator.dispose()
 
         assertNull(engine.configuredRelayVerifier)
+    }
+
+    /**
+     * The counterpart of iOS's `testResettingClearsTheRelay`, which asserts
+     * that ending a session's discovery leaves this device unable to relay
+     * even though the radio may still be scanning.
+     *
+     * The mechanism differs and the assertion says so. iOS's `reset()` calls
+     * the relay teardown directly. Android has no such entry point: leaving
+     * and disposing are the two session ends, and both are covered above.
+     * What `stopNearbyEventDiscovery` does instead is clear the candidates the
+     * gate reads, so the verifier stays configured and answers Rejected to
+     * everything, because there is no longer a registry-verified candidate for
+     * any envelope to match. The fact both hosts pin is the same one: after a
+     * reset, nothing relays.
+     */
+    @Test
+    fun resettingClearsTheRelay() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        coordinator.joinEvent("community-night")
+        val verifier = assertNotNull(engine.configuredRelayVerifier)
+
+        coordinator.stopNearbyEventDiscovery()
+        runCurrent()
+
+        assertEquals(
+            BarnardRelayVerification.Rejected,
+            verifier.verify(ByteArray(64) { 0x11 }, 1_000L),
+            "a reset leaves no candidate for any envelope to match",
+        )
     }
 
     /**
