@@ -319,6 +319,17 @@
     "You declined the request in your wallet.": {},
     "Your attendance proof is ready to be added to your collection.": {},
     "Zero effort": {},
+    "account.bluetooth.relayNote": {
+      "comment": "Note under the Bluetooth row on the Account sheet: while this phone is at an event it can pass that event's details on to phones nearby, so the event still reaches the edges of a venue (beid#367). Says what the phone does, not how the protocol does it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "While you're at an event, beid can pass its details on to phones nearby, so people across the venue can still find it."
+          }
+        }
+      }
+    },
     "account.joinEvent.label": {
       "comment": "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages.",
       "localizations": {

@@ -10,7 +10,8 @@ import XCTest
 func makeIsolatedSensingCoordinator(
   for testCase: XCTestCase,
   sensingCryptography: any SensingCryptography = DeterministicSensingCryptography(),
-  reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
+  reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+  participantRelayControl: (any ParticipantRelayControlling)? = nil
 ) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
     .appendingPathComponent("sensing-coordinator-test-\(UUID().uuidString)", isDirectory: true)
@@ -40,7 +41,8 @@ func makeIsolatedSensingCoordinator(
     ),
     unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
     sensingCryptography: sensingCryptography,
-    reportSubmissionRuntime: reportSubmissionRuntime
+    reportSubmissionRuntime: reportSubmissionRuntime,
+    participantRelayControl: participantRelayControl
   )
 }
 

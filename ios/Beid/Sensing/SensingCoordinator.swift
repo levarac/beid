@@ -369,6 +369,25 @@ final class SensingCoordinator: ObservableObject {
   private static let ledgerLog = Logger(subsystem: "org.levarac.beid", category: "ledger")
 
   private let engine = BarnardEngine()
+
+  /// The Barnard relay operations this coordinator drives. Defaults to
+  /// `engine`; injected in tests, which cannot construct a `BarnardEngine`
+  /// they can observe.
+  private let relayControl: any ParticipantRelayControlling
+
+  /// The spec 134 relay verifier (beid#367). Held for the whole lifetime and
+  /// republished as discovery state moves, rather than rebuilt per session:
+  /// Barnard may call it from another queue at any moment while configured,
+  /// and swapping the object under that call buys nothing.
+  private let relayVerifier: ParticipantRelayVerifier
+
+  /// Repeating 30-second wake-up that runs the relay's lease decisions.
+  private var relayCadenceTask: Task<Void, Never>?
+
+  /// The most recent spec 134 decision, for visibility only. It never feeds a
+  /// card, a tally, or a phase: hop counts and relay volume say nothing about
+  /// an event (spec 134, "Security and abuse considerations").
+  @Published private(set) var lastRelayDecision: ParticipantRelayDecision?
   private let sensingCryptography: any SensingCryptography
   private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
   private let eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
@@ -970,7 +989,8 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
-    eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil
+    eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
+    participantRelayControl: (any ParticipantRelayControlling)? = nil
   ) {
     guard
       let store = try? UnsentWindowLedgerStore(fileURL: unsentWindowLedgerFileURL),
@@ -987,7 +1007,8 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
-      eventIdentityVerificationSource: eventIdentityVerificationSource
+      eventIdentityVerificationSource: eventIdentityVerificationSource,
+      participantRelayControl: participantRelayControl
     )
   }
 
@@ -1007,7 +1028,8 @@ final class SensingCoordinator: ObservableObject {
       Int64((Date().timeIntervalSince1970 * 1000).rounded())
     },
     nearbyRegistryClient:
-      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil
+      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
+    participantRelayControl: (any ParticipantRelayControlling)? = nil
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     var ledgerFailure = initialLedgerFailure
@@ -1046,6 +1068,14 @@ final class SensingCoordinator: ObservableObject {
       .createNearbyEventDiscoveryStore()
     self.nearbyDiscoveryStore = nearbyDiscoveryStore
     self.nearbyEventCandidates = nearbyDiscoveryStore.snapshot
+    self.relayVerifier = ParticipantRelayVerifier(
+      state: ParticipantRelayGateState(
+        candidates: nearbyDiscoveryStore.snapshot,
+        verifiedDefinitionsByHash: [:],
+        joinedEventIdHex: nil
+      )
+    )
+    self.relayControl = participantRelayControl ?? engine
     if let ledgerFailure {
       ledgerHealth = .degraded(reason: ledgerFailure, since: Date())
     }
@@ -1097,6 +1127,13 @@ final class SensingCoordinator: ObservableObject {
         registryAgreement: { definition in
           BarnardB005EnvelopeV2.registryAgreement(envelope, definition: definition) == .agrees
         }
+      )
+    case .relayDecision(let relay):
+      handleRelayDecision(
+        decision: relay.decision.rawValue,
+        payloadDigestHex: relay.payloadDigest.lowercaseHexString,
+        hop: relay.hop,
+        reason: relay.reason
       )
     case .eventInfoHint(let hint):
       handleEventInfoHint(
@@ -1549,6 +1586,10 @@ final class SensingCoordinator: ObservableObject {
     let confirmed = engine.getCurrentEventCode()
     joinedEventCode = confirmed
     joinedCanonicalEventIdHex = confirmed == code ? canonicalEventIdHex : nil
+    // The relay gate reads this: without a canonical id from this app's own
+    // registry read there is no way to say "this event and no other", which
+    // is what one device, one event requires.
+    republishRelayGateState()
     return confirmed == code
   }
 
@@ -1557,6 +1598,7 @@ final class SensingCoordinator: ObservableObject {
   func leaveEvent() {
     invalidateEventIdentityVerification()
     engine.leaveEvent()
+    stopParticipantRelay()
     joinedEventCode = engine.getCurrentEventCode()
     joinedCanonicalEventIdHex = nil
     // Mirrors Android's `EventJoinCoordinator.leaveEvent()`: candidates
@@ -1612,9 +1654,13 @@ final class SensingCoordinator: ObservableObject {
       engine.requestPermissions { [weak self] status in
         guard let self else { return }
         Task { @MainActor in
-          guard status.canScan, status.canAdvertise else { return }
+          guard status.canScan, status.canAdvertise else {
+            self.stopParticipantRelay()
+            return
+          }
           self.engine.configure(eventCode: eventCode)
           self.engine.startAuto()
+          self.startParticipantRelay()
         }
       }
     }
@@ -1689,6 +1735,10 @@ final class SensingCoordinator: ObservableObject {
     closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
+    // Both stop and reset end relay. Relay is a property of an active sensing
+    // session, not of the engine's transport, so a reset that leaves scanning
+    // running must still stop re-broadcasting.
+    stopParticipantRelay()
     clearNearbyEventDiscovery()
     if stopEngine {
       engine.stopAuto()
@@ -1858,6 +1908,7 @@ final class SensingCoordinator: ObservableObject {
     }
     nearbyEnvelopeAgreements = nearbyEnvelopeAgreements.filter { liveHashes.contains($0.key) }
     nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter { liveHashes.contains($0.key) }
+    republishRelayGateState()
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
 
@@ -1882,6 +1933,72 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
+  /// Rebuilds the immutable value the relay verifier reads. Main actor only.
+  private func republishRelayGateState() {
+    relayVerifier.update(
+      ParticipantRelayGateState(
+        candidates: nearbyEventCandidates,
+        verifiedDefinitionsByHash: nearbyVerifiedDefinitions,
+        joinedEventIdHex: joinedCanonicalEventIdHex
+      )
+    )
+  }
+
+  /// Records the latest spec 134 decision so relay is observable at all.
+  ///
+  /// Visibility only. Nothing downstream reads it, and nothing may: a relayed
+  /// candidate is an ordinary card, its hop count is never shown, and relay
+  /// volume is never evidence about an event. Not `private`, for the same
+  /// test-seam reason as the envelope handlers above:
+  /// `BarnardRelayDecisionEvent` has no public initializer.
+  func handleRelayDecision(
+    decision: String,
+    payloadDigestHex: String,
+    hop: Int,
+    reason: String
+  ) {
+    lastRelayDecision = ParticipantRelayDecision(
+      decision: decision,
+      payloadDigestHex: payloadDigestHex,
+      hop: hop,
+      reason: reason
+    )
+  }
+
+  /// Turns relay on for this session.
+  ///
+  /// Called only once permissions allow both scanning and advertising: a
+  /// device that cannot advertise cannot re-broadcast anything, and
+  /// configuring a relay it could never serve would misreport what a peer
+  /// reading B005 would actually get.
+  private func startParticipantRelay() {
+    republishRelayGateState()
+    relayControl.setParticipantRelayVerifier(relayVerifier)
+    relayCadenceTask?.cancel()
+    relayCadenceTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: Self.relayDecisionBoundaryNanoseconds)
+        guard !Task.isCancelled, let self else { return }
+        self.relayControl.advanceParticipantRelay()
+      }
+    }
+  }
+
+  /// Turns relay off. Idempotent, and called from every exit: leaving the
+  /// event, ending the session, and a permission refusal. Passing no verifier
+  /// is what makes Barnard drop the lease, the density handles, and the
+  /// cached envelope.
+  private func stopParticipantRelay() {
+    relayCadenceTask?.cancel()
+    relayCadenceTask = nil
+    relayControl.setParticipantRelayVerifier(nil)
+    republishRelayGateState()
+  }
+
+  /// Spec 134's `T`. Barnard self-ticks as well, so this cadence is
+  /// belt-and-braces rather than the only thing keeping a lease honest.
+  private static let relayDecisionBoundaryNanoseconds: UInt64 = 30_000_000_000
+
   /// Ends the current discovery session: cancels the pending expiry wake-up
   /// and clears candidates together with the global omission/eviction facts.
   /// Named to avoid being confused with the shared free function it calls.
@@ -1896,6 +2013,7 @@ final class SensingCoordinator: ObservableObject {
     nearbyEventCandidates = ExportedKotlinPackages.org.levarac.parallax.discovery
       .resetNearbyEventDiscovery(store: nearbyDiscoveryStore)
       .snapshot
+    republishRelayGateState()
   }
 
   private func resolveNearbyCandidates(
