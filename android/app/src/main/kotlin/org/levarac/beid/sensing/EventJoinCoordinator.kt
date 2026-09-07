@@ -86,6 +86,13 @@ class EventJoinCoordinator internal constructor(
     ledgerFilesDir: File? = null,
     injectedWindowAccumulator: WindowObservationAccumulator? = null,
     windowObservationRuntimeOwner: WindowObservationRuntimeOwner? = null,
+    /**
+     * Discovery's registry seam, injected only by tests. Production derives it
+     * from [registryClient]; a test needs it because reaching
+     * `REGISTRY_VERIFIED` -- the tier the relay gate requires -- means
+     * answering a real lookup, and there is no other way in.
+     */
+    nearbyRegistry: NearbyEventRegistry? = null,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -103,7 +110,7 @@ class EventJoinCoordinator internal constructor(
     private val nearbyDiscovery = NearbyEventDiscoverySession(
         nowEpochMillis = nowEpochMillis,
         coroutineScope = coroutineScope,
-        registry = registryClient?.let(::RegistryClientNearbyEventRegistry),
+        registry = nearbyRegistry ?: registryClient?.let(::RegistryClientNearbyEventRegistry),
     )
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
@@ -128,6 +135,14 @@ class EventJoinCoordinator internal constructor(
 
     /** The relay verifier, configured on join and cleared on every stop. */
     private val relayVerifier = ParticipantRelayVerifier { relayGateState }
+
+    /**
+     * The gate's current joined event id, as the verifier would read it.
+     * Exposed for tests, mirroring iOS's property of the same shape; nothing
+     * in the app reads it.
+     */
+    internal val relayGateJoinedEventIdHexForTesting: String?
+        get() = relayGateState.joinedEventIdHex
 
     /** Repeating 30-second wake-up that runs the relay's lease decisions. */
     private var relayCadenceJob: Job? = null

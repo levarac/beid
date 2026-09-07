@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import org.levarac.barnard.BarnardDetectionEvent
+import org.levarac.barnard.BarnardB005EnvelopeV2
 import org.levarac.barnard.BarnardB005EnvelopeV2Receipt
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardEventInfoEnvelopeV2Event
@@ -112,6 +113,31 @@ internal class FakeEventJoinEngine(
                 BarnardEventInfoEnvelopeV2Event(
                     peripheralId = peripheralId,
                     receipt = BarnardB005EnvelopeV2Receipt.Unverified,
+                    rawContainer = container,
+                ),
+            ),
+        )
+    }
+
+    /**
+     * Emits a genuinely verified B005 v2 envelope, by handing barnard real
+     * signed bytes and letting it produce the receipt.
+     *
+     * The note above still holds -- `BarnardB005VerifiedEnvelope` cannot be
+     * constructed here -- but it need not be: `BarnardB005EnvelopeV2.verify`
+     * is public, so a conformance-vector container at an ENIN inside its
+     * signed window yields the real thing. That is the only way a test can
+     * reach the relay gate, which refuses anything barnard did not verify.
+     */
+    fun emitVerifiedEnvelopeV2(peripheralId: String, container: ByteArray, currentEnin: Long) {
+        val verified = requireNotNull(BarnardB005EnvelopeV2.verify(container, currentEnin)) {
+            "the fixture container did not verify at ENIN $currentEnin"
+        }
+        onEvent?.invoke(
+            BarnardEvent.EventInfoEnvelopeV2(
+                BarnardEventInfoEnvelopeV2Event(
+                    peripheralId = peripheralId,
+                    receipt = BarnardB005EnvelopeV2Receipt.RadioSelfVerified(verified),
                     rawContainer = container,
                 ),
             ),

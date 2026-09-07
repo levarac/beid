@@ -159,7 +159,12 @@ private fun ByteArray.toHexString(): String =
  * are worth asserting rather than merely worth printing.
  */
 internal fun logRelayRefusal(reason: String) {
-    Log.d(RELAY_LOG_TAG, "b005 relay refused: $reason")
+    // Diagnostics must never change a relay decision, so a logger that cannot
+    // write is ignored rather than propagated. `android.util.Log` throws
+    // outright in a plain JVM unit test, and a test exercising the real
+    // verifier would otherwise fail inside a log call rather than on anything
+    // it set out to assert.
+    runCatching { Log.d(RELAY_LOG_TAG, "b005 relay refused: $reason") }
 }
 
 private const val RELAY_LOG_TAG = "BeidRelay"

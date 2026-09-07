@@ -160,6 +160,9 @@ final class ParticipantRelayTests: XCTestCase {
   func testLeavingTheEventClearsTheRelay() {
     let control = RecordingParticipantRelayControl()
     let coordinator = makeIsolatedSensingCoordinator(for: self, participantRelayControl: control)
+    coordinator.useDemoEventMode = false
+    coordinator.startParticipantRelay()
+    XCTAssertNotNil(control.verifier, "the relay must be armed before leaving can clear it")
 
     coordinator.leaveEvent()
 
@@ -170,6 +173,9 @@ final class ParticipantRelayTests: XCTestCase {
   func testEndingTheSessionClearsTheRelay() {
     let control = RecordingParticipantRelayControl()
     let coordinator = makeIsolatedSensingCoordinator(for: self, participantRelayControl: control)
+    coordinator.useDemoEventMode = false
+    coordinator.startParticipantRelay()
+    XCTAssertNotNil(control.verifier, "the relay must be armed before stopping can clear it")
 
     _ = coordinator.stopSensing()
 
@@ -179,13 +185,27 @@ final class ParticipantRelayTests: XCTestCase {
 
   /// A reset leaves the engine scanning, and relay must stop anyway: it is a
   /// property of an active sensing session, not of the transport.
+  ///
+  /// The relay is armed first on purpose. An earlier version of this test
+  /// asserted a verifier that had been nil since construction, so it passed
+  /// whether or not `reset()` tore anything down: deleting the teardown left
+  /// it green. Arming first is what makes the assertion about reset.
   func testResettingClearsTheRelay() {
     let control = RecordingParticipantRelayControl()
     let coordinator = makeIsolatedSensingCoordinator(for: self, participantRelayControl: control)
+    coordinator.useDemoEventMode = false
+    coordinator.startParticipantRelay()
+    XCTAssertNotNil(control.verifier, "the relay must be armed before reset can clear it")
+    let armedCalls = control.configureCalls
 
     _ = coordinator.reset()
 
     XCTAssertNil(control.verifier)
+    XCTAssertGreaterThan(
+      control.configureCalls,
+      armedCalls,
+      "reset must clear the relay rather than leave it configured"
+    )
   }
 
   /// The counterpart of Android's `EventJoinCoordinator` opening the gate only
