@@ -46,6 +46,11 @@ func makeIsolatedSensingCoordinator(
 
 @MainActor
 final class SensingCoordinatorTests: XCTestCase {
+  /// Stand-in B005 v2 container bytes. Nothing here parses them: barnard has
+  /// already verified whatever these tests hand across the seam, and the host
+  /// keeps them only so a spec 134 relay can re-send them unchanged.
+  static let envelopeContainer = Data([3, 0, 1, 2])
+
   func testDemoEventModeRemainsOverridableInDebugSimulator() throws {
     #if DEBUG && targetEnvironment(simulator)
     let coordinator = makeIsolatedSensingCoordinator(for: self)
@@ -632,6 +637,7 @@ final class SensingCoordinatorTests: XCTestCase {
       peripheralId: "peripheral-a",
       eventDisplayName: "Community night",
       eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
       registryAgreement: { _ in true },
       observedAtEpochMillis: 1_000
     )
@@ -671,6 +677,7 @@ final class SensingCoordinatorTests: XCTestCase {
       peripheralId: "peripheral-a",
       eventDisplayName: "Community night",
       eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
       registryAgreement: { _ in true },
       observedAtEpochMillis: 1_001
     )
@@ -707,6 +714,7 @@ final class SensingCoordinatorTests: XCTestCase {
       peripheralId: "peripheral-a",
       eventDisplayName: "Community night",
       eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
       registryAgreement: { _ in true },
       observedAtEpochMillis: 1_001
     )
@@ -725,6 +733,42 @@ final class SensingCoordinatorTests: XCTestCase {
       try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0)).receiverState,
       .UNVERIFIED
     )
+  }
+
+  /// Spec 134 re-broadcast is signature-preserving, so the exact container
+  /// bytes have to survive on the candidate for a later relay decision.
+  func testRadioSelfVerifiedEnvelopeRetainsItsRawContainerBytes() throws {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: Data([0, 1, 2, 3, 4, 5, 6, 7]),
+      rawContainer: Self.envelopeContainer,
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_000
+    )
+
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(
+      Data(bytesFromKotlinByteArray: try XCTUnwrap(candidate.rawEnvelopeContainer)),
+      Self.envelopeContainer
+    )
+  }
+
+  /// An unverified container becomes no candidate, but must not vanish
+  /// without trace: the session tally is what makes the drop observable.
+  func testUnverifiedEnvelopeIsCountedRatherThanVanishing() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.handleUnverifiedEventInfoEnvelopeV2(observedAtEpochMillis: 1_000)
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 1)
+    XCTAssertEqual(coordinator.phase, .idle)
+
+    coordinator.reset()
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 0)
   }
 
   /// Barnard's overflow marker carries no candidate identity. Its global

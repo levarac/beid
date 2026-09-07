@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -220,6 +221,7 @@ class NearbyEventReceiverStateTest {
             peripheralId = "p",
             eventDisplayName = "Event",
             eventCodeHashHex = "zz",
+            rawContainerHex = "03000000",
             additionalNamesOmitted = false,
             additionalEventsOmitted = false,
             observedAtEpochMillis = 1L,
@@ -227,6 +229,47 @@ class NearbyEventReceiverStateTest {
 
         assertFalse(update.acceptedHint)
         assertEquals(0, update.snapshot.candidateCount)
+    }
+
+    @Test
+    fun theRawContainerIsRetainedForRelayAndDroppedWithTheSession() {
+        val store = createNearbyEventDiscoveryStore()
+        recordEnvelope(store, observedAt = 1L)
+
+        val candidate = assertNotNull(store.snapshot.candidateAt(0))
+        assertTrue(CONTAINER.contentEquals(assertNotNull(candidate.rawEnvelopeContainer)))
+        assertEquals("03000102", candidate.rawEnvelopeContainerHex)
+
+        // A defensive copy, so a caller cannot mutate the bytes a signature
+        // was computed over.
+        assertNotNull(candidate.rawEnvelopeContainer)[0] = 0x7f
+        assertTrue(CONTAINER.contentEquals(assertNotNull(candidate.rawEnvelopeContainer)))
+
+        resetNearbyEventDiscovery(store)
+        recordNearbyEventHint(store, "p", "Event", HASH.hexBytes(), null, false, false, 2L)
+        assertNull(assertNotNull(store.snapshot.candidateAt(0)).rawEnvelopeContainer)
+    }
+
+    @Test
+    fun aHintOnlyCandidateHasNoRawContainer() {
+        val store = createNearbyEventDiscoveryStore()
+        recordNearbyEventHint(store, "p", "Event", HASH.hexBytes(), null, false, false, 1L)
+
+        assertNull(assertNotNull(store.snapshot.candidateAt(0)).rawEnvelopeContainer)
+    }
+
+    @Test
+    fun anUnverifiableContainerIsCountedRatherThanVanishing() {
+        val store = createNearbyEventDiscoveryStore()
+
+        val update = recordNearbyEventUnverifiedEnvelope(store)
+
+        assertTrue(update.changed)
+        assertFalse(update.acceptedHint)
+        assertEquals(0, update.snapshot.candidateCount)
+        assertEquals(1, update.snapshot.unverifiedEnvelopeCount)
+        assertEquals(2, recordNearbyEventUnverifiedEnvelope(store).snapshot.unverifiedEnvelopeCount)
+        assertEquals(0, resetNearbyEventDiscovery(store).snapshot.unverifiedEnvelopeCount)
     }
 
     private fun recordEnvelope(
@@ -237,6 +280,7 @@ class NearbyEventReceiverStateTest {
         peripheralId = "p",
         eventDisplayName = "Event",
         eventCodeHash = HASH.hexBytes(),
+        rawContainer = CONTAINER,
         additionalNamesOmitted = false,
         additionalEventsOmitted = false,
         observedAtEpochMillis = observedAt,
@@ -264,6 +308,7 @@ class NearbyEventReceiverStateTest {
     private companion object {
         const val EVENT_ID = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
         const val HASH = "6c86c6aac5fb24bc"
+        val CONTAINER = byteArrayOf(3, 0, 1, 2)
     }
 }
 

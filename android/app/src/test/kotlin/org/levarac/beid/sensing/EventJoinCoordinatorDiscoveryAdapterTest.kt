@@ -54,6 +54,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         engine.emitUnverifiedEnvelopeV2("peripheral-a")
 
         assertEquals(0, coordinator.nearbyEventCandidates.value.candidateCount)
+        assertEquals(1, coordinator.nearbyEventCandidates.value.unverifiedEnvelopeCount)
         assertEquals(EventJoinUiState.Idle, coordinator.state.value)
     }
 

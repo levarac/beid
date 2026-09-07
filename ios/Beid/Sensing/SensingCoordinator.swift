@@ -1082,12 +1082,18 @@ final class SensingCoordinator: ObservableObject {
         // An unverified receipt carries no parsed identity: barnard's
         // `verify` returns nothing for both a malformed container and a bad
         // signature, so there is no event-code hash to key a candidate on.
+        // Counting it keeps the drop observable rather than silent.
+        Self.log.debug(
+          "b005 v2 envelope failed verification, container bytes: \(envelopeEvent.rawContainer.count, privacy: .public)"
+        )
+        handleUnverifiedEventInfoEnvelopeV2()
         break
       }
       handleEventInfoEnvelopeV2(
         peripheralId: envelopeEvent.peripheralId.uuidString,
         eventDisplayName: envelope.eventDisplayName,
         eventCodeHash: Data(envelope.eventCodeHash),
+        rawContainer: envelopeEvent.rawContainer,
         registryAgreement: { definition in
           BarnardB005EnvelopeV2.registryAgreement(envelope, definition: definition) == .agrees
         }
@@ -1785,6 +1791,7 @@ final class SensingCoordinator: ObservableObject {
     peripheralId: String,
     eventDisplayName: String,
     eventCodeHash: Data,
+    rawContainer: Data,
     registryAgreement: @escaping (BarnardEventDefinitionV1) -> Bool,
     observedAtEpochMillis: Int64? = nil
   ) {
@@ -1796,6 +1803,7 @@ final class SensingCoordinator: ObservableObject {
         peripheralId: peripheralId,
         eventDisplayName: eventDisplayName,
         eventCodeHashHex: hash,
+        rawContainerHex: rawContainer.lowercaseHexString,
         additionalNamesOmitted: false,
         additionalEventsOmitted: false,
         observedAtEpochMillis: observedAt
@@ -1816,6 +1824,18 @@ final class SensingCoordinator: ObservableObject {
     }
     publishNearbyEventDiscovery(snapshot, asOf: observedAt)
     resolveNearbyCandidates(update.snapshot)
+  }
+
+  /// Records that barnard could not verify a container this session saw.
+  ///
+  /// There is nothing else to record -- an unverified receipt has no parsed
+  /// identity at all -- so this tally is the only trace the drop leaves.
+  /// Not `private`, for the same test-seam reason as the two handlers above.
+  func handleUnverifiedEventInfoEnvelopeV2(observedAtEpochMillis: Int64? = nil) {
+    let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
+    let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .recordNearbyEventUnverifiedEnvelope(store: nearbyDiscoveryStore)
+    publishNearbyEventDiscovery(update.snapshot, asOf: observedAt)
   }
 
   /// Publishes one snapshot and rearms the single expiry wake-up from the

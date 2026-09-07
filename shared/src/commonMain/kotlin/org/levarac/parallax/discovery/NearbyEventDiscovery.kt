@@ -57,6 +57,26 @@ public enum class NearbyEventRegistryResolutionResult {
  * cleared with the rest of the session by TTL expiry or reset: a later
  * observation, including a hostile one, can never lower a tier already
  * established for a hash.
+ *
+ * ## Which gate applies to which candidate
+ *
+ * The join / key-use / recording / relay gate is split by whether a candidate
+ * has ever carried a v2 envelope, because the two kinds of candidate cannot be
+ * held to the same bar:
+ *
+ * - **A candidate with a v2 envelope observed** ([RADIO_SELF_VERIFIED] or
+ *   above) must reach [REGISTRY_VERIFIED]. [RADIO_SELF_VERIFIED] is never
+ *   enough, and must never be presented to a user as "verified".
+ * - **A candidate assembled from v1 `eventInfoHint` traffic alone** stays at
+ *   [UNVERIFIED] forever, since nothing can raise it, and so keeps the
+ *   pre-existing [NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP]
+ *   gate. Holding it to [REGISTRY_VERIFIED] would make it permanently
+ *   unjoinable and regress the shipped v1 join path.
+ *
+ * This split is temporary by design. It exists only while v1 traffic is still
+ * the common case; once organizers serve their own v2 containers, the v1
+ * fallback retires and the single [REGISTRY_VERIFIED] bar applies to every
+ * candidate. A host must not build anything on the v1 branch surviving.
  */
 public enum class NearbyEventReceiverState {
     UNVERIFIED,
@@ -89,8 +109,34 @@ public class NearbyEventCandidate internal constructor(
     public val registryStatus: NearbyEventRegistryStatus,
     public val resolvedEventIdHex: String?,
     public val receiverState: NearbyEventReceiverState,
+    rawEnvelopeContainer: ByteArray?,
 ) {
     private val eventCodeHashBytes: ByteArray = eventCodeHash.copyOf()
+    private val rawEnvelopeContainerBytes: ByteArray? = rawEnvelopeContainer?.copyOf()
+
+    /**
+     * The B005 v2 container exactly as it came off the wire, for the last
+     * radio-self-verified envelope observed for this hash, or null when this
+     * candidate has only ever carried v1 hints.
+     *
+     * Retained because spec 134 re-broadcast is signature-preserving: a relay
+     * serves these bytes back with only `relayHopCount` changed, never a
+     * re-encode and never a re-signing, and the later relay verifier needs the
+     * exact bytes too. Session state only, held for the discovery TTL and
+     * dropped on expiry or reset; nothing here is persisted.
+     *
+     * Returns a defensive copy, like every other byte accessor on this type:
+     * the bytes are what a signature was computed over and must not be
+     * mutable in place after the fact.
+     */
+    public val rawEnvelopeContainer: ByteArray?
+        get() = rawEnvelopeContainerBytes?.copyOf()
+
+    /** Lowercase hex encoding of [rawEnvelopeContainer], for native callers. */
+    public val rawEnvelopeContainerHex: String?
+        get() = rawEnvelopeContainerBytes?.joinToString(separator = "") {
+            (it.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
 
     /** Returns a defensive copy so callers cannot mutate candidate identity. */
     public val eventCodeHash: ByteArray
@@ -131,6 +177,8 @@ public class NearbyEventCandidates internal constructor(
     public val additionalEventsOmitted: Boolean,
     public val hasLocallyEvictedSources: Boolean,
     public val nextExpiryAtEpochMillis: Long?,
+    /** See [NearbyEventDiscoveryStore.unverifiedEnvelopeCount]. */
+    public val unverifiedEnvelopeCount: Int,
 ) {
     public val candidateCount: Int
         get() = candidates.size
@@ -165,6 +213,23 @@ public class NearbyEventDiscoveryStore internal constructor() {
      * re-observation after a flaky registry read.
      */
     internal val receiverStates: MutableMap<EventHash, NearbyEventReceiverState> = mutableMapOf()
+
+    /**
+     * Signature-preserving relay needs the exact container bytes, so they are
+     * held for the session beside the tier they belong to. Same lifetime as
+     * [receiverStates]: dropped on TTL expiry and on reset, never persisted.
+     */
+    internal val rawEnvelopeContainers: MutableMap<EventHash, ByteArray> = mutableMapOf()
+
+    /**
+     * How many B005 v2 containers this session saw that barnard could not
+     * verify. Such a container has no parsed identity and becomes no
+     * candidate, so this tally is the only trace it leaves; it exists so a
+     * dropped envelope is observable in tests and in a host's diagnostics
+     * rather than vanishing silently. A session tally, cleared by reset like
+     * the eviction fact, not by TTL.
+     */
+    internal var unverifiedEnvelopeCount: Int = 0
 
     public val snapshot: NearbyEventCandidates
         get() = buildSnapshot()
@@ -281,6 +346,7 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     peripheralId: String,
     eventDisplayName: String,
     eventCodeHash: ByteArray,
+    rawContainer: ByteArray,
     additionalNamesOmitted: Boolean,
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
@@ -297,11 +363,15 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
         observedAtEpochMillis = observedAtEpochMillis,
     )
     if (!update.acceptedHint) return update
-    val raised = store.raiseReceiverState(
-        EventHash(eventCodeHash),
-        NearbyEventReceiverState.RADIO_SELF_VERIFIED,
-    )
-    if (!raised) return update
+    val hash = EventHash(eventCodeHash)
+    val raised = store.raiseReceiverState(hash, NearbyEventReceiverState.RADIO_SELF_VERIFIED)
+    // The newest container for a hash replaces the one held. Spec 134 elects
+    // by hop among what a device can currently observe, so the freshest bytes
+    // are the ones a relay decision should be made from; an older copy of the
+    // same event is not more authoritative for being older.
+    val containerChanged = !store.rawEnvelopeContainers[hash].contentEqualsOrNull(rawContainer)
+    if (containerChanged) store.rawEnvelopeContainers[hash] = rawContainer.copyOf()
+    if (!raised && !containerChanged) return update
     return NearbyEventDiscoveryUpdate(
         acceptedHint = true,
         changed = true,
@@ -309,12 +379,35 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     )
 }
 
+/**
+ * Records that barnard could not verify a B005 v2 container.
+ *
+ * There is nothing else to record: `verify` returns nothing for both a
+ * malformed container and a bad signature, so the container has no event-code
+ * hash, no display name, and no candidate to attach to. Counting it is what
+ * keeps a dropped envelope observable instead of silent.
+ */
+public fun recordNearbyEventUnverifiedEnvelope(
+    store: NearbyEventDiscoveryStore,
+): NearbyEventDiscoveryUpdate {
+    store.unverifiedEnvelopeCount += 1
+    return NearbyEventDiscoveryUpdate(
+        acceptedHint = false,
+        changed = true,
+        snapshot = store.snapshot,
+    )
+}
+
+private fun ByteArray?.contentEqualsOrNull(other: ByteArray): Boolean =
+    this != null && this.contentEquals(other)
+
 /** Swift Export boundary for [recordNearbyEventRadioSelfVerifiedEnvelope]. */
 public fun recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
     store: NearbyEventDiscoveryStore,
     peripheralId: String,
     eventDisplayName: String,
     eventCodeHashHex: String,
+    rawContainerHex: String,
     additionalNamesOmitted: Boolean,
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
@@ -323,6 +416,7 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
     peripheralId = peripheralId,
     eventDisplayName = eventDisplayName,
     eventCodeHash = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrElse { ByteArray(0) },
+    rawContainer = runCatching { rawContainerHex.decodeHexBytes() }.getOrElse { ByteArray(0) },
     additionalNamesOmitted = additionalNamesOmitted,
     additionalEventsOmitted = additionalEventsOmitted,
     observedAtEpochMillis = observedAtEpochMillis,
@@ -604,10 +698,13 @@ public fun resetNearbyEventDiscovery(
     val changed = store.sources.isNotEmpty() ||
         store.additionalNamesOmittedAtEpochMillis != null ||
         store.additionalEventsOmittedAtEpochMillis != null ||
-        store.locallyEvictedSources
+        store.locallyEvictedSources ||
+        store.unverifiedEnvelopeCount != 0
     store.sources.clear()
     store.registry.clear()
     store.receiverStates.clear()
+    store.rawEnvelopeContainers.clear()
+    store.unverifiedEnvelopeCount = 0
     store.additionalNamesOmittedAtEpochMillis = null
     store.additionalEventsOmittedAtEpochMillis = null
     store.locallyEvictedSources = false
@@ -663,6 +760,7 @@ private fun expireAt(store: NearbyEventDiscoveryStore, nowEpochMillis: Long): Bo
         val liveHashes = store.sources.keys.map { it.eventHash }.toSet()
         store.registry.keys.retainAll(liveHashes)
         store.receiverStates.keys.retainAll(liveHashes)
+        store.rawEnvelopeContainers.keys.retainAll(liveHashes)
         changed = true
     }
 
@@ -709,6 +807,7 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
                 registryStatus = registry[eventHash]?.status ?: NearbyEventRegistryStatus.UNRESOLVED,
                 resolvedEventIdHex = registry[eventHash]?.eventIdHex,
                 receiverState = receiverStates[eventHash] ?: NearbyEventReceiverState.UNVERIFIED,
+                rawEnvelopeContainer = rawEnvelopeContainers[eventHash],
             )
         }
 
@@ -723,6 +822,7 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
         additionalEventsOmitted = additionalEventsOmittedAtEpochMillis != null,
         hasLocallyEvictedSources = locallyEvictedSources,
         nextExpiryAtEpochMillis = expiryTimes.minOrNull(),
+        unverifiedEnvelopeCount = unverifiedEnvelopeCount,
     )
 }
 

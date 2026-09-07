@@ -15,6 +15,7 @@ import org.levarac.parallax.discovery.createNearbyEventDiscoveryStore
 import org.levarac.parallax.discovery.applyNearbyEventRegistryAgreementFromHex
 import org.levarac.parallax.discovery.recordNearbyEventHint
 import org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelope
+import org.levarac.parallax.discovery.recordNearbyEventUnverifiedEnvelope
 import org.levarac.parallax.discovery.refreshNearbyEventDiscovery
 import org.levarac.parallax.discovery.resetNearbyEventDiscovery
 import org.levarac.parallax.discovery.beginNearbyEventRegistryResolutionFromHex
@@ -173,6 +174,7 @@ internal class NearbyEventDiscoverySession(
         peripheralId: String,
         eventDisplayName: String,
         eventCodeHash: ByteArray,
+        rawContainer: ByteArray,
         registryAgreement: (BarnardEventDefinitionV1) -> Boolean,
     ) {
         if (disposed) return
@@ -181,6 +183,7 @@ internal class NearbyEventDiscoverySession(
             peripheralId = peripheralId,
             eventDisplayName = eventDisplayName,
             eventCodeHash = eventCodeHash,
+            rawContainer = rawContainer,
             additionalNamesOmitted = false,
             additionalEventsOmitted = false,
             observedAtEpochMillis = nowEpochMillis(),
@@ -196,6 +199,18 @@ internal class NearbyEventDiscoverySession(
         }
         publishAndSchedule(promoted ?: update.snapshot)
         resolveUnresolvedCandidates(update.snapshot)
+    }
+
+    /**
+     * Records that barnard could not verify a container this session saw.
+     *
+     * There is nothing else to record -- an unverified receipt has no parsed
+     * identity at all -- so this tally is the only trace the drop leaves, and
+     * it is what makes the drop observable rather than silent.
+     */
+    fun recordUnverifiedEnvelope() {
+        if (disposed) return
+        publishAndSchedule(recordNearbyEventUnverifiedEnvelope(store).snapshot)
     }
 
     fun reset() {

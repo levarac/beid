@@ -40,7 +40,7 @@ class NearbyEventReceiverStateAdapterTest {
     fun radioSelfVerifiedEnvelopeIsNotJoinableUntilTheRegistryAgrees() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { false }
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
 
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
         resolveVerifiedOpenDefinition(registry)
@@ -53,7 +53,7 @@ class NearbyEventReceiverStateAdapterTest {
     fun agreementOnAVerifiedDefinitionPromotesAndUnlocksJoin() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { true }
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
 
         resolveVerifiedOpenDefinition(registry)
 
@@ -68,7 +68,7 @@ class NearbyEventReceiverStateAdapterTest {
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
         resolveVerifiedOpenDefinition(registry)
 
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { true }
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
 
         assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate(session).receiverState)
         assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
@@ -88,7 +88,7 @@ class NearbyEventReceiverStateAdapterTest {
         resolveVerifiedOpenDefinition(registry)
         assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
 
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { false }
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
 
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
         assertNull(session.cards.value.single().eventIdHex)
@@ -100,7 +100,7 @@ class NearbyEventReceiverStateAdapterTest {
         val registry = FakeRegistry()
         val session = session(registry)
         var seen: BarnardEventDefinitionV1? = null
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) {
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) {
             seen = it
             true
         }
@@ -120,7 +120,7 @@ class NearbyEventReceiverStateAdapterTest {
     fun anUnavailableRegistryReadNeverPromotesEvenWhenAgreementWouldSayYes() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { true }
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
 
         registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
         runCurrent()
@@ -135,7 +135,7 @@ class NearbyEventReceiverStateAdapterTest {
     fun aDefinitionMissingItsKeySetDigestNeverPromotes() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { true }
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
 
         registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
         runCurrent()
@@ -146,10 +146,30 @@ class NearbyEventReceiverStateAdapterTest {
     }
 
     @Test
+    fun theRawContainerReachesTheCandidateForSignaturePreservingRelay() = runTest {
+        val session = session(FakeRegistry())
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
+
+        val stored = assertNotNull(candidate(session).rawEnvelopeContainer)
+        assertTrue(CONTAINER.contentEquals(stored))
+    }
+
+    @Test
+    fun anUnverifiableContainerIsCountedRatherThanVanishing() = runTest {
+        val session = session(FakeRegistry())
+
+        session.recordUnverifiedEnvelope()
+
+        assertEquals(0, session.candidates.value.candidateCount)
+        assertEquals(1, session.candidates.value.unverifiedEnvelopeCount)
+        assertEquals(0, session.cards.value.size)
+    }
+
+    @Test
     fun resetClearsTheReceiverStateAndTheCachedAgreement() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { true }
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
         resolveVerifiedOpenDefinition(registry)
         assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate(session).receiverState)
 
@@ -219,6 +239,7 @@ class NearbyEventReceiverStateAdapterTest {
         val EVENT_ID_BYTES = ByteArray(32) { (it + 1).toByte() }
         val KEY_SET_DIGEST_BYTES = ByteArray(32) { (it + 100).toByte() }
         val EVENT_HASH = eventCodeHashForOpenEventV1(EVENT_ID_BYTES)
+        val CONTAINER = byteArrayOf(3, 0, 1, 2)
         val EVENT_ID_HEX = "0x" + EVENT_ID_BYTES.toHex()
         val KEY_SET_DIGEST_HEX = "0x" + KEY_SET_DIGEST_BYTES.toHex()
 
