@@ -497,8 +497,19 @@
         }
       }
     },
+    "scan.binding.smartWalletUnsupported": {
+      "comment": "Reason shown when beid recognizes the wallet's signature as an ERC-6492 smart-contract-wallet format (e.g. Safe, other smart accounts). beid does not support this wallet type yet. Do not imply the user can fix this by trying again or reconnecting — it cannot succeed until beid adds support.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This wallet type isn't supported yet"
+          }
+        }
+      }
+    },
     "scan.binding.verificationFailed": {
-      "comment": "Reason shown when the wallet's signature doesn't match the address it claimed to sign with, so beid could not verify the wallet actually owns that address. The user can try again.",
+      "comment": "Reason shown when beid could not verify this wallet-binding attempt: stale/malformed local state, a wallet signature of the wrong length, or a signature that cryptographically recovers to a different address than the one claimed. Distinct from the ERC-6492 smart-wallet case (scan.binding.smartWalletUnsupported), which has its own reason. The user can try again — this case covers failures that could be transient (e.g. transport corruption), unlike the smart-wallet case.",
       "localizations": {
         "en": {
           "stringUnit": {

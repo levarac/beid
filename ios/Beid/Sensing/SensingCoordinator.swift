@@ -2015,10 +2015,15 @@ final class SensingCoordinator: ObservableObject {
   /// `barnard-wallet-ack:v1` message referencing the wallet's own signature
   /// bytes (§2.4 — the mutual-signature requirement, §4/§6: neither
   /// signature alone is a valid binding), builds and persists the
-  /// `BindingRecord`, and moves to `.bound`. `nil` (no state change) if
-  /// there is no in-flight attempt to complete, `walletSignatureHex` isn't
-  /// valid hex — defensive against a stale callback racing a decline, or a
-  /// malformed transport response — or either verification below fails.
+  /// `BindingRecord`, and moves to `.bound`. Returns a
+  /// `BindingCompletionResult` — `.notVerified` if there is no in-flight
+  /// attempt to complete, `walletSignatureHex` isn't valid hex (defensive
+  /// against a stale callback racing a decline, or a malformed transport
+  /// response), or either verification below fails for a reason other than
+  /// an unsupported smart-contract wallet; `.smartWalletUnsupported` if the
+  /// wallet signature is ERC-6492-shaped (beid#359 — this must not collapse
+  /// into the same reason a corrupt signature gets, since retrying can
+  /// never succeed for this reason, unlike the others).
   ///
   /// Two checks guard against a `BindingRecord` whose stored
   /// `walletAddress` disagrees with what was actually signed (beid#316):
@@ -2035,12 +2040,15 @@ final class SensingCoordinator: ObservableObject {
   /// and checks it against `expectedWalletAddress`, and separately checks
   /// the device acknowledgement against `expectedOwnerPublicKey`. Catches a
   /// wallet/connector that signed with a different key than the address it
-  /// reported. `.smartWalletUnsupported` is treated the same as `.invalid`
-  /// here — no new persistent state for it (gh#240 removed unbacked states
-  /// from this vocabulary twice already); the failure is recoverable by
-  /// retry, so it is surfaced as copy by the caller, not new state.
-  @discardableResult
-  func completeBinding(walletAddress: String, walletSignatureHex: String) -> BindingRecord? {
+  /// reported. Before (b)'s cryptography ever runs, `BarnardCoreSigning
+  /// .classifyWalletSignature` classifies the raw wallet-signature bytes
+  /// (beid#357): a signature that isn't 65 bytes is rejected right there,
+  /// before the owner key ever signs anything over it, and a smart-wallet-
+  /// shaped signature is routed to `.smartWalletUnsupported` instead of
+  /// falling into the generic `.notVerified` bucket (beid#359) — one
+  /// classification call serving both issues. (b)'s own verification now
+  /// yields three distinguishable outcomes instead of a boolean.
+  func completeBinding(walletAddress: String, walletSignatureHex: String) -> BindingCompletionResult {
     guard
       let message = pendingBindingMessage,
       let proofId = activeProofId,
@@ -2048,13 +2056,27 @@ final class SensingCoordinator: ObservableObject {
       let walletAddressBytes = Data(hexEncoded: walletAddress),
       walletAddressBytes == message.walletAddress,
       let walletSignatureBytes = Data(hexEncoded: walletSignatureHex),
+      let canonicalText = message.canonicalText()
+    else {
+      return .notVerified
+    }
+
+    switch BarnardCoreSigning.classifyWalletSignature(Array(walletSignatureBytes)) {
+    case .smartWalletUnsupported:
+      return .smartWalletUnsupported
+    case .invalid:
+      return .notVerified
+    case .validEoaShape:
+      break
+    }
+
+    guard
       let ackSignature = sensingCryptography.signWalletAcknowledgement(
         walletAddress: message.walletAddress,
         walletSignature: walletSignatureBytes
-      ),
-      let canonicalText = message.canonicalText()
+      )
     else {
-      return nil
+      return .notVerified
     }
 
     let deviceSignature = BarnardCoreRecoverableSignature(
@@ -2063,16 +2085,23 @@ final class SensingCoordinator: ObservableObject {
       v: ackSignature.v
     )
 
-    guard
-      BarnardCoreSigning.verifyWalletBinding(
-        text: canonicalText,
-        walletSignature: Array(walletSignatureBytes),
-        expectedWalletAddress: Array(walletAddressBytes),
-        expectedOwnerPublicKey: Array(message.ownerPublicKey),
-        acknowledgement: deviceSignature
-      ) == .valid
-    else {
-      return nil
+    switch BarnardCoreSigning.verifyWalletBinding(
+      text: canonicalText,
+      walletSignature: Array(walletSignatureBytes),
+      expectedWalletAddress: Array(walletAddressBytes),
+      expectedOwnerPublicKey: Array(message.ownerPublicKey),
+      acknowledgement: deviceSignature
+    ) {
+    case .invalid:
+      return .notVerified
+    case .smartWalletUnsupported:
+      // Unreachable via this call site in practice — classifyWalletSignature
+      // above already routed this shape, and it's a pure function of the same
+      // bytes, so verifyWalletBinding cannot independently reclassify it here.
+      // Handled for exhaustiveness, not because this path is expected to run.
+      return .smartWalletUnsupported
+    case .valid:
+      break
     }
 
     let record = BindingRecord(
@@ -2090,7 +2119,7 @@ final class SensingCoordinator: ObservableObject {
     bindingRecordStore.add(record)
     bindingState = .bound(record)
     pendingBindingMessage = nil
-    return record
+    return .bound(record)
   }
 
   /// Discards the pending binding message without changing `bindingState`.

@@ -23,6 +23,28 @@ enum EventBindingState: Equatable {
   case failed(reason: String)
 }
 
+/// Outcome of one `completeBinding` call. Never persisted — not a new
+/// `EventBindingState` case, not stored on `BindingRecord` (beid#240
+/// forbids new unbacked persistent state; beid#359 only makes the
+/// *reason returned to the caller* distinguishable). The caller consumes
+/// this immediately to pick failure copy, then discards it.
+enum BindingCompletionResult: Equatable {
+  case bound(BindingRecord)
+  /// The wallet signature is ERC-6492-shaped (ends with the 32-byte magic
+  /// suffix) — beid does not support smart-contract wallets yet (beid#359).
+  /// Retrying can never succeed for this reason; the caller must not imply
+  /// otherwise.
+  case smartWalletUnsupported
+  /// Any other failure: stale/malformed local state, a wallet signature
+  /// that isn't 65 bytes (beid#357 — rejected before the owner key ever
+  /// runs), or a signature that cryptographically recovers to a different
+  /// signer than the claimed address. Deliberately not further split:
+  /// unlike the smart-wallet case, none of these are diagnosable from here,
+  /// so a retry is genuinely plausible (e.g. transport corruption) and the
+  /// existing generic reason stays honest about that uncertainty.
+  case notVerified
+}
+
 extension EventBindingState {
   /// Keeps the pending binding copy aligned with the live scan phase without
   /// changing an already-started binding attempt.
