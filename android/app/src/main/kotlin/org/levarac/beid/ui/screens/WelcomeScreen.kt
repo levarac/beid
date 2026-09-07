@@ -1,22 +1,15 @@
 package org.levarac.beid.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import org.levarac.beid.R
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
-import org.levarac.beid.ui.designsystem.BeidScreen
+import org.levarac.beid.ui.designsystem.BeidStateScreen
+import org.levarac.beid.ui.designsystem.WelcomeMarkGlyph
 import org.levarac.beid.ui.theme.BeidAppTheme
-import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
 
 object WelcomeScreenTestTags {
@@ -25,16 +18,22 @@ object WelcomeScreenTestTags {
 
 /**
  * Screen 01: Welcome — mirrors iOS's `WelcomeView`
- * (`ios/Beid/Views/WelcomeView.swift`). Title/subtitle reproduce
- * `BeidHeroHeader`'s centered text layout as plain Text/Column, without its
- * icon roundel — this scaffold has no material-icons-core/-extended
- * dependency (see `TestIcon.kt`'s kdoc), so `BeidHeroHeader` itself is not
- * used here, matching how `EventJoinScreen` already avoids the icon-required
- * design-system components.
+ * (`ios/Beid/Views/WelcomeView.swift`). Uses [BeidStateScreen]'s
+ * `contentSlot` to render [WelcomeMarkGlyph] — iOS's Welcome header uses its
+ * custom `welcome-mark` illustration (`assetImage`), not just its
+ * `checkmark.seal.fill` SF Symbol fallback (`systemImage`), so a Material
+ * icon was the wrong tier for this one screen (beid#338 correction; see
+ * `Illustrations.kt`'s kdoc for the full reproduction-vs-import reasoning).
+ * `BluetoothPermissionScreen`/`BluetoothOffScreen` stay on Material icons —
+ * their iOS equivalents only ever pass `systemImage`, never `assetImage`.
  */
 @Composable
 fun WelcomeScreen(onGetStarted: () -> Unit) {
-    BeidScreen(
+    BeidStateScreen(
+        title = stringResource(R.string.welcome_title),
+        message = stringResource(R.string.welcome_subtitle),
+        tint = BeidTheme.colors.actionPrimary,
+        contentSlot = { WelcomeMarkGlyph() },
         footer = {
             BeidPrimaryButton(
                 text = stringResource(R.string.welcome_get_started),
@@ -45,26 +44,7 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
                 modifier = Modifier.testTag(WelcomeScreenTestTags.GET_STARTED_BUTTON),
             )
         },
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
-        ) {
-            Text(
-                text = stringResource(R.string.welcome_title),
-                style = MaterialTheme.typography.headlineLarge,
-                color = BeidTheme.colors.textPrimary,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = stringResource(R.string.welcome_subtitle),
-                style = MaterialTheme.typography.bodyLarge,
-                color = BeidTheme.colors.textSecondary,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
+    )
 }
 
 @Preview(showBackground = true)

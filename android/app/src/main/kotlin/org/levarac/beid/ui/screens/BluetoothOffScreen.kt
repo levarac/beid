@@ -2,21 +2,18 @@ package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import org.levarac.beid.R
 import org.levarac.beid.ui.designsystem.BeidNumberedStepList
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
-import org.levarac.beid.ui.designsystem.BeidScreen
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
+import org.levarac.beid.ui.designsystem.BeidStateScreen
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
@@ -28,19 +25,36 @@ object BluetoothOffScreenTestTags {
 
 /**
  * Screen 03: Bluetooth-off recovery — mirrors iOS's `BluetoothOffView`
- * (`ios/Beid/Views/BluetoothOffView.swift`). Header text reproduces
- * `BeidHeroHeader`'s layout as plain Text/Column without its icon roundel —
- * see [WelcomeScreen]'s kdoc for why.
+ * (`ios/Beid/Views/BluetoothOffView.swift`). Uses [BeidStateScreen]'s icon +
+ * title + subtitle header now that `material-icons-extended` is a project
+ * dependency (beid#338) — previously reproduced as plain Text/Column
+ * without an icon roundel because no icon library was available.
  *
  * iOS applies its single `signalWarning` motif accent to the whole screen —
  * header glyph, step-list badges, and both buttons — via one ambient
  * `.tint()` (see `BluetoothOffView`'s trailing comment). Compose has no
  * ambient tint, so [BeidTheme.colors.signalWarning]/[BeidTheme.colors.labelOnWarning]
- * are passed explicitly to every warning-accented element here instead.
+ * are passed explicitly to every warning-accented element here instead,
+ * including the header icon's `tint`.
  */
 @Composable
 fun BluetoothOffScreen(onOpenSettings: () -> Unit, onTurnedOn: () -> Unit) {
-    BeidScreen(
+    BeidStateScreen(
+        icon = Icons.Filled.BluetoothDisabled,
+        title = stringResource(R.string.bluetooth_off_title),
+        message = stringResource(R.string.bluetooth_off_message),
+        tint = BeidTheme.colors.signalWarning,
+        accessory = {
+            BeidNumberedStepList(
+                steps = listOf(
+                    stringResource(R.string.bluetooth_off_step_open_settings),
+                    stringResource(R.string.bluetooth_off_step_tap_bluetooth),
+                    stringResource(R.string.bluetooth_off_step_switch_on),
+                ),
+                badgeColor = BeidTheme.colors.signalWarning,
+                labelColor = BeidTheme.colors.labelOnWarning,
+            )
+        },
         footer = {
             Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
                 BeidPrimaryButton(
@@ -60,38 +74,7 @@ fun BluetoothOffScreen(onOpenSettings: () -> Unit, onTurnedOn: () -> Unit) {
                 )
             }
         },
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.l)) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
-            ) {
-                Text(
-                    text = stringResource(R.string.bluetooth_off_title),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = BeidTheme.colors.textPrimary,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    text = stringResource(R.string.bluetooth_off_message),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = BeidTheme.colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
-            }
-
-            BeidNumberedStepList(
-                steps = listOf(
-                    stringResource(R.string.bluetooth_off_step_open_settings),
-                    stringResource(R.string.bluetooth_off_step_tap_bluetooth),
-                    stringResource(R.string.bluetooth_off_step_switch_on),
-                ),
-                badgeColor = BeidTheme.colors.signalWarning,
-                labelColor = BeidTheme.colors.labelOnWarning,
-            )
-        }
-    }
+    )
 }
 
 @Preview(showBackground = true)

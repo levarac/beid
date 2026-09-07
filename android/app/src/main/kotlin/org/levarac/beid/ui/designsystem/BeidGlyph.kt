@@ -22,10 +22,18 @@ import org.levarac.beid.ui.theme.BeidSize
  * equivalent of iOS's `assetImage` precedence over `systemImage`, ported as
  * a slot rather than a wired asset since Android has no illustration assets
  * yet (see android/README.md).
+ *
+ * `icon` is nullable (beid#338 illustration correction): a caller that
+ * supplies `contentSlot` (e.g. [WelcomeMarkGlyph] and its siblings in
+ * `Illustrations.kt`) never needs a fallback icon at all — unlike iOS's
+ * `BeidGlyph`, whose `systemImage` stays a required, always-present
+ * parameter even when `assetImage` wins (see `ios/Beid/DesignSystem.swift`),
+ * Kotlin's nullable-default-parameter idiom lets Android express "no icon"
+ * directly instead of threading through an unused placeholder value.
  */
 @Composable
 fun BeidGlyph(
-    icon: ImageVector,
+    icon: ImageVector? = null,
     tint: Color,
     modifier: Modifier = Modifier,
     size: Dp = BeidSize.glyph,
@@ -39,7 +47,7 @@ fun BeidGlyph(
     ) {
         if (contentSlot != null) {
             contentSlot()
-        } else {
+        } else if (icon != null) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,

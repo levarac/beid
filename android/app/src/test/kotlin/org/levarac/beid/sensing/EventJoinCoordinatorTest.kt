@@ -3,6 +3,7 @@ package org.levarac.beid.sensing
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -186,6 +187,58 @@ class EventJoinCoordinatorHooksTest {
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
 
         assertTrue(coordinator.state.value is EventJoinUiState.Sensing, "reaching here without an exception is the assertion")
+    }
+
+    @Test
+    fun recordingCeremonyShownDefaultsFalseAndFlipsTrueOnceMarked() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeSensingCryptography())
+
+        assertFalse(coordinator.recordingCeremonyShown, "a fresh coordinator has never shown the ceremony")
+        coordinator.joinEvent("HOOK-EVENT")
+        confirmRecording(engine)
+        assertFalse(coordinator.recordingCeremonyShown, "confirming Recording alone must not mark the ceremony shown — only the UI does, via markRecordingCeremonyShown")
+
+        coordinator.markRecordingCeremonyShown()
+
+        assertTrue(coordinator.recordingCeremonyShown)
+    }
+
+    @Test
+    fun recordingCeremonyShownSurvivesASignalLostResumeCycleUnchanged() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeSensingCryptography())
+
+        coordinator.joinEvent("HOOK-EVENT")
+        confirmRecording(engine)
+        coordinator.markRecordingCeremonyShown()
+
+        coordinator.simulateSignalLost()
+        coordinator.resumeSensing()
+
+        assertTrue(
+            coordinator.recordingCeremonyShown,
+            "resumeSensing (SIGNAL_LOST -> RECORDING in place) must never replay the entrance ceremony",
+        )
+    }
+
+    @Test
+    fun recordingCeremonyShownResetsOnAFreshSessionAfterLeavingTheEvent() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeSensingCryptography())
+
+        coordinator.joinEvent("FIRST-EVENT")
+        confirmRecording(engine)
+        coordinator.markRecordingCeremonyShown()
+        assertTrue(coordinator.recordingCeremonyShown)
+
+        coordinator.leaveEvent()
+        coordinator.joinEvent("SECOND-EVENT")
+
+        assertFalse(
+            coordinator.recordingCeremonyShown,
+            "a genuinely new session (a fresh joinEvent after leaving) must show the ceremony again",
+        )
     }
 
     private fun confirmRecording(engine: FakeEventJoinEngine) {

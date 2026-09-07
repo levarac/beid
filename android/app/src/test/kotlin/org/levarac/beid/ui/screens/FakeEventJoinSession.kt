@@ -33,6 +33,8 @@ internal class FakeEventJoinSession(
         private set
     var leaveEventCallCount: Int = 0
         private set
+    override var recordingCeremonyShown: Boolean = false
+        private set
 
     override fun joinEvent(code: String) {
         joinedCode = code
@@ -65,6 +67,10 @@ internal class FakeEventJoinSession(
 
     override fun leaveEvent() {
         leaveEventCallCount += 1
+    }
+
+    override fun markRecordingCeremonyShown() {
+        recordingCeremonyShown = true
     }
 
     fun emit(next: EventJoinUiState) {

@@ -15,10 +15,15 @@ import org.levarac.beid.ui.theme.BeidSpacing
  * (`ios/Beid/DesignSystem.swift`), used by Welcome, BluetoothPermission,
  * BluetoothOff, and SignalLost. Built from [BeidScreen] + [BeidHeroHeader]
  * plus an accessory slot and a footer slot.
+ *
+ * `icon` is nullable (beid#338 illustration correction) — a caller passing
+ * `contentSlot` (e.g. `WelcomeScreen`'s [WelcomeMarkGlyph]) needs no
+ * fallback icon; see [BeidGlyph]'s kdoc for why this differs from iOS's
+ * always-required `systemImage`.
  */
 @Composable
 fun BeidStateScreen(
-    icon: ImageVector,
+    icon: ImageVector? = null,
     title: String,
     message: String,
     tint: Color,

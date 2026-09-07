@@ -223,6 +223,14 @@ class EventJoinCoordinator internal constructor(
      */
     var onProofSignatureStateChanged: ((proofId: UUID, hasSelfProof: Boolean, hasBinding: Boolean) -> Unit)? = null
 
+    /** See [EventJoinSession.recordingCeremonyShown]. Reset in [resetSessionState], never by [resumeSensing]. */
+    override var recordingCeremonyShown: Boolean = false
+        private set
+
+    override fun markRecordingCeremonyShown() {
+        recordingCeremonyShown = true
+    }
+
     init {
         engine.onEvent = ::handleBarnardEvent
     }
@@ -497,6 +505,7 @@ class EventJoinCoordinator internal constructor(
         activeProofId = null
         bindingState = EventBindingState.None
         pendingBindingMessage = null
+        recordingCeremonyShown = false
     }
 
     // MARK: - Wallet connect+binding (mirrors iOS's `SensingCoordinator`

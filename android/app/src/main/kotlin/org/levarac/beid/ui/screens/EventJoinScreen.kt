@@ -10,10 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,13 +28,10 @@ import org.levarac.beid.R
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.ScanPhase
-import org.levarac.beid.ui.designsystem.BeidMetricRow
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
-import org.levarac.beid.ui.designsystem.BeidSecondaryButton
-import org.levarac.beid.ui.designsystem.BeidStatusPill
+import org.levarac.beid.ui.designsystem.BeidTextField
 import org.levarac.beid.ui.theme.BeidAppTheme
-import org.levarac.beid.ui.theme.BeidRadius
 import org.levarac.beid.ui.theme.BeidSpacing
 import org.levarac.beid.ui.theme.BeidTheme
 
@@ -73,6 +67,13 @@ private fun EventJoinFieldError.message(): String = when (this) {
  *
  * State lives in [viewModel], not here — this composable only renders
  * [EventJoinViewModel.uiState] and forwards user actions back to it.
+ *
+ * Once [EventJoinUiState.Sensing] is reached, the title and
+ * [NearbyEventCards] give way to [ScanFlowScreen] (beid#336) — the Android
+ * equivalent of iOS's `ScanFlowView` full-screen cover, except the
+ * account-entry [Text] above stays visible in every state: it is Android's
+ * only door to the Account screen (and therefore to "Leave Event"), so it
+ * is chrome, not swapped-out body content, even while a session is active.
  */
 @Composable
 fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
@@ -95,44 +96,58 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
                     .clickable(onClick = onOpenAccount)
                     .testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
             )
-            Text(
-                text = stringResource(R.string.event_join_title),
-                style = MaterialTheme.typography.headlineLarge,
-                color = BeidTheme.colors.textPrimary,
-            )
-            NearbyEventCards(
-                cards = uiState.nearbyEventCards,
-                selectedEventHashHex = uiState.selectedNearbyEventHashHex,
-                enabled = uiState.sessionState is EventJoinUiState.Idle,
-                onJoin = viewModel::joinNearbyEvent,
-            )
-            if (uiState.sessionState !is EventJoinUiState.Idle) {
-                Text(
-                    text = statusText(uiState.sessionState),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = BeidTheme.colors.textSecondary,
-                )
-            }
-            when (val sessionState = uiState.sessionState) {
-                is EventJoinUiState.PermissionDenied -> BeidPrimaryButton(
-                    text = stringResource(R.string.event_join_open_settings),
-                    containerColor = BeidTheme.colors.actionPrimary,
-                    contentColor = BeidTheme.colors.surfaceCanvas,
-                    onClick = viewModel::openAppSettings,
-                    modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
-                )
-                is EventJoinUiState.Sensing -> ScanPhaseDetail(
+
+            val sessionState = uiState.sessionState
+            if (sessionState is EventJoinUiState.Sensing) {
+                ScanFlowScreen(
                     phase = sessionState.phase,
+                    showEntranceCeremony = !viewModel.recordingCeremonyShown,
+                    onCeremonyFinished = viewModel::markRecordingCeremonyShown,
                     onSimulateSignalLost = viewModel::simulateSignalLost,
                     onResumeSensing = viewModel::resumeSensing,
                 )
-                else -> Unit
+            } else {
+                Text(
+                    text = stringResource(R.string.event_join_title),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = BeidTheme.colors.textPrimary,
+                )
+                NearbyEventCards(
+                    cards = uiState.nearbyEventCards,
+                    selectedEventHashHex = uiState.selectedNearbyEventHashHex,
+                    enabled = sessionState is EventJoinUiState.Idle,
+                    onJoin = viewModel::joinNearbyEvent,
+                )
+                if (sessionState !is EventJoinUiState.Idle) {
+                    Text(
+                        text = statusText(sessionState),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BeidTheme.colors.textSecondary,
+                    )
+                }
+                if (sessionState is EventJoinUiState.PermissionDenied) {
+                    BeidPrimaryButton(
+                        text = stringResource(R.string.event_join_open_settings),
+                        containerColor = BeidTheme.colors.actionPrimary,
+                        contentColor = BeidTheme.colors.surfaceCanvas,
+                        onClick = viewModel::openAppSettings,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
+                    )
+                }
             }
         }
     }
 }
 
-/** Pure rendering seam used by read-only scenarios without constructing a coordinator. */
+/**
+ * Pure rendering seam used by read-only scenarios without constructing a
+ * coordinator. [showEntranceCeremony]/[onCeremonyFinished] default to
+ * "skip the ceremony" — read-only scenario/demo playback has no
+ * coordinator-backed [EventJoinSession.recordingCeremonyShown] to seed
+ * from, and a scripted frame sequence flashing a 2-second ceremony mid-demo
+ * would fight the scenario's own frame-advance timing, so demo playback
+ * always renders [RecordingScreen]'s steady state directly.
+ */
 @Composable
 fun EventJoinScreen(
     state: EventJoinScreenState,
@@ -142,6 +157,8 @@ fun EventJoinScreen(
     onOpenAccount: () -> Unit,
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
+    showEntranceCeremony: Boolean = false,
+    onCeremonyFinished: () -> Unit = {},
 ) {
     Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
         Column(
@@ -156,7 +173,8 @@ fun EventJoinScreen(
             // screen (beid#126). iOS has no direct equivalent to mirror here (its Account
             // sheet opens from a CollectionHomeView toolbar button that doesn't exist on
             // Android yet), so kept minimal and undesigned: existing typography/color
-            // tokens only, no new icon or reusable component.
+            // tokens only, no new icon or reusable component. Stays visible in every
+            // state, including Sensing (beid#336) — Android's only door to Account.
             Text(
                 text = stringResource(R.string.account_title),
                 style = MaterialTheme.typography.bodyMedium,
@@ -166,72 +184,58 @@ fun EventJoinScreen(
                     .testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
             )
 
-            Text(
-                text = stringResource(R.string.event_join_title),
-                style = MaterialTheme.typography.headlineLarge,
-                color = BeidTheme.colors.textPrimary,
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
-                OutlinedTextField(
-                    value = state.eventCode,
-                    onValueChange = onEventCodeChanged,
-                    label = { Text(stringResource(R.string.event_join_code_label)) },
-                    isError = state.fieldError != null,
-                    singleLine = true,
-                    shape = RoundedCornerShape(BeidRadius.control),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = BeidTheme.colors.textPrimary,
-                        unfocusedTextColor = BeidTheme.colors.textPrimary,
-                        errorTextColor = BeidTheme.colors.textPrimary,
-                        focusedContainerColor = BeidTheme.colors.surfaceRaised,
-                        unfocusedContainerColor = BeidTheme.colors.surfaceRaised,
-                        errorContainerColor = BeidTheme.colors.surfaceRaised,
-                        // iOS's EventCodeEntryView never varies the field's own border/label/
-                        // cursor color on error — only the message below it changes — so the
-                        // error variants mirror the unfocused/normal ones instead of Material3's
-                        // stock red, keeping this control visually identical to iOS on error.
-                        focusedBorderColor = BeidTheme.colors.actionPrimary,
-                        unfocusedBorderColor = BeidTheme.colors.strokeHairline,
-                        errorBorderColor = BeidTheme.colors.strokeHairline,
-                        errorLabelColor = BeidTheme.colors.textSecondary,
-                        cursorColor = BeidTheme.colors.actionPrimary,
-                        errorCursorColor = BeidTheme.colors.actionPrimary,
-                        errorSupportingTextColor = BeidTheme.colors.textPrimary,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
+            if (state.sessionState is EventJoinUiState.Sensing) {
+                ScanFlowScreen(
+                    phase = state.sessionState.phase,
+                    showEntranceCeremony = showEntranceCeremony,
+                    onCeremonyFinished = onCeremonyFinished,
+                    onSimulateSignalLost = onSimulateSignalLost,
+                    onResumeSensing = onResumeSensing,
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.event_join_title),
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = BeidTheme.colors.textPrimary,
                 )
 
-                state.fieldError?.let { error ->
-                    // iOS renders this row in DS.Color.textPrimary (plain ink), not a warning
-                    // accent — DESIGN.md §5's accent map reserves signalWarning for BLE
-                    // signal-loss recovery screens, and a validation/join error isn't that.
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
-                    ) {
-                        Text(
-                            text = "⚠",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BeidTheme.colors.textPrimary,
-                        )
-                        Text(
-                            text = error.message(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BeidTheme.colors.textPrimary,
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
+                    BeidTextField(
+                        value = state.eventCode,
+                        onValueChange = onEventCodeChanged,
+                        placeholder = stringResource(R.string.event_join_code_label),
+                        isError = state.fieldError != null,
+                    )
+
+                    state.fieldError?.let { error ->
+                        // iOS renders this row in DS.Color.textPrimary (plain ink), not a warning
+                        // accent — DESIGN.md §5's accent map reserves signalWarning for BLE
+                        // signal-loss recovery screens, and a validation/join error isn't that.
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
+                            modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
+                        ) {
+                            Text(
+                                text = "⚠",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = BeidTheme.colors.textPrimary,
+                            )
+                            Text(
+                                text = error.message(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = BeidTheme.colors.textPrimary,
+                            )
+                        }
                     }
                 }
-            }
 
-            Text(
-                text = statusText(state.sessionState),
-                style = MaterialTheme.typography.bodyMedium,
-                color = BeidTheme.colors.textSecondary,
-            )
+                Text(
+                    text = statusText(state.sessionState),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BeidTheme.colors.textSecondary,
+                )
 
-            when (val sessionState = state.sessionState) {
-                is EventJoinUiState.PermissionDenied -> {
+                if (state.sessionState is EventJoinUiState.PermissionDenied) {
                     BeidPrimaryButton(
                         text = stringResource(R.string.event_join_open_settings),
                         containerColor = BeidTheme.colors.actionPrimary,
@@ -239,15 +243,7 @@ fun EventJoinScreen(
                         onClick = onOpenSettings,
                         modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
                     )
-                }
-                is EventJoinUiState.Sensing -> {
-                    ScanPhaseDetail(
-                        phase = sessionState.phase,
-                        onSimulateSignalLost = onSimulateSignalLost,
-                        onResumeSensing = onResumeSensing,
-                    )
-                }
-                else -> {
+                } else {
                     BeidPrimaryButton(
                         text = stringResource(R.string.event_join_button),
                         containerColor = BeidTheme.colors.actionPrimary,
@@ -271,29 +267,11 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
         ) {
             Text(stringResource(R.string.event_join_code_label), style = MaterialTheme.typography.headlineLarge)
-            OutlinedTextField(
+            BeidTextField(
                 value = uiState.eventCode,
                 onValueChange = viewModel::onEventCodeChanged,
-                label = { Text(stringResource(R.string.event_join_code_label)) },
+                placeholder = stringResource(R.string.event_join_code_label),
                 isError = uiState.fieldError != null,
-                singleLine = true,
-                shape = RoundedCornerShape(BeidRadius.control),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = BeidTheme.colors.textPrimary,
-                    unfocusedTextColor = BeidTheme.colors.textPrimary,
-                    errorTextColor = BeidTheme.colors.textPrimary,
-                    focusedContainerColor = BeidTheme.colors.surfaceRaised,
-                    unfocusedContainerColor = BeidTheme.colors.surfaceRaised,
-                    errorContainerColor = BeidTheme.colors.surfaceRaised,
-                    focusedBorderColor = BeidTheme.colors.actionPrimary,
-                    unfocusedBorderColor = BeidTheme.colors.strokeHairline,
-                    errorBorderColor = BeidTheme.colors.strokeHairline,
-                    errorLabelColor = BeidTheme.colors.textSecondary,
-                    cursorColor = BeidTheme.colors.actionPrimary,
-                    errorCursorColor = BeidTheme.colors.actionPrimary,
-                    errorSupportingTextColor = BeidTheme.colors.textPrimary,
-                ),
-                modifier = Modifier.fillMaxWidth(),
             )
             uiState.fieldError?.let { error ->
                 Row(
@@ -387,69 +365,6 @@ private fun NearbyEventCards(
 }
 
 /**
- * Renders the current [ScanPhase] once [EventJoinUiState.Sensing] is
- * reached — the plainest form distinguishing the four reachable phases
- * (`Sensing`/`EventFound`/`Recording`/`SignalLost`) via existing
- * design-system vocabulary ([BeidStatusPill]/[BeidMetricRow]), not a
- * redesign. `Idle` never renders here — it is never published as this
- * screen's [EventJoinUiState.Sensing] payload (see
- * [org.levarac.beid.sensing.EventJoinCoordinator]'s call sites into
- * `org.levarac.beid.shared.sensing`).
- */
-@Composable
-private fun ScanPhaseDetail(
-    phase: ScanPhase,
-    onSimulateSignalLost: () -> Unit,
-    onResumeSensing: () -> Unit,
-) {
-    val isPaused = phase is ScanPhase.SignalLost
-    Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.m)) {
-        BeidStatusPill(
-            label = stringResource(
-                if (isPaused) R.string.event_join_status_pill_paused else R.string.event_join_status_pill_active,
-            ),
-            tone = if (isPaused) BeidStatusPill.Tone.Paused else BeidStatusPill.Tone.Active,
-            modifier = Modifier.testTag(EventJoinScreenTestTags.PHASE_STATUS_PILL),
-        )
-
-        when (phase) {
-            is ScanPhase.Recording -> {
-                BeidMetricRow(
-                    label = stringResource(R.string.event_join_peers_verified_label),
-                    value = phase.peersVerified.toString(),
-                    modifier = Modifier.testTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW),
-                )
-                // Android has no real BLE signal-loss detection yet (mirrors iOS's
-                // own demo-only manual trigger) — this is the only way to reach
-                // SignalLost until real detection lands.
-                BeidSecondaryButton(
-                    text = stringResource(R.string.event_join_simulate_signal_lost),
-                    contentColor = BeidTheme.colors.textPrimary,
-                    borderColor = BeidTheme.colors.strokeHairline,
-                    onClick = onSimulateSignalLost,
-                    modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
-                )
-            }
-            is ScanPhase.SignalLost -> {
-                BeidMetricRow(
-                    label = stringResource(R.string.event_join_peers_verified_label),
-                    value = phase.peersVerified.toString(),
-                    modifier = Modifier.testTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW),
-                )
-                BeidPrimaryButton(
-                    text = stringResource(R.string.event_join_resume_sensing),
-                    containerColor = BeidTheme.colors.actionPrimary,
-                    contentColor = BeidTheme.colors.surfaceCanvas,
-                    onClick = onResumeSensing,
-                    modifier = Modifier.testTag(EventJoinScreenTestTags.RESUME_BUTTON),
-                )
-            }
-            ScanPhase.Idle, ScanPhase.Sensing, is ScanPhase.EventFound -> Unit
-        }
-    }
-}
-
-/**
  * Constructs (via [EventJoinViewModel.Factory]) and remembers the screen's
  * [EventJoinViewModel], scoped to the current [androidx.lifecycle.ViewModelStoreOwner]
  * (`MainActivity`). Kept separate from [EventJoinScreen] so the latter stays
@@ -531,17 +446,11 @@ private fun EventJoinFieldErrorPreview(error: EventJoinFieldError) {
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
-            OutlinedTextField(
+            BeidTextField(
                 value = "",
                 onValueChange = {},
-                label = { Text(stringResource(R.string.event_join_code_label)) },
+                placeholder = stringResource(R.string.event_join_code_label),
                 isError = true,
-                singleLine = true,
-                shape = RoundedCornerShape(BeidRadius.control),
-                colors = OutlinedTextFieldDefaults.colors(
-                    errorBorderColor = BeidTheme.colors.strokeHairline,
-                ),
-                modifier = Modifier.fillMaxWidth(),
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
