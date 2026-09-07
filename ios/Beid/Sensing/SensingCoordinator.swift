@@ -1094,9 +1094,18 @@ final class SensingCoordinator: ObservableObject {
   deinit {
     let request = eventIdentityVerificationRequest
     let expiryTask = nearbyDiscoveryExpiryTask
+    // Mirrors Android's `dispose()`. Barnard's engine outlives nothing here,
+    // but the relay is the one thing this object switched on that keeps a
+    // radio busy, so it is switched off on the way out rather than left to a
+    // caller remembering to stop sensing first. Captured as locals because
+    // `deinit` cannot hand `self` to a task.
+    let relayControl = self.relayControl
+    let cadenceTask = relayCadenceTask
     Task { @MainActor in
       request?.cancel()
       expiryTask?.cancel()
+      cadenceTask?.cancel()
+      relayControl.setParticipantRelayVerifier(nil)
     }
   }
 
@@ -1603,13 +1612,9 @@ final class SensingCoordinator: ObservableObject {
   func leaveEvent() {
     invalidateEventIdentityVerification()
     engine.leaveEvent()
-    // Cleared before the relay teardown, not after: `stopParticipantRelay`
-    // republishes the gate state, and republishing it while this still holds
-    // the departed event's id would put that id back into the verifier on the
-    // way out.
-    joinedCanonicalEventIdHex = nil
     stopParticipantRelay()
     joinedEventCode = engine.getCurrentEventCode()
+    joinedCanonicalEventIdHex = nil
     // Mirrors Android's `EventJoinCoordinator.leaveEvent()`: candidates
     // observed before a join are stale once that join is given up, and
     // clearing them must not depend on a separate discovery-stop call.
@@ -1943,14 +1948,26 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// Rebuilds the immutable value the relay verifier reads. Main actor only.
-  private func republishRelayGateState() {
+  ///
+  /// The joined id is an explicit argument rather than a read of
+  /// `joinedCanonicalEventIdHex`, so a caller that is closing the gate says
+  /// so. A teardown that inherited the property would only fail closed while
+  /// the property happened to have been cleared first, which makes the safety
+  /// of the whole thing a question about statement order at each call site.
+  private func republishRelayGateState(joinedEventIdHex: String?) {
     relayVerifier.update(
       ParticipantRelayGateState(
         candidates: nearbyEventCandidates,
         verifiedDefinitionsByHash: nearbyVerifiedDefinitions,
-        joinedEventIdHex: joinedCanonicalEventIdHex
+        joinedEventIdHex: joinedEventIdHex
       )
     )
+  }
+
+  /// Republishes with whatever event is joined right now, for the callers
+  /// that are following discovery state rather than changing the gate.
+  private func republishRelayGateState() {
+    republishRelayGateState(joinedEventIdHex: joinedCanonicalEventIdHex)
   }
 
   /// Records the latest spec 134 decision so relay is observable at all.
@@ -2001,7 +2018,7 @@ final class SensingCoordinator: ObservableObject {
     relayCadenceTask?.cancel()
     relayCadenceTask = nil
     relayControl.setParticipantRelayVerifier(nil)
-    republishRelayGateState()
+    republishRelayGateState(joinedEventIdHex: nil)
   }
 
   /// Spec 134's `T`, taken from Barnard rather than restated, so the two

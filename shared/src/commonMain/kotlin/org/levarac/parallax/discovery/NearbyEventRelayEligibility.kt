@@ -30,6 +30,14 @@ public enum class NearbyEventRelayEligibility {
     NOT_REGISTRY_VERIFIED,
 
     /**
+     * An identifier handed to the gate is not hex at all. Distinct from
+     * [OTHER_EVENT] because it describes a caller that is malformed rather
+     * than a device standing at a different event, and reading one as the
+     * other would send anyone diagnosing it to the wrong place.
+     */
+    MALFORMED_EVENT_ID,
+
+    /**
      * The hash is registry-verified, but the retained container for it is not
      * the envelope offered here. The confirmation is about specific bytes, and
      * it does not carry over to different ones sharing an event-code hash.
@@ -71,7 +79,7 @@ public fun nearbyEventRelayEligibility(
 ): NearbyEventRelayEligibility {
     val joined = joinedEventIdHex.normalizedHexOrNull() ?: return NearbyEventRelayEligibility.NOT_JOINED
     val envelopeEventId = envelopeEventIdHex.normalizedHexOrNull()
-        ?: return NearbyEventRelayEligibility.OTHER_EVENT
+        ?: return NearbyEventRelayEligibility.MALFORMED_EVENT_ID
     if (joined != envelopeEventId) return NearbyEventRelayEligibility.OTHER_EVENT
 
     val hash = eventCodeHashHex.normalizedHexOrNull() ?: return NearbyEventRelayEligibility.NOT_REGISTRY_VERIFIED

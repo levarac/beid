@@ -172,6 +172,23 @@ class NearbyEventRelayEligibilityTest {
         )
     }
 
+    /**
+     * A malformed identifier is its own answer. Reporting it as "a different
+     * event" would describe a device standing somewhere else, which is a
+     * different problem with a different fix.
+     */
+    @Test
+    fun aMalformedEnvelopeEventIdIsReportedAsMalformed() {
+        assertEquals(
+            NearbyEventRelayEligibility.MALFORMED_EVENT_ID,
+            eligibility(
+                registryVerifiedSnapshot(),
+                joinedEventIdHex = EVENT_ID,
+                envelopeEventIdHex = "not-hex",
+            ),
+        )
+    }
+
     private fun eligibility(
         candidates: NearbyEventCandidates,
         joinedEventIdHex: String?,

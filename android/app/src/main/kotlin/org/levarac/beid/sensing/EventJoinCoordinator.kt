@@ -806,7 +806,7 @@ class EventJoinCoordinator internal constructor(
         engine.dispose()
     }
 
-    private companion object {
+    internal companion object {
         /** Mirrors iOS's `SensingCoordinator.handleDetection`'s `"Unknown Event"` fallback. */
         const val UNKNOWN_EVENT_CODE = "Unknown Event"
 

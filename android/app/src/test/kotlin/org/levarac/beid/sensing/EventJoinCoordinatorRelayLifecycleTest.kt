@@ -78,12 +78,13 @@ class EventJoinCoordinatorRelayLifecycleTest {
      * is a host whose relay decisions are no longer tied to its own liveness.
      */
     @Test
-    fun theHostRunsTheRelayForwardOnTheThirtySecondBoundary() = runTest {
+    fun theHostRunsTheRelayForwardOnTheDecisionBoundary() = runTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.joinEvent("community-night")
 
-        advanceTimeBy(29_999L)
+        val cadence = EventJoinCoordinator.RELAY_DECISION_BOUNDARY_MILLIS
+        advanceTimeBy(cadence - 1)
         runCurrent()
         assertEquals(0, engine.advanceRelayCalls)
 
@@ -91,7 +92,7 @@ class EventJoinCoordinatorRelayLifecycleTest {
         runCurrent()
         assertEquals(1, engine.advanceRelayCalls)
 
-        advanceTimeBy(30_000L)
+        advanceTimeBy(cadence)
         runCurrent()
         assertEquals(2, engine.advanceRelayCalls)
     }
@@ -101,11 +102,11 @@ class EventJoinCoordinatorRelayLifecycleTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.joinEvent("community-night")
-        advanceTimeBy(30_000L)
+        advanceTimeBy(EventJoinCoordinator.RELAY_DECISION_BOUNDARY_MILLIS)
         runCurrent()
 
         coordinator.leaveEvent()
-        advanceTimeBy(120_000L)
+        advanceTimeBy(EventJoinCoordinator.RELAY_DECISION_BOUNDARY_MILLIS * 4)
         runCurrent()
 
         assertEquals(1, engine.advanceRelayCalls)
