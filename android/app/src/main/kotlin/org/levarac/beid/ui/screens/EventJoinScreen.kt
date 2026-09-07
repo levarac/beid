@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -195,6 +194,31 @@ fun EventJoinContent(
 @Composable
 fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    ManualEventCodeContent(
+        state = uiState,
+        onEventCodeChanged = viewModel::onEventCodeChanged,
+        onSubmit = viewModel::submit,
+    )
+}
+
+/**
+ * Manual event-code entry's single stateless renderer, extracted so its
+ * previews render the real screen instead of a hand-drawn lookalike. Same
+ * split [EventJoinScreen]/[EventJoinContent] use: this is the whole screen
+ * as a function of [state], and [ManualEventCodeScreen] is only the
+ * collector above it.
+ *
+ * This screen is reached from Account, not from Event Join — since beid#350
+ * the Event Join surface offers nearby-event cards rather than a code field,
+ * and beid#363 removed the second copy of that field the scenario path used
+ * to draw.
+ */
+@Composable
+fun ManualEventCodeContent(
+    state: EventJoinScreenState,
+    onEventCodeChanged: (String) -> Unit,
+    onSubmit: () -> Unit,
+) {
     Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(innerPadding).padding(BeidSpacing.pageMargin),
@@ -202,12 +226,12 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
         ) {
             Text(stringResource(R.string.event_join_code_label), style = MaterialTheme.typography.headlineLarge)
             BeidTextField(
-                value = uiState.eventCode,
-                onValueChange = viewModel::onEventCodeChanged,
+                value = state.eventCode,
+                onValueChange = onEventCodeChanged,
                 placeholder = stringResource(R.string.event_join_code_label),
-                isError = uiState.fieldError != null,
+                isError = state.fieldError != null,
             )
-            uiState.fieldError?.let { error ->
+            state.fieldError?.let { error ->
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
                     modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
@@ -220,7 +244,7 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
                 text = stringResource(R.string.event_join_button),
                 containerColor = BeidTheme.colors.actionPrimary,
                 contentColor = BeidTheme.colors.surfaceCanvas,
-                onClick = viewModel::submit,
+                onClick = onSubmit,
                 modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
             )
         }
@@ -375,12 +399,21 @@ private fun EventJoinScreenPermissionDeniedPreview() {
     EventJoinContentPreview(EventJoinScreenState(sessionState = EventJoinUiState.PermissionDenied))
 }
 
-@Preview(name = "Error — empty code", showBackground = true)
 @Composable
-private fun EventJoinScreenEmptyCodeErrorPreview() {
+private fun ManualEventCodeContentPreview(error: EventJoinFieldError) {
     BeidAppTheme {
-        EventJoinFieldErrorPreview(EventJoinFieldError.EmptyCode)
+        ManualEventCodeContent(
+            state = EventJoinScreenState(fieldError = error),
+            onEventCodeChanged = {},
+            onSubmit = {},
+        )
     }
+}
+
+@Preview(name = "Manual entry — error, empty code", showBackground = true)
+@Composable
+private fun ManualEventCodeEmptyCodeErrorPreview() {
+    ManualEventCodeContentPreview(EventJoinFieldError.EmptyCode)
 }
 
 /**
@@ -389,47 +422,8 @@ private fun EventJoinScreenEmptyCodeErrorPreview() {
  * only way to exercise it until [EventJoinSession] gains a distinct
  * join-failure state.
  */
-@Preview(name = "Error — join failed (dormant, see kdoc)", showBackground = true)
+@Preview(name = "Manual entry — error, join failed (dormant, see kdoc)", showBackground = true)
 @Composable
-private fun EventJoinScreenJoinFailedErrorPreview() {
-    BeidAppTheme {
-        EventJoinFieldErrorPreview(EventJoinFieldError.JoinFailed)
-    }
-}
-
-@Composable
-private fun EventJoinFieldErrorPreview(error: EventJoinFieldError) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(BeidSpacing.pageMargin),
-        verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
-    ) {
-        Text(
-            text = stringResource(R.string.event_join_title),
-            style = MaterialTheme.typography.headlineLarge,
-            color = BeidTheme.colors.textPrimary,
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
-            BeidTextField(
-                value = "",
-                onValueChange = {},
-                placeholder = stringResource(R.string.event_join_code_label),
-                isError = true,
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
-                Text(text = "⚠", color = BeidTheme.colors.textPrimary)
-                Text(text = error.message(), color = BeidTheme.colors.textPrimary)
-            }
-        }
-
-        BeidPrimaryButton(
-            text = stringResource(R.string.event_join_button),
-            containerColor = BeidTheme.colors.actionPrimary,
-            contentColor = BeidTheme.colors.surfaceCanvas,
-            onClick = {},
-        )
-    }
+private fun ManualEventCodeJoinFailedErrorPreview() {
+    ManualEventCodeContentPreview(EventJoinFieldError.JoinFailed)
 }
