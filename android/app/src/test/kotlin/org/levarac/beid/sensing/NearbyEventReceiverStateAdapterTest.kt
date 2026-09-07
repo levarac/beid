@@ -74,6 +74,27 @@ class NearbyEventReceiverStateAdapterTest {
         assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
     }
 
+    /**
+     * The gate must be re-evaluated when the tier changes, not only when the
+     * registry read completes: a disagreeing envelope arriving after a
+     * successful resolution would otherwise leave the already-published
+     * verified metadata on a card that is no longer allowed to be joinable.
+     */
+    @Test
+    fun aDisagreeingEnvelopeArrivingAfterResolutionRevokesJoinability() = runTest {
+        val registry = FakeRegistry()
+        val session = session(registry)
+        session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
+        resolveVerifiedOpenDefinition(registry)
+        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH) { false }
+
+        assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
+        assertNull(session.cards.value.single().eventIdHex)
+        assertNull(session.cards.value.single().validFromEpochSeconds)
+    }
+
     @Test
     fun barnardIsAskedWithTheDefinitionThisHostRead() = runTest {
         val registry = FakeRegistry()

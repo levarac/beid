@@ -1827,6 +1827,17 @@ final class SensingCoordinator: ObservableObject {
     asOf now: Int64
   ) {
     nearbyEventCandidates = snapshot
+    // Mirrors the Android session's prune: a hash whose sources have expired
+    // keeps neither its cached agreement nor its cached definition, so neither
+    // map grows without bound across a long discovery session.
+    var liveHashes = Set<String>()
+    for index in 0..<snapshot.candidateCount {
+      if let candidate = snapshot.candidateAt(index: index) {
+        liveHashes.insert(candidate.eventCodeHashHex)
+      }
+    }
+    nearbyEnvelopeAgreements = nearbyEnvelopeAgreements.filter { liveHashes.contains($0.key) }
+    nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter { liveHashes.contains($0.key) }
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
 

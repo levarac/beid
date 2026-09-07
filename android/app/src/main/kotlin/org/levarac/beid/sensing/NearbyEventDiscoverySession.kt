@@ -317,7 +317,13 @@ internal class NearbyEventDiscoverySession(
         _cards.value = buildList {
             repeat(snapshot.candidateCount) { index ->
                 snapshot.candidateAt(index)?.let { candidate ->
+                    // The gate is evaluated here, not only on the resolution
+                    // path: a candidate can reach RADIO_SELF_VERIFIED *after*
+                    // its registry read already published verified metadata,
+                    // and that metadata would otherwise keep the card joinable
+                    // at a tier that must not be joinable.
                     val verified = verifiedMetadataByHash[candidate.eventCodeHashHex]
+                        ?.takeIf { candidate.receiverState != NearbyEventReceiverState.RADIO_SELF_VERIFIED }
                     add(
                         NearbyEventCard(
                             beaconDisplayName = candidate.displayNameAt(0),
@@ -351,6 +357,10 @@ internal class NearbyEventDiscoverySession(
      * The shared reducer remains the sole trust predicate. Native code only
      * carries period fields from the already verified context after that
      * reducer exposes REGISTERED_VIA_OPERATOR_LOOKUP for the same candidate.
+     *
+     * Whether those fields reach a card is decided in [publishAndSchedule], so
+     * that a candidate reaching RADIO_SELF_VERIFIED after this ran is still
+     * withheld from joining.
      */
     private fun updateVerifiedCard(
         hash: String,
@@ -362,14 +372,7 @@ internal class NearbyEventDiscoverySession(
         val candidate = (0 until snapshot.candidateCount)
             .mapNotNull(snapshot::candidateAt)
             .firstOrNull { it.eventCodeHashHex == hash }
-        // A candidate that carried a B005 v2 envelope must reach
-        // REGISTRY_VERIFIED before it becomes joinable; only an eventIdHex on
-        // the card makes it so. A candidate assembled from v1 hints alone can
-        // never reach that tier, so it keeps the existing registry-status gate
-        // and the v1 join path is unchanged.
-        val receiverStateAllowsJoin = candidate?.receiverState != NearbyEventReceiverState.RADIO_SELF_VERIFIED
-        if (receiverStateAllowsJoin &&
-            candidate?.registryStatus == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP &&
+        if (candidate?.registryStatus == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP &&
             candidate.resolvedEventIdHex == eventIdHex && validFrom != null && validUntil != null
         ) {
             verifiedMetadataByHash[hash] = VerifiedNearbyEventMetadata(eventIdHex, validFrom, validUntil)
