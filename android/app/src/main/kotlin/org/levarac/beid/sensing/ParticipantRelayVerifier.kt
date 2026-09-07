@@ -1,5 +1,6 @@
 package org.levarac.beid.sensing
 
+import android.util.Log
 import org.levarac.barnard.BarnardB005EnvelopeV2
 import org.levarac.barnard.BarnardEventDefinitionV1
 import org.levarac.barnard.BarnardRegistryAgreement
@@ -63,6 +64,7 @@ internal class ParticipantRelayVerifier(
             agreesWithDefinition = { definition ->
                 BarnardB005EnvelopeV2.registryAgreement(verified, definition) is BarnardRegistryAgreement.Agrees
             },
+            reportRefusal = ::logRelayRefusal,
         )
     }
 }
@@ -85,6 +87,13 @@ internal fun participantRelayVerification(
     validThroughEnin: Long,
     currentEnin: Long,
     agreesWithDefinition: (BarnardEventDefinitionV1) -> Boolean,
+    /**
+     * Where a refusal reason goes. Defaults to discarding it: the production
+     * caller above passes [logRelayRefusal] explicitly, and defaulting to that
+     * instead would make every plain JVM test throw, because `android.util.Log`
+     * is not mocked in one.
+     */
+    reportRefusal: (String) -> Unit = {},
 ): BarnardRelayVerification {
     val eligibility = nearbyEventRelayEligibility(
         candidates = state.candidates,
@@ -94,6 +103,12 @@ internal fun participantRelayVerification(
         joinedEventIdHex = state.joinedEventIdHex,
     )
     if (eligibility != NearbyEventRelayEligibility.ELIGIBLE) {
+        // The reason, not just the refusal. The shared gate names six of them
+        // precisely so a venue where nothing relays can be told apart from a
+        // venue with nothing to relay, and dropping the answer here would make
+        // that distinction unobservable. The name of a refusal carries no
+        // identifier: no hash, no event id, no peer.
+        reportRefusal(eligibility.name)
         return BarnardRelayVerification.Rejected
     }
 
@@ -103,8 +118,14 @@ internal fun participantRelayVerification(
     // property of these bytes, rather than something inherited through a
     // stored tier.
     val definition = state.verifiedDefinitionsByHash[eventCodeHashHex]
-        ?: return BarnardRelayVerification.Rejected
-    if (!agreesWithDefinition(definition)) return BarnardRelayVerification.Rejected
+    if (definition == null) {
+        reportRefusal("NO_CACHED_DEFINITION")
+        return BarnardRelayVerification.Rejected
+    }
+    if (!agreesWithDefinition(definition)) {
+        reportRefusal("DEFINITION_DISAGREES")
+        return BarnardRelayVerification.Rejected
+    }
 
     return BarnardRelayVerification.RegistryVerified(
         eventId = eventId,
@@ -127,3 +148,18 @@ internal fun participantRelayVerification(
 
 private fun ByteArray.toHexString(): String =
     joinToString(separator = "") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+/**
+ * Relay diagnostics. Its own tag so relay decisions filter apart from the rest
+ * of sensing, and nothing written under it identifies a person, a device, or
+ * an event -- a refusal reason is a constant name from a fixed set.
+ *
+ * Passed in at the call site rather than called directly, because
+ * `android.util.Log` throws in a plain JVM unit test and the refusal reasons
+ * are worth asserting rather than merely worth printing.
+ */
+internal fun logRelayRefusal(reason: String) {
+    Log.d(RELAY_LOG_TAG, "b005 relay refused: $reason")
+}
+
+private const val RELAY_LOG_TAG = "BeidRelay"

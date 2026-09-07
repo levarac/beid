@@ -5,6 +5,12 @@ import Barnard
 import BarnardCore
 import BeidSharedKit
 import Foundation
+import os
+
+/// Relay diagnostics. Its own category so relay decisions filter apart from
+/// the sensing and ledger logs, and `.public` throughout because none of what
+/// it prints identifies a person, a device, or an event.
+private let relayLog = Logger(subsystem: "org.levarac.beid", category: "relay")
 
 /// The Barnard relay operations `SensingCoordinator` drives, behind a
 /// protocol so a test can watch them.
@@ -62,7 +68,7 @@ struct ParticipantRelayGateState {
 /// evidence about the event — spec 134 is explicit that relay volume says
 /// nothing about an event's popularity, authenticity, or attendance.
 struct ParticipantRelayDecision: Equatable {
-  var decision: String
+  var decision: BarnardRelayDecision
   /// `SHA256(signedEnvelope)`, which is already derivable from the wire.
   var payloadDigestHex: String
   var hop: Int
@@ -151,25 +157,37 @@ func participantRelayVerification(
   agreesWithDefinition: (BarnardEventDefinitionV1) -> Bool
 ) -> BarnardRelayVerification {
   let eventIdHex = eventId.relayHexString
-  let eligible = ExportedKotlinPackages.org.levarac.parallax.discovery
-    .isNearbyEventRelayEligible(
+  let eligibility = ExportedKotlinPackages.org.levarac.parallax.discovery
+    .nearbyEventRelayEligibility(
       candidates: state.candidates,
       signedEnvelopeHex: signedEnvelopeHex,
       eventCodeHashHex: eventCodeHashHex,
       envelopeEventIdHex: eventIdHex,
       joinedEventIdHex: state.joinedEventIdHex
     )
-  guard eligible else { return .rejected }
+  guard eligibility == .ELIGIBLE else {
+    // The reason, not just the refusal. The shared gate names six of them
+    // precisely so a venue where nothing relays can be told apart from a
+    // venue with nothing to relay, and dropping the answer here would make
+    // that distinction unobservable. The name of a refusal carries no
+    // identifier: no hash, no event id, no peer.
+    relayLog.debug("b005 relay refused: \(String(describing: eligibility), privacy: .public)")
+    return .rejected
+  }
 
   // The shared gate already required a hash this app promoted, which it only
   // does on agreement. Re-running Barnard's own comparison against the
   // definition that promotion used costs one pure call and makes agreement a
   // property of these bytes, rather than something inherited through a stored
   // tier.
-  guard
-    let definition = state.verifiedDefinitionsByHash[eventCodeHashHex],
-    agreesWithDefinition(definition)
-  else { return .rejected }
+  guard let definition = state.verifiedDefinitionsByHash[eventCodeHashHex] else {
+    relayLog.debug("b005 relay refused: no cached definition for a promoted hash")
+    return .rejected
+  }
+  guard agreesWithDefinition(definition) else {
+    relayLog.debug("b005 relay refused: envelope no longer agrees with the definition")
+    return .rejected
+  }
 
   guard
     let validFrom = UInt32(exactly: max(0, validFromEnin)),

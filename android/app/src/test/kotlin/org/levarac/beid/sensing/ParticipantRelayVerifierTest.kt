@@ -127,6 +127,42 @@ class ParticipantRelayVerifierTest {
         )
     }
 
+    /**
+     * The refusal reason reaches the diagnostics, not just the caller. The
+     * shared gate names its reasons so a venue where nothing relays can be
+     * told apart from a venue with nothing to relay, which is only true if
+     * something reports them.
+     */
+    @Test
+    fun `a refusal reports its reason`() {
+        val reasons = mutableListOf<String>()
+
+        participantRelayVerification(
+            state = gateState(joinedEventIdHex = null),
+            signedEnvelopeHex = ENVELOPE_HEX,
+            eventCodeHashHex = HASH,
+            eventId = EVENT_ID.hexBytes(),
+            validFromEnin = VALID_FROM,
+            validThroughEnin = VALID_THROUGH,
+            currentEnin = NOW,
+            agreesWithDefinition = { true },
+            reportRefusal = { reasons += it },
+        )
+        participantRelayVerification(
+            state = gateState(joinedEventIdHex = EVENT_ID, cacheDefinition = false),
+            signedEnvelopeHex = ENVELOPE_HEX,
+            eventCodeHashHex = HASH,
+            eventId = EVENT_ID.hexBytes(),
+            validFromEnin = VALID_FROM,
+            validThroughEnin = VALID_THROUGH,
+            currentEnin = NOW,
+            agreesWithDefinition = { true },
+            reportRefusal = { reasons += it },
+        )
+
+        assertEquals(listOf("NOT_JOINED", "NO_CACHED_DEFINITION"), reasons)
+    }
+
     private fun verification(
         state: ParticipantRelayGateState,
         agrees: Boolean = true,

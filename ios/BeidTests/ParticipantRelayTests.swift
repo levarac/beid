@@ -174,13 +174,77 @@ final class ParticipantRelayTests: XCTestCase {
     XCTAssertNil(control.verifier)
   }
 
+  /// The counterpart of Android's `EventJoinCoordinator` opening the gate only
+  /// in `acceptVerifiedObservationContext`. Joining resolves a code to an
+  /// event id and nothing more; spec 134 wants the definition read and agreed
+  /// with before this device re-broadcasts on the event's behalf.
+  func testAJoinedEventWhoseDefinitionIsNotVerifiedKeepsTheGateClosed() {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.joinEvent("community-night", canonicalEventIdHex: eventIdHex)
+
+    XCTAssertNil(
+      coordinator.relayGateJoinedEventIdHexForTesting,
+      "joining alone must not open the relay gate"
+    )
+    XCTAssertEqual(
+      nearbyEventRelayEligibilityReason(
+        joinedEventIdHex: coordinator.relayGateJoinedEventIdHexForTesting
+      ),
+      .NOT_JOINED
+    )
+  }
+
+  // MARK: - Cadence
+
+  /// The counterpart of Android's
+  /// `theHostRunsTheRelayForwardOnTheDecisionBoundary`. Barnard self-ticks
+  /// too, so this asserts that the host's own wake-up exists, not that it is
+  /// the only thing ending a lease.
+  func testTheHostRunsTheRelayForwardOnTheDecisionBoundary() async throws {
+    let control = RecordingParticipantRelayControl()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      participantRelayControl: control,
+      relayCadenceNanoseconds: 10_000_000
+    )
+
+    coordinator.startParticipantRelay()
+    XCTAssertNotNil(control.verifier)
+    XCTAssertEqual(control.advanceCalls, 0)
+
+    try await waitForRelayAdvance(on: control)
+    XCTAssertGreaterThanOrEqual(control.advanceCalls, 1)
+  }
+
+  /// The counterpart of Android's `theCadenceStopsWhenTheEventIsLeft`.
+  func testTheCadenceStopsWhenTheEventIsLeft() async throws {
+    let control = RecordingParticipantRelayControl()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      participantRelayControl: control,
+      relayCadenceNanoseconds: 10_000_000
+    )
+    coordinator.startParticipantRelay()
+
+    coordinator.leaveEvent()
+    let afterLeaving = control.advanceCalls
+    try await Task.sleep(nanoseconds: 300_000_000)
+
+    XCTAssertEqual(
+      control.advanceCalls,
+      afterLeaving,
+      "a cancelled cadence must not keep running the relay forward"
+    )
+  }
+
   // MARK: - Visibility
 
   func testARelayDecisionIsSurfacedForVisibility() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
 
     coordinator.handleRelayDecision(
-      decision: "broadcast",
+      decision: .broadcast,
       payloadDigestHex: "0a0b",
       hop: 1,
       reason: "elected"
@@ -189,7 +253,7 @@ final class ParticipantRelayTests: XCTestCase {
     XCTAssertEqual(
       coordinator.lastRelayDecision,
       ParticipantRelayDecision(
-        decision: "broadcast",
+        decision: .broadcast,
         payloadDigestHex: "0a0b",
         hop: 1,
         reason: "elected"
@@ -198,6 +262,31 @@ final class ParticipantRelayTests: XCTestCase {
   }
 
   // MARK: - Fixtures
+
+  /// Polls rather than sleeping for the full boundary: the cadence is 30
+  /// seconds in production, and a test that waited for it would spend that
+  /// long doing nothing.
+  private func waitForRelayAdvance(
+    on control: RecordingParticipantRelayControl
+  ) async throws {
+    for _ in 0..<200 {
+      if control.advanceCalls > 0 { return }
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    XCTFail("the relay cadence never ran the relay forward")
+  }
+
+  private func nearbyEventRelayEligibilityReason(
+    joinedEventIdHex: String?
+  ) -> ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventRelayEligibility {
+    ExportedKotlinPackages.org.levarac.parallax.discovery.nearbyEventRelayEligibility(
+      candidates: candidates(promote: true),
+      signedEnvelopeHex: envelopeHex,
+      eventCodeHashHex: hashHex,
+      envelopeEventIdHex: eventIdHex,
+      joinedEventIdHex: joinedEventIdHex
+    )
+  }
 
   private func verification(
     state: ParticipantRelayGateState,
