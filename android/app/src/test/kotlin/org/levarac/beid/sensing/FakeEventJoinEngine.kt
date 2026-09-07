@@ -7,6 +7,7 @@ import org.levarac.barnard.BarnardEventInfoEnvelopeV2Event
 import org.levarac.barnard.BarnardEventInfo
 import org.levarac.barnard.BarnardEventInfoHintEvent
 import org.levarac.barnard.BarnardPermissionResult
+import org.levarac.barnard.BarnardRelayVerifier
 import org.levarac.barnard.BarnardPermissionStatus
 
 /**
@@ -55,6 +56,22 @@ internal class FakeEventJoinEngine(
     override fun startAuto() {
         startAutoCalls += 1
         engineState = EventJoinEngineState(isScanning = true, isAdvertising = true)
+    }
+
+    var configuredRelayVerifier: BarnardRelayVerifier? = null
+        private set
+    var relayConfigureCalls: Int = 0
+        private set
+    var advanceRelayCalls: Int = 0
+        private set
+
+    override fun configureParticipantRelay(verifier: BarnardRelayVerifier?) {
+        relayConfigureCalls += 1
+        configuredRelayVerifier = verifier
+    }
+
+    override fun advanceParticipantRelay() {
+        advanceRelayCalls += 1
     }
 
     override fun leaveEvent() {

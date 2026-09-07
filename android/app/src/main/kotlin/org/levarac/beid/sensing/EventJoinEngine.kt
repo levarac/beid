@@ -5,6 +5,7 @@ import org.levarac.barnard.BarnardDebugEvent
 import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardPermissionResult
+import org.levarac.barnard.BarnardRelayVerifier
 
 internal data class EventJoinEngineState(
     val isScanning: Boolean,
@@ -31,6 +32,20 @@ internal interface EventJoinEngine {
     fun startAuto()
 
     fun leaveEvent()
+
+    /**
+     * Enables barnard's spec 134 participant relay, or disables it when
+     * [verifier] is null. The relay itself lives in barnard; this host only
+     * says whether an envelope may be re-broadcast and when the feature is on.
+     */
+    fun configureParticipantRelay(verifier: BarnardRelayVerifier?)
+
+    /**
+     * Runs the relay's 30-second lease decisions. barnard drives this on its
+     * own timer as well; a host calling it keeps the cadence tied to this
+     * app's own liveness rather than only to the SDK's.
+     */
+    fun advanceParticipantRelay()
 
     fun getState(): EventJoinEngineState
 
@@ -87,6 +102,14 @@ internal class BarnardEventJoinEngine(activity: Activity) : EventJoinEngine {
 
     override fun leaveEvent() {
         engine.leaveEvent()
+    }
+
+    override fun configureParticipantRelay(verifier: BarnardRelayVerifier?) {
+        engine.configureParticipantRelay(verifier)
+    }
+
+    override fun advanceParticipantRelay() {
+        engine.advanceParticipantRelay()
     }
 
     override fun getState(): EventJoinEngineState = engine.getState().let { state ->
