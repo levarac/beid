@@ -82,7 +82,7 @@
     <!-- Bluetooth status badge text: the phone's Bluetooth radio is powered off. -->
     <string name="account_bluetooth_status_off">Off</string>
     <!-- Note under the Bluetooth row: while this phone is at an event, it can pass that event's details on to phones nearby, so the event still reaches the edges of a venue (beid#367, barnard spec 134). Says what the phone does, not how the protocol does it. -->
-    <string name="account_relay_note">While you\'re at an event, beid can pass its details on to phones nearby, so people across the venue can still find it.</string>
+    <string name="account_relay_note">While this phone is at an event, beid can pass the event\'s details on to phones nearby, so people across the venue can still find it.</string>
     <!-- Destructive-named (not destructive-colored) action: leaves the currently joined event. -->
     <string name="account_leave_event_button">Leave Event</string>
     <!-- Nav row on the Account screen (mirrors iOS's AccountSheetView "Past Events" row) that opens the Records screen. -->

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.levarac.barnard.BarnardB005EnvelopeV2
+import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardEventInfoEnvelopeV2Event
 import org.levarac.barnard.BarnardRegistryAgreement
@@ -810,10 +811,11 @@ class EventJoinCoordinator internal constructor(
         const val UNKNOWN_EVENT_CODE = "Unknown Event"
 
         /**
-         * Spec 134's `T`. barnard self-ticks as well, so this cadence is
+         * Spec 134's `T`, taken from barnard rather than restated, so the two
+         * cannot drift. barnard self-ticks as well, so this cadence is
          * belt-and-braces rather than the only thing keeping a lease honest.
          */
-        const val RELAY_DECISION_BOUNDARY_MILLIS = 30_000L
+        val RELAY_DECISION_BOUNDARY_MILLIS = BarnardEngine.RELAY_DECISION_BOUNDARY_MS
     }
 }
 

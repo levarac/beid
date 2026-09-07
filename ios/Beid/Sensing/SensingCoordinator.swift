@@ -1995,9 +1995,11 @@ final class SensingCoordinator: ObservableObject {
     republishRelayGateState()
   }
 
-  /// Spec 134's `T`. Barnard self-ticks as well, so this cadence is
+  /// Spec 134's `T`, taken from Barnard rather than restated, so the two
+  /// cannot drift. Barnard self-ticks as well, so this cadence is
   /// belt-and-braces rather than the only thing keeping a lease honest.
-  private static let relayDecisionBoundaryNanoseconds: UInt64 = 30_000_000_000
+  private static let relayDecisionBoundaryNanoseconds =
+    UInt64(BarnardEngine.relayDecisionBoundaryMilliseconds) * 1_000_000
 
   /// Ends the current discovery session: cancels the pending expiry wake-up
   /// and clears candidates together with the global omission/eviction facts.

@@ -149,8 +149,8 @@ struct AccountSheetView: View {
       localized: "account.bluetooth.relayNote",
       defaultValue:
         """
-        While you're at an event, beid can pass its details on to phones nearby, so people \
-        across the venue can still find it.
+        While this phone is at an event, beid can pass the event's details on to phones \
+        nearby, so people across the venue can still find it.
         """
     )
   }
