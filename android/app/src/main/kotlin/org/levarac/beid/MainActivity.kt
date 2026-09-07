@@ -20,7 +20,7 @@ import org.levarac.beid.scenario.playback
 import org.levarac.beid.scenario.selectAndroidDataSource
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.sensing.ProofRecordingBridge
-import org.levarac.beid.ui.screens.EventJoinScreen
+import org.levarac.beid.ui.screens.EventJoinContent
 import org.levarac.beid.ui.screens.RecordsScreen
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.parallax.registry.RegistryClient
@@ -124,12 +124,15 @@ internal fun ReadOnlyScenarioContent(
             frameIndex += 1
         }
     }
-    EventJoinScreen(
+    // The same stateless renderer production uses (beid#363). Every action
+    // callback except frame advance is a no-op: a read-only scenario has no
+    // session to join, no settings to open, and no way to reach recording,
+    // signing, or submission.
+    EventJoinContent(
         state = frame.snapshot.eventJoinScreenState,
-        onEventCodeChanged = {},
-        onSubmit = {},
-        onOpenSettings = {},
         onOpenAccount = {},
+        onJoinNearbyEvent = {},
+        onOpenSettings = {},
         onSimulateSignalLost = {},
         onResumeSensing = {
             if (frame.advance == AndroidScenarioAdvance.Resume) frameIndex += 1

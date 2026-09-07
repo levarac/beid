@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -27,6 +26,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.R
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
@@ -65,96 +65,61 @@ private fun EventJoinFieldError.message(): String = when (this) {
  * event-join slice landing on iOS in parallel; a stub/simple version here is
  * intentional, not a placeholder for missing work.
  *
- * State lives in [viewModel], not here — this composable only renders
- * [EventJoinViewModel.uiState] and forwards user actions back to it.
- *
- * Once [EventJoinUiState.Sensing] is reached, the title and
- * [NearbyEventCards] give way to [ScanFlowScreen] (beid#336) — the Android
- * equivalent of iOS's `ScanFlowView` full-screen cover, except the
- * account-entry [Text] above stays visible in every state: it is Android's
- * only door to the Account screen (and therefore to "Leave Event"), so it
- * is chrome, not swapped-out body content, even while a session is active.
+ * State lives in [viewModel], not here — this composable only collects
+ * [EventJoinViewModel.uiState] and forwards user actions back to it. The
+ * rendering itself belongs to [EventJoinContent], the one renderer this
+ * production path and the read-only scenario/preview path share (beid#363).
  */
 @Composable
 fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(BeidSpacing.pageMargin)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
-        ) {
-            Text(
-                text = stringResource(R.string.account_title),
-                style = MaterialTheme.typography.bodyMedium,
-                color = BeidTheme.colors.textPrimary,
-                modifier = Modifier
-                    .clickable(onClick = onOpenAccount)
-                    .testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
-            )
-
-            val sessionState = uiState.sessionState
-            if (sessionState is EventJoinUiState.Sensing) {
-                ScanFlowScreen(
-                    phase = sessionState.phase,
-                    showEntranceCeremony = !viewModel.recordingCeremonyShown,
-                    onCeremonyFinished = viewModel::markRecordingCeremonyShown,
-                    onSimulateSignalLost = viewModel::simulateSignalLost,
-                    onResumeSensing = viewModel::resumeSensing,
-                )
-            } else {
-                Text(
-                    text = stringResource(R.string.event_join_title),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = BeidTheme.colors.textPrimary,
-                )
-                NearbyEventCards(
-                    cards = uiState.nearbyEventCards,
-                    selectedEventHashHex = uiState.selectedNearbyEventHashHex,
-                    enabled = sessionState is EventJoinUiState.Idle,
-                    onJoin = viewModel::joinNearbyEvent,
-                )
-                if (sessionState !is EventJoinUiState.Idle) {
-                    Text(
-                        text = statusText(sessionState),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = BeidTheme.colors.textSecondary,
-                    )
-                }
-                if (sessionState is EventJoinUiState.PermissionDenied) {
-                    BeidPrimaryButton(
-                        text = stringResource(R.string.event_join_open_settings),
-                        containerColor = BeidTheme.colors.actionPrimary,
-                        contentColor = BeidTheme.colors.surfaceCanvas,
-                        onClick = viewModel::openAppSettings,
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
-                    )
-                }
-            }
-        }
-    }
+    EventJoinContent(
+        state = uiState,
+        onOpenAccount = onOpenAccount,
+        onJoinNearbyEvent = viewModel::joinNearbyEvent,
+        onOpenSettings = viewModel::openAppSettings,
+        onSimulateSignalLost = viewModel::simulateSignalLost,
+        onResumeSensing = viewModel::resumeSensing,
+        showEntranceCeremony = !viewModel.recordingCeremonyShown,
+        onCeremonyFinished = viewModel::markRecordingCeremonyShown,
+    )
 }
 
 /**
- * Pure rendering seam used by read-only scenarios without constructing a
- * coordinator. [showEntranceCeremony]/[onCeremonyFinished] default to
- * "skip the ceremony" — read-only scenario/demo playback has no
- * coordinator-backed [EventJoinSession.recordingCeremonyShown] to seed
- * from, and a scripted frame sequence flashing a 2-second ceremony mid-demo
- * would fight the scenario's own frame-advance timing, so demo playback
- * always renders [RecordingScreen]'s steady state directly.
+ * The screen's single stateless renderer: everything Event Join shows is a
+ * function of [state] alone. Production ([EventJoinScreen]) and the
+ * read-only scenario/preview path (`ReadOnlyScenarioContent`,
+ * `ScenarioPreviews`) both call this, so a DEBUG launch-argument scenario
+ * and a Compose preview show exactly what the app shows (beid#363 — before
+ * it, the scenario path drew a separate legacy event-code input and never
+ * read [EventJoinScreenState.nearbyEventCards]).
+ *
+ * It holds no [EventJoinSession], store, or coordinator handle, and reports
+ * a chosen candidate only as an opaque `eventCodeHashHex` through
+ * [onJoinNearbyEvent] — scenario callers pass a no-op there, so fixture
+ * cards have no path into joining, recording, signing, or submission.
+ *
+ * Once [EventJoinUiState.Sensing] is reached, the title and the nearby-event
+ * cards give way to [ScanFlowScreen] (beid#336) — the Android equivalent of
+ * iOS's `ScanFlowView` full-screen cover, except the account-entry [Text]
+ * above stays visible in every state: it is Android's only door to the
+ * Account screen (and therefore to "Leave Event"), so it is chrome, not
+ * swapped-out body content, even while a session is active.
+ *
+ * [showEntranceCeremony]/[onCeremonyFinished] default to "skip the
+ * ceremony" — read-only scenario/demo playback has no coordinator-backed
+ * [EventJoinSession.recordingCeremonyShown] to seed from, and a scripted
+ * frame sequence flashing a 2-second ceremony mid-demo would fight the
+ * scenario's own frame-advance timing, so demo playback always renders
+ * [RecordingScreen]'s steady state directly.
  */
 @Composable
-fun EventJoinScreen(
+fun EventJoinContent(
     state: EventJoinScreenState,
-    onEventCodeChanged: (String) -> Unit,
-    onSubmit: () -> Unit,
-    onOpenSettings: () -> Unit,
     onOpenAccount: () -> Unit,
+    onJoinNearbyEvent: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
     showEntranceCeremony: Boolean = false,
@@ -184,9 +149,10 @@ fun EventJoinScreen(
                     .testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
             )
 
-            if (state.sessionState is EventJoinUiState.Sensing) {
+            val sessionState = state.sessionState
+            if (sessionState is EventJoinUiState.Sensing) {
                 ScanFlowScreen(
-                    phase = state.sessionState.phase,
+                    phase = sessionState.phase,
                     showEntranceCeremony = showEntranceCeremony,
                     onCeremonyFinished = onCeremonyFinished,
                     onSimulateSignalLost = onSimulateSignalLost,
@@ -198,58 +164,25 @@ fun EventJoinScreen(
                     style = MaterialTheme.typography.headlineLarge,
                     color = BeidTheme.colors.textPrimary,
                 )
-
-                Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
-                    BeidTextField(
-                        value = state.eventCode,
-                        onValueChange = onEventCodeChanged,
-                        placeholder = stringResource(R.string.event_join_code_label),
-                        isError = state.fieldError != null,
-                    )
-
-                    state.fieldError?.let { error ->
-                        // iOS renders this row in DS.Color.textPrimary (plain ink), not a warning
-                        // accent — DESIGN.md §5's accent map reserves signalWarning for BLE
-                        // signal-loss recovery screens, and a validation/join error isn't that.
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
-                            modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
-                        ) {
-                            Text(
-                                text = "⚠",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = BeidTheme.colors.textPrimary,
-                            )
-                            Text(
-                                text = error.message(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = BeidTheme.colors.textPrimary,
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = statusText(state.sessionState),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = BeidTheme.colors.textSecondary,
+                NearbyEventCards(
+                    cards = state.nearbyEventCards,
+                    selectedEventHashHex = state.selectedNearbyEventHashHex,
+                    enabled = sessionState is EventJoinUiState.Idle,
+                    onJoin = onJoinNearbyEvent,
                 )
-
-                if (state.sessionState is EventJoinUiState.PermissionDenied) {
+                if (sessionState !is EventJoinUiState.Idle) {
+                    Text(
+                        text = statusText(sessionState),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BeidTheme.colors.textSecondary,
+                    )
+                }
+                if (sessionState is EventJoinUiState.PermissionDenied) {
                     BeidPrimaryButton(
                         text = stringResource(R.string.event_join_open_settings),
                         containerColor = BeidTheme.colors.actionPrimary,
                         contentColor = BeidTheme.colors.surfaceCanvas,
                         onClick = onOpenSettings,
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
-                    )
-                } else {
-                    BeidPrimaryButton(
-                        text = stringResource(R.string.event_join_button),
-                        containerColor = BeidTheme.colors.actionPrimary,
-                        contentColor = BeidTheme.colors.surfaceCanvas,
-                        onClick = onSubmit,
-                        enabled = state.sessionState !is EventJoinUiState.RequestingPermission,
                         modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
                     )
                 }
@@ -261,6 +194,31 @@ fun EventJoinScreen(
 @Composable
 fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    ManualEventCodeContent(
+        state = uiState,
+        onEventCodeChanged = viewModel::onEventCodeChanged,
+        onSubmit = viewModel::submit,
+    )
+}
+
+/**
+ * Manual event-code entry's single stateless renderer, extracted so its
+ * previews render the real screen instead of a hand-drawn lookalike. Same
+ * split [EventJoinScreen]/[EventJoinContent] use: this is the whole screen
+ * as a function of [state], and [ManualEventCodeScreen] is only the
+ * collector above it.
+ *
+ * This screen is reached from Account, not from Event Join — since beid#350
+ * the Event Join surface offers nearby-event cards rather than a code field,
+ * and beid#363 removed the second copy of that field the scenario path used
+ * to draw.
+ */
+@Composable
+fun ManualEventCodeContent(
+    state: EventJoinScreenState,
+    onEventCodeChanged: (String) -> Unit,
+    onSubmit: () -> Unit,
+) {
     Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(innerPadding).padding(BeidSpacing.pageMargin),
@@ -268,12 +226,12 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
         ) {
             Text(stringResource(R.string.event_join_code_label), style = MaterialTheme.typography.headlineLarge)
             BeidTextField(
-                value = uiState.eventCode,
-                onValueChange = viewModel::onEventCodeChanged,
+                value = state.eventCode,
+                onValueChange = onEventCodeChanged,
                 placeholder = stringResource(R.string.event_join_code_label),
-                isError = uiState.fieldError != null,
+                isError = state.fieldError != null,
             )
-            uiState.fieldError?.let { error ->
+            state.fieldError?.let { error ->
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
                     modifier = Modifier.testTag(EventJoinScreenTestTags.FIELD_ERROR),
@@ -286,7 +244,7 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
                 text = stringResource(R.string.event_join_button),
                 containerColor = BeidTheme.colors.actionPrimary,
                 contentColor = BeidTheme.colors.surfaceCanvas,
-                onClick = viewModel::submit,
+                onClick = onSubmit,
                 modifier = Modifier.testTag(EventJoinScreenTestTags.SUBMIT_BUTTON),
             )
         }
@@ -301,7 +259,7 @@ fun ManualEventCodeRoute(session: EventJoinSession) {
 
 @Composable
 private fun NearbyEventCards(
-    cards: List<org.levarac.beid.sensing.NearbyEventCard>,
+    cards: List<NearbyEventCard>,
     selectedEventHashHex: String?,
     enabled: Boolean,
     onJoin: (String) -> Unit,
@@ -395,26 +353,67 @@ private fun phaseStatusText(phase: ScanPhase): String = when (phase) {
     is ScanPhase.SignalLost -> stringResource(R.string.event_join_status_signal_lost)
 }
 
-@Preview(name = "Idle", showBackground = true)
 @Composable
-private fun EventJoinScreenPreview() {
+private fun EventJoinContentPreview(state: EventJoinScreenState) {
     BeidAppTheme {
-        Column(
-            modifier = Modifier.padding(BeidSpacing.pageMargin),
-            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
-        ) {
-            Text(stringResource(R.string.event_join_title))
-            Text(stringResource(R.string.event_join_status_idle))
-        }
+        EventJoinContent(
+            state = state,
+            onOpenAccount = {},
+            onJoinNearbyEvent = {},
+            onOpenSettings = {},
+            onSimulateSignalLost = {},
+            onResumeSensing = {},
+        )
     }
 }
 
-@Preview(name = "Error — empty code", showBackground = true)
+@Preview(name = "Idle — searching for nearby events", showBackground = true)
 @Composable
-private fun EventJoinScreenEmptyCodeErrorPreview() {
+private fun EventJoinScreenPreview() {
+    EventJoinContentPreview(EventJoinScreenState(sessionState = EventJoinUiState.Idle))
+}
+
+/**
+ * Pins the nearby-event card list, including the "waiting for event
+ * verification" card that stays display-only (beid#350) — the state
+ * beid#363 made reachable from a preview and a DEBUG scenario.
+ */
+@Preview(name = "Idle — verified and unverified nearby cards", showBackground = true)
+@Composable
+private fun EventJoinScreenNearbyCardsPreview() {
+    EventJoinContentPreview(
+        EventJoinScreenState(
+            sessionState = EventJoinUiState.Idle,
+            nearbyEventCards = listOf(
+                NearbyEventCard("Shibuya Open Space", "0x0123456789abcdef", 1_756_000_000L, 1_756_086_400L, "1111111111111111"),
+                NearbyEventCard("Unnamed beacon nearby", null, null, null, "2222222222222222"),
+            ),
+            selectedNearbyEventHashHex = "1111111111111111",
+        ),
+    )
+}
+
+@Preview(name = "Permission denied", showBackground = true)
+@Composable
+private fun EventJoinScreenPermissionDeniedPreview() {
+    EventJoinContentPreview(EventJoinScreenState(sessionState = EventJoinUiState.PermissionDenied))
+}
+
+@Composable
+private fun ManualEventCodeContentPreview(error: EventJoinFieldError) {
     BeidAppTheme {
-        EventJoinFieldErrorPreview(EventJoinFieldError.EmptyCode)
+        ManualEventCodeContent(
+            state = EventJoinScreenState(fieldError = error),
+            onEventCodeChanged = {},
+            onSubmit = {},
+        )
     }
+}
+
+@Preview(name = "Manual entry — error, empty code", showBackground = true)
+@Composable
+private fun ManualEventCodeEmptyCodeErrorPreview() {
+    ManualEventCodeContentPreview(EventJoinFieldError.EmptyCode)
 }
 
 /**
@@ -423,47 +422,8 @@ private fun EventJoinScreenEmptyCodeErrorPreview() {
  * only way to exercise it until [EventJoinSession] gains a distinct
  * join-failure state.
  */
-@Preview(name = "Error — join failed (dormant, see kdoc)", showBackground = true)
+@Preview(name = "Manual entry — error, join failed (dormant, see kdoc)", showBackground = true)
 @Composable
-private fun EventJoinScreenJoinFailedErrorPreview() {
-    BeidAppTheme {
-        EventJoinFieldErrorPreview(EventJoinFieldError.JoinFailed)
-    }
-}
-
-@Composable
-private fun EventJoinFieldErrorPreview(error: EventJoinFieldError) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(BeidSpacing.pageMargin),
-        verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
-    ) {
-        Text(
-            text = stringResource(R.string.event_join_title),
-            style = MaterialTheme.typography.headlineLarge,
-            color = BeidTheme.colors.textPrimary,
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.s)) {
-            BeidTextField(
-                value = "",
-                onValueChange = {},
-                placeholder = stringResource(R.string.event_join_code_label),
-                isError = true,
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
-                Text(text = "⚠", color = BeidTheme.colors.textPrimary)
-                Text(text = error.message(), color = BeidTheme.colors.textPrimary)
-            }
-        }
-
-        BeidPrimaryButton(
-            text = stringResource(R.string.event_join_button),
-            containerColor = BeidTheme.colors.actionPrimary,
-            contentColor = BeidTheme.colors.surfaceCanvas,
-            onClick = {},
-        )
-    }
+private fun ManualEventCodeJoinFailedErrorPreview() {
+    ManualEventCodeContentPreview(EventJoinFieldError.JoinFailed)
 }

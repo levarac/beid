@@ -53,12 +53,11 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(
+                EventJoinContent(
                     state = snapshot.eventJoinScreenState,
-                    onEventCodeChanged = {},
-                    onSubmit = {},
-                    onOpenSettings = {},
                     onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
                     onSimulateSignalLost = {},
                     onResumeSensing = {},
                 )
@@ -66,6 +65,85 @@ class EventJoinScreenTest {
         }
 
         composeTestRule.onNodeWithText("40").assertIsDisplayed()
+    }
+
+    /**
+     * beid#363: the scenario/preview path renders the same nearby-event card
+     * list production does, including leaving an unverified candidate
+     * disabled. Drives [EventJoinContent] with a hand-built state rather
+     * than an [EventJoinViewModel], which is exactly what a DEBUG
+     * launch-argument scenario and a Compose preview do.
+     */
+    @Test
+    fun scenarioPathRendersNearbyEventCardsAndLeavesTheUnverifiedCardDisabled() {
+        val verifiedHash = "1111111111111111"
+        val unverifiedHash = "2222222222222222"
+        var joinedHash: String? = null
+        val state = EventJoinScreenState(
+            sessionState = EventJoinUiState.Idle,
+            nearbyEventCards = listOf(
+                NearbyEventCard("Verified beacon", "0x0123456789abcdef", 100L, 200L, verifiedHash),
+                NearbyEventCard("Unverified beacon", null, null, null, unverifiedHash),
+            ),
+            selectedNearbyEventHashHex = verifiedHash,
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = state,
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = { joinedHash = it },
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Verified beacon").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Unverified beacon").assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_not_joinable_yet)).assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(verifiedHash))
+            .assertIsEnabled()
+            .assertIsSelected()
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(unverifiedHash))
+            .assertIsDisplayed()
+            .assertIsNotEnabled()
+            .assertIsNotSelected()
+            .performClick()
+        composeTestRule.runOnIdle { assertNull(joinedHash) }
+    }
+
+    /**
+     * beid#363: the legacy event-code text input is gone from the
+     * scenario/preview path — an empty candidate list now shows production's
+     * searching + rescue copy, not a second manual-entry surface.
+     */
+    @Test
+    fun scenarioPathWithNoNearbyCandidatesShowsSearchingCopyAndNoEventCodeEntry() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = EventJoinScreenState(sessionState = EventJoinUiState.Idle),
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_searching_nearby)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_rescue_guidance)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_code_label)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
     }
 
     @Test
