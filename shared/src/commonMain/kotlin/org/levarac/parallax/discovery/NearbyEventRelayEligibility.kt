@@ -54,7 +54,11 @@ public enum class NearbyEventRelayEligibility {
  *
  * @param joinedEventIdHex the canonical event id this device is joined to, as
  *   resolved by this host's own registry read, or null while not joined or
- *   while that resolution has not succeeded. Null fails closed.
+ *   while that resolution has not succeeded. Null fails closed, which has a
+ *   consequence worth stating plainly: an event joined by typing its code does
+ *   not relay until that host's registry lookup resolves the canonical id. The
+ *   alternative would be relaying on the strength of a code the user typed,
+ *   and spec 134 requires the authoritative definition before re-broadcast.
  * @param envelopeEventIdHex the canonical event id carried by the envelope
  *   offered here, as parsed by barnard's own verification.
  */

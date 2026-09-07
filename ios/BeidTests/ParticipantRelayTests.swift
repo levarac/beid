@@ -53,6 +53,33 @@ final class ParticipantRelayTests: XCTestCase {
     XCTAssertEqual(expires, 1_001)
   }
 
+  /// The bound, not just the current value. Whatever ENIN the relay asks
+  /// about, the answer must never reach past the next one — that is the only
+  /// thing standing in for the signed expiry until levarac/barnard#197
+  /// exposes it.
+  func testTheAnswerNeverExceedsTheNextENINAtAnyCurrentENIN() {
+    for now: UInt32 in [996, 1_000, 1_050, 1_099] {
+      let result = participantRelayVerification(
+        state: gateState(joinedEventIdHex: eventIdHex),
+        signedEnvelopeHex: envelopeHex,
+        eventCodeHashHex: hashHex,
+        eventId: hexBytes(eventIdHex),
+        validFromEnin: 995,
+        validThroughEnin: 1_100,
+        currentEnin: now,
+        agreesWithDefinition: { _ in true }
+      )
+      guard case .registryVerified(_, _, _, let expires) = result else {
+        return XCTFail("expected the envelope to be relayable at ENIN \(now), got \(result)")
+      }
+      XCTAssertLessThanOrEqual(
+        expires,
+        now + 1,
+        "relay expiry \(expires) reached past the next ENIN at \(now)"
+      )
+    }
+  }
+
   func testADeviceThatIsNotJoinedRelaysNothing() {
     XCTAssertEqual(verification(state: gateState(joinedEventIdHex: nil)), .rejected)
   }

@@ -188,8 +188,10 @@ func participantRelayVerification(
     // signed relay window, which makes the next ENIN no later than the signed
     // expiry. The cost is that a candidate lapses after one ENIN and needs a
     // fresh observation, which re-verifies and so re-checks the true expiry.
-    // Nothing here can outlive what the authority signed. Tracked upstream:
-    // expose `relayExpiresAtEnin` and this becomes a plain echo.
+    // Nothing here can outlive what the authority signed. Tracked upstream as
+    // levarac/barnard#197: once the verified envelope exposes
+    // `relayExpiresAtEnin`, this becomes a plain echo of the signed field and
+    // the per-ENIN re-admission goes away.
     relayExpiresAtEnin: currentEnin + 1
   )
 }

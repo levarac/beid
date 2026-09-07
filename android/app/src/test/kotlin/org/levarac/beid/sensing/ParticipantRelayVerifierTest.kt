@@ -44,6 +44,33 @@ class ParticipantRelayVerifierTest {
         assertEquals(NOW + 1, verified.relayExpiresAtEnin)
     }
 
+    /**
+     * The bound, not just the current value. Whatever ENIN the relay asks
+     * about, the answer must never reach past the next one -- that is the only
+     * thing standing in for the signed expiry until levarac/barnard#197
+     * exposes it.
+     */
+    @Test
+    fun `the answer never exceeds the next ENIN at any current ENIN`() {
+        for (now in listOf(996L, 1_000L, 1_050L, 1_099L)) {
+            val result = participantRelayVerification(
+                state = gateState(joinedEventIdHex = EVENT_ID),
+                signedEnvelopeHex = ENVELOPE_HEX,
+                eventCodeHashHex = HASH,
+                eventId = EVENT_ID.hexBytes(),
+                validFromEnin = VALID_FROM,
+                validThroughEnin = VALID_THROUGH,
+                currentEnin = now,
+                agreesWithDefinition = { true },
+            ) as BarnardRelayVerification.RegistryVerified
+
+            assertTrue(
+                "relay expiry ${result.relayExpiresAtEnin} reached past the next ENIN at $now",
+                result.relayExpiresAtEnin <= now + 1,
+            )
+        }
+    }
+
     @Test
     fun `a device that is not joined relays nothing`() {
         assertEquals(
