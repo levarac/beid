@@ -163,8 +163,14 @@ internal fun logRelayRefusal(reason: String) {
     // write is ignored rather than propagated. `android.util.Log` throws
     // outright in a plain JVM unit test, and a test exercising the real
     // verifier would otherwise fail inside a log call rather than on anything
-    // it set out to assert.
-    runCatching { Log.d(RELAY_LOG_TAG, "b005 relay refused: $reason") }
+    // it set out to assert. Narrow on purpose: the unmocked stub raises a
+    // `RuntimeException`, while an `Error` -- an exhausted heap, say -- is not
+    // this function's to swallow.
+    try {
+        Log.d(RELAY_LOG_TAG, "b005 relay refused: $reason")
+    } catch (_: RuntimeException) {
+        // The logger is unavailable. There is nothing to report it to.
+    }
 }
 
 private const val RELAY_LOG_TAG = "BeidRelay"
