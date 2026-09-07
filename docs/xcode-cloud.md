@@ -1,15 +1,22 @@
 # iOS delivery: GitHub Actions and Xcode Cloud
 
 This document is the source of truth for beid's iOS delivery setup. It keeps
-the retained Xcode Cloud configuration reviewable and records the temporary
-GitHub Actions lane used while the Xcode Cloud budget is exhausted. Beid's
-scope is TestFlight only; App Store submission automation is not included.
+the retained Xcode Cloud configuration reviewable and records the
+GitHub Actions fallback lane, used when the Xcode Cloud budget is exhausted.
+Beid's scope is TestFlight only; App Store submission automation is not
+included.
 
-## Current temporary status — 2026-08-20
+## Current status — 2026-09-08
 
-The Xcode Cloud workflows remain configured but are not the active delivery
-path while their compute budget is exhausted. Two repository workflows provide
-the temporary path:
+Xcode Cloud is the active delivery path again. Its compute budget returned, the
+PR **Build & Test** workflow (`a465d6ac-e3b5-4fe0-b586-db7285435990`) was
+re-enabled, and TestFlight delivery runs from the Xcode Cloud **Internal Build**
+and **Release Build** workflows.
+
+The GitHub Actions lane described below is retained as the documented fallback.
+It is dormant, not removed: the repository variable `GHA_DELIVERY` is `off`, and
+both workflows run only when it is exactly `on`. Two repository workflows provide
+that lane:
 
 | Workflow | Automatic trigger | Manual trigger |
 |---|---|---|
@@ -18,9 +25,9 @@ the temporary path:
 
 Both jobs run only when the repository variable `GHA_DELIVERY` is exactly
 `on`. They share the fixed `beid-ios-delivery` concurrency group, do not cancel
-an in-progress delivery, and run on the self-hosted `emi` runner. Set the
-variable to `off` to silence both workflows when the Xcode Cloud budget
-returns; no Xcode Cloud setting needs to be removed for this temporary lane.
+an in-progress delivery, and run on the self-hosted `emi` runner. Setting the
+variable to `on` re-arms the fallback; setting it to `off` silences both
+workflows. Neither direction requires changing any Xcode Cloud setting.
 
 `scripts/gha/build-and-upload-ios.sh` installs the XcodeGen version pinned by
 `ios/ci_scripts/XCODEGEN_VERSION`, checks that generation leaves the committed
