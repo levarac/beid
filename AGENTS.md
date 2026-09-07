@@ -523,13 +523,15 @@ dates). The contract every agent must know before touching delivery files:
   上の KMP review gate を免除しない。KMP の independent review は作業上の
   gate、GitHub の approving review は merge button の設定で、別の条件である。
 
-### Temporary iOS delivery lane (GitHub Actions)
+### iOS delivery fallback lane (GitHub Actions)
 
-- **2026-08-20 現在、Xcode Cloud の budget 枯渇中は GitHub Actions が
-  TestFlight upload を代行する。** Xcode Cloud の workflow 設定は削除・変更
-  せず、そのまま保持する。budget が戻ったら repository variable
-  `GHA_DELIVERY` を `off` にして GitHub Actions lane を止め、Xcode Cloud を
-  再び delivery path として使う。
+- **2026-09-08 現在、iOS の TestFlight delivery は Xcode Cloud が担う。** budget が
+  戻ったので PR の Build & Test workflow を再度有効化し、delivery は Xcode Cloud の
+  Internal Build / Release Build に戻した。GitHub Actions lane は fallback として
+  残してあるが動いていない — repository variable `GHA_DELIVERY` は `off`。再び
+  Xcode Cloud が使えなくなったら `GHA_DELIVERY` を `on` にすれば GitHub Actions lane
+  が delivery を代行する。Xcode Cloud の workflow 設定はどちらの向きでも削除・変更
+  しない。
 - `.github/workflows/internal-testflight.yml` は `main` への push のうち
   `what_to_test.json` または `what_to_test.ios.json` が変わった時と、手動実行で
   起動する。`.github/workflows/release-testflight.yml` は `release/**` branch
