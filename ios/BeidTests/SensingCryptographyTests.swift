@@ -173,26 +173,29 @@ final class SensingCryptographyTests: XCTestCase {
     let walletAcknowledgementSignature = SensingRecoverableSignature(barnardCore: acknowledgement)
     cryptography.walletAcknowledgementSignatureResult = walletAcknowledgementSignature
 
-    let bindingRecord = coordinator.completeBinding(
+    guard case .bound(let bindingRecord) = coordinator.completeBinding(
       walletAddress: walletAddress,
       walletSignatureHex: walletSignatureHex
-    )
+    ) else {
+      XCTFail("expected a BindingRecord")
+      return
+    }
     let selfProofRecord = coordinator.reset()
 
     XCTAssertEqual(
-      bindingRecord?.eventSigningPublicKeyHex,
+      bindingRecord.eventSigningPublicKeyHex,
       hexString(eventSigningPublicKey)
     )
-    XCTAssertEqual(bindingRecord?.ownerPublicKeyHex, hexString(ownerPublicKey))
+    XCTAssertEqual(bindingRecord.ownerPublicKeyHex, hexString(ownerPublicKey))
     XCTAssertEqual(
-      bindingRecord?.deviceSignatureRHex,
+      bindingRecord.deviceSignatureRHex,
       hexString(walletAcknowledgementSignature.r)
     )
     XCTAssertEqual(
-      bindingRecord?.deviceSignatureSHex,
+      bindingRecord.deviceSignatureSHex,
       hexString(walletAcknowledgementSignature.s)
     )
-    XCTAssertEqual(bindingRecord?.deviceSignatureV, walletAcknowledgementSignature.v)
+    XCTAssertEqual(bindingRecord.deviceSignatureV, walletAcknowledgementSignature.v)
     XCTAssertEqual(
       selfProofRecord?.signatureRHex,
       hexString(selfProofSignature.r)

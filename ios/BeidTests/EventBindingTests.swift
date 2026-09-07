@@ -123,7 +123,10 @@ final class EventBindingTests: XCTestCase {
 
   func testCompleteBindingWithNoInFlightAttemptReturnsNil() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
-    XCTAssertNil(coordinator.completeBinding(walletAddress: "0xABC", walletSignatureHex: "0xSIG"))
+    XCTAssertEqual(
+      coordinator.completeBinding(walletAddress: "0xABC", walletSignatureHex: "0xSIG"),
+      .notVerified
+    )
   }
 
   func testCompleteBindingBuildsAndPersistsBindingRecord() async {
@@ -144,12 +147,10 @@ final class EventBindingTests: XCTestCase {
     }
     coordinator.markBindingAwaitingApproval()
     let walletSignatureHex = TestWallet.sign(messageHex: messageHex)
-    let record = coordinator.completeBinding(
+    guard case .bound(let record) = coordinator.completeBinding(
       walletAddress: realWalletAddress,
       walletSignatureHex: walletSignatureHex
-    )
-
-    guard let record else {
+    ) else {
       XCTFail("expected a BindingRecord")
       return
     }
@@ -182,7 +183,10 @@ final class EventBindingTests: XCTestCase {
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
 
-    XCTAssertNil(coordinator.completeBinding(walletAddress: testWalletAddress, walletSignatureHex: "not-hex"))
+    XCTAssertEqual(
+      coordinator.completeBinding(walletAddress: testWalletAddress, walletSignatureHex: "not-hex"),
+      .notVerified
+    )
   }
 
   // MARK: - Signer address verification at binding time (beid#316)
@@ -208,8 +212,9 @@ final class EventBindingTests: XCTestCase {
     XCTAssertNotNil(coordinator.beginBinding(walletAddress: addressA, chainId: testChainId))
     // No discardPendingBindingMessage() call here — simulates the regression.
 
-    XCTAssertNil(
+    XCTAssertEqual(
       coordinator.completeBinding(walletAddress: addressB, walletSignatureHex: testWalletSignatureHex),
+      .notVerified,
       """
       completeBinding must reject an argument address that disagrees with \
       the pending message's embedded address, regardless of whether the \
@@ -244,12 +249,15 @@ final class EventBindingTests: XCTestCase {
       return
     }
 
-    let record = coordinator.completeBinding(
+    let result = coordinator.completeBinding(
       walletAddress: realWalletAddress,
       walletSignatureHex: TestWallet.sign(messageHex: messageHex)
     )
 
-    XCTAssertNotNil(record, "a legitimate retry for the same address must still succeed")
+    guard case .bound = result else {
+      XCTFail("a legitimate retry for the same address must still succeed, got \(result)")
+      return
+    }
   }
 
   /// Piece (b): the argument address and the pending message's embedded
@@ -275,9 +283,114 @@ final class EventBindingTests: XCTestCase {
 
     let wrongSignatureHex = TestWallet.signWrong(messageHex: messageHex)
 
-    XCTAssertNil(
+    XCTAssertEqual(
       coordinator.completeBinding(walletAddress: realWalletAddress, walletSignatureHex: wrongSignatureHex),
+      .notVerified,
       "a wallet signature that doesn't actually recover to the claimed address must be rejected"
+    )
+  }
+
+  // MARK: - beid#357: signature-length boundary check
+
+  /// beid#357's trap: a wallet signature one byte off the required 65 bytes
+  /// must be rejected before it ever reaches the owner key, and must not
+  /// produce a BindingRecord. Uses a real, otherwise-valid signature with one
+  /// byte truncated/appended so this fails ONLY on length, not because the
+  /// bytes are garbage in some other way.
+  func testCompleteBindingRejectsSignatureOneByteShortOfRequiredLength() async {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    guard let messageHex = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
+
+    let validSignatureHex = TestWallet.sign(messageHex: messageHex)
+    let truncatedSignatureHex = String(validSignatureHex.dropLast(2)) // drop one byte (2 hex chars)
+
+    XCTAssertEqual(
+      coordinator.completeBinding(walletAddress: realWalletAddress, walletSignatureHex: truncatedSignatureHex),
+      .notVerified,
+      "a signature one byte short of the required 65 must be rejected, not passed to the owner key"
+    )
+  }
+
+  func testCompleteBindingRejectsSignatureOneByteLongerThanRequiredLength() async {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    guard let messageHex = coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
+
+    let validSignatureHex = TestWallet.sign(messageHex: messageHex)
+    let extendedSignatureHex = validSignatureHex + "ab" // one extra byte
+
+    XCTAssertEqual(
+      coordinator.completeBinding(walletAddress: realWalletAddress, walletSignatureHex: extendedSignatureHex),
+      .notVerified,
+      "a signature one byte longer than the required 65 must be rejected, not passed to the owner key"
+    )
+  }
+
+  // MARK: - beid#359: smart-wallet (ERC-6492) signature distinguished from a corrupt one
+
+  /// A smart-wallet-shaped signature (ends with the ERC-6492 32-byte magic
+  /// suffix `0x6492...6492`) must yield `.smartWalletUnsupported`, not the
+  /// same `.notVerified` a corrupt/garbage signature gets — this is the exact
+  /// collapse beid#359 reports. Length is deliberately NOT 65 bytes here
+  /// (real ERC-6492 wrapped signatures aren't), so this also proves the
+  /// beid#357 length gate does not swallow this case ahead of classification.
+  func testCompleteBindingDistinguishesSmartWalletSignatureFromCorruptSignature() async {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    guard coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) != nil else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
+
+    // erc6492Magic per BarnardCoreOwnerKey.swift: 16 repetitions of 0x64 0x92.
+    let erc6492MagicHex = String(repeating: "6492", count: 16)
+    let smartWalletSignatureHex = "0x" + String(repeating: "cd", count: 32) + erc6492MagicHex
+
+    let smartWalletResult = coordinator.completeBinding(
+      walletAddress: realWalletAddress,
+      walletSignatureHex: smartWalletSignatureHex
+    )
+    XCTAssertEqual(smartWalletResult, .smartWalletUnsupported)
+
+    // Re-establish a pending attempt (the smart-wallet call above did not
+    // consume/clear pendingBindingMessage — completeBinding never mutates
+    // state on a failure path), then try a same-length but non-magic-suffixed
+    // corrupt signature and confirm it gets the OTHER reason.
+    // smartWalletSignatureHex is "0x" + 32 bytes (cd) + 32 bytes (magic) = 64
+    // bytes; match that length here with 64 bytes of 0xef (count: 64, not the
+    // byte total) so the two signatures are genuinely the same length.
+    let corruptSameLengthSignatureHex = "0x" + String(repeating: "ef", count: 64)
+    XCTAssertEqual(corruptSameLengthSignatureHex.count, smartWalletSignatureHex.count)
+
+    let corruptResult = coordinator.completeBinding(
+      walletAddress: realWalletAddress,
+      walletSignatureHex: corruptSameLengthSignatureHex
+    )
+    XCTAssertEqual(corruptResult, .notVerified)
+
+    XCTAssertNotEqual(
+      smartWalletResult,
+      corruptResult,
+      "a smart-wallet-shaped signature must not collapse into the same reason as a corrupt one"
     )
   }
 
@@ -293,7 +406,7 @@ final class EventBindingTests: XCTestCase {
       return
     }
 
-    guard let record = coordinator.completeBinding(
+    guard case .bound(let record) = coordinator.completeBinding(
       walletAddress: realWalletAddress,
       walletSignatureHex: TestWallet.sign(messageHex: messageHex)
     ) else {
@@ -316,8 +429,9 @@ final class EventBindingTests: XCTestCase {
     coordinator.failBinding(reason: "Declined in wallet")
 
     XCTAssertEqual(coordinator.bindingState, .failed(reason: "Declined in wallet"))
-    XCTAssertNil(
+    XCTAssertEqual(
       coordinator.completeBinding(walletAddress: "0xLATE", walletSignatureHex: "0xLATE"),
+      .notVerified,
       "a stale completion racing the failure must not resurrect the old attempt"
     )
   }
@@ -332,8 +446,9 @@ final class EventBindingTests: XCTestCase {
     coordinator.declineBinding()
 
     XCTAssertEqual(coordinator.bindingState, .pendingConnect(event))
-    XCTAssertNil(
+    XCTAssertEqual(
       coordinator.completeBinding(walletAddress: "0xLATE", walletSignatureHex: "0xLATE"),
+      .notVerified,
       "a stale completion racing the decline must not resurrect the old attempt"
     )
   }
@@ -386,10 +501,13 @@ final class EventBindingTests: XCTestCase {
       XCTFail("expected beginBinding to succeed")
       return
     }
-    XCTAssertNotNil(coordinator.completeBinding(
+    guard case .bound = coordinator.completeBinding(
       walletAddress: realWalletAddress,
       walletSignatureHex: TestWallet.sign(messageHex: messageHex)
-    ))
+    ) else {
+      XCTFail("expected a BindingRecord")
+      return
+    }
 
     coordinator.reset()
 
@@ -412,10 +530,13 @@ final class EventBindingTests: XCTestCase {
       XCTFail("expected beginBinding to succeed")
       return
     }
-    XCTAssertNotNil(coordinator.completeBinding(
+    guard case .bound = coordinator.completeBinding(
       walletAddress: realWalletAddress,
       walletSignatureHex: TestWallet.sign(messageHex: messageHex)
-    ))
+    ) else {
+      XCTFail("expected a BindingRecord")
+      return
+    }
     coordinator.reset()
 
     coordinator.startSensing(demoEvent: .demoSample)
@@ -465,10 +586,16 @@ final class EventBindingTests: XCTestCase {
       return
     }
 
-    let record = coordinator.completeBinding(walletAddress: live.address, walletSignatureHex: signatureHex)
+    guard case .bound(let record) = coordinator.completeBinding(
+      walletAddress: live.address,
+      walletSignatureHex: signatureHex
+    ) else {
+      XCTFail("expected a BindingRecord")
+      return
+    }
 
     XCTAssertEqual(
-      record?.walletAddress,
+      record.walletAddress,
       live.address,
       "the recorded address must be exactly the connector's own live address"
     )
@@ -584,10 +711,16 @@ final class EventBindingTests: XCTestCase {
       "must sign the freshly rebuilt message, not the stale one"
     )
 
-    let record = coordinator.completeBinding(walletAddress: live.address, walletSignatureHex: signatureHex)
+    guard case .bound(let record) = coordinator.completeBinding(
+      walletAddress: live.address,
+      walletSignatureHex: signatureHex
+    ) else {
+      XCTFail("expected a BindingRecord")
+      return
+    }
 
     XCTAssertEqual(
-      record?.walletAddress,
+      record.walletAddress,
       liveAddress,
       "the persisted record must carry the wallet's actual address, never the stale hint"
     )

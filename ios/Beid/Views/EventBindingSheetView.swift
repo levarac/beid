@@ -288,28 +288,47 @@ struct EventBindingSheetView: View {
     }
   }
 
-  /// `sensing.completeBinding` returns `nil` (no state change) both for
-  /// stale/malformed inputs and — since beid#316 — a genuine signer
-  /// mismatch the coordinator's own verification caught. Before beid#316
-  /// only the former could happen here (both call sites above only ever
-  /// reach this after a wallet round trip already succeeded), so the `nil`
-  /// case was effectively dead code; now it's a realistic outcome, and
-  /// without this, `bindingState` would never leave `.connecting`/
+  /// `sensing.completeBinding` returns a `BindingCompletionResult` that this
+  /// switches over: `.bound` needs no further action here (the sheet
+  /// dismisses on the resulting `bindingState` change), `.smartWalletUnsupported`
+  /// (beid#359) gets its own non-retryable reason, and `.notVerified` covers
+  /// everything else — stale/malformed inputs, a wallet signature of the
+  /// wrong length (beid#357), and a genuine signer mismatch the coordinator's
+  /// own verification caught (beid#316). Before beid#316 only the
+  /// stale/malformed case could happen here (both call sites above only ever
+  /// reach this after a wallet round trip already succeeded), so the failure
+  /// path was effectively dead code; now it's a realistic outcome, and
+  /// without handling it, `bindingState` would never leave `.connecting`/
   /// `.awaitingApproval`, leaving the sheet stuck on its spinner with no
   /// way to dismiss (`isInFlight` disables swipe-dismiss and hides Cancel
   /// for both those states).
   @MainActor
   private func completeBindingOrFailVerification(walletAddress: String, walletSignatureHex: String) {
-    guard sensing.completeBinding(walletAddress: walletAddress, walletSignatureHex: walletSignatureHex) != nil else {
+    switch sensing.completeBinding(walletAddress: walletAddress, walletSignatureHex: walletSignatureHex) {
+    case .bound:
+      break
+    case .smartWalletUnsupported:
+      sensing.failBinding(reason: String(
+        localized: "scan.binding.smartWalletUnsupported",
+        defaultValue: "This wallet type isn't supported yet",
+        comment: """
+        Reason shown when beid recognizes the wallet's signature as an ERC-6492 smart-contract-wallet \
+        format (e.g. Safe, other smart accounts). beid does not support this wallet type yet. Do not imply \
+        the user can fix this by trying again or reconnecting — it cannot succeed until beid adds support.
+        """
+      ))
+    case .notVerified:
       sensing.failBinding(reason: String(
         localized: "scan.binding.verificationFailed",
         defaultValue: "Couldn't verify this wallet",
         comment: """
-        Reason shown when the wallet's signature doesn't match the address it claimed to sign with, so beid \
-        could not verify the wallet actually owns that address. The user can try again.
+        Reason shown when beid could not verify this wallet-binding attempt: stale/malformed local state, a \
+        wallet signature of the wrong length, or a signature that cryptographically recovers to a different \
+        address than the one claimed. Distinct from the ERC-6492 smart-wallet case \
+        (scan.binding.smartWalletUnsupported), which has its own reason. The user can try again — this case \
+        covers failures that could be transient (e.g. transport corruption), unlike the smart-wallet case.
         """
       ))
-      return
     }
   }
 
