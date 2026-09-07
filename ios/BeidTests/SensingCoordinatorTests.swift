@@ -763,7 +763,7 @@ final class SensingCoordinatorTests: XCTestCase {
   func testUnverifiedEnvelopeIsCountedRatherThanVanishing() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
 
-    coordinator.handleUnverifiedEventInfoEnvelopeV2(observedAtEpochMillis: 1_000)
+    coordinator.handleUnverifiedEventInfoEnvelopeV2()
 
     XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
     XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 1)

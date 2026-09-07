@@ -221,7 +221,7 @@ class NearbyEventReceiverStateTest {
             peripheralId = "p",
             eventDisplayName = "Event",
             eventCodeHashHex = "zz",
-            rawContainerHex = "03000000",
+            rawContainerHex = "03000102",
             agreesWithRegistry = false,
             additionalNamesOmitted = false,
             additionalEventsOmitted = false,
@@ -230,6 +230,54 @@ class NearbyEventReceiverStateTest {
 
         assertFalse(update.acceptedHint)
         assertEquals(0, update.snapshot.candidateCount)
+        assertEquals(1, update.snapshot.unverifiedEnvelopeCount)
+    }
+
+    /**
+     * A dropped container moves no candidate, source, omission fact or expiry
+     * time, so it must not report a change: a peer transmitting garbage would
+     * otherwise drive an unbounded card rebuild and expiry re-arm on every
+     * receiving device.
+     */
+    @Test
+    fun aDroppedContainerReportsNoChangeAndDisturbsNoExpirySchedule() {
+        val store = createNearbyEventDiscoveryStore()
+        recordEnvelope(store, observedAt = 1L)
+        val before = store.snapshot
+
+        val update = recordNearbyEventUnverifiedEnvelope(store)
+
+        assertFalse(update.changed)
+        assertEquals(before.candidateCount, update.snapshot.candidateCount)
+        assertEquals(before.nextExpiryAtEpochMillis, update.snapshot.nextExpiryAtEpochMillis)
+        assertEquals(1, update.snapshot.unverifiedEnvelopeCount)
+    }
+
+    /**
+     * Zero bytes are not what came off the wire. A relay re-sending an empty
+     * container would be worse than relaying nothing, so a container that does
+     * not survive the hex boundary is rejected and counted rather than stored.
+     */
+    @Test
+    fun aContainerThatFailsTheHexBoundaryIsRejectedRatherThanStoredEmpty() {
+        listOf("zz", "", "0").forEach { badContainer ->
+            val store = createNearbyEventDiscoveryStore()
+            val update = recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
+                store = store,
+                peripheralId = "p",
+                eventDisplayName = "Event",
+                eventCodeHashHex = HASH,
+                rawContainerHex = badContainer,
+                agreesWithRegistry = false,
+                additionalNamesOmitted = false,
+                additionalEventsOmitted = false,
+                observedAtEpochMillis = 1L,
+            )
+
+            assertFalse(update.acceptedHint, "accepted container hex '$badContainer'")
+            assertEquals(0, update.snapshot.candidateCount)
+            assertEquals(1, update.snapshot.unverifiedEnvelopeCount)
+        }
     }
 
     @Test
@@ -340,7 +388,6 @@ class NearbyEventReceiverStateTest {
 
         val update = recordNearbyEventUnverifiedEnvelope(store)
 
-        assertTrue(update.changed)
         assertFalse(update.acceptedHint)
         assertEquals(0, update.snapshot.candidateCount)
         assertEquals(1, update.snapshot.unverifiedEnvelopeCount)

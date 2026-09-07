@@ -217,7 +217,12 @@ internal class NearbyEventDiscoverySession(
      */
     fun recordUnverifiedEnvelope() {
         if (disposed) return
-        publishAndSchedule(recordNearbyEventUnverifiedEnvelope(store).snapshot)
+        // Publishes the candidates flow so the tally is observable, and stops
+        // there. Deliberately not publishAndSchedule: no candidate, source or
+        // expiry time moved, so rebuilding the card list and re-arming the
+        // expiry wake-up would let a peer transmitting garbage drive both on
+        // every received packet.
+        _candidates.value = recordNearbyEventUnverifiedEnvelope(store).snapshot
     }
 
     fun reset() {

@@ -411,6 +411,15 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
  * malformed container and a bad signature, so the container has no event-code
  * hash, no display name, and no candidate to attach to. Counting it is what
  * keeps a dropped envelope observable instead of silent.
+ *
+ * Reports `changed = false`. No candidate, source, omission fact or expiry
+ * time moved, so a host must not rebuild its card list or re-arm its expiry
+ * wake-up for this: a peer transmitting garbage would otherwise drive an
+ * unbounded rebuild-and-rearm loop on every receiving device, and re-arming
+ * from a snapshot whose expiry times did not change is how a scheduled
+ * refresh gets pushed around by traffic that means nothing. The tally is on
+ * the returned snapshot for a host that wants to surface it; the returned
+ * snapshot is not a reason to republish.
  */
 public fun recordNearbyEventUnverifiedEnvelope(
     store: NearbyEventDiscoveryStore,
@@ -418,7 +427,7 @@ public fun recordNearbyEventUnverifiedEnvelope(
     store.unverifiedEnvelopeCount += 1
     return NearbyEventDiscoveryUpdate(
         acceptedHint = false,
-        changed = true,
+        changed = false,
         snapshot = store.snapshot,
     )
 }
@@ -437,17 +446,30 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
     additionalNamesOmitted: Boolean,
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
-): NearbyEventDiscoveryUpdate = recordNearbyEventRadioSelfVerifiedEnvelope(
-    store = store,
-    peripheralId = peripheralId,
-    eventDisplayName = eventDisplayName,
-    eventCodeHash = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrElse { ByteArray(0) },
-    rawContainer = runCatching { rawContainerHex.decodeHexBytes() }.getOrElse { ByteArray(0) },
-    agreesWithRegistry = agreesWithRegistry,
-    additionalNamesOmitted = additionalNamesOmitted,
-    additionalEventsOmitted = additionalEventsOmitted,
-    observedAtEpochMillis = observedAtEpochMillis,
-)
+): NearbyEventDiscoveryUpdate {
+    // A container that does not survive the hex boundary is rejected, not
+    // stored empty. Zero bytes are not what came off the wire, and a spec 134
+    // relay re-sending an empty container is worse than one relaying nothing:
+    // the candidate would claim to hold bytes it does not have. Counted as a
+    // drop for the same reason a verification failure is -- it is the only
+    // trace the envelope can leave.
+    val eventCodeHash = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrNull()
+    val rawContainer = runCatching { rawContainerHex.decodeHexBytes() }.getOrNull()
+    if (eventCodeHash == null || rawContainer == null || rawContainer.isEmpty()) {
+        return recordNearbyEventUnverifiedEnvelope(store)
+    }
+    return recordNearbyEventRadioSelfVerifiedEnvelope(
+        store = store,
+        peripheralId = peripheralId,
+        eventDisplayName = eventDisplayName,
+        eventCodeHash = eventCodeHash,
+        rawContainer = rawContainer,
+        agreesWithRegistry = agreesWithRegistry,
+        additionalNamesOmitted = additionalNamesOmitted,
+        additionalEventsOmitted = additionalEventsOmitted,
+        observedAtEpochMillis = observedAtEpochMillis,
+    )
+}
 
 /**
  * Promotes one hash to [NearbyEventReceiverState.REGISTRY_VERIFIED].

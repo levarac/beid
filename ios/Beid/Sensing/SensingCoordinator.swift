@@ -1836,11 +1836,15 @@ final class SensingCoordinator: ObservableObject {
   /// There is nothing else to record -- an unverified receipt has no parsed
   /// identity at all -- so this tally is the only trace the drop leaves.
   /// Not `private`, for the same test-seam reason as the two handlers above.
-  func handleUnverifiedEventInfoEnvelopeV2(observedAtEpochMillis: Int64? = nil) {
-    let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
-    let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+  func handleUnverifiedEventInfoEnvelopeV2() {
+    // Publishes the snapshot so the tally is observable, and stops there.
+    // Deliberately not `publishNearbyEventDiscovery`: no candidate, source or
+    // expiry time moved, so rebuilding from it and re-arming the expiry
+    // wake-up would let a peer transmitting garbage drive both on every
+    // received packet.
+    nearbyEventCandidates = ExportedKotlinPackages.org.levarac.parallax.discovery
       .recordNearbyEventUnverifiedEnvelope(store: nearbyDiscoveryStore)
-    publishNearbyEventDiscovery(update.snapshot, asOf: observedAt)
+      .snapshot
   }
 
   /// Publishes one snapshot and rearms the single expiry wake-up from the
