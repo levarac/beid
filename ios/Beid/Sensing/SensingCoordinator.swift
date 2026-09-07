@@ -1993,11 +1993,38 @@ final class SensingCoordinator: ObservableObject {
   private static func barnardDefinition(
     from context: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionContext
   ) -> BarnardEventDefinitionV1? {
-    guard let eventId = context.eventIdHex.hexBytes(count: 32),
-      let keySetDigest = context.definition.keySetDigestHex.hexBytes(count: 32),
-      let eventCodeHashHex = context.eventCodeHashHex,
+    barnardDefinition(
+      eventIdHex: context.eventIdHex,
+      keySetDigestHex: context.definition.keySetDigestHex,
+      eventCodeHashHex: context.eventCodeHashHex,
+      joinMode: context.joinMode,
+      validFromUnixSeconds: context.validFrom.value,
+      validUntilUnixSeconds: context.validUntil.value
+    )
+  }
+
+  /// The whole decision, split out from the context reader above so it can be
+  /// tested: `EventDefinitionContext` has an internal Kotlin initializer and
+  /// cannot be constructed from a test, which left every rule here — the
+  /// join-mode wire mapping most of all — unexercised.
+  ///
+  /// `joinMode` is the wire value the Event Definition CBOR carries (`0` open,
+  /// `1` gated), not an enum ordinal that happens to line up with it.
+  /// Internal rather than private for the same test-seam reason; nothing
+  /// outside this type calls it.
+  static func barnardDefinition(
+    eventIdHex: String,
+    keySetDigestHex: String,
+    eventCodeHashHex: String?,
+    joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode?,
+    validFromUnixSeconds: Int64,
+    validUntilUnixSeconds: Int64
+  ) -> BarnardEventDefinitionV1? {
+    guard let eventId = eventIdHex.hexBytes(count: 32),
+      let keySetDigest = keySetDigestHex.hexBytes(count: 32),
+      let eventCodeHashHex,
       let eventCodeHash = eventCodeHashHex.hexBytes(count: 8),
-      let joinMode = context.joinMode
+      let joinMode
     else { return nil }
     let mode: UInt8
     switch joinMode {
@@ -2010,8 +2037,8 @@ final class SensingCoordinator: ObservableObject {
       keySetDigest: keySetDigest,
       joinMode: mode,
       eventCodeHash: eventCodeHash,
-      validFromUnixSeconds: context.validFrom.value,
-      validUntilUnixSeconds: context.validUntil.value
+      validFromUnixSeconds: validFromUnixSeconds,
+      validUntilUnixSeconds: validUntilUnixSeconds
     )
   }
 

@@ -50,6 +50,9 @@ final class SensingCoordinatorTests: XCTestCase {
   /// already verified whatever these tests hand across the seam, and the host
   /// keeps them only so a spec 134 relay can re-send them unchanged.
   static let envelopeContainer = Data([3, 0, 1, 2])
+  static let eventIdHex = String(repeating: "ab", count: 32)
+  static let keySetDigestHex = String(repeating: "cd", count: 32)
+  static let eventCodeHashHex = String(repeating: "ef", count: 8)
 
   func testDemoEventModeRemainsOverridableInDebugSimulator() throws {
     #if DEBUG && targetEnvironment(simulator)
@@ -769,6 +772,108 @@ final class SensingCoordinatorTests: XCTestCase {
     coordinator.reset()
 
     XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 0)
+  }
+
+  // MARK: - Registry definition mapping
+  //
+  // The values handed to barnard's `registryAgreement` decide whether a
+  // candidate is promoted at all, so every rule that builds them is asserted
+  // here. Mirrors Android's `barnardIsAskedWithTheDefinitionThisHostRead`.
+
+  func testOpenDefinitionMapsToJoinModeZeroAndCarriesEveryFieldThrough() throws {
+    let definition = try XCTUnwrap(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: Self.eventIdHex,
+        keySetDigestHex: Self.keySetDigestHex,
+        eventCodeHashHex: Self.eventCodeHashHex,
+        joinMode: .OPEN,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+
+    XCTAssertEqual(definition.joinMode, 0)
+    XCTAssertEqual(Data(definition.eventId), Data(repeating: 0xab, count: 32))
+    XCTAssertEqual(Data(definition.keySetDigest), Data(repeating: 0xcd, count: 32))
+    XCTAssertEqual(Data(definition.eventCodeHash), Data(repeating: 0xef, count: 8))
+    XCTAssertEqual(definition.validFromUnixSeconds, 100)
+    XCTAssertEqual(definition.validUntilUnixSeconds, 200)
+  }
+
+  /// The wire value, not an enum ordinal. Barnard derives an open event's
+  /// code hash from its event ID and only for `joinMode == 0`, so inverting
+  /// this mapping would make agreement answer about the wrong event shape.
+  func testGatedDefinitionMapsToJoinModeOne() throws {
+    let definition = try XCTUnwrap(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: Self.eventIdHex,
+        keySetDigestHex: Self.keySetDigestHex,
+        eventCodeHashHex: Self.eventCodeHashHex,
+        joinMode: .GATED,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+
+    XCTAssertEqual(definition.joinMode, 1)
+  }
+
+  func testDefinitionWithNoJoinModeYieldsNothing() {
+    XCTAssertNil(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: Self.eventIdHex,
+        keySetDigestHex: Self.keySetDigestHex,
+        eventCodeHashHex: Self.eventCodeHashHex,
+        joinMode: nil,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+  }
+
+  /// Every hex field is length-checked, because a short or long value would
+  /// otherwise reach barnard as a differently shaped array and make agreement
+  /// answer a question nobody asked.
+  func testMisSizedOrMalformedHexFieldsYieldNothing() {
+    let cases: [(String, String, String?)] = [
+      (String(repeating: "ab", count: 31), Self.keySetDigestHex, Self.eventCodeHashHex),
+      (String(repeating: "ab", count: 33), Self.keySetDigestHex, Self.eventCodeHashHex),
+      (Self.eventIdHex, String(repeating: "cd", count: 31), Self.eventCodeHashHex),
+      (Self.eventIdHex, Self.keySetDigestHex, String(repeating: "ef", count: 7)),
+      (Self.eventIdHex, Self.keySetDigestHex, String(repeating: "ef", count: 9)),
+      (Self.eventIdHex, Self.keySetDigestHex, nil),
+      (String(repeating: "zz", count: 32), Self.keySetDigestHex, Self.eventCodeHashHex),
+    ]
+
+    for (eventId, keySetDigest, eventCodeHash) in cases {
+      XCTAssertNil(
+        SensingCoordinator.barnardDefinition(
+          eventIdHex: eventId,
+          keySetDigestHex: keySetDigest,
+          eventCodeHashHex: eventCodeHash,
+          joinMode: .OPEN,
+          validFromUnixSeconds: 100,
+          validUntilUnixSeconds: 200
+        ),
+        "expected nil for eventId \(eventId.prefix(8)), digest \(keySetDigest.prefix(8)), hash \(eventCodeHash ?? "nil")"
+      )
+    }
+  }
+
+  /// The registry hands these fields back `0x`-prefixed.
+  func testPrefixedHexIsAccepted() throws {
+    let definition = try XCTUnwrap(
+      SensingCoordinator.barnardDefinition(
+        eventIdHex: "0x" + Self.eventIdHex,
+        keySetDigestHex: "0x" + Self.keySetDigestHex,
+        eventCodeHashHex: "0x" + Self.eventCodeHashHex,
+        joinMode: .OPEN,
+        validFromUnixSeconds: 100,
+        validUntilUnixSeconds: 200
+      )
+    )
+
+    XCTAssertEqual(Data(definition.eventId), Data(repeating: 0xab, count: 32))
   }
 
   /// Barnard's overflow marker carries no candidate identity. Its global
