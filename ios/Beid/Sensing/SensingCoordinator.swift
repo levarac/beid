@@ -1797,6 +1797,10 @@ final class SensingCoordinator: ObservableObject {
   ) {
     let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
     let hash = eventCodeHash.lowercaseHexString
+    // Asked before recording, because the reducer needs this envelope's own
+    // verdict to decide whether it may replace the container retained for a
+    // hash that is already REGISTRY_VERIFIED.
+    let agrees = nearbyVerifiedDefinitions[hash].map(registryAgreement) ?? false
     let update = ExportedKotlinPackages.org.levarac.parallax.discovery
       .recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
         store: nearbyDiscoveryStore,
@@ -1804,6 +1808,7 @@ final class SensingCoordinator: ObservableObject {
         eventDisplayName: eventDisplayName,
         eventCodeHashHex: hash,
         rawContainerHex: rawContainer.lowercaseHexString,
+        agreesWithRegistry: agrees,
         additionalNamesOmitted: false,
         additionalEventsOmitted: false,
         observedAtEpochMillis: observedAt
@@ -1814,12 +1819,12 @@ final class SensingCoordinator: ObservableObject {
     // landing after that completion has no callback left to ride on and must
     // promote through the standalone agreement entry instead.
     var snapshot = update.snapshot
-    if let definition = nearbyVerifiedDefinitions[hash] {
+    if nearbyVerifiedDefinitions[hash] != nil {
       snapshot = ExportedKotlinPackages.org.levarac.parallax.discovery
         .applyNearbyEventRegistryAgreementFromHex(
           store: nearbyDiscoveryStore,
           eventCodeHashHex: hash,
-          agrees: registryAgreement(definition)
+          agrees: agrees
         ).snapshot
     }
     publishNearbyEventDiscovery(snapshot, asOf: observedAt)

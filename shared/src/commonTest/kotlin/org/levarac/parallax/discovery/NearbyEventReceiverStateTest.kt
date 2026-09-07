@@ -222,6 +222,7 @@ class NearbyEventReceiverStateTest {
             eventDisplayName = "Event",
             eventCodeHashHex = "zz",
             rawContainerHex = "03000000",
+            agreesWithRegistry = false,
             additionalNamesOmitted = false,
             additionalEventsOmitted = false,
             observedAtEpochMillis = 1L,
@@ -250,6 +251,81 @@ class NearbyEventReceiverStateTest {
         assertNull(assertNotNull(store.snapshot.candidateAt(0)).rawEnvelopeContainer)
     }
 
+    /**
+     * Barnard's radio self-check passes for any internally consistent
+     * envelope, including one carrying a different key set for the same
+     * event-code hash. Such an envelope cannot lower an established tier and
+     * its disagreement is dropped by the promotion tier guard, so a
+     * newest-wins container rule would leave a REGISTRY_VERIFIED candidate
+     * holding bytes no registry read vouched for -- and those are exactly the
+     * bytes a spec 134 relay re-sends.
+     */
+    @Test
+    fun aVerifiedCandidateKeepsTheAgreedContainerAgainstADisagreeingEnvelope() {
+        val store = createNearbyEventDiscoveryStore()
+        recordEnvelope(store, observedAt = 1L)
+        resolveRegistry(store, agrees = true)
+        assertEquals(
+            NearbyEventReceiverState.REGISTRY_VERIFIED,
+            assertNotNull(store.snapshot.candidateAt(0)).receiverState,
+        )
+
+        val impostor = byteArrayOf(3, 0, 9, 9)
+        val update = recordEnvelope(
+            store,
+            observedAt = 2L,
+            rawContainer = impostor,
+            agreesWithRegistry = false,
+        )
+
+        val candidate = assertNotNull(update.snapshot.candidateAt(0))
+        assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate.receiverState)
+        assertTrue(CONTAINER.contentEquals(assertNotNull(candidate.rawEnvelopeContainer)))
+    }
+
+    /**
+     * The other half: a relayed copy of the same envelope differs only in its
+     * hop count, which `registryAgreement` does not compare, so it agrees and
+     * is allowed to replace what is held.
+     */
+    @Test
+    fun aVerifiedCandidateSwapsInAnAgreeingEnvelope() {
+        val store = createNearbyEventDiscoveryStore()
+        recordEnvelope(store, observedAt = 1L)
+        resolveRegistry(store, agrees = true)
+
+        val relayed = byteArrayOf(3, 1, 1, 2)
+        val update = recordEnvelope(
+            store,
+            observedAt = 2L,
+            rawContainer = relayed,
+            agreesWithRegistry = true,
+        )
+
+        val candidate = assertNotNull(update.snapshot.candidateAt(0))
+        assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate.receiverState)
+        assertTrue(relayed.contentEquals(assertNotNull(candidate.rawEnvelopeContainer)))
+    }
+
+    /** Below REGISTRY_VERIFIED the newest container still simply wins. */
+    @Test
+    fun anUnpromotedCandidateTakesTheNewestContainer() {
+        val store = createNearbyEventDiscoveryStore()
+        recordEnvelope(store, observedAt = 1L)
+
+        val newer = byteArrayOf(3, 0, 4, 5)
+        val update = recordEnvelope(
+            store,
+            observedAt = 2L,
+            rawContainer = newer,
+            agreesWithRegistry = false,
+        )
+
+        val candidate = assertNotNull(update.snapshot.candidateAt(0))
+        assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
+        assertTrue(newer.contentEquals(assertNotNull(candidate.rawEnvelopeContainer)))
+    }
+
     @Test
     fun aHintOnlyCandidateHasNoRawContainer() {
         val store = createNearbyEventDiscoveryStore()
@@ -275,12 +351,15 @@ class NearbyEventReceiverStateTest {
     private fun recordEnvelope(
         store: NearbyEventDiscoveryStore,
         observedAt: Long,
+        rawContainer: ByteArray = CONTAINER,
+        agreesWithRegistry: Boolean = false,
     ): NearbyEventDiscoveryUpdate = recordNearbyEventRadioSelfVerifiedEnvelope(
         store = store,
         peripheralId = "p",
         eventDisplayName = "Event",
         eventCodeHash = HASH.hexBytes(),
-        rawContainer = CONTAINER,
+        rawContainer = rawContainer,
+        agreesWithRegistry = agreesWithRegistry,
         additionalNamesOmitted = false,
         additionalEventsOmitted = false,
         observedAtEpochMillis = observedAt,

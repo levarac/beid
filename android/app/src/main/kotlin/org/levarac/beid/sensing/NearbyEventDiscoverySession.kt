@@ -178,24 +178,31 @@ internal class NearbyEventDiscoverySession(
         registryAgreement: (BarnardEventDefinitionV1) -> Boolean,
     ) {
         if (disposed) return
+        val hash = eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        // Asked before recording, because the reducer needs this envelope's
+        // own verdict to decide whether it may replace the container retained
+        // for a hash that is already REGISTRY_VERIFIED.
+        val agrees = verifiedDefinitionByHash[hash]?.let(registryAgreement) == true
         val update = recordNearbyEventRadioSelfVerifiedEnvelope(
             store = store,
             peripheralId = peripheralId,
             eventDisplayName = eventDisplayName,
             eventCodeHash = eventCodeHash,
             rawContainer = rawContainer,
+            agreesWithRegistry = agrees,
             additionalNamesOmitted = false,
             additionalEventsOmitted = false,
             observedAtEpochMillis = nowEpochMillis(),
         )
         if (!update.acceptedHint) return
-        val hash = eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
         envelopeAgreementByHash[hash] = registryAgreement
         // The registry resolution for a hash completes exactly once, so an
         // envelope that lands after it has no completion callback left to ride
         // on and must promote through the standalone agreement entry.
-        val promoted = verifiedDefinitionByHash[hash]?.let { definition ->
-            applyNearbyEventRegistryAgreementFromHex(store, hash, registryAgreement(definition)).snapshot
+        val promoted = if (verifiedDefinitionByHash.containsKey(hash)) {
+            applyNearbyEventRegistryAgreementFromHex(store, hash, agrees).snapshot
+        } else {
+            null
         }
         publishAndSchedule(promoted ?: update.snapshot)
         resolveUnresolvedCandidates(update.snapshot)

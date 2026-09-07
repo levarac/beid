@@ -340,6 +340,14 @@ public fun recordNearbyEventHint(
  *
  * A receipt that is not radio-self-verified must not reach here at all: it has
  * no parsed event-code hash to key on, and so has no candidate to describe.
+ *
+ * [agreesWithRegistry] is barnard's `registryAgreement` for THIS envelope
+ * against a definition the host had already read for this hash, or false when
+ * the host has no such definition yet. It never raises the tier -- only
+ * [applyNearbyEventRegistryAgreementFromHex] and the resolution completion do
+ * that -- and it decides one thing: whether this envelope is allowed to
+ * replace the container retained for a hash that is already
+ * [NearbyEventReceiverState.REGISTRY_VERIFIED].
  */
 public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     store: NearbyEventDiscoveryStore,
@@ -347,6 +355,7 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     eventDisplayName: String,
     eventCodeHash: ByteArray,
     rawContainer: ByteArray,
+    agreesWithRegistry: Boolean,
     additionalNamesOmitted: Boolean,
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
@@ -365,11 +374,27 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     if (!update.acceptedHint) return update
     val hash = EventHash(eventCodeHash)
     val raised = store.raiseReceiverState(hash, NearbyEventReceiverState.RADIO_SELF_VERIFIED)
-    // The newest container for a hash replaces the one held. Spec 134 elects
-    // by hop among what a device can currently observe, so the freshest bytes
-    // are the ones a relay decision should be made from; an older copy of the
-    // same event is not more authoritative for being older.
-    val containerChanged = !store.rawEnvelopeContainers[hash].contentEqualsOrNull(rawContainer)
+    // Below REGISTRY_VERIFIED the newest container simply wins: spec 134
+    // elects by hop among what a device can currently observe, so the freshest
+    // bytes are what a relay decision should be made from, and an older copy
+    // of the same event is not more authoritative for being older.
+    //
+    // At REGISTRY_VERIFIED that rule would be a hole. Barnard's radio
+    // self-check is satisfied by any envelope that is internally consistent,
+    // including one carrying a different key set for the same event-code hash.
+    // Such an envelope cannot lower the tier and its disagreement is dropped
+    // by `promoteToRegistryVerified`'s tier guard, so under a newest-wins rule
+    // it would quietly replace the retained bytes and leave a candidate
+    // reading REGISTRY_VERIFIED while holding bytes no registry read ever
+    // vouched for -- the exact bytes a spec 134 relay re-sends. So once the
+    // tier is REGISTRY_VERIFIED, only an envelope that itself agrees with the
+    // registry may replace what is held. A genuine relayed copy of the same
+    // envelope still qualifies: `registryAgreement` compares the signed
+    // fields, and `relayHopCount` is not one of them.
+    val registryVerified = store.receiverStates[hash] == NearbyEventReceiverState.REGISTRY_VERIFIED
+    val mayReplaceContainer = !registryVerified || agreesWithRegistry
+    val containerChanged = mayReplaceContainer &&
+        !store.rawEnvelopeContainers[hash].contentEqualsOrNull(rawContainer)
     if (containerChanged) store.rawEnvelopeContainers[hash] = rawContainer.copyOf()
     if (!raised && !containerChanged) return update
     return NearbyEventDiscoveryUpdate(
@@ -408,6 +433,7 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
     eventDisplayName: String,
     eventCodeHashHex: String,
     rawContainerHex: String,
+    agreesWithRegistry: Boolean,
     additionalNamesOmitted: Boolean,
     additionalEventsOmitted: Boolean,
     observedAtEpochMillis: Long,
@@ -417,6 +443,7 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
     eventDisplayName = eventDisplayName,
     eventCodeHash = runCatching { eventCodeHashHex.decodeHexBytes() }.getOrElse { ByteArray(0) },
     rawContainer = runCatching { rawContainerHex.decodeHexBytes() }.getOrElse { ByteArray(0) },
+    agreesWithRegistry = agreesWithRegistry,
     additionalNamesOmitted = additionalNamesOmitted,
     additionalEventsOmitted = additionalEventsOmitted,
     observedAtEpochMillis = observedAtEpochMillis,
