@@ -123,6 +123,23 @@ class ParallaxEventDefinitionSourceChecksumTest {
         assertContentEquals(committed, readPinnedSource(root, "source.txt", expected))
     }
 
+    /**
+     * Every resource this repository vendors from Parallax, compared against the
+     * blob committed at the pinned ref.
+     *
+     * The list below is written by hand: it RESTATES what is vendored instead of
+     * deriving it, so a resource added to `commonTest/resources` without a matching
+     * entry here is copied and then watched by nothing. That is not hypothetical.
+     * Until beid#403 the two `mutual-sensing-window-v1.json` vectors were absent
+     * from it while `MutualSensingObservationTest` drove a dozen assertions off
+     * them -- load-bearing inputs whose provenance no check could express an
+     * opinion about. They were in step when found; nothing would have said so had
+     * they drifted.
+     *
+     * Adding an entry when vendoring a file is therefore a convention and not a
+     * constraint, with the failure mode conventions have: correct when written and
+     * silently wrong afterwards.
+     */
     @Test
     fun copiedVectorsAndCddlMatchTheParallaxCheckoutWhenAvailable() {
         val root = File(
@@ -159,6 +176,16 @@ class ParallaxEventDefinitionSourceChecksumTest {
             resourcePath = "vectors/negative/open-event-code-v1.json",
             root = root,
             sourcePath = "protocol/vectors/negative/open-event-code-v1.json",
+        )
+        assertResourceMatchesSource(
+            resourcePath = "vectors/positive/mutual-sensing-window-v1.json",
+            root = root,
+            sourcePath = "protocol/vectors/positive/mutual-sensing-window-v1.json",
+        )
+        assertResourceMatchesSource(
+            resourcePath = "vectors/negative/mutual-sensing-window-v1.json",
+            root = root,
+            sourcePath = "protocol/vectors/negative/mutual-sensing-window-v1.json",
         )
         assertResourceMatchesSource(
             resourcePath = "canonical/event-definition-v1.cddl",
