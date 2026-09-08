@@ -47,14 +47,7 @@ class OpenEventCodeV1Test {
                 .contentEquals(eventCodeHashForOpenEventV1(eventId)),
         )
     }
-}
 
-private fun ByteArray.toHexWithoutPrefixForOpenCodeTest(): String = buildString(size * 2) {
-    for (byte in this@toHexWithoutPrefixForOpenCodeTest) {
-        val value = byte.toInt() and 0xff
-        append("0123456789abcdef"[value ushr 4])
-        append("0123456789abcdef"[value and 0x0f])
-    }
 
     /**
      * Parity with the OTHER SIDE's own output, rather than with our record of
@@ -123,5 +116,13 @@ private fun ByteArray.toHexWithoutPrefixForOpenCodeTest(): String = buildString(
             val hashHex = case.jsonObject.getValue("hashHex").jsonPrimitive.content
             assertNotEquals(hashHex, ours, "non-canonical spelling '$name' must not be our answer")
         }
+    }
+}
+
+private fun ByteArray.toHexWithoutPrefixForOpenCodeTest(): String = buildString(size * 2) {
+    for (byte in this@toHexWithoutPrefixForOpenCodeTest) {
+        val value = byte.toInt() and 0xff
+        append("0123456789abcdef"[value ushr 4])
+        append("0123456789abcdef"[value and 0x0f])
     }
 }
