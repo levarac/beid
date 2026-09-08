@@ -51,6 +51,13 @@ final class RecordingEventJoinControl: EventJoinControlling, @unchecked Sendable
     case denied
     /// Calls the completion with exactly these values.
     case reports(canScan: Bool, canAdvertise: Bool)
+    /// Keeps the completion so a test can answer it after the fact.
+    ///
+    /// Every other case fires synchronously, which made a *late* grant
+    /// inexpressible — and a late grant is precisely the case that used to
+    /// join an event after the user had already stopped. An apparatus that
+    /// cannot express the failure cannot pin the fix.
+    case answersLate
   }
 
   var onEvent: ((BarnardEvent) -> Void)?
@@ -78,6 +85,11 @@ final class RecordingEventJoinControl: EventJoinControlling, @unchecked Sendable
     !joinAndStartContexts.isEmpty
   }
 
+  /// Whether a permission request is still outstanding.
+  var isHoldingPermissionRequest: Bool { heldPermissionCompletion != nil }
+
+  private var heldPermissionCompletion: ((Bool, Bool) -> Void)?
+
   func requestJoinPermissions(
     _ completion: @escaping (_ canScan: Bool, _ canAdvertise: Bool) -> Void
   ) {
@@ -91,7 +103,16 @@ final class RecordingEventJoinControl: EventJoinControlling, @unchecked Sendable
       completion(false, false)
     case let .reports(canScan, canAdvertise):
       completion(canScan, canAdvertise)
+    case .answersLate:
+      heldPermissionCompletion = completion
     }
+  }
+
+  /// Answers a held permission request, granting both capabilities.
+  func grantHeldPermissionRequest() {
+    let completion = heldPermissionCompletion
+    heldPermissionCompletion = nil
+    completion?(true, true)
   }
 
   func joinAndStart(

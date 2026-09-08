@@ -6,198 +6,277 @@ import XCTest
 
 /// The iOS half of the beid#374 join gate (beid#410).
 ///
-/// ## Why every test here asserts a *positive* fact as well as a refusal
+/// ## What the first version of this suite got wrong
 ///
-/// Each test below ends in "and nothing was joined". On its own that assertion
-/// is nearly worthless on this host: the iOS Simulator has no BLE radio, so
-/// before this change `requestPermissions` never reported `canScan`/
-/// `canAdvertise`, its completion never ran, and *nothing was ever joined in
-/// any test whatsoever*. A refusal test written against that apparatus is green
-/// whether the gate works, whether it is absent, and whether the code under it
-/// was deleted outright.
+/// It asserted refusals without reaching them. `makeIsolatedSensingCoordinator`
+/// passed no registry, so `beginRegistryVerifiedJoin` returned at its *first*
+/// guard and nothing downstream ran — the read, the issuer and every refusal
+/// past "none configured" were untouched. **Deleting the entire body of that
+/// method left every test green.** The file also carried a long comment
+/// claiming it drove every refusal and could tell a working gate from a
+/// missing one. It drove one early return, and it could not.
 ///
-/// So every test here also asserts `requestJoinPermissionsCallCount == 1`. That
-/// is the positive control: it proves the run actually reached the gated path
-/// and was refused there, rather than stopping somewhere earlier and looking
-/// identical. `RecordingEventJoinControl.permissionOutcome` is what makes that
-/// possible, and it defaults to `.neverAnswers` precisely so a test has to opt
-/// into the grant deliberately.
+/// The specific error is worth naming because it is subtle: the suite *did*
+/// have a positive control — it asserted the permission callback was reached.
+/// That control was simply one layer too shallow. Reaching the permission
+/// callback and then hitting a nil-registry guard is also exactly what a
+/// deleted gate body looks like, so the control could not separate them.
 ///
-/// It is the same discipline `ParticipantRelayTests.testResettingClearsTheRelay`
-/// records for itself — arm the thing first, or the assertion is not about what
-/// its name claims.
+/// ## What makes these tests bite instead
 ///
-/// ## What this suite deliberately cannot do, and why that is not a gap here
+/// `FakeEventJoinRegistry` records the event ids the gate actually asked
+/// about. A test that asserts `requestedEventIdHexes` is non-empty is
+/// asserting the gate reached the *read* — the depth the old suite never got
+/// to. Delete the body of `beginRegistryVerifiedJoin` now and those
+/// assertions fail, which is the property a coverage claim has to have.
 ///
-/// There is no test that a *verified* event joins successfully, because Swift
-/// cannot build one to verify. `fromOperatorLookup` needs an
+/// Two tests go further and pin behaviour that is invisible to a refusal
+/// assertion alone. A late permission grant, and a late registry answer, both
+/// used to act on a session the user had already left; the tests for those
+/// assert on what the *stale* path would have done (asked the registry;
+/// skipped a cancel), because asserting "nothing joined" cannot distinguish a
+/// working guard from an answer that would never have joined anyway.
+///
+/// ## What still cannot be expressed here
+///
+/// No test proves a *verified* event joins. `fromOperatorLookup` needs an
 /// `EventDefinitionResolution`, and that type — like `EventDefinitionContext`
 /// behind it — carries an `internal` Kotlin constructor, which Swift Export
-/// emits with only a `package` initializer. No Swift code, production or test,
-/// can construct either.
+/// emits with only a `package` initializer. No Swift code can build one.
+/// Android hit the same wall and reaches a successful join by walking the real
+/// nearby promotion path; that fixture is Kotlin-side and iOS has no caller
+/// for that path yet. Closing this needs shared test support (beid#391).
 ///
-/// Android reached the same wall and recorded it in `FakeEventJoinRegistry.kt`,
-/// resolving it by walking the real nearby promotion path into a
-/// registry-verified candidate. That fixture is Kotlin-side and unreachable
-/// from Swift, and iOS has no surface that joins a discovered candidate yet.
-/// Closing this needs shared-side test support (beid#391), not another iOS
-/// test. It is called out rather than left as an absence, because a suite that
-/// can only ever observe "nothing joined" cannot by itself distinguish a
-/// working gate from an app that joins nothing at all.
+/// So this suite proves the gate refuses, and cannot prove it ever admits.
+/// That is stated rather than left as an absence, because a suite that only
+/// ever observes "nothing joined" cannot by itself distinguish a working gate
+/// from an app that joins nothing at all.
 @MainActor
 final class EventJoinGateTests: XCTestCase {
-  /// Lets the coordinator's `Task { @MainActor in ... }` hop run before the
-  /// assertions read the fake.
+  private let canonicalEventIdHex = "0x\(String(repeating: "a", count: 64))"
+
+  /// Lets the coordinator's `Task { @MainActor in ... }` hops run.
   private func settle() async {
     try? await Task.sleep(nanoseconds: 20_000_000)
   }
 
-  // MARK: - Selecting is not joining
-
-  /// The defect this issue exists for, stated as its inverse.
-  ///
-  /// `joinEvent` used to call `BarnardEngine.joinEvent` on its very next line,
-  /// so the app was joined before any registry read had verified anything. It
-  /// must now reach Barnard not at all: the join belongs to `startSensing`,
-  /// behind the capability.
-  func testSelectingAnEventDoesNotJoinBarnard() {
-    let engine = RecordingEventJoinControl()
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
-    coordinator.useDemoEventMode = false
-
-    XCTAssertTrue(coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: "abc123"))
-
-    XCTAssertFalse(
-      engine.didJoin,
-      "selecting an event must not reach Barnard; the join belongs behind the capability"
+  private func makeGatedCoordinator(
+    engine: RecordingEventJoinControl,
+    registry: FakeEventJoinRegistry? = nil,
+    relay: RecordingParticipantRelayControl? = nil
+  ) -> SensingCoordinator {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      participantRelayControl: relay,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
     )
-    XCTAssertEqual(coordinator.joinedEventCode, "ethtokyo2026", "the selection is still recorded")
+    coordinator.useDemoEventMode = false
+    return coordinator
   }
 
-  // MARK: - startSensing refuses without a capability
+  // MARK: - Selecting is not joining
 
-  /// The second door, and the one no issue text named: `startSensing` reached
-  /// `configure(eventCode:)` and `startAuto()` without passing through
-  /// `joinEvent` at all.
-  func testStartSensingStartsNeitherJoinNorSensingWhenNoRegistryIsConfigured() async {
+  /// The defect this issue exists for, stated as its inverse. `joinEvent` used
+  /// to call `BarnardEngine.joinEvent` on its very next line.
+  func testSelectingAnEventDoesNotJoinBarnard() {
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeGatedCoordinator(engine: engine)
+
+    XCTAssertTrue(coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex))
+
+    XCTAssertFalse(engine.didJoin, "selecting must not reach Barnard")
+    XCTAssertEqual(coordinator.joinedEventCode, "ethtokyo2026")
+  }
+
+  // MARK: - Refusals that actually reach the read
+
+  /// Mirrors Android's `joinEventStartsNeitherJoinNorSensingWhenTheRegistryLookupFails`.
+  func testStartSensingStartsNeitherJoinNorSensingWhenTheRegistryReadFails() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
-    coordinator.useDemoEventMode = false
-    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: "abc123")
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .readFails
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
 
     coordinator.startSensing()
     await settle()
 
     XCTAssertEqual(
-      engine.requestJoinPermissionsCallCount, 1,
-      "the run must actually reach the gated path, or the refusal below proves nothing"
+      registry.requestedEventIdHexes, [canonicalEventIdHex],
+      "the gate must reach the registry read; an empty list means it refused earlier and this test proves nothing"
     )
-    XCTAssertFalse(
-      engine.didJoin,
-      "with no registry client there is nothing to verify against, so nothing may start"
-    )
+    XCTAssertFalse(engine.didJoin, "a failed read must start neither join nor sensing")
+    XCTAssertEqual(coordinator.joinRefusal, .registryReadFailed)
+    XCTAssertEqual(coordinator.phase, .idle, "a refusal must not leave the user on a sensing screen")
+  }
+
+  /// Mirrors Android's `joinEventStartsNeitherJoinNorSensingWhileTheRegistryLookupIsPending`.
+  func testStartSensingStartsNeitherJoinNorSensingWhileTheRegistryReadIsPending() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .holds
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+
+    coordinator.startSensing()
+    await settle()
+
+    XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex])
+    XCTAssertTrue(registry.isHoldingRead, "the read must still be outstanding for this to be the pending case")
+    XCTAssertFalse(engine.didJoin, "a read still in flight must start nothing")
   }
 
   /// A code that never obtained a canonical id never had a registry answer, so
-  /// there is nothing to issue a capability from.
-  func testStartSensingStartsNeitherJoinNorSensingWithoutACanonicalEventId() async {
+  /// the gate refuses before the read rather than reading with nothing to ask.
+  func testStartSensingStartsNothingWithoutACanonicalEventId() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
-    coordinator.useDemoEventMode = false
+    let registry = FakeEventJoinRegistry()
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
     coordinator.joinEvent("ethtokyo2026")
 
     coordinator.startSensing()
     await settle()
 
-    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+    XCTAssertTrue(registry.requestedEventIdHexes.isEmpty, "there is no id to ask about")
     XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(coordinator.joinRefusal, .noCanonicalEventId)
   }
 
-  /// gh#101, closed here. `startSensing`'s event code used to fall back to the
-  /// literal `"beid-demo-event"`, so a host that had never joined anything
-  /// could start its radio on a hardcoded code — an ungated path with a
-  /// built-in destination.
+  /// gh#101. The event code used to fall back to the literal
+  /// `"beid-demo-event"`, so a host that had never joined anything could start
+  /// its radio on a hardcoded code.
   func testStartSensingStartsNothingWhenNoEventWasSelected() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
-    coordinator.useDemoEventMode = false
+    let registry = FakeEventJoinRegistry()
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
 
     coordinator.startSensing()
     await settle()
 
     XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
     XCTAssertFalse(engine.didJoin, "no event was selected, so there is nothing to sense for")
-    XCTAssertEqual(
-      engine.joinedCodes, [],
-      "and in particular Barnard must never be handed the beid-demo-event fallback"
-    )
+    XCTAssertEqual(engine.joinedCodes, [], "and Barnard must never receive the beid-demo-event fallback")
   }
 
-  /// Refused permissions must stop the sequence before the gate, not after it.
   func testStartSensingStartsNothingWhenPermissionsAreRefused() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .denied
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
-    coordinator.useDemoEventMode = false
-    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: "abc123")
+    let registry = FakeEventJoinRegistry()
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
 
     coordinator.startSensing()
     await settle()
 
     XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+    XCTAssertTrue(registry.requestedEventIdHexes.isEmpty, "a refused grant must not even reach the read")
     XCTAssertFalse(engine.didJoin)
   }
 
-  /// Scanning without advertising is not a partial grant this app proceeds on:
-  /// both arms are required, and the pair is asserted rather than assumed
-  /// because `.reports` can express the mixed case that `.granted`/`.denied`
-  /// cannot.
-  func testStartSensingStartsNothingWhenOnlyScanningIsPermitted() async {
+  // MARK: - Answers that arrive after the user moved on
+
+  /// Mirrors Android's `aVerificationThatAnswersAfterTheUserLeftStartsNothing`.
+  ///
+  /// Asserts that the stale grant never reaches the registry. Asserting only
+  /// "nothing joined" would pass whether or not the guard exists, because the
+  /// fake registry cannot answer with a success anyway — so that assertion
+  /// could not tell the guard from the limitation.
+  func testAPermissionGrantThatLandsAfterTheUserStoppedStartsNothing() async {
     let engine = RecordingEventJoinControl()
-    engine.permissionOutcome = .reports(canScan: true, canAdvertise: false)
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
-    coordinator.useDemoEventMode = false
-    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: "abc123")
+    engine.permissionOutcome = .answersLate
+    let registry = FakeEventJoinRegistry()
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+
+    coordinator.startSensing()
+    await settle()
+    XCTAssertTrue(engine.isHoldingPermissionRequest, "the grant must be outstanding for this to be the late case")
+
+    _ = coordinator.stopSensing()
+    engine.grantHeldPermissionRequest()
+    await settle()
+
+    XCTAssertTrue(
+      registry.requestedEventIdHexes.isEmpty,
+      "a grant landing after the user stopped must not start a registry read for an abandoned session"
+    )
+    XCTAssertFalse(engine.didJoin)
+  }
+
+  /// Leaving must cancel an outstanding read rather than let it answer into a
+  /// session that no longer exists. Asserted through the cancel count, which a
+  /// missing guard would leave at zero.
+  func testLeavingCancelsAnOutstandingRegistryRead() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .holds
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+
+    coordinator.startSensing()
+    await settle()
+    XCTAssertTrue(registry.isHoldingRead)
+
+    coordinator.leaveEvent()
+    await settle()
+
+    XCTAssertEqual(registry.cancelCount, 1, "an abandoned read must be cancelled, not merely ignored")
+    XCTAssertFalse(engine.didJoin)
+  }
+
+  /// Mirrors Android's `aRefusedJoinLeavesNoRecordingAndNoRelay`.
+  func testARefusedJoinLeavesNoRelay() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .readFails
+    let relay = RecordingParticipantRelayControl()
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry, relay: relay)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
 
     coordinator.startSensing()
     await settle()
 
-    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+    XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex])
     XCTAssertFalse(engine.didJoin)
+    XCTAssertNil(relay.verifier, "a refused join must leave the relay disarmed")
   }
 
   // MARK: - Demo mode stays outside the gate
 
-  /// Demo mode never reaches Barnard, and it is the App Review path. It must
-  /// not ask for permissions or join, whatever the gate does.
-  func testDemoModeNeitherRequestsPermissionsNorJoins() async {
+  /// Demo mode never reaches Barnard and is the App Review path. It must not
+  /// ask for permissions, read the registry, or join.
+  func testDemoModeNeitherRequestsPermissionsNorReadsTheRegistry() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let registry = FakeEventJoinRegistry()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
+    )
     coordinator.useDemoEventMode = true
 
     coordinator.startSensing()
     await settle()
 
-    XCTAssertEqual(
-      engine.requestJoinPermissionsCallCount, 0,
-      "demo mode must not touch the radio path at all"
-    )
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertTrue(registry.requestedEventIdHexes.isEmpty)
     XCTAssertFalse(engine.didJoin)
   }
 
   // MARK: - Leaving
 
-  /// Leaving clears Barnard's event even though selecting never set one there,
-  /// so a session begun by a previous `startSensing` is properly ended.
   func testLeavingClearsTheJoinedEvent() {
     let engine = RecordingEventJoinControl()
     engine.currentEventCode = "ethtokyo2026"
-    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
-    coordinator.useDemoEventMode = false
+    let coordinator = makeGatedCoordinator(engine: engine)
 
     coordinator.leaveEvent()
 

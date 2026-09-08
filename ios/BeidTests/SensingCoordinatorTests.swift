@@ -13,6 +13,7 @@ func makeIsolatedSensingCoordinator(
   reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
   participantRelayControl: (any ParticipantRelayControlling)? = nil,
   eventJoinControl: (any EventJoinControlling)? = nil,
+  eventJoinRegistry: (any EventJoinRegistry)? = nil,
   relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
 ) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
@@ -45,6 +46,7 @@ func makeIsolatedSensingCoordinator(
     sensingCryptography: sensingCryptography,
     reportSubmissionRuntime: reportSubmissionRuntime,
     eventJoinControl: eventJoinControl,
+    eventJoinRegistry: eventJoinRegistry,
     participantRelayControl: participantRelayControl,
     relayCadenceNanoseconds: relayCadenceNanoseconds
   )
