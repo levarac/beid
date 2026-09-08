@@ -151,6 +151,16 @@ class ParallaxEventDefinitionSourceChecksumTest {
             sourcePath = "protocol/vectors/negative/submission-endpoint-profile-v1.json",
         )
         assertResourceMatchesSource(
+            resourcePath = "vectors/positive/open-event-code-v1.json",
+            root = root,
+            sourcePath = "protocol/vectors/positive/open-event-code-v1.json",
+        )
+        assertResourceMatchesSource(
+            resourcePath = "vectors/negative/open-event-code-v1.json",
+            root = root,
+            sourcePath = "protocol/vectors/negative/open-event-code-v1.json",
+        )
+        assertResourceMatchesSource(
             resourcePath = "canonical/event-definition-v1.cddl",
             root = root,
             sourcePath = "protocol/cddl/event-definition-v1.cddl",
@@ -158,23 +168,129 @@ class ParallaxEventDefinitionSourceChecksumTest {
         assertSourceChecksum(
             root = root,
             sourcePath = "protocol/reference/js/src/wire-identifiers.ts",
-            expectedSha256 = "0x78dd66a08c6cac756ee15c15567fc58ca8238b0db9becb46ccf5879837623eb5",
+            expectedSha256 = "0x4a439506c0d88c771182cdc84b13ba2fdcc8bae858fa594f491a805b6e76992b",
         )
     }
 
-    private fun assertResourceMatchesSource(root: File, resourcePath: String, sourcePath: String) {
+    /**
+     * The comparison at the heart of this check must be able to FAIL when the
+     * vendored copy differs, and until beid#403 nothing showed that it could.
+     *
+     * The four checks that existed all inspected the state of the CHECKOUT --
+     * a wrong ref, a missing directory, a non-git directory, a detached HEAD.
+     * Not one of them varied the VENDORED FILE, so the assertion this whole
+     * cross-repo check exists to make had never been observed failing. A
+     * verification that cannot express the error it looks for cannot detect
+     * it, and a re-vendor blessed by such a check is not a verified re-vendor.
+     *
+     * These two run against a throwaway git fixture rather than the real
+     * parallax checkout, so they hold on every machine including CI, where the
+     * real comparison skips entirely for want of a checkout.
+     */
+    @Test
+    fun aVendoredCopyThatDiffersFromTheCheckoutIsDetected() {
+        val root = temporaryFolder.newFolder("upstream that drifted")
+        val ref = commitFixtureSource(
+            root,
+            sourcePath = "protocol/cddl/event-definition-v1.cddl",
+            content = readVectorResource("canonical/event-definition-v1.cddl") + "\n; upstream moved on\n",
+        )
+
+        val failure = assertFailsWith<AssertionError> {
+            assertResourceMatchesSource(
+                root = root,
+                resourcePath = "canonical/event-definition-v1.cddl",
+                sourcePath = "protocol/cddl/event-definition-v1.cddl",
+                ref = ref,
+            )
+        }
+        assertTrue(
+            failure.message.orEmpty().contains("copied resource drifted"),
+            "the failure must name the drift rather than something incidental: ${failure.message}",
+        )
+    }
+
+    /**
+     * The positive control, and it is the half that makes the negative mean
+     * something. Without it, a comparison that threw unconditionally would
+     * satisfy the test above and still be useless.
+     */
+    @Test
+    fun aVendoredCopyThatMatchesTheCheckoutIsAccepted() {
+        val root = temporaryFolder.newFolder("upstream in step")
+        val ref = commitFixtureSource(
+            root,
+            sourcePath = "protocol/cddl/event-definition-v1.cddl",
+            content = readVectorResource("canonical/event-definition-v1.cddl"),
+        )
+
+        assertResourceMatchesSource(
+            root = root,
+            resourcePath = "canonical/event-definition-v1.cddl",
+            sourcePath = "protocol/cddl/event-definition-v1.cddl",
+            ref = ref,
+        )
+    }
+
+    /**
+     * The same question asked of the checksum half: a pinned constant that no
+     * longer matches the checkout must fail. The constants are beid's own
+     * record of what beid last copied, so nothing outside this repository
+     * would notice them going stale.
+     */
+    @Test
+    fun aPinnedChecksumThatNoLongerMatchesTheCheckoutIsDetected() {
+        val root = temporaryFolder.newFolder("upstream with a new identifier")
+        val ref = commitFixtureSource(
+            root,
+            sourcePath = "protocol/reference/js/src/wire-identifiers.ts",
+            content = "export const WIRE = 1\n",
+        )
+
+        assertFailsWith<AssertionError> {
+            assertSourceChecksum(
+                root = root,
+                sourcePath = "protocol/reference/js/src/wire-identifiers.ts",
+                expectedSha256 = "0x" + "00".repeat(32),
+                ref = ref,
+            )
+        }
+    }
+
+    /** Commits one file into a throwaway repository and returns its commit id. */
+    private fun commitFixtureSource(root: File, sourcePath: String, content: String): String {
+        fixtureGit(root, "init", "--initial-branch=main")
+        val file = File(root, sourcePath)
+        file.parentFile.mkdirs()
+        file.writeText(content)
+        fixtureGit(root, "add", sourcePath)
+        fixtureGit(root, "commit", "-m", "vendored fixture")
+        return fixtureGit(root, "rev-parse", "HEAD")
+    }
+
+    private fun assertResourceMatchesSource(
+        root: File,
+        resourcePath: String,
+        sourcePath: String,
+        ref: String = EXPECTED_PARALLAX_REF,
+    ) {
         val copied = readVectorResource(resourcePath).encodeToByteArray()
-        val canonical = readPinnedSource(root, sourcePath, EXPECTED_PARALLAX_REF)
+        val canonical = readPinnedSource(root, sourcePath, ref)
         assertEquals(
             Sha256.digest(canonical).toPrefixedHex(),
             Sha256.digest(copied).toPrefixedHex(),
-            "copied resource drifted from ${root.absolutePath} at $EXPECTED_PARALLAX_REF:$sourcePath",
+            "copied resource drifted from ${root.absolutePath} at $ref:$sourcePath",
         )
     }
 
-    private fun assertSourceChecksum(root: File, sourcePath: String, expectedSha256: String) {
-        val canonical = readPinnedSource(root, sourcePath, EXPECTED_PARALLAX_REF)
+    private fun assertSourceChecksum(
+        root: File,
+        sourcePath: String,
+        expectedSha256: String,
+        ref: String = EXPECTED_PARALLAX_REF,
+    ) {
+        val canonical = readPinnedSource(root, sourcePath, ref)
         assertEquals(expectedSha256, Sha256.digest(canonical).toPrefixedHex(),
-            "${root.absolutePath} at $EXPECTED_PARALLAX_REF:$sourcePath")
+            "${root.absolutePath} at $ref:$sourcePath")
     }
 }
