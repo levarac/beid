@@ -82,6 +82,16 @@ class AndroidDemoScenarioTest {
     }
 
     @Test
+    fun scenarioPreviewsAreDerivedFromTheEnumRatherThanAWrittenOutList() {
+        assertEquals(
+            AndroidDemoScenario.entries,
+            ScenarioProvider().values.toList(),
+            "preview coverage must come from the enum; a hand-written list would still render " +
+                "every preview while silently omitting any scenario added later",
+        )
+    }
+
+    @Test
     fun everyScenarioProducesOnlyReadOnlyScreenModels() {
         AndroidDemoScenario.entries.forEach { scenario ->
             val snapshot = scenario.snapshot()
