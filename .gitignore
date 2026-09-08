@@ -18,3 +18,11 @@ ios/Beid/Secrets.plist
 # xcodemake build-acceleration cache (tool-generated, machine-local)
 ios/Makefile
 ios/xcodemake_*.log
+
+# Python bytecode. Interpreter- and machine-specific build output that churns
+# on every edit and that nothing reads from the repository (beid#399).
+# Note: two .pyc files under scripts/tests/__pycache__ are already tracked on
+# main and stay tracked — an ignore rule does not untrack them, and removing
+# them is an older cleanup that does not belong to this change.
+__pycache__/
+*.pyc
