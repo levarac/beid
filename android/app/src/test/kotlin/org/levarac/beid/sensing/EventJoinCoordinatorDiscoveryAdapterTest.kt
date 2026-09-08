@@ -104,13 +104,11 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
     @Test
     fun joiningTransfersTransportOwnershipAndLeaveResetsCandidatesWithoutStoppingScanOrAdvertise() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
         coordinator.requestBluetoothPermission {}
-        engine.emitHint("p", "Event", EVENT_HASH)
 
-        coordinator.joinEvent("JOIN-CODE")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         coordinator.leaveEvent()
         coordinator.stopNearbyEventDiscovery()
 
@@ -177,11 +175,10 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
     @Test
     fun leaveEventAloneClearsCandidatesWithoutRelyingOnAnExplicitDiscoveryStop() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
         coordinator.requestBluetoothPermission {}
-        engine.emitHint("p", "Event", EVENT_HASH)
-        coordinator.joinEvent("JOIN-CODE")
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         assertEquals(1, coordinator.nearbyEventCandidates.value.candidateCount)
 
         coordinator.leaveEvent()
@@ -211,9 +208,9 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
     @Test
     fun aLiveJoinedSessionBlocksDiscoveryEvenWhenTheEngineReportsNoTransport() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
-        coordinator.joinEvent("JOIN-CODE")
-        runCurrent()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         engine.engineState = EventJoinEngineState(isScanning = false, isAdvertising = false)
 
         coordinator.requestBluetoothPermission {}
@@ -241,11 +238,14 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         assertTrue(engine.engineState.isScanning)
     }
 
-    private fun kotlinx.coroutines.test.TestScope.coordinator(engine: FakeEventJoinEngine): EventJoinCoordinator =
+    private fun kotlinx.coroutines.test.TestScope.coordinator(
+        engine: FakeEventJoinEngine,
+        nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
+    ): EventJoinCoordinator =
         EventJoinCoordinator(
             engine = engine,
-            joinRegistry = FakeEventJoinRegistry(),
-            nowEpochMillis = { testScheduler.currentTime },
+            nearbyRegistry = nearbyRegistry,
+            nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
             coroutineScope = backgroundScope,
             sensingCryptography = FakeSensingCryptography(),
             selfProofRecordStore = SelfProofRecordStore(newTempRecordFile("self-proofs")),

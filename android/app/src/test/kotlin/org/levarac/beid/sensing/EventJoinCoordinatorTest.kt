@@ -47,26 +47,23 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun staleJoinActionCannotReplaceAnActiveProofOrResetItsAccountingAndBinding() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         val proofIds = mutableListOf<UUID>()
         val peerUpdates = mutableListOf<Pair<UUID, Int>>()
         coordinator.onProofCollected = { proofId, _, _ -> proofIds += proofId }
         coordinator.onPeersVerifiedChanged = { proofId, peersVerified -> peerUpdates += proofId to peersVerified }
 
-        coordinator.joinEvent("FIRST-EVENT")
-
-        runCurrent()
-        assertEquals("FIRST-EVENT", engine.getCurrentEventCode(), "an Idle session must still admit the initial join")
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, engine.getCurrentEventCode(), "an Idle session must still admit the initial join")
         assertEquals(1, engine.startAutoCalls)
         confirmRecording(engine)
         val firstProofId = proofIds.single()
         val firstBinding = assertIs<EventBindingState.PendingConnect>(coordinator.bindingState)
 
-        coordinator.joinNearbyEvent("SECOND-EVENT")
+        joinPromotedVectorEvent(coordinator, engine, registry)
 
-        runCurrent()
-
-        assertEquals("FIRST-EVENT", engine.getCurrentEventCode(), "a stale action must not replace the active engine event")
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, engine.getCurrentEventCode(), "a stale action must not replace the active engine event")
         assertEquals(1, engine.startAutoCalls, "a stale action must not restart the engine")
         assertEquals(firstBinding, coordinator.bindingState, "a stale action must not clear the active proof's binding state")
 
@@ -79,18 +76,17 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun onProofCollectedFiresExactlyOnceAtFirstConfirmWithTheCorrectValues() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         val calls = mutableListOf<Triple<UUID, String, Int>>()
         coordinator.onProofCollected = { proofId, eventCode, peersVerified -> calls += Triple(proofId, eventCode, peersVerified) }
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
 
         assertEquals(1, calls.size, "must fire exactly once, at the first confirm into Recording")
         val (proofId, eventCode, peersVerified) = calls.single()
-        assertEquals("HOOK-EVENT", eventCode)
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, eventCode)
         assertEquals(3, peersVerified, "3 distinct devices were observed to reach the confirm threshold")
         assertTrue(calls.all { it.first == proofId }, "sanity: only one call recorded")
     }
@@ -98,13 +94,12 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun onProofCollectedDoesNotRefireOnSubsequentDetectionsWhileAlreadyRecording() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         var callCount = 0
         coordinator.onProofCollected = { _, _, _ -> callCount += 1 }
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
@@ -115,13 +110,12 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun onPeersVerifiedChangedDoesNotFireOnTheInitialConfirm() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         var callCount = 0
         coordinator.onPeersVerifiedChanged = { _, _ -> callCount += 1 }
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
 
         assertEquals(0, callCount, "the confirming detection is onProofCollected's transition, not a peers-verified update")
@@ -130,15 +124,14 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun onPeersVerifiedChangedFiresWhenTheCountChangesWhileAlreadyRecording() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         val proofIds = mutableListOf<UUID>()
         coordinator.onProofCollected = { proofId, _, _ -> proofIds += proofId }
         val calls = mutableListOf<Pair<UUID, Int>>()
         coordinator.onPeersVerifiedChanged = { proofId, peersVerified -> calls += proofId to peersVerified }
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
 
@@ -148,13 +141,12 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun onPeersVerifiedChangedDoesNotFireForARepeatedDeviceThatDoesNotChangeTheCount() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         var callCount = 0
         coordinator.onPeersVerifiedChanged = { _, _ -> callCount += 1 }
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "cc", detectedDisplayId = "device-3")
 
@@ -164,15 +156,14 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun neitherHookFiresBelowTheConfirmThreshold() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         var proofCollectedCalls = 0
         var peersVerifiedChangedCalls = 0
         coordinator.onProofCollected = { _, _, _ -> proofCollectedCalls += 1 }
         coordinator.onPeersVerifiedChanged = { _, _ -> peersVerifiedChangedCalls += 1 }
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         engine.emitDetection(enin = 1, rpid = "aa", detectedDisplayId = "device-1")
 
         assertEquals(0, proofCollectedCalls, "EventFound/Sensing never produced a Proof")
@@ -182,13 +173,12 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun onPeersVerifiedChangedDoesNotFireWhileSignalLost() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         var callCount = 0
         coordinator.onPeersVerifiedChanged = { _, _ -> callCount += 1 }
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.simulateSignalLost()
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
@@ -199,11 +189,10 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun neitherHookCrashesWhenNeverAssigned() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
 
@@ -213,11 +202,11 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun recordingCeremonyShownDefaultsFalseAndFlipsTrueOnceMarked() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
 
         assertFalse(coordinator.recordingCeremonyShown, "a fresh coordinator has never shown the ceremony")
-        coordinator.joinEvent("HOOK-EVENT")
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         assertFalse(coordinator.recordingCeremonyShown, "confirming Recording alone must not mark the ceremony shown — only the UI does, via markRecordingCeremonyShown")
 
@@ -229,11 +218,10 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun recordingCeremonyShownSurvivesASignalLostResumeCycleUnchanged() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
 
-        coordinator.joinEvent("HOOK-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.markRecordingCeremonyShown()
 
@@ -249,18 +237,16 @@ class EventJoinCoordinatorHooksTest {
     @Test
     fun recordingCeremonyShownResetsOnAFreshSessionAfterLeavingTheEvent() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
 
-        coordinator.joinEvent("FIRST-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.markRecordingCeremonyShown()
         assertTrue(coordinator.recordingCeremonyShown)
 
         coordinator.leaveEvent()
-        coordinator.joinEvent("SECOND-EVENT")
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
 
         assertFalse(
             coordinator.recordingCeremonyShown,
@@ -279,10 +265,11 @@ class EventJoinCoordinatorHooksTest {
         cryptography: FakeSensingCryptography,
         selfProofRecordStore: SelfProofRecordStore = SelfProofRecordStore(newTempRecordFile("self-proofs")),
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
+        nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
-        joinRegistry = FakeEventJoinRegistry(),
-        nowEpochMillis = { testScheduler.currentTime },
+        nearbyRegistry = nearbyRegistry,
+        nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,
         selfProofRecordStore = selfProofRecordStore,

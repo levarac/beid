@@ -47,12 +47,11 @@ class EventJoinCoordinatorSelfProofTest {
     @Test
     fun leaveEventProducesASelfProofOnlyAfterRecordingBegan() = runTest {
         val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
         val store = SelfProofRecordStore(newTempRecordFile("self-proofs"))
-        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
+        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store, nearbyRegistry = registry)
 
-        coordinator.joinEvent("SELF-PROOF-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         require(coordinator.state.value is EventJoinUiState.Sensing) { "expected Sensing state" }
 
@@ -60,7 +59,7 @@ class EventJoinCoordinatorSelfProofTest {
 
         val record = store.records.singleOrNull()
         requireNotNull(record) { "expected exactly one self-proof record" }
-        assertEquals("SELF-PROOF-EVENT", record.eventCode)
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, record.eventCode)
         assertTrue(record.eninStart <= record.eninEnd)
         assertTrue(record.eventSigningPublicKeyHex.isNotEmpty())
         assertTrue(record.ownerPublicKeyHex.isNotEmpty())
@@ -71,12 +70,11 @@ class EventJoinCoordinatorSelfProofTest {
     @Test
     fun disposeAfterLeaveEventDoesNotProduceASecondSelfProof() = runTest {
         val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
         val store = SelfProofRecordStore(newTempRecordFile("self-proofs"))
-        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
+        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store, nearbyRegistry = registry)
 
-        coordinator.joinEvent("SELF-PROOF-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.leaveEvent()
         assertEquals(1, store.records.size)
@@ -89,12 +87,11 @@ class EventJoinCoordinatorSelfProofTest {
     @Test
     fun disposeAloneProducesASelfProofWhenLeaveEventWasNeverCalled() = runTest {
         val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
         val store = SelfProofRecordStore(newTempRecordFile("self-proofs"))
-        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
+        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store, nearbyRegistry = registry)
 
-        coordinator.joinEvent("SELF-PROOF-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
 
         coordinator.dispose()
@@ -105,12 +102,11 @@ class EventJoinCoordinatorSelfProofTest {
     @Test
     fun eventFoundWithoutReachingRecordingProducesNoSelfProof() = runTest {
         val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
         val store = SelfProofRecordStore(newTempRecordFile("self-proofs"))
-        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
+        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store, nearbyRegistry = registry)
 
-        coordinator.joinEvent("SELF-PROOF-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         // Only one detection: below defaultEventConfirmThreshold (3), never reaches Recording.
         engine.emitDetection(enin = 1, rpid = "aa", detectedDisplayId = "device-1")
 
@@ -122,13 +118,12 @@ class EventJoinCoordinatorSelfProofTest {
     @Test
     fun onProofSignatureStateChangedFiresFromLeaveEventWithNoPriorBinding() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
         coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
 
-        coordinator.joinEvent("SELF-PROOF-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.leaveEvent()
 
@@ -140,14 +135,13 @@ class EventJoinCoordinatorSelfProofTest {
     @Test
     fun onProofSignatureStateChangedFiresFromLeaveEventWithBindingAlreadyPresent() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
         coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
         val walletAddress = "0x14791697260e4c9a71f18484c9f997b308e59325"
 
-        coordinator.joinEvent("SELF-PROOF-EVENT")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
         coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))
@@ -173,10 +167,11 @@ class EventJoinCoordinatorSelfProofTest {
         cryptography: FakeSensingCryptography,
         selfProofRecordStore: SelfProofRecordStore = SelfProofRecordStore(newTempRecordFile("self-proofs")),
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
+        nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
-        joinRegistry = FakeEventJoinRegistry(),
-        nowEpochMillis = { testScheduler.currentTime },
+        nearbyRegistry = nearbyRegistry,
+        nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,
         selfProofRecordStore = selfProofRecordStore,

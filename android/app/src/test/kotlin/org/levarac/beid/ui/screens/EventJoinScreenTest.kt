@@ -274,7 +274,7 @@ class EventJoinScreenTest {
     }
 
     @Test
-    fun oneVerifiedNearbyCandidateIsSelectedAndJoinsWithItsExactEventId() {
+    fun oneVerifiedNearbyCandidateIsSelectedAndJoinsWithItsStableHash() {
         val eventId = "0x0123456789abcdef"
         val session = FakeEventJoinSession(
             nearbyEventCards = listOf(
@@ -298,7 +298,9 @@ class EventJoinScreenTest {
             assertEquals("1111111111111111", viewModel.uiState.value.selectedNearbyEventHashHex)
         }
         composeTestRule.runOnIdle {
-            assertEquals(eventId, session.joinedDiscoveredEventId)
+            // The card reports its stable hash; the Event ID it rendered is a
+            // projection with no authority over the join (beid#374).
+            assertEquals("1111111111111111", session.joinedNearbyEventCodeHashHex)
         }
     }
 
@@ -320,7 +322,7 @@ class EventJoinScreenTest {
             .assertIsNotSelected()
             .performClick()
         composeTestRule.runOnIdle {
-            assertNull(session.joinedDiscoveredEventId)
+            assertNull(session.joinedNearbyEventCodeHashHex)
             assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)
         }
     }
@@ -357,7 +359,7 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("2222222222222222")).assertDoesNotExist()
         composeTestRule.runOnIdle {
-            assertEquals(firstEventId, session.joinedDiscoveredEventId)
+            assertEquals(firstEventId, session.joinedNearbyEventCodeHashHex)
         }
     }
 

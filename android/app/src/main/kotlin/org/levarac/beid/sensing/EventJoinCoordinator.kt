@@ -656,6 +656,16 @@ class EventJoinCoordinator internal constructor(
      * of re-derived transition AGENTS.md's ownership boundary forbids.
      */
     private fun handleDetection(enin: Long, rpid: String, detectedDisplayId: String?, reporterRpid: String?) {
+        // No joined session, no counting and no phase (beid#374). The radio
+        // keeps delivering detections whether or not this device joined --
+        // discovery scanning runs before any join and continues after a
+        // refused one -- and before this guard existed every one of them ran
+        // the accounting and then published `Sensing`, so a join the gate had
+        // just refused still produced a recording session on screen. The gate
+        // decides whether a session exists; detections only advance one that
+        // already does.
+        if (_state.value !is EventJoinUiState.Sensing) return
+
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
 
         val session = when (val phase = scanPhase) {

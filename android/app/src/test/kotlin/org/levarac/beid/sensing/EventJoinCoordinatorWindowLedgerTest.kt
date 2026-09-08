@@ -4,6 +4,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
@@ -14,49 +15,41 @@ import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.shared.report.createUnsentWindowObservationRecoveryInput
 import org.levarac.beid.shared.report.reconcileUnsentWindowLedgerAfterRelaunch
 
+/**
+ * Window bookkeeping around the join gate (beid#374).
+ *
+ * ## Two tests moved to `shared/`, and what that costs here
+ *
+ * `joiningAnotherEventClosesTheOpenWindowBeforeAcceptingItsDetections` and
+ * `replacementCoordinatorContinuesAndClosesTheSameWindowExactlyOnce` used to
+ * live here and now live in `shared/`'s observation suite. They asserted on
+ * the *signed* observation structure, and that assertion cannot be made in
+ * this module any more.
+ *
+ * The reason is worth stating exactly, because it is not fixture sloppiness.
+ * Their canned signature verified because THE OLD CONTEXT WAS THE CONFORMANCE
+ * VECTOR'S CONTEXT — same window id, event id, definition digest, observer
+ * key, `finalizedAt`, ENIN and participant commitment. The join gate now
+ * sources event identity from barnard's B005 vector instead, so that structure
+ * is UNREACHABLE BY CONSTRUCTION: no arrangement of fixture values is both the
+ * observation vector's context and a promoted candidate. And the window never
+ * closes without a signature that verifies — `signWithCompactSignatureHex`
+ * throws and nothing catches it — so substituting ledger assertions here was
+ * not an option either; they sit downstream of the throw.
+ *
+ * **The residual coverage gap, stated rather than left as an absence:** before
+ * this change, `signatureStructureHex` appeared in exactly two tests in the
+ * whole app test module — those two — and
+ * [WindowObservationAccumulatorTest] never asserted that a context's
+ * `eventIdHex` or definition digest reach the signed structure. After the
+ * move, `shared/` covers accumulator-input to signed-structure, and the shared
+ * issuer suite covers the capability carrying the right digest. What nothing
+ * covers is the step BETWEEN them: [EventJoinCoordinator] building a
+ * [WindowObservationContext] out of the capability. That link is uncovered and
+ * is filed as a follow-up rather than pretended away.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorWindowLedgerTest {
-    @Test
-    fun joiningAnotherEventClosesTheOpenWindowBeforeAcceptingItsDetections() = runTest {
-        val directory = Files.createTempDirectory("window-event-change").toFile()
-        val owner = WindowObservationRuntimeOwner(
-            newWindowId = { java.util.UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },
-            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
-        )
-        val cryptography = vectorCryptography()
-        val firstEngine = FakeEventJoinEngine()
-        val first = coordinator(firstEngine, directory, owner, cryptography)
-        first.joinEvent("event-a")
-        runCurrent()
-        emitRecordingWindow(firstEngine)
-        first.dispose()
-
-        val replacementEngine = FakeEventJoinEngine()
-        val replacement = coordinator(
-            replacementEngine,
-            directory,
-            owner,
-            cryptography,
-            joinRegistry = FakeEventJoinRegistry(
-                eventIdHex = EVENT_B_DISTINCT_CONTEXT.eventIdHex,
-                definitionHashHex = EVENT_B_DISTINCT_CONTEXT.eventDefinitionDigestHex,
-            ),
-        )
-        replacement.joinEvent("event-b")
-        runCurrent()
-        replacementEngine.emitDetection(6_000_000, RPID_THREE, "device-b", REPORTER_RPID)
-        replacement.leaveEvent()
-
-        val sign = cryptography.calls.filterIsInstance<FakeSensingCryptography.Call.SignWindowReport>().single()
-        assertEquals("event-a", sign.eventCode)
-        val signatureStructureHex = sign.bytes.toHexString()
-        assertTrue(EVENT_A_VECTOR_CONTEXT.eventIdHex in signatureStructureHex)
-        assertTrue(EVENT_A_VECTOR_CONTEXT.eventDefinitionDigestHex in signatureStructureHex)
-        assertFalse(EVENT_B_DISTINCT_CONTEXT.eventIdHex in signatureStructureHex)
-        assertFalse(EVENT_B_DISTINCT_CONTEXT.eventDefinitionDigestHex in signatureStructureHex)
-        assertFalse(RPID_THREE in signatureStructureHex, "event-B RPID must not be added to event-A's signed window")
-    }
-
     @Test
     fun disposedCoordinatorCannotReplaceTheReplacementEventContextWithALateCompletion() = runTest {
         val directory = Files.createTempDirectory("window-late-context").toFile()
@@ -66,84 +59,43 @@ class EventJoinCoordinatorWindowLedgerTest {
         )
         val cryptography = vectorCryptography()
         val firstEngine = FakeEventJoinEngine()
-        // event-A's registry read never answers before the coordinator that
-        // asked for it is destroyed, which is the only way its answer can
-        // arrive late enough to collide with a replacement.
-        val firstRegistry = FakeEventJoinRegistry(
-            answer = FakeEventJoinRegistry.Answer.HOLDS,
-            eventIdHex = EVENT_A_CONTEXT.eventIdHex,
-            definitionHashHex = EVENT_A_CONTEXT.eventDefinitionDigestHex,
-        )
+        // The first coordinator's registry read never answers before the
+        // coordinator that asked for it is destroyed, which is the only way its
+        // answer can arrive late enough to collide with a replacement.
+        val firstRegistry = FakeNearbyEventRegistry()
         val first = coordinator(firstEngine, directory, owner, cryptography, firstRegistry)
-        first.joinEvent("event-a")
+        firstEngine.emitVerifiedEnvelopeV2(
+            "peripheral-vector",
+            NearbyEventPromotionFixture.CONTAINER,
+            NearbyEventPromotionFixture.ENIN,
+        )
         runCurrent()
 
         first.dispose()
 
         val replacementEngine = FakeEventJoinEngine()
-        val replacement = coordinator(
-            replacementEngine,
-            directory,
-            owner,
-            cryptography,
-            joinRegistry = FakeEventJoinRegistry(
-                eventIdHex = EVENT_B_CONTEXT.eventIdHex,
-                definitionHashHex = EVENT_B_CONTEXT.eventDefinitionDigestHex,
-            ),
+        val replacementRegistry = FakeNearbyEventRegistry()
+        val replacement = coordinator(replacementEngine, directory, owner, cryptography, replacementRegistry)
+        joinPromotedVectorEvent(replacement, replacementEngine, replacementRegistry, DEFINITION_B, BLOCK_B)
+
+        // The dead coordinator's registry finally answers. Disposal advanced
+        // its callback generation, so the answer is discarded before it can
+        // reach any shared runtime state -- and the proof of that is that no
+        // definition read is ever started for it, which is what makes the
+        // second completion below impossible rather than merely ignored.
+        firstRegistry.completeLookup(NearbyEventIdLookup(true, NearbyEventPromotionFixture.EVENT_ID_HEX, null))
+        runCurrent()
+        assertFailsWith<IllegalArgumentException>(
+            "a disposed coordinator must not carry its lookup answer into a definition read",
+        ) {
+            firstRegistry.completeDefinition(NearbyEventPromotionFixture.definition(DEFINITION_A, BLOCK_A))
+        }
+
+        assertEquals(
+            NearbyEventPromotionFixture.EVENT_ID_HEX,
+            replacement.state.value.let { requireNotNull(replacementEngine.getCurrentEventCode()) },
+            "the replacement's session is untouched by the dead coordinator's late answer",
         )
-        replacement.joinEvent("event-b")
-        runCurrent()
-
-        firstRegistry.completeHeldLookup()
-        runCurrent()
-        firstRegistry.completeHeldDefinition()
-        runCurrent()
-        emitRecordingWindow(replacementEngine)
-        replacement.leaveEvent()
-
-        val contextCalls = cryptography.calls.filterIsInstance<FakeSensingCryptography.Call.EventSigningPublicKey>()
-        assertTrue(contextCalls.isNotEmpty())
-        assertTrue(contextCalls.all { it.eventCode == "event-b" }, "late event-A completion must not select event-A signing identity")
-        val sign = cryptography.calls.filterIsInstance<FakeSensingCryptography.Call.SignWindowReport>().single()
-        assertEquals("event-b", sign.eventCode)
-        val signatureStructureHex = sign.bytes.toHexString()
-        assertTrue(EVENT_B_CONTEXT.eventIdHex in signatureStructureHex)
-        assertTrue(EVENT_B_CONTEXT.eventDefinitionDigestHex in signatureStructureHex)
-        assertFalse(EVENT_A_CONTEXT.eventIdHex in signatureStructureHex)
-        assertFalse(EVENT_A_CONTEXT.eventDefinitionDigestHex in signatureStructureHex)
-    }
-
-    @Test
-    fun replacementCoordinatorContinuesAndClosesTheSameWindowExactlyOnce() = runTest {
-        val directory = Files.createTempDirectory("window-config-replacement").toFile()
-        val ledgerFile = directory.resolve("unsent-window-ledger-v1.snapshot")
-        val owner = WindowObservationRuntimeOwner(
-            newWindowId = { java.util.UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },
-            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
-        )
-        val firstEngine = FakeEventJoinEngine()
-        val first = coordinator(firstEngine, directory, owner)
-        first.joinEvent("event")
-        runCurrent()
-        emitRecordingWindow(firstEngine)
-
-        first.dispose()
-
-        val replacementEngine = FakeEventJoinEngine()
-        val replacement = coordinator(replacementEngine, directory, owner)
-        replacement.joinEvent("event")
-        runCurrent()
-        emitRecordingWindow(replacementEngine)
-        replacement.leaveEvent()
-
-        val loaded = requireNotNull(UnsentWindowLedgerStore(ledgerFile).load())
-        assertEquals(2L, loaded.persistenceRevision, "one logical row has exactly one open and one close transition")
-        assertEquals(1, directory.resolve("canonical-observations-v1").listFiles().orEmpty().size)
-        val relaunchProbe = reconcileUnsentWindowLedgerAfterRelaunch(
-            requireNotNull(loaded.ledger),
-            createUnsentWindowObservationRecoveryInput(),
-        )
-        assertFalse(relaunchProbe.changed, "no orphan open row may remain for later relaunch cleanup")
     }
 
     @Test
@@ -193,11 +145,11 @@ class EventJoinCoordinatorWindowLedgerTest {
         directory: java.io.File,
         owner: WindowObservationRuntimeOwner,
         cryptography: FakeSensingCryptography = vectorCryptography(),
-        joinRegistry: FakeEventJoinRegistry = FakeEventJoinRegistry(),
+        nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
-        joinRegistry = joinRegistry,
-        nowEpochMillis = { 1_800_000_000_000L },
+        nearbyRegistry = nearbyRegistry,
+        nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,
         selfProofRecordStore = SelfProofRecordStore(newTempRecordFile("self-proofs")),
@@ -229,10 +181,10 @@ class EventJoinCoordinatorWindowLedgerTest {
         const val RPID_THREE = "0133333333333333333333333333333333"
         const val SIGNATURE_R = "d9b39668ed2e92db7226461f059a1ecd06a732bd5bfdae0b23d43390a8025349"
         const val SIGNATURE_S = "462b3ecfaa8305881ad1a8b8960e9f3f1e6770683e0c178543613de942c8b765"
-        val EVENT_A_VECTOR_CONTEXT = WindowObservationContext("event-a", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
-        val EVENT_A_CONTEXT = WindowObservationContext("event-a", "31".repeat(32), "32".repeat(32), "ab".repeat(32))
-        val EVENT_B_CONTEXT = WindowObservationContext("event-b", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
-        val EVENT_B_DISTINCT_CONTEXT = WindowObservationContext("event-b", "41".repeat(32), "42".repeat(32), "ab".repeat(32))
+        val DEFINITION_A = "a1".repeat(32)
+        val DEFINITION_B = "b2".repeat(32)
+        val BLOCK_A = "a3".repeat(32)
+        val BLOCK_B = "b4".repeat(32)
     }
 }
 

@@ -10,7 +10,6 @@ import org.levarac.barnard.BarnardPermissionStatus
 import org.levarac.barnard.BarnardRelayDecision
 import org.levarac.barnard.BarnardRelayDecisionEvent
 import org.levarac.barnard.BarnardRelayVerification
-import org.levarac.parallax.registry.EventJoinMode
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
 import kotlin.test.Test
@@ -31,11 +30,10 @@ class EventJoinCoordinatorRelayLifecycleTest {
     @Test
     fun joiningWithFullPermissionConfiguresTheRelay() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
 
-        coordinator.joinEvent("community-night")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
 
         assertNotNull(engine.configuredRelayVerifier)
     }
@@ -45,11 +43,10 @@ class EventJoinCoordinatorRelayLifecycleTest {
         // The fake answers the permission request inline, so the refusal has
         // to be in place before the join asks for it.
         val engine = FakeEventJoinEngine(SCAN_ONLY)
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
 
-        coordinator.joinEvent("community-night")
-
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, registry)
 
         assertNull(
             engine.configuredRelayVerifier,
@@ -60,9 +57,9 @@ class EventJoinCoordinatorRelayLifecycleTest {
     @Test
     fun leavingTheEventClearsTheRelay() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
-        coordinator.joinEvent("community-night")
-        runCurrent()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
 
         coordinator.leaveEvent()
 
@@ -72,9 +69,9 @@ class EventJoinCoordinatorRelayLifecycleTest {
     @Test
     fun endingTheSessionClearsTheRelay() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
-        coordinator.joinEvent("community-night")
-        runCurrent()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
 
         coordinator.dispose()
 
@@ -106,20 +103,12 @@ class EventJoinCoordinatorRelayLifecycleTest {
         val engine = FakeEventJoinEngine()
         val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, registry)
-        coordinator.joinEvent("community-night")
-        runCurrent()
-        val verifier = assertNotNull(engine.configuredRelayVerifier)
 
-        // A verified envelope and a discovery registry answer that agrees with
-        // it. The third thing the gate insists on -- the joined event's
-        // canonical id -- is now established by the join itself (beid#374),
-        // which is why no observation context is fed in by hand here.
-        engine.emitVerifiedEnvelopeV2("peripheral-a", VECTOR_CONTAINER, VECTOR_ENIN)
-        runCurrent()
-        registry.completeLookup(NearbyEventIdLookup(true, VECTOR_EVENT_ID_HEX, null))
-        runCurrent()
-        registry.completeDefinition(vectorDefinition())
-        runCurrent()
+        // The promotion and the join in one: a verified envelope, a registry
+        // answer that agrees with it, and the joined event's canonical id,
+        // which the join itself now establishes (beid#374).
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        val verifier = assertNotNull(engine.configuredRelayVerifier)
 
         assertEquals(
             VECTOR_EVENT_ID_HEX,
@@ -172,9 +161,9 @@ class EventJoinCoordinatorRelayLifecycleTest {
     @Test
     fun theHostRunsTheRelayForwardOnTheDecisionBoundary() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
-        coordinator.joinEvent("community-night")
-        runCurrent()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
 
         val cadence = EventJoinCoordinator.RELAY_DECISION_BOUNDARY_MILLIS
         advanceTimeBy(cadence - 1)
@@ -193,9 +182,9 @@ class EventJoinCoordinatorRelayLifecycleTest {
     @Test
     fun theCadenceStopsWhenTheEventIsLeft() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
-        coordinator.joinEvent("community-night")
-        runCurrent()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         advanceTimeBy(EventJoinCoordinator.RELAY_DECISION_BOUNDARY_MILLIS)
         runCurrent()
 
@@ -239,80 +228,25 @@ class EventJoinCoordinatorRelayLifecycleTest {
             // the envelope carries -- otherwise the verifier would refuse for
             // an unrelated reason and these tests would assert nothing.
             joinRegistry = FakeEventJoinRegistry(eventIdHex = VECTOR_EVENT_ID_HEX),
-            nowEpochMillis = { testScheduler.currentTime },
+            nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
             coroutineScope = backgroundScope,
             sensingCryptography = FakeSensingCryptography(),
             selfProofRecordStore = SelfProofRecordStore(newTempRecordFile("relay-self-proofs")),
             bindingRecordStore = BindingRecordStore(newTempRecordFile("relay-binding-records")),
         )
 
-    private fun vectorDefinition() = NearbyEventDefinitionVerification(
-        isSuccess = true,
-        joinMode = EventJoinMode.OPEN,
-        eventIdHex = VECTOR_EVENT_ID_HEX,
-        eventCodeHashHex = VECTOR_EVENT_CODE_HASH,
-        // The registry publishes Unix seconds; barnard converts them back to
-        // ENINs and requires exact agreement, so these are the vector's own
-        // window expressed the way a registry would carry it.
-        validFromEpochSeconds = VECTOR_VALID_FROM * VECTOR_ENIN_SECONDS,
-        validUntilEpochSeconds = (VECTOR_VALID_THROUGH + 1) * VECTOR_ENIN_SECONDS - 1,
-        keySetDigestHex = VECTOR_KEY_SET_DIGEST,
-    )
-
-    private class FakeNearbyEventRegistry : NearbyEventRegistry {
-        private var lookupCompletion: ((NearbyEventIdLookup) -> Unit)? = null
-        private var definitionCompletion: ((NearbyEventDefinitionVerification) -> Unit)? = null
-
-        override fun resolveEventIdByCodeHash(
-            hashHex: String,
-            completion: (NearbyEventIdLookup) -> Unit,
-        ): NearbyEventRegistryRequest {
-            lookupCompletion = completion
-            return NearbyEventRegistryRequest {}
-        }
-
-        override fun resolveEventDefinition(
-            eventIdHex: String,
-            useTimeEpochSeconds: Long,
-            completion: (NearbyEventDefinitionVerification) -> Unit,
-        ): NearbyEventRegistryRequest {
-            definitionCompletion = completion
-            return NearbyEventRegistryRequest {}
-        }
-
-        fun completeLookup(result: NearbyEventIdLookup) {
-            requireNotNull(lookupCompletion) { "no event-id lookup was started" }(result)
-        }
-
-        fun completeDefinition(result: NearbyEventDefinitionVerification) {
-            requireNotNull(definitionCompletion) { "no definition read was started" }(result)
-        }
-    }
-
     private companion object {
-        /**
-         * barnard's own B005 v2 conformance vector, `v1_*` from
-         * `test-vectors/b005-envelope-v2.txt` at tag v0.8.0: authority-direct
-         * mode, hop zero, genuinely signed. Copied rather than synthesised
-         * because the relay gate only ever sees envelopes barnard verified,
-         * and nothing this repository can fabricate would get that far.
-         */
-        const val VECTOR_CONTAINER_HEX = "03000100011111111111111111111111111111111111111111222222222222222222222222222222222222222233333333333333333333333333333333333333333333333333333333333333330102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f900012c005b8d76005b8d8a005b8d82029adc61d60dda843e3a4261726e6172642052656c617920436f6e666f726d616e6365204576656e742030313233343536373839206162636465666768696a6b6c6d6e6f00f3e5c7db67db1a676b3e488b9f7805bdb0c7078a97cd65a01b2ba8630bc7bb334a594053371a53830a4cac5f57e74cbd1d684ca822859ca5fa510ef28b203b5000"
-        const val VECTOR_ENVELOPE_HEX = "011111111111111111111111111111111111111111222222222222222222222222222222222222222233333333333333333333333333333333333333333333333333333333333333330102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f900012c005b8d76005b8d8a005b8d82029adc61d60dda843e3a4261726e6172642052656c617920436f6e666f726d616e6365204576656e742030313233343536373839206162636465666768696a6b6c6d6e6f00f3e5c7db67db1a676b3e488b9f7805bdb0c7078a97cd65a01b2ba8630bc7bb334a594053371a53830a4cac5f57e74cbd1d684ca822859ca5fa510ef28b203b5000"
-        const val VECTOR_EVENT_ID_HEX =
-            "5d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab3195"
-        const val VECTOR_KEY_SET_DIGEST =
-            "cba59e50c7666ef2468a14f2e53f04decfd078933cd245a9a2d77532eb23b700"
-        const val VECTOR_EVENT_CODE_HASH = "9adc61d60dda843e"
-        const val VECTOR_VALID_FROM = 5_999_990L
-        const val VECTOR_VALID_THROUGH = 6_000_010L
-        const val VECTOR_ENIN_SECONDS = 300L
-
-        /** Inside the vector's signed relay window `[validFrom, relayExpires)`. */
-        const val VECTOR_ENIN = 6_000_000L
-
-        val VECTOR_CONTAINER = VECTOR_CONTAINER_HEX.hexBytes()
-        val VECTOR_ENVELOPE = VECTOR_ENVELOPE_HEX.hexBytes()
+        // Aliases onto NearbyEventPromotionFixture rather than a second copy.
+        // Two files holding the same signed conformance vector, which must
+        // agree byte for byte or nothing promotes, is exactly the drift hazard
+        // this round already found once.
+        const val VECTOR_EVENT_ID_HEX = NearbyEventPromotionFixture.EVENT_ID_HEX
+        const val VECTOR_EVENT_CODE_HASH = NearbyEventPromotionFixture.EVENT_CODE_HASH
+        const val VECTOR_VALID_FROM = NearbyEventPromotionFixture.VALID_FROM_ENIN
+        const val VECTOR_VALID_THROUGH = NearbyEventPromotionFixture.VALID_THROUGH_ENIN
+        const val VECTOR_ENIN = NearbyEventPromotionFixture.ENIN
+        val VECTOR_CONTAINER = NearbyEventPromotionFixture.CONTAINER
+        val VECTOR_ENVELOPE = NearbyEventPromotionFixture.ENVELOPE
 
         fun String.hexBytes(): ByteArray =
             chunked(2).map { it.toInt(16).toByte() }.toByteArray()

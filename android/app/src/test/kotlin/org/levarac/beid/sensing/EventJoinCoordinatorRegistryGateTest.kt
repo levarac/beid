@@ -92,24 +92,14 @@ class EventJoinCoordinatorRegistryGateTest {
         assertEquals(EventJoinUiState.VerifyingRegistry, coordinator.state.value)
     }
 
-    @Test
-    fun joinEventStartsJoinAndSensingOnceTheRegistryVerifiesTheEvent() = runTest {
-        val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeEventJoinRegistry())
-
-        coordinator.joinEvent("VERIFIED-EVENT")
-        runCurrent()
-
-        assertEquals(1, engine.joinEventCalls)
-        assertEquals("VERIFIED-EVENT", engine.getCurrentEventCode())
-        assertEquals(1, engine.startAutoCalls)
-        assertIs<EventJoinUiState.Sensing>(coordinator.state.value)
-        assertEquals(
-            FakeEventJoinRegistry.DEFAULT_EVENT_ID_HEX,
-            coordinator.relayGateJoinedEventIdHexForTesting,
-            "the verified Event ID is what opens the relay gate",
-        )
-    }
+    // DELETED, and deliberately: the code-entry SUCCESS case cannot be
+    // expressed in this module. Its evidence is an EventDefinitionResolution,
+    // whose constructor is internal to shared, so no app-module fake can
+    // produce one -- which is the unforgeability this round is built on rather
+    // than a gap in the fixture. That case is proven in shared by
+    // RegistryVerifiedJoinContextTest's operator-lookup suite. The code-entry
+    // FAILED and PENDING cases remain here, above, because those a fake can
+    // express by answering null or by never answering.
 
     @Test
     fun joinEventStartsNeitherJoinNorSensingWhenNoRegistryIsConfigured() = runTest {
@@ -127,13 +117,42 @@ class EventJoinCoordinatorRegistryGateTest {
         )
     }
 
+    /**
+     * A candidate barnard verified on the radio but that the registry never
+     * confirmed. The strongest refusal on this path, because everything except
+     * the registry's own answer is present.
+     */
     @Test
-    fun joinNearbyEventStartsNeitherJoinNorSensingWhenTheRegistryVerificationFails() = runTest {
+    fun joinNearbyEventStartsNeitherJoinNorSensingForARadioSelfVerifiedCandidate() = runTest {
         val engine = FakeEventJoinEngine()
-        val registry = FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.DEFINITION_FAILS)
-        val coordinator = coordinator(engine, registry)
+        val nearby = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeEventJoinRegistry(), nearby)
+        engine.emitVerifiedEnvelopeV2(
+            "peripheral-vector",
+            NearbyEventPromotionFixture.CONTAINER,
+            NearbyEventPromotionFixture.ENIN,
+        )
+        runCurrent()
 
-        coordinator.joinNearbyEvent(FakeEventJoinRegistry.DEFAULT_EVENT_ID_HEX)
+        coordinator.joinNearbyEvent(NearbyEventPromotionFixture.EVENT_CODE_HASH)
+        runCurrent()
+
+        assertNoJoinAndNoSensing(engine, coordinator)
+        assertEquals(EventJoinUiState.JoinFailed, coordinator.state.value)
+    }
+
+    /**
+     * The nearby path performs no registry read at the tap -- shape (a) issues
+     * from what the promotion already retained -- so there is no pending state
+     * to observe here. What remains representable, and what actually matters,
+     * is that a card with no promoted candidate behind it joins nothing.
+     */
+    @Test
+    fun joinNearbyEventStartsNeitherJoinNorSensingForACandidateThatWasNeverPromoted() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, FakeEventJoinRegistry())
+
+        coordinator.joinNearbyEvent(NearbyEventPromotionFixture.EVENT_CODE_HASH)
         runCurrent()
 
         assertNoJoinAndNoSensing(engine, coordinator)
@@ -141,35 +160,22 @@ class EventJoinCoordinatorRegistryGateTest {
     }
 
     @Test
-    fun joinNearbyEventStartsNeitherJoinNorSensingWhileTheRegistryVerificationIsPending() = runTest {
+    fun joinNearbyEventStartsJoinAndSensingOnceTheCandidateIsRegistryVerified() = runTest {
         val engine = FakeEventJoinEngine()
-        val registry = FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.HOLDS)
-        val coordinator = coordinator(engine, registry)
+        val nearby = FakeNearbyEventRegistry()
+        val joinRegistry = FakeEventJoinRegistry()
+        val coordinator = coordinator(engine, joinRegistry, nearby)
 
-        coordinator.joinNearbyEvent(FakeEventJoinRegistry.DEFAULT_EVENT_ID_HEX)
-        runCurrent()
-
-        assertNoJoinAndNoSensing(engine, coordinator)
-        assertEquals(EventJoinUiState.VerifyingRegistry, coordinator.state.value)
-    }
-
-    @Test
-    fun joinNearbyEventStartsJoinAndSensingOnceTheRegistryVerifiesTheEvent() = runTest {
-        val engine = FakeEventJoinEngine()
-        val registry = FakeEventJoinRegistry()
-        val coordinator = coordinator(engine, registry)
-
-        coordinator.joinNearbyEvent(FakeEventJoinRegistry.DEFAULT_EVENT_ID_HEX)
-        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, nearby)
 
         assertEquals(1, engine.joinEventCalls)
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, engine.getCurrentEventCode())
         assertIs<EventJoinUiState.Sensing>(coordinator.state.value)
         assertEquals(
             0,
-            registry.lookupRequests,
-            "a card already carries the canonical Event ID, so there is nothing to route",
+            joinRegistry.lookupRequests + joinRegistry.definitionRequests,
+            "shape (a) issues from retained promotion evidence and reads the registry again for nothing",
         )
-        assertEquals(1, registry.definitionRequests, "the card's Event ID is still verified here, not inherited")
     }
 
     /**
@@ -227,10 +233,12 @@ class EventJoinCoordinatorRegistryGateTest {
     private fun TestScope.coordinator(
         engine: FakeEventJoinEngine,
         joinRegistry: FakeEventJoinRegistry?,
+        nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
         joinRegistry = joinRegistry,
-        nowEpochMillis = { testScheduler.currentTime },
+        nearbyRegistry = nearbyRegistry,
+        nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = FakeSensingCryptography(),
         selfProofRecordStore = SelfProofRecordStore(newTempRecordFile("gate-self-proofs")),

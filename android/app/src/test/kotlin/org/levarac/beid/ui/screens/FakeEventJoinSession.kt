@@ -19,7 +19,7 @@ internal class FakeEventJoinSession(
 
     var joinedCode: String? = null
         private set
-    var joinedDiscoveredEventId: String? = null
+    var joinedNearbyEventCodeHashHex: String? = null
         private set
     var openedAppSettings: Boolean = false
         private set
@@ -40,8 +40,8 @@ internal class FakeEventJoinSession(
         joinedCode = code
     }
 
-    override fun joinNearbyEvent(eventIdHex: String) {
-        joinedDiscoveredEventId = eventIdHex
+    override fun joinNearbyEvent(eventCodeHashHex: String) {
+        joinedNearbyEventCodeHashHex = eventCodeHashHex
     }
 
     override fun openAppSettings() {
@@ -81,7 +81,7 @@ internal class FakeEventJoinSession(
         mutableNearbyEventCards.value = cards
     }
 
-    fun clearJoinedDiscoveredEvent() {
-        joinedDiscoveredEventId = null
+    fun clearJoinedNearbyEvent() {
+        joinedNearbyEventCodeHashHex = null
     }
 }
