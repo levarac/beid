@@ -204,9 +204,12 @@ partial translations safe.
 This is deliberate, not a placeholder pending emulator infrastructure:
 
 - CI's Android job (`.github/workflows/pr-ci.yml`, see the [PR CI
-  contract](../AGENTS.md#pr-ci)) only runs `:shared:testAndroidHostTest`,
+  contract](../AGENTS.md#pr-ci)) only *runs* `:shared:testAndroidHostTest`,
   `:app:testDebugUnitTest`, and `:app:assembleDebug` on Ubuntu — no emulator,
-  no `connectedAndroidTest` step. An instrumented `androidTest` would not run
+  no `connectedAndroidTest` step. It additionally *compiles* the instrumented
+  source set via `:app:compileDebugAndroidTestKotlin`, which catches
+  `androidTest` code that no longer builds against the main sources, but it
+  never executes those tests. An instrumented `androidTest` would not run
   in CI today without adding emulator infrastructure, which is a call bigger
   than any single feature slice and not something to add incidentally.
 - Robolectric + Compose's JVM `createComposeRule()` gives real Compose
