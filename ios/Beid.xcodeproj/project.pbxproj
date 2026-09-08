@@ -127,6 +127,7 @@
 		D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6660B6477CE489C244F95FED /* ProofCardView.swift */; };
 		D6D222534D0B2F3B27077CA3 /* BindingRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0AA6219B53ABF42EDACF85 /* BindingRecordStore.swift */; };
 		D9C7575BA9CA4B5E9BC83F75 /* VenueDeviceAssignmentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */; };
+		DC040CF25B30C603A232AB3B /* PreviewAggregateFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1D6BBD55B5DDEB2D3476C2 /* PreviewAggregateFactory.swift */; };
 		DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */ = {isa = PBXBuildFile; productRef = 85120383F176FDA459C0D6E8 /* Barnard */; };
 		E374652864E3C6B1275E5DE6 /* SessionAggregateSnapshotPersistHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0B8D5C627A0DB76BAA9A54B /* SessionAggregateSnapshotPersistHookTests.swift */; };
 		E5A517F638D8CCCDD0646D48 /* CachedWalletHint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EEF1F2BB12006126E6A11FF /* CachedWalletHint.swift */; };
@@ -332,6 +333,7 @@
 		FB0AA6219B53ABF42EDACF85 /* BindingRecordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingRecordStore.swift; sourceTree = "<group>"; };
 		FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Illustrations.xcassets; sourceTree = "<group>"; };
 		FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceAssignmentRecord.swift; sourceTree = "<group>"; };
+		FE1D6BBD55B5DDEB2D3476C2 /* PreviewAggregateFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewAggregateFactory.swift; sourceTree = "<group>"; };
 		FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeEntryView.swift; sourceTree = "<group>"; };
 		FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletConnectTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -500,6 +502,7 @@
 				2169FFDF6767C427D481ED17 /* ItemDetailView.swift */,
 				7726C4148C25E9309E34D1A8 /* ParticipationSummaryView.swift */,
 				05E3EC74423D098E4990BF12 /* PastEventsView.swift */,
+				FE1D6BBD55B5DDEB2D3476C2 /* PreviewAggregateFactory.swift */,
 				6660B6477CE489C244F95FED /* ProofCardView.swift */,
 				DBBF900C092346BBFDF6BA96 /* RecordingView.swift */,
 				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
@@ -875,6 +878,7 @@
 				B6781B043B48CC6D1D750F52 /* ParticipantRelayVerifier.swift in Sources */,
 				E8F1697483B2B3DF69D495CA /* ParticipationSummaryView.swift in Sources */,
 				EC72A30AFB5E74B8245D7505 /* PastEventsView.swift in Sources */,
+				DC040CF25B30C603A232AB3B /* PreviewAggregateFactory.swift in Sources */,
 				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
 				ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */,
