@@ -402,8 +402,8 @@ internal class NearbyEventDiscoverySession(
                         NearbyEventCard(
                             beaconDisplayName = candidate.displayNameAt(0),
                             eventIdHex = verified?.eventIdHex,
-                            validFromEpochSeconds = verified?.validFromEpochSeconds,
-                            validUntilEpochSeconds = verified?.validUntilEpochSeconds,
+                            displayValidFromEpochSeconds = verified?.validFromEpochSeconds,
+                            displayValidUntilEpochSeconds = verified?.validUntilEpochSeconds,
                             eventCodeHashHex = candidate.eventCodeHashHex,
                         ),
                     )

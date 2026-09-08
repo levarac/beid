@@ -146,8 +146,8 @@ class EventJoinViewModelTest {
                 NearbyEventCard(
                     beaconDisplayName = "Beacon name",
                     eventIdHex = eventId,
-                    validFromEpochSeconds = 1_700_000_000L,
-                    validUntilEpochSeconds = 1_700_003_600L,
+                    displayValidFromEpochSeconds = 1_700_000_000L,
+                    displayValidUntilEpochSeconds = 1_700_003_600L,
                     eventCodeHashHex = "1111111111111111",
                 ),
             ),

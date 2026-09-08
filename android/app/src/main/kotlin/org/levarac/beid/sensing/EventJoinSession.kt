@@ -10,8 +10,27 @@ import kotlinx.coroutines.flow.StateFlow
 data class NearbyEventCard(
     val beaconDisplayName: String?,
     val eventIdHex: String? = null,
-    val validFromEpochSeconds: Long? = null,
-    val validUntilEpochSeconds: Long? = null,
+    /**
+     * The event's validity window **for rendering only**, and never the
+     * authority for whether this event may be joined (beid#374).
+     *
+     * The join decision reads
+     * [org.levarac.parallax.discovery.NearbyEventCandidate.definitionValidFromEpochSeconds]
+     * — the window the registry promotion retained — and re-checks it at the
+     * moment of the tap. These two are not copies of one value that happen to
+     * be spelled twice: **this one can be absent while the authoritative one
+     * is present**, because it is published only for a candidate the card list
+     * currently considers joinable and is dropped once it lapses. A reader
+     * reaching here for a join check therefore gets `null` and concludes there
+     * is no window, while the real one is sitting on the candidate. A silent
+     * absence reads as a legitimate empty case, which is what makes it worse
+     * than a wrong value.
+     *
+     * Named `display…` so that reaching for it in a decision is visibly wrong
+     * at the call site rather than merely plausible.
+     */
+    val displayValidFromEpochSeconds: Long? = null,
+    val displayValidUntilEpochSeconds: Long? = null,
     /** Stable B005 candidate identity; unlike list position, it survives reordering. */
     val eventCodeHashHex: String,
 )

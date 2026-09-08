@@ -23,8 +23,8 @@ class NearbyEventDiscoverySessionTest {
         assertEquals(EVENT_HASH.toHex(), card.eventCodeHashHex)
         assertEquals("Beacon announcement", card.beaconDisplayName)
         assertNull(card.eventIdHex)
-        assertNull(card.validFromEpochSeconds)
-        assertNull(card.validUntilEpochSeconds)
+        assertNull(card.displayValidFromEpochSeconds)
+        assertNull(card.displayValidUntilEpochSeconds)
     }
 
     @Test
@@ -49,8 +49,8 @@ class NearbyEventDiscoverySessionTest {
 
         val card = session.cards.value.single()
         assertEquals(EVENT_ID_HEX, card.eventIdHex)
-        assertEquals(100L, card.validFromEpochSeconds)
-        assertEquals(200L, card.validUntilEpochSeconds)
+        assertEquals(100L, card.displayValidFromEpochSeconds)
+        assertEquals(200L, card.displayValidUntilEpochSeconds)
     }
 
     @Test

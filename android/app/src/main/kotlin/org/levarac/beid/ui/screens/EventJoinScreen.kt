@@ -298,11 +298,11 @@ private fun NearbyEventCards(
                     style = MaterialTheme.typography.titleMedium,
                     color = BeidTheme.colors.textPrimary,
                 )
-                if (card.validFromEpochSeconds != null && card.validUntilEpochSeconds != null) Text(
+                if (card.displayValidFromEpochSeconds != null && card.displayValidUntilEpochSeconds != null) Text(
                     text = stringResource(
                         R.string.event_join_validity_period,
-                        card.validFromEpochSeconds,
-                        card.validUntilEpochSeconds,
+                        card.displayValidFromEpochSeconds,
+                        card.displayValidUntilEpochSeconds,
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = BeidTheme.colors.textSecondary,

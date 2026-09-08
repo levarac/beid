@@ -102,7 +102,7 @@ class NearbyEventReceiverStateAdapterTest {
 
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
         assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
-        assertEquals(100L, session.cards.value.single().validFromEpochSeconds)
+        assertEquals(100L, session.cards.value.single().displayValidFromEpochSeconds)
     }
 
     /**
@@ -144,7 +144,7 @@ class NearbyEventReceiverStateAdapterTest {
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
         assertEquals(NearbyEventRegistryStatus.UNRESOLVED, candidate.registryStatus)
         assertNull(session.cards.value.single().eventIdHex)
-        assertNull(session.cards.value.single().validUntilEpochSeconds)
+        assertNull(session.cards.value.single().displayValidUntilEpochSeconds)
     }
 
     @Test
