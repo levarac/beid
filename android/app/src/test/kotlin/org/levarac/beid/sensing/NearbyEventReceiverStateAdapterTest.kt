@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class NearbyEventReceiverStateAdapterTest {
     @Test
-    fun hintOnlyCandidateStaysUnverifiedAndKeepsTheExistingJoinGate() = runTest {
+    fun hintOnlyCandidateStaysUnverifiedAndIsNotJoinable() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
@@ -35,7 +35,15 @@ class NearbyEventReceiverStateAdapterTest {
         resolveVerifiedOpenDefinition(registry)
 
         assertEquals(NearbyEventReceiverState.UNVERIFIED, candidate(session).receiverState)
-        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+        assertEquals(
+            NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP,
+            candidate(session).registryStatus,
+            "the registration itself is genuine -- it is the TIER that is not joinable",
+        )
+        assertNull(
+            session.cards.value.single().eventIdHex,
+            "v1.0 nearby join requires REGISTRY_VERIFIED; a successful registry read alone is not it",
+        )
     }
 
     /**
@@ -55,6 +63,34 @@ class NearbyEventReceiverStateAdapterTest {
 
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
         assertNull(session.cards.value.single().eventIdHex)
+    }
+
+    /**
+     * The positive pin of the v1.0 nearby ruling, asked for by name.
+     *
+     * `RADIO_SELF_VERIFIED` plus a genuine `REGISTERED_VIA_OPERATOR_LOOKUP`
+     * registration is the strongest state that is still NOT joinable, and it is
+     * the one the old local rule admitted. Nothing else in this suite pins that
+     * exact combination: the neighbouring tests reach it incidentally while
+     * asserting something else, so a regression that made it joinable again
+     * would not necessarily turn any of them red.
+     */
+    @Test
+    fun radioSelfVerifiedWithAnOperatorLookupRegistrationIsNotJoinable() = runTest {
+        val registry = FakeRegistry()
+        val session = session(registry)
+        session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
+        resolveVerifiedOpenDefinition(registry)
+        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
+
+        val candidate = candidate(session)
+        assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
+        assertEquals(NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP, candidate.registryStatus)
+        assertNull(
+            session.cards.value.single().eventIdHex,
+            "this exact pair rendered as an enabled card before beid#374's review and tapped to JoinFailed",
+        )
+        assertNull(session.cards.value.single().displayValidFromEpochSeconds)
     }
 
     @Test
@@ -96,13 +132,27 @@ class NearbyEventReceiverStateAdapterTest {
         val session = session(registry)
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
         resolveVerifiedOpenDefinition(registry)
-        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+        // Not joinable even here: a hint-only candidate is UNVERIFIED, and the
+        // v1.0 nearby ruling does not admit that tier however well its registry
+        // read went. The registration below is what the forgery must not revoke.
+        assertNull(session.cards.value.single().eventIdHex)
+        assertEquals(
+            NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP,
+            candidate(session).registryStatus,
+        )
 
         session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
 
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
-        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
-        assertEquals(100L, session.cards.value.single().validFromEpochSeconds)
+        assertEquals(
+            NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP,
+            candidate(session).registryStatus,
+            "the forgery must not revoke the genuine registration -- that is this test's point",
+        )
+        assertNull(
+            session.cards.value.single().eventIdHex,
+            "and the tier it forced is still not a joinable one",
+        )
     }
 
     /**
@@ -132,7 +182,10 @@ class NearbyEventReceiverStateAdapterTest {
         runCurrent()
         registry.completeDefinition(verification(validUntilEpochSeconds = 10_000L))
         runCurrent()
-        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+        assertNull(
+            session.cards.value.single().eventIdHex,
+            "a hint-only candidate is not joinable even before its registration lapses",
+        )
 
         // Lands exactly on the TTL boundary without running the wake-up
         // scheduled there, so the re-observation is what expires the old
@@ -144,7 +197,7 @@ class NearbyEventReceiverStateAdapterTest {
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
         assertEquals(NearbyEventRegistryStatus.UNRESOLVED, candidate.registryStatus)
         assertNull(session.cards.value.single().eventIdHex)
-        assertNull(session.cards.value.single().validUntilEpochSeconds)
+        assertNull(session.cards.value.single().displayValidUntilEpochSeconds)
     }
 
     @Test
@@ -250,14 +303,26 @@ class NearbyEventReceiverStateAdapterTest {
         validFromEpochSeconds = 100L,
         validUntilEpochSeconds = validUntilEpochSeconds,
         keySetDigestHex = keySetDigestHex,
+        // beid#374: the promotion retains these, and the join issuer re-checks
+        // them. Without them a genuinely promoted candidate is refused for
+        // incomplete evidence, which is the correct answer and not the one
+        // these fixtures are trying to exercise.
+        definitionHashHex = DEFINITION_HASH_HEX,
+        blockHashHex = BLOCK_HASH_HEX,
     )
 
     private fun candidate(session: NearbyEventDiscoverySession) =
         assertNotNull(session.candidates.value.candidateAt(0))
 
+    /**
+     * The clock sits inside [verification]'s validity window on purpose. The
+     * join issuer re-checks that window at the moment it is asked, so a clock
+     * at zero — `TestScope`'s default — puts every candidate outside its own
+     * definition and refuses it for the wrong reason.
+     */
     private fun kotlinx.coroutines.test.TestScope.session(registry: NearbyEventRegistry) =
         NearbyEventDiscoverySession(
-            nowEpochMillis = { testScheduler.currentTime },
+            nowEpochMillis = { WINDOW_MIDPOINT_EPOCH_MILLIS + testScheduler.currentTime },
             coroutineScope = backgroundScope,
             registry = registry,
         )
@@ -294,6 +359,11 @@ class NearbyEventReceiverStateAdapterTest {
         val EVENT_HASH = eventCodeHashForOpenEventV1(EVENT_ID_BYTES)
         val CONTAINER = byteArrayOf(3, 0, 1, 2)
         val EVENT_ID_HEX = "0x" + EVENT_ID_BYTES.toHex()
+        val DEFINITION_HASH_HEX = "ab".repeat(32)
+        val BLOCK_HASH_HEX = "cd".repeat(32)
+
+        /** Inside `verification()`'s 100..200 second window. */
+        const val WINDOW_MIDPOINT_EPOCH_MILLIS = 150_000L
         val KEY_SET_DIGEST_HEX = "0x" + KEY_SET_DIGEST_BYTES.toHex()
 
         fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }

@@ -23,34 +23,37 @@ class NearbyEventDiscoverySessionTest {
         assertEquals(EVENT_HASH.toHex(), card.eventCodeHashHex)
         assertEquals("Beacon announcement", card.beaconDisplayName)
         assertNull(card.eventIdHex)
-        assertNull(card.validFromEpochSeconds)
-        assertNull(card.validUntilEpochSeconds)
+        assertNull(card.displayValidFromEpochSeconds)
+        assertNull(card.displayValidUntilEpochSeconds)
     }
 
     @Test
     fun verifiedOpenDefinitionPublishesItsExactIdAndPeriod() = runTest {
         val registry = FakeNearbyEventRegistry()
-        val session = session(registry)
-        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        // Inside the definition's 100..200 second window: the join issuer
+        // re-checks that window when it is asked, so a clock at zero would put
+        // this candidate outside its own definition.
+        val session = session(registry, baseEpochMillis = 150_000L)
+        // An agreeing envelope, so the candidate genuinely reaches
+        // REGISTRY_VERIFIED. Under the v1.0 nearby ruling a hint-only candidate
+        // is not a joinable tier however well its registry read went, so
+        // without this the card would correctly publish no id at all.
+        session.recordRadioSelfVerifiedEnvelope(
+            "peripheral",
+            "Beacon announcement",
+            EVENT_HASH,
+            CONTAINER,
+        ) { true }
 
         registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
         runCurrent()
-        registry.completeDefinition(
-            NearbyEventDefinitionVerification(
-                isSuccess = true,
-                joinMode = EventJoinMode.OPEN,
-                eventIdHex = EVENT_ID_HEX,
-                eventCodeHashHex = EVENT_HASH.toHex(),
-                validFromEpochSeconds = 100L,
-                validUntilEpochSeconds = 200L,
-            ),
-        )
+        registry.completeDefinition(eligibleDefinition())
         runCurrent()
 
         val card = session.cards.value.single()
         assertEquals(EVENT_ID_HEX, card.eventIdHex)
-        assertEquals(100L, card.validFromEpochSeconds)
-        assertEquals(200L, card.validUntilEpochSeconds)
+        assertEquals(100L, card.displayValidFromEpochSeconds)
+        assertEquals(200L, card.displayValidUntilEpochSeconds)
     }
 
     @Test
@@ -103,12 +106,15 @@ class NearbyEventDiscoverySessionTest {
     fun verifiedCardExpiresAtDefinitionValidUntilEvenWhileBeaconHintsContinue() = runTest {
         val registry = FakeNearbyEventRegistry()
         val session = session(registry)
-        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        session.recordRadioSelfVerifiedEnvelope(
+            "peripheral",
+            "Beacon announcement",
+            EVENT_HASH,
+            CONTAINER,
+        ) { true }
         registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
         runCurrent()
-        registry.completeDefinition(
-            NearbyEventDefinitionVerification(true, EventJoinMode.OPEN, EVENT_ID_HEX, EVENT_HASH.toHex(), 0L, 1L),
-        )
+        registry.completeDefinition(eligibleDefinition(validFrom = 0L, validUntil = 1L))
         runCurrent()
         assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
 
@@ -129,9 +135,12 @@ class NearbyEventDiscoverySessionTest {
         assertNull(session.cards.value.single().eventIdHex)
     }
 
-    private fun kotlinx.coroutines.test.TestScope.session(registry: NearbyEventRegistry): NearbyEventDiscoverySession =
+    private fun kotlinx.coroutines.test.TestScope.session(
+        registry: NearbyEventRegistry,
+        baseEpochMillis: Long = 0L,
+    ): NearbyEventDiscoverySession =
         NearbyEventDiscoverySession(
-            nowEpochMillis = { testScheduler.currentTime },
+            nowEpochMillis = { baseEpochMillis + testScheduler.currentTime },
             coroutineScope = backgroundScope,
             registry = registry,
         )
@@ -162,8 +171,28 @@ class NearbyEventDiscoverySessionTest {
         fun completeDefinition(result: NearbyEventDefinitionVerification) = definitionCompletion(result)
     }
 
+    /** A definition an eligible candidate can actually be built from (beid#374). */
+    private fun eligibleDefinition(
+        validFrom: Long = 100L,
+        validUntil: Long = 200L,
+    ) = NearbyEventDefinitionVerification(
+        isSuccess = true,
+        joinMode = EventJoinMode.OPEN,
+        eventIdHex = EVENT_ID_HEX,
+        eventCodeHashHex = EVENT_HASH.toHex(),
+        validFromEpochSeconds = validFrom,
+        validUntilEpochSeconds = validUntil,
+        keySetDigestHex = KEY_SET_DIGEST_HEX,
+        definitionHashHex = DEFINITION_HASH_HEX,
+        blockHashHex = BLOCK_HASH_HEX,
+    )
+
     companion object {
         val EVENT_ID_BYTES = ByteArray(32) { (it + 1).toByte() }
+        val KEY_SET_DIGEST_HEX = "0x" + ByteArray(32) { (it + 100).toByte() }.toHex()
+        val DEFINITION_HASH_HEX = "ab".repeat(32)
+        val BLOCK_HASH_HEX = "cd".repeat(32)
+        val CONTAINER = byteArrayOf(3, 0, 1, 2)
         val EVENT_HASH = eventCodeHashForOpenEventV1(EVENT_ID_BYTES)
         val EVENT_ID_HEX = "0x" + EVENT_ID_BYTES.toHex()
 

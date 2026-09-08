@@ -3,6 +3,7 @@ package org.levarac.beid.sensing
 import java.util.UUID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
@@ -40,8 +41,9 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun beginBindingReturnsHexPrefixedTextAndMovesToConnecting() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
-        coordinator.joinEvent("BIND-EVENT")
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
 
         val messageHex = coordinator.beginBinding(walletAddress, chainId = 1)
@@ -54,8 +56,9 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun beginBindingReusesThePendingMessageAcrossCalls() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
-        coordinator.joinEvent("BIND-EVENT")
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
 
         val first = coordinator.beginBinding(walletAddress, chainId = 1)
@@ -76,8 +79,9 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun markBindingAwaitingApprovalMovesFromConnecting() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
-        coordinator.joinEvent("BIND-EVENT")
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -96,16 +100,17 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun completeBindingProducesAndPersistsABindingRecordAndMovesToBound() = runTest {
         val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
         val store = BindingRecordStore(newTempRecordFile("binding-records"))
-        val coordinator = coordinator(engine, FakeSensingCryptography(), bindingRecordStore = store)
-        coordinator.joinEvent("BIND-EVENT")
+        val coordinator = coordinator(engine, FakeSensingCryptography(), bindingRecordStore = store, nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
         val record = coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))
 
         assertNotNull(record)
-        assertEquals("BIND-EVENT", record.eventCode)
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, record.eventCode)
         assertEquals(walletAddress, record.walletAddress)
         assertEquals(listOf(record), store.records)
         assertEquals(EventBindingState.Bound(record), coordinator.bindingState)
@@ -114,10 +119,11 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun completeBindingFiresOnProofSignatureStateChangedWithNoPriorSelfProof() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
         coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
-        coordinator.joinEvent("BIND-EVENT")
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -131,11 +137,12 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun completeBindingFiresOnProofSignatureStateChangedWithSelfProofAlreadyPresent() = runTest {
         val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
         val selfProofStore = SelfProofRecordStore(newTempRecordFile("self-proofs"))
-        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = selfProofStore)
+        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = selfProofStore, nearbyRegistry = registry)
         val proofIds = mutableListOf<UUID>()
         coordinator.onProofCollected = { proofId, _, _ -> proofIds += proofId }
-        coordinator.joinEvent("BIND-EVENT")
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         val proofId = proofIds.single()
         selfProofStore.add(
@@ -164,8 +171,9 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun failBindingClearsThePendingMessageAndRecordsTheReason() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
-        coordinator.joinEvent("BIND-EVENT")
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -178,8 +186,9 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun declineBindingReturnsToPendingConnectWhileStillRecording() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
-        coordinator.joinEvent("BIND-EVENT")
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -191,8 +200,9 @@ class EventJoinCoordinatorBindingTest {
     @Test
     fun leaveEventResetsBindingStateEvenMidAttempt() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine, FakeSensingCryptography())
-        coordinator.joinEvent("BIND-EVENT")
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -212,9 +222,11 @@ class EventJoinCoordinatorBindingTest {
         cryptography: FakeSensingCryptography,
         selfProofRecordStore: SelfProofRecordStore = SelfProofRecordStore(newTempRecordFile("self-proofs")),
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
+        nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
-        nowEpochMillis = { testScheduler.currentTime },
+        nearbyRegistry = nearbyRegistry,
+        nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,
         selfProofRecordStore = selfProofRecordStore,

@@ -3,6 +3,7 @@ package org.levarac.beid
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,6 +14,9 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.sensing.FakeEventJoinEngine
+import org.levarac.beid.sensing.FakeNearbyEventRegistry
+import org.levarac.beid.sensing.NearbyEventPromotionFixture
+import org.levarac.beid.sensing.joinPromotedVectorEvent
 import org.levarac.beid.sensing.FakeSensingCryptography
 import org.levarac.beid.sensing.ProofRecordingBridge
 import org.levarac.beid.sensing.newTempRecordFile
@@ -49,7 +53,8 @@ class MainActivityWiringTest {
     @Test
     fun wiringConnectsAllThreeCallbackPropertiesToTheStore() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, nearbyRegistry = registry)
         val proofRecordStore = ProofRecordStore(tempProofRecordFile())
         val bridge = ProofRecordingBridge(proofRecordStore)
 
@@ -63,7 +68,8 @@ class MainActivityWiringTest {
     @Test
     fun onProofCollectedInvocationReachesTheStore() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, nearbyRegistry = registry)
         val proofRecordStore = ProofRecordStore(tempProofRecordFile())
         val bridge = ProofRecordingBridge(proofRecordStore)
         wireProofRecording(coordinator, bridge)
@@ -71,23 +77,24 @@ class MainActivityWiringTest {
         // A real EventJoinCoordinator session, not a direct bridge call --
         // this is what distinguishes "the wiring works" from "the bridge
         // works" (already proven by ProofRecordingBridgeTest on its own).
-        coordinator.joinEvent("WIRING-TEST-EVENT")
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
 
         assertEquals(1, proofRecordStore.records.size, "onProofCollected must have reached the store via the wiring")
         val record = proofRecordStore.records.single()
-        assertEquals("WIRING-TEST-EVENT", record.eventCode)
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, record.eventCode)
         assertTrue(record.peersVerified > 0)
     }
 
     @Test
     fun onPeersVerifiedChangedInvocationReachesTheStore() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, nearbyRegistry = registry)
         val proofRecordStore = ProofRecordStore(tempProofRecordFile())
         val bridge = ProofRecordingBridge(proofRecordStore)
         wireProofRecording(coordinator, bridge)
-        coordinator.joinEvent("WIRING-TEST-EVENT")
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         val initialCount = proofRecordStore.records.single().peersVerified
 
@@ -100,11 +107,12 @@ class MainActivityWiringTest {
     @Test
     fun onProofSignatureStateChangedInvocationReachesTheStore() = runTest {
         val engine = FakeEventJoinEngine()
-        val coordinator = coordinator(engine)
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, nearbyRegistry = registry)
         val proofRecordStore = ProofRecordStore(tempProofRecordFile())
         val bridge = ProofRecordingBridge(proofRecordStore)
         wireProofRecording(coordinator, bridge)
-        coordinator.joinEvent("WIRING-TEST-EVENT")
+        joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
 
         coordinator.leaveEvent() // finalizeSelfProofIfNeeded() fires onProofSignatureStateChanged
@@ -125,9 +133,11 @@ class MainActivityWiringTest {
         engine: FakeEventJoinEngine,
         selfProofRecordStore: SelfProofRecordStore = SelfProofRecordStore(newTempRecordFile("self-proofs")),
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
+        nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
-        nowEpochMillis = { testScheduler.currentTime },
+        nearbyRegistry = nearbyRegistry,
+        nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = FakeSensingCryptography(),
         selfProofRecordStore = selfProofRecordStore,

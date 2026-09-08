@@ -6,6 +6,7 @@ import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.barnard.BarnardRelayVerifier
+import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
 
 internal data class EventJoinEngineState(
     val isScanning: Boolean,
@@ -27,9 +28,24 @@ internal interface EventJoinEngine {
 
     fun stopScan()
 
-    fun joinEvent(code: String)
-
-    fun startAuto()
+    /**
+     * Joins the verified event and starts automatic operation, as one act
+     * (beid#374).
+     *
+     * There is deliberately no `joinEvent(String)` and no argumentless
+     * `startAuto()` on this interface any more. Barnard's string join API
+     * still exists and is still what gets called, but the conversion from a
+     * capability to that string happens inside the production adapter below,
+     * where it cannot be reached with a string that did not come from a
+     * registry-verified context. A coordinator holding only an event code has
+     * no method to call, and that is a compile error rather than a review
+     * comment.
+     *
+     * The two were merged rather than kept as an ordered pair because a pair
+     * can be half-called: a host that joined and then returned early would
+     * leave barnard joined to an event this app is not sensing for.
+     */
+    fun joinAndStart(context: RegistryVerifiedJoinContext)
 
     fun leaveEvent()
 
@@ -92,11 +108,15 @@ internal class BarnardEventJoinEngine(activity: Activity) : EventJoinEngine {
         engine.stopScan()
     }
 
-    override fun joinEvent(code: String) {
-        engine.joinEvent(code)
-    }
-
-    override fun startAuto() {
+    /**
+     * The only place in this app where an event code reaches barnard's string
+     * join API. The string is not chosen here — it is
+     * [RegistryVerifiedJoinContext.joinCode], fixed by the shared issuer when
+     * the capability was granted, so this adapter cannot pair a verified event
+     * with any other text.
+     */
+    override fun joinAndStart(context: RegistryVerifiedJoinContext) {
+        engine.joinEvent(context.joinCode)
         engine.startAuto()
     }
 

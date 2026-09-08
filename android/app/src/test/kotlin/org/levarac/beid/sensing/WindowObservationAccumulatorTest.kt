@@ -8,6 +8,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertFailsWith
 import org.levarac.beid.shared.report.confirmUnsentWindowLedgerPersistence
 import org.levarac.beid.shared.report.createUnsentWindowLedger
@@ -40,6 +41,60 @@ class WindowObservationAccumulatorTest {
         assertEquals(3L, loaded.persistenceRevision)
         val observation = directory.resolve("observations").listFiles().orEmpty().single()
         assertNotNull(restoreStoredObservation(observation.readBytes().toHex()))
+    }
+
+    /**
+     * Joining a second event CLOSES the first event's open window, and it is
+     * `beginEvent`'s two-line guard that does it
+     * ([WindowObservationAccumulator] `beginEvent`: close when the incoming
+     * event code differs from the active one).
+     *
+     * This existed only inside a coordinator-level test that beid#374 had to
+     * remove, and its loss was invisible: deleting that guard so `beginEvent`
+     * merely assigns `activeEventCode` left all 327 app tests passing. What
+     * ships in that state is the one-device-one-event violation the relay
+     * fence exists for -- a user joins event A, records a window, joins event
+     * B on the same device, and event B's detections accumulate into event
+     * A's still-open window, get signed into event A's observation and are
+     * written durably under A's identity.
+     *
+     * Asserted here rather than through the nearby join path on purpose. The
+     * property is about the accumulator, not about how an event was joined,
+     * and the nearby path cannot express it at all: with a single conformance
+     * vector both joins share one Event ID, so there is no second event to
+     * change to.
+     */
+    @Test
+    fun beginningASecondEventClosesTheFirstEventsOpenWindow() {
+        val directory = Files.createTempDirectory("window-event-change-guard").toFile()
+        val ledgerFile = directory.resolve("ledger.snapshot")
+        val crypto = VectorCryptography()
+        val accumulator = WindowObservationAccumulator(
+            context = { VECTOR_CONTEXT },
+            cryptography = crypto,
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            observationDirectory = directory.resolve("observations"),
+            nowEpochSeconds = { 1_800_000_000.75 },
+            newWindowId = sequenceIds(),
+            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
+        )
+        accumulator.observe(6_000_000, RPID_TWO, REPORTER_RPID, recording = false)
+        accumulator.observe(6_000_000, RPID_ONE, REPORTER_RPID, recording = true)
+        assertNull(crypto.signedBytes, "nothing may be signed while the window is still open")
+
+        accumulator.beginEvent("a-second-event")
+
+        assertContentEquals(
+            EXPECTED_SIGNATURE_STRUCTURE.hexBytes(),
+            crypto.signedBytes,
+            "beginning a second event must close and sign the first event's window",
+        )
+        val loaded = assertNotNull(UnsentWindowLedgerStore(ledgerFile).load())
+        assertEquals(2L, loaded.persistenceRevision, "one open and one close for the first event")
+        assertNotNull(
+            directory.resolve("observations").listFiles().orEmpty().singleOrNull(),
+            "the first event's observation must be durable before the second event begins",
+        )
     }
 
     @Test

@@ -32,6 +32,7 @@
     <string name="event_join_button">Join event</string>
     <string name="event_join_status_idle">Enter the event code shared by the organizer.</string>
     <string name="event_join_status_requesting_permission">Requesting Bluetooth permission…</string>
+    <string name="event_join_status_verifying_registry">Checking the event registration…</string>
     <string name="event_join_status_sensing">Sensing for nearby peers…</string>
     <string name="event_join_status_permission_denied">beid needs Bluetooth permission to sense nearby peers. Open Settings to grant it.</string>
     <string name="event_join_open_settings">Open Settings</string>

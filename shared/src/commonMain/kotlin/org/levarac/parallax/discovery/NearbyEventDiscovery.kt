@@ -109,6 +109,18 @@ public class NearbyEventCandidate internal constructor(
     public val registryStatus: NearbyEventRegistryStatus,
     public val resolvedEventIdHex: String?,
     public val receiverState: NearbyEventReceiverState,
+    /**
+     * The Event Definition digest this candidate's registration was
+     * established against, or null when no resolution has matched for it
+     * (beid#374). See [RegistryRecord.definitionHashHex] for why an Event ID
+     * alone is not enough for a join to stand on.
+     */
+    public val verifiedDefinitionHashHex: String?,
+    /** The pinned registry block behind [verifiedDefinitionHashHex]. */
+    public val registryBlockHashHex: String?,
+    /** The verified definition's validity window, re-checked when a join is issued. */
+    public val definitionValidFromEpochSeconds: Long?,
+    public val definitionValidUntilEpochSeconds: Long?,
     rawEnvelopeContainer: ByteArray?,
 ) {
     private val eventCodeHashBytes: ByteArray = eventCodeHash.copyOf()
@@ -239,6 +251,31 @@ internal data class RegistryRecord(
     var status: NearbyEventRegistryStatus = NearbyEventRegistryStatus.UNRESOLVED,
     var eventIdHex: String? = null,
     var attempt: NearbyEventRegistryResolutionAttempt? = null,
+    /**
+     * The Event Definition digest and pinned block this hash's registration
+     * was established against (beid#374).
+     *
+     * Retained because a later join has to prove it is joining *the same*
+     * definition that promoted this candidate, and an Event ID alone cannot
+     * prove that: the same ID can be read again later against a different
+     * definition or a different block. Both are set only when the resolution
+     * actually matched, and both are cleared with the rest of the record, so
+     * a failed retry cannot leave a stale digest standing behind an
+     * unresolved status.
+     */
+    var definitionHashHex: String? = null,
+    var registryBlockHashHex: String? = null,
+    /**
+     * The definition's validity window as the registration established it.
+     *
+     * Retained alongside the digest because the join issuer re-checks the
+     * window *at issue time*, not at promotion time. Retained evidence
+     * establishes what was verified; the re-check establishes that it is still
+     * true. Without the window on the candidate, a promotion made hours ago
+     * could still issue a join for a definition that has since expired.
+     */
+    var definitionValidFromEpochSeconds: Long? = null,
+    var definitionValidUntilEpochSeconds: Long? = null,
 )
 
 /**
@@ -654,6 +691,21 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     verifiedDefinitionEventIdHex: String?,
     verifiedDefinitionEventCodeHashHex: String?,
     envelopeAgreesWithRegistry: Boolean,
+    /**
+     * The digest of the definition this read verified, and the block it was
+     * pinned to (beid#374). Both default to null so an existing caller keeps
+     * compiling, and a null one simply issues no join capability later —
+     * failing closed, never open.
+     */
+    verifiedDefinitionHashHex: String? = null,
+    registryBlockHashHex: String? = null,
+    /**
+     * The verified definition's validity window, retained so the join issuer
+     * can re-check it at issue time rather than trusting that a promotion made
+     * earlier is still current.
+     */
+    verifiedDefinitionValidFromEpochSeconds: Long? = null,
+    verifiedDefinitionValidUntilEpochSeconds: Long? = null,
 ): NearbyEventDiscoveryUpdate {
     val hash = attempt.eventHash
     val record = store.registry[hash]
@@ -688,6 +740,14 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     if (record.status == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP && record.eventIdHex == null) {
         record.status = NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE
     }
+    // Retained only for a registration that actually stands. Anything else
+    // clears them, so a later join can never read a digest left behind by a
+    // resolution that was subsequently downgraded.
+    val registrationStands = record.status == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
+    record.definitionHashHex = verifiedDefinitionHashHex.takeIf { registrationStands }
+    record.registryBlockHashHex = registryBlockHashHex.takeIf { registrationStands }
+    record.definitionValidFromEpochSeconds = verifiedDefinitionValidFromEpochSeconds.takeIf { registrationStands }
+    record.definitionValidUntilEpochSeconds = verifiedDefinitionValidUntilEpochSeconds.takeIf { registrationStands }
     // Runs after `record.status` is final, and is a no-op unless a
     // radio-self-verified envelope for this same hash is already on record.
     store.promoteToRegistryVerified(hash, envelopeAgreesWithRegistry)
@@ -870,6 +930,10 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
                 registryStatus = registry[eventHash]?.status ?: NearbyEventRegistryStatus.UNRESOLVED,
                 resolvedEventIdHex = registry[eventHash]?.eventIdHex,
                 receiverState = receiverStates[eventHash] ?: NearbyEventReceiverState.UNVERIFIED,
+                verifiedDefinitionHashHex = registry[eventHash]?.definitionHashHex,
+                registryBlockHashHex = registry[eventHash]?.registryBlockHashHex,
+                definitionValidFromEpochSeconds = registry[eventHash]?.definitionValidFromEpochSeconds,
+                definitionValidUntilEpochSeconds = registry[eventHash]?.definitionValidUntilEpochSeconds,
                 rawEnvelopeContainer = rawEnvelopeContainers[eventHash],
             )
         }

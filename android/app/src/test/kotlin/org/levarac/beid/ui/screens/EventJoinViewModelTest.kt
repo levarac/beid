@@ -139,15 +139,15 @@ class EventJoinViewModelTest {
     }
 
     @Test
-    fun joiningThePreselectedVerifiedOpenCardPassesItsExactEventIdToTheSession() = runTest {
+    fun joiningThePreselectedVerifiedOpenCardPassesItsStableHashToTheSession() = runTest {
         val eventId = "0x0123456789abcdef"
         val session = FakeEventJoinSession(
             nearbyEventCards = listOf(
                 NearbyEventCard(
                     beaconDisplayName = "Beacon name",
                     eventIdHex = eventId,
-                    validFromEpochSeconds = 1_700_000_000L,
-                    validUntilEpochSeconds = 1_700_003_600L,
+                    displayValidFromEpochSeconds = 1_700_000_000L,
+                    displayValidUntilEpochSeconds = 1_700_003_600L,
                     eventCodeHashHex = "1111111111111111",
                 ),
             ),
@@ -157,7 +157,9 @@ class EventJoinViewModelTest {
 
         viewModel.joinNearbyEvent("1111111111111111")
 
-        assertEquals(eventId, session.joinedDiscoveredEventId)
+        // The stable candidate hash, not the rendered Event ID: the session
+        // re-reads the candidate itself at the moment of the tap (beid#374).
+        assertEquals("1111111111111111", session.joinedNearbyEventCodeHashHex)
     }
 
     @Test
@@ -173,15 +175,15 @@ class EventJoinViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         viewModel.joinNearbyEvent(selected.eventCodeHashHex)
 
-        assertEquals("0x02", session.joinedDiscoveredEventId)
+        assertEquals(selected.eventCodeHashHex, session.joinedNearbyEventCodeHashHex)
         assertEquals(selected.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
 
-        session.clearJoinedDiscoveredEvent()
+        session.clearJoinedNearbyEvent()
         session.emitNearbyEventCards(listOf(inserted, first))
         testDispatcher.scheduler.advanceUntilIdle()
         viewModel.joinNearbyEvent(selected.eventCodeHashHex)
 
-        assertNull(session.joinedDiscoveredEventId, "an expired selection must not retarget another card")
+        assertNull(session.joinedNearbyEventCodeHashHex, "an expired selection must not retarget another card")
         assertNull(viewModel.uiState.value.selectedNearbyEventHashHex)
     }
 

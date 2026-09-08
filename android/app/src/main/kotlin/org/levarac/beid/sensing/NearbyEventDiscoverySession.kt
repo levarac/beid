@@ -9,9 +9,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.levarac.barnard.BarnardEventDefinitionV1
 import org.levarac.parallax.discovery.NearbyEventCandidates
-import org.levarac.parallax.discovery.NearbyEventReceiverState
+import org.levarac.parallax.discovery.NearbyEventJoinEligibility
 import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.discovery.createNearbyEventDiscoveryStore
+import org.levarac.parallax.discovery.nearbyCandidateJoinEligibility
 import org.levarac.parallax.discovery.recordNearbyEventHint
 import org.levarac.parallax.discovery.recordNearbyEventRadioSelfVerifiedEnvelope
 import org.levarac.parallax.discovery.recordNearbyEventUnverifiedEnvelope
@@ -43,6 +44,14 @@ internal data class NearbyEventDefinitionVerification(
     val validFromEpochSeconds: Long?,
     val validUntilEpochSeconds: Long?,
     val keySetDigestHex: String? = null,
+    /**
+     * The verified Event Definition's digest and the pinned registry block it
+     * was read at (beid#374). Discovery itself does not read either one; they
+     * are retained on the candidate so a later join can prove it is joining
+     * the same definition that promoted it.
+     */
+    val definitionHashHex: String? = null,
+    val blockHashHex: String? = null,
 )
 
 /** Native effect seam; the shared reducer below remains the trust authority. */
@@ -91,6 +100,8 @@ internal class RegistryClientNearbyEventRegistry(
                     validFromEpochSeconds = it.context?.validFrom?.value,
                     validUntilEpochSeconds = it.context?.validUntil?.value,
                     keySetDigestHex = it.context?.definition?.keySetDigestHex,
+                    definitionHashHex = it.definitionHashHex,
+                    blockHashHex = it.blockHashHex,
                 ),
             )
         }
@@ -310,6 +321,13 @@ internal class NearbyEventDiscoverySession(
                                     verifiedDefinitionEventIdHex = verified.eventIdHex,
                                     verifiedDefinitionEventCodeHashHex = verified.eventCodeHashHex,
                                     envelopeAgreesWithRegistry = agrees,
+                                    // Retained so a later join can prove it is
+                                    // joining the definition that promoted this
+                                    // candidate, not merely the same event id.
+                                    verifiedDefinitionHashHex = verified.definitionHashHex,
+                                    registryBlockHashHex = verified.blockHashHex,
+                                    verifiedDefinitionValidFromEpochSeconds = verified.validFromEpochSeconds,
+                                    verifiedDefinitionValidUntilEpochSeconds = verified.validUntilEpochSeconds,
                                 )
                             updateVerifiedCard(
                                 hash,
@@ -348,45 +366,34 @@ internal class NearbyEventDiscoverySession(
         _cards.value = buildList {
             repeat(snapshot.candidateCount) { index ->
                 snapshot.candidateAt(index)?.let { candidate ->
-                    // The gate is evaluated here, not only on the resolution
-                    // path: a candidate can change tier *after* its registry
-                    // read already published verified metadata, and that
-                    // metadata would otherwise keep the card joinable at a
-                    // tier that must not be joinable.
+                    // Joinability is the SHARED gate's answer, not a rule
+                    // restated here (beid#374 review). This projection used to
+                    // decide it locally, and the local rule admitted two tiers
+                    // the issuer refuses -- a v1-hint-only candidate whose
+                    // registry read succeeded, and a RADIO_SELF_VERIFIED
+                    // candidate carrying an operator-lookup registration, which
+                    // is the forged-envelope case. Both rendered as enabled
+                    // cards that tapped straight through to JoinFailed.
                     //
-                    // Exhaustive on purpose, with no `else`: a fourth receiver
-                    // state must not silently inherit either answer.
-                    val joinable = when (candidate.receiverState) {
-                        // Never observed a v2 envelope, so the pre-existing v1
-                        // gate is the only one that can apply.
-                        NearbyEventReceiverState.UNVERIFIED -> true
-                        // This host's own registry read agreed with the
-                        // envelope. The strongest tier there is.
-                        NearbyEventReceiverState.REGISTRY_VERIFIED -> true
-                        // A verified-but-unregistered envelope withdraws join
-                        // only from a candidate that had nothing else to stand
-                        // on. Spec 122 step 7 binds the event-code hash to the
-                        // event ID for OPEN events only, so an attacker can
-                        // forge a self-consistent envelope carrying a GATED
-                        // event's hash: it verifies, raises this tier, and
-                        // would otherwise withdraw the genuine operator-lookup
-                        // registration until the discovery TTL expires. An
-                        // agreeing envelope never reaches this branch, because
-                        // agreement promotes to REGISTRY_VERIFIED, so honouring
-                        // the operator lookup here is strictly no worse than
-                        // before v2 existed and the forgery buys nothing.
-                        NearbyEventReceiverState.RADIO_SELF_VERIFIED ->
-                            candidate.registryStatus ==
-                                NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
-                    }
+                    // The lesson is narrower than "do not duplicate logic": a
+                    // display projection can carry stale DATA and it can also
+                    // make its own DECISION, and those are separate audits. The
+                    // card's validity window was the first; this was the second,
+                    // on the same object, found only by reading the card's
+                    // enablement rule against the gate's.
+                    val joinable = nearbyCandidateJoinEligibility(
+                        candidates = snapshot,
+                        eventCodeHashHex = candidate.eventCodeHashHex,
+                        nowEpochSeconds = nowEpochSeconds,
+                    ) == NearbyEventJoinEligibility.ELIGIBLE
                     val verified = verifiedMetadataByHash[candidate.eventCodeHashHex]
                         ?.takeIf { joinable }
                     add(
                         NearbyEventCard(
                             beaconDisplayName = candidate.displayNameAt(0),
                             eventIdHex = verified?.eventIdHex,
-                            validFromEpochSeconds = verified?.validFromEpochSeconds,
-                            validUntilEpochSeconds = verified?.validUntilEpochSeconds,
+                            displayValidFromEpochSeconds = verified?.validFromEpochSeconds,
+                            displayValidUntilEpochSeconds = verified?.validUntilEpochSeconds,
                             eventCodeHashHex = candidate.eventCodeHashHex,
                         ),
                     )

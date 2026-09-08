@@ -22,6 +22,7 @@ import org.levarac.barnard.BarnardRelayDecision
 import org.levarac.barnard.BarnardRelayDecisionEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.parallax.discovery.NearbyEventCandidates
+import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
@@ -40,6 +41,16 @@ import org.levarac.beid.registry.RegistryDependencies
 sealed class EventJoinUiState {
     data object Idle : EventJoinUiState()
     data object RequestingPermission : EventJoinUiState()
+
+    /**
+     * Permission is granted and this host's own registry read for the
+     * requested event is in flight (beid#374). Nothing has been joined yet:
+     * no [ScanPhase] has moved, no event signing key has been used, and the
+     * relay gate is shut. Reaching [Sensing] from here requires a
+     * [RegistryVerifiedJoinContext]; every other outcome, including a read that
+     * never answers before the user leaves the surface, ends at [JoinFailed].
+     */
+    data object VerifyingRegistry : EventJoinUiState()
     data class Sensing(val phase: ScanPhase) : EventJoinUiState()
     data object PermissionDenied : EventJoinUiState()
     data object JoinFailed : EventJoinUiState()
@@ -93,6 +104,12 @@ class EventJoinCoordinator internal constructor(
      * answering a real lookup, and there is no other way in.
      */
     nearbyRegistry: NearbyEventRegistry? = null,
+    /**
+     * The join gate's registry seam (beid#374), injected only by tests.
+     * Production derives it from [registryClient]. Separate from
+     * [nearbyRegistry] on purpose — see [EventJoinRegistry].
+     */
+    joinRegistry: EventJoinRegistry? = null,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -107,6 +124,14 @@ class EventJoinCoordinator internal constructor(
     )
 
     private val accounting = ScanDeviceAccounting()
+
+    /**
+     * The registry this join gate reads. `null` means the deployment has no
+     * registry configured at all, which is a refusal like any other: an event
+     * this host cannot verify must not be joined.
+     */
+    private val eventJoinRegistry: EventJoinRegistry? =
+        joinRegistry ?: registryClient?.let(::RegistryClientEventJoinRegistry)
     private val nearbyDiscovery = NearbyEventDiscoverySession(
         nowEpochMillis = nowEpochMillis,
         coroutineScope = coroutineScope,
@@ -159,8 +184,15 @@ class EventJoinCoordinator internal constructor(
     private var scanPhase: ScanPhase = ScanPhase.Idle
     private var discoveryOnlyScanOwned = false
     private var disposed = false
-    @Volatile
-    private var observationContextRequestOwner: Any? = null
+
+    /**
+     * Identity of the join verification currently allowed to finish (beid#374).
+     * A completion whose owner is no longer this value belongs to a superseded
+     * attempt — the user left the event, disposed the session, or started
+     * another join while the read was outstanding — and must not join
+     * anything. Cleared, never reused, so a late answer can only be discarded.
+     */
+    private var joinVerificationOwner: Any? = null
     private val windowObservationRuntime = if (injectedWindowAccumulator == null && ledgerFilesDir != null) {
         (windowObservationRuntimeOwner ?: WindowObservationRuntimeOwner()).acquire(
             filesDir = ledgerFilesDir,
@@ -336,6 +368,18 @@ class EventJoinCoordinator internal constructor(
         republishRelayGateState(joinedEventIdHex = null)
     }
 
+    /**
+     * Manual event-code join. Asks for permission first and only then reads
+     * the registry, because a device that may not scan or advertise cannot
+     * take part whatever the registry says, and asking the network about an
+     * event the user will not be able to join spends a lookup for nothing.
+     *
+     * The read is the boundary (beid#374): nothing native starts until it
+     * produces a [RegistryVerifiedJoinContext]. A code the operator lookup cannot
+     * route, an Event ID whose definition does not verify, a read that is
+     * still outstanding, and a deployment with no registry configured all end
+     * at [EventJoinUiState.JoinFailed] with no join, no key use and no sensing.
+     */
     override fun joinEvent(code: String) {
         if (!canBeginJoin()) return
         _state.value = EventJoinUiState.RequestingPermission
@@ -344,13 +388,7 @@ class EventJoinCoordinator internal constructor(
                 return@requestPermissions
             }
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
-                windowObservationRuntime?.beginEvent(code)
-                engine.joinEvent(code)
-                resolveObservationContext(code)
-                discoveryOnlyScanOwned = false
-                engine.startAuto()
-                startParticipantRelay()
-                startSensing()
+                verifyThenJoin(eventCode = code)
             } else {
                 stopParticipantRelay()
                 _state.value = mapPermissionResultToState(result)
@@ -362,9 +400,164 @@ class EventJoinCoordinator internal constructor(
         !disposed &&
             scanPhase == ScanPhase.Idle &&
             _state.value !is EventJoinUiState.RequestingPermission &&
+            _state.value !is EventJoinUiState.VerifyingRegistry &&
             _state.value !is EventJoinUiState.Sensing
 
-    override fun joinNearbyEvent(eventIdHex: String) = joinEvent(eventIdHex)
+    /**
+     * Nearby-card join. Same boundary as [joinEvent], one step shorter: the
+     * card already carries the registry's canonical Event ID, so there is
+     * nothing to route and the operator lookup is skipped. The definition read
+     * still runs here rather than being inherited from discovery — the card's
+     * ID is an argument this class received, and a candidate's tier can have
+     * changed since the list was built.
+     *
+     * The Event ID is passed to `BarnardEngine.joinEvent` verbatim, as it
+     * always has been on this path, so it is also this session's event code.
+     */
+    override fun joinNearbyEvent(eventCodeHashHex: String) {
+        if (!canBeginJoin()) return
+        _state.value = EventJoinUiState.RequestingPermission
+        engine.requestPermissions { result ->
+            if (disposed || scanPhase != ScanPhase.Idle || _state.value != EventJoinUiState.RequestingPermission) {
+                return@requestPermissions
+            }
+            if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
+                // Issued from the candidate as it stands at this moment, not
+                // from what a click closure remembered, and with no second
+                // registry read: discovery already performed that read to
+                // promote this candidate. The shared issuer re-checks now that
+                // the promotion still holds and that the definition's window
+                // contains this instant.
+                val context = RegistryVerifiedJoinContext.fromNearbyCandidate(
+                    candidates = nearbyDiscovery.candidates.value,
+                    eventCodeHashHex = eventCodeHashHex,
+                    nowEpochSeconds = nowEpochMillis() / 1_000L,
+                )
+                if (context == null) {
+                    refuseJoinWithoutVerification()
+                    return@requestPermissions
+                }
+                joinVerificationOwner = null
+                beginVerifiedJoin(context)
+            } else {
+                stopParticipantRelay()
+                _state.value = mapPermissionResultToState(result)
+            }
+        }
+    }
+
+    /** A refusal decided before any registry read was started. */
+    private fun refuseJoinWithoutVerification() {
+        joinVerificationOwner = null
+        stopParticipantRelay()
+        _state.value = EventJoinUiState.JoinFailed
+    }
+
+    /**
+     * Runs the registry read that has to succeed before anything is joined.
+     *
+     * Both completions are re-entered through [coroutineScope] because
+     * `RegistryClient` answers on `Dispatchers.Default` while everything this
+     * class mutates is confined to the main thread — the same wrapping the
+     * observation-context read has carried since `1c7db20`, kept here rather
+     * than removed now that the read decides the join instead of annotating it.
+     */
+    private fun verifyThenJoin(eventCode: String) {
+        val registry = eventJoinRegistry
+        val owner = Any()
+        joinVerificationOwner = owner
+        if (registry == null) {
+            refuseJoin(owner)
+            return
+        }
+        _state.value = EventJoinUiState.VerifyingRegistry
+        registry.resolveEventId(eventCode) { eventIdHex ->
+            coroutineScope.launch {
+                if (!isCurrentJoinVerification(owner)) return@launch
+                if (eventIdHex == null) {
+                    refuseJoin(owner)
+                    return@launch
+                }
+                verifyDefinitionThenJoin(registry, eventCode, eventIdHex, owner)
+            }
+        }
+    }
+
+    private fun verifyDefinitionThenJoin(
+        registry: EventJoinRegistry,
+        eventCode: String,
+        eventIdHex: String,
+        owner: Any,
+    ) {
+        val useTimeEpochSeconds = nowEpochMillis() / 1_000L
+        registry.resolveEventDefinition(eventIdHex, useTimeEpochSeconds) { resolution ->
+            coroutineScope.launch {
+                if (!isCurrentJoinVerification(owner)) return@launch
+                // Evidence shape (b). This host decides *when* to ask, never
+                // whether the answer is good enough: the definition verifying,
+                // open admission and validity at use time are all decided in
+                // `shared/`, so both platforms answer identically.
+                val context = resolution?.let {
+                    RegistryVerifiedJoinContext.fromOperatorLookup(
+                        joinCode = eventCode,
+                        resolution = it,
+                        nowEpochSeconds = useTimeEpochSeconds,
+                    )
+                }
+                if (context == null) {
+                    refuseJoin(owner)
+                    return@launch
+                }
+                joinVerificationOwner = null
+                beginVerifiedJoin(context)
+            }
+        }
+    }
+
+    private fun isCurrentJoinVerification(owner: Any): Boolean =
+        !disposed && joinVerificationOwner === owner && _state.value == EventJoinUiState.VerifyingRegistry
+
+    /**
+     * The one refusal. Every way a join can fail to prove itself lands here so
+     * the surface cannot be left waiting on an answer that will never come.
+     */
+    private fun refuseJoin(owner: Any) {
+        if (disposed || joinVerificationOwner !== owner) return
+        joinVerificationOwner = null
+        stopParticipantRelay()
+        _state.value = EventJoinUiState.JoinFailed
+    }
+
+    /**
+     * The whole native join sequence, and the only place it exists.
+     *
+     * Taking [RegistryVerifiedJoinContext] rather than a `String` is what makes
+     * beid#374's boundary a compile-time one: joining, using the event signing
+     * key, recording and relaying are reachable only through this method, and
+     * this method cannot be called with an event code that has not been
+     * through the registry.
+     *
+     * The relay gate opens here, together with the join, for the reason it
+     * previously opened on a late callback: this is the point where the joined
+     * event has a canonical ID that came from this host's own authenticated
+     * registry read. That ID is now known before the join rather than after
+     * it, so the window where the session was joined but unnameable is gone.
+     */
+    private fun beginVerifiedJoin(context: RegistryVerifiedJoinContext) {
+        windowObservationRuntime?.beginEvent(context.joinCode)
+        engine.joinAndStart(context)
+        windowObservationRuntime?.updateContext(
+            WindowObservationContext(
+                eventCode = context.joinCode,
+                eventIdHex = context.eventIdHex,
+                eventDefinitionDigestHex = context.definitionHashHex,
+            ),
+        )
+        discoveryOnlyScanOwned = false
+        startParticipantRelay()
+        republishRelayGateState(joinedEventIdHex = context.eventIdHex)
+        startSensing()
+    }
 
     private fun startSensing() {
         resetSessionState()
@@ -463,6 +656,16 @@ class EventJoinCoordinator internal constructor(
      * of re-derived transition AGENTS.md's ownership boundary forbids.
      */
     private fun handleDetection(enin: Long, rpid: String, detectedDisplayId: String?, reporterRpid: String?) {
+        // No joined session, no counting and no phase (beid#374). The radio
+        // keeps delivering detections whether or not this device joined --
+        // discovery scanning runs before any join and continues after a
+        // refused one -- and before this guard existed every one of them ran
+        // the accounting and then published `Sensing`, so a join the gate had
+        // just refused still produced a recording session on screen. The gate
+        // decides whether a session exists; detections only advance one that
+        // already does.
+        if (_state.value !is EventJoinUiState.Sensing) return
+
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
 
         val session = when (val phase = scanPhase) {
@@ -576,6 +779,10 @@ class EventJoinCoordinator internal constructor(
      */
     override fun leaveEvent() {
         if (disposed) return
+        // A verification still in flight belongs to the session being left.
+        // Dropping its owner is what stops its answer from joining an event
+        // the user has already walked away from.
+        joinVerificationOwner = null
         windowAccumulator?.close()
         finalizeSelfProofIfNeeded()
         engine.leaveEvent()
@@ -585,47 +792,6 @@ class EventJoinCoordinator internal constructor(
         scanPhase = applyStopSensing()
         resetSessionState()
         _state.value = EventJoinUiState.Idle
-    }
-
-    private fun resolveObservationContext(eventCode: String) {
-        windowObservationRuntime?.updateContext(null)
-        val requestOwner = Any()
-        observationContextRequestOwner = requestOwner
-        val client = registryClient ?: return
-        client.resolveEventId(eventCode) { lookup ->
-            if (observationContextRequestOwner !== requestOwner) return@resolveEventId
-            val eventId = lookup.eventIdHex ?: return@resolveEventId
-            client.resolveEventDefinition(eventId, org.levarac.parallax.registry.safeRegistryReadPin(), nowEpochMillis() / 1_000L) { result ->
-                val verified = result.context ?: return@resolveEventDefinition
-                coroutineScope.launch {
-                    acceptVerifiedObservationContext(
-                        WindowObservationContext(
-                            eventCode = eventCode,
-                            eventIdHex = verified.eventIdHex,
-                            eventDefinitionDigestHex = verified.definitionHashHex,
-                        ),
-                        requestOwner,
-                    )
-                }
-            }
-        }
-    }
-
-    internal fun acceptVerifiedObservationContext(context: WindowObservationContext) {
-        val requestOwner = observationContextRequestOwner ?: return
-        acceptVerifiedObservationContext(context, requestOwner)
-    }
-
-    private fun acceptVerifiedObservationContext(context: WindowObservationContext, requestOwner: Any) {
-        if (!disposed && observationContextRequestOwner === requestOwner && engine.getCurrentEventCode() == context.eventCode) {
-            windowObservationRuntime?.updateContext(context)
-            // The relay gate opens here and nowhere else. This is the only
-            // point where the joined event has a canonical id that came from
-            // this host's own authenticated registry read, and relaying an
-            // event this device cannot name that precisely is exactly what
-            // "one device, one event" forbids.
-            republishRelayGateState(joinedEventIdHex = context.eventIdHex)
-        }
     }
 
     /**
@@ -810,7 +976,7 @@ class EventJoinCoordinator internal constructor(
     fun dispose() {
         if (disposed) return
         disposed = true
-        observationContextRequestOwner = null
+        joinVerificationOwner = null
         finalizeSelfProofIfNeeded()
         stopParticipantRelay()
         discoveryOnlyScanOwned = false

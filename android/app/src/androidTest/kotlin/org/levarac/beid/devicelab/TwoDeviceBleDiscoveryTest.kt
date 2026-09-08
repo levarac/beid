@@ -21,6 +21,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.rules.TestRule
 import org.junit.runners.model.Statement
+import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
 import org.levarac.beid.MainActivity
 import org.levarac.beid.persistence.BindingRecordStore
@@ -96,23 +97,23 @@ class TwoDeviceBleDiscoveryTest {
         val startFinished = CountDownLatch(1)
         val advertisingConfirmed = AtomicBoolean(false)
         val startFailure = AtomicReference<String?>()
-        val coordinatorOnEvent = harness.engine.onEvent
+        val coordinatorOnEvent = harness.radio.onEvent
 
-        harness.engine.onEvent = { event ->
+        harness.radio.onEvent = { event ->
             coordinatorOnEvent?.invoke(event)
             if (event is BarnardEvent.Error && event.error.code == "advertise_failed") {
                 startFailure.compareAndSet(null, event.error.message)
                 startFinished.countDown()
             }
         }
-        harness.engine.onDebugEvent = { event ->
+        harness.radio.onDebugEvent = { event ->
             if (event.name == "advertise_started") {
                 advertisingConfirmed.set(true)
                 startFinished.countDown()
             }
         }
-        harness.engine.joinEvent(eventCode)
-        harness.engine.startAuto()
+        harness.radio.joinEvent(eventCode)
+        harness.radio.startAuto()
 
         if (!startFinished.await(timeoutSeconds, TimeUnit.SECONDS) || !advertisingConfirmed.get()) {
             fail(startFailure.get() ?: "Advertiser did not confirm start within $timeoutSeconds seconds")
@@ -129,9 +130,9 @@ class TwoDeviceBleDiscoveryTest {
         val scanObserved = CountDownLatch(1)
         val detection = AtomicReference<BarnardEvent.Detection?>()
         val peerObserved = CountDownLatch(1)
-        val coordinatorOnEvent = harness.engine.onEvent
+        val coordinatorOnEvent = harness.radio.onEvent
 
-        harness.engine.onEvent = { event ->
+        harness.radio.onEvent = { event ->
             coordinatorOnEvent?.invoke(event)
             when (event) {
                 is BarnardEvent.Error -> if (event.error.code == "scan_failed") {
@@ -146,13 +147,13 @@ class TwoDeviceBleDiscoveryTest {
                 else -> Unit
             }
         }
-        harness.engine.onDebugEvent = { event ->
+        harness.radio.onDebugEvent = { event ->
             if (event.name == "ble_discovery_result" && advertisementSeen.compareAndSet(false, true)) {
                 scanObserved.countDown()
             }
         }
-        harness.engine.joinEvent(eventCode)
-        harness.engine.startScan()
+        harness.radio.joinEvent(eventCode)
+        harness.radio.startScan()
 
         if (!scanObserved.await(timeoutSeconds, TimeUnit.SECONDS) || !advertisementSeen.get()) {
             fail(scanFailure.get() ?: "Scanner received no BLE callback within $timeoutSeconds seconds")
@@ -184,6 +185,7 @@ class TwoDeviceBleDiscoveryTest {
         val result = AtomicReference<Harness?>()
         activityRule.scenario.onActivity { activity ->
             val engine = BarnardEventJoinEngine(activity)
+            val radio = BarnardEngine(activity.applicationContext).apply { setActivity(activity) }
             val recordSuffix = UUID.randomUUID().toString()
             val coordinator = EventJoinCoordinator(
                 engine = engine,
@@ -197,7 +199,7 @@ class TwoDeviceBleDiscoveryTest {
                     File(activity.cacheDir, "device-lab-bindings-$recordSuffix.json"),
                 ),
             )
-            result.set(Harness(coordinator, engine))
+            result.set(Harness(coordinator, engine, radio))
         }
         return result.get() ?: fail("MainActivity was unavailable for the device-lab harness")
     }
@@ -216,9 +218,25 @@ class TwoDeviceBleDiscoveryTest {
         }
     }
 
+    /**
+     * [radio] is barnard itself, held directly and deliberately (beid#374).
+     *
+     * This test drives raw BLE between two physical devices to prove the radio
+     * works; it is not a test of the join gate and it sits BELOW it. Since
+     * beid#374 the app's own adapter exposes no string join and no bare
+     * `startAuto` -- joining requires a `RegistryVerifiedJoinContext` issued by
+     * `shared/` from a real registry read, which is exactly the guarantee that
+     * must not have a back door cut into it for a test's convenience. So this
+     * harness talks to the SDK directly rather than reaching through the gated
+     * adapter, which is what it always meant to do.
+     *
+     * [coordinator] is still constructed, unchanged, because the scenario also
+     * checks that a real coordinator can be stood up on a device.
+     */
     private data class Harness(
         val coordinator: EventJoinCoordinator,
         val engine: BarnardEventJoinEngine,
+        val radio: BarnardEngine,
     )
 
     private companion object {
