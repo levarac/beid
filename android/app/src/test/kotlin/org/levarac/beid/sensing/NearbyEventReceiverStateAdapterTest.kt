@@ -184,6 +184,14 @@ class NearbyEventReceiverStateAdapterTest {
         assertNull(hintOnly.cards.value.single().eventIdHex)
     }
 
+    /**
+     * Spec 122 step 7 binds the event-code hash to the event ID for OPEN
+     * events only, so an attacker can forge a self-consistent envelope
+     * carrying a GATED event's hash. It verifies and raises the tier. If that
+     * withdrew the genuine operator-lookup registration, the forgery would be
+     * a cheap denial of service lasting until the discovery TTL. It must
+     * still be denied promotion.
+     */
     @Test
     fun aDisagreeingEnvelopeNeitherPromotesNorRevokesAnOperatorLookupRegistration() = runTest {
         val registry = FakeRegistry()
