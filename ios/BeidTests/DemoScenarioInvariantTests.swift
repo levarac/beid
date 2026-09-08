@@ -76,12 +76,27 @@ final class DemoScenarioInvariantTests: XCTestCase {
     )
   }
 
-  /// The set, not the order. iOS lists `appReviewGolden` first because it is
-  /// the launch-argument fallback, and Android's `AndroidDemoScenarioTest`
-  /// pins a different order for its own reasons; comparing sequences would
-  /// make one platform's ordering a constraint on the other's for no product
-  /// reason, and the first thing to break would be iOS's fallback.
-  func testBothPlatformsOfferTheSameScenarioNames() {
+  /// iOS's roster, pinned as a set, plus the fallback staying first.
+  ///
+  /// **This does not check Android, despite the names below being Android's.**
+  /// It compares iOS against a literal that a human keeps in step with the
+  /// Kotlin enum; nothing here reads that enum, and no Swift test can. So
+  /// adding a scenario to `AndroidDemoScenario` tomorrow leaves this green
+  /// while the platforms diverge. What is genuinely covered is the *changing*
+  /// side: each platform's own literal fails when that platform's roster
+  /// moves, so a one-sided change is caught where it is made — nothing forces
+  /// the other side to follow.
+  ///
+  /// A real cross-platform assertion needs one fixture both hosts read, which
+  /// is a larger change than beid#395 and deliberately out of its scope
+  /// ("fixture のファイル化はこの issue では行わない").
+  ///
+  /// The set and not the order: iOS lists `appReviewGolden` first because it
+  /// is the launch-argument fallback, while `AndroidDemoScenarioTest` pins a
+  /// different order for its own reasons. Comparing sequences would make one
+  /// platform's ordering a constraint on the other's for no product reason,
+  /// and the first thing to break would be iOS's fallback.
+  func testIosOffersTheAgreedScenarioNamesAndKeepsTheFallbackFirst() {
     XCTAssertEqual(
       Set(DemoScenario.allScenarios.map(\.identifier)),
       [
