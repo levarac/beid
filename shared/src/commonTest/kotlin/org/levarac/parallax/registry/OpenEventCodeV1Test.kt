@@ -97,6 +97,29 @@ class OpenEventCodeV1Test {
      *
      * Read from the vector rather than restated here, so a spelling parallax
      * adds later arrives with the re-vendor instead of being missed.
+     *
+     * ## What this actually guards, which is not what the name suggests
+     *
+     * The assertion is negative, so it can only fail on a COLLISION: our answer
+     * having become one of the spellings parallax says is wrong. It therefore
+     * does NOT fail for implementation changes that leave the spelling alone.
+     * Measured, not argued: mutating the truncation in
+     * [eventCodeHashForOpenEventV1] turns [theImplementationReproducesParallaxsOwnOpenEventCodeVector]
+     * red and leaves this one GREEN.
+     *
+     * It is load-bearing against its own line. Mutating [canonicalOpenCodeV1] to
+     * emit uppercase hex makes our answer `8fec958437b27e6c`, which is exactly
+     * the negative vector's `uppercase` case, and this test fails naming it.
+     * Three of the five enumerated cases -- uppercase, an `0x` prefix, leading
+     * whitespace -- are reachable that way. The remaining two, a dropped leading
+     * zero and the raw Event ID bytes, are not produced by any spelling of ours
+     * and can only fire if parallax later publishes a near-miss that our
+     * canonical form happens to equal.
+     *
+     * So: it guards the SPELLING, and the sibling above guards the TRUNCATION.
+     * One mutation cannot exercise both, and a reader checking whether this
+     * suite has teeth must mutate the line each test protects rather than the
+     * property its name describes (beid#403).
      */
     @Test
     fun noNoncanonicalSpellingFromParallaxsNegativeVectorMatchesOurs() {
