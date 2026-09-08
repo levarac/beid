@@ -35,7 +35,7 @@ jobs:
     # fromJSON is required because runs-on treats a plain string variable as
     # ONE label; it does not split on commas.
     runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - name: Initialize CI output path
         shell: bash
