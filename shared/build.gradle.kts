@@ -69,3 +69,12 @@ tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach {
 tasks.matching { it.name == "iosArm64Test" }.configureEach {
     dependsOn(copyIosArm64TestResources)
 }
+
+// beid#403: the cross-repo comparison needs the sibling Parallax checkout, and it
+// must find it WITHOUT consulting the working directory. Gradle knows this module's
+// project directory regardless of where the wrapper was invoked from, so the repo
+// root is derived here and handed to the JVM test task rather than guessed there.
+// Its absence is reported by the test as "cannot tell", never as "no checkout".
+tasks.withType<Test>().configureEach {
+    systemProperty("beid.repoRoot", layout.projectDirectory.dir("..").asFile.canonicalPath)
+}

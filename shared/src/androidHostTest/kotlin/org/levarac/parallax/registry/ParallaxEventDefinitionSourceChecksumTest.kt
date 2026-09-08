@@ -9,6 +9,8 @@ import org.levarac.parallax.observation.readVectorResource
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -17,8 +19,21 @@ import kotlin.test.fail
 // change that reconciles the vendored resources/checksums. Never use a moving branch.
 private const val EXPECTED_PARALLAX_REF = "5215991b440db8e8bdc6279eee30affa0c532023"
 
-/** Sibling checkout consulted when [PARALLAX_REPO_ENV] says nothing. */
-private const val DEFAULT_PARALLAX_PATH = "/Users/kenichi/Repository/Levarac/parallax"
+/**
+ * Sibling directory consulted when [PARALLAX_REPO_ENV] says nothing: `../parallax`
+ * beside the beid repository root.
+ *
+ * Resolved from [REPO_ROOT_PROPERTY], which `shared/build.gradle.kts` computes from
+ * this module's PROJECT directory. Deliberately not the working directory: a cwd
+ * resolution would make the answer depend on where the wrapper happened to be
+ * invoked, which is the dependence this evening removed from the Parallax side.
+ * It was previously an absolute path under one developer's home, which tied the
+ * gate to a single machine -- on a Linux runner it could not be found even in
+ * principle.
+ */
+private const val DEFAULT_PARALLAX_DIRECTORY_NAME = "parallax"
+
+private const val REPO_ROOT_PROPERTY = "beid.repoRoot"
 
 private const val PARALLAX_REPO_ENV = "PARALLAX_REPO"
 
@@ -47,12 +62,23 @@ private const val PARALLAX_REPO_ENV = "PARALLAX_REPO"
  */
 private class ParallaxCheckout(val root: File, val maySkipWhenAbsent: Boolean)
 
-private fun parallaxCheckout(configured: String?): ParallaxCheckout =
-    if (configured == null) {
-        ParallaxCheckout(File(DEFAULT_PARALLAX_PATH), maySkipWhenAbsent = true)
-    } else {
-        ParallaxCheckout(File(configured), maySkipWhenAbsent = false)
+/**
+ * Null means CANNOT TELL: nothing was configured and the repo root is unknown, so
+ * there is no place to look. That is a third state, distinct from "a checkout is
+ * absent" and from "a configured path is wrong", and it is reported as its own
+ * skip reason rather than being folded into the first.
+ */
+private fun parallaxCheckout(configured: String?, repoRoot: File?): ParallaxCheckout? =
+    when {
+        configured != null -> ParallaxCheckout(File(configured), maySkipWhenAbsent = false)
+        repoRoot == null -> null
+        else -> ParallaxCheckout(
+            repoRoot.resolveSibling(DEFAULT_PARALLAX_DIRECTORY_NAME),
+            maySkipWhenAbsent = true,
+        )
     }
+
+private fun configuredRepoRoot(): File? = System.getProperty(REPO_ROOT_PROPERTY)?.let(::File)
 
 /**
  * An absent checkout skips this optional cross-repo check ONLY when nobody asked for
@@ -199,7 +225,13 @@ class ParallaxEventDefinitionSourceChecksumTest {
      */
     @Test
     fun copiedVectorsAndCddlMatchTheParallaxCheckoutWhenAvailable() {
-        val checkout = parallaxCheckout(System.getenv(PARALLAX_REPO_ENV))
+        val checkout = parallaxCheckout(System.getenv(PARALLAX_REPO_ENV), configuredRepoRoot())
+            ?: throw AssumptionViolatedException(
+                "$REPO_ROOT_PROPERTY is not set, so the sibling Parallax checkout cannot be " +
+                    "located and this comparison does not know where to look. This is not the " +
+                    "same as there being no checkout: set $PARALLAX_REPO_ENV, or run through " +
+                    "Gradle, which supplies the property from the project directory.",
+            )
         val root = checkout.root
         assertExpectedCheckout(root, EXPECTED_PARALLAX_REF, checkout.maySkipWhenAbsent)
 
@@ -350,13 +382,42 @@ class ParallaxEventDefinitionSourceChecksumTest {
      */
     @Test
     fun onlyAnUnconfiguredCheckoutMaySkip() {
-        val unset = parallaxCheckout(null)
-        assertTrue(unset.maySkipWhenAbsent, "an unset variable falls back and may skip")
-        assertEquals(DEFAULT_PARALLAX_PATH, unset.root.path)
+        val repoRoot = File("/somewhere/beid")
 
-        val configured = parallaxCheckout("/some/operator/choice")
+        val unset = assertNotNull(parallaxCheckout(configured = null, repoRoot = repoRoot))
+        assertTrue(unset.maySkipWhenAbsent, "an unset variable falls back and may skip")
+        assertEquals(
+            File("/somewhere/$DEFAULT_PARALLAX_DIRECTORY_NAME"),
+            unset.root,
+            "the fallback is the sibling of the repo root, not a path under anyone's home",
+        )
+
+        val configured = assertNotNull(
+            parallaxCheckout(configured = "/some/operator/choice", repoRoot = repoRoot),
+        )
         assertTrue(!configured.maySkipWhenAbsent, "a configured path may never skip")
-        assertEquals("/some/operator/choice", configured.root.path)
+        assertEquals(File("/some/operator/choice"), configured.root)
+    }
+
+    /**
+     * The third state, kept distinct from the other two on purpose.
+     *
+     * Without the repo root there is nowhere to look, which is CANNOT TELL rather
+     * than NO CHECKOUT. Folding it into the latter is the same defect this class
+     * was changed to remove: a guard reporting an absence it never actually
+     * established. A configured path still wins, because then the operator has
+     * said where to look and the repo root is irrelevant.
+     */
+    @Test
+    fun anUnknownRepoRootIsNotTreatedAsAnAbsentCheckout() {
+        assertNull(
+            parallaxCheckout(configured = null, repoRoot = null),
+            "with nothing configured and no repo root, there is no checkout to speak of",
+        )
+        assertNotNull(
+            parallaxCheckout(configured = "/some/operator/choice", repoRoot = null),
+            "a configured path does not need the repo root",
+        )
     }
 
     /**
