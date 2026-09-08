@@ -513,6 +513,24 @@ final class SensingCoordinator: ObservableObject {
   private var ledgerLoadTask: Task<Void, Never>?
   private var demoTask: Task<Void, Never>?
   private var demoInterpreterScenario: DemoScenario?
+  /// Preview seam (beid#399): the screen at which to stop this scenario.
+  ///
+  /// Deliberately a *screen*, resolved from the live phase through the same
+  /// `ScanFlowContent.route(for:)` the app renders with, rather than a step
+  /// index. A step index would put the reducer's confirm decision into the
+  /// caller — the preview would encode an assumption about the code and keep
+  /// rendering a stale screen after any reducer change. Here the reducer runs
+  /// and the interpreter stops when the resulting screen is the requested one,
+  /// so the reducer stays the only authority on where a scenario gets to.
+  private var demoInterpreterStopRoute: ScanFlowContent.Route?
+  /// Whether the run actually reached `demoInterpreterStopRoute`.
+  ///
+  /// Not every scenario reaches every screen — `crowdSurge` never goes to
+  /// Signal Lost — and a preview that silently rendered the terminal screen
+  /// under another screen's name would be a fixture lying about what it shows.
+  /// Callers read this to say "not reachable" instead of showing the wrong
+  /// screen confidently.
+  private(set) var demoScenarioReachedRequestedRoute = false
   private var demoInterpreterCursor: Int?
   private var demoInterpreterIsParked = false
   private var demoInterpreterLastObservationChanged = false
@@ -3138,7 +3156,31 @@ final class SensingCoordinator: ObservableObject {
 
   /// Runs a named deterministic DemoEvent scenario without calling the real
   /// BLE observation, ledger, report, or submission-capture paths.
+  /// Preview/test overload: runs `scenario` and stops as soon as the screen
+  /// the app would render equals `stopWhenPhaseReaches`.
+  ///
+  /// This is a stop, not a park. `simulateSignalLost`'s park suspends a run
+  /// that a user resumes; nothing resumes a preview, and reusing
+  /// `demoInterpreterIsParked` here would make `hasParkedDemoScenarioForTesting`
+  /// mean two different things and leave `resumeSensing()` — which only acts
+  /// from `.signalLost` — unable to clear a stop taken at `.recording`.
+  func runDemoScenario(
+    _ scenario: DemoScenario,
+    stepDelayNanos: UInt64 = 700_000_000,
+    stopWhenPhaseReaches route: ScanFlowContent.Route
+  ) {
+    runDemoScenario(scenario, stepDelayNanos: stepDelayNanos, stopRoute: route)
+  }
+
   func runDemoScenario(_ scenario: DemoScenario, stepDelayNanos: UInt64 = 700_000_000) {
+    runDemoScenario(scenario, stepDelayNanos: stepDelayNanos, stopRoute: nil)
+  }
+
+  private func runDemoScenario(
+    _ scenario: DemoScenario,
+    stepDelayNanos: UInt64,
+    stopRoute: ScanFlowContent.Route?
+  ) {
     demoTask?.cancel()
     let session = EventSession(
       id: scenario.event.id,
@@ -3157,6 +3199,8 @@ final class SensingCoordinator: ObservableObject {
 
     let resolvedScenario = scenario.replacingEvent(session)
     demoInterpreterScenario = resolvedScenario
+    demoInterpreterStopRoute = stopRoute
+    demoScenarioReachedRequestedRoute = false
     demoInterpreterCursor = 0
     demoInterpreterIsParked = false
     demoInterpreterLastObservationChanged = false
@@ -3190,6 +3234,20 @@ final class SensingCoordinator: ObservableObject {
         guard !Task.isCancelled else { return }
         self.onDemoInterpreterCheckpointForTesting?(.renderTurnSettled(index))
         self.demoInterpreterCursor = index + 1
+
+        // The reducer has now run for this step, so `phase` is its answer and
+        // this asks the production router which screen that answer renders.
+        // Nothing here decides where a scenario gets to; it only notices.
+        if let stopRoute = self.demoInterpreterStopRoute,
+           ScanFlowContent.route(for: self.phase) == stopRoute {
+          self.demoScenarioReachedRequestedRoute = true
+          // Same teardown as running off the end of the step list: the run is
+          // over, nothing resumes it, and leaving interpreter state behind
+          // would make a later `resumeSensing()` look at a finished scenario.
+          self.clearDemoInterpreterState()
+          self.onDemoInterpreterCheckpointForTesting?(.completed)
+          return
+        }
 
         if shouldPark {
           self.demoInterpreterIsParked = true
@@ -3258,6 +3316,7 @@ final class SensingCoordinator: ObservableObject {
 
   private func clearDemoInterpreterState() {
     demoInterpreterScenario = nil
+    demoInterpreterStopRoute = nil
     demoInterpreterCursor = nil
     demoInterpreterIsParked = false
     demoInterpreterLastObservationChanged = false
