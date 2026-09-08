@@ -267,11 +267,26 @@ TestFlight evaluation.
 
 The optional `-beid-demo-scenario <identifier>` argument chooses a named
 walkthrough: `appReviewGolden` (the default and fallback for a missing or
-unknown value), `crowdSurge`, `signalLostMidway`, or `longDisplayNames`.
+unknown value), `crowdSurge`, `signalLostMidway`, `longDisplayNames`,
+`zeroPeersForever`, or `unidentifiedHeavy`. The set matches Android's
+identifiers exactly (see `android/README.md`); the listed order does not, and
+is not meant to — `appReviewGolden` is first here because it is the fallback.
 Use it together with `-beid-demo-event` on a Debug real device; Simulator
 Debug builds already enable DemoEvent mode. Each scenario uses the production
 `ScanFlowContent` router and the same Sensing, Event Found, Recording, and
-Signal Lost views as an ordinary scan flow. The scenario interpreter only
+Signal Lost views as an ordinary scan flow.
+
+Two of them exist for states the others cannot reach. `zeroPeersForever`
+observes nothing at all and stays on Sensing, which is the "is it even
+scanning?" screen. `unidentifiedHeavy` observes proximity identifiers that
+never resolve to a display id, so it reaches Recording with
+`devicesVerified` at 0 and `unidentifiedRpidCount` above the confirm
+threshold — the lopsided pair `RecordingView`'s diagnostic line exists to
+distinguish from silence. It confirms through the co-presence arm rather
+than the distinct-device arm, and is the only scenario that does, which is
+why every one of its observations stays inside a single demo window:
+`advanceDemoWindow()` clears the co-presence set, so a window advance placed
+mid-run would stall it in Event Found. The scenario interpreter only
 advances demo bookkeeping and phase state: it does not open ledger windows,
 capture a report for submission, or write a window report.
 

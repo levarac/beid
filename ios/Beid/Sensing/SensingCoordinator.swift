@@ -608,8 +608,11 @@ final class SensingCoordinator: ObservableObject {
   private var aggregationRuntime = AggregationRuntime()
   /// Demo-only synthetic device counter backing `observeOneDemoDevice()`.
   /// Monotonically increasing so every call synthesizes a never-repeated
-  /// rpid/displayId pair, guaranteeing each call grows the shared device
-  /// count by exactly one.
+  /// rpid/displayId pair. That guarantees a call grows the shared device
+  /// count by exactly one only when a display id is actually supplied: since
+  /// beid#395 a scenario may pass `nil`, and such a call is counted here
+  /// (the id space is still consumed) while deliberately leaving
+  /// `devicesVerified` untouched.
   private var demoDeviceSequence = 0
   /// Demo-only stand-in for `currentWindowRpids` (beid#189), scoped to the
   /// demo script's own window concept (`demoWindowEnin`/
@@ -618,14 +621,16 @@ final class SensingCoordinator: ObservableObject {
   /// honestly-tracked value rather than a fabricated placeholder — see
   /// `applyPhaseDecision`'s own doc comment for why a fabricated count
   /// would itself violate DECISIONS 2026-08-01, not just an implementation
-  /// detail. Demo's own confirm timing is still always actually driven by
-  /// the distinct-device arm in practice (see `runDemoSequence`'s doc
-  /// comment), since `devicesVerified` grows monotonically across the
-  /// whole scripted session while this set resets every
-  /// `advanceDemoWindow()` call — but the reducer receives a real count
-  /// either way, never a stand-in chosen to force an outcome. Cleared by
-  /// `advanceDemoWindow()` and `resetSessionState()`; inserted into by
-  /// `observeOneDemoDevice()`.
+  /// detail. Every scenario before beid#395 confirmed through the
+  /// distinct-device arm in practice, since `devicesVerified` grows
+  /// monotonically across the whole scripted session while this set resets
+  /// every `advanceDemoWindow()` call. `unidentifiedHeavy` is the first that
+  /// does not: nothing it observes resolves a display id, so the
+  /// distinct-device arm can never fire and co-presence is the only arm
+  /// left — which is why that scenario keeps all of its observations inside
+  /// one demo window. The reducer receives a real count either way, never a
+  /// stand-in chosen to force an outcome. Cleared by `advanceDemoWindow()`
+  /// and `resetSessionState()`; inserted into by `observeOneDemoDevice()`.
   private var demoWindowRpids: Set<String> = []
   /// Backs `unidentifiedRpidCount`. Holds proximity identifiers seen
   /// without a display id; an identifier is removed once it does arrive with
@@ -3216,6 +3221,13 @@ final class SensingCoordinator: ObservableObject {
         rpid: rpid,
         enin: enin
       )
+    case let .observeOneUnidentifiedRpid(rpid, enin):
+      // Same helper, `nil` display id: one observation path, not two.
+      demoInterpreterLastObservationChanged = observeOneDemoDevice(
+        displayId: nil,
+        rpid: rpid,
+        enin: enin
+      )
     case .applyPhaseDecision:
       applyPhaseDecision(
         coPresentDeviceCount: demoWindowRpids.count,
@@ -3311,8 +3323,18 @@ final class SensingCoordinator: ObservableObject {
     )
   }
 
+  /// `displayId` is optional so the `unidentifiedHeavy` scenario (beid#395)
+  /// can file an observation that never resolves, exactly as the real path
+  /// does when Barnard B003 is unavailable. A `nil` display id still records
+  /// the observation into `aggregationRuntime` and still inserts the rpid
+  /// into `demoWindowRpids`; what it does not do is grow `devicesVerified`,
+  /// so this returns `false` and the identifier lands in
+  /// `rpidsAwaitingDisplayId`/`unidentifiedRpidCount` instead. The branch
+  /// belongs to `recordDeviceIdentity`, which both the demo and real paths
+  /// already share — this parameter only stops the demo vocabulary from
+  /// being unable to say it.
   @discardableResult
-  private func observeOneDemoDevice(displayId: String, rpid: String, enin: Int) -> Bool {
+  private func observeOneDemoDevice(displayId: String?, rpid: String, enin: Int) -> Bool {
     demoDeviceSequence += 1
     demoWindowEnin = enin
     demoWindowRpids.insert(rpid)
