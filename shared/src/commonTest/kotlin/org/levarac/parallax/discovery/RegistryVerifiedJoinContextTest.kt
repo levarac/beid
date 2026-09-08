@@ -41,7 +41,7 @@ class RegistryVerifiedJoinContextTest {
         val context = RegistryVerifiedJoinContext.fromOperatorLookup(
             joinCode = JOIN_CODE,
             resolution = resolution,
-            nowEpochSeconds = validFrom(),
+            nowEpochSeconds = vectorValidFrom(),
         )
 
         val issued = assertNotNull(context)
@@ -56,9 +56,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.READ_FAILED,
-            operatorLookupJoinEligibility(JOIN_CODE, resolution, validFrom()),
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidFrom()),
         )
-        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, vectorValidFrom()))
     }
 
     /**
@@ -71,9 +71,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.READ_FAILED,
-            operatorLookupJoinEligibility(JOIN_CODE, resolution, validFrom()),
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidFrom()),
         )
-        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, vectorValidFrom()))
     }
 
     @Test
@@ -82,9 +82,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.INCOMPLETE_REGISTRY_EVIDENCE,
-            operatorLookupJoinEligibility(JOIN_CODE, resolution, validFrom()),
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidFrom()),
         )
-        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, vectorValidFrom()))
     }
 
     @Test
@@ -93,9 +93,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.INCOMPLETE_REGISTRY_EVIDENCE,
-            operatorLookupJoinEligibility(JOIN_CODE, resolution, validFrom()),
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidFrom()),
         )
-        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, vectorValidFrom()))
     }
 
     @Test
@@ -104,13 +104,13 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.DEFINITION_EXPIRED,
-            operatorLookupJoinEligibility(JOIN_CODE, resolution, validUntil() + 1),
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidUntil() + 1),
         )
         assertEquals(
             NearbyEventJoinEligibility.DEFINITION_EXPIRED,
-            operatorLookupJoinEligibility(JOIN_CODE, resolution, validFrom() - 1),
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidFrom() - 1),
         )
-        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, validUntil() + 1))
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, vectorValidUntil() + 1))
     }
 
     /**
@@ -123,9 +123,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.NOT_OPEN_ADMISSION,
-            operatorLookupJoinEligibility(JOIN_CODE, resolution, validFrom()),
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidFrom()),
         )
-        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, vectorValidFrom()))
     }
 
     @Test
@@ -134,9 +134,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.CODE_NOT_BOUND,
-            operatorLookupJoinEligibility("", resolution, validFrom()),
+            operatorLookupJoinEligibility("", resolution, vectorValidFrom()),
         )
-        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup("", resolution, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup("", resolution, vectorValidFrom()))
     }
 
     /**
@@ -147,7 +147,7 @@ class RegistryVerifiedJoinContextTest {
     @Test
     fun theCapabilityCarriesTheCodeItWasIssuedFor() {
         val issued = assertNotNull(
-            RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution(), validFrom()),
+            RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution(), vectorValidFrom()),
         )
 
         assertEquals(JOIN_CODE, issued.joinCode)
@@ -172,13 +172,16 @@ class RegistryVerifiedJoinContextTest {
     fun aPromotedCandidateInsideItsWindowIssuesTheCapability() {
         val candidates = promotedCandidates()
 
+        // Asked inside the window the PROMOTION retained, which is the only
+        // window shape (a) knows about. The conformance vector's own window
+        // belongs to shape (b) and has nothing to do with this candidate.
         val issued = assertNotNull(
-            RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, validFrom()),
+            RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, VALID_FROM),
         )
 
         assertEquals(
             NearbyEventJoinEligibility.ELIGIBLE,
-            nearbyCandidateJoinEligibility(candidates, HASH, validFrom()),
+            nearbyCandidateJoinEligibility(candidates, HASH, VALID_FROM),
         )
         assertEquals(EVENT_ID, issued.joinCode, "the nearby path joins the canonical Event ID")
         assertEquals(EVENT_ID, issued.eventIdHex)
@@ -203,9 +206,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.NOT_REGISTRY_VERIFIED,
-            nearbyCandidateJoinEligibility(candidates, HASH, validFrom()),
+            nearbyCandidateJoinEligibility(candidates, HASH, VALID_FROM),
         )
-        assertNull(RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, VALID_FROM))
     }
 
     @Test
@@ -215,7 +218,7 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.NOT_REGISTRY_VERIFIED,
-            nearbyCandidateJoinEligibility(store.snapshot, HASH, validFrom()),
+            nearbyCandidateJoinEligibility(store.snapshot, HASH, VALID_FROM),
         )
     }
 
@@ -225,7 +228,7 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.NOT_REGISTRY_VERIFIED,
-            nearbyCandidateJoinEligibility(candidates, OTHER_HASH, validFrom()),
+            nearbyCandidateJoinEligibility(candidates, OTHER_HASH, VALID_FROM),
         )
     }
 
@@ -241,9 +244,9 @@ class RegistryVerifiedJoinContextTest {
 
         assertEquals(
             NearbyEventJoinEligibility.INCOMPLETE_REGISTRY_EVIDENCE,
-            nearbyCandidateJoinEligibility(candidates, HASH, validFrom()),
+            nearbyCandidateJoinEligibility(candidates, HASH, VALID_FROM),
         )
-        assertNull(RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, validFrom()))
+        assertNull(RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, VALID_FROM))
     }
 
     /**
@@ -353,9 +356,9 @@ class RegistryVerifiedJoinContextTest {
         errorMessage = null,
     )
 
-    private fun validFrom(): Long = verifiedDefinition().validFrom.value
+    private fun vectorValidFrom(): Long = verifiedDefinition().validFrom.value
 
-    private fun validUntil(): Long = verifiedDefinition().validUntil.value
+    private fun vectorValidUntil(): Long = verifiedDefinition().validUntil.value
 
     private companion object {
         const val VECTOR_PATH = "vectors/positive/event-definition-v1.json"
