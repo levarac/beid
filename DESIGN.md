@@ -5,6 +5,14 @@ audiences at once: human designers and AI coding agents. It covers all SwiftUI
 UI in `ios/Beid/`, previews, empty states, in-app artwork, and the review
 criteria applied to UI PRs.
 
+**[This opening paragraph is itself the exact gap beid#339 was filed
+over: it names "all beid UI" as scope in sentence one, then describes
+coverage only in SwiftUI/`ios/Beid/` terms — the word "Android" appears
+nowhere in it. Left as written per this task's instructions (existing
+text is not reworded); see the new "Platform scope" note below and
+`docs/decisions/issue-339-design-md-android-scope.md` for whether/how
+Android's coverage gets stated here.]**
+
 **Rule language.** Rules use RFC-style keywords:
 
 - **MUST** / **MUST NOT** — hard requirement; violating PRs are rejected.
@@ -20,9 +28,29 @@ mark the values still genuinely undecided (type ramp choice, exact secondary
 hex values, CTA sentence-case grandfathering). Structural and enforcement
 rules carry no tag and are not pending.
 
+**Platform scope — open decision (beid#339).** Whether this contract binds
+Android as written, or iOS is source-of-truth and Android follows/adapts,
+is an owner decision that has **not** been made yet, and it is **not**
+decided anywhere in this document. See
+[`docs/decisions/issue-339-design-md-android-scope.md`](docs/decisions/issue-339-design-md-android-scope.md)
+for the two options and their costs. Independent of how that decision
+resolves, every section and rule below now carries one of three labels:
+**Platform-neutral**, **iOS-specific mechanism — Android counterpart
+named**, or **iOS-only as written — do not apply verbatim to Android**.
+These labels classify what a rule's *content* says and whether an Android
+mechanism exists for it today; they do not by themselves decide whether
+Android is *held* to a "Platform-neutral" rule with the same MUST/FORBIDDEN
+weight iOS is — that weighting is exactly the open decision above.
+
 ---
 
 ## 0. Source of Truth
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named.
+> The "rules vs. values" principle is platform-neutral; the table below
+> names concrete iOS files, so each row gets its own Android counterpart
+> immediately after it (verified against current Android source, not by
+> analogy).
 
 DESIGN.md documents **rules**; repo artifacts hold **values**.
 
@@ -34,6 +62,31 @@ DESIGN.md documents **rules**; repo artifacts hold **values**.
 | DESIGN.md (this file) | Semantics, usage rules, tone, review criteria |
 | Figma "Minimal v4" board | Historical visual input for screen layouts; ratified redesign specs and current components supersede it where they differ |
 
+**Android counterparts** (verified against
+`android/app/src/main/kotlin/org/levarac/beid/ui/theme/` and
+`ui/designsystem/`, 2026-09-07):
+
+- `Tokens.swift`'s `DS` namespace → split across three files rather than
+  one namespace: `ui/theme/Color.kt` (`BeidPalette` primitives +
+  `BeidColorScheme`), `ui/theme/Spacing.kt` (`BeidSpacing`/`BeidRadius`/
+  `BeidSize`), `ui/theme/Type.kt` (`BeidTypography`). Screens read through
+  `BeidTheme.colors.*` (`ui/theme/Theme.kt`), the Compose analogue of `DS.*`
+  usage.
+- `Colors.xcassets`'s adaptive colorsets → no asset-catalog equivalent
+  exists on Android. `BeidPalette` in `Color.kt` holds separate `*Light`/
+  `*Dark` `Color(0x...)` constants, and `BeidAppTheme` in `Theme.kt`
+  (`if (darkTheme) DarkBeidColors else LightBeidColors`) selects between
+  them at composition time — a conditional branch, not a per-asset variant.
+- `.swiftlint.yml` → **does not exist yet.** No detekt or ktlint
+  configuration exists anywhere under `android/` as of this writing. See
+  §16's new enforcement-asymmetry note below — this is not a missing-file
+  detail, it is the same gap stated at the enforcement-layer level.
+- DESIGN.md (this row) → itself platform-neutral, contingent on the open
+  scope decision above.
+- Figma "Minimal v4" board → iOS-only as written (see the note on the
+  board immediately below); no Android-specific visual input exists in
+  this document today.
+
 Note on the Figma board: the mock (branded "SenseProof", an earlier name)
 anchors a light minimal look with a blue, Bluetooth-centric accent. This
 document's palette (§5) deviates from that blue deliberately; Ken resolved
@@ -42,15 +95,35 @@ seal adopted). Figma remains historical visual input, not authority for the
 current flow: ratified `docs/specs/` redesigns and the component/screen
 inventory in §§10–11 govern when they differ. Its colors are not tokens.
 
+> **Platform scope:** iOS-only as written. This note is entirely about an
+> iOS-only historical mock (SwiftUI-era naming, an iOS palette resolution);
+> it makes no claim about Android and none is implied. See #104's
+> discussion in `docs/decisions/issue-339-design-md-android-scope.md` for
+> whether bringing Android into this document's scope changes that issue's
+> reach.
+
 - MUST: When this document and `Tokens.swift` disagree on a value, the code
   is right and this document has drifted — fix the document, and treat the
-  drift as a bug.
+  drift as a bug. **[Android counterpart: the same principle, against
+  Android's token homes — `Color.kt`/`Spacing.kt`/`Type.kt` — when this
+  document and those files disagree.]**
 - MUST: Token excerpts in this document are illustrative; never copy values
-  from prose into code.
+  from prose into code. **[Platform-neutral as a principle; applies
+  identically once Android values are cited in this document.]**
 - FORBIDDEN: Raw color/font/spacing/radius/duration values anywhere in
-  `ios/Beid/**` outside `ios/Beid/DesignSystem/`.
+  `ios/Beid/**` outside `ios/Beid/DesignSystem/`. **[iOS-specific mechanism
+  — Android counterpart: the equivalent path-shaped rule would be raw
+  values anywhere in `android/app/src/main/kotlin/org/levarac/beid/**`
+  outside `ui/theme/` and `ui/designsystem/`. Naming this rule for Android
+  is a content classification only — §16's new note states plainly that no
+  lint mechanism currently checks it there.]**
 
 ## 1. Product Design Thesis
+
+> **Platform scope:** Platform-neutral. The thesis, the "MUST NOT feel
+> like" list, and the guest-first wallet-optional requirement are product
+> statements about the app, not about SwiftUI — nothing here names an
+> iOS API or file.
 
 Ratified (Ken, 2026-07-10) — thesis wording adopted as-is.
 
@@ -72,6 +145,18 @@ fully coherent to a user who never connects a wallet.
 
 ## 2. Non-Negotiables
 
+> **Platform scope:** the *intent* behind every rule below is
+> platform-neutral (tokens-not-literals, accessible hit targets, Dynamic
+> Type, dark mode, labeled icons, color-plus-symbol, standard containers,
+> a capped decorative-symbol size, a documented-exception process). Rules
+> 1–4 and 11 name iOS APIs as their *current expression* — Android
+> counterparts are named per-rule below. Rule 5's exact number is iOS-only
+> as written (see below). None of rules 1–12 has any automated check on
+> Android today (§16's new note); on iOS, rules 1–4 have lint plus the
+> author's own review, and rules 5–12 have only the author's own review —
+> the independent-review gate described later in this document is
+> currently suspended repo-wide (AGENTS.md).
+
 Rules 1–4 are lint-backed for their *common surface forms*
 (`.swiftlint.yml` catches the direct call-site patterns — roughly the 80%
 case); values reached through expressions, wrappers, or indirection are
@@ -82,30 +167,89 @@ by grep alone.
 1. MUST: All colors in Views come from `DS.Color.*`. FORBIDDEN: `Color(red:`,
    `Color(hue:`, `Color(hex:`, `Color.white/.black/.blue/...`, shorthand
    member colors in `.tint(.blue)` / `.foregroundStyle(.orange)` / `.fill(.green)`,
-   and `#RRGGBB` literals — anywhere outside `DesignSystem/`.
+   and `#RRGGBB` literals — anywhere outside `DesignSystem/`. **[Android
+   counterpart: colors come from `BeidTheme.colors.*` (`ui/theme/Color.kt`);
+   FORBIDDEN would be `Color(0x...)`/`Color(red = ...)`/Material default
+   colors (`Color.White`, `MaterialTheme.colorScheme.*` used as a color
+   source instead of `BeidTheme.colors.*`) outside `ui/theme/`. No lint rule
+   enforces this on Android today — see §16.]**
 2. MUST: All fonts in Views come from `DS.Font.*`. FORBIDDEN: `Font.system(`,
    `.font(.title3...)` shorthand, `.font(.custom(` outside `DesignSystem/`.
+   **[Android counterpart: fonts come from `MaterialTheme.typography.*` as
+   configured by `BeidTypography` (`ui/theme/Type.kt`); FORBIDDEN would be
+   a literal `fontSize = N.sp`/`TextStyle(...)` constructed inline outside
+   `ui/theme/`.]**
 3. MUST: Spacing and padding use `DS.Space.*`. Numeric literals other than
    `0` and `1` (hairlines) in spacing/padding are FORBIDDEN outside
-   `DesignSystem/`.
-4. MUST: Corner radii use `DS.Radius.*`.
+   `DesignSystem/`. **[Android counterpart: `BeidSpacing.*`
+   (`ui/theme/Spacing.kt`); same `0`/`1.dp` hairline exception.]**
+4. MUST: Corner radii use `DS.Radius.*`. **[Android counterpart:
+   `BeidRadius.*` (`ui/theme/Spacing.kt`) — verified this file also carries
+   `BeidRadius.glyph` (24dp), an Android-only addition with no named iOS
+   `DS.Radius` counterpart in this document; not a discrepancy to fix here,
+   just noted as not 1:1.]**
 5. MUST: Every interactive element has a hit region ≥ 44×44 pt
-   (`DS.Size.minHitTarget`).
+   (`DS.Size.minHitTarget`). **[iOS-only as written: 44×44pt is Apple's
+   Human Interface Guidelines minimum, not a unit-converted number.
+   Android's own platform accessibility minimum is 48×48dp (Material
+   Design) — a different value, not the same value in different units.
+   Android has no named token equivalent to `DS.Size.minHitTarget` today:
+   `BeidPrimaryButton` hardcodes `heightIn(min = 52.dp)` and
+   `BeidSecondaryButton` hardcodes `heightIn(min = 44.dp)`
+   (`ui/designsystem/BeidButtons.kt`) — the secondary button's 44dp is
+   below Android's own 48dp platform minimum, not just below a
+   not-yet-ported iOS number. Flagged here as a discovered fact, not
+   fixed — out of scope for this docs-only change.]**
 6. MUST: All text uses Dynamic Type-compatible fonts (every `DS.Font.*` role
-   is built on text styles, not fixed sizes).
+   is built on text styles, not fixed sizes). **[Android counterpart: every
+   `BeidTypography` role is a Material3 `TextStyle` reached via
+   `MaterialTheme.typography.*`, which scales with the user's Android font
+   size setting the same way Dynamic Type scales with iOS's — see
+   `Type.kt`'s own role-mapping table.]**
 7. MUST: Every screen renders correctly in light and dark mode; all
-   `DS.Color.*` tokens are adaptive asset colors.
-8. MUST: Icon-only buttons have `.accessibilityLabel`.
+   `DS.Color.*` tokens are adaptive asset colors. **[Android counterpart:
+   the *outcome* (every screen correct in both modes) is platform-neutral;
+   the *mechanism* differs — Android has no adaptive asset-catalog
+   equivalent (see §0's new note above), so "adaptive asset colors" as
+   written does not apply verbatim. Android's actual mechanism is
+   `BeidAppTheme`'s `if (darkTheme)` branch over `LightBeidColors`/
+   `DarkBeidColors` (`ui/theme/Theme.kt`).]**
+8. MUST: Icon-only buttons have `.accessibilityLabel`. **[Android
+   counterpart: `contentDescription` on the `Icon`/`IconButton`, e.g. the
+   analogue of `CollectionHomeView`'s "person.crop.circle" account button
+   needing "Account" as its accessibility label (§13).]**
 9. MUST: State is never conveyed by color alone (verified/warning states pair
-   color with a symbol and/or text).
+   color with a symbol and/or text). **[Platform-neutral principle;
+   Android's `BeidStatusPill` already follows it — see §10.]**
 10. MUST: Standard SwiftUI containers first — `NavigationStack`, `TabView`,
     `.sheet`, `.fullScreenCover`, `.alert`, `.confirmationDialog` — before
-    any custom chrome.
+    any custom chrome. **[iOS-specific mechanism — Android counterpart:
+    Compose Navigation (`NavHost`/`composable`, as `AppNavHost.kt` already
+    uses), `AlertDialog`, `ModalBottomSheet` before custom chrome. Note:
+    Android's current `AccountScreen` is a plain nav-graph destination
+    (`Scaffold` + `Column`), not a `ModalBottomSheet` — see §11's Android
+    note on the Account pattern for why this is a real shape difference,
+    not just an unported detail.]**
 11. FORBIDDEN: Decorative `Image(systemName:)` larger than 32 pt (see §12).
+    **[iOS-specific mechanism — Android counterpart: the same 32pt/32dp cap
+    on a decorative `Icon`/`ImageVector` — see §12's fuller treatment.]**
 12. MUST: Any deviation from this document links a decision record in the PR
-    (`DesignException: <link or rationale>`).
+    (`DesignException: <link or rationale>`). **[Platform-neutral process
+    rule; not tied to any iOS API.]**
 
 ## 3. Tone and Manner
+
+> **Platform scope:** Platform-neutral for the motif *names and
+> meanings*, the do/don't formula, and the voice-register principles —
+> none of that is SwiftUI-specific. The "UI use" column and the voice
+> registers below name concrete iOS view identifiers as *today's*
+> instances of each motif; Android's current screen graph does not have
+> one-to-one matching views for several of them (no dedicated
+> `SensingView`/`EventFoundView`/`RecordingView`/`CollectionHomeView`/
+> `ItemDetailView`/`AccountSheetView` — see §11's Android notes for the
+> verified current shape). Treat the motif column as "where this idea
+> currently lives on iOS," not as a claim that Android has a matching view
+> by that name.
 
 Adjectives don't constrain agents; named motifs do. Each motif names a
 recurring visual idea, where it applies, and what it must not decay into.
@@ -137,6 +281,16 @@ system blue accent,
 or any wallet/crypto iconography.
 ```
 
+**[Android note: no collection-home empty state exists yet on Android
+(no `CollectionHomeView` counterpart — §11). Android's closest analogue,
+`RecordsScreen`'s empty state, uses a plain centered `Text` with no icon
+and no CTA at all (verified, `RecordsScreen.kt`) — it is not this do/don't
+pair's target. Also note the CTA text itself: Android's actual join
+button string is `"Join event"` (`event_join_button`,
+`strings.xml`), not `"Sense Event"` — the two platforms do not currently
+share this grandfathered string; see #24's treatment in
+`docs/decisions/issue-339-design-md-android-scope.md`.]**
+
 Voice registers by moment:
 
 - **Sensing** (`SensingView`, `EventFoundView`): calm, factual, present tense.
@@ -148,31 +302,79 @@ Voice registers by moment:
 - **Recovery** (`SignalLostView`, `BluetoothOffView`): plain instructions,
   no blame, always a way forward.
 
+**[Android note: the voice-register *principle* for each moment is
+platform-neutral. Structurally, Android currently renders Sensing/
+EventFound/Recording/SignalLost inside one screen
+(`EventJoinScreen`'s `ScanPhaseDetail`, verified `EventJoinScreen.kt`)
+rather than one view per moment, so "which screen this register applies
+to" does not map view-for-view to iOS — see §11.]**
+
 ## 4. Token Architecture
+
+> **Platform scope:** the three-tier *architecture* (primitive → semantic
+> → component convention) is platform-neutral. The file names in tier 1
+> and the "MUST edit `Tokens.swift`" rule are iOS-specific mechanism — see
+> the Android counterparts below each. Android's three tiers verified
+> present: primitives (`BeidPalette` in `Color.kt`), semantic tokens
+> (`BeidTheme.colors.*`, `BeidSpacing`/`BeidRadius`/`BeidSize`,
+> `BeidTypography`), component conventions (§10, e.g. `BeidPanel` uses
+> `BeidRadius.card`).
 
 Three tiers:
 
 1. **Primitive values** — hex components in `Colors.xcassets`, numeric
    constants in `Tokens.swift`. Never referenced directly by Views.
+   **[Android counterpart: `BeidPalette` in `ui/theme/Color.kt` — the
+   `internal object` holding raw `Color(0x...)` constants, never referenced
+   directly by screens (verified: screens read `BeidTheme.colors.*`, not
+   `BeidPalette.*`).]**
 2. **Semantic tokens** — the `DS.*` namespace (`DS.Color.signalActive`,
    `DS.Space.m`, `DS.Size.minHitTarget`, `DS.Font.sectionTitle`,
    `DS.Motion.proofResolve`, `DS.Artwork.proofCardGradient(seed:)`). This
-   is the only tier Views may use.
+   is the only tier Views may use. **[Android counterpart:
+   `BeidTheme.colors.signalActive`, `BeidSpacing.m`, `BeidTypography`'s
+   roles via `MaterialTheme.typography.*`. Two gaps verified, not
+   invented: Android has no named token equivalent to `DS.Size.minHitTarget`
+   (§2 rule 5) and no motion-token namespace equivalent to `DS.Motion.*`
+   exists under `ui/theme/` — Android's motion/spring usage (§9) is not
+   yet centralized the way `DS.Motion` centralizes iOS's.]**
 3. **Component conventions** — per-component token bindings documented in
-   §10 (e.g. proof cards use `DS.Radius.card`).
+   §10 (e.g. proof cards use `DS.Radius.card`). **[Android counterpart:
+   the same §10 component list, e.g. `BeidPanel`/`BeidNumberedStepList`
+   use `BeidRadius.card` — verified in `ui/designsystem/BeidPanel.kt` and
+   `BeidNumberedStepList.kt`.]**
 
 Rules:
 
 - MUST: New semantic tokens are added by editing `Tokens.swift` (+ a colorset
   in `Colors.xcassets` for colors) *and* the token table in §17 in the same PR.
+  **[Android counterpart: editing the relevant `ui/theme/*.kt` file (there
+  is no per-color "colorset" step to mirror, since Android has no
+  asset-catalog equivalent — see §0) and the §17 token table in the same
+  PR — a rule this document does not yet state for Android because §17's
+  table today has no Android column (see §17's own note below).]**
 - MUST: Token names describe role, not appearance (`signalActive`, not
-  `tealAccent`).
+  `tealAccent`). **[Platform-neutral naming principle; Android's existing
+  names already follow it (`signalActive`, `actionPrimary`, etc. —
+  verified `Color.kt`).]**
 - SHOULD: Prefer reusing an existing semantic token over adding a near-
   duplicate; introduce a new one only when the *role* is genuinely new.
+  **[Platform-neutral.]**
 - MAY: Introduce a DTCG `tokens.json` upstream source later if design-tool
-  sync becomes real; until then Swift + xcassets are canonical.
+  sync becomes real; until then Swift + xcassets are canonical. **[iOS-only
+  as written: names a specific future iOS-side format; no Android claim is
+  made or implied.]**
 
 ## 5. Color
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named.
+> The palette direction, hex values, and role/allowed/forbidden semantics
+> are platform-neutral content; "adaptive asset colorset" is an iOS-only
+> mechanism (§0). Verified against `ui/theme/Color.kt`: Android's
+> `BeidPalette`/`BeidColorScheme` port every row's exact light/dark hex
+> pair below **except** `DS.Color.statusCaution`, which has **no Android
+> counterpart today** — it is simply absent from `BeidColorScheme`, not
+> renamed or substituted.
 
 Direction ratified (Ken, 2026-07-10): deep ink background + quiet teal
 (`#18C7A7` family) + violet proof seal — the Figma Minimal v4 blue is
@@ -201,20 +403,36 @@ Rules:
 
 - MUST: Every color is an adaptive asset colorset (light + dark) exposed
   through `DS.Color.*`. High-contrast variants SHOULD be added to the same
-  colorsets when the palette is ratified.
+  colorsets when the palette is ratified. **[iOS-only mechanism as
+  written — Android has no colorset to add to (§0). Android counterpart:
+  every color is a `*Light`/`*Dark` pair in `BeidPalette`, exposed through
+  `BeidTheme.colors.*`; a future high-contrast pass would add variant
+  fields to `BeidColorScheme` rather than a colorset.]**
 - MUST: Exactly **one** motif accent per screen, mapped by moment:
   `signalActive` on sensing screens (`SensingView`, `EventFoundView`),
   `proofSeal` on `RecordingView` and proof artwork, `signalWarning` on
   recovery screens (`SignalLostView`, `BluetoothOffView`). Screens outside these moments
   (onboarding, home, account) have **no** motif accent — their CTAs and
-  controls tint with `DS.Color.actionPrimary`.
+  controls tint with `DS.Color.actionPrimary`. **[The one-accent-per-screen
+  principle is platform-neutral; the named views are iOS's current screen
+  graph, not Android's — see §11's Android notes. Verified consistent with
+  the principle: Android's `BluetoothOffScreen` passes `signalWarning`/
+  `labelOnWarning` explicitly to every warning-accented element on that
+  screen (`BluetoothOffScreen.kt`'s own kdoc explains this is because
+  Compose has no ambient `.tint()` to inherit from, unlike SwiftUI).]**
 - MUST NOT: System default blue as an *implicit fallback* — every tintable
   control gets an explicit `DS.Color.*` tint, and the app-level accent is
   `actionPrimary`. FORBIDDEN: `.tint(.blue)` (a retired scaffold pattern,
-  not precedent).
+  not precedent). **[Android counterpart: no default Material3 blue as an
+  implicit fallback; `BeidAppTheme`'s `lightColorScheme`/`darkColorScheme`
+  already wire `primary = beidColors.actionPrimary` explicitly
+  (`Theme.kt`), consistent with this rule as verified today — not a gap.]**
 - MAY: System semantic colors (`.primary`, `.secondary`, `Color(.systemRed)`)
   inside `DesignSystem/` as implementation details of a token — never
-  directly in Views.
+  directly in Views. **[Android counterpart, as a principle: Material3
+  semantic colors (`MaterialTheme.colorScheme.*`) MAY appear inside
+  `ui/theme/`/`ui/designsystem/` as a token's implementation detail, never
+  directly in `ui/screens/`.]**
 - MUST: Prominent CTA labels never rely on the button style's default
   white. Label pairing per fill (see `BeidPrimaryButton`):
   `actionPrimary` → `surfaceCanvas` (fill inversion), `proofSeal` →
@@ -224,13 +442,29 @@ Rules:
   token first (ink-style measures ~8:1/12:1; the inversion default fails
   at ~2:1). Any fill hex change (including ratifying this PROPOSAL
   palette) MUST re-check ≥4.5:1 label-on-fill contrast in both modes.
+  **[Android already has a component of the same name: `BeidPrimaryButton`
+  (`ui/designsystem/BeidButtons.kt`) requires `containerColor`/
+  `contentColor` as non-defaulted parameters, for the same "no default
+  tint" reason stated in its own kdoc — verified consistent with this rule
+  today.]**
 - The per-proof generated gradient is a *data-driven* artwork generator,
   not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
   its canonical home and the only sanctioned source of `Color(hue:)`.
   `ProofCardView` and `ItemDetailView` call that generator directly; a local
   copy of the same math would reintroduce the retired scaffold debt.
+  **[iOS-only as written today: no artwork-generator equivalent exists
+  under `ui/theme/`/`ui/designsystem/` — verified no `hue`/gradient
+  generator anywhere in `android/app/src/main/kotlin`. This is a missing
+  mechanism, not a renamed one; §10's `ProofCardView`/`ItemDetailView`
+  entries have no Android screen to point at yet either (no Android
+  `CollectionHomeView`/`ItemDetailView`, per §11).]**
 
 ## 6. Typography
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named.
+> The ramp's *roles* and constraints are platform-neutral; `DS.Font`
+> itself is an iOS namespace. `ui/theme/Type.kt`'s own kdoc already states
+> a role-for-role Material3 mapping, verified below.
 
 `PROPOSAL — Ken ratification pending` (ramp choice: system SF Pro + SF Mono
 for ledger traces; no custom brand font in this phase)
@@ -249,57 +483,148 @@ Ramp (all Dynamic Type text styles, defined in `DS.Font`):
 | `DS.Font.ledgerMono` | `.footnote` monospaced | Addresses, hashes, proof IDs | Ledger Trace motif only |
 | `DS.Font.cta` | `.headline` | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
 
+**Android counterpart** (verified `ui/theme/Type.kt`, `BeidTypography`):
+`screenTitle` → `headlineLarge`, `ceremonyTitle` → `headlineMedium`,
+`sectionTitle` → `titleLarge`, `cardTitle` → `titleMedium`, `body` →
+`bodyLarge`, `supporting` → `bodyMedium`, `meta` → `labelSmall`,
+`ledgerMono` → `bodySmall` (monospace `FontFamily`), `cta` → `labelLarge`.
+Reached as `MaterialTheme.typography.*`, the same way `DS.Font.*` is
+reached on iOS. This mapping already exists in the codebase's own kdoc —
+this document did not have to invent it.
+
 Rules:
 
 - MUST: All fonts support Dynamic Type (text styles, never fixed point sizes).
+  **[Android counterpart: every `BeidTypography` role is a Material3 role,
+  which scales with the Android system font-size setting — see §2 rule
+  6.]**
 - MUST: Layouts survive AX3 text sizes: multiline text wraps, never clipped;
-  fixed-height containers around text are FORBIDDEN.
+  fixed-height containers around text are FORBIDDEN. **[Android
+  counterpart: layouts must survive Android's largest font-scale setting
+  the same way; `Modifier.height(fixed)` around text is the equivalent
+  FORBIDDEN pattern. Not independently verified against every Android
+  screen in this pass — a review-level check, same as iOS.]**
 - SHOULD: Long event names truncate with `lineLimit` on cards, wrap on
-  detail screens.
+  detail screens. **[Android counterpart: `Text(..., maxLines = 1,
+  overflow = TextOverflow.Ellipsis)` on cards — `BeidHeroHeader` already
+  does this (`maxLines = 2`, `TextOverflow.Ellipsis`, verified
+  `BeidHeroHeader.kt`), wrap (no `maxLines`) on detail screens.]**
 - FORBIDDEN in Views: `.font(.system(size: N))`. A system-symbol fallback
   may size itself inside `DesignSystem/`, but it must still respect §12's
-  32 pt decorative-symbol cap.
+  32 pt decorative-symbol cap. **[Android counterpart: a literal
+  `fontSize = N.sp` outside `ui/theme/`/`ui/designsystem/` — see §2 rule
+  2's Android note.]**
 
 ## 7. Spacing, Layout, Safe Areas
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named.
+> Verified `ui/theme/Spacing.kt`: Android's `BeidSpacing` ports the exact
+> same six values and `pageMargin`, in dp instead of pt (`xs 4.dp / s 8.dp
+> / m 16.dp / l 24.dp / xl 32.dp / xxl 48.dp`, `pageMargin 32.dp`) — a
+> direct 1:1 port, not just a same-shaped scale.
 
 4 pt base scale in `DS.Space`: `xs 4 / s 8 / m 16 / l 24 / xl 32 / xxl 48`,
 plus `DS.Space.pageMargin` (32) for full-width content and bottom CTAs.
 
 - MUST: All padding/spacing values come from `DS.Space.*` (exceptions: `0`, `1`).
+  **[Android counterpart: `BeidSpacing.*` — see §2 rule 3.]**
 - MUST: On state screens in compact width, full-width primary CTAs sit at
   the bottom with horizontal padding `DS.Space.pageMargin` (the pattern in
   `WelcomeView` and `SignalLostView`). Sheets, regular-
   width layouts, and secondary actions MAY deviate with a stated reason.
+  **[Android counterpart: verified in `WelcomeScreen`/`BluetoothOffScreen`
+  — both use `BeidScreen`'s `footer` slot with `BeidSpacing.pageMargin`
+  horizontal padding, matching this pattern. Android is phone-only today
+  (no regular-width/tablet layout class in this codebase), so the "regular
+  width" deviation clause has no Android instance yet — not a violation,
+  just an unexercised case.]**
 - MUST: Respect safe areas; content never hides behind home indicator or
-  notch. Keyboard avoidance uses standard SwiftUI behavior.
+  notch. Keyboard avoidance uses standard SwiftUI behavior. **[Android
+  counterpart: respect system window insets (status bar, navigation bar,
+  display cutouts) — `Scaffold`'s `innerPadding`, which `EventJoinScreen`/
+  `AccountScreen`/`ManualEventCodeScreen` already thread through
+  (verified). Keyboard avoidance uses standard Compose/`Scaffold` behavior.]**
 - SHOULD: Grid layouts use `DS.Space.m` (16) gutters (the
-  `CollectionHomeView` `LazyVGrid` pattern).
+  `CollectionHomeView` `LazyVGrid` pattern). **[iOS-only as written: no
+  `CollectionHomeView`/grid layout exists on Android today (§11) — the
+  gutter *value* recommendation (`BeidSpacing.m`) would carry over to a
+  future Compose `LazyVerticalGrid`, but there is no current screen this
+  rule governs.]**
 - SHOULD: Vertical rhythm inside a state screen (icon → title → body → CTA)
-  uses `DS.Space.l` (24) as the default stack spacing.
+  uses `DS.Space.l` (24) as the default stack spacing. **[Android
+  counterpart: `Arrangement.spacedBy(BeidSpacing.l)` — verified as the
+  actual spacing `BeidStateScreen`/`BeidScreen` use internally
+  (`ui/designsystem/BeidStateScreen.kt`, `BeidScreen.kt`).]**
 
 ## 8. Shape, Material, Elevation
+
+> **Platform scope:** mixed, annotated per bullet below. The radii
+> values/roles and the matte-elevation principle are platform-neutral
+> with a named Android counterpart; the Liquid Glass material paragraphs
+> are iOS-only as written (Android has no Liquid Glass API at all — see
+> §8a's own tag below and `ui/designsystem/BeidSurface.kt`'s kdoc, which
+> states this directly in the code).
 
 Radii in `DS.Radius`: `control 12 / card 16 / seal 28 / pill 999`. All
 rounded rectangles use `style: .continuous`.
 
-- MUST: Proof cards and event cards use `DS.Radius.card`.
-- MUST: Seal/ceremony surfaces use `DS.Radius.seal`.
+**[Android counterpart, verified `ui/theme/Spacing.kt`'s `BeidRadius`:**
+`control 12.dp / card 16.dp / seal 28.dp / pill 999.dp` — an exact 1:1
+port (plus `glyph 24.dp`, an Android-only addition for the icon-roundel
+component, not a divergence to reconcile). **iOS-only as written:**
+`style: .continuous` names SwiftUI's continuous/squircle corner curve;
+Compose's `RoundedCornerShape` (what `BeidRadius` values are consumed
+through, e.g. `BeidSurface.kt`) is a standard circular-arc rounded
+rectangle with no continuous-corner equivalent — this is a real visual
+difference, not just an API rename.**]**
+
+- MUST: Proof cards and event cards use `DS.Radius.card`. **[iOS-only as
+  written for now: no Android proof/event card exists yet (§11) — the
+  token itself (`BeidRadius.card`) is already used by `BeidPanel`
+  (`ui/designsystem/BeidPanel.kt`), Android's closest current analogue.]**
+- MUST: Seal/ceremony surfaces use `DS.Radius.seal`. **[iOS-only as
+  written for now: no Android ceremony/seal surface exists yet — `BeidGlyph`
+  uses `BeidRadius.glyph` (24dp), not `BeidRadius.seal`, for its icon
+  roundel (verified `BeidGlyph.kt`), so this is not yet exercised on
+  Android at all, not a mismatch.]**
 - SHOULD: Elevation via material or `surfaceRaised` + hairline stroke, not
   heavy drop shadows. Beid surfaces are matte and physical, not floaty.
+  **[Android counterpart, verified consistent: `Modifier.beidSurface`
+  (`BeidSurface.kt`) is exactly `surfaceRaised` background + 1dp
+  `strokeHairline` border — no shadow API used anywhere in
+  `ui/designsystem/`.]**
 - Materials: the deployment target is iOS 17, so iOS 26 Liquid Glass APIs
   (e.g. `glassEffect`) are usable only behind availability gates
   (`if #available(iOS 26, *)`), never unguarded. Standard SwiftUI
   controls/navigation adopt the new system appearance automatically when
   the app is rebuilt with the iOS 26 SDK — prefer that free adoption. For
   pre-26 fallback and overlay chrome, use system materials
-  (`.ultraThinMaterial` etc.).
+  (`.ultraThinMaterial` etc.). **[iOS-only as written: an iOS deployment-
+  target/availability-gating concern with no Android analog. Android's
+  `beidSurface` has no OS-version branch at all — its own kdoc states it
+  is "the fallback path alone, always applied" (`BeidSurface.kt`).]**
 - MUST: Custom `glassEffect` use requires explicit design approval
   (a `DesignException` link). Glass is a functional layer for controls and
   navigation, not content decoration — proof/ceremony artwork is content
-  and does not get glass by default. No glass-on-glass nesting.
-- FORBIDDEN: Faking glass with arbitrary blur rectangles.
+  and does not get glass by default. No glass-on-glass nesting. **[iOS-only
+  as written: `glassEffect` does not exist on Android; there is no glass
+  layer to require approval for or to nest.]**
+- FORBIDDEN: Faking glass with arbitrary blur rectangles. **[iOS-only as
+  written: Android has no glass effect to fake — not applicable, not a
+  named counterpart.]**
 
 ### 8a. Liquid Glass materials (design-approved surface, DesignException: this section)
+
+> **Platform scope:** iOS-only as written, for the entire subsection —
+> not merely untranslated. Liquid Glass is an iOS 26 SDK API family with
+> no Android analog at all, not a mechanism that needs an Android name.
+> Android's own `Modifier.beidSurface` (`ui/designsystem/BeidSurface.kt`)
+> already states this directly in its kdoc: it is "material-fallback path
+> only... Android has no Liquid Glass equivalent and no 'below OS 26'
+> branch to speak of, so this is that fallback path alone, always
+> applied." Android's matte/hairline surface treatment is §8's material
+> rule (already covered there), not a renamed instance of anything in this
+> subsection — nothing below needs or gets an Android counterpart tag.
 
 Beid expresses Liquid Glass through the quiet-field-instrument register, not
 against it: glass is restrained, matte-adjacent, and reserved for chrome —
@@ -362,6 +687,16 @@ never a decorative flourish layered onto content or artwork.
 
 ## 9. Motion and Haptics
 
+> **Platform scope:** iOS-specific mechanism — Android counterpart named,
+> with a real caveat. The spring-first/interruptible/reduce-motion/
+> haptics-at-commits *principles* are platform-neutral; the exact
+> parameter values are not portable as-is (below). Verified: Android has
+> **no** motion/animation/haptics code at all today — no `spring(`,
+> `animate*AsState`, `rememberInfiniteTransition`, or haptic-feedback call
+> anywhere under `ui/`, and no `DS.Motion`-equivalent token namespace
+> exists under `ui/theme/` (§4). This section is entirely unimplemented on
+> Android, not implemented differently.
+
 Motion is spring-first and interruptible. Springs are parameterized by
 damping and response (`DS.Motion`), not fixed-duration curves.
 
@@ -373,27 +708,66 @@ damping and response (`DS.Motion`), not fixed-duration curves.
 | `DS.Motion.proofResolve` | spring, response 0.6, damping 0.8 | Proof seal ceremony |
 | `DS.Motion.sensingPulsePeriod` | 1.8 s | One radar pulse cycle in `SensingView` |
 
+**[iOS-specific mechanism, not a numeric port: Compose's spring API
+(`androidx.compose.animation.core.spring`) is parameterized by
+`dampingRatio`/`stiffness`, not SwiftUI's `response`/`damping`. These are
+different curve parameterizations — a future Android motion-token file
+would need its own `dampingRatio`/`stiffness` pairs tuned to feel
+equivalent, not these response/damping numbers relabeled. No such file
+exists yet (see the section tag above).]**
+
 Rules:
 
 - MUST: Default to critically damped (damping 1.0). Overshoot (damping < 1)
   is reserved for moments that carry momentum or ceremony: `entrance` and
-  `proofResolve`.
+  `proofResolve`. **[Platform-neutral principle; Android counterpart would
+  use `dampingRatio = Spring.DampingRatioNoBouncy` (critically damped) by
+  default, `Spring.DampingRatioMediumBouncy`-class values reserved for
+  ceremony/entrance — not yet implemented.]**
 - MUST: Animations are interruptible — never lock out input during a
-  transition; animate from the current (presentation) value.
+  transition; animate from the current (presentation) value. **[Platform-
+  neutral principle; Compose counterpart is animating from an
+  `Animatable`'s live value, same as SwiftUI's presentation-value
+  interruption — not yet implemented.]**
 - MUST: Honor Reduce Motion — replace slides/springs with opacity
   cross-fades; the `SensingView` pulse loop degrades to a static state with
-  a subtle opacity breathe or none at all.
+  a subtle opacity breathe or none at all. **[Android counterpart:
+  Android's system motion-reduction setting
+  (`Settings.Global.ANIMATOR_DURATION_SCALE` / the "Remove animations"
+  accessibility setting) is the platform analogue to iOS's Reduce Motion.
+  Not read or honored anywhere in the current Android codebase — a real
+  gap, not a naming gap.]**
 - SHOULD: Haptics only at meaningful commits: event found (light), proof
   sealed (success). FORBIDDEN: haptics on every phase change of
-  `ScanPhase`.
+  `ScanPhase`. **[Android counterpart: `HapticFeedback`/
+  `LocalHapticFeedback.current.performHapticFeedback(...)`, same
+  restraint rule. No haptic call exists anywhere in the current Android
+  codebase — not yet exercised, so the FORBIDDEN clause has no current
+  violation to point at either.]**
 - FORBIDDEN: `repeatForever` animations on screens other than `SensingView`
   (ambient motion is the Encounter Field motif's privilege, nobody else's).
+  **[iOS-only as written for now: no Android screen has an ambient/looping
+  animation at all today (no `SensingView` counterpart exists — §11), so
+  there is currently nothing on Android for this FORBIDDEN clause to
+  either permit or forbid. The Android counterpart mechanism, when a
+  sensing-phase screen lands, would be `rememberInfiniteTransition`.]**
 
 ## 10. Component Inventory
+
+> **Platform scope:** annotated per component below. As a general note,
+> every Android component cited here lives under
+> `android/app/src/main/kotlin/org/levarac/beid/ui/designsystem/` and was
+> read directly, not assumed by analogy to its iOS name.
 
 Real components in this codebase. Each entry is the contract for reuse.
 
 ### Component: ProofCardView
+
+> **Platform scope:** iOS-only as written — no Android counterpart exists.
+> There is no Android `CollectionHomeView` (§11), so there is no Android
+> proof-card grid for this component to render into. `DS.Artwork.proofCardGradient`
+> also has no Android counterpart (§5). Not renamed, not deferred to
+> another component — absent.
 
 - Purpose: One collected proof in the `CollectionHomeView` grid.
 - Use when: Rendering a `Proof` in a collection context.
@@ -419,6 +793,13 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Component: ScanFlowView (phase container)
 
+> **Platform scope:** iOS-only as written — no Android counterpart
+> container exists. Android's phase rendering (`EventJoinScreen`'s
+> `ScanPhaseDetail`, verified) is a `when` branch inside one screen, not a
+> full-screen-cover container switching between separate phase views —
+> see §11's Android note on the scan flow for the verified current shape.
+> This is a structural difference, not a missing name.
+
 - Purpose: Full-screen cover hosting the sensing flow, switching on
   `SensingCoordinator.phase` (`ScanPhase`: idle/sensing → eventFound →
   recording, with signalLost branch).
@@ -431,6 +812,11 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Component: Sensing pulse (in SensingView)
 
+> **Platform scope:** iOS-only as written — no Android counterpart exists
+> (§9's motion section already establishes Android has zero animation code
+> today; there is also no `SensingView`-equivalent screen for a pulse to
+> live in, §11).
+
 - Purpose: The Encounter Field ambient indicator while scanning.
 - Required tokens: `DS.Color.signalActive`, `DS.Motion.sensingPulsePeriod`.
 - Rules: the only permitted `repeatForever` animation; MUST degrade under
@@ -438,6 +824,11 @@ Real components in this codebase. Each entry is the contract for reuse.
   the state conveyed by the title text.
 
 ### Component: BeidStatusPill
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named,
+> with a deliberately different API shape (not just a port). Android's
+> `BeidStatusPill` (`ui/designsystem/BeidStatusPill.kt`) is real and in
+> production use (`EventJoinScreen`, `RecordsScreen`).
 
 - Purpose: Dot + label status indicator, e.g. "Sensing automatically" atop
   `SensingView`.
@@ -447,23 +838,47 @@ Real components in this codebase. Each entry is the contract for reuse.
   more than a dot + one line of text (use `BeidBulletRow` or a bespoke row
   instead).
 - API: `BeidStatusPill(state:)`, `state: BeidStatusPill.State` —
-  `.sensingAutomatically` / `.sensingPaused`.
+  `.sensingAutomatically` / `.sensingPaused`. **[Android's actual API
+  diverges here on purpose, per its own kdoc: `BeidStatusPill(label:
+  String, tone: Tone)` where `Tone` is `Active`/`Paused`/`Neutral`/`Sealed`
+  and carries **no string** — the caller supplies `label` via
+  `stringResource`. The kdoc states why: baking English label strings into
+  a Kotlin enum (as iOS's `State` does) would bake §15's still-unratified
+  sentence-case decision (#24) into the component. `Neutral`/`Sealed` are
+  Android-only tones added for `RecordsScreen`'s three-state signature
+  pill (beid#121) — Android added tones iOS's `State` enum doesn't have,
+  not the reverse.]**
 - Required tokens: `DS.Space.m` (horizontal padding), `DS.Space.s`
   (vertical padding and the dot-label gap), `DS.Size.statusDot`,
   `DS.Radius.pill` (via `beidSurface`), `DS.Font.supporting`,
   `DS.Color.textSecondary` (label, both states), `DS.Color.signalActive` /
-  `DS.Color.signalWarning` (dot).
+  `DS.Color.signalWarning` (dot). **[Android counterpart: the same tokens
+  by Android name — `BeidSpacing.m`/`.s`, `BeidSize.statusDot`,
+  `BeidRadius.pill` via `beidSurface`, `MaterialTheme.typography.bodyMedium`,
+  `BeidTheme.colors.textSecondary`/`.signalActive`/`.signalWarning` —
+  verified 1:1 in `BeidStatusPill.kt`.]**
 - States: `.sensingAutomatically` (active, `signalActive` dot) /
   `.sensingPaused` (warning, `signalWarning` dot; rendered in
   `SignalLostView`). Label color never changes with state — only
   the dot does, and the label text itself names the state, so color is
-  never the only signal (§2.9).
+  never the only signal (§2.9). **[Android: same "label color never
+  changes, only the dot" rule — verified `BeidStatusPill.kt` always uses
+  `textSecondary` for the label regardless of `tone`.]**
 - Accessibility: dot is `.accessibilityHidden(true)` (decorative — state is
   named by the label text); label is a plain `Text`, not merged into a
   combined accessibility element, so it stays independently queryable by
-  its string.
+  its string. **[Android counterpart: the dot `Box` carries no semantics
+  node (the Compose equivalent of `.accessibilityHidden(true)` — verified
+  no `.semantics {}` on the dot in `BeidStatusPill.kt`); the label is a
+  plain, unmerged `Text`.]**
 
 ### Component: BeidBulletRow
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named,
+> component exists (`ui/designsystem/BeidBulletRow.kt`) but **has no
+> current production caller**. `BluetoothPermissionScreen` reproduces its
+> *text* layout by hand instead of calling it (verified — see the
+> component's own note below).
 
 - Purpose: One benefit/permission bullet — an icon roundel plus a title, and
   optionally a second, smaller supporting sentence.
@@ -472,16 +887,34 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Don't use when: The row needs numbering/sequence (use
   `BeidNumberedStepList` instead) or is itself a full panel/card.
 - API: `BeidBulletRow(systemImage: String, title: LocalizedStringKey, subtitle: LocalizedStringKey? = nil)`.
-  Omit `subtitle` for a title-only row.
+  Omit `subtitle` for a title-only row. **[Android's actual signature:
+  `BeidBulletRow(icon: ImageVector, title: String, tint: Color, subtitle:
+  String? = null)` — `icon` takes a real `ImageVector`, not a symbol-name
+  `String`, and `tint` is a required parameter with no ambient-tint
+  fallback (Compose has no ambient `.tint()` — see §5's accent-map note).
+  Verified `BluetoothPermissionScreen.kt` does **not** call this component:
+  its kdoc states the scaffold has no `material-icons-core`/`-extended`
+  dependency, so it reproduces `BeidBulletRow`'s title+subtitle text layout
+  by hand instead, without an icon roundel at all.]**
 - Required tokens: `DS.Space.s`/`DS.Space.xs` stack spacing, `DS.Font.cardTitle`
   (title), `DS.Font.meta` + `DS.Color.textSecondary` (subtitle),
   `BeidDesign.Radius.control` + `BeidDesign.Size.bulletIcon` (icon roundel).
   Icon tint follows ambient `.tint()` (no motif accent on onboarding screens
-  → `actionPrimary`; §5 accent map elsewhere).
+  → `actionPrimary`; §5 accent map elsewhere). **[Android counterpart:
+  `BeidSpacing.s`/`.xs`, `MaterialTheme.typography.titleMedium` (title),
+  `.labelSmall` + `BeidTheme.colors.textSecondary` (subtitle),
+  `BeidRadius.control` + `BeidSize.bulletIcon` (icon roundel) — verified
+  1:1 in the component file, even though nothing calls it yet.]**
 - Accessibility: icon roundel is `.accessibilityHidden(true)` (decorative;
-  the title/subtitle text already carries the meaning).
+  the title/subtitle text already carries the meaning). **[Android
+  counterpart: the `Icon` carries no `contentDescription`
+  (`contentDescription = null`) — verified.]**
 
 ### Component: BeidNumberedStepList
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named
+> and, unlike `BeidBulletRow`, **actually called** in production
+> (`BluetoothOffScreen`, verified).
 
 - Purpose: Sequential numbered instructions in a bordered card — one filled
   index badge + one line per step.
@@ -490,33 +923,79 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Don't use when: The list isn't ordered (use `BeidBulletRow` instead) or
   has more than a handful of steps (this is not a scrolling list).
 - API: `BeidNumberedStepList(steps: [LocalizedStringKey], labelColor: Color = DS.Color.surfaceCanvas)`.
+  **[Android's actual signature makes both `badgeColor` and `labelColor`
+  required, with no default: `BeidNumberedStepList(steps: List<String>,
+  badgeColor: Color, labelColor: Color)`. The component's own kdoc gives
+  the reason directly: iOS defaults the badge fill to the screen's ambient
+  `.tint()`, but Compose has no ambient tint to read implicitly, so both
+  colors are caller-supplied instead of defaulted.]**
 - Required tokens: `DS.Space.m`/`DS.Space.s`/`DS.Space.xs` spacing,
   `DS.Font.meta` (badge number) + `DS.Font.body` (step text),
   `BeidDesign.Radius.card` + `BeidDesign.Size.stepBadge` (badge), hairline
-  `Divider()` between rows.
+  `Divider()` between rows. **[Android counterpart, verified 1:1:
+  `BeidSpacing.m`/`.s`/`.xs`, `MaterialTheme.typography.labelSmall` (badge
+  number) + `.bodyLarge` (step text), `BeidRadius.card` + `BeidSize.stepBadge`,
+  `HorizontalDivider`.]**
 - Rules: the badge fill follows ambient `.tint()` so it always matches the
   hosting screen's single motif accent (§5) — `labelColor` MUST be that
   tint's on-fill pairing token (e.g. `signalWarning` fill → `labelOnWarning`
   label, the same rule `BeidPrimaryButton` follows). Never hardcode a
   specific `DS.Color` for the badge fill; that would fight whatever tint the
-  screen sets.
+  screen sets. **[Android counterpart: same pairing rule, enforced by the
+  caller instead of an ambient tint — verified `BluetoothOffScreen` passes
+  `signalWarning`/`labelOnWarning` explicitly together.]**
 - Accessibility: badge + step text read as one line per row; no separate
-  accessibility grouping needed since nothing is interactive.
+  accessibility grouping needed since nothing is interactive. **[Android
+  counterpart: `Modifier.semantics(mergeDescendants = true) {}` on each row
+  — verified, the direct Compose equivalent of
+  `.accessibilityElement(children: .combine)`.]**
 
 ### Component: State screen (pattern shared by 01/02/03/06d)
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart
+> exists in the design system (`BeidStateScreen`,
+> `ui/designsystem/BeidStateScreen.kt`) but, like `BeidBulletRow`, **has no
+> current production caller** — verified: no screen under `ui/screens/`
+> calls `BeidStateScreen(`. `BeidStateScreen.kt`'s own kdoc claims it is
+> "used by Welcome, BluetoothPermission, BluetoothOff, and SignalLost";
+> that claim does not match current source and should not be repeated as
+> fact from this document. All of `WelcomeScreen`/`BluetoothPermissionScreen`/
+> `BluetoothOffScreen` instead hand-roll this pattern's text layout without
+> the shared container, each citing the same no-`material-icons`-dependency
+> reason in their own kdoc.
 
 - Purpose: Icon/artwork → title → supporting text → optional bottom CTA.
   Used by `WelcomeView`, `BluetoothPermissionView`, `BluetoothOffView`,
   and `SignalLostView`.
 - Required tokens: `DS.Space.l` stack spacing, `DS.Space.pageMargin`
   margins, `DS.Font.sectionTitle`/`ceremonyTitle` + `DS.Font.supporting`,
-  bottom CTA with `DS.Font.cta`.
+  bottom CTA with `DS.Font.cta`. **[Android counterpart, verified in
+  `BeidStateScreen.kt`/`BeidScreen.kt`: `BeidSpacing.l` stack spacing,
+  `BeidSpacing.pageMargin` margins, `MaterialTheme.typography.titleLarge`/
+  `headlineMedium` + `.bodyLarge`, footer CTA with `.labelLarge`.]**
 - Rules: This is a conceptual pattern, not a missing phase-2 task. Extract a
   shared `StateScreen` container only when a new reuse case justifies it;
   until then new state screens match the required slots and tokens above
-  without pixel-copying an existing view.
+  without pixel-copying an existing view. **[On Android this needs the
+  opposite caution stated in the reverse direction: the shared container
+  (`BeidStateScreen`) already exists but is unused because of the
+  material-icons dependency gap (§12) — do not describe it as "missing,"
+  and do not assume every future icon-bearing state screen should skip it
+  the way today's three do.]**
 
 ### Component: Detail meta row (detailRow in ItemDetailView)
+
+> **Platform scope:** iOS-only as written — and not merely absent. Where
+> Android *does* have a comparable surface (`RecordDetailScreen`, beid#122),
+> its current design **deliberately does not** show an unconditional
+> "Verified" status the way this component does: `RecordDetailScreen.kt`'s
+> own kdoc cites beid#222 rejecting "a measured-looking zero" and beid#240
+> having already forced the removal of an unbacked "Verified" claim twice,
+> and states its five rows use only "Recorded"/"Not yet available" instead.
+> Applying this component's fixed-"Verified" behavior to Android verbatim
+> would not just be untranslated — per Android's own current, deliberate
+> policy it would be wrong. `DS.Artwork.proofCardGradient`/
+> `DS.Size.itemDetailArtwork` also have no Android counterpart (§5, §17).
 
 - Purpose: Ledger Trace metadata (`Method`, `Devices sensed`, `Status`), in
   a `BeidPanel` with no section title — the panel goes straight into rows
@@ -539,17 +1018,53 @@ Real components in this codebase. Each entry is the contract for reuse.
 
 ### Pattern: Primary CTA button
 
+> **Platform scope:** iOS-specific mechanism — Android counterpart named
+> and in production use (`BeidPrimaryButton`, verified across
+> `WelcomeScreen`/`EventJoinScreen`/`ManualEventCodeScreen`).
+
 - Purpose: The one main action per screen ("Get Started", "Sense Event",
   "Try Again", "Done"). A convention, not a reusable component (yet).
+  **[Android's actual CTA strings for this same role are "Get Started"
+  (`welcome_get_started`) and "Join event" (`event_join_button`) — not
+  "Sense Event"; see #24's discussion in
+  `docs/decisions/issue-339-design-md-android-scope.md`.]**
 - Rules: `.borderedProminent`, label `DS.Font.cta`, full width inside
   `DS.Space.pageMargin` (compact-width state screens, §7). Tint follows the
   §5 accent map exactly: `signalActive` on sensing screens, `proofSeal` at
   ceremony, `signalWarning` on recovery screens, `DS.Color.actionPrimary`
   everywhere else. There is no "default" tint — an unspecified tint is a
   §5 violation, not a fallback. Label color follows §5's CTA-label pairing
-  rule (never the style default white). Max one per screen.
+  rule (never the style default white). Max one per screen. **[Android
+  counterpart, verified `BeidButtons.kt`: `BeidPrimaryButton` is a
+  Material3 `Button` (the Compose equivalent of `.borderedProminent`),
+  label `MaterialTheme.typography.labelLarge`, `fillMaxWidth()` inside
+  `BeidSpacing.pageMargin`-padded content, min height 52dp. `containerColor`/
+  `contentColor` are required parameters with no default — the same "no
+  default tint" rule, enforced the same way `BeidNumberedStepList` enforces
+  it (by requiring the caller to pass it, since Compose has no ambient
+  tint to fall back to).]**
 
 ## 11. Screen Patterns
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named
+> per bullet below, verified 2026-09-07 directly against
+> `android/app/src/main/kotlin/org/levarac/beid/navigation/{Screen.kt,
+> AppNavHost.kt}` and `ui/screens/*.kt` — not against AGENTS.md's own
+> prose summary, which states it was last checked 2026-09-03 and warns its
+> own snapshot can go stale. It already has, in one respect: AGENTS.md
+> currently states Android has "six screens" (Welcome, Bluetooth
+> permission, Bluetooth off, Join event, Account, Records); the verified
+> current navigation graph has **nine** real destinations — those six plus
+> `ManualEventCode`, `TodaySummary`, and `RecordDetail` — none of which are
+> hidden or dead code (`AppNavHost.kt` wires all nine into `NavHost`). This
+> is not a claim this document is authorized to fix in AGENTS.md; it is
+> named here because §11 must describe Android's *current* shape
+> accurately, not repeat a prose summary that has already drifted.
+>
+> Direction note: this section states what each screen's current shape
+> *is*, not which platform's shape a future convergence would adopt. At
+> least one area below (the entry flow) currently has Android ahead of
+> iOS, not behind it — see the scan-flow bullet.
 
 The app's navigation shape (all real, from `ios/Beid/Navigation/`):
 
@@ -558,28 +1073,92 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   bluetoothOff / home).
   Onboarding order depends on `OnboardingMode` (walletFirst | guestFirst).
   MUST: both orders stay coherent; no screen may assume a wallet exists.
+  **[Android counterpart, verified `Screen.kt` + `AppNavHost.kt`: a
+  Compose-Navigation graph over nine routes — `Welcome`,
+  `BluetoothPermission`, `BluetoothOff`, `EventJoin`, `Account`,
+  `ManualEventCode`, `Records`, `TodaySummary`, `RecordDetail`. No
+  `walletConnect` route exists (expected — gated on #124, matching
+  beid#335's own comparison table). `EventJoin` stands in for iOS's
+  `.home` (`Screen.kt`'s own comment says this explicitly) — there is no
+  Android `OnboardingMode` equivalent (guest-first is the only path;
+  Android has no wallet-first onboarding order to keep coherent, since
+  wallet-first has no Android entry point yet).]**
 - **Onboarding screens (01–03)**: state-screen pattern (§10), one CTA,
   benefits as short icon bullets (`BluetoothPermissionView`). Permission
-  requests explain value *before* the system prompt.
+  requests explain value *before* the system prompt. **[Android
+  counterpart: `WelcomeScreen`/`BluetoothPermissionScreen`/
+  `BluetoothOffScreen` match this role, but (§10) hand-roll the layout
+  instead of calling `BeidStateScreen`/`BeidBulletRow` due to the
+  material-icons dependency gap (§12). `BluetoothPermissionScreen`
+  explains value before `session.requestBluetoothPermission` is called,
+  matching the "explain before the system prompt" rule (verified
+  `AppNavHost.kt`'s composable body).]**
 - **Collection home (04)**: `NavigationStack` + adaptive `LazyVGrid` of
   `ProofCardView`; account entry top-trailing; "Sense Event" CTA in the
-  bottom bar. Empty state (04b) follows the §3 do/don't.
+  bottom bar. Empty state (04b) follows the §3 do/don't. **[iOS-only as
+  written — no Android counterpart. `Screen.kt`'s own comment: `EventJoin`
+  "stands in for iOS's `.home`, since Android has no post-onboarding
+  collection-home screen yet." Promoting a screen to this role is
+  explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
+  kdoc), not something this document should describe as already true.]**
 - **Scan flow (05–06d)**: `fullScreenCover` — sensing is a modal session with
   a clear exit (a trailing close (X) button). Phase progression is linear;
   `SignalLostView` (06d) is the recovery branch and MUST always offer "Try
-  Again".
+  Again". **[Android's current shape differs structurally, not just by
+  name: `EventJoinScreen`'s `ScanPhaseDetail` (verified) renders
+  Sensing/EventFound/Recording/SignalLost as a `when` branch inside one
+  non-modal screen — no full-screen-cover container, no close (X) button
+  (there is nothing separate to close; leaving happens via `Account`'s
+  "Leave Event"). The SignalLost branch's actual button reads "Resume"
+  (`event_join_resume_sensing` — verified `strings.xml`), not "Try Again."
+  Separately, and not part of this bullet's iOS-described flow at all:
+  `EventJoinScreen` already offers **automatic nearby-event discovery**
+  (`NearbyEventCards`, BLE-driven, verified `EventJoinScreen.kt`) before a
+  user ever enters a code — iOS's current entry flow has no equivalent
+  auto-discovery card list. This is a concrete case of Android currently
+  being ahead of iOS on the entry flow, not behind it; this document does
+  not take a position on whether or how that gets reconciled.]**
 - **Detail (08)**: push via `navigationDestination(item:)` from the grid.
+  **[Android counterpart: `Screen.RecordDetail` is a parameterized
+  Compose-Navigation route (`"records/{recordId}"`), pushed from
+  `RecordsScreen` row taps (verified `AppNavHost.kt`/`RecordsScreen.kt`) —
+  the same push-navigation *intent*, different navigation API. Also see
+  §10's "Detail meta row" entry: Android's `RecordDetailScreen` is one
+  screen collapsing iOS's `ItemDetailView`/`TransparencyView`/
+  `ParticipationSummaryView` three-screen push chain (per beid#335's
+  2026-09-03 addendum, which treats this collapse as content the app
+  already gets right, with only the screen *count* differing) — and it
+  deliberately never shows "Verified" (§10).]**
 - **Account (09)**: `.sheet` with `List` + inline title; wallet
   connect/disconnect lives here in guest-first mode. Destructive actions
   (`Disconnect Wallet`) use `role: .destructive` and MUST confirm via
   `.confirmationDialog`. The current `AccountSheetView` performs the
   disconnect directly; that review-level violation is migration debt, not
-  precedent.
+  precedent. **[Android's shape differs, not just its chrome:
+  `AccountScreen` is a plain nav-graph destination (`Scaffold` + `Column`
+  of `BeidSecondaryButton` rows, verified `AccountScreen.kt`), not a
+  `.sheet`/`List`. No wallet connect/disconnect exists (out of scope,
+  #124). Android does have its own destructive action — "Leave Event" —
+  and it has the *same* shape of gap this document already calls
+  migration debt for iOS: `AccountScreen`'s `onClick = viewModel::leaveEvent`
+  fires directly with no confirmation dialog (verified). This document
+  names that gap as a fact about current Android source, on the same
+  terms it already names it for iOS — it does not decide whether Android
+  should get a confirmation dialog before or independently of iOS.]**
 - Loading: indeterminate work shows calm progress (`RecordingView`'s
   activity indicator with cumulative peer count), never blocking spinners
-  without copy or an invented denominator.
+  without copy or an invented denominator. **[Android counterpart: no
+  activity-indicator/spinner exists on Android today; the closest current
+  analogue is `BeidMetricRow`'s cumulative peers-verified count in
+  `ScanPhaseDetail` and `RecordsScreen`'s rows (verified) — a real count,
+  never an invented denominator, consistent with the rule.]**
 - Errors: recovery screens state what happened, why, and one action —
-  the `SignalLostView` formula.
+  the `SignalLostView` formula. **[Android counterpart: `EventJoinScreen`'s
+  field-error row ("⚠" + `error.message()`, verified) states what
+  happened; the SignalLost branch's "Resume" button is the one action.
+  Android has no screen dedicated to this formula the way `SignalLostView`
+  is dedicated to it — it is one branch of `ScanPhaseDetail`, per the
+  scan-flow bullet above.]**
 
 **Planned surfaces (Figma MTG comments, 2026-07 — not yet designed).**
 Organizer-side comments on the Minimal v4 board name surfaces that do not
@@ -592,7 +1171,42 @@ when they land, they are designed against this contract (the event-code
 rescue path, for example, is a Recovery-register screen per §3, not a new
 visual language).
 
+> **Platform scope — #23, verified facts only (see the decision doc for
+> the full treatment):** Android already has its own manual event-code
+> screen, `ManualEventCodeScreen`/`ManualEventCodeRoute`
+> (`ui/screens/EventJoinScreen.kt`), reached only from `AccountScreen`'s
+> "Enter event code" button (`account_manual_event_code_button`,
+> `Screen.ManualEventCode` route) — **not** from onboarding, and **not**
+> from the scan-flow/recovery path this paragraph reserves. It is
+> currently the closest Android analogue to iOS's `EventCodeEntryView`
+> role (a manual-entry fallback reached outside the main sensing flow),
+> and it sits at a similar naming/role distance from this paragraph's
+> reserved rescue-path surface that `EventCodeEntryView` itself does on
+> iOS — which is exactly what #23 warns must not be assumed reusable
+> without checking fit. This document does not conclude what the eventual
+> Android rescue-path screen should reuse or avoid, or which platform's
+> shape any future convergence follows; see
+> `docs/decisions/issue-339-design-md-android-scope.md`.
+
 ## 12. Iconography and Illustration
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named
+> as a **parity principle**, not a snapshot of today's dependency graph
+> (beid#338 is actively landing Android icon/asset work in a parallel
+> change as this document is written, so a "Android currently has no
+> icons" claim would go stale immediately). The principle: both platforms
+> lean on the *platform's own always-available bundled symbol set* for
+> the system-actions/toolbar/small-inline (≤32pt) tier this table's left
+> column names, and both reserve custom brand artwork for the right
+> column's proof/ceremony/empty-state moments. Android's counterpart to
+> "SF Symbols" in that always-available sense is Android's own bundled
+> vector icon set (`androidx.compose.material.icons` / Material Symbols),
+> used for the same left-column tier — not a claim about which specific
+> icons are wired into any given screen today. As of this writing, no
+> `material-icons` artifact is on `:app`'s Gradle classpath and no custom
+> drawable/illustration assets exist under `android/app/src/main/res` —
+> current facts, not a permanent state; do not restate them without
+> re-checking.
 
 Policy split:
 
@@ -602,11 +1216,22 @@ Policy split:
 | Toolbar and tab affordances | Ceremony moments (`RecordingView` entrance seal) |
 | Small inline symbols beside text (≤ 32 pt) | Any brand moment that lacks suitable custom artwork |
 
+**[Android counterpart column: system actions/toolbar/small-inline (≤32dp)
+→ Material Icons/Material Symbols vector set. Proof seals/encounter
+artwork/empty states/ceremony moments → custom vector assets under
+`android/app/src/main/res` (no asset pipeline decision recorded for
+Android yet — track that decision where it lands, not in this table).]**
+
 - FORBIDDEN: Decorative `Image(systemName:)` larger than 32 pt. There are no
   known current violations: hero headers route through `BeidGlyph`, whose
   default 72 pt container renders a 27.36 pt system-symbol fallback, and
   available brand moments use custom assets. Treat this as a continuing cap,
-  not permission to grow the fallback.
+  not permission to grow the fallback. **[Android counterpart: the same
+  32dp cap on a decorative `Icon`/`ImageVector`. `BeidGlyph`
+  (`ui/designsystem/BeidGlyph.kt`) already sizes its icon at `size * 0.38f`
+  of the container — the same proportional-fallback shape iOS's `BeidGlyph`
+  uses — so a future icon dependency landing there inherits the cap by
+  construction, not by a new rule.]**
 - Two distinct custom-asset pipelines — do not mix them:
   1. **Illustrations** (proof artwork, empty states, sensing scenes):
      vector assets in `Illustrations.xcassets`, rendering `Original`, with
@@ -616,53 +1241,138 @@ Policy split:
      sets, validated in the SF Symbols app, added to the asset catalog —
      this preserves weights, scales, text alignment, and accessibility
      behavior. Single-color template glyphs are tinted only via
-     `DS.Color.*`.
+     `DS.Color.*`. **[iOS-specific mechanism — no Android counterpart
+     pipeline exists yet. Android's nearest structural equivalents would
+     be vector drawables (`res/drawable/*.xml`) for illustrations and
+     `ImageVector`s for custom symbols, but neither pipeline has been
+     decided or built as of this writing — naming the eventual mechanism
+     is out of this document's job (see beid#338).]**
 - Temporary path when a required asset does not yet exist: a new surface
   that *needs* a brand moment MAY ship with a placeholder (small SF Symbol
   ≤ 32 pt or plain layout) plus a `TODO(asset): <asset-name>` comment and a
   checklist note. Remove that TODO when the named asset lands; never use an
-  oversized decorative SF Symbol.
-- MUST: Decorative images use `.accessibilityHidden(true)`.
+  oversized decorative SF Symbol. **[Platform-neutral principle; Android's
+  actual current placeholder path is "plain layout" (no icon at all) —
+  `WelcomeScreen`/`BluetoothPermissionScreen`/`BluetoothOffScreen` all take
+  this branch today, per their own kdoc, rather than a small placeholder
+  icon, since no icon dependency exists to draw even a placeholder from.]**
+- MUST: Decorative images use `.accessibilityHidden(true)`. **[Android
+  counterpart: no semantics node on the decorative `Icon` — verified
+  `BeidGlyph.kt` already omits `contentDescription`.]**
 - MUST: Symbols paired with text scale with Dynamic Type (`@ScaledMetric`
-  or font-relative sizing).
+  or font-relative sizing). **[Android counterpart: font-relative sizing
+  via `.sp`-based or `TextUnit`-relative dimensions, the Compose analogue
+  of `@ScaledMetric` — not yet exercised on Android since no such symbol
+  exists in production today.]**
 - Asset naming: kebab-case, motif-prefixed — e.g. `encounter-field-empty`,
-  `encounter-field-pulse`, `proof-seal-mark`.
+  `encounter-field-pulse`, `proof-seal-mark`. **[Platform-neutral naming
+  convention; would apply verbatim to Android drawable resource names once
+  they exist, modulo Android resource-name rules (lowercase, underscores
+  instead of hyphens — Android resource identifiers cannot contain a
+  hyphen), e.g. `encounter_field_empty`.]**
 
 ## 13. Accessibility
+
+> **Platform scope:** Platform-neutral for every principle below;
+> VoiceOver → TalkBack is a direct platform naming swap, not a mechanism
+> gap. No independent Android accessibility audit (TalkBack pass) was run
+> for this document — the notes below are source-level, same limitation
+> as everywhere else in this pass.
 
 Acceptance criteria for every component and screen, not post-hoc QA:
 
 - MUST: Contrast ≥ WCAG AA for text against its actual background in both
   appearances (verify against `surfaceCanvas` *and* `surfaceRaised`).
-- MUST: Dynamic Type through AX sizes without clipped text (§6).
+  **[Platform-neutral; applies against Android's identical hex pairs
+  (§5) the same way.]**
+- MUST: Dynamic Type through AX sizes without clipped text (§6). **[Android
+  counterpart: Android's largest font-scale setting through Material3 text
+  styles without clipped text — see §6's Android note.]**
 - MUST: VoiceOver — every screen readable in a sensible order; cards are
   single elements with composed labels (§10); icon-only buttons labeled
   (`CollectionHomeView`'s "person.crop.circle" account button MUST carry
-  "Account").
+  "Account"). **[Android counterpart: TalkBack — every screen readable in
+  a sensible order; cards merge to one semantics node with a composed
+  label (`Modifier.semantics(mergeDescendants = true)`, already used by
+  `BeidNumberedStepList` — §10); icon-only buttons carry
+  `contentDescription`. No Android `CollectionHomeView`/account
+  icon-button exists yet (§11) — `EventJoinScreen`'s account entry point
+  is plain clickable `Text`, which is inherently labeled by its own
+  visible string, not an icon-only control needing a separate label.]**
 - MUST: Reduce Motion honored (§9); Reduce Transparency degrades materials
-  to solid `surfaceRaised`.
+  to solid `surfaceRaised`. **[Android counterpart per §9: Android's
+  motion-reduction setting, not currently read anywhere in this codebase —
+  a real gap, not a mechanism gap. "Reduce Transparency" has no Android
+  analogue to name yet, since Android has no glass/transparency material
+  at all (§8a) — `beidSurface` is unconditionally solid `surfaceRaised`
+  already, so this half of the rule is trivially satisfied, not
+  unaddressed.]**
 - MUST: State never by color alone; `RecordingView` exposes the cumulative
   "Recording your attendance automatically · {n} devices sensed" text for
-  VoiceOver, without inventing a total.
+  VoiceOver, without inventing a total. **[Platform-neutral principle,
+  already followed on Android: `BeidStatusPill`'s label text names the
+  state independent of the dot color (§10), and `ScanPhaseDetail`'s
+  `BeidMetricRow` "Devices sensed" figure is a real `peersVerified` count,
+  never an invented denominator (verified `EventJoinScreen.kt`,
+  `RecordDetailScreen.kt`).]**
 - SHOULD: The sensing session posts meaningful VoiceOver announcements on
-  phase changes (event found, recording, signal lost, resumed).
+  phase changes (event found, recording, signal lost, resumed). **[Android
+  counterpart: TalkBack announcements on phase changes, e.g. via
+  `Modifier.semantics { liveRegion = LiveRegionMode.Polite }` or an
+  equivalent explicit announcement — not currently implemented on Android
+  (no `liveRegion`/announcement call found in `ui/screens/`).]**
 
 ## 14. Dark Mode and High Contrast
 
+> **Platform scope:** iOS-specific mechanism — Android counterpart named
+> per bullet; the underlying "every screen correct in both modes, previews
+> prove it, forced overrides only in previews" principle is
+> platform-neutral.
+
 - MUST: Every `DS.Color` token has a dark variant (already true in
-  `Colors.xcassets`); no view opts out of dark mode.
+  `Colors.xcassets`); no view opts out of dark mode. **[Android
+  counterpart: every `BeidColorScheme` field has a `*Light`/`*Dark` pair in
+  `BeidPalette` (verified — all thirteen fields present in both, except
+  `statusCaution`, which has neither, per §5's note); no screen opts out of
+  `BeidAppTheme`.]**
 - MUST: PRs adding UI include light *and* dark previews
-  (`.preferredColorScheme` variants in `#Preview`).
+  (`.preferredColorScheme` variants in `#Preview`). **[Android counterpart:
+  `@Preview` supports a `uiMode = UI_MODE_NIGHT_YES` parameter for the same
+  purpose. Verified gap: all seven current `@Preview` functions under
+  `ui/screens/` render light-mode only — none passes a night-mode
+  `uiMode` — so this rule does not currently hold on Android. Named as a
+  fact, not fixed here.]**
 - MUST: The proof-card generated gradient remains legible against both
   canvas values; card text sits on `surfaceRaised`, never directly on the
-  gradient.
+  gradient. **[iOS-only as written for now: no Android proof card or
+  gradient generator exists (§5, §10) — nothing to check yet.]**
 - SHOULD: High-contrast colorset variants are added at palette ratification;
   until then, high-contrast rendering falls back to the base values and
-  must at minimum not lose information.
+  must at minimum not lose information. **[Android counterpart: the same
+  fallback principle against `BeidPalette`; no high-contrast variant
+  mechanism exists in `BeidColorScheme` today, matching iOS's own
+  not-yet-added state — not a platform gap, a shared one.]**
 - FORBIDDEN: `.colorScheme(.dark)` / `.preferredColorScheme` forced in
-  production views (previews only).
+  production views (previews only). **[Android counterpart: forcing
+  `BeidAppTheme(darkTheme = true/false)` instead of the default
+  `isSystemInDarkTheme()` in a production screen call site would be the
+  equivalent violation — verified no screen does this; `darkTheme`'s
+  default is used everywhere `BeidAppTheme` is called in `@Preview`
+  functions and (by omission) at the real app root.]**
 
 ## 15. Copywriting Voice
+
+> **Platform scope:** mixed, annotated per bullet. The voice/vocabulary/
+> forbidden-term/trust-model/error-formula/CTA-shape rules are
+> platform-neutral. The localization *mechanism* (String Catalog) is
+> iOS-specific — Android's counterpart is named below, worded like
+> AGENTS.md's `LocalizedStringKey`-never-`String` framing for Compose, per
+> this task's own brief. **This document does not restate which specific
+> locales are currently targeted** — that list has moved at least twice
+> (§C decision log shows the 2026-07-10 ratification; AGENTS.md's own
+> Localization Process section records further changes since) — see
+> AGENTS.md's Localization Process section for the current locale set
+> rather than treating any list repeated here as current.
 
 Language model (Ken decision, 2026-07-10): the app's primary language is
 **English**, localized via String Catalogs to the confirmed locale set
@@ -671,41 +1381,107 @@ lives in `AGENTS.md`.
 
 - MUST: All copy is authored in English as the source language; the voice,
   vocabulary, and forbidden-term rules below are defined against English.
+  **[Platform-neutral; applies to Android's English source strings the
+  same way.]**
 - MUST: Translations preserve the register per locale (calm/factual,
   ceremonial, recovery — §3); the forbidden-term list maps per language
   (e.g. the Japanese equivalents of "mint"/"NFT" jargon are equally
-  forbidden).
+  forbidden). **[Platform-neutral principle. Which locales this applies to
+  is exactly the point this section's platform-scope note above declines
+  to restate — see AGENTS.md.]**
 - MUST: User-facing strings go through the String Catalog — no hardcoded
-  display strings that bypass localization.
+  display strings that bypass localization. **[Android counterpart:
+  Android string resources (`res/values/strings.xml`) via
+  `stringResource()`, never a hardcoded literal in a `Text()`/composable —
+  the same rule AGENTS.md's Localization Process states for
+  `LocalizedStringKey`, worded for Compose. Verified consistent with
+  current Android source: every user-facing string found in `ui/screens/`
+  is resolved via `stringResource(R.string.*)`, none hardcoded (test tags
+  are the one deliberate exception — `EventJoinScreenTestTags`'s own kdoc
+  states test tags are not user-facing copy and so deliberately bypass the
+  string catalog, mirroring this rule's own carve-out logic). One gap
+  worth naming, not fixing here: AGENTS.md's MUST rule requires
+  design-system components to take `LocalizedStringKey`, never `String`,
+  specifically so a genuinely dynamic runtime value can't be mistaken for
+  copy. Every Android design-system component (`BeidBulletRow`,
+  `BeidStatusPill`, `BeidNumberedStepList`, `BeidHeroHeader`,
+  `BeidPrimaryButton`, `BeidMetricRow` — verified) takes a plain `String`
+  parameter; Kotlin/Compose has no type distinguishing a
+  `stringResource()`-sourced value from an arbitrary runtime string the
+  way `LocalizedStringKey` does. Today's actual call sites comply in
+  practice (verified: every call site passes a `stringResource(...)`
+  result, not a raw literal), but nothing in the type system would catch
+  a future violation the way it would on iOS.]**
 - Per-locale term mapping, Japanese (Ken decision, 2026-07-10): the UI terms
   are **検知** for "Sensing" and **証明** for "Proof". Do NOT "correct" these
   to the team-internal vocabulary (センシング / 証) — plain-user readability
   wins over internal jargon. Future translators: this is a deliberate,
-  ratified choice, not an oversight.
+  ratified choice, not an oversight. **[iOS-only as written today: Android
+  has no Japanese string resources at all (the target locale set is
+  `en`-only per AGENTS.md) — this term mapping has no current Android
+  application, not a missing port.]**
 
 - Vocabulary: "proof", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A proof is **collected** or **sealed**, never "minted",
-  "dropped", or "claimed".
+  "dropped", or "claimed". **[Platform-neutral; Android's actual strings
+  already comply, e.g. `event_join_button` = "Join event",
+  `records_signature_status_bound`/`records_signature_status_self_proof`
+  (verified `strings.xml`) — no "minted"/"dropped"/"claimed" found.]**
 - FORBIDDEN in user-facing copy: "NFT", "token", "on-chain", "gas", "mint",
   "airdrop", "web3". Wallet copy says what the wallet does for the user
-  ("sign your proofs"), not what protocol it speaks.
+  ("sign your proofs"), not what protocol it speaks. **[Platform-neutral;
+  no violation found in current Android `strings.xml` (grepped for each
+  forbidden term).]**
 - Trust model: beid's whitepaper trust model is a pragmatic compromise and
   the product says so plainly where relevant — settings/about copy states
   what is and isn't cryptographically guaranteed, upfront, in one sentence.
-  No overclaiming ("tamper-proof", "trustless") anywhere.
+  No overclaiming ("tamper-proof", "trustless") anywhere. **[Platform-
+  neutral; Android's `RecordDetailScreen` already practices the
+  no-overclaiming half of this rule concretely — see §10's "Detail meta
+  row" note on its deliberate never-"Verified" wording.]**
 - Grammar: sentence case everywhere, including buttons ("Sense Event" is
   grandfathered until ratification; new CTAs use sentence case —
   `PROPOSAL — Ken ratification pending`). No exclamation marks. Present
-  tense. Second person only when instructing.
+  tense. Second person only when instructing. **[Platform-neutral
+  principle, still `PROPOSAL` — see #24's dedicated treatment in
+  `docs/decisions/issue-339-design-md-android-scope.md`. Android has no
+  string that mirrors iOS's specific "Sense Event" grandfather clause (its
+  own equivalent CTA is "Join event," already sentence case — verified
+  `strings.xml`), and Android's own current CTAs already mix Title Case
+  ("Get Started", "Leave Event", "Open Settings") and sentence case ("Join
+  event", "Enter event code") exactly the way #24 describes for iOS — this
+  is not a new problem Android introduces, it is the same undecided rule
+  producing the same mixing pattern on both platforms independently.]**
 - Error formula: what happened + why + one action. Model:
   "beid lost the connection to {event}. Move closer and we'll pick it back
-  up automatically." + "Try Again".
+  up automatically." + "Try Again". **[Platform-neutral principle; Android
+  has no screen dedicated to this exact formula yet — see §11's note on
+  the scan-flow recovery branch, whose actual button reads "Resume," not
+  "Try Again."]**
 - CTAs are verb-first and specific: "Start sensing", "Open Settings",
   "Connect wallet". FORBIDDEN as generic action labels: "OK", "Submit".
   "Continue" MAY be used where the next step is genuinely a continuation
   (multi-step onboarding), with a stated reason; never as a lazy default.
+  **[Platform-neutral; Android's current CTAs are verb-first
+  (`event_join_button` = "Join event", `event_join_open_settings` =
+  "Open Settings") and none of "OK"/"Submit"/"Continue" was found in
+  `strings.xml`.]**
 
 ## 16. Agent Compliance Checklist
+
+> **Platform scope:** the checklist below is reproduced verbatim (it is a
+> literal copy-paste template for PR descriptions, so it is not annotated
+> line-by-line the way other sections are — reformatting it would break
+> its copy-paste use). Its *content* is platform-neutral item-for-item;
+> the specific mechanism each line names (`DS.*`, `scripts/lint.sh`, "pt",
+> "SF Symbols") is iOS-specific, and each has an Android counterpart
+> already named earlier in this document — `DS.*` → §2/§4's Android
+> notes, `scripts/lint.sh` → **no Android counterpart exists** (see the
+> new enforcement-layer note below), "44×44 pt" → §2 rule 5's Android note
+> (a different platform minimum, 48×48dp, not a unit conversion), "SF
+> Symbols"/TODO(asset) → §12's Android note, §15 → its own per-bullet
+> notes above. Use an Android PR's own checklist by substituting those
+> named counterparts, not by pasting the iOS-worded block unchanged.
 
 Copy-paste this into every UI PR description and check each item:
 
@@ -762,16 +1538,53 @@ Enforcement layers:
 3. **Exception process**: a PR that must deviate states
    `DesignException: <reason>` in its description and links the decision;
    silent deviations are rejected.
+4. **Platform scope — enforcement asymmetry (Android), stated precisely,
+   not as "automated vs. review-level."** No detekt or ktlint
+   configuration exists anywhere under `android/` as of this writing (§0,
+   §2). That means what actually happens per PR is not symmetric with
+   "lint-level + review-level" on either platform, and it must not be
+   described that way: this repository's independent-review gate is
+   currently **suspended repo-wide** (AGENTS.md's "Review gate — SUSPENDED
+   as of 2026-08-19" section) — a PR merges once CI is green, with no
+   independently dispatched reviewer required, on *either* platform.
+   Stated plainly, per platform:
+   - **iOS**: `scripts/lint.sh` (SwiftLint, items 1–4 and 8's cap) runs in
+     PR CI, **plus** the author's own review for every other item.
+   - **Android**: the author's own review, for every item, and nothing
+     else. No lint mechanism exists to catch even the "common 80%"
+     call-site literals (§2, §4's Android notes) automatically.
+
+   This is not a lag this document should paper over: a rule this section
+   calls MUST/FORBIDDEN, checked by nobody but the person who wrote the
+   code, is discovered when it's violated, not enforced beforehand — which
+   is the exact failure shape beid#335/#339 exist to fix in the first
+   place. AGENTS.md's own stated reason for suspending the independent-
+   review gate applies directly here, not as an outside argument: "A gate
+   that is documented but never runs is worse than no gate, because it
+   gets cited as though it were in force." A DESIGN.md that quietly reads
+   as binding Android, while only iOS has a lint gate and neither platform
+   has independent review, would become exactly that. See the decision
+   doc's cost analysis for how this bears on the Option A/B choice.
 
 Known pre-existing lint debt is the exact eight-entry set recorded in
 `lint/baseline.template.json`, all in `ios/Beid/DesignSystem.swift` at the
 last verification point. The screen-level phase-2 migration has landed;
 do not describe every screen as scaffold debt or use the baseline as
-permission to add another violation.
+permission to add another violation. **[iOS-only as written: Android has
+no lint baseline of any kind, since it has no lint mechanism at all (item
+4 above) — there is no Android equivalent list to keep current or point
+to.]**
 
 ## 17. Appendices
 
 ### A. Token table (excerpt — canonical values live in Tokens.swift)
+
+> **Platform scope:** iOS-specific mechanism — Android counterpart named
+> per row below. This table has no Android column; per §4's rule, adding
+> Android tokens to §17 in the same PR that adds them is a rule this
+> document does not yet state for Android — the notes below are this
+> pass's inventory, not a commitment to keep a parallel table current
+> going forward.
 
 | Token | Swift | Value | Role |
 | --- | --- | --- | --- |
@@ -801,7 +1614,35 @@ permission to add another violation.
 6 motion, plus 1 artwork generator — see
 `ios/Beid/DesignSystem/Tokens.swift`.)
 
+**Android counterparts, verified against `ui/theme/{Color.kt,Spacing.kt,
+Type.kt}` (2026-09-07):**
+
+- **Exist today**, same role: `color.surface.canvas` →
+  `BeidTheme.colors.surfaceCanvas`; `color.signal.active` →
+  `.signalActive`; `color.proof.seal` → `.proofSeal`; `color.label.onWarning`
+  → `.labelOnWarning`; `color.label.onSeal` → `.labelOnSeal`;
+  `color.status.on`/`color.status.off` → `.statusOn`/`.statusOff`;
+  `space.m` → `BeidSpacing.m`; `radius.card` → `BeidRadius.card`;
+  `size.status.dot` → `BeidSize.statusDot`; `type.section.title` →
+  `MaterialTheme.typography.titleLarge` (§6's role mapping).
+- **Do not exist yet** (honest gap, not a rename — each depends on a
+  screen or feature Android doesn't have, per §11/§9's notes): the four
+  `layout.*` entries (no regular-width/tablet layout class exists on
+  Android at all — §7); `size.radar.field`/`size.radar.core` (no
+  `SensingView` equivalent); `size.proofCard.artwork`/
+  `size.itemDetail.artwork` (no proof-card/item-detail artwork — §5, §10);
+  `size.qrCode` (no `WalletConnectPairingView` — wallet is gated on #124);
+  `motion.proof.resolve` (no `DS.Motion`-equivalent namespace exists —
+  §9).
+
 ### B. Asset inventory
+
+> **Platform scope:** iOS-only as written for now. **[Android counterpart:
+> no custom drawable/illustration assets exist under
+> `android/app/src/main/res` as of this writing — verified, zero files
+> under any `drawable*` directory. This is a current fact, stated as a
+> parity principle per §12's note above, not a permanent claim — beid#338
+> is active work in this area.]**
 
 `Illustrations.xcassets` currently contains four original-rendering SVG image
 sets, each with light and dark variants:
@@ -815,6 +1656,13 @@ The image-set directories and the four `assetImage:` call sites are the
 inventory evidence. Naming remains governed by §12.
 
 ### C. Decision log
+
+> **Platform scope:** iOS-only as written — every entry below records an
+> iOS-side ratification or revision; none mentions Android. This document
+> does not add a row for beid#339 itself; that decision belongs in
+> `docs/decisions/issue-339-design-md-android-scope.md` and, once the
+> owner decides, in `DECISIONS.md` per this repository's normal process —
+> not invented here as a new log entry ahead of that decision.
 
 | Date | Decision | Status |
 | --- | --- | --- |
@@ -834,7 +1682,20 @@ inventory evidence. Naming remains governed by §12.
 
 ### D. Deprecated patterns
 
+> **Platform scope:** iOS-specific mechanism — Android counterpart named.
+> The underlying prohibitions (no default-blue tint, no oversized
+> decorative symbols, no fixed-size fonts, no raw padding, no ad hoc hue
+> math) are platform-neutral; each named API is iOS's.
+
 Patterns new code must not introduce: `.tint(.blue)` as brand accent,
 oversized decorative SF Symbols, `.font(.system(size:))` in Views, raw
 padding literals, and `Color(hue:)` outside the designated artwork
 generator.
+
+**[Android counterpart: a default Material3 blue as brand accent (verified
+not present — `Theme.kt` wires `actionPrimary` explicitly, §5); oversized
+decorative `Icon`/`ImageVector` beyond 32dp (§12); `fontSize = N.sp`
+literals in Views (§2, §6); raw `Dp`/`sp` padding literals outside
+`ui/theme/` (§2 rule 3); `Color(hue = ...)` math outside a designated
+artwork generator — moot today since no such generator exists on Android
+(§5).]**
