@@ -10,8 +10,12 @@ The scenario identifiers exist twice — `DemoScenario.allScenarios` in Swift an
 the `AndroidDemoScenario` enum in Kotlin — and the two are not required to
 agree at any given commit. Reading one and reporting it as "the scenarios"
 would print a roster that is true of neither platform whenever they diverge,
-and the divergence is a real product fact, not noise: at the time of writing
-iOS carries four and Android six.
+and a divergence is a real product fact rather than noise.
+
+No counts are quoted here on purpose. Whether the two rosters currently agree
+is exactly what this command exists to answer, and a number written into this
+docstring would be a second, unmaintained copy of that answer — stale the next
+time either roster moves, which sibling work does routinely.
 
 So this prints two rosters, names the platform on each, and prints the
 difference explicitly. It does not reconcile them and does not pick a winner.
