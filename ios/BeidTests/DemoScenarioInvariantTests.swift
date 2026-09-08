@@ -66,6 +66,53 @@ final class DemoScenarioInvariantTests: XCTestCase {
       BeidConfig.demoScenario(arguments: ["-beid-demo-scenario", "longDisplayNames"]).identifier,
       "longDisplayNames"
     )
+    XCTAssertEqual(
+      BeidConfig.demoScenario(arguments: ["-beid-demo-scenario", "zeroPeersForever"]).identifier,
+      "zeroPeersForever"
+    )
+    XCTAssertEqual(
+      BeidConfig.demoScenario(arguments: ["-beid-demo-scenario", "unidentifiedHeavy"]).identifier,
+      "unidentifiedHeavy"
+    )
+  }
+
+  /// iOS's roster, pinned as a set, plus the fallback staying first.
+  ///
+  /// **This does not check Android, despite the names below being Android's.**
+  /// It compares iOS against a literal that a human keeps in step with the
+  /// Kotlin enum; nothing here reads that enum, and no Swift test can. So
+  /// adding a scenario to `AndroidDemoScenario` tomorrow leaves this green
+  /// while the platforms diverge. What is genuinely covered is the *changing*
+  /// side: each platform's own literal fails when that platform's roster
+  /// moves, so a one-sided change is caught where it is made — nothing forces
+  /// the other side to follow.
+  ///
+  /// A real cross-platform assertion needs one fixture both hosts read, which
+  /// is a larger change than beid#395 and deliberately out of its scope
+  /// ("fixture のファイル化はこの issue では行わない").
+  ///
+  /// The set and not the order: iOS lists `appReviewGolden` first because it
+  /// is the launch-argument fallback, while `AndroidDemoScenarioTest` pins a
+  /// different order for its own reasons. Comparing sequences would make one
+  /// platform's ordering a constraint on the other's for no product reason,
+  /// and the first thing to break would be iOS's fallback.
+  func testIosOffersTheAgreedScenarioNamesAndKeepsTheFallbackFirst() {
+    XCTAssertEqual(
+      Set(DemoScenario.allScenarios.map(\.identifier)),
+      [
+        "zeroPeersForever",
+        "crowdSurge",
+        "longDisplayNames",
+        "unidentifiedHeavy",
+        "signalLostMidway",
+        "appReviewGolden",
+      ]
+    )
+    XCTAssertEqual(
+      DemoScenario.allScenarios.first?.identifier,
+      "appReviewGolden",
+      "the fallback scenario must stay first; BeidConfig.demoScenario returns it for unknown input"
+    )
   }
 
   func testAppReviewGoldenPreservesExactPrimitiveSequence() {
@@ -357,6 +404,95 @@ final class DemoScenarioInvariantTests: XCTestCase {
 
     XCTAssertFalse(coordinator.demoScenarioReachedRequestedRoute)
     XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .recording)
+  }
+
+  /// The screen no other scenario reaches: scanning, and nothing arriving.
+  ///
+  /// Asserting the phase alone would pass on a scenario that observed devices
+  /// and simply had not confirmed yet, which is a different screen with the
+  /// same name. The two counters are what separate "nothing is arriving" from
+  /// "something is arriving and not identifying" — the whole distinction
+  /// `unidentifiedHeavy` below exists to sit opposite.
+  func testZeroPeersForeverStaysInSensingWithNothingObservedAtAll() async {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let scenario = DemoScenario.zeroPeersForever
+    var executedSteps: [DemoScenario.Step] = []
+    coordinator.onDemoInterpreterCheckpointForTesting = { checkpoint in
+      if case .step(_, let step) = checkpoint {
+        executedSteps.append(step)
+      }
+    }
+
+    coordinator.runDemoScenario(scenario, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    // The end state alone cannot tell "held Sensing across every render turn"
+    // from "never ran": an EMPTY step list also finishes in `.sensing` with
+    // both counters at zero. This scenario's whole content is its step list,
+    // so without pinning execution the assertions below would pass for a
+    // scenario that does nothing at all — a fixture unable to express its own
+    // failure.
+    XCTAssertFalse(scenario.steps.isEmpty, "a scenario with no steps would satisfy every assertion below")
+    XCTAssertEqual(executedSteps, scenario.steps, "every step must actually reach the interpreter")
+
+    guard case .sensing = coordinator.phase else {
+      XCTFail("expected zeroPeersForever to stay in sensing, got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(coordinator.devicesVerified, 0)
+    XCTAssertEqual(coordinator.unidentifiedRpidCount, 0, "nothing was observed, identified or not")
+    XCTAssertFalse(coordinator.hasParkedDemoScenarioForTesting)
+  }
+
+  /// Radio arriving, none of it identifying — the pair `RecordingView`'s
+  /// diagnostic line (beid#218) exists to tell apart from silence.
+  ///
+  /// `devicesVerified == 0` is the assertion doing the real work. Checking
+  /// only that the phase reached `.recording` would pass for the wrong
+  /// reason if the scenario ever started resolving display ids, because then
+  /// it would confirm through the distinct-device arm and render an ordinary
+  /// healthy Recording screen under this scenario's name. That is precisely
+  /// the failure Android's `unidentifiedHeavy` snapshot ships today.
+  func testUnidentifiedHeavyRecordsWithEveryObservationUnidentified() async {
+    await assertUnidentifiedHeavyConfirmsWithoutIdentifyingAnything()
+  }
+
+  /// The same scenario at two other thresholds, because its step count is
+  /// derived from `BeidConfig.eventConfirmThreshold` rather than written out.
+  /// Without this, a step list that happened to be long enough at today's
+  /// default of 3 would look correct and stop confirming the moment the
+  /// threshold moved — and the launch argument `-beid-threshold-override`
+  /// moves it in exactly the demo builds this scenario is for.
+  func testUnidentifiedHeavyStaysCorrectWhenTheConfirmThresholdMoves() async {
+    for threshold in [1, 7] {
+      BeidConfig.eventConfirmThresholdOverrideForTesting = threshold
+      await assertUnidentifiedHeavyConfirmsWithoutIdentifyingAnything(
+        message: "threshold \(threshold)"
+      )
+      BeidConfig.eventConfirmThresholdOverrideForTesting = nil
+    }
+  }
+
+  private func assertUnidentifiedHeavyConfirmsWithoutIdentifyingAnything(
+    message: String = "default threshold"
+  ) async {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+    let threshold = BeidConfig.eventConfirmThreshold
+
+    coordinator.runDemoScenario(.unidentifiedHeavy, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    guard case .recording(_, let peersVerified) = coordinator.phase else {
+      XCTFail("\(message): expected unidentifiedHeavy to reach recording, got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(peersVerified, 0, "\(message): the recording screen must claim no identified peers")
+    XCTAssertEqual(coordinator.devicesVerified, 0, "\(message): nothing resolved a display id")
+    XCTAssertGreaterThan(
+      coordinator.unidentifiedRpidCount,
+      threshold,
+      "\(message): the unidentified residue must exceed the threshold, or the screen reads like an ordinary confirm"
+    )
   }
 
   private func makeFixture() -> (
