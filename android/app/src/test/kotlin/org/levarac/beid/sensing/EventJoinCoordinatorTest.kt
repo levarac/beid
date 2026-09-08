@@ -8,6 +8,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.barnard.BarnardPermissionError
 import org.levarac.barnard.BarnardPermissionResult
@@ -53,6 +54,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onPeersVerifiedChanged = { proofId, peersVerified -> peerUpdates += proofId to peersVerified }
 
         coordinator.joinEvent("FIRST-EVENT")
+
+        runCurrent()
         assertEquals("FIRST-EVENT", engine.getCurrentEventCode(), "an Idle session must still admit the initial join")
         assertEquals(1, engine.startAutoCalls)
         confirmRecording(engine)
@@ -60,6 +63,8 @@ class EventJoinCoordinatorHooksTest {
         val firstBinding = assertIs<EventBindingState.PendingConnect>(coordinator.bindingState)
 
         coordinator.joinNearbyEvent("SECOND-EVENT")
+
+        runCurrent()
 
         assertEquals("FIRST-EVENT", engine.getCurrentEventCode(), "a stale action must not replace the active engine event")
         assertEquals(1, engine.startAutoCalls, "a stale action must not restart the engine")
@@ -79,6 +84,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onProofCollected = { proofId, eventCode, peersVerified -> calls += Triple(proofId, eventCode, peersVerified) }
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
 
         assertEquals(1, calls.size, "must fire exactly once, at the first confirm into Recording")
@@ -96,6 +103,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onProofCollected = { _, _, _ -> callCount += 1 }
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
@@ -111,6 +120,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onPeersVerifiedChanged = { _, _ -> callCount += 1 }
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
 
         assertEquals(0, callCount, "the confirming detection is onProofCollected's transition, not a peers-verified update")
@@ -126,6 +137,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onPeersVerifiedChanged = { proofId, peersVerified -> calls += proofId to peersVerified }
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
 
@@ -140,6 +153,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onPeersVerifiedChanged = { _, _ -> callCount += 1 }
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "cc", detectedDisplayId = "device-3")
 
@@ -156,6 +171,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onPeersVerifiedChanged = { _, _ -> peersVerifiedChangedCalls += 1 }
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         engine.emitDetection(enin = 1, rpid = "aa", detectedDisplayId = "device-1")
 
         assertEquals(0, proofCollectedCalls, "EventFound/Sensing never produced a Proof")
@@ -170,6 +187,8 @@ class EventJoinCoordinatorHooksTest {
         coordinator.onPeersVerifiedChanged = { _, _ -> callCount += 1 }
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         coordinator.simulateSignalLost()
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
@@ -183,6 +202,8 @@ class EventJoinCoordinatorHooksTest {
         val coordinator = coordinator(engine, FakeSensingCryptography())
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
 
@@ -196,6 +217,7 @@ class EventJoinCoordinatorHooksTest {
 
         assertFalse(coordinator.recordingCeremonyShown, "a fresh coordinator has never shown the ceremony")
         coordinator.joinEvent("HOOK-EVENT")
+        runCurrent()
         confirmRecording(engine)
         assertFalse(coordinator.recordingCeremonyShown, "confirming Recording alone must not mark the ceremony shown — only the UI does, via markRecordingCeremonyShown")
 
@@ -210,6 +232,8 @@ class EventJoinCoordinatorHooksTest {
         val coordinator = coordinator(engine, FakeSensingCryptography())
 
         coordinator.joinEvent("HOOK-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         coordinator.markRecordingCeremonyShown()
 
@@ -228,12 +252,15 @@ class EventJoinCoordinatorHooksTest {
         val coordinator = coordinator(engine, FakeSensingCryptography())
 
         coordinator.joinEvent("FIRST-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         coordinator.markRecordingCeremonyShown()
         assertTrue(coordinator.recordingCeremonyShown)
 
         coordinator.leaveEvent()
         coordinator.joinEvent("SECOND-EVENT")
+        runCurrent()
 
         assertFalse(
             coordinator.recordingCeremonyShown,
@@ -254,6 +281,7 @@ class EventJoinCoordinatorHooksTest {
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
+        joinRegistry = FakeEventJoinRegistry(),
         nowEpochMillis = { testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,

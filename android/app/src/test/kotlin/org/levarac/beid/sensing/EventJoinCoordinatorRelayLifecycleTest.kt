@@ -35,6 +35,8 @@ class EventJoinCoordinatorRelayLifecycleTest {
 
         coordinator.joinEvent("community-night")
 
+        runCurrent()
+
         assertNotNull(engine.configuredRelayVerifier)
     }
 
@@ -47,6 +49,8 @@ class EventJoinCoordinatorRelayLifecycleTest {
 
         coordinator.joinEvent("community-night")
 
+        runCurrent()
+
         assertNull(
             engine.configuredRelayVerifier,
             "a device that cannot advertise cannot re-broadcast anything",
@@ -58,6 +62,7 @@ class EventJoinCoordinatorRelayLifecycleTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.joinEvent("community-night")
+        runCurrent()
 
         coordinator.leaveEvent()
 
@@ -69,6 +74,7 @@ class EventJoinCoordinatorRelayLifecycleTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.joinEvent("community-night")
+        runCurrent()
 
         coordinator.dispose()
 
@@ -101,23 +107,18 @@ class EventJoinCoordinatorRelayLifecycleTest {
         val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, registry)
         coordinator.joinEvent("community-night")
+        runCurrent()
         val verifier = assertNotNull(engine.configuredRelayVerifier)
 
-        // A verified envelope, a registry answer that agrees with it, and the
-        // joined event resolved: the three things the gate insists on.
+        // A verified envelope and a discovery registry answer that agrees with
+        // it. The third thing the gate insists on -- the joined event's
+        // canonical id -- is now established by the join itself (beid#374),
+        // which is why no observation context is fed in by hand here.
         engine.emitVerifiedEnvelopeV2("peripheral-a", VECTOR_CONTAINER, VECTOR_ENIN)
         runCurrent()
         registry.completeLookup(NearbyEventIdLookup(true, VECTOR_EVENT_ID_HEX, null))
         runCurrent()
         registry.completeDefinition(vectorDefinition())
-        runCurrent()
-        coordinator.acceptVerifiedObservationContext(
-            WindowObservationContext(
-                eventCode = "community-night",
-                eventIdHex = VECTOR_EVENT_ID_HEX,
-                eventDefinitionDigestHex = VECTOR_EVENT_ID_HEX,
-            ),
-        )
         runCurrent()
 
         assertEquals(
@@ -173,6 +174,7 @@ class EventJoinCoordinatorRelayLifecycleTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.joinEvent("community-night")
+        runCurrent()
 
         val cadence = EventJoinCoordinator.RELAY_DECISION_BOUNDARY_MILLIS
         advanceTimeBy(cadence - 1)
@@ -193,6 +195,7 @@ class EventJoinCoordinatorRelayLifecycleTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.joinEvent("community-night")
+        runCurrent()
         advanceTimeBy(EventJoinCoordinator.RELAY_DECISION_BOUNDARY_MILLIS)
         runCurrent()
 
@@ -231,6 +234,11 @@ class EventJoinCoordinatorRelayLifecycleTest {
         EventJoinCoordinator(
             engine = engine,
             nearbyRegistry = nearbyRegistry,
+            // The join gate answers with the conformance vector's own Event ID,
+            // so the gate this suite exercises is opened by the same identity
+            // the envelope carries -- otherwise the verifier would refuse for
+            // an unrelated reason and these tests would assert nothing.
+            joinRegistry = FakeEventJoinRegistry(eventIdHex = VECTOR_EVENT_ID_HEX),
             nowEpochMillis = { testScheduler.currentTime },
             coroutineScope = backgroundScope,
             sensingCryptography = FakeSensingCryptography(),

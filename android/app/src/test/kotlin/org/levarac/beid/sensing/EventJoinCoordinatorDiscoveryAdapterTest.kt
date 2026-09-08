@@ -109,6 +109,8 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         engine.emitHint("p", "Event", EVENT_HASH)
 
         coordinator.joinEvent("JOIN-CODE")
+
+        runCurrent()
         coordinator.leaveEvent()
         coordinator.stopNearbyEventDiscovery()
 
@@ -179,6 +181,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         coordinator.requestBluetoothPermission {}
         engine.emitHint("p", "Event", EVENT_HASH)
         coordinator.joinEvent("JOIN-CODE")
+        runCurrent()
         assertEquals(1, coordinator.nearbyEventCandidates.value.candidateCount)
 
         coordinator.leaveEvent()
@@ -210,6 +213,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine)
         coordinator.joinEvent("JOIN-CODE")
+        runCurrent()
         engine.engineState = EventJoinEngineState(isScanning = false, isAdvertising = false)
 
         coordinator.requestBluetoothPermission {}
@@ -240,6 +244,7 @@ class EventJoinCoordinatorDiscoveryAdapterTest {
     private fun kotlinx.coroutines.test.TestScope.coordinator(engine: FakeEventJoinEngine): EventJoinCoordinator =
         EventJoinCoordinator(
             engine = engine,
+            joinRegistry = FakeEventJoinRegistry(),
             nowEpochMillis = { testScheduler.currentTime },
             coroutineScope = backgroundScope,
             sensingCryptography = FakeSensingCryptography(),

@@ -2128,7 +2128,13 @@ final class SensingCoordinator: ObservableObject {
                 verifiedDefinitionJoinMode: nil,
                 verifiedDefinitionEventIdHex: nil,
                 verifiedDefinitionEventCodeHashHex: nil,
-                envelopeAgreesWithRegistry: false
+                envelopeAgreesWithRegistry: false,
+                // A lookup that did not route establishes no definition, so
+                // there is no digest and no block to retain (beid#374).
+                verifiedDefinitionHashHex: nil,
+                registryBlockHashHex: nil,
+                verifiedDefinitionValidFromEpochSeconds: nil,
+                verifiedDefinitionValidUntilEpochSeconds: nil
               )
             self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
             return
@@ -2166,7 +2172,17 @@ final class SensingCoordinator: ObservableObject {
                   verifiedDefinitionJoinMode: verified.context?.joinMode,
                   verifiedDefinitionEventIdHex: verified.context?.eventIdHex,
                   verifiedDefinitionEventCodeHashHex: verified.context?.eventCodeHashHex,
-                  envelopeAgreesWithRegistry: agrees
+                  envelopeAgreesWithRegistry: agrees,
+                  // Retained so a later join can prove it is joining the
+                  // definition that promoted this candidate, not merely the
+                  // same event id (beid#374). Passed explicitly rather than
+                  // relying on the Kotlin default, because Swift Export's
+                  // handling of Kotlin default arguments is not something to
+                  // depend on unverified.
+                  verifiedDefinitionHashHex: verified.definitionHashHex,
+                  registryBlockHashHex: verified.blockHashHex,
+                  verifiedDefinitionValidFromEpochSeconds: verified.context?.validFrom.value,
+                  verifiedDefinitionValidUntilEpochSeconds: verified.context?.validUntil.value
                 )
               self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
             }

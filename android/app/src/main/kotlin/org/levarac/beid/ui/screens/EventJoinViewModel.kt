@@ -95,13 +95,19 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun openAppSettings() = session.openAppSettings()
 
+    /**
+     * Forwards the tapped card's stable hash, not the Event ID it was
+     * rendering (beid#374). The lookup below is presentation only — it decides
+     * what to select in the list — and the session re-reads the current
+     * candidate itself. Whether this event may actually be joined is decided
+     * there and in `shared/`, never by what this list happened to show.
+     */
     fun joinNearbyEvent(eventCodeHashHex: String) {
-        val card = _uiState.value.nearbyEventCards
+        _uiState.value.nearbyEventCards
             .firstOrNull { it.eventCodeHashHex == eventCodeHashHex }
             ?: return
-        val eventIdHex = card.eventIdHex ?: return
         _uiState.update { it.copy(selectedNearbyEventHashHex = eventCodeHashHex) }
-        session.joinNearbyEvent(eventIdHex)
+        session.joinNearbyEvent(eventCodeHashHex)
     }
 
     fun simulateSignalLost() = session.simulateSignalLost()

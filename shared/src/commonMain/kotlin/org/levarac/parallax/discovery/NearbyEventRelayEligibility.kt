@@ -132,7 +132,14 @@ public fun isNearbyEventRelayEligible(
  * find no candidate, and the gate would refuse to relay with no signal that a
  * spelling, rather than a policy, made the decision.
  */
-private fun NearbyEventCandidates.candidateForHashHex(hashHex: String): NearbyEventCandidate? {
+// Public rather than private for two reasons. The join gate reuses this exact
+// lookup instead of carrying a second copy -- two gates with two private
+// copies of the same hex handling is how they drift apart, and a difference
+// between the join bar and the relay bar must be a decision, never an accident
+// of spelling. And both native hosts need it directly: a card carries an
+// event-code hash as its stable identity, so joining one means re-reading the
+// candidate that hash currently names rather than trusting what was rendered.
+public fun NearbyEventCandidates.candidateForHashHex(hashHex: String): NearbyEventCandidate? {
     for (index in 0 until candidateCount) {
         val candidate = candidateAt(index) ?: continue
         if (candidate.eventCodeHashHex.normalizedHexOrNull() == hashHex) return candidate
@@ -146,7 +153,7 @@ private fun NearbyEventCandidates.candidateForHashHex(hashHex: String): NearbyEv
  * case or prefix difference between two sources of the same value can never
  * read as a mismatch, and a malformed value can never read as a match.
  */
-private fun String?.normalizedHexOrNull(): String? {
+internal fun String?.normalizedHexOrNull(): String? {
     val value = this ?: return null
     val body = if (value.startsWith("0x") || value.startsWith("0X")) value.substring(2) else value
     if (body.isEmpty() || body.length % 2 != 0) return null

@@ -43,6 +43,14 @@ internal data class NearbyEventDefinitionVerification(
     val validFromEpochSeconds: Long?,
     val validUntilEpochSeconds: Long?,
     val keySetDigestHex: String? = null,
+    /**
+     * The verified Event Definition's digest and the pinned registry block it
+     * was read at (beid#374). Discovery itself does not read either one; they
+     * are retained on the candidate so a later join can prove it is joining
+     * the same definition that promoted it.
+     */
+    val definitionHashHex: String? = null,
+    val blockHashHex: String? = null,
 )
 
 /** Native effect seam; the shared reducer below remains the trust authority. */
@@ -91,6 +99,8 @@ internal class RegistryClientNearbyEventRegistry(
                     validFromEpochSeconds = it.context?.validFrom?.value,
                     validUntilEpochSeconds = it.context?.validUntil?.value,
                     keySetDigestHex = it.context?.definition?.keySetDigestHex,
+                    definitionHashHex = it.definitionHashHex,
+                    blockHashHex = it.blockHashHex,
                 ),
             )
         }
@@ -310,6 +320,13 @@ internal class NearbyEventDiscoverySession(
                                     verifiedDefinitionEventIdHex = verified.eventIdHex,
                                     verifiedDefinitionEventCodeHashHex = verified.eventCodeHashHex,
                                     envelopeAgreesWithRegistry = agrees,
+                                    // Retained so a later join can prove it is
+                                    // joining the definition that promoted this
+                                    // candidate, not merely the same event id.
+                                    verifiedDefinitionHashHex = verified.definitionHashHex,
+                                    registryBlockHashHex = verified.blockHashHex,
+                                    verifiedDefinitionValidFromEpochSeconds = verified.validFromEpochSeconds,
+                                    verifiedDefinitionValidUntilEpochSeconds = verified.validUntilEpochSeconds,
                                 )
                             updateVerifiedCard(
                                 hash,

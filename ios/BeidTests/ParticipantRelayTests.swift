@@ -402,7 +402,11 @@ final class ParticipantRelayTests: XCTestCase {
         verifiedDefinitionJoinMode: .OPEN,
         verifiedDefinitionEventIdHex: eventIdHex,
         verifiedDefinitionEventCodeHashHex: hashHex,
-        envelopeAgreesWithRegistry: true
+        envelopeAgreesWithRegistry: true,
+        verifiedDefinitionHashHex: nil,
+        registryBlockHashHex: nil,
+        verifiedDefinitionValidFromEpochSeconds: nil,
+        verifiedDefinitionValidUntilEpochSeconds: nil
       ).snapshot
   }
 

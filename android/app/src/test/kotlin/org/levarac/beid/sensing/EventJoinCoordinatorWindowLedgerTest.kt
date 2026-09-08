@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
@@ -26,14 +27,23 @@ class EventJoinCoordinatorWindowLedgerTest {
         val firstEngine = FakeEventJoinEngine()
         val first = coordinator(firstEngine, directory, owner, cryptography)
         first.joinEvent("event-a")
-        first.acceptVerifiedObservationContext(EVENT_A_VECTOR_CONTEXT)
+        runCurrent()
         emitRecordingWindow(firstEngine)
         first.dispose()
 
         val replacementEngine = FakeEventJoinEngine()
-        val replacement = coordinator(replacementEngine, directory, owner, cryptography)
+        val replacement = coordinator(
+            replacementEngine,
+            directory,
+            owner,
+            cryptography,
+            joinRegistry = FakeEventJoinRegistry(
+                eventIdHex = EVENT_B_DISTINCT_CONTEXT.eventIdHex,
+                definitionHashHex = EVENT_B_DISTINCT_CONTEXT.eventDefinitionDigestHex,
+            ),
+        )
         replacement.joinEvent("event-b")
-        replacement.acceptVerifiedObservationContext(EVENT_B_DISTINCT_CONTEXT)
+        runCurrent()
         replacementEngine.emitDetection(6_000_000, RPID_THREE, "device-b", REPORTER_RPID)
         replacement.leaveEvent()
 
@@ -56,17 +66,38 @@ class EventJoinCoordinatorWindowLedgerTest {
         )
         val cryptography = vectorCryptography()
         val firstEngine = FakeEventJoinEngine()
-        val first = coordinator(firstEngine, directory, owner, cryptography)
+        // event-A's registry read never answers before the coordinator that
+        // asked for it is destroyed, which is the only way its answer can
+        // arrive late enough to collide with a replacement.
+        val firstRegistry = FakeEventJoinRegistry(
+            answer = FakeEventJoinRegistry.Answer.HOLDS,
+            eventIdHex = EVENT_A_CONTEXT.eventIdHex,
+            definitionHashHex = EVENT_A_CONTEXT.eventDefinitionDigestHex,
+        )
+        val first = coordinator(firstEngine, directory, owner, cryptography, firstRegistry)
         first.joinEvent("event-a")
+        runCurrent()
 
         first.dispose()
 
         val replacementEngine = FakeEventJoinEngine()
-        val replacement = coordinator(replacementEngine, directory, owner, cryptography)
+        val replacement = coordinator(
+            replacementEngine,
+            directory,
+            owner,
+            cryptography,
+            joinRegistry = FakeEventJoinRegistry(
+                eventIdHex = EVENT_B_CONTEXT.eventIdHex,
+                definitionHashHex = EVENT_B_CONTEXT.eventDefinitionDigestHex,
+            ),
+        )
         replacement.joinEvent("event-b")
-        replacement.acceptVerifiedObservationContext(EVENT_B_CONTEXT)
+        runCurrent()
 
-        first.acceptVerifiedObservationContext(EVENT_A_CONTEXT)
+        firstRegistry.completeHeldLookup()
+        runCurrent()
+        firstRegistry.completeHeldDefinition()
+        runCurrent()
         emitRecordingWindow(replacementEngine)
         replacement.leaveEvent()
 
@@ -93,7 +124,7 @@ class EventJoinCoordinatorWindowLedgerTest {
         val firstEngine = FakeEventJoinEngine()
         val first = coordinator(firstEngine, directory, owner)
         first.joinEvent("event")
-        first.acceptVerifiedObservationContext(VECTOR_CONTEXT)
+        runCurrent()
         emitRecordingWindow(firstEngine)
 
         first.dispose()
@@ -101,7 +132,7 @@ class EventJoinCoordinatorWindowLedgerTest {
         val replacementEngine = FakeEventJoinEngine()
         val replacement = coordinator(replacementEngine, directory, owner)
         replacement.joinEvent("event")
-        replacement.acceptVerifiedObservationContext(VECTOR_CONTEXT)
+        runCurrent()
         emitRecordingWindow(replacementEngine)
         replacement.leaveEvent()
 
@@ -152,13 +183,20 @@ class EventJoinCoordinatorWindowLedgerTest {
         assertEquals(0, directory.resolve("observations").listFiles().orEmpty().size)
     }
 
+    /**
+     * The observation context now arrives with the join itself (beid#374), so
+     * the identity a coordinator will sign under is chosen here, through the
+     * registry answer it gets, rather than fed in afterwards.
+     */
     private fun kotlinx.coroutines.test.TestScope.coordinator(
         engine: FakeEventJoinEngine,
         directory: java.io.File,
         owner: WindowObservationRuntimeOwner,
         cryptography: FakeSensingCryptography = vectorCryptography(),
+        joinRegistry: FakeEventJoinRegistry = FakeEventJoinRegistry(),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
+        joinRegistry = joinRegistry,
         nowEpochMillis = { 1_800_000_000_000L },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,
@@ -191,7 +229,6 @@ class EventJoinCoordinatorWindowLedgerTest {
         const val RPID_THREE = "0133333333333333333333333333333333"
         const val SIGNATURE_R = "d9b39668ed2e92db7226461f059a1ecd06a732bd5bfdae0b23d43390a8025349"
         const val SIGNATURE_S = "462b3ecfaa8305881ad1a8b8960e9f3f1e6770683e0c178543613de942c8b765"
-        val VECTOR_CONTEXT = WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
         val EVENT_A_VECTOR_CONTEXT = WindowObservationContext("event-a", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
         val EVENT_A_CONTEXT = WindowObservationContext("event-a", "31".repeat(32), "32".repeat(32), "ab".repeat(32))
         val EVENT_B_CONTEXT = WindowObservationContext("event-b", "21".repeat(32), "22".repeat(32), "ab".repeat(32))

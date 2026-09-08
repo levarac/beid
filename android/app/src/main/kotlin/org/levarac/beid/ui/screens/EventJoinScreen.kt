@@ -340,6 +340,7 @@ fun EventJoinRoute(session: EventJoinSession, onOpenAccount: () -> Unit) {
 private fun statusText(state: EventJoinUiState): String = when (state) {
     is EventJoinUiState.Idle -> stringResource(R.string.event_join_status_idle)
     is EventJoinUiState.RequestingPermission -> stringResource(R.string.event_join_status_requesting_permission)
+    is EventJoinUiState.VerifyingRegistry -> stringResource(R.string.event_join_status_verifying_registry)
     is EventJoinUiState.Sensing -> phaseStatusText(state.phase)
     is EventJoinUiState.PermissionDenied -> stringResource(R.string.event_join_status_permission_denied)
     is EventJoinUiState.JoinFailed -> stringResource(R.string.event_join_error_join_failed)

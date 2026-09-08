@@ -3,6 +3,7 @@ package org.levarac.beid
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,6 +14,7 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.sensing.FakeEventJoinEngine
+import org.levarac.beid.sensing.FakeEventJoinRegistry
 import org.levarac.beid.sensing.FakeSensingCryptography
 import org.levarac.beid.sensing.ProofRecordingBridge
 import org.levarac.beid.sensing.newTempRecordFile
@@ -72,6 +74,7 @@ class MainActivityWiringTest {
         // this is what distinguishes "the wiring works" from "the bridge
         // works" (already proven by ProofRecordingBridgeTest on its own).
         coordinator.joinEvent("WIRING-TEST-EVENT")
+        runCurrent()
         confirmRecording(engine)
 
         assertEquals(1, proofRecordStore.records.size, "onProofCollected must have reached the store via the wiring")
@@ -88,6 +91,7 @@ class MainActivityWiringTest {
         val bridge = ProofRecordingBridge(proofRecordStore)
         wireProofRecording(coordinator, bridge)
         coordinator.joinEvent("WIRING-TEST-EVENT")
+        runCurrent()
         confirmRecording(engine)
         val initialCount = proofRecordStore.records.single().peersVerified
 
@@ -105,6 +109,7 @@ class MainActivityWiringTest {
         val bridge = ProofRecordingBridge(proofRecordStore)
         wireProofRecording(coordinator, bridge)
         coordinator.joinEvent("WIRING-TEST-EVENT")
+        runCurrent()
         confirmRecording(engine)
 
         coordinator.leaveEvent() // finalizeSelfProofIfNeeded() fires onProofSignatureStateChanged
@@ -127,6 +132,7 @@ class MainActivityWiringTest {
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
+        joinRegistry = FakeEventJoinRegistry(),
         nowEpochMillis = { testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = FakeSensingCryptography(),

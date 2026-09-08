@@ -37,8 +37,18 @@ interface EventJoinSession {
 
     fun joinEvent(code: String)
 
-    /** Starts the existing native join sequence with the shared-verified Event ID verbatim. */
-    fun joinNearbyEvent(eventIdHex: String)
+    /**
+     * Joins the nearby candidate with this event-code hash (beid#374).
+     *
+     * Takes the hash rather than the Event ID on purpose. The hash is the
+     * stable candidate identity — see [NearbyEventCard.eventCodeHashHex] — so
+     * the session re-reads the *current* candidate and re-checks it at the
+     * moment of the tap, instead of joining an Event ID that a click closure
+     * captured when the list was built. A candidate's tier can fall between
+     * render and tap, and a card's `enabled` flag is a display projection,
+     * never the authority for whether a join may proceed.
+     */
+    fun joinNearbyEvent(eventCodeHashHex: String)
 
     fun openAppSettings()
 

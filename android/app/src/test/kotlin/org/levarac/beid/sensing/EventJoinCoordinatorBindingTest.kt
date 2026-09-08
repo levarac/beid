@@ -3,6 +3,7 @@ package org.levarac.beid.sensing
 import java.util.UUID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
@@ -42,6 +43,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine, FakeSensingCryptography())
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
 
         val messageHex = coordinator.beginBinding(walletAddress, chainId = 1)
@@ -56,6 +58,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine, FakeSensingCryptography())
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
 
         val first = coordinator.beginBinding(walletAddress, chainId = 1)
@@ -78,6 +81,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine, FakeSensingCryptography())
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -99,6 +103,7 @@ class EventJoinCoordinatorBindingTest {
         val store = BindingRecordStore(newTempRecordFile("binding-records"))
         val coordinator = coordinator(engine, FakeSensingCryptography(), bindingRecordStore = store)
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -118,6 +123,7 @@ class EventJoinCoordinatorBindingTest {
         val calls = mutableListOf<Triple<UUID, Boolean, Boolean>>()
         coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -136,6 +142,7 @@ class EventJoinCoordinatorBindingTest {
         val proofIds = mutableListOf<UUID>()
         coordinator.onProofCollected = { proofId, _, _ -> proofIds += proofId }
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
         val proofId = proofIds.single()
         selfProofStore.add(
@@ -166,6 +173,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine, FakeSensingCryptography())
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -180,6 +188,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine, FakeSensingCryptography())
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -193,6 +202,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine()
         val coordinator = coordinator(engine, FakeSensingCryptography())
         coordinator.joinEvent("BIND-EVENT")
+        runCurrent()
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
@@ -214,6 +224,7 @@ class EventJoinCoordinatorBindingTest {
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
+        joinRegistry = FakeEventJoinRegistry(),
         nowEpochMillis = { testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,

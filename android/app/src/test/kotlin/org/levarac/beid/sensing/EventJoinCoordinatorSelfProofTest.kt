@@ -3,6 +3,7 @@ package org.levarac.beid.sensing
 import java.util.UUID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
@@ -50,6 +51,8 @@ class EventJoinCoordinatorSelfProofTest {
         val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
 
         coordinator.joinEvent("SELF-PROOF-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         require(coordinator.state.value is EventJoinUiState.Sensing) { "expected Sensing state" }
 
@@ -72,6 +75,8 @@ class EventJoinCoordinatorSelfProofTest {
         val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
 
         coordinator.joinEvent("SELF-PROOF-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         coordinator.leaveEvent()
         assertEquals(1, store.records.size)
@@ -88,6 +93,8 @@ class EventJoinCoordinatorSelfProofTest {
         val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
 
         coordinator.joinEvent("SELF-PROOF-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
 
         coordinator.dispose()
@@ -102,6 +109,8 @@ class EventJoinCoordinatorSelfProofTest {
         val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store)
 
         coordinator.joinEvent("SELF-PROOF-EVENT")
+
+        runCurrent()
         // Only one detection: below defaultEventConfirmThreshold (3), never reaches Recording.
         engine.emitDetection(enin = 1, rpid = "aa", detectedDisplayId = "device-1")
 
@@ -118,6 +127,8 @@ class EventJoinCoordinatorSelfProofTest {
         coordinator.onProofSignatureStateChanged = { proofId, hasSelfProof, hasBinding -> calls += Triple(proofId, hasSelfProof, hasBinding) }
 
         coordinator.joinEvent("SELF-PROOF-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         coordinator.leaveEvent()
 
@@ -135,6 +146,8 @@ class EventJoinCoordinatorSelfProofTest {
         val walletAddress = "0x14791697260e4c9a71f18484c9f997b308e59325"
 
         coordinator.joinEvent("SELF-PROOF-EVENT")
+
+        runCurrent()
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
         coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))
@@ -162,6 +175,7 @@ class EventJoinCoordinatorSelfProofTest {
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
+        joinRegistry = FakeEventJoinRegistry(),
         nowEpochMillis = { testScheduler.currentTime },
         coroutineScope = backgroundScope,
         sensingCryptography = cryptography,

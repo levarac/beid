@@ -10,6 +10,7 @@ import org.levarac.barnard.BarnardEventInfoHintEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.barnard.BarnardRelayVerifier
 import org.levarac.barnard.BarnardPermissionStatus
+import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
 
 /**
  * Shared [EventJoinEngine] test double — promoted out of
@@ -27,6 +28,9 @@ internal class FakeEventJoinEngine(
     var startScanCalls = 0
     var stopScanCalls = 0
     var startAutoCalls = 0
+
+    /** Counted so beid#374's gate tests can assert that no join was even attempted. */
+    var joinEventCalls = 0
     var disposeCalls = 0
     private var permissionCallback: ((BarnardPermissionResult) -> Unit)? = null
     private var eventCode: String? = null
@@ -50,12 +54,16 @@ internal class FakeEventJoinEngine(
         engineState = engineState.copy(isScanning = false)
     }
 
-    override fun joinEvent(code: String) {
-        eventCode = code
-    }
-
-    override fun startAuto() {
+    /**
+     * Both counters move together because the production adapter now performs
+     * both acts inside one call (beid#374). They are kept separate so existing
+     * assertions about `startAutoCalls` still say what they always said, and
+     * so a gate test can assert that no join was even attempted.
+     */
+    override fun joinAndStart(context: RegistryVerifiedJoinContext) {
+        joinEventCalls += 1
         startAutoCalls += 1
+        eventCode = context.joinCode
         engineState = EventJoinEngineState(isScanning = true, isAdvertising = true)
     }
 
