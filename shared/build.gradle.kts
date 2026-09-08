@@ -77,4 +77,16 @@ tasks.matching { it.name == "iosArm64Test" }.configureEach {
 // Its absence is reported by the test as "cannot tell", never as "no checkout".
 tasks.withType<Test>().configureEach {
     systemProperty("beid.repoRoot", layout.projectDirectory.dir("..").asFile.canonicalPath)
+
+    // A skip that prints nothing is indistinguishable from a test that passed
+    // (beid#403). The cross-repo comparison skips on every machine without a
+    // Parallax checkout -- CI included -- and until now the only trace was a
+    // count in an HTML report nobody opens. Printing the skip and its reason
+    // costs one line of console output and makes the difference visible.
+    testLogging {
+        events("skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showCauses = true
+        showStackTraces = false
+    }
 }
