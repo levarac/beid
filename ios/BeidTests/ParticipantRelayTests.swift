@@ -209,9 +209,10 @@ final class ParticipantRelayTests: XCTestCase {
   }
 
   /// The counterpart of Android's `EventJoinCoordinator` opening the gate only
-  /// in `acceptVerifiedObservationContext`. Joining resolves a code to an
-  /// event id and nothing more; spec 134 wants the definition read and agreed
-  /// with before this device re-broadcasts on the event's behalf.
+  /// once the join is granted a `RegistryVerifiedJoinContext` (beid#374). On
+  /// iOS, joining still resolves a code to an event id and nothing more; spec
+  /// 134 wants the definition read and agreed with before this device
+  /// re-broadcasts on the event's behalf.
   func testAJoinedEventWhoseDefinitionIsNotVerifiedKeepsTheGateClosed() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
 

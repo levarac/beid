@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
@@ -50,8 +51,56 @@ import org.levarac.beid.shared.report.reconcileUnsentWindowLedgerAfterRelaunch
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorWindowLedgerTest {
+    /**
+     * The link the moved tests used to cover, recovered here without a signer.
+     *
+     * [FakeSensingCryptography] appends its [FakeSensingCryptography.Call.SignWindowReport]
+     * record BEFORE the observation layer verifies the signature it returns, so
+     * the bytes the host actually asked to have signed are observable even
+     * though the canned signature cannot verify for this structure. The verify
+     * failure is therefore expected and deliberately swallowed: this test is
+     * about what reached the signer, not about the signature coming back.
+     */
     @Test
-    fun disposedCoordinatorCannotReplaceTheReplacementEventContextWithALateCompletion() = runTest {
+    fun theJoinedEventIdentityReachesTheBytesTheHostSigns() = runTest {
+        val directory = Files.createTempDirectory("window-signed-identity").toFile()
+        val owner = WindowObservationRuntimeOwner(
+            newWindowId = { java.util.UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },
+            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
+        )
+        val cryptography = vectorCryptography()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, directory, owner, cryptography, registry)
+        joinPromotedVectorEvent(coordinator, engine, registry, DEFINITION_A, BLOCK_A)
+        emitRecordingWindow(engine)
+
+        // The canned signature cannot verify for a structure the conformance
+        // vector was not signed over. Everything this test asserts happened
+        // before that point.
+        runCatching { coordinator.leaveEvent() }
+
+        val sign = cryptography.calls
+            .filterIsInstance<FakeSensingCryptography.Call.SignWindowReport>()
+            .single()
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, sign.eventCode)
+        val signatureStructureHex = sign.bytes.toHexString()
+        assertTrue(
+            NearbyEventPromotionFixture.EVENT_ID_HEX in signatureStructureHex,
+            "the joined event's canonical id must reach the bytes the host signs",
+        )
+        assertTrue(
+            DEFINITION_A in signatureStructureHex,
+            "the definition digest the capability carried must reach those bytes too",
+        )
+        assertTrue(
+            DEFINITION_B !in signatureStructureHex,
+            "and no other definition's digest may appear in them",
+        )
+    }
+
+    @Test
+    fun aDisposedCoordinatorsLateLookupAnswerNeverReachesADefinitionRead() = runTest {
         val directory = Files.createTempDirectory("window-late-context").toFile()
         val owner = WindowObservationRuntimeOwner(
             newWindowId = { java.util.UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },
@@ -93,8 +142,12 @@ class EventJoinCoordinatorWindowLedgerTest {
 
         assertEquals(
             NearbyEventPromotionFixture.EVENT_ID_HEX,
-            replacement.state.value.let { requireNotNull(replacementEngine.getCurrentEventCode()) },
+            replacementEngine.getCurrentEventCode(),
             "the replacement's session is untouched by the dead coordinator's late answer",
+        )
+        assertIs<EventJoinUiState.Sensing>(
+            replacement.state.value,
+            "and it is still the live session, not one the late answer disturbed",
         )
     }
 

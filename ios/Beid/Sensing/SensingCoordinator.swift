@@ -400,8 +400,11 @@ final class SensingCoordinator: ObservableObject {
   /// returned: a code-to-id lookup, with no reading of the event's definition.
   /// Spec 134 step 3 wants the authoritative definition before re-broadcast,
   /// so the gate opens only once `EventIdentityVerification` reaches
-  /// `.verified` — the same bar Android's `resolveObservationContext` applies
-  /// by requiring a verified context, rather than the id lookup alone.
+  /// `.verified` — the same bar Android now applies by requiring a
+  /// `RegistryVerifiedJoinContext` before it joins at all (beid#374), rather
+  /// than the id lookup alone. Android's `resolveObservationContext`, which
+  /// this comment used to name, no longer exists: the verification moved in
+  /// front of the join instead of annotating it afterwards.
   private var relayGateEventIdHex: String?
 
   /// The most recent spec 134 decision, for visibility only. It never feeds a
@@ -1508,10 +1511,14 @@ final class SensingCoordinator: ObservableObject {
       forEventID: eventID,
       to: outcome
     )
-    // The relay gate opens here and nowhere else, matching Android's
-    // `acceptVerifiedObservationContext`. Every outcome other than `.verified`
-    // closes it: an event whose definition this app could not read is one it
-    // must not re-broadcast on behalf of.
+    // The relay gate opens here and nowhere else. Android opens its
+    // equivalent when the join itself is granted a
+    // `RegistryVerifiedJoinContext` (beid#374); its
+    // `acceptVerifiedObservationContext`, which this comment used to name, was
+    // deleted in that change — it was a test-only hook that opened the relay
+    // gate with no evidence at all. Every outcome other than `.verified`
+    // closes this one: an event whose definition this app could not read is
+    // one it must not re-broadcast on behalf of.
     relayGateEventIdHex = outcome == .verified ? hint : nil
     republishRelayGateState()
     eventIdentityVerificationRequest = nil
