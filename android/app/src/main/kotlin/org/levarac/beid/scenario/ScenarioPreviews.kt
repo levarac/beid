@@ -19,8 +19,13 @@ import org.levarac.beid.ui.theme.BeidAppTheme
  * notice it was missing.
  *
  * Internal rather than private so a test can pin it to [AndroidDemoScenario.entries].
- * Deriving the list is the guarantee; without a test, a later edit could quietly
- * replace it with a written-out list and every preview would still render.
+ *
+ * Be precise about what that test does: a written-out list that is COMPLETE
+ * passes it today. It does not forbid writing the names out. What it catches is
+ * that list GOING STALE — the moment a seventh scenario is added, a hand-written
+ * list stops equalling `entries` and the test fails. The assertion is aimed at
+ * the future edit, not at the current text, which is exactly the event beid#399
+ * exists to catch.
  */
 internal class ScenarioProvider : PreviewParameterProvider<AndroidDemoScenario> {
     override val values = AndroidDemoScenario.entries.asSequence()
