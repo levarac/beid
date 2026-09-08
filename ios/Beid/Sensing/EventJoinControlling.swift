@@ -112,11 +112,19 @@ extension BarnardEngine: EventJoinControlling {
   /// the capability was granted, so this adapter cannot pair a verified event
   /// with any other text.
   ///
-  /// `joinEvent` rather than `configure(eventCode:)`: both reach
-  /// `rpid.joinEvent`, but `configure` also rewrites the ENIN mode, the ENIN
-  /// length and the beacon chain to its own defaults on every call. Sensing
-  /// should not silently reset those to start a scan, and the previous code
-  /// path did.
+  /// `joinEvent` rather than the `configure(eventCode:)` the previous code
+  /// path used. Both reach `rpid.joinEvent`, so the join itself is unchanged.
+  /// `configure` additionally rewrites the ENIN mode, the ENIN length and the
+  /// beacon chain on every call — but it writes exactly its own parameter
+  /// defaults, and those are the same values `BarnardEngine` already holds
+  /// from its stored properties (`.fixedLength`, `300`, `.ethereumMainnet`).
+  /// It was the only `configure` call the coordinator made, so nothing else
+  /// had moved them off those values either. Dropping it therefore changes no
+  /// setting; it only removes a second string door. Checked against the
+  /// Barnard sources rather than assumed, because "the defaults are the same"
+  /// is the kind of claim that is quietly wrong after an SDK bump — if a
+  /// future Barnard changes either set of defaults, this call must become
+  /// `configure(eventCode: context.joinCode)` again.
   func joinAndStart(
     _ context: ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext
   ) {
