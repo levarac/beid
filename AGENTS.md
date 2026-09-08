@@ -485,7 +485,12 @@ dates). The contract every agent must know before touching delivery files:
   `.github/workflows/pr-ci.yml` にある。現在の `pr-ci` はすべての PR と
   `main` への push で、Ubuntu 上に次の 3 job を実行する。
   - Android build: `:shared:testAndroidHostTest`、
-    `:app:testDebugUnitTest`、`:app:assembleDebug`、`:app:dependencyInsight`
+    `:app:testDebugUnitTest`、`:app:assembleDebug`、
+    `:app:compileDebugAndroidTestKotlin` (instrumented test source を
+    **compile だけする** 別 step。emulator は使わず実行もしない。
+    `androidTest` source set は `assembleDebug` でも `testDebugUnitTest` でも
+    compile されないため、この step が無いと device-lab の instrumented test が
+    engine API の変更で壊れても CI が緑のままになる)、`:app:dependencyInsight`
     (`org.levarac:barnard` の `debugRuntimeClasspath` resolution を build と
     test の step とは別の `./gradlew` 呼び出しとして追加実行し、その出力を
     `scripts/check_barnard_dependency_provenance.py` で検証する。resolved

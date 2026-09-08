@@ -32,6 +32,9 @@ jobs:
         run: |
           java -version
           ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel
+      - name: Compile Android instrumented tests
+        working-directory: android
+        run: ./gradlew :app:compileDebugAndroidTestKotlin --no-daemon --no-parallel
       - name: Capture Barnard dependency resolution
         working-directory: android
         run: |
