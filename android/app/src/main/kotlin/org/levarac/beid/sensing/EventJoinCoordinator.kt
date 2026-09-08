@@ -388,7 +388,7 @@ class EventJoinCoordinator internal constructor(
                 return@requestPermissions
             }
             if (result is BarnardPermissionResult.Granted && result.status.canScan && result.status.canAdvertise) {
-                verifyThenJoin(eventCode = code, knownEventIdHex = null)
+                verifyThenJoin(eventCode = code)
             } else {
                 stopParticipantRelay()
                 _state.value = mapPermissionResultToState(result)
