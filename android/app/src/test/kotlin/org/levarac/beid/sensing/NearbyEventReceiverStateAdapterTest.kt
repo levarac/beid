@@ -44,6 +44,14 @@ class NearbyEventReceiverStateAdapterTest {
      * it kept the assertion and dropped the input that gave it meaning. Same
      * shape as the late-arrival test above: what makes a refusal test real is
      * that something actually refused.
+     *
+     * This test and its sibling pin THE LOOKUP MAPPING and deliberately say
+     * nothing about the card. They cannot: `eventIdHex` is published only from
+     * the definition-verification success path, which a failed lookup never
+     * reaches, so a card assertion here would read as coverage and hold for
+     * every possible card rule including a maximally broken one. The card has
+     * a designated guardian in [theCardFollowsTheSharedJoinEligibility], which
+     * covers all three tiers itself.
      */
     @Test
     fun aNotFoundLookupIsRecordedAsNotRegisteredRatherThanUnavailable() = runTest {
@@ -55,7 +63,6 @@ class NearbyEventReceiverStateAdapterTest {
         runCurrent()
 
         assertEquals(NearbyEventRegistryStatus.NOT_REGISTERED, candidate(session).registryStatus)
-        assertNull(session.cards.value.single().eventIdHex)
     }
 
     /**
@@ -74,7 +81,6 @@ class NearbyEventReceiverStateAdapterTest {
         runCurrent()
 
         assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate(session).registryStatus)
-        assertNull(session.cards.value.single().eventIdHex)
     }
 
     /**
