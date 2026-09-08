@@ -332,6 +332,80 @@ final class DemoScenarioInvariantTests: XCTestCase {
     XCTAssertEqual(record?.eninEnd, 4)
   }
 
+  // MARK: - beid#399 preview seam: stop where the reducer says
+
+  /// The seam's whole point: the caller names a SCREEN, and the reducer
+  /// decides which step reaches it.
+  ///
+  /// The assertion is deliberately on the phase and not on a cursor value. If
+  /// this test pinned "stops after N steps" it would re-encode the reducer's
+  /// confirm rule in the test, and it would keep passing while previews went
+  /// stale after any change to that rule — the exact failure the step-index
+  /// version of this seam was rejected for.
+  func testScenarioStopsAtTheRequestedScreenRatherThanAStepIndex() async {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.runDemoScenario(.appReviewGolden, stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound)
+    await coordinator.waitForDemoScenarioPreviewToSettle()
+
+    XCTAssertTrue(coordinator.demoScenarioReachedRequestedRoute)
+    XCTAssertEqual(
+      ScanFlowContent.route(for: coordinator.phase),
+      .eventFound,
+      "the interpreter must stop while the app would still be rendering Event Found"
+    )
+  }
+
+  /// Stopping early must actually stop early. Without this, a seam that ran to
+  /// the end and merely reported the requested screen would satisfy the test
+  /// above whenever the terminal screen happened to match.
+  func testStoppingAtAnEarlyScreenLeavesTheLaterScreenUnreached() async {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.runDemoScenario(.crowdSurge, stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound)
+    await coordinator.waitForDemoScenarioPreviewToSettle()
+
+    XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .eventFound)
+    XCTAssertLessThan(
+      coordinator.devicesVerified,
+      40,
+      "crowdSurge observes 40 devices by its end; stopping at Event Found must leave most unobserved"
+    )
+  }
+
+  /// What the apparatus CANNOT express, pinned so it cannot be mistaken for
+  /// something it can.
+  ///
+  /// `crowdSurge` never reaches Signal Lost — no step of it ever asks for that
+  /// phase. A preview that quietly rendered the terminal Recording screen
+  /// under a "Signal Lost" label would be a fixture lying about what it shows,
+  /// which is worse than showing nothing. The seam reports the miss instead,
+  /// and this test is what stops a later change from making the miss silent.
+  func testAnUnreachableScreenIsReportedRatherThanSilentlySubstituted() async {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.runDemoScenario(.crowdSurge, stepDelayNanos: 0, stopWhenPhaseReaches: .signalLost)
+    await coordinator.waitForDemoScenarioPreviewToSettle()
+
+    XCTAssertFalse(
+      coordinator.demoScenarioReachedRequestedRoute,
+      "crowdSurge cannot reach Signal Lost, and the seam must say so rather than stop somewhere else"
+    )
+    XCTAssertNotEqual(ScanFlowContent.route(for: coordinator.phase), .signalLost)
+  }
+
+  /// The default overload must be untouched by the seam: no stop route, no
+  /// early exit, and the flag stays false so nothing reads a stale true.
+  func testRunningWithoutAStopRouteIsUnchanged() async {
+    let coordinator = makeIsolatedSensingCoordinator(for: self)
+
+    coordinator.runDemoScenario(.appReviewGolden, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+
+    XCTAssertFalse(coordinator.demoScenarioReachedRequestedRoute)
+    XCTAssertEqual(ScanFlowContent.route(for: coordinator.phase), .recording)
+  }
+
   /// The screen no other scenario reaches: scanning, and nothing arriving.
   ///
   /// Asserting the phase alone would pass on a scenario that observed devices
