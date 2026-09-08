@@ -12,6 +12,7 @@ func makeIsolatedSensingCoordinator(
   sensingCryptography: any SensingCryptography = DeterministicSensingCryptography(),
   reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
   participantRelayControl: (any ParticipantRelayControlling)? = nil,
+  eventJoinControl: (any EventJoinControlling)? = nil,
   relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
 ) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
@@ -43,6 +44,7 @@ func makeIsolatedSensingCoordinator(
     unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
     sensingCryptography: sensingCryptography,
     reportSubmissionRuntime: reportSubmissionRuntime,
+    eventJoinControl: eventJoinControl,
     participantRelayControl: participantRelayControl,
     relayCadenceNanoseconds: relayCadenceNanoseconds
   )

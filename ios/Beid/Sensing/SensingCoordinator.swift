@@ -368,11 +368,19 @@ final class SensingCoordinator: ObservableObject {
   /// populate.
   private static let ledgerLog = Logger(subsystem: "org.levarac.beid", category: "ledger")
 
-  private let engine = BarnardEngine()
+  /// The Barnard participation operations this coordinator drives (beid#410).
+  ///
+  /// Deliberately `any EventJoinControlling` rather than a `BarnardEngine`.
+  /// That protocol has no `joinEvent(String)` and no argumentless
+  /// `startAuto()` on it, so this type cannot join or start sensing without a
+  /// `RegistryVerifiedJoinContext` — not because a check refuses, but because
+  /// there is no method to call. Holding the concrete engine here is what
+  /// previously left both doors open.
+  private let engine: any EventJoinControlling
 
-  /// The Barnard relay operations this coordinator drives. Defaults to
-  /// `engine`; injected in tests, which cannot construct a `BarnardEngine`
-  /// they can observe.
+  /// The Barnard relay operations this coordinator drives. Defaults to the
+  /// same Barnard engine `engine` forwards to; injected in tests, which
+  /// cannot construct a `BarnardEngine` they can observe.
   private let relayControl: any ParticipantRelayControlling
 
   /// The spec 134 relay verifier (beid#367). Held for the whole lifetime and
@@ -1021,6 +1029,7 @@ final class SensingCoordinator: ObservableObject {
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
+    eventJoinControl: (any EventJoinControlling)? = nil,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1040,6 +1049,7 @@ final class SensingCoordinator: ObservableObject {
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
+      eventJoinControl: eventJoinControl,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds
     )
@@ -1062,6 +1072,7 @@ final class SensingCoordinator: ObservableObject {
     },
     nearbyRegistryClient:
       ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
+    eventJoinControl: (any EventJoinControlling)? = nil,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1109,7 +1120,13 @@ final class SensingCoordinator: ObservableObject {
         joinedEventIdHex: nil
       )
     )
-    self.relayControl = participantRelayControl ?? engine
+    // One Barnard engine backs both seams by default, so production keeps the
+    // single instance it has always had. Either seam can be injected on its
+    // own; a test that injects only one still gets the real engine behind the
+    // other, exactly as before.
+    let barnardEngine = BarnardEngine()
+    self.engine = eventJoinControl ?? barnardEngine
+    self.relayControl = participantRelayControl ?? barnardEngine
     self.relayCadenceNanoseconds = relayCadenceNanoseconds
     if let ledgerFailure {
       ledgerHealth = .degraded(reason: ledgerFailure, since: Date())
@@ -1231,7 +1248,7 @@ final class SensingCoordinator: ObservableObject {
     }
     switch phase {
     case .sensing:
-      let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
+      let eventCode = engine.currentJoinedEventCode() ?? "Unknown Event"
       let session = EventSession(
         id: eventCode,
         name: eventCode,
@@ -1634,29 +1651,45 @@ final class SensingCoordinator: ObservableObject {
     )
   }
 
-  /// Calls the Barnard SDK's join API (`BarnardEngine.joinEvent`)
-  /// with a manually entered event code — the wallet-optional fallback path
-  /// (`EventCodeEntryView`) for choosing which event to sense, since there
-  /// is no BLE auto-discovery yet. Returns whether the code took effect.
+  /// Selects a manually entered event code — the wallet-optional path
+  /// (`EventCodeEntryView`) for choosing which event to sense, since there is
+  /// no BLE auto-discovery yet. Returns whether the code was accepted as a
+  /// selection.
+  ///
+  /// **Selecting is not joining (beid#410).** Barnard is told nothing here.
+  /// This used to call `BarnardEngine.joinEvent` on its very next line, which
+  /// meant the app joined an event before any registry read had verified it,
+  /// and the verification that followed only *annotated* a session that had
+  /// already begun. The join now happens in `startSensing`, and only if the
+  /// shared issuer grants a `RegistryVerifiedJoinContext` at that moment.
+  ///
+  /// What is retained is the *evidence* a capability can be issued from — a
+  /// code and a canonical id — never a capability. The capability's own
+  /// documentation is explicit that one held across an await is not evidence
+  /// after it, and the gap between this call and the permission grant is
+  /// exactly such an await.
+  ///
+  /// Returning `true` therefore no longer means Barnard accepted anything. It
+  /// means the selection was recorded and a join will be *attempted*, under
+  /// the gate, when sensing starts.
   @discardableResult
   func joinEvent(_ code: String, canonicalEventIdHex: String? = nil) -> Bool {
-    engine.joinEvent(code)
-    let confirmed = engine.getCurrentEventCode()
-    joinedEventCode = confirmed
-    joinedCanonicalEventIdHex = confirmed == code ? canonicalEventIdHex : nil
-    // Joining deliberately does not open the relay gate. The id above came
+    guard !code.isEmpty else { return false }
+    joinedEventCode = code
+    joinedCanonicalEventIdHex = canonicalEventIdHex
+    // Selecting deliberately does not open the relay gate. The id above came
     // from a code-to-id lookup, and relaying wants the event's definition
     // read and agreed with first -- see `relayGateEventIdHex`.
-    return confirmed == code
+    return true
   }
 
   /// Calls the Barnard SDK's leave API (`BarnardEngine.leaveEvent`) to clear
   /// a manually joined event code, symmetric with `joinEvent(_:)`.
   func leaveEvent() {
     invalidateEventIdentityVerification()
-    engine.leaveEvent()
+    engine.leaveJoinedEvent()
     stopParticipantRelay()
-    joinedEventCode = engine.getCurrentEventCode()
+    joinedEventCode = engine.currentJoinedEventCode()
     joinedCanonicalEventIdHex = nil
     // Mirrors Android's `EventJoinCoordinator.leaveEvent()`: candidates
     // observed before a join are stale once that join is given up, and
@@ -1695,32 +1728,111 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
-    let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
+    // No `?? "beid-demo-event"` any more (beid#410, gh#101). That fallback let
+    // a host that had never joined anything start its radio on a hardcoded
+    // event code — an ungated path with a built-in destination. The real path
+    // below now starts nothing at all when no event has been selected, which
+    // is the correct answer to "sense what?" with no answer.
+    let selectedEventCode = eventCode ?? joinedEventCode
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
     pendingCanonicalEventIdHex = canonicalEventIdHex
     reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
+      // Untouched by the gate. Demo mode never reaches Barnard at all, and it
+      // is the App Review path (`ios/README.md`), which AGENTS.md records as
+      // having been regressed once already by work in this area. It also never
+      // read `selectedEventCode`, before or now.
       var selectedScenario = demoScenario ?? BeidConfig.demoScenario()
       if let demoEvent {
         selectedScenario = selectedScenario.replacingEvent(demoEvent)
       }
       runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
-      engine.requestPermissions { [weak self] status in
+      engine.requestJoinPermissions { [weak self] canScan, canAdvertise in
         guard let self else { return }
         Task { @MainActor in
-          guard status.canScan, status.canAdvertise else {
+          guard canScan, canAdvertise else {
             self.stopParticipantRelay()
             return
           }
-          self.engine.configure(eventCode: eventCode)
-          self.engine.startAuto()
-          self.startParticipantRelay()
+          guard let selectedEventCode else {
+            Self.log.error("Sensing was asked to start with no event selected; starting nothing.")
+            self.stopParticipantRelay()
+            return
+          }
+          self.beginRegistryVerifiedJoin(
+            joinCode: selectedEventCode,
+            canonicalEventIdHex: canonicalEventIdHex
+          )
         }
       }
     }
+  }
+
+  /// Verifies the selected event against the registry and, only if the shared
+  /// issuer grants a capability, joins it and starts sensing (beid#410).
+  ///
+  /// This is where the verification moved *in front of* the join. It runs
+  /// after the permission grant rather than at code entry because the
+  /// capability must be issued close to its use: `RegistryVerifiedJoinContext`
+  /// establishes that an event was verified a moment ago, not that it still is
+  /// at some later moment, and the permission wait is exactly the kind of gap
+  /// that invalidates a stale one. Android's `beginVerifiedJoin` carries a
+  /// request identity through its own permission wait for the same reason.
+  ///
+  /// Evidence shape (b), the operator-lookup path, is the only one wired here,
+  /// because it is the only join path iOS currently has: `EventCodeEntryView`
+  /// is how an event is chosen, since there is no BLE auto-discovery yet.
+  /// Shape (a), `fromNearbyCandidate`, needs a candidate this host's own
+  /// registry read already promoted to `REGISTRY_VERIFIED`, and iOS has no
+  /// surface that joins a discovered candidate yet — that arrives with the
+  /// participation-surface work (#141/#100), and this is where it hooks in.
+  ///
+  /// Every refusal below starts nothing. There is deliberately no fallback
+  /// branch that joins anyway on a failed or unavailable read: that is the
+  /// exact shape of the defect this replaces.
+  private func beginRegistryVerifiedJoin(joinCode: String, canonicalEventIdHex: String?) {
+    guard let client = nearbyRegistryClient else {
+      Self.log.error("No registry client configured; refusing to join without verification.")
+      return
+    }
+    guard let eventIdHex = canonicalEventIdHex else {
+      // A code with no canonical id never had a registry answer, so there is
+      // nothing to issue a capability from.
+      Self.log.error("Selected event has no canonical id; refusing to join unverified.")
+      return
+    }
+    let request = client.resolveEventDefinition(
+      eventIdHex: eventIdHex,
+      pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin(),
+      useTimeEpochSeconds: nearbyDiscoveryClock() / 1000
+    ) { [weak self] resolution in
+      Task { @MainActor in
+        guard let self else { return }
+        // Issued from the live resolution, and re-checked against the clock
+        // now rather than when the read was requested.
+        // `Companion.shared`, not `companion`: Swift Export emits a Kotlin
+        // companion object as a nested `Companion` class reached through a
+        // static `shared` accessor. Confirmed against generated output rather
+        // than assumed — see this change's PR notes for which tree and which
+        // toolchain version that observation came from.
+        guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
+          .RegistryVerifiedJoinContext.Companion.shared.fromOperatorLookup(
+            joinCode: joinCode,
+            resolution: resolution,
+            nowEpochSeconds: self.nearbyDiscoveryClock() / 1000
+          )
+        else {
+          Self.log.error("Registry did not verify the selected event; starting nothing.")
+          return
+        }
+        self.engine.joinAndStart(context)
+        self.startParticipantRelay()
+      }
+    }
+    nearbyRegistryRequests.append(request)
   }
 
   @discardableResult
@@ -1798,7 +1910,7 @@ final class SensingCoordinator: ObservableObject {
     stopParticipantRelay()
     clearNearbyEventDiscovery()
     if stopEngine {
-      engine.stopAuto()
+      engine.stopAutomaticOperation()
     }
     resetSessionState()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
