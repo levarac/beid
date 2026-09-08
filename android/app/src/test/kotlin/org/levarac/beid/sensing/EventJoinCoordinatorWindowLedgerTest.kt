@@ -93,10 +93,11 @@ class EventJoinCoordinatorWindowLedgerTest {
             DEFINITION_A in signatureStructureHex,
             "the definition digest the capability carried must reach those bytes too",
         )
-        assertTrue(
-            DEFINITION_B !in signatureStructureHex,
-            "and no other definition's digest may appear in them",
-        )
+        // No absence assertion here on purpose: only DEFINITION_A is ever
+        // joined in this test, so asserting DEFINITION_B's absence could not
+        // fail. The falsifiable form of that property lives in
+        // WindowObservationAccumulatorTest.beginningASecondEventClosesTheFirstEventsOpenWindow,
+        // where a second event genuinely exists.
     }
 
     @Test

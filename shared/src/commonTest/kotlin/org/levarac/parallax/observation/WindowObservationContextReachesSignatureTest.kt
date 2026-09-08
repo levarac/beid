@@ -25,10 +25,18 @@ import kotlin.test.assertTrue
  * prepared Sig_structure can be inspected directly, before a signer is ever
  * involved. That is strictly less machinery for the same guarantee.
  *
- * These assert the second half of the chain — a context's identity fields
- * reaching the signed bytes. The first half, the Android coordinator building
- * that context out of a `RegistryVerifiedJoinContext`, is covered by neither
- * these nor the app module and is filed as a follow-up.
+ * These assert PRESENCE only, and deliberately no longer assert absence. An
+ * earlier version checked that a different event's id and digest do NOT appear
+ * in the structure, which could not fail: the other values were never supplied
+ * to anything, so no production change could have put them there. An assertion
+ * that cannot fail is decoration, and padding this fixture until it merely
+ * looked falsifiable would have recreated that with more ceremony.
+ *
+ * The absence property — one event's data not reaching another event's signed
+ * window — is genuinely falsifiable one layer down, where a second event can
+ * actually exist:
+ * `WindowObservationAccumulatorTest.beginningASecondEventClosesTheFirstEventsOpenWindow`.
+ * That test goes red when the guard it protects is removed.
  */
 class WindowObservationContextReachesSignatureTest {
     @Test
@@ -41,20 +49,6 @@ class WindowObservationContextReachesSignatureTest {
             DEFINITION_DIGEST_HEX in structure,
             "the definition digest must reach the bytes the host signs",
         )
-    }
-
-    /**
-     * The counterpart the moved tests actually existed for: one session's
-     * signed window must not carry another session's identity. Asserting the
-     * absence is what makes the presence above mean something.
-     */
-    @Test
-    fun anotherSessionsIdentityDoesNotAppearInThisSessionsSignedStructure() {
-        val prepared = prepared(EVENT_ID_HEX, DEFINITION_DIGEST_HEX)
-
-        val structure = prepared.signatureStructure.toByteArray().toLowercaseHex()
-        assertTrue(OTHER_EVENT_ID_HEX !in structure, "a different event's id must not leak in")
-        assertTrue(OTHER_DIGEST_HEX !in structure, "a different definition's digest must not leak in")
     }
 
     private fun prepared(eventIdHex: String, definitionDigestHex: String): PreparedObservationV1 {
@@ -78,8 +72,6 @@ class WindowObservationContextReachesSignatureTest {
         const val WINDOW_ID_HEX = "00112233445566778899aabbccddeeff"
         const val EVENT_ID_HEX = "2121212121212121212121212121212121212121212121212121212121212121"
         const val DEFINITION_DIGEST_HEX = "2222222222222222222222222222222222222222222222222222222222222222"
-        const val OTHER_EVENT_ID_HEX = "4141414141414141414141414141414141414141414141414141414141414141"
-        const val OTHER_DIGEST_HEX = "4242424242424242424242424242424242424242424242424242424242424242"
         const val OBSERVER_HEX = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
         const val REPORTER_RPID_HEX = "0110101010101010101010101010101010"
         const val OBSERVED_RPID_HEX = "0111111111111111111111111111111111"

@@ -105,9 +105,17 @@ public enum class NearbyEventJoinEligibility {
  * Retained evidence establishes **what was verified**. It does not establish
  * that it is **still true**, because the world moves between promotion and
  * tap. So the issuer re-checks, at issue time and on both shapes, that the
- * definition's window contains *now*, that the candidate still stands at
- * `REGISTRY_VERIFIED` with a registration behind it, and that admission is
- * open. A capability is never handed out on the strength of a snapshot alone.
+ * definition's window contains *now*, and on the nearby shape that the
+ * candidate still stands at `REGISTRY_VERIFIED` with a registration behind it.
+ * A capability is never handed out on the strength of a snapshot alone.
+ *
+ * Open admission is checked at issue time on the operator-lookup shape only.
+ * On the nearby shape it was already enforced at PROMOTION — a candidate
+ * cannot reach `REGISTERED_VIA_OPERATOR_LOOKUP` unless the definition declared
+ * it — and the retained definition digest is what pins that the promotion and
+ * this join are talking about the same definition. Harmless in effect, but the
+ * distinction is stated because a reviewer reading "both shapes" would not go
+ * looking for it.
  *
  * ## What this type does not protect
  *
