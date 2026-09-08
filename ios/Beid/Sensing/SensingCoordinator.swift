@@ -536,6 +536,21 @@ final class SensingCoordinator: ObservableObject {
   /// real event session is established. It is an untrusted routing hint and is
   /// never derived from event code.
   private var pendingCanonicalEventIdHex: String?
+  /// The event code this sensing session was started for, carried the same way
+  /// and for the same span as `pendingCanonicalEventIdHex`.
+  ///
+  /// Held here rather than read back from Barnard (beid#410). The session's
+  /// name used to come from `getCurrentEventCode()`, which worked only because
+  /// `joinEvent` pushed the code into Barnard the instant the user typed it.
+  /// Now that joining waits for a verified capability, Barnard knows no code
+  /// until the join actually happens — so asking it during `.sensing` returned
+  /// nothing and the session was named `"Unknown Event"`. That name is not
+  /// cosmetic: it becomes `EventSession.id`, and it reaches the durable
+  /// records a session produces.
+  ///
+  /// The coordinator owns the selection now, so the selection is the honest
+  /// source. Barnard's copy is derived from this one, never the reverse.
+  private var pendingEventCode: String?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
   /// `advanceWindowBookkeepingIfNeeded`-derived `firstWindowEnin`/
@@ -1248,7 +1263,7 @@ final class SensingCoordinator: ObservableObject {
     }
     switch phase {
     case .sensing:
-      let eventCode = engine.currentJoinedEventCode() ?? "Unknown Event"
+      let eventCode = pendingEventCode ?? engine.currentJoinedEventCode() ?? "Unknown Event"
       let session = EventSession(
         id: eventCode,
         name: eventCode,
@@ -1737,6 +1752,7 @@ final class SensingCoordinator: ObservableObject {
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
     pendingCanonicalEventIdHex = canonicalEventIdHex
+    pendingEventCode = selectedEventCode
     reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
@@ -1938,6 +1954,9 @@ final class SensingCoordinator: ObservableObject {
     currentWindowReporterRpid = nil
     currentWindowLedgerOpened = false
     pendingCanonicalEventIdHex = nil
+    // Cleared with its sibling. `startSensing` resets first and assigns both
+    // afterwards, so a new session never inherits the previous one's name.
+    pendingEventCode = nil
     activeCommit = nil
     activeProofId = nil
     pendingBindingMessage = nil
