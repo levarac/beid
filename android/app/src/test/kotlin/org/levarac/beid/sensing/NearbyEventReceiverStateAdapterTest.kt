@@ -132,7 +132,14 @@ class NearbyEventReceiverStateAdapterTest {
         val session = session(registry)
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
         resolveVerifiedOpenDefinition(registry)
-        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+        // Not joinable even here: a hint-only candidate is UNVERIFIED, and the
+        // v1.0 nearby ruling does not admit that tier however well its registry
+        // read went. The registration below is what the forgery must not revoke.
+        assertNull(session.cards.value.single().eventIdHex)
+        assertEquals(
+            NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP,
+            candidate(session).registryStatus,
+        )
 
         session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
 
