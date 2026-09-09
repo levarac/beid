@@ -21,8 +21,9 @@ ios/xcodemake_*.log
 
 # Python bytecode. Interpreter- and machine-specific build output that churns
 # on every edit and that nothing reads from the repository (beid#399).
-# Note: two .pyc files under scripts/tests/__pycache__ are already tracked on
-# main and stay tracked — an ignore rule does not untrack them, and removing
-# them is an older cleanup that does not belong to this change.
+# The two .pyc files that used to be tracked under scripts/tests/__pycache__
+# were untracked here. They mattered because #423 made PR CI run
+# `python3 -m unittest discover -s scripts/tests`, so running the documented
+# command dirties the working tree for anyone who follows it.
 __pycache__/
 *.pyc

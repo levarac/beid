@@ -68,8 +68,14 @@ primary `CollectionHomeView` sits. So the collection *home* is still absent
 (`Screen.kt` still states outright that `EventJoin` stands in for iOS's
 `.home`); promoting the records list to that position is a navigation decision
 that belongs with the participation-surface work in #141, not a follow-up to
-#121. Also still absent: the proof-detail surface (#122) and wallet connection
-(#124, additionally gated on the iOS field test per its own issue body).
+#121. Also still absent: the proof-detail surface (#122), wallet connection
+(#124, additionally gated on the iOS field test per its own issue body), and
+the venue-device organizer surface — `VenueDeviceBroadcasting` and
+`VenueDeviceOrganizerView` exist only on iOS (`git grep -w
+VenueDeviceBroadcasting` returns hits under `ios/` and **none** under
+`android/`), tracked as dispatch#4. It is listed here because this file's own
+both-OS rule forbids a silent platform asymmetry: the gap may be deliberate,
+but it may not go unnamed.
 Do not restate "Android has only one screen"—that was true when Issue #117
 was filed and has not been true since #119/#120/#123/#126/#118 landed.
 Do not restate that Android lacks owner-key binding or a records list either;
@@ -288,6 +294,35 @@ stands in full — verify that the iOS check **exists on the exact head SHA and
 succeeded**, not merely that a green check exists somewhere. That check is the
 only automated gate left, so treat its absence as a hard stop.
 
+**Carve-out — when absence is configuration rather than a hard stop.** Xcode
+Cloud is configured with `DO_NOT_START_IF_ALL_FILES_MATCH` over the matchers
+{`docs/`, `.github/`, `*.md`} (read from the ASC API 2026-09-09; the ASC GUI is
+the source of truth). A PR whose **every** changed file falls inside that set
+therefore has no iOS check **by configuration**, and that absence is not the
+hard stop above. Do not re-derive this per PR — state it, in this form, in the
+gate record:
+
+1. **Predicate** — enumerate every path from `gh pr view <n> --json files` at
+   the head being merged, and show each one is under `docs/`, under
+   `.github/`, or ends in `.md`. Give the count (`N of N`).
+2. **Complement, enumerated** — `ios/`, `shared/`, `android/`, `scripts/`,
+   `ios/project.yml`, `Package.resolved`, `*.swift`, `*.kt` are **not** in the
+   exclusion set, so any iOS-affecting change falls outside it by construction
+   and this record cannot apply to it.
+3. **Source and control** — name where the configuration was read, and cite a
+   control experiment on the same PR if one exists (PR #428: two pushes inside
+   the set produced zero Xcode Cloud check-runs; one push adding a `.py`,
+   outside the set, fired and succeeded).
+4. **Void clause** — if **any** file at the final head is outside the exclusion
+   set, absence of the check is the hard stop again and the remedy is a
+   close→reopen retrigger, **not** this record. Re-evaluate (1) at the head SHA
+   named in the package, since the file set is a property of the (head, base)
+   pair rather than of the PR.
+
+The carve-out interprets a process rule and lifts no technical control — see
+the branch-protection note in the PR CI subsection for why there is no
+technical control here to lift. Recorded from the lead's ruling on PR #428.
+
 Re-enable when either becomes true: a way to dispatch reviewers independently
 of the author exists, or a defect reaches a shipped path that an author's own
 review missed.
@@ -440,13 +475,21 @@ gracefully to English rather than blocking or breaking the build.
 ### What NOT to localize
 
 - **DemoEvent fixture data** (event names, fake peer labels, etc. in
-  `ios/Beid/Models/DemoEvent.swift` and friends): localize it. Recommendation
-  is to treat DemoEvent strings as regular user-visible copy, not internal
-  test fixtures — DemoEvent is also the intended App Review demo path (see
-  `ios/README.md` "DemoEvent mode"), so a reviewer running the app in a
-  non-English App Store locale sees DemoEvent's strings as real product
-  copy, not placeholder text. Do not special-case DemoEvent strings out of
-  the catalog.
+  `ios/Beid/Models/DemoEvent.swift` and friends): localize it. Treat DemoEvent
+  strings as regular user-visible copy rather than internal test fixtures:
+  they are what a human sees on the golden walkthrough, and that walkthrough
+  is what demos and reviews the product. Do not special-case DemoEvent strings
+  out of the catalog.
+
+  **DemoEvent is not reachable in a shipping build, so do not describe it as
+  the App Review path.** Release configurations hardwire
+  `SensingCoordinator.useDemoEventMode` to a getter returning `false` with a
+  no-op setter, so assignments have no effect; `ios/README.md` says the same
+  and adds that an App Review walkthrough in a shipping build "needs its own
+  deliberate, reviewed release mechanism", which does not exist yet.
+  Walkthroughs run from Debug builds. This paragraph previously cited
+  `ios/README.md` as authority for the opposite claim, which that file has
+  never made.
 - Debug-only / developer-facing strings (console logs, `#if DEBUG` internal
   labels, SwiftUI `#Preview` titles) are not user-facing and are not part of
   the target locale set.
@@ -523,9 +566,20 @@ dates). The contract every agent must know before touching delivery files:
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
 
-  - **Xcode Cloud** — required check。branch protection と merge 判断の対象。
-    ただし 2026-08-19 以降 compute 枠の枯渇で cancelled が続いており、
-    **実質的に停止している**(下の「Local and CI evidence traps」を参照)。
+  - **Xcode Cloud** — merge 判断の対象。**branch protection による強制ではない。**
+    この repository に branch protection は存在しない (`GET
+    /repos/.../branches/main/protection` は 403 *Upgrade to GitHub Pro or make
+    this repository public* を返す)。つまり required context は 1 つも設定されて
+    おらず、**「すべての required check が緑」と「required check が 1 つも無い」
+    は GitHub 上で区別が付かない** — `mergeStateStatus` の `CLEAN` はどちらでも
+    同じように出る。したがって iOS check を待つのは**運用ルールとしての hard
+    stop** であって仕組みではない。人が守らなければ何も止めない。
+    稼働状況をここに書かない — compute 枠は動くので、状態を書き写した瞬間に
+    古くなる (#433 が同じ subsection に入れた「件数をここに書かない」と同じ
+    失敗を、件数ではなく**状態**という通貨でやることになる)。現在動いているか
+    は **ASC の GUI が正本** (本ファイルが workflow 設定について既にそう宣言して
+    いる) で、判断対象の head に check が存在し succeeded かどうかは
+    `gh pr checks` が答える。
   - **`.github/workflows/pr-ci-ios-macos.yml`(#301、2026-09-02 追加)** —
     self-hosted runner `emi` 上の **informational-only** lane。job 名は
     `iOS simulator (self-hosted macOS, informational)`。`ios/` `shared/`
@@ -591,10 +645,11 @@ dates). The contract every agent must know before touching delivery files:
   `what_to_test.json` または `what_to_test.android.json` が変わった時と、
   手動実行で起動する。`GHA_DELIVERY == on` の時だけ self-hosted runner `emi`
   上でAABをbuild・署名し、Google Play internal testingへuploadする。
-- Android laneもXcode Cloud予算枯渇中のtemporary pathである。iOS laneと同じ
-  repository variableで止まるため、予算復旧時は`GHA_DELIVERY=off`で両方を
-  無効化する。Android側にXcode Cloudの代替元はないため、再開時の恒久運用は
-  別途決める。
+- Android laneはiOS laneと同じ`GHA_DELIVERY`で止まるtemporary pathである。
+  **Xcode Cloudの稼働状況をここに書かない** — 上の PR CI subsection と同じ理由で、
+  書き写した状態は次に枠が動いた瞬間に古くなる。どちらのlaneも
+  `GHA_DELIVERY=off`で無効化でき、現在の値は repository variable が正本。
+  Android側にXcode Cloudの代替元はないため、恒久運用は別途決める。
 - runnerは`ANDROID_HOME`と`KMP_JAVA_HOME`を持ち、Gradleは必ずrepositoryの
   `scripts/resolve_kmp_java_home.sh`が選ぶJDK 17で動かす。ambientなsystem Javaを
   使ってはならない。
