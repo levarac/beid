@@ -208,6 +208,46 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertFalse(engine.didJoin)
   }
 
+  /// The other half of the same guard: the *read* can also answer after the
+  /// user stopped, and that half had no test at all.
+  ///
+  /// `beginRegistryVerifiedJoin` checks `isCurrentJoinAttempt` twice, once at
+  /// the permission grant and once inside the read's completion, because the
+  /// two waits are separate and either can outlive the attempt. Only the first
+  /// was pinned. Cancellation does not make this redundant: a real registry
+  /// client may already have the answer in flight when `cancel` arrives, so
+  /// the completion has to be safe on its own rather than merely unlikely.
+  ///
+  /// The assertion with teeth is `joinRefusal`, not `didJoin`. A stale answer
+  /// that got through would write `.registryReadFailed` into a session the
+  /// user already ended, leaving a refusal on screen for an attempt that no
+  /// longer exists; `didJoin` would stay false either way, because the fake
+  /// cannot answer with a success (see `FakeEventJoinRegistry`).
+  func testARegistryReadThatAnswersAfterTheUserStoppedStartsNothing() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .holds
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+
+    coordinator.startSensing()
+    await settle()
+    XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex])
+    XCTAssertTrue(registry.isHoldingRead, "the read must be outstanding for this to be the late case")
+
+    _ = coordinator.stopSensing()
+    registry.answerHeldReadAsFailure()
+    await settle()
+
+    XCTAssertNil(
+      coordinator.joinRefusal,
+      "an answer landing after the user stopped must not record a refusal against the ended session"
+    )
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(coordinator.phase, .idle)
+  }
+
   /// Leaving must cancel an outstanding read rather than let it answer into a
   /// session that no longer exists. Asserted through the cancel count, which a
   /// missing guard would leave at zero.

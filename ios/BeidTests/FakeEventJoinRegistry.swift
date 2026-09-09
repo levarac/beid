@@ -30,10 +30,14 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
   enum Answer {
     /// Answers nil immediately: the read produced no definition.
     case readFails
-    /// Never answers. The read is still outstanding.
+    /// Does not answer on its own. The read stays outstanding, so it can be
+    /// observed through `isHoldingRead`, cancelled, or answered after the fact
+    /// with `answerHeldReadAsFailure()`.
+    ///
+    /// There was a second case, `answersLate`, that did the storing this one
+    /// only claimed to do. Two cases for one behavior is what let `holds`
+    /// become a no-op without any test noticing — see `isHoldingRead`.
     case holds
-    /// Keeps the completion so a test can fire it after the fact.
-    case answersLate
   }
 
   var answer: Answer = .readFails
@@ -54,6 +58,12 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
   )?
 
   /// Whether a read is still outstanding.
+  ///
+  /// Derived from the stored completion rather than tracked separately, so
+  /// there is one source of truth for "outstanding". It used to read as false
+  /// for the whole of `.holds`, because that case stored nothing — the two
+  /// tests that assert it had never executed anywhere, since the Xcode project
+  /// did not compile this file into the test target (beid#410).
   var isHoldingRead: Bool { heldCompletion != nil }
 
   @discardableResult
@@ -69,8 +79,6 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
     case .readFails:
       completion(nil)
     case .holds:
-      break
-    case .answersLate:
       heldCompletion = completion
     }
     return FakeEventJoinRequest { [weak self] in
