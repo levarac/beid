@@ -147,8 +147,7 @@ the same name shadows them.
   applies is decided by where the Kotlin package sits relative to the shared
   module's own root (`org/levarac/beid/shared`), not by preference:**
   - **Inside that root** — `BeidSharedKit.<package>.<Type>`, e.g.
-    `BeidSharedKit.report.SomeSharedType`. This covers `aggregation`, `event`,
-    `report`, `sensing` and `swift`.
+    `BeidSharedKit.report.SomeSharedType`.
   - **Outside it** — the fully-qualified exported path,
     `ExportedKotlinPackages.<full.kotlin.path>.<Type>`, e.g.
     `ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext`.
