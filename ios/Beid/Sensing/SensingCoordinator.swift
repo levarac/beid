@@ -1894,68 +1894,125 @@ final class SensingCoordinator: ObservableObject {
     canonicalEventIdHex: String?,
     generation: Int
   ) {
+    switch joinGatePreflight(canonicalEventIdHex: canonicalEventIdHex) {
+    case .refuse(let refusal, let message):
+      applyJoinGateDecision(.refuse(refusal, message))
+    case .read(let registry, let eventIdHex):
+      joinRegistryRequest = registry.resolveEventDefinition(
+        eventIdHex: eventIdHex,
+        nowEpochSeconds: nearbyDiscoveryClock() / 1000
+      ) { [weak self] resolution in
+        // Hopped to the main actor the same way `EventIdentityVerificationSource`
+        // does for the identical read, rather than annotating the completion.
+        Task { @MainActor in
+          guard let self else { return }
+          // The read can answer after the user stopped or left. Checked here as
+          // well as at the permission grant, because the two waits are separate
+          // and either can outlive the attempt that started it.
+          guard self.isCurrentJoinAttempt(generation) else { return }
+          self.joinRegistryRequest = nil
+          self.applyJoinGateDecision(
+            self.joinGateDecision(
+              joinCode: joinCode,
+              resolution: resolution,
+              nowEpochSeconds: self.nearbyDiscoveryClock() / 1000
+            )
+          )
+        }
+      }
+    }
+  }
+
+  /// What the gate decided, as a value rather than as an effect already
+  /// performed (beid#410).
+  ///
+  /// Every branch below *returns* one of these instead of each remembering to
+  /// call `refuseJoin` before returning. That is a structural property, not a
+  /// tidier spelling: a `guard ... else` whose body must produce a
+  /// `JoinGateDecision` cannot have its refusal deleted and still compile, so
+  /// the mutation "drop one refusal and see whether anything notices" stops
+  /// being writable. Before this, four separate branches each had to remember,
+  /// and a checker's mutation proved one of them was unguarded by any test.
+  ///
+  /// This is the same by-type argument the join itself already rests on —
+  /// `EventJoinControlling` offers no way to join without a capability — moved
+  /// one level in, to the decision about whether to grant one.
+  private enum JoinGateDecision {
+    case admit(ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext)
+    case refuse(EventJoinRefusal, String)
+  }
+
+  /// What the gate can settle before spending a registry read.
+  private enum JoinGatePreflight {
+    case read(any EventJoinRegistry, String)
+    case refuse(EventJoinRefusal, String)
+  }
+
+  private func joinGatePreflight(canonicalEventIdHex: String?) -> JoinGatePreflight {
     guard let registry = eventJoinRegistry else {
-      refuseJoin(.noRegistryConfigured, "No registry configured; refusing to join unverified.")
-      return
+      return .refuse(.noRegistryConfigured, "No registry configured; refusing to join unverified.")
     }
     guard let eventIdHex = canonicalEventIdHex else {
       // A code with no canonical id never had a registry answer, so there is
       // nothing to issue a capability from.
-      refuseJoin(.noCanonicalEventId, "Selected event has no canonical id; refusing to join.")
-      return
+      return .refuse(.noCanonicalEventId, "Selected event has no canonical id; refusing to join.")
     }
-    joinRegistryRequest = registry.resolveEventDefinition(
-      eventIdHex: eventIdHex,
-      nowEpochSeconds: nearbyDiscoveryClock() / 1000
-    ) { [weak self] resolution in
-      // Hopped to the main actor the same way `EventIdentityVerificationSource`
-      // does for the identical read, rather than annotating the completion.
-      Task { @MainActor in
-      guard let self else { return }
-      // The read can answer after the user stopped or left. Checked here as
-      // well as at the permission grant, because the two waits are separate
-      // and either can outlive the attempt that started it.
-      guard self.isCurrentJoinAttempt(generation) else { return }
-      self.joinRegistryRequest = nil
-      guard let resolution else {
-        self.refuseJoin(.registryReadFailed, "Registry read produced no definition; starting nothing.")
-        return
-      }
-      // Issued from the live resolution, and re-checked against the clock now
-      // rather than when the read was requested.
-      //
-      // `Companion.shared`, not `companion`: Swift Export emits a Kotlin
-      // companion object as a nested `Companion` class reached through a
-      // static `shared` accessor. Read out of beid's own generated
-      // `BeidSharedKit.swift` rather than assumed.
-      let nowEpochSeconds = self.nearbyDiscoveryClock() / 1000
-      guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
-        .RegistryVerifiedJoinContext.Companion.shared.fromOperatorLookup(
+    return .read(registry, eventIdHex)
+  }
+
+  /// The post-read half of the same decision. Pure: it reads the clock value
+  /// it is handed and touches no coordinator state, so what it decides is a
+  /// function of the registry's answer alone.
+  private func joinGateDecision(
+    joinCode: String,
+    resolution: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?,
+    nowEpochSeconds: Int64
+  ) -> JoinGateDecision {
+    guard let resolution else {
+      return .refuse(.registryReadFailed, "Registry read produced no definition; starting nothing.")
+    }
+    // Issued from the live resolution, and re-checked against the clock now
+    // rather than when the read was requested.
+    //
+    // `Companion.shared`, not `companion`: Swift Export emits a Kotlin
+    // companion object as a nested `Companion` class reached through a
+    // static `shared` accessor. Read out of beid's own generated
+    // `BeidSharedKit.swift` rather than assumed.
+    guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .RegistryVerifiedJoinContext.Companion.shared.fromOperatorLookup(
+        joinCode: joinCode,
+        resolution: resolution,
+        nowEpochSeconds: nowEpochSeconds
+      )
+    else {
+      // Ask the shared decision *why*, so the refusal is diagnosable rather
+      // than merely a refusal. The verdict is logged rather than mapped to a
+      // case: its generated Swift surface has no name, description or
+      // equality — see `EventJoinRefusal`.
+      let verdict = ExportedKotlinPackages.org.levarac.parallax.discovery
+        .operatorLookupJoinEligibility(
           joinCode: joinCode,
           resolution: resolution,
           nowEpochSeconds: nowEpochSeconds
         )
-      else {
-        // Ask the shared decision *why*, so the refusal is diagnosable rather
-        // than merely a refusal. The verdict is logged rather than mapped to a
-        // case: its generated Swift surface has no name, description or
-        // equality — see `EventJoinRefusal`.
-        let verdict = ExportedKotlinPackages.org.levarac.parallax.discovery
-          .operatorLookupJoinEligibility(
-            joinCode: joinCode,
-            resolution: resolution,
-            nowEpochSeconds: nowEpochSeconds
-          )
-        self.refuseJoin(
-          .definitionNotEligible,
-          "Registry did not verify the selected event (\(String(describing: verdict))); starting nothing."
-        )
-        return
-      }
-      self.joinRefusal = nil
-      self.engine.joinAndStart(context)
-      self.startParticipantRelay()
-      }
+      return .refuse(
+        .definitionNotEligible,
+        "Registry did not verify the selected event (\(String(describing: verdict))); starting nothing."
+      )
+    }
+    return .admit(context)
+  }
+
+  /// Performs the decision. The **only** place a refused join is recorded, so
+  /// deleting that one call turns every refusal test red rather than one.
+  private func applyJoinGateDecision(_ decision: JoinGateDecision) {
+    switch decision {
+    case .admit(let context):
+      joinRefusal = nil
+      engine.joinAndStart(context)
+      startParticipantRelay()
+    case .refuse(let refusal, let message):
+      refuseJoin(refusal, message)
     }
   }
 

@@ -49,7 +49,10 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
   /// `SensingCoordinator.joinEvent` records the code and tells Barnard
   /// nothing (beid#410). The refusal lives one step later, in
   /// `beginRegistryVerifiedJoin` at `startSensing`, which answers
-  /// `.noRegistryConfigured` — see `EventJoinGateTests`.
+  /// `.noRegistryConfigured` — pinned by
+  /// `EventJoinGateTests.testStartSensingLeavesNoSensingScreenWhenNoRegistryIsConfigured`,
+  /// which asserts the session returns to idle rather than merely that the
+  /// refusal value was published.
   ///
   /// Named for selection on purpose. Under its previous name this test read
   /// as proof that an unverified *join* was acceptable, and that reading sent

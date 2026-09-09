@@ -110,7 +110,20 @@ final class RegistryEventJoinRegistry: EventJoinRegistry {
       useTimeEpochSeconds: nowEpochSeconds
     ) { resolution in
       Task { @MainActor in
-        completion(resolution)
+        // Mirrors Android's `EventJoinRegistry.kt:69`
+        // (`completion(resolution.takeIf { it.isSuccess })`).
+        //
+        // The shared client's completion is **not** optional:
+        // `RegistryClient.resolveEventDefinition` declares
+        // `completion: (EventDefinitionResolution) -> Unit`, so a failed read
+        // arrives as a resolution carrying `isSuccess == false`, never as
+        // nil. Without this filter the failure flowed on to the issuer and
+        // came back refused as `.definitionNotEligible`, which left the nil
+        // branch — `.registryReadFailed` — dead on a real device and
+        // reachable only from a fake. The two branches now mean on iOS what
+        // they mean on Android, and the fake's nil is the shape production
+        // actually produces.
+        completion(resolution.isSuccess ? resolution : nil)
       }
     }
     return RegistryEventJoinRequest(request: request)

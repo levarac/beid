@@ -47,6 +47,37 @@ import XCTest
 /// nearby promotion path; that fixture is Kotlin-side and iOS has no caller
 /// for that path yet. Closing this needs shared test support (beid#391).
 ///
+/// The same wall leaves one *refusal* unpinned: `.definitionNotEligible`.
+///
+/// It now means what its name says — the read **succeeded** and the shared
+/// issuer still refused the definition. Reaching it therefore needs a
+/// successful `EventDefinitionResolution`, which is the same thing this
+/// suite cannot build, so it is unpinned for exactly the reason the positive
+/// case is. Every clause is checkable in the generated `BeidSharedKit.swift`:
+/// the type exposes only getters plus a `package`-scoped
+/// `init(__externalRCRefUnsafe:options:)`; no exported function in that file
+/// returns it; its only producer is the `RegistryClient` completion; and
+/// `RegistryClient` has no public initializer, only
+/// `createSepoliaRegistryClient`, which refuses loopback HTTP for every URL
+/// template (beid#258 P1-1 round-3), so it cannot be pointed at a stub.
+///
+/// Until the adapter filtered on `isSuccess`, this case meant something else
+/// and something worse. `RegistryClient.resolveEventDefinition` hands back a
+/// **non-optional** resolution — a failed read arrives carrying
+/// `isSuccess == false`, never as nil — so every real failed read landed
+/// here, while `.registryReadFailed` was reachable only from a fake. The
+/// tested branch was the impossible one and the untested branch was the
+/// everyday one. `RegistryEventJoinRegistry` now filters, mirroring Android's
+/// `EventJoinRegistry.kt:69`, so the fake's nil is the shape production
+/// actually produces.
+///
+/// **Remove this paragraph, and the `.definitionNotEligible` case in
+/// `EventJoinRefusal` that it describes, if that case is collapsed into
+/// `.registryReadFailed`** — the two are now one refusal wearing two labels,
+/// since a caller cannot distinguish them and no test can reach the second.
+/// Deleting the case and this note belong together, so this cannot rot into a
+/// description of something that no longer exists.
+///
 /// So this suite proves the gate refuses, and cannot prove it ever admits.
 /// That is stated rather than left as an absence, because a suite that only
 /// ever observes "nothing joined" cannot by itself distinguish a working gate
@@ -90,6 +121,42 @@ final class EventJoinGateTests: XCTestCase {
   }
 
   // MARK: - Refusals that actually reach the read
+
+  /// Mirrors Android's `joinEventStartsNeitherJoinNorSensingWhenNoRegistryIsConfigured`.
+  ///
+  /// The load-bearing assertion is `phase`, not `joinRefusal`. `startSensing`
+  /// sets `.sensing` before the permission request, so a gate that returns
+  /// without calling `refuseJoin` leaves the user on a sensing screen with the
+  /// radio off and nothing on screen to explain it — the exact failure
+  /// `refuseJoin`'s own doc comment says it exists to kill. A test that
+  /// asserted only the published refusal value would stay green through
+  /// precisely that regression, which is why the phase assertion comes first.
+  ///
+  /// This branch had a test at f21e2b1
+  /// (`testStartSensingStartsNeitherJoinNorSensingWhenNoRegistryIsConfigured`)
+  /// and lost it at 38ea66d, when the suite was rebuilt around
+  /// `FakeEventJoinRegistry` and every remaining case started passing a
+  /// registry. The rewrite that made the gate testable dropped the one branch
+  /// that was already covered.
+  func testStartSensingLeavesNoSensingScreenWhenNoRegistryIsConfigured() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let relay = RecordingParticipantRelayControl()
+    // No registry at all: `makeGatedCoordinator` defaults `registry` to nil.
+    let coordinator = makeGatedCoordinator(engine: engine, relay: relay)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+
+    coordinator.startSensing()
+    await settle()
+
+    XCTAssertEqual(
+      coordinator.phase, .idle,
+      "a refusal must return the session to idle; leaving it sensing strands the user on a sensing screen with the radio off"
+    )
+    XCTAssertEqual(coordinator.joinRefusal, .noRegistryConfigured)
+    XCTAssertFalse(engine.didJoin, "no registry means nothing was verified, so nothing may join")
+    XCTAssertNil(relay.verifier, "a refused join must leave the relay disarmed")
+  }
 
   /// Mirrors Android's `joinEventStartsNeitherJoinNorSensingWhenTheRegistryLookupFails`.
   func testStartSensingStartsNeitherJoinNorSensingWhenTheRegistryReadFails() async {
@@ -276,7 +343,15 @@ final class EventJoinGateTests: XCTestCase {
   }
 
   /// Mirrors Android's `aRefusedJoinLeavesNoRecordingAndNoRelay`.
-  func testARefusedJoinLeavesNoRelay() async {
+  ///
+  /// beid#374's invariant has four parts — join, key, recording, relay — and
+  /// until now this test asserted two of them while its doc comment claimed
+  /// the Android mirror, which also drives detections. Detections keep
+  /// arriving from the radio whether or not this device joined anything, so
+  /// "nothing joined" does not by itself establish that a later detection
+  /// cannot carry a refused join into a recording session. That is the part
+  /// the detections below add.
+  func testARefusedJoinLeavesNoRecordingAndNoRelay() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
     let registry = FakeEventJoinRegistry()
@@ -291,6 +366,23 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex])
     XCTAssertFalse(engine.didJoin)
     XCTAssertNil(relay.verifier, "a refused join must leave the relay disarmed")
+
+    // The radio does not stop because this device refused to join.
+    coordinator.handleDetection(enin: 1, rpid: "aa", detectedDisplayId: "device-1")
+    coordinator.handleDetection(enin: 2, rpid: "bb", detectedDisplayId: "device-2")
+    coordinator.handleDetection(enin: 3, rpid: "cc", detectedDisplayId: "device-3")
+    await settle()
+
+    switch coordinator.phase {
+    case .recording, .eventFound, .signalLost:
+      XCTFail(
+        "detections must not carry a refused join into a recording session; phase was \(coordinator.phase)"
+      )
+    case .idle, .sensing:
+      break
+    }
+    XCTAssertNil(relay.verifier, "detections must not arm the relay for a refused join")
+    XCTAssertFalse(engine.didJoin, "detections must not retroactively join a refused event")
   }
 
   // MARK: - Demo mode stays outside the gate
