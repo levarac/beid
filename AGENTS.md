@@ -326,10 +326,13 @@ record:
    relying on it for any PR whose classification is not obvious**, or whose
    answer would change if a matcher had been added or removed. The ASC GUI is
    the source of truth for workflow settings, as stated elsewhere in this file.
-2. **Complement, enumerated** — `ios/`, `shared/`, `android/`, `scripts/`,
-   `ios/project.yml`, `Package.resolved`, `*.swift`, `*.kt` are **not** in the
-   exclusion set, so any iOS-affecting change falls outside it by construction
-   and this record cannot apply to it.
+2. **Complement** — state that anything failing (1) is outside the set **by
+   definition**, so an iOS-affecting change cannot qualify for this record.
+   Do not enumerate what lies outside. The predicate already answers it, and a
+   list of the outside is a second, weaker statement of the same rule that can
+   go wrong on its own — silently, the first time a new top-level directory
+   appears, leaving a reader who trusts the list unable to classify a path that
+   is not on it.
 3. **Source and control** — name where the configuration was read, and cite a
    control experiment on the same PR if one exists (PR #428: two pushes inside
    the set produced zero Xcode Cloud check-runs; one push adding a `.py`,
