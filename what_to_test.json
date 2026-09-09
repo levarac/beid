@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "This build is for the four-device field test. Everyone taking part must be on this build number before you start, so read it aloud and check it matches on every phone. Please connect a wallet with MetaMask, approve one signature request, and confirm the app comes back on its own with the signature applied, then tell us exactly where it stops if it does not. Reopening the app should now show the wallet address you used last time straight away, and asking for a signature should send you to MetaMask once rather than twice."
+    "text": "Two things are new. Event cards now appear only for events the app has checked against the registry, so if a card you expect is missing, tell us what you saw instead of nothing. And a phone that has already picked up an event now passes it on, so try standing away from the beacon next to someone who is already in the event and see whether the card reaches you. Still open from last time: connect a wallet with MetaMask, approve one signature, and confirm the app comes back on its own with the signature applied."
   }
 ]
