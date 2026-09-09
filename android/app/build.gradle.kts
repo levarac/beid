@@ -68,7 +68,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
@@ -108,10 +112,9 @@ dependencies {
     // from the resolved jars, not the library's docs: core ships 49 Filled.*
     // icons, extended ships 2083.
     //
-    // Three symbols is a thin justification for 2083, and R8 does not trim
-    // the rest today — isMinifyEnabled is false on both build types below.
-    // beid#379 tracks that: enabling minification is a precondition for an
-    // App Store / Play release, not a general improvement to get to later.
+    // Three symbols is a thin justification for 2083. The release build uses
+    // R8 to trim unreferenced icons; debug remains unminified so its build and
+    // development behavior do not change (beid#379).
     //
     // Hand-drawing these was considered and rejected. The illustrations in
     // ui/designsystem/Illustrations.kt were transcribed from SVG sources in
