@@ -257,9 +257,11 @@ as of 2026-08-19 — reverify before reusing if this doc is old):
 
 ## What's deliberately not here
 
-- No ProGuard/R8 minification config beyond Gradle defaults (`isMinifyEnabled
-  = false` for debug and release, matching barnard's own example app — real
-  release signing/minification is a pre-launch concern, not scaffold scope).
+- No app-specific R8 keep rules are currently required because the app uses
+  the `JsonElement` tree API directly rather than reflection or generated
+  serializers. Release builds enable minification with the Android Gradle
+  plugin's optimized defaults and the intentionally empty
+  `proguard-rules.pro`; debug builds remain unminified.
 - No instrumentation or device E2E tests. See "Testing" above for why Compose
   UI coverage is Robolectric-backed JVM tests instead. JVM unit tests
   currently cover the app-to-`shared/` bridge, the native unsent-window
