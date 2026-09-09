@@ -78,6 +78,20 @@ tasks.matching { it.name == "iosArm64Test" }.configureEach {
 tasks.withType<Test>().configureEach {
     systemProperty("beid.repoRoot", layout.projectDirectory.dir("..").asFile.canonicalPath)
 
+    // beid#415: PARALLAX_REPO decides whether the cross-repo comparison runs at all, but
+    // an environment variable is not a task input, so Gradle reused a result produced
+    // under a different answer. Observed 2026-09-09: a run with PARALLAX_REPO set, then
+    // the same task with it unset, reported UP-TO-DATE and never re-executed -- the
+    // comparison silently did not run and the build was green. Declaring the variable as
+    // an input makes changing it invalidate the task. This deliberately does NOT call
+    // environment(): an empty value would be read back as a configured-but-missing
+    // checkout and fail loudly, which is the opposite of the unset-means-skip half of
+    // the contract in ParallaxEventDefinitionSourceChecksumTest.
+    inputs.property(
+        "parallaxRepo",
+        providers.environmentVariable("PARALLAX_REPO").orElse(""),
+    )
+
     // A skip that prints nothing is indistinguishable from a test that passed
     // (beid#403). The cross-repo comparison skips on every machine without a
     // Parallax checkout -- CI included -- and until now the only trace was a

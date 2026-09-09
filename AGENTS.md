@@ -498,13 +498,27 @@ dates). The contract every agent must know before touching delivery files:
     force override / project・composite-build substitution /
     `mavenLocal()` による差し替えが無いことを確認し、published dependency
     が実際に何へ resolve したかを CI log に machine-checkable な証拠として
-    残す — gh#110)
+    残す — gh#110)。あわせて build の前に `scripts/clone_parallax_pinned.sh` が
+    `levarac/parallax` を **pin された commit で detached に clone** し
+    (ref は `ParallaxEventDefinitionSourceChecksumTest` の
+    `EXPECTED_PARALLAX_REF` から読む。YAML に write down しない)、
+    `PARALLAX_REPO` を後続 step へ渡す。これにより vendored 資材のバイト比較が
+    **毎回走る** — 従来は誰かが手元で環境変数を指したときにしか走らなかった
+    (gh#415)。test の後に `scripts/check_parallax_comparison_ran.py` が
+    JUnit XML を読み、比較の testcase が存在し skipped でないことを確認して
+    job を落とす。**secret `PARALLAX_READ_TOKEN` が無い環境では clone せず、
+    warning annotation と step summary を出して skip する** (緑と見分けが付く)。
+    `PARALLAX_REPO` を空文字で export してはならない。設定済みだが存在しない
+    path は misconfiguration として loud に落ちる仕様であり (gh#403 / PR #412)、
+    未設定だけが skip してよい状態である
   - SwiftLint: `scripts/lint.sh`
   - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証、
     `scripts/check_pr_ci_doc_drift.py` による本 subsection と workflow の
     drift 検査、`python3 -m unittest discover -s scripts/tests -t .` による
-    `scripts/` の契約テスト (51 件・1 秒未満。gh#423 で追加するまで、この
-    テスト群はどの workflow からも実行されていなかった)
+    `scripts/` の契約テスト (1 秒未満。gh#423 で追加するまで、この
+    テスト群はどの workflow からも実行されていなかった)。**件数をここに書かない** —
+    追加するたびに古くなり、しかもそれを検査するものが無い。drift 検出を説明する
+    文書に、手で維持する数字を置かないこと
 
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
