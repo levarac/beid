@@ -37,6 +37,67 @@ private const val REPO_ROOT_PROPERTY = "beid.repoRoot"
 
 private const val PARALLAX_REPO_ENV = "PARALLAX_REPO"
 
+private const val VENDORED_RESOURCE_ROOT = "shared/src/commonTest/resources"
+
+private const val VENDORED_RESOURCE_SENTINEL = "canonical/event-definition-v1.cddl"
+
+private data class VendoredResourceMapping(
+    val resourcePath: String,
+    val sourcePath: String,
+)
+
+/**
+ * Android-host-only checkout discovery. This deliberately reads the repository's
+ * source-tree directory via [REPO_ROOT_PROPERTY]; it is not a portable commonTest
+ * resource enumerator. Kotlin/Native uses the explicit processedResources Copy
+ * tasks documented in shared/build.gradle.kts instead of this JVM disk layout.
+ */
+private fun discoverVendoredResourceMappings(repoRoot: File?): List<VendoredResourceMapping> {
+    val resourceRoot = repoRoot?.resolve(VENDORED_RESOURCE_ROOT)
+    val resourcePaths = if (resourceRoot?.isDirectory == true) {
+        resourceRoot.walkTopDown()
+            .filter(File::isFile)
+            .map { it.relativeTo(resourceRoot).invariantSeparatorsPath }
+            .sorted()
+            .toList()
+    } else {
+        emptyList()
+    }
+    return requireMappedVendoredResources(resourcePaths)
+}
+
+private fun requireMappedVendoredResources(
+    resourcePaths: List<String>,
+): List<VendoredResourceMapping> {
+    assertTrue(
+        resourcePaths.isNotEmpty(),
+        "No regular vendored resources were discovered; expected a non-empty set containing " +
+            "sentinel '$VENDORED_RESOURCE_SENTINEL'.",
+    )
+    assertTrue(
+        VENDORED_RESOURCE_SENTINEL in resourcePaths,
+        "Vendored resource discovery did not contain sentinel '$VENDORED_RESOURCE_SENTINEL'.",
+    )
+    return resourcePaths.map(::mapVendoredResource)
+}
+
+private fun mapVendoredResource(resourcePath: String): VendoredResourceMapping {
+    val segments = resourcePath.split('/')
+    val sourcePath = when {
+        segments.size == 3 && segments[0] == "vectors" &&
+            segments[1].isNotEmpty() && segments[2].isNotEmpty() ->
+            "protocol/vectors/${segments[1]}/${segments[2]}"
+        segments.size == 2 && segments[0] == "canonical" &&
+            segments[1].removeSuffix(".cddl").isNotEmpty() && segments[1].endsWith(".cddl") ->
+            "protocol/cddl/${segments[1]}"
+        else -> fail(
+            "Vendored resource '$resourcePath' has no Parallax source mapping. " +
+                "Expected vectors/<bucket>/<name> or canonical/<name>.cddl.",
+        )
+    }
+    return VendoredResourceMapping(resourcePath, sourcePath)
+}
+
 /**
  * Where to look, and whether an absent checkout is allowed to skip.
  *
@@ -90,6 +151,55 @@ private fun configuredRepoRoot(): File? = System.getProperty(REPO_ROOT_PROPERTY)
 class ParallaxEventDefinitionSourceChecksumTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun everyVendoredResourceHasAParallaxMapping() {
+        val mappings = discoverVendoredResourceMappings(configuredRepoRoot())
+        assertEquals(
+            mappings.sortedBy { it.resourcePath },
+            mappings,
+            "vendored resource mappings must have deterministic relative-path order",
+        )
+    }
+
+    @Test
+    fun vendoredResourceMappingRulesDeriveParallaxPaths() {
+        assertEquals(
+            VendoredResourceMapping(
+                resourcePath = "vectors/example-bucket/example.json",
+                sourcePath = "protocol/vectors/example-bucket/example.json",
+            ),
+            mapVendoredResource("vectors/example-bucket/example.json"),
+        )
+        assertEquals(
+            VendoredResourceMapping(
+                resourcePath = "canonical/example.cddl",
+                sourcePath = "protocol/cddl/example.cddl",
+            ),
+            mapVendoredResource("canonical/example.cddl"),
+        )
+    }
+
+    @Test
+    fun anUnknownVendoredResourcePathFailsLoudly() {
+        val unknown = "unmapped/new-resource.txt"
+        val failure = assertFailsWith<AssertionError> {
+            requireMappedVendoredResources(listOf(VENDORED_RESOURCE_SENTINEL, unknown))
+        }
+
+        assertTrue(failure.message.orEmpty().contains(unknown))
+        assertTrue(failure.message.orEmpty().contains("has no Parallax source mapping"))
+    }
+
+    @Test
+    fun emptyVendoredResourceDiscoveryFailsClosed() {
+        val failure = assertFailsWith<AssertionError> {
+            requireMappedVendoredResources(emptyList())
+        }
+
+        assertTrue(failure.message.orEmpty().contains("No regular vendored resources were discovered"))
+        assertTrue(failure.message.orEmpty().contains(VENDORED_RESOURCE_SENTINEL))
+    }
 
     @Test
     fun wrongCheckoutRefFailsBeforeComparingFiles() {
@@ -206,25 +316,10 @@ class ParallaxEventDefinitionSourceChecksumTest {
         assertContentEquals(committed, readPinnedSource(root, "source.txt", expected))
     }
 
-    /**
-     * Every resource this repository vendors from Parallax, compared against the
-     * blob committed at the pinned ref.
-     *
-     * The list below is written by hand: it RESTATES what is vendored instead of
-     * deriving it, so a resource added to `commonTest/resources` without a matching
-     * entry here is copied and then watched by nothing. That is not hypothetical.
-     * Until beid#403 the two `mutual-sensing-window-v1.json` vectors were absent
-     * from it while `MutualSensingObservationTest` drove a dozen assertions off
-     * them -- load-bearing inputs whose provenance no check could express an
-     * opinion about. They were in step when found; nothing would have said so had
-     * they drifted.
-     *
-     * Adding an entry when vendoring a file is therefore a convention and not a
-     * constraint, with the failure mode conventions have: correct when written and
-     * silently wrong afterwards.
-     */
+    /** Every discovered vendored resource, compared with the blob at the pinned ref. */
     @Test
     fun copiedVectorsAndCddlMatchTheParallaxCheckoutWhenAvailable() {
+        val mappings = discoverVendoredResourceMappings(configuredRepoRoot())
         val checkout = parallaxCheckout(System.getenv(PARALLAX_REPO_ENV), configuredRepoRoot())
             ?: throw AssumptionViolatedException(
                 "$REPO_ROOT_PROPERTY is not set, so the sibling Parallax checkout cannot be " +
@@ -235,51 +330,13 @@ class ParallaxEventDefinitionSourceChecksumTest {
         val root = checkout.root
         assertExpectedCheckout(root, EXPECTED_PARALLAX_REF, checkout.maySkipWhenAbsent)
 
-        assertResourceMatchesSource(
-            resourcePath = "vectors/positive/event-definition-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/positive/event-definition-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "vectors/negative/event-definition-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/negative/event-definition-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "vectors/positive/submission-endpoint-profile-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/positive/submission-endpoint-profile-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "vectors/negative/submission-endpoint-profile-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/negative/submission-endpoint-profile-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "vectors/positive/open-event-code-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/positive/open-event-code-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "vectors/negative/open-event-code-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/negative/open-event-code-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "vectors/positive/mutual-sensing-window-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/positive/mutual-sensing-window-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "vectors/negative/mutual-sensing-window-v1.json",
-            root = root,
-            sourcePath = "protocol/vectors/negative/mutual-sensing-window-v1.json",
-        )
-        assertResourceMatchesSource(
-            resourcePath = "canonical/event-definition-v1.cddl",
-            root = root,
-            sourcePath = "protocol/cddl/event-definition-v1.cddl",
-        )
+        for (mapping in mappings) {
+            assertResourceMatchesSource(
+                resourcePath = mapping.resourcePath,
+                root = root,
+                sourcePath = mapping.sourcePath,
+            )
+        }
         assertSourceChecksum(
             root = root,
             sourcePath = "protocol/reference/js/src/wire-identifiers.ts",
@@ -308,13 +365,13 @@ class ParallaxEventDefinitionSourceChecksumTest {
         val ref = commitFixtureSource(
             root,
             sourcePath = "protocol/cddl/event-definition-v1.cddl",
-            content = readVectorResource("canonical/event-definition-v1.cddl") + "\n; upstream moved on\n",
+            content = readVectorResource(VENDORED_RESOURCE_SENTINEL) + "\n; upstream moved on\n",
         )
 
         val failure = assertFailsWith<AssertionError> {
             assertResourceMatchesSource(
                 root = root,
-                resourcePath = "canonical/event-definition-v1.cddl",
+                resourcePath = VENDORED_RESOURCE_SENTINEL,
                 sourcePath = "protocol/cddl/event-definition-v1.cddl",
                 ref = ref,
             )
@@ -336,12 +393,12 @@ class ParallaxEventDefinitionSourceChecksumTest {
         val ref = commitFixtureSource(
             root,
             sourcePath = "protocol/cddl/event-definition-v1.cddl",
-            content = readVectorResource("canonical/event-definition-v1.cddl"),
+            content = readVectorResource(VENDORED_RESOURCE_SENTINEL),
         )
 
         assertResourceMatchesSource(
             root = root,
-            resourcePath = "canonical/event-definition-v1.cddl",
+            resourcePath = VENDORED_RESOURCE_SENTINEL,
             sourcePath = "protocol/cddl/event-definition-v1.cddl",
             ref = ref,
         )
