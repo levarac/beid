@@ -38,7 +38,7 @@ class EventDefinitionCborCodecTest {
             ).toHexWithoutPrefix(),
         )
         assertEquals(
-            "9306efe09fa39d7ca42a66c9e023e358ebd2f6771cb74c80d965754c9be08e51",
+            "f2684b54f0bf4e1f4639c9573f6f7fbb9893dd6741ffe7aac2b0fbaaf843e72c",
             Sha256.digest(
                 readVectorResource("canonical/event-definition-v1.cddl").encodeToByteArray(),
             ).toHexWithoutPrefix(),

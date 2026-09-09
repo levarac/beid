@@ -30,3 +30,5 @@ event-definition-v1 = {
   ? 14: 0 / 1,
   ? 15: bstr .size 8
 }
+
+; deliberate vendored drift for beid#415 CI proof
