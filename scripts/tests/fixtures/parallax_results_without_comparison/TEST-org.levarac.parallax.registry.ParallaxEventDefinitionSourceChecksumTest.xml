@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-09-09T15:52:11.989Z" hostname="Alphard.local" time="1.01">
+  <properties/>
+  <testcase name="emptyVendoredResourceDiscoveryFailsClosed" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.003"/>
+  <testcase name="anUnknownVendoredResourcePathFailsLoudly" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.001"/>
+  <testcase name="everyVendoredResourceHasAParallaxMapping" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.005"/>
+  <testcase name="onlyAnUnconfiguredCheckoutMaySkip" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.001"/>
+  <testcase name="wrongCheckoutRefFailsBeforeComparingFiles" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.145"/>
+  <testcase name="anUnknownRepoRootIsNotTreatedAsAnAbsentCheckout" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.001"/>
+  <testcase name="aConfiguredPathThatDoesNotExistFailsInsteadOfSkipping" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.0"/>
+  <testcase name="existingNonGitDirectoryFailsInsteadOfSkipping" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.04"/>
+  
+  <testcase name="missingCheckoutRemainsSkippable" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.001"/>
+  <testcase name="pinnedSourceIgnoresUncommittedEdits" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.111"/>
+  <testcase name="expectedCommitIsAcceptedWithDetachedHead" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.101"/>
+  <testcase name="vendoredResourceMappingRulesDeriveParallaxPaths" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.0"/>
+  <testcase name="aPinnedChecksumThatNoLongerMatchesTheCheckoutIsDetected" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.111"/>
+  <testcase name="aVendoredCopyThatDiffersFromTheCheckoutIsDetected" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.106"/>
+  <testcase name="aConfiguredCheckoutAtTheWrongCommitFailsLoudly" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.134"/>
+  <testcase name="aVendoredCopyThatMatchesTheCheckoutIsAccepted" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.096"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
