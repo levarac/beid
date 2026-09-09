@@ -187,6 +187,15 @@ final class SensingCoordinator: ObservableObject {
   /// `startSensing(eventCode:)` once the user has joined manually via
   /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
   @Published private(set) var joinedEventCode: String?
+  /// Why the most recent real-path join attempt was refused, or nil when the
+  /// last attempt was not refused (beid#410).
+  ///
+  /// Published because a refusal previously produced a log line and nothing
+  /// else: `phase` was already `.sensing` before the permission request and
+  /// was never moved back, so a user whose registry read failed sat on a
+  /// sensing screen with the radio off, indefinitely. A gate that refuses
+  /// silently is indistinguishable from one that is broken.
+  @Published private(set) var joinRefusal: EventJoinRefusal?
   /// Canonical registry Event ID returned by the code lookup for
   /// `joinedEventCode`. It is an untrusted routing hint until the dedicated
   /// event-definition resolution completes; event codes are not sufficient to
@@ -368,11 +377,19 @@ final class SensingCoordinator: ObservableObject {
   /// populate.
   private static let ledgerLog = Logger(subsystem: "org.levarac.beid", category: "ledger")
 
-  private let engine = BarnardEngine()
+  /// The Barnard participation operations this coordinator drives (beid#410).
+  ///
+  /// Deliberately `any EventJoinControlling` rather than a `BarnardEngine`.
+  /// That protocol has no `joinEvent(String)` and no argumentless
+  /// `startAuto()` on it, so this type cannot join or start sensing without a
+  /// `RegistryVerifiedJoinContext` — not because a check refuses, but because
+  /// there is no method to call. Holding the concrete engine here is what
+  /// previously left both doors open.
+  private let engine: any EventJoinControlling
 
-  /// The Barnard relay operations this coordinator drives. Defaults to
-  /// `engine`; injected in tests, which cannot construct a `BarnardEngine`
-  /// they can observe.
+  /// The Barnard relay operations this coordinator drives. Defaults to the
+  /// same Barnard engine `engine` forwards to; injected in tests, which
+  /// cannot construct a `BarnardEngine` they can observe.
   private let relayControl: any ParticipantRelayControlling
 
   /// The spec 134 relay verifier (beid#367). Held for the whole lifetime and
@@ -546,6 +563,39 @@ final class SensingCoordinator: ObservableObject {
   /// real event session is established. It is an untrusted routing hint and is
   /// never derived from event code.
   private var pendingCanonicalEventIdHex: String?
+  /// Identifies the current join attempt so a completion that lands after the
+  /// user moved on cannot act (beid#410).
+  ///
+  /// Bumped by `resetSessionState()` and `leaveEvent()`, so stopping,
+  /// restarting or leaving all invalidate anything still in flight. Both the
+  /// permission completion and the registry completion re-check it.
+  ///
+  /// Without this, the sequence startSensing, user stops, permission grant
+  /// lands, read succeeds, joinAndStart runs — with `phase` already `.idle`.
+  /// The capability's own documentation names carrying a request identity
+  /// through a permission wait as a *host* obligation, and Android discharges
+  /// it with `isCurrentJoinVerification`. The first version of this gate cited
+  /// that reason for issuing the capability late and then did not implement
+  /// the guard the reason calls for.
+  private var joinAttemptGeneration = 0
+  /// The in-flight join-time registry read, cancelled when an attempt is
+  /// abandoned rather than left to answer into a session that has moved on.
+  private var joinRegistryRequest: (any EventIdentityVerificationRequest)?
+  /// The event code this sensing session was started for, carried the same way
+  /// and for the same span as `pendingCanonicalEventIdHex`.
+  ///
+  /// Held here rather than read back from Barnard (beid#410). The session's
+  /// name used to come from `getCurrentEventCode()`, which worked only because
+  /// `joinEvent` pushed the code into Barnard the instant the user typed it.
+  /// Now that joining waits for a verified capability, Barnard knows no code
+  /// until the join actually happens — so asking it during `.sensing` returned
+  /// nothing and the session was named `"Unknown Event"`. That name is not
+  /// cosmetic: it becomes `EventSession.id`, and it reaches the durable
+  /// records a session produces.
+  ///
+  /// The coordinator owns the selection now, so the selection is the honest
+  /// source. Barnard's copy is derived from this one, never the reverse.
+  private var pendingEventCode: String?
   /// Demo-only ENIN counter (`advanceDemoWindow()`) — never touches
   /// `closeWindow`/`WindowReportStore`, only stands in for the real path's
   /// `advanceWindowBookkeepingIfNeeded`-derived `firstWindowEnin`/
@@ -585,6 +635,15 @@ final class SensingCoordinator: ObservableObject {
   private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
   private let nearbyRegistryClient:
     ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
+  /// The join gate's registry read, behind a protocol a test can answer
+  /// (beid#410). Defaults to a production adapter over `nearbyRegistryClient`,
+  /// so production wiring is unchanged and only tests inject.
+  ///
+  /// The gate read through the Kotlin client directly at first. No test can
+  /// build one, so every gate test ran with no client and stopped at the first
+  /// guard — the suite could not reach the read, the issuer, or any refusal
+  /// past "none configured", and deleting the method body left it green.
+  private let eventJoinRegistry: (any EventJoinRegistry)?
   private var nearbyRegistryRequests:
     [ExportedKotlinPackages.org.levarac.parallax.registry.RegistryRequest] = []
   /// Invalidates registry callbacks already queued on MainActor when a
@@ -1044,6 +1103,8 @@ final class SensingCoordinator: ObservableObject {
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
+    eventJoinControl: (any EventJoinControlling)? = nil,
+    eventJoinRegistry: (any EventJoinRegistry)? = nil,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1063,6 +1124,8 @@ final class SensingCoordinator: ObservableObject {
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
+      eventJoinControl: eventJoinControl,
+      eventJoinRegistry: eventJoinRegistry,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds
     )
@@ -1085,6 +1148,8 @@ final class SensingCoordinator: ObservableObject {
     },
     nearbyRegistryClient:
       ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
+    eventJoinControl: (any EventJoinControlling)? = nil,
+    eventJoinRegistry: (any EventJoinRegistry)? = nil,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1121,6 +1186,8 @@ final class SensingCoordinator: ObservableObject {
     self.ownerKeyRestorationAcknowledgementDefaults = ownerKeyRestorationAcknowledgementDefaults
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
     self.nearbyRegistryClient = nearbyRegistryClient
+    self.eventJoinRegistry = eventJoinRegistry
+      ?? nearbyRegistryClient.map { RegistryEventJoinRegistry(client: $0) }
     let nearbyDiscoveryStore = ExportedKotlinPackages.org.levarac.parallax.discovery
       .createNearbyEventDiscoveryStore()
     self.nearbyDiscoveryStore = nearbyDiscoveryStore
@@ -1132,7 +1199,13 @@ final class SensingCoordinator: ObservableObject {
         joinedEventIdHex: nil
       )
     )
-    self.relayControl = participantRelayControl ?? engine
+    // One Barnard engine backs both seams by default, so production keeps the
+    // single instance it has always had. Either seam can be injected on its
+    // own; a test that injects only one still gets the real engine behind the
+    // other, exactly as before.
+    let barnardEngine = BarnardEngine()
+    self.engine = eventJoinControl ?? barnardEngine
+    self.relayControl = participantRelayControl ?? barnardEngine
     self.relayCadenceNanoseconds = relayCadenceNanoseconds
     if let ledgerFailure {
       ledgerHealth = .degraded(reason: ledgerFailure, since: Date())
@@ -1254,7 +1327,7 @@ final class SensingCoordinator: ObservableObject {
     }
     switch phase {
     case .sensing:
-      let eventCode = engine.getCurrentEventCode() ?? "Unknown Event"
+      let eventCode = pendingEventCode ?? engine.currentJoinedEventCode() ?? "Unknown Event"
       let session = EventSession(
         id: eventCode,
         name: eventCode,
@@ -1657,29 +1730,52 @@ final class SensingCoordinator: ObservableObject {
     )
   }
 
-  /// Calls the Barnard SDK's join API (`BarnardEngine.joinEvent`)
-  /// with a manually entered event code — the wallet-optional fallback path
-  /// (`EventCodeEntryView`) for choosing which event to sense, since there
-  /// is no BLE auto-discovery yet. Returns whether the code took effect.
+  /// Selects a manually entered event code — the wallet-optional path
+  /// (`EventCodeEntryView`) for choosing which event to sense, since there is
+  /// no BLE auto-discovery yet. Returns whether the code was accepted as a
+  /// selection.
+  ///
+  /// **Selecting is not joining (beid#410).** Barnard is told nothing here.
+  /// This used to call `BarnardEngine.joinEvent` on its very next line, which
+  /// meant the app joined an event before any registry read had verified it,
+  /// and the verification that followed only *annotated* a session that had
+  /// already begun. The join now happens in `startSensing`, and only if the
+  /// shared issuer grants a `RegistryVerifiedJoinContext` at that moment.
+  ///
+  /// What is retained is the *evidence* a capability can be issued from — a
+  /// code and a canonical id — never a capability. The capability's own
+  /// documentation is explicit that one held across an await is not evidence
+  /// after it, and the gap between this call and the permission grant is
+  /// exactly such an await.
+  ///
+  /// Returning `true` therefore no longer means Barnard accepted anything. It
+  /// means the selection was recorded and a join will be *attempted*, under
+  /// the gate, when sensing starts.
   @discardableResult
   func joinEvent(_ code: String, canonicalEventIdHex: String? = nil) -> Bool {
-    engine.joinEvent(code)
-    let confirmed = engine.getCurrentEventCode()
-    joinedEventCode = confirmed
-    joinedCanonicalEventIdHex = confirmed == code ? canonicalEventIdHex : nil
-    // Joining deliberately does not open the relay gate. The id above came
+    guard !code.isEmpty else { return false }
+    joinedEventCode = code
+    joinedCanonicalEventIdHex = canonicalEventIdHex
+    // Selecting deliberately does not open the relay gate. The id above came
     // from a code-to-id lookup, and relaying wants the event's definition
     // read and agreed with first -- see `relayGateEventIdHex`.
-    return confirmed == code
+    return true
   }
 
   /// Calls the Barnard SDK's leave API (`BarnardEngine.leaveEvent`) to clear
   /// a manually joined event code, symmetric with `joinEvent(_:)`.
   func leaveEvent() {
     invalidateEventIdentityVerification()
-    engine.leaveEvent()
+    // Leaving invalidates an in-flight join the same way stopping does: a
+    // permission grant or registry read still outstanding must not join an
+    // event the user has just left (beid#410).
+    joinAttemptGeneration &+= 1
+    joinRegistryRequest?.cancel()
+    joinRegistryRequest = nil
+    joinRefusal = nil
+    engine.leaveJoinedEvent()
     stopParticipantRelay()
-    joinedEventCode = engine.getCurrentEventCode()
+    joinedEventCode = engine.currentJoinedEventCode()
     joinedCanonicalEventIdHex = nil
     // Mirrors Android's `EventJoinCoordinator.leaveEvent()`: candidates
     // observed before a join are stale once that join is given up, and
@@ -1718,32 +1814,231 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
-    let eventCode = eventCode ?? joinedEventCode ?? "beid-demo-event"
+    // No `?? "beid-demo-event"` any more (beid#410, gh#101). That fallback let
+    // a host that had never joined anything start its radio on a hardcoded
+    // event code — an ungated path with a built-in destination. The real path
+    // below now starts nothing at all when no event has been selected, which
+    // is the correct answer to "sense what?" with no answer.
+    let selectedEventCode = eventCode ?? joinedEventCode
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
     pendingCanonicalEventIdHex = canonicalEventIdHex
+    pendingEventCode = selectedEventCode
+    // Captured after the reset, which bumped it. Everything downstream of the
+    // permission request is checked against this value, so an attempt the user
+    // has since abandoned cannot join.
+    let joinGeneration = joinAttemptGeneration
     reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
+      // Untouched by the gate. Demo mode never reaches Barnard at all, and it
+      // is the App Review path (`ios/README.md`), which AGENTS.md records as
+      // having been regressed once already by work in this area. It also never
+      // read `selectedEventCode`, before or now.
       var selectedScenario = demoScenario ?? BeidConfig.demoScenario()
       if let demoEvent {
         selectedScenario = selectedScenario.replacingEvent(demoEvent)
       }
       runDemoScenario(selectedScenario, stepDelayNanos: demoStepDelayNanos)
     } else {
-      engine.requestPermissions { [weak self] status in
+      engine.requestJoinPermissions { [weak self] canScan, canAdvertise in
         guard let self else { return }
         Task { @MainActor in
-          guard status.canScan, status.canAdvertise else {
+          // The grant can land after the user stopped, left, or started a
+          // different session. Without this the sequence start, stop, grant
+          // joins with `phase` already `.idle`.
+          guard self.isCurrentJoinAttempt(joinGeneration) else { return }
+          guard canScan, canAdvertise else {
             self.stopParticipantRelay()
             return
           }
-          self.engine.configure(eventCode: eventCode)
-          self.engine.startAuto()
-          self.startParticipantRelay()
+          guard let selectedEventCode else {
+            Self.log.error("Sensing was asked to start with no event selected; starting nothing.")
+            self.stopParticipantRelay()
+            return
+          }
+          self.beginRegistryVerifiedJoin(
+            joinCode: selectedEventCode,
+            canonicalEventIdHex: canonicalEventIdHex,
+            generation: joinGeneration
+          )
         }
       }
     }
+  }
+
+  /// Verifies the selected event against the registry and, only if the shared
+  /// issuer grants a capability, joins it and starts sensing (beid#410).
+  ///
+  /// This is where the verification moved *in front of* the join. It runs
+  /// after the permission grant rather than at code entry because the
+  /// capability must be issued close to its use: `RegistryVerifiedJoinContext`
+  /// establishes that an event was verified a moment ago, not that it still is
+  /// at some later moment, and the permission wait is exactly the kind of gap
+  /// that invalidates a stale one. Android's `beginVerifiedJoin` carries a
+  /// request identity through its own permission wait for the same reason.
+  ///
+  /// Evidence shape (b), the operator-lookup path, is the only one wired here,
+  /// because it is the only join path iOS currently has: `EventCodeEntryView`
+  /// is how an event is chosen, since there is no BLE auto-discovery yet.
+  /// Shape (a), `fromNearbyCandidate`, needs a candidate this host's own
+  /// registry read already promoted to `REGISTRY_VERIFIED`, and iOS has no
+  /// surface that joins a discovered candidate yet — that arrives with the
+  /// participation-surface work (#141/#100), and this is where it hooks in.
+  ///
+  /// Every refusal below starts nothing. There is deliberately no fallback
+  /// branch that joins anyway on a failed or unavailable read: that is the
+  /// exact shape of the defect this replaces.
+  private func beginRegistryVerifiedJoin(
+    joinCode: String,
+    canonicalEventIdHex: String?,
+    generation: Int
+  ) {
+    switch joinGatePreflight(canonicalEventIdHex: canonicalEventIdHex) {
+    case .refuse(let refusal, let message):
+      applyJoinGateDecision(.refuse(refusal, message))
+    case .read(let registry, let eventIdHex):
+      joinRegistryRequest = registry.resolveEventDefinition(
+        eventIdHex: eventIdHex,
+        nowEpochSeconds: nearbyDiscoveryClock() / 1000
+      ) { [weak self] resolution in
+        // Hopped to the main actor the same way `EventIdentityVerificationSource`
+        // does for the identical read, rather than annotating the completion.
+        Task { @MainActor in
+          guard let self else { return }
+          // The read can answer after the user stopped or left. Checked here as
+          // well as at the permission grant, because the two waits are separate
+          // and either can outlive the attempt that started it.
+          guard self.isCurrentJoinAttempt(generation) else { return }
+          self.joinRegistryRequest = nil
+          self.applyJoinGateDecision(
+            self.joinGateDecision(
+              joinCode: joinCode,
+              resolution: resolution,
+              nowEpochSeconds: self.nearbyDiscoveryClock() / 1000
+            )
+          )
+        }
+      }
+    }
+  }
+
+  /// What the gate decided, as a value rather than as an effect already
+  /// performed (beid#410).
+  ///
+  /// Every branch below *returns* one of these instead of each remembering to
+  /// call `refuseJoin` before returning. That is a structural property, not a
+  /// tidier spelling: a `guard ... else` whose body must produce a
+  /// `JoinGateDecision` cannot have its refusal deleted and still compile, so
+  /// the mutation "drop one refusal and see whether anything notices" stops
+  /// being writable. Before this, four separate branches each had to remember,
+  /// and a checker's mutation proved one of them was unguarded by any test.
+  ///
+  /// This is the same by-type argument the join itself already rests on —
+  /// `EventJoinControlling` offers no way to join without a capability — moved
+  /// one level in, to the decision about whether to grant one.
+  private enum JoinGateDecision {
+    case admit(ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext)
+    case refuse(EventJoinRefusal, String)
+  }
+
+  /// What the gate can settle before spending a registry read.
+  private enum JoinGatePreflight {
+    case read(any EventJoinRegistry, String)
+    case refuse(EventJoinRefusal, String)
+  }
+
+  private func joinGatePreflight(canonicalEventIdHex: String?) -> JoinGatePreflight {
+    guard let registry = eventJoinRegistry else {
+      return .refuse(.noRegistryConfigured, "No registry configured; refusing to join unverified.")
+    }
+    guard let eventIdHex = canonicalEventIdHex else {
+      // A code with no canonical id never had a registry answer, so there is
+      // nothing to issue a capability from.
+      return .refuse(.noCanonicalEventId, "Selected event has no canonical id; refusing to join.")
+    }
+    return .read(registry, eventIdHex)
+  }
+
+  /// The post-read half of the same decision. Pure: it reads the clock value
+  /// it is handed and touches no coordinator state, so what it decides is a
+  /// function of the registry's answer alone.
+  private func joinGateDecision(
+    joinCode: String,
+    resolution: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?,
+    nowEpochSeconds: Int64
+  ) -> JoinGateDecision {
+    guard let resolution else {
+      return .refuse(.registryReadFailed, "Registry read produced no definition; starting nothing.")
+    }
+    // Issued from the live resolution, and re-checked against the clock now
+    // rather than when the read was requested.
+    //
+    // `Companion.shared`, not `companion`: Swift Export emits a Kotlin
+    // companion object as a nested `Companion` class reached through a
+    // static `shared` accessor. Read out of beid's own generated
+    // `BeidSharedKit.swift` rather than assumed.
+    guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .RegistryVerifiedJoinContext.Companion.shared.fromOperatorLookup(
+        joinCode: joinCode,
+        resolution: resolution,
+        nowEpochSeconds: nowEpochSeconds
+      )
+    else {
+      // Ask the shared decision *why*, so the refusal is diagnosable rather
+      // than merely a refusal. The verdict is logged rather than mapped to a
+      // case: its generated Swift surface has no name, description or
+      // equality — see `EventJoinRefusal`.
+      let verdict = ExportedKotlinPackages.org.levarac.parallax.discovery
+        .operatorLookupJoinEligibility(
+          joinCode: joinCode,
+          resolution: resolution,
+          nowEpochSeconds: nowEpochSeconds
+        )
+      return .refuse(
+        .definitionNotEligible,
+        "Registry did not verify the selected event (\(String(describing: verdict))); starting nothing."
+      )
+    }
+    return .admit(context)
+  }
+
+  /// Performs the decision. The **only** place a refused join is recorded, so
+  /// deleting that one call turns every refusal test red rather than one.
+  private func applyJoinGateDecision(_ decision: JoinGateDecision) {
+    switch decision {
+    case .admit(let context):
+      joinRefusal = nil
+      engine.joinAndStart(context)
+      startParticipantRelay()
+    case .refuse(let refusal, let message):
+      refuseJoin(refusal, message)
+    }
+  }
+
+  /// Whether the join attempt identified by `generation` is still the one this
+  /// coordinator is running, and the session is still waiting to start.
+  ///
+  /// Both conditions matter. The generation catches a stop or a leave; the
+  /// phase check catches a session that has already moved on, which a
+  /// generation bump alone would not express.
+  private func isCurrentJoinAttempt(_ generation: Int) -> Bool {
+    guard generation == joinAttemptGeneration else { return false }
+    guard case .sensing = phase else { return false }
+    return true
+  }
+
+  /// Records a refused join, returns the session to idle, and says why.
+  ///
+  /// Returning to `.idle` is the point: `phase` was set to `.sensing` before
+  /// the permission request and, before this, was never moved back — so every
+  /// refusal left the user on a sensing screen with the radio off, forever.
+  private func refuseJoin(_ refusal: EventJoinRefusal, _ message: String) {
+    Self.log.error("\(message, privacy: .public)")
+    joinRefusal = refusal
+    joinRegistryRequest = nil
+    stopParticipantRelay()
+    phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
   }
 
   @discardableResult
@@ -1821,7 +2116,7 @@ final class SensingCoordinator: ObservableObject {
     stopParticipantRelay()
     clearNearbyEventDiscovery()
     if stopEngine {
-      engine.stopAuto()
+      engine.stopAutomaticOperation()
     }
     resetSessionState()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
@@ -1849,6 +2144,16 @@ final class SensingCoordinator: ObservableObject {
     currentWindowReporterRpid = nil
     currentWindowLedgerOpened = false
     pendingCanonicalEventIdHex = nil
+    // Cleared with its sibling. `startSensing` resets first and assigns both
+    // afterwards, so a new session never inherits the previous one's name.
+    pendingEventCode = nil
+    // Invalidates any join attempt still waiting on a permission grant or a
+    // registry read, and cancels the read rather than letting it answer into a
+    // session that no longer exists (beid#410).
+    joinAttemptGeneration &+= 1
+    joinRegistryRequest?.cancel()
+    joinRegistryRequest = nil
+    joinRefusal = nil
     activeCommit = nil
     activeProofId = nil
     pendingBindingMessage = nil

@@ -310,8 +310,15 @@ the Simulator, remain available without letting fabricated proof data enter
 the shipping sensing path.
 
 When demo mode is off — including in every Release build — `startSensing()`
-instead calls `BarnardEngine.requestPermissions` → `configure(eventCode:)` →
-`startAuto()`. `SensingCoordinator` holds one `SensingCryptography` facade,
+instead asks for permissions and then, only if this host's own registry read
+verifies the selected event, joins it and starts sensing as one act
+(beid#410). The Barnard calls go through the `EventJoinControlling` seam,
+whose only join entry takes a `RegistryVerifiedJoinContext`; there is
+deliberately no `joinEvent(String)` and no argumentless `startAuto()` on it,
+so an unverified event cannot be joined rather than merely should not be.
+A registry read that fails, or an event that was never selected, starts
+nothing at all — there is no longer a `"beid-demo-event"` fallback (gh#101).
+`SensingCoordinator` holds one `SensingCryptography` facade,
 not a `BarnardIdentity`; the production initializer injects
 `BarnardSensingCryptography`. When an event is found, the coordinator obtains
 the per-event signing public key through `eventSigningPublicKey(eventCode:)`,
