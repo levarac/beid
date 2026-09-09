@@ -71,6 +71,16 @@ import XCTest
 /// `EventJoinRegistry.kt:69`, so the fake's nil is the shape production
 /// actually produces.
 ///
+/// **That filter is itself unpinned by this suite, for the same reason.**
+/// Reaching it means handing `RegistryEventJoinRegistry` a real
+/// `RegistryClient`, which no fake can build — the same constructibility wall
+/// described above. So the statement is symmetric rather than one-sided: the
+/// case is unfalsifiable here *and* the line that repairs it is unpinned here,
+/// both because of the shared module's `internal` constructors. The filter
+/// rests on symmetry with Android's adapter and on inspection, which is
+/// weaker evidence than anything else in this file, and is said plainly here
+/// rather than left for a reader to notice by its absence.
+///
 /// **Remove this paragraph, and the `.definitionNotEligible` case in
 /// `EventJoinRefusal` that it describes, if that case is collapsed into
 /// `.registryReadFailed`** — the two are now one refusal wearing two labels,
