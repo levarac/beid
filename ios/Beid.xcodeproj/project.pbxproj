@@ -129,6 +129,7 @@
 		D244F2EF45BA1F0ED4C3BCF8 /* VenueDeviceAssignmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA596FDBF8F1F004E195D54E /* VenueDeviceAssignmentStore.swift */; };
 		D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6660B6477CE489C244F95FED /* ProofCardView.swift */; };
 		D6D222534D0B2F3B27077CA3 /* BindingRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0AA6219B53ABF42EDACF85 /* BindingRecordStore.swift */; };
+		D73B6341358666EAAAD9F200 /* EventJoinRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80C88CDD0300DFD1CEBD0F9 /* EventJoinRegistry.swift */; };
 		D9C7575BA9CA4B5E9BC83F75 /* VenueDeviceAssignmentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */; };
 		DC040CF25B30C603A232AB3B /* PreviewAggregateFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1D6BBD55B5DDEB2D3476C2 /* PreviewAggregateFactory.swift */; };
 		DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */ = {isa = PBXBuildFile; productRef = 85120383F176FDA459C0D6E8 /* Barnard */; };
@@ -144,6 +145,7 @@
 		EC72A30AFB5E74B8245D7505 /* PastEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E3EC74423D098E4990BF12 /* PastEventsView.swift */; };
 		ECD429DD4E52BAAED0CB39A2 /* FakeVenueDeviceBroadcasting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831658C5506647E4B2DBFB48 /* FakeVenueDeviceBroadcasting.swift */; };
 		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
+		ED3FB185C17EC78A0FAA32A1 /* FakeEventJoinRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29505FEC31838C7138BC1AC3 /* FakeEventJoinRegistry.swift */; };
 		EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25F9B71C531690F799D13498 /* EventBindingTests.swift */; };
 		EEC27BE7A4E3F2AFFDB4C08B /* VenueDeviceBroadcasting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CBBE87F0D227CFFF2509D9E /* VenueDeviceBroadcasting.swift */; };
 		EFAADC6CDAC67683A1ACD51A /* ReportSubmissionWiringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 779C1DBA70189E14E9D1D5AE /* ReportSubmissionWiringTests.swift */; };
@@ -218,6 +220,7 @@
 		24484D87C1409892A5EE1045 /* EventJoinGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventJoinGateTests.swift; sourceTree = "<group>"; };
 		25C51A1484068D01C6D1A967 /* EventGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventGroupingTests.swift; sourceTree = "<group>"; };
 		25F9B71C531690F799D13498 /* EventBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventBindingTests.swift; sourceTree = "<group>"; };
+		29505FEC31838C7138BC1AC3 /* FakeEventJoinRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeEventJoinRegistry.swift; sourceTree = "<group>"; };
 		299022E955C6AD2273DF22FA /* DailyRollupRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRollupRuntimeTests.swift; sourceTree = "<group>"; };
 		29B97F1CE6BE6E1A98E511D8 /* EventIdentityVerificationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventIdentityVerificationUITests.swift; sourceTree = "<group>"; };
 		29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingView.swift; sourceTree = "<group>"; };
@@ -296,6 +299,7 @@
 		B2A0822EAE8F243702AA4F1C /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		B3E95383AD24579017E2EF0B /* DailySummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySummaryView.swift; sourceTree = "<group>"; };
 		B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingMode.swift; sourceTree = "<group>"; };
+		B80C88CDD0300DFD1CEBD0F9 /* EventJoinRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventJoinRegistry.swift; sourceTree = "<group>"; };
 		BAE9AB6A36B71BDF979C1435 /* EventGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventGrouping.swift; sourceTree = "<group>"; };
 		BB47871AF9ADE5CDBDBA2EA6 /* SelfProofRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofRecord.swift; sourceTree = "<group>"; };
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -382,6 +386,7 @@
 				C906FD35459E7A26F40FEB22 /* EventIdentityVerificationSource.swift */,
 				13AA21AD1DA667D20C77BD26 /* EventIdHash.swift */,
 				C238EFE3D2172FCAC370F5F0 /* EventJoinControlling.swift */,
+				B80C88CDD0300DFD1CEBD0F9 /* EventJoinRegistry.swift */,
 				C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */,
 				CA1CC0C132C9AE42C8C050B2 /* OwnerKeyRegenerationDetector.swift */,
 				2216225A599F7A2681ED2BC7 /* ParticipantRelayVerifier.swift */,
@@ -571,6 +576,7 @@
 				4E51400ED8F9E003C7E1D199 /* EventIdentityVerificationTests.swift */,
 				24484D87C1409892A5EE1045 /* EventJoinGateTests.swift */,
 				A66AC8F313C43F47575480DE /* EventRejoinTests.swift */,
+				29505FEC31838C7138BC1AC3 /* FakeEventJoinRegistry.swift */,
 				C637EA719C58481853B15B91 /* LocalizationContractTests.swift */,
 				E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */,
 				B034A3268DF912DD68B68873 /* OwnerKeyKeychainTests.swift */,
@@ -879,6 +885,7 @@
 				6051242403F1D7D211A40702 /* EventIdentityVerificationRow.swift in Sources */,
 				0539921BF96B4A87706974FB /* EventIdentityVerificationSource.swift in Sources */,
 				233C4ABB4C7C909DDF036EF6 /* EventJoinControlling.swift in Sources */,
+				D73B6341358666EAAAD9F200 /* EventJoinRegistry.swift in Sources */,
 				71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */,
 				7CAC82F1DCA3E6D6A6F590D0 /* ItemDetailView.swift in Sources */,
 				9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */,
@@ -954,6 +961,7 @@
 				60D9362EAB445D2A8C484EDA /* EventIdentityVerificationTests.swift in Sources */,
 				08558ED65AFA7A03AA4DDDC0 /* EventJoinGateTests.swift in Sources */,
 				46CF65FACDABE9817ED8CC1C /* EventRejoinTests.swift in Sources */,
+				ED3FB185C17EC78A0FAA32A1 /* FakeEventJoinRegistry.swift in Sources */,
 				ECD429DD4E52BAAED0CB39A2 /* FakeVenueDeviceBroadcasting.swift in Sources */,
 				388685E3B16428D9AAE11A8D /* LocalizationContractTests.swift in Sources */,
 				A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */,
