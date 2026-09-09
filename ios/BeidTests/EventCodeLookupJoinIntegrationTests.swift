@@ -44,7 +44,17 @@ import XCTest
 /// exists specifically to get the ordering right instead.
 @MainActor
 final class EventCodeLookupJoinIntegrationTests: XCTestCase {
-  func testJoinEventResolvingCanonicalIdReturnsNoErrorWhenNoRegistryClientIsConfigured() async throws {
+  /// Selecting a code with no registry client configured is not a *code
+  /// entry* error, so this surface shows nothing. It is also not a join:
+  /// `SensingCoordinator.joinEvent` records the code and tells Barnard
+  /// nothing (beid#410). The refusal lives one step later, in
+  /// `beginRegistryVerifiedJoin` at `startSensing`, which answers
+  /// `.noRegistryConfigured` — see `EventJoinGateTests`.
+  ///
+  /// Named for selection on purpose. Under its previous name this test read
+  /// as proof that an unverified *join* was acceptable, and that reading sent
+  /// two separate reviewers after a P1 that does not exist (2026-09-09).
+  func testSelectingAnEventCodeIsNotAnErrorWhenNoRegistryClientIsConfigured() async throws {
     let coordinator = AppCoordinator(registryClient: nil)
 
     let outcome = await coordinator.joinEventResolvingCanonicalId(code: "ethtokyo2026")
@@ -53,7 +63,12 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
     XCTAssertNil(coordinator.sensingCoordinator.joinedCanonicalEventIdHex)
   }
 
-  func testJoinEventResolvingCanonicalIdReturnsNoErrorWhenTheLookupUrlTemplateIsNotConfigured() async throws {
+  /// Same distinction as above for an unconfigured lookup URL template: the
+  /// selection is recorded with no canonical id, and the nil asserted below
+  /// is precisely the state `beginRegistryVerifiedJoin` refuses with
+  /// `.noCanonicalEventId` — pinned by
+  /// `EventJoinGateTests.testStartSensingStartsNothingWithoutACanonicalEventId`.
+  func testSelectingAnEventCodeIsNotAnErrorWhenTheLookupUrlTemplateIsNotConfigured() async throws {
     let coordinator = try makeCoordinator(eventCodeLookupUrlTemplate: nil)
 
     let outcome = await coordinator.joinEventResolvingCanonicalId(code: "ethtokyo2026")

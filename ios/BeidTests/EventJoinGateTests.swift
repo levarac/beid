@@ -208,6 +208,11 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertFalse(engine.didJoin)
   }
 
+  /// Mirrors the read half of Android's
+  /// `aVerificationThatAnswersAfterTheUserLeftStartsNothing`, which fires both
+  /// `completeHeldLookup` and `completeHeldDefinition`. iOS previously
+  /// mirrored only its permission half.
+  ///
   /// The other half of the same guard: the *read* can also answer after the
   /// user stopped, and that half had no test at all.
   ///
