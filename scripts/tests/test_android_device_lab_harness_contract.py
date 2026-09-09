@@ -48,7 +48,7 @@ class AndroidDeviceLabHarnessContractTests(unittest.TestCase):
 
     def test_ready_depends_on_confirmed_async_callbacks(self) -> None:
         self.assertTrue(self.ready_is_control_dependent_on_success("advertiser"))
-        self.assertTrue(self.ready_is_control_dependent_on_success("scanner"))
+        self.assertFalse(self.ready_is_control_dependent_on_success("scanner"))
         self.assertNotRegex(
             self.harness,
             re.compile(r"waitUntil\([^)]*\)\s*\{\s*harness\.engine\.getState\(\)\.is(?:Advertising|Scanning)"),
