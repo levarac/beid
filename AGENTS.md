@@ -310,16 +310,23 @@ succeeded**, not merely that a green check exists somewhere. That check is the
 only automated gate left, so treat its absence as a hard stop.
 
 **Carve-out — when absence is configuration rather than a hard stop.** Xcode
-Cloud is configured with `DO_NOT_START_IF_ALL_FILES_MATCH` over the matchers
-{`docs/`, `.github/`, `*.md`} (read from the ASC API 2026-09-09; the ASC GUI is
-the source of truth). A PR whose **every** changed file falls inside that set
-therefore has no iOS check **by configuration**, and that absence is not the
-hard stop above. Do not re-derive this per PR — state it, in this form, in the
-gate record:
+Cloud runs `DO_NOT_START_IF_ALL_FILES_MATCH` over a set of path matchers
+configured in ASC. A PR whose **every** changed file falls inside that set has
+no iOS check **by configuration**, and that absence is not the hard stop above.
+Do not re-derive the reasoning per PR — state it, in this form, in the gate
+record:
 
 1. **Predicate** — enumerate every path from `gh pr view <n> --json files` at
-   the head being merged, and show each one is under `docs/`, under
-   `.github/`, or ends in `.md`. Give the count (`N of N`).
+   the head being merged, and show each one falls inside the exclusion set.
+   Give the count (`N of N`).
+
+   **The set itself is defined in ASC and is not restated here as a rule.** As
+   read from the ASC API on **2026-09-09** it was {`docs/`, `.github/`,
+   `*.md`} — use that to classify the obvious cases without a GUI, but treat it
+   as a dated observation rather than as the contract, and **re-read ASC before
+   relying on it for any PR whose classification is not obvious**, or whose
+   answer would change if a matcher had been added or removed. The ASC GUI is
+   the source of truth for workflow settings, as stated elsewhere in this file.
 2. **Complement, enumerated** — `ios/`, `shared/`, `android/`, `scripts/`,
    `ios/project.yml`, `Package.resolved`, `*.swift`, `*.kt` are **not** in the
    exclusion set, so any iOS-affecting change falls outside it by construction
