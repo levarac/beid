@@ -500,7 +500,11 @@ dates). The contract every agent must know before touching delivery files:
     が実際に何へ resolve したかを CI log に machine-checkable な証拠として
     残す — gh#110)
   - SwiftLint: `scripts/lint.sh`
-  - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証
+  - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証、
+    `scripts/check_pr_ci_doc_drift.py` による本 subsection と workflow の
+    drift 検査、`python3 -m unittest discover -s scripts/tests -t .` による
+    `scripts/` の契約テスト (51 件・1 秒未満。gh#423 で追加するまで、この
+    テスト群はどの workflow からも実行されていなかった)
 
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。

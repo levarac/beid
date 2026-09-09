@@ -91,3 +91,5 @@ jobs:
           fi
       - name: Check AGENTS.md PR CI section matches this workflow
         run: python3 scripts/check_pr_ci_doc_drift.py
+      - name: Run scripts/ contract tests
+        run: python3 -m unittest discover -s scripts/tests -t .
