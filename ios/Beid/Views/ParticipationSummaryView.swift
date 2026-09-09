@@ -243,28 +243,3 @@ struct ParticipationSummaryView: View {
     )
   }
 }
-
-/// Preview-only helper: builds a real `BeidSharedKit.aggregation
-/// .SessionAggregate` from plain observation tuples, the same shared call
-/// production code uses, rather than a hand-rolled preview stand-in type.
-private enum PreviewAggregateFactory {
-  static func sessionAggregate(
-    observations: [(windowIndex: Int, peerKey: String, displayId: String?)],
-    windowsPerBand: Int32
-  ) -> BeidSharedKit.aggregation.SessionAggregate {
-    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
-    for observation in observations {
-      _ = BeidSharedKit.aggregation.addAggregationObservation(
-        input: input,
-        windowIndex: Int64(observation.windowIndex),
-        peerKey: observation.peerKey,
-        displayId: observation.displayId,
-        mutual: false
-      )
-    }
-    return BeidSharedKit.aggregation.aggregateObservationsForSession(
-      input: input,
-      windowsPerBand: windowsPerBand
-    )
-  }
-}

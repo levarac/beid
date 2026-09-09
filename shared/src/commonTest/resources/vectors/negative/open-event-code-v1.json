@@ -1,0 +1,26 @@
+{
+  "vector": "levarac-open-event-code-v1-negative",
+  "cases": [
+    {
+      "name": "uppercase",
+      "hashHex": "8fec958437b27e6c"
+    },
+    {
+      "name": "0x prefix",
+      "hashHex": "d525eb3154e30504"
+    },
+    {
+      "name": "leading whitespace",
+      "hashHex": "9a40c6b3d6548c3b"
+    },
+    {
+      "name": "dropped leading zero",
+      "hashHex": "73e08a40995225da"
+    },
+    {
+      "name": "raw eventId bytes",
+      "hashHex": "630dcd2966c43366"
+    }
+  ],
+  "expectedEventCodeHashHex": "6c86c6aac5fb24bc"
+}

@@ -530,6 +530,24 @@ final class SensingCoordinator: ObservableObject {
   private var ledgerLoadTask: Task<Void, Never>?
   private var demoTask: Task<Void, Never>?
   private var demoInterpreterScenario: DemoScenario?
+  /// Preview seam (beid#399): the screen at which to stop this scenario.
+  ///
+  /// Deliberately a *screen*, resolved from the live phase through the same
+  /// `ScanFlowContent.route(for:)` the app renders with, rather than a step
+  /// index. A step index would put the reducer's confirm decision into the
+  /// caller — the preview would encode an assumption about the code and keep
+  /// rendering a stale screen after any reducer change. Here the reducer runs
+  /// and the interpreter stops when the resulting screen is the requested one,
+  /// so the reducer stays the only authority on where a scenario gets to.
+  private var demoInterpreterStopRoute: ScanFlowContent.Route?
+  /// Whether the run actually reached `demoInterpreterStopRoute`.
+  ///
+  /// Not every scenario reaches every screen — `crowdSurge` never goes to
+  /// Signal Lost — and a preview that silently rendered the terminal screen
+  /// under another screen's name would be a fixture lying about what it shows.
+  /// Callers read this to say "not reachable" instead of showing the wrong
+  /// screen confidently.
+  private(set) var demoScenarioReachedRequestedRoute = false
   private var demoInterpreterCursor: Int?
   private var demoInterpreterIsParked = false
   private var demoInterpreterLastObservationChanged = false
@@ -667,8 +685,11 @@ final class SensingCoordinator: ObservableObject {
   private var aggregationRuntime = AggregationRuntime()
   /// Demo-only synthetic device counter backing `observeOneDemoDevice()`.
   /// Monotonically increasing so every call synthesizes a never-repeated
-  /// rpid/displayId pair, guaranteeing each call grows the shared device
-  /// count by exactly one.
+  /// rpid/displayId pair. That guarantees a call grows the shared device
+  /// count by exactly one only when a display id is actually supplied: since
+  /// beid#395 a scenario may pass `nil`, and such a call is counted here
+  /// (the id space is still consumed) while deliberately leaving
+  /// `devicesVerified` untouched.
   private var demoDeviceSequence = 0
   /// Demo-only stand-in for `currentWindowRpids` (beid#189), scoped to the
   /// demo script's own window concept (`demoWindowEnin`/
@@ -677,14 +698,16 @@ final class SensingCoordinator: ObservableObject {
   /// honestly-tracked value rather than a fabricated placeholder — see
   /// `applyPhaseDecision`'s own doc comment for why a fabricated count
   /// would itself violate DECISIONS 2026-08-01, not just an implementation
-  /// detail. Demo's own confirm timing is still always actually driven by
-  /// the distinct-device arm in practice (see `runDemoSequence`'s doc
-  /// comment), since `devicesVerified` grows monotonically across the
-  /// whole scripted session while this set resets every
-  /// `advanceDemoWindow()` call — but the reducer receives a real count
-  /// either way, never a stand-in chosen to force an outcome. Cleared by
-  /// `advanceDemoWindow()` and `resetSessionState()`; inserted into by
-  /// `observeOneDemoDevice()`.
+  /// detail. Every scenario before beid#395 confirmed through the
+  /// distinct-device arm in practice, since `devicesVerified` grows
+  /// monotonically across the whole scripted session while this set resets
+  /// every `advanceDemoWindow()` call. `unidentifiedHeavy` is the first that
+  /// does not: nothing it observes resolves a display id, so the
+  /// distinct-device arm can never fire and co-presence is the only arm
+  /// left — which is why that scenario keeps all of its observations inside
+  /// one demo window. The reducer receives a real count either way, never a
+  /// stand-in chosen to force an outcome. Cleared by `advanceDemoWindow()`
+  /// and `resetSessionState()`; inserted into by `observeOneDemoDevice()`.
   private var demoWindowRpids: Set<String> = []
   /// Backs `unidentifiedRpidCount`. Holds proximity identifiers seen
   /// without a display id; an identifier is removed once it does arrive with
@@ -3386,7 +3409,31 @@ final class SensingCoordinator: ObservableObject {
 
   /// Runs a named deterministic DemoEvent scenario without calling the real
   /// BLE observation, ledger, report, or submission-capture paths.
+  /// Preview/test overload: runs `scenario` and stops as soon as the screen
+  /// the app would render equals `stopWhenPhaseReaches`.
+  ///
+  /// This is a stop, not a park. `simulateSignalLost`'s park suspends a run
+  /// that a user resumes; nothing resumes a preview, and reusing
+  /// `demoInterpreterIsParked` here would make `hasParkedDemoScenarioForTesting`
+  /// mean two different things and leave `resumeSensing()` — which only acts
+  /// from `.signalLost` — unable to clear a stop taken at `.recording`.
+  func runDemoScenario(
+    _ scenario: DemoScenario,
+    stepDelayNanos: UInt64 = 700_000_000,
+    stopWhenPhaseReaches route: ScanFlowContent.Route
+  ) {
+    runDemoScenario(scenario, stepDelayNanos: stepDelayNanos, stopRoute: route)
+  }
+
   func runDemoScenario(_ scenario: DemoScenario, stepDelayNanos: UInt64 = 700_000_000) {
+    runDemoScenario(scenario, stepDelayNanos: stepDelayNanos, stopRoute: nil)
+  }
+
+  private func runDemoScenario(
+    _ scenario: DemoScenario,
+    stepDelayNanos: UInt64,
+    stopRoute: ScanFlowContent.Route?
+  ) {
     demoTask?.cancel()
     let session = EventSession(
       id: scenario.event.id,
@@ -3405,6 +3452,8 @@ final class SensingCoordinator: ObservableObject {
 
     let resolvedScenario = scenario.replacingEvent(session)
     demoInterpreterScenario = resolvedScenario
+    demoInterpreterStopRoute = stopRoute
+    demoScenarioReachedRequestedRoute = false
     demoInterpreterCursor = 0
     demoInterpreterIsParked = false
     demoInterpreterLastObservationChanged = false
@@ -3439,6 +3488,20 @@ final class SensingCoordinator: ObservableObject {
         self.onDemoInterpreterCheckpointForTesting?(.renderTurnSettled(index))
         self.demoInterpreterCursor = index + 1
 
+        // The reducer has now run for this step, so `phase` is its answer and
+        // this asks the production router which screen that answer renders.
+        // Nothing here decides where a scenario gets to; it only notices.
+        if let stopRoute = self.demoInterpreterStopRoute,
+           ScanFlowContent.route(for: self.phase) == stopRoute {
+          self.demoScenarioReachedRequestedRoute = true
+          // Same teardown as running off the end of the step list: the run is
+          // over, nothing resumes it, and leaving interpreter state behind
+          // would make a later `resumeSensing()` look at a finished scenario.
+          self.clearDemoInterpreterState()
+          self.onDemoInterpreterCheckpointForTesting?(.completed)
+          return
+        }
+
         if shouldPark {
           self.demoInterpreterIsParked = true
           self.onDemoInterpreterCheckpointForTesting?(.suspended(index + 1))
@@ -3461,6 +3524,13 @@ final class SensingCoordinator: ObservableObject {
     case let .observeOneDemoDevice(displayId, rpid, enin):
       demoInterpreterLastObservationChanged = observeOneDemoDevice(
         displayId: displayId,
+        rpid: rpid,
+        enin: enin
+      )
+    case let .observeOneUnidentifiedRpid(rpid, enin):
+      // Same helper, `nil` display id: one observation path, not two.
+      demoInterpreterLastObservationChanged = observeOneDemoDevice(
+        displayId: nil,
         rpid: rpid,
         enin: enin
       )
@@ -3506,6 +3576,7 @@ final class SensingCoordinator: ObservableObject {
 
   private func clearDemoInterpreterState() {
     demoInterpreterScenario = nil
+    demoInterpreterStopRoute = nil
     demoInterpreterCursor = nil
     demoInterpreterIsParked = false
     demoInterpreterLastObservationChanged = false
@@ -3559,8 +3630,18 @@ final class SensingCoordinator: ObservableObject {
     )
   }
 
+  /// `displayId` is optional so the `unidentifiedHeavy` scenario (beid#395)
+  /// can file an observation that never resolves, exactly as the real path
+  /// does when Barnard B003 is unavailable. A `nil` display id still records
+  /// the observation into `aggregationRuntime` and still inserts the rpid
+  /// into `demoWindowRpids`; what it does not do is grow `devicesVerified`,
+  /// so this returns `false` and the identifier lands in
+  /// `rpidsAwaitingDisplayId`/`unidentifiedRpidCount` instead. The branch
+  /// belongs to `recordDeviceIdentity`, which both the demo and real paths
+  /// already share — this parameter only stops the demo vocabulary from
+  /// being unable to say it.
   @discardableResult
-  private func observeOneDemoDevice(displayId: String, rpid: String, enin: Int) -> Bool {
+  private func observeOneDemoDevice(displayId: String?, rpid: String, enin: Int) -> Bool {
     demoDeviceSequence += 1
     demoWindowEnin = enin
     demoWindowRpids.insert(rpid)

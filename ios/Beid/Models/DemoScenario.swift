@@ -16,6 +16,18 @@ struct DemoScenario: Equatable, Identifiable {
     case pause
     /// Records one synthetic nearby device through the shared aggregation path.
     case observeOneDemoDevice(displayId: String, rpid: String, enin: Int)
+    /// Records one synthetic proximity identifier that never resolves to a
+    /// display id, through that same aggregation path.
+    ///
+    /// Deliberately a separate case rather than widening
+    /// `observeOneDemoDevice`'s `displayId` to an optional: the App Review
+    /// golden sequence is pinned as a step-array literal in both this file
+    /// and `DemoScenarioInvariantTests`, and widening the existing payload
+    /// would rewrite that literal on both sides in one edit — which is the
+    /// shape where a golden quietly stops guarding anything. The coordinator
+    /// still routes both cases through one `recordDeviceIdentity` call, so
+    /// this adds a vocabulary word, not a second observation path.
+    case observeOneUnidentifiedRpid(rpid: String, enin: Int)
     /// Applies the shared scan-phase reducer to the current demo observation.
     case applyPhaseDecision
     /// Advances only demo ENIN bookkeeping; it never opens or closes a report window.
@@ -67,8 +79,43 @@ struct DemoScenario: Equatable, Identifiable {
     )
   }
 
+  /// Stays in Sensing with nothing ever arriving — the "is it even scanning?"
+  /// screen, which no other scenario reaches because every other one observes
+  /// at least one device.
+  static let zeroPeersForever = DemoScenario(
+    identifier: "zeroPeersForever",
+    event: zeroPeersEvent,
+    steps: zeroPeersForeverSteps()
+  )
+
+  /// Radio is arriving and none of it identifies: `unidentifiedRpidCount`
+  /// climbs while `devicesVerified` stays at 0. This is the pair
+  /// `RecordingView`'s diagnostic line (beid#218) exists to tell apart from
+  /// "nothing is arriving at all", and it is the only scenario that produces
+  /// it.
+  ///
+  /// Threshold-derived, so it must be a `var`: the step count is a function
+  /// of `BeidConfig.eventConfirmThreshold`, which
+  /// `eventConfirmThresholdOverrideForTesting` and `-beid-threshold-override`
+  /// both move at runtime. A `let` would cache a list built against whichever
+  /// threshold happened to be current at first access.
+  static var unidentifiedHeavy: DemoScenario {
+    DemoScenario(
+      identifier: "unidentifiedHeavy",
+      event: unidentifiedHeavyEvent,
+      steps: unidentifiedHeavySteps()
+    )
+  }
+
   static var allScenarios: [DemoScenario] {
-    [appReviewGolden, crowdSurge, signalLostMidway, longDisplayNames]
+    [
+      appReviewGolden,
+      crowdSurge,
+      signalLostMidway,
+      longDisplayNames,
+      zeroPeersForever,
+      unidentifiedHeavy,
+    ]
   }
 
   static func named(_ identifier: String) -> DemoScenario? {
@@ -84,6 +131,8 @@ struct DemoScenario: Equatable, Identifiable {
   private static let appReviewEvent = EventSession.demoSample
   private static let crowdSurgeEvent = EventSession.demoSample
   private static let signalLostEvent = EventSession.demoSample
+  private static let zeroPeersEvent = EventSession.demoSample
+  private static let unidentifiedHeavyEvent = EventSession.demoSample
   private static let longDisplayNamesEvent = EventSession(
     id: "BEID-DEMO-LONG-DISPLAY-NAMES",
     name: String(
@@ -188,6 +237,43 @@ struct DemoScenario: Equatable, Identifiable {
     )
     steps.append(.applyPhaseDecision)
     steps.append(.advanceDemoWindow)
+    return steps
+  }
+
+  /// Four render turns of nothing. The count is arbitrary but not zero:
+  /// `runDemoScenario` publishes `.sensing` before the first step, so a step
+  /// list still has to give the UI turns to render it, and an empty list would
+  /// complete the interpreter before the screen was ever drawn.
+  private static func zeroPeersForeverSteps() -> [Step] {
+    Array(repeating: Step.pause, count: 4)
+  }
+
+  /// Every observation lands in one demo window (`enin: 0`, no
+  /// `advanceDemoWindow`) on purpose, and the scenario is unreadable without
+  /// knowing why.
+  ///
+  /// No observation here resolves a display id, so `devicesVerified` never
+  /// moves and the distinct-device arm of
+  /// `BeidSharedKit.sensing.shouldConfirmScanEvent` can never fire. The only
+  /// arm left is co-presence, which counts `demoWindowRpids` — and
+  /// `advanceDemoWindow()` clears that set. A window advance placed anywhere
+  /// inside this run would reset the count below the threshold, the event
+  /// would never confirm, and the scenario would park in Event Found looking
+  /// entirely plausible while never reaching the Recording screen it exists
+  /// to show.
+  ///
+  /// Overshooting the threshold is the point rather than an accident: at
+  /// exactly the threshold the diagnostic line reads the same as a healthy
+  /// session that happened to confirm, and the state being demonstrated is
+  /// the lopsided one.
+  private static func unidentifiedHeavySteps() -> [Step] {
+    let threshold = max(1, BeidConfig.eventConfirmThreshold)
+    var steps: [Step] = [.pause]
+    for index in 1...(threshold + 3) {
+      steps.append(.observeOneUnidentifiedRpid(rpid: "unidentified-rpid-\(index)", enin: 0))
+      steps.append(.applyPhaseDecision)
+      steps.append(.pause)
+    }
     return steps
   }
 }

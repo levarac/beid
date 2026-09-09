@@ -5,7 +5,9 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.barnard.BarnardEventDefinitionV1
+import org.levarac.parallax.discovery.NearbyEventJoinEligibility
 import org.levarac.parallax.discovery.NearbyEventReceiverState
+import org.levarac.parallax.discovery.nearbyCandidateJoinEligibility
 import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.registry.EventJoinMode
 import org.levarac.parallax.registry.eventCodeHashForOpenEventV1
@@ -26,85 +28,80 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NearbyEventReceiverStateAdapterTest {
+    /**
+     * The adapter's own error-code mapping, and the second thing beid#391's
+     * move dropped.
+     *
+     * `event_code_lookup_not_found` means the operator answered and does not
+     * know this hash, which is NOT_REGISTERED; anything else that fails is
+     * LOOKUP_UNAVAILABLE, because a lookup this host could not complete says
+     * nothing about whether the event exists. That distinction is made HERE,
+     * in the adapter, from a string only this side sees — the shared reducer
+     * receives the already-classified result.
+     *
+     * The moved version of the neighbouring tier test asserted an unjoinable
+     * candidate stays unjoinable WITHOUT ever running a lookup that fails, so
+     * it kept the assertion and dropped the input that gave it meaning. Same
+     * shape as the late-arrival test above: what makes a refusal test real is
+     * that something actually refused.
+     *
+     * This test and its sibling pin THE LOOKUP MAPPING and deliberately say
+     * nothing about the card. They cannot: `eventIdHex` is published only from
+     * the definition-verification success path, which a failed lookup never
+     * reaches, so a card assertion here would read as coverage and hold for
+     * every possible card rule including a maximally broken one. The card has
+     * a designated guardian in [theCardFollowsTheSharedJoinEligibility], which
+     * covers all three tiers itself.
+     */
     @Test
-    fun hintOnlyCandidateStaysUnverifiedAndIsNotJoinable() = runTest {
+    fun aNotFoundLookupIsRecordedAsNotRegisteredRatherThanUnavailable() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
-
-        resolveVerifiedOpenDefinition(registry)
-
-        assertEquals(NearbyEventReceiverState.UNVERIFIED, candidate(session).receiverState)
-        assertEquals(
-            NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP,
-            candidate(session).registryStatus,
-            "the registration itself is genuine -- it is the TIER that is not joinable",
-        )
-        assertNull(
-            session.cards.value.single().eventIdHex,
-            "v1.0 nearby join requires REGISTRY_VERIFIED; a successful registry read alone is not it",
-        )
-    }
-
-    /**
-     * A verified-but-unregistered envelope withdraws join only from a
-     * candidate that had nothing else to stand on. With no operator lookup
-     * behind it this candidate has nothing, so it stays unjoinable.
-     */
-    @Test
-    fun aV2OnlyCandidateWithoutAnOperatorLookupStaysUnjoinable() = runTest {
-        val registry = FakeRegistry()
-        val session = session(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
-        assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
 
         registry.completeLookup(NearbyEventIdLookup(false, null, "event_code_lookup_not_found"))
         runCurrent()
 
-        assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate(session).receiverState)
-        assertNull(session.cards.value.single().eventIdHex)
+        assertEquals(NearbyEventRegistryStatus.NOT_REGISTERED, candidate(session).registryStatus)
     }
 
     /**
-     * The positive pin of the v1.0 nearby ruling, asked for by name.
-     *
-     * `RADIO_SELF_VERIFIED` plus a genuine `REGISTERED_VIA_OPERATOR_LOOKUP`
-     * registration is the strongest state that is still NOT joinable, and it is
-     * the one the old local rule admitted. Nothing else in this suite pins that
-     * exact combination: the neighbouring tests reach it incidentally while
-     * asserting something else, so a regression that made it joinable again
-     * would not necessarily turn any of them red.
+     * The other half of that mapping. A lookup that failed for any other
+     * reason leaves the question open rather than answering it in the
+     * negative, and a host must not treat "I could not ask" as "it does not
+     * exist".
      */
     @Test
-    fun radioSelfVerifiedWithAnOperatorLookupRegistrationIsNotJoinable() = runTest {
+    fun anyOtherLookupFailureLeavesTheRegistrationUnavailableRatherThanNotRegistered() = runTest {
         val registry = FakeRegistry()
         val session = session(registry)
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
-        resolveVerifiedOpenDefinition(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
 
-        val candidate = candidate(session)
-        assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
-        assertEquals(NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP, candidate.registryStatus)
-        assertNull(
-            session.cards.value.single().eventIdHex,
-            "this exact pair rendered as an enabled card before beid#374's review and tapped to JoinFailed",
-        )
-        assertNull(session.cards.value.single().displayValidFromEpochSeconds)
+        registry.completeLookup(NearbyEventIdLookup(false, null, "event_code_lookup_http_error"))
+        runCurrent()
+
+        assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate(session).registryStatus)
     }
 
-    @Test
-    fun agreementOnAVerifiedDefinitionPromotesAndUnlocksJoin() = runTest {
-        val registry = FakeRegistry()
-        val session = session(registry)
-        session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
-
-        resolveVerifiedOpenDefinition(registry)
-
-        assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate(session).receiverState)
-        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
-    }
-
+    /**
+     * The late-arrival ordering, and the branch only Android exercises.
+     *
+     * A hash resolves once, so an envelope arriving AFTER that resolution has
+     * no completion callback left to ride on. The adapter therefore asks
+     * barnard right here, against the definition its own registry read
+     * retained, and hands the verdict to the reducer as `agreesWithRegistry`.
+     *
+     * This was briefly moved to `shared/` in beid#391 and had to come back,
+     * for a reason worth stating because the next person moving tests will
+     * reach for the same thing: the shared version exercised
+     * `applyNearbyEventRegistryAgreementFromHex`, WHICH HAS NO PRODUCTION
+     * CALLER ON EITHER PLATFORM. Both hosts take the inline path above. So the
+     * moved test ran against a door nothing walks through while the door
+     * production uses had nobody watching it — it passed, it looked like
+     * coverage, and it covered nothing that ships. A test can be moved onto an
+     * entry point that exists but is unused, and that is invisible unless you
+     * mutate the branch you believe is covered.
+     */
     @Test
     fun anEnvelopeArrivingAfterResolutionStillPromotes() = runTest {
         val registry = FakeRegistry()
@@ -115,7 +112,76 @@ class NearbyEventReceiverStateAdapterTest {
         session.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
 
         assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate(session).receiverState)
-        assertEquals(EVENT_ID_HEX, session.cards.value.single().eventIdHex)
+        assertEquals(
+            NearbyEventJoinEligibility.ELIGIBLE,
+            nearbyCandidateJoinEligibility(session.candidates.value, EVENT_HASH.toHex(), NOW_EPOCH_SECONDS),
+        )
+        assertNotNull(session.cards.value.single().eventIdHex)
+    }
+
+    /**
+     * The card follows the SHARED rule, and that is all this asserts.
+     *
+     * Which tier may join is pinned in `shared/`'s
+     * [org.levarac.parallax.discovery.NearbyEventJoinEligibilityTest], with
+     * mirrored names, because both hosts must answer it identically (beid#391).
+     * What has no counterpart there is this projection: the card is an Android
+     * rendering of a candidate, and whether it FOLLOWS the shared answer is a
+     * different property from what the shared answer is.
+     *
+     * It is pinned here rather than moved with the rest because the projection
+     * deciding for itself is exactly the defect beid#374's review found: the
+     * card used to carry its own `when`, which admitted two tiers the issuer
+     * refuses, so candidates rendered as enabled and tapped through to
+     * JoinFailed. Moving every card assertion to shared would have left that
+     * unpinned again.
+     */
+    @Test
+    fun theCardFollowsTheSharedJoinEligibility() = runTest {
+        val eligibleRegistry = FakeRegistry()
+        val eligible = session(eligibleRegistry)
+        eligible.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { true }
+        resolveVerifiedOpenDefinition(eligibleRegistry)
+
+        val refusedRegistry = FakeRegistry()
+        val refused = session(refusedRegistry)
+        refused.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
+        resolveVerifiedOpenDefinition(refusedRegistry)
+        refused.recordRadioSelfVerifiedEnvelope("peripheral", "Beacon", EVENT_HASH, CONTAINER) { false }
+
+        assertEquals(
+            NearbyEventJoinEligibility.ELIGIBLE,
+            nearbyCandidateJoinEligibility(eligible.candidates.value, EVENT_HASH.toHex(), NOW_EPOCH_SECONDS),
+        )
+        assertNotNull(
+            eligible.cards.value.single().eventIdHex,
+            "a candidate the shared rule calls ELIGIBLE must render as joinable",
+        )
+
+        assertEquals(
+            NearbyEventJoinEligibility.NOT_REGISTRY_VERIFIED,
+            nearbyCandidateJoinEligibility(refused.candidates.value, EVENT_HASH.toHex(), NOW_EPOCH_SECONDS),
+        )
+        assertNull(
+            refused.cards.value.single().eventIdHex,
+            "and one it refuses must not, however good its registration looks",
+        )
+
+        // The UNVERIFIED tier explicitly, rather than relying on another test
+        // to happen to pass through it. Incidental coverage is what evaporates
+        // in the next move -- which is precisely what beid#391's first attempt
+        // did to the late-arrival branch above.
+        val hintOnlyRegistry = FakeRegistry()
+        val hintOnly = session(hintOnlyRegistry)
+        hintOnly.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
+        resolveVerifiedOpenDefinition(hintOnlyRegistry)
+
+        assertEquals(NearbyEventReceiverState.UNVERIFIED, candidate(hintOnly).receiverState)
+        assertEquals(
+            NearbyEventJoinEligibility.NOT_REGISTRY_VERIFIED,
+            nearbyCandidateJoinEligibility(hintOnly.candidates.value, EVENT_HASH.toHex(), NOW_EPOCH_SECONDS),
+        )
+        assertNull(hintOnly.cards.value.single().eventIdHex)
     }
 
     /**
@@ -364,6 +430,7 @@ class NearbyEventReceiverStateAdapterTest {
 
         /** Inside `verification()`'s 100..200 second window. */
         const val WINDOW_MIDPOINT_EPOCH_MILLIS = 150_000L
+        const val NOW_EPOCH_SECONDS = 150L
         val KEY_SET_DIGEST_HEX = "0x" + KEY_SET_DIGEST_BYTES.toHex()
 
         fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }

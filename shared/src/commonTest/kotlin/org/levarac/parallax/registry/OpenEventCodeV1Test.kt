@@ -1,10 +1,16 @@
 package org.levarac.parallax.registry
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.levarac.parallax.observation.readVectorResource
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class OpenEventCodeV1Test {
     @Test
@@ -40,6 +46,99 @@ class OpenEventCodeV1Test {
             Sha256.digest(eventId).copyOfRange(0, 8)
                 .contentEquals(eventCodeHashForOpenEventV1(eventId)),
         )
+    }
+
+
+    /**
+     * Parity with the OTHER SIDE's own output, rather than with our record of
+     * it (beid#403).
+     *
+     * The assertions above are beid's literals. They are correct today, and
+     * they would stay green if parallax changed the convention tomorrow,
+     * because nothing in them is derived from parallax. This one reads the
+     * vendored `open-event-code-v1` vector — emitted by parallax, byte-checked
+     * against the pinned checkout by the cross-repo comparison — and requires
+     * beid's implementation to reproduce it.
+     *
+     * That is the difference between "beid agrees with beid" and "beid agrees
+     * with parallax", and it is the whole subject of beid#403: a stand-in for
+     * something that lives elsewhere must be checked against what that thing
+     * actually emits.
+     */
+    @Test
+    fun theImplementationReproducesParallaxsOwnOpenEventCodeVector() {
+        val vector = Json.parseToJsonElement(
+            readVectorResource("vectors/positive/open-event-code-v1.json"),
+        ).jsonObject
+        val eventId = vector.getValue("eventIdHex").jsonPrimitive.content.decodeHex()
+
+        assertEquals(
+            vector.getValue("openCodeV1").jsonPrimitive.content,
+            canonicalOpenCodeV1(eventId),
+            "the canonical open code must be the one parallax publishes",
+        )
+        assertEquals(
+            vector.getValue("sha256Hex").jsonPrimitive.content,
+            Sha256.digest(canonicalOpenCodeV1(eventId).encodeToByteArray())
+                .toHexWithoutPrefixForOpenCodeTest(),
+        )
+        assertContentEquals(
+            vector.getValue("eventCodeHashHex").jsonPrimitive.content.decodeHex(),
+            eventCodeHashForOpenEventV1(eventId),
+            "the 8-byte event-code hash must be the one parallax publishes",
+        )
+    }
+
+    /**
+     * The negative half of the same vector: parallax enumerates the
+     * near-miss spellings of the canonical code — uppercase, an `0x` prefix,
+     * leading whitespace, a dropped leading zero — and the hash each one
+     * would produce. None of them may be what this implementation produces.
+     *
+     * Read from the vector rather than restated here, so a spelling parallax
+     * adds later arrives with the re-vendor instead of being missed.
+     *
+     * ## What this actually guards, which is not what the name suggests
+     *
+     * The assertion is negative, so it can only fail on a COLLISION: our answer
+     * having become one of the spellings parallax says is wrong. It therefore
+     * does NOT fail for implementation changes that leave the spelling alone.
+     * Measured, not argued: mutating the truncation in
+     * [eventCodeHashForOpenEventV1] turns [theImplementationReproducesParallaxsOwnOpenEventCodeVector]
+     * red and leaves this one GREEN.
+     *
+     * It is load-bearing against its own line. Mutating [canonicalOpenCodeV1] to
+     * emit uppercase hex makes our answer `8fec958437b27e6c`, which is exactly
+     * the negative vector's `uppercase` case, and this test fails naming it.
+     * Three of the five enumerated cases -- uppercase, an `0x` prefix, leading
+     * whitespace -- are reachable that way. The remaining two, a dropped leading
+     * zero and the raw Event ID bytes, are not produced by any spelling of ours
+     * and can only fire if parallax later publishes a near-miss that our
+     * canonical form happens to equal.
+     *
+     * So: it guards the SPELLING, and the sibling above guards the TRUNCATION.
+     * One mutation cannot exercise both, and a reader checking whether this
+     * suite has teeth must mutate the line each test protects rather than the
+     * property its name describes (beid#403).
+     */
+    @Test
+    fun noNoncanonicalSpellingFromParallaxsNegativeVectorMatchesOurs() {
+        val positive = Json.parseToJsonElement(
+            readVectorResource("vectors/positive/open-event-code-v1.json"),
+        ).jsonObject
+        val eventId = positive.getValue("eventIdHex").jsonPrimitive.content.decodeHex()
+        val ours = eventCodeHashForOpenEventV1(eventId).toHexWithoutPrefixForOpenCodeTest()
+
+        val negative = Json.parseToJsonElement(
+            readVectorResource("vectors/negative/open-event-code-v1.json"),
+        ).jsonObject
+        val cases = negative.getValue("cases").jsonArray
+        assertTrue(cases.isNotEmpty(), "the negative vector must actually carry cases")
+        for (case in cases) {
+            val name = case.jsonObject.getValue("name").jsonPrimitive.content
+            val hashHex = case.jsonObject.getValue("hashHex").jsonPrimitive.content
+            assertNotEquals(hashHex, ours, "non-canonical spelling '$name' must not be our answer")
+        }
     }
 }
 
