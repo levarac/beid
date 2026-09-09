@@ -24,7 +24,7 @@ production-path cost and primitive are corrected.
 The issue's original questions should not be reopened here:
 
 - **Sender-side UI:** shipped as issue #138 in PR #187 (`VenueDeviceOrganizerView`).
-- **Hint trust display:** shipped with #138/PR #187; the organizer screen says that beid does not verify the broadcast, and the receiving design treats B005 as an unauthenticated hint.
+- **Hint trust display:** shipped with #138/PR #187; the organizer screen says that beid does not verify the broadcast, and the receiving design treats B005 as an unauthenticated hint. **【superseded 2026-09-10】この項の後半「the receiving design treats B005 as an unauthenticated hint」は現在偽。barnard 0.8.0 の v2 署名封筒と受信 3 状態が入っている。本文書末尾の「その後（2026-09-10）」節を参照。**
 - **Code distribution:** effectively resolved by the decision to adopt B005 discovery; this document does not propose a second distribution mechanism.
 - **Receiver-side implementation order:** belongs to issue #141, not issue #100.
 
@@ -47,6 +47,8 @@ B005 trustworthy on the air. B005 hints remain unauthenticated, and a determined
 nearby attacker can use another client or the Barnard SDK to broadcast a false
 hint. Receiver-side trust treatment must therefore remain in place under every
 option below.
+
+**【superseded 2026-09-10】直前の段落のうち「it cannot make B005 trustworthy on the air」「B005 hints remain unauthenticated」は、B005 全体の記述としては現在偽。v2 署名封筒の経路には `RADIO_SELF_VERIFIED` / `REGISTRY_VERIFIED` という検証状態がある。ただし v1 の `eventInfoHint` だけの候補が `UNVERIFIED` に留まる点と、最後の文（受信側の trust 扱いを維持すること）は現在も正しい。本文書末尾の「その後（2026-09-10）」節を参照。**
 
 The repository does contain a read path for EventRegistry facts. A resolved
 registration exposes `registrarHex` and `operatorHex`, plus the event's key-set
@@ -195,3 +197,75 @@ it cannot select the acceptable business risk. Ken must explicitly decide:
 
 Until that call is recorded, the accurate current-state label is **open
 self-service organizer mode**, not “organizer-authorized mode.”
+
+## その後（2026-09-10）
+
+本節は追記であり、上の判断を書き換えるものではない。当時の記述は当時の設計を正しく写しており、
+決定文書として履歴に残す。ここでは「その後に何が変わったか」だけを述べる。
+
+### 何が superseded になったか
+
+`:27` と、`:45`–`:49` の段落（とりわけ `:46`）は、**受信側に B005 を認証する経路が存在しない**
+という前提で書かれている。barnard 0.8.0 の v2 署名封筒が入った時点で、この前提は成り立たない。
+
+beid は両 OS で barnard 0.8.0 を pin している（`android/app/build.gradle.kts:99`、
+`ios/project.yml:10`）。受信 3 状態は `shared/` の
+`org.levarac.parallax.discovery.NearbyEventDiscovery` が持つ単一の判断として実装され、
+iOS の `SensingCoordinator.swift` と Android の `EventJoinCoordinator.kt` /
+`NearbyEventDiscoverySession.kt` から呼ばれている。
+
+### 現在の受信設計（正本は barnard spec 122 / 134 と DESIGN-NOTES §0.2d）
+
+ここに設計を再記述しない。決定文書が spec を再導出すれば、2 度目の陳腐化を招くだけである。
+参照だけを置く。
+
+- 受信側は検証状態を `UNVERIFIED` / `RADIO_SELF_VERIFIED` / `REGISTRY_VERIFIED` の 3 つとして
+  **明示的に公開しなければならない**（spec 122「Receiver policy — the display and relay gate」。
+  2026-09-05 に maintainer が批准した normative 節）。
+- `RADIO_SELF_VERIFIED` は署名検証と `eventId` の自己整合までを意味し、**登録は確認されていない**。
+  この状態を "verified" / "registered" としてユーザーに提示してはならない。
+- 候補表示は `RADIO_SELF_VERIFIED` で進めてよい。relay・join・イベント鍵生成・observation の
+  記録は `REGISTRY_VERIFIED` を下回って進めてはならない（spec 122 同節、および spec 134 の
+  2026-09-05 erratum「display only」）。
+- **上の gate は、join への到達路をすべて言い尽くしてはいない。** `RegistryVerifiedJoinContext` には
+  factory が **2 つ**ある。typed-code 経路の `fromOperatorLookup` は、**beid の maintainer decision により
+  v1.0 で維持されている**。これは候補を `REGISTRY_VERIFIED` という状態へ昇格させる経路ではなく、
+  operator 経由で得た registry の答えを evidence として同じ capability 型へ到達する別経路であり、
+  **relay gate は意図的に満たさない**。出典は barnard の spec ではなく **beid の code** である
+  （`shared/src/commonMain/kotlin/org/levarac/parallax/discovery/RegistryVerifiedJoinContext.kt` の
+  `fromOperatorLookup` 自身の doc comment: 「Kept for v1.0 by maintainer decision: code-entry join
+  depends on it … it deliberately does not satisfy the relay gate」）。これは barnard の規範ではなく
+  beid 側の判断であり、出典は spec ではなく code の側にある。
+  どちらの factory がどの OS に配線されているかは、**本文書には書かない**。それは code の現況であって
+  決定ではなく、ここに書き留めれば `:27` や `:46` とまったく同じ形で陳腐化するからである。
+- `REGISTRY_VERIFIED` を割り当てるのは **host だけ**である。SDK は決して割り当てない
+  （DESIGN-NOTES §0.2d「The host signs, the engine serves. … The SDK holds no authority key and
+  has no registry access, so it cannot sign and must not appear to: it does not re-encode,
+  does not re-sign, and never assigns `REGISTRY_VERIFIED`」）。
+
+### 当時の記述のうち、いまも正しい部分
+
+superseded は段落全体ではない。以下は現在も成り立つので、まとめて読み替えないこと。
+
+- **v1 の `eventInfoHint` だけから組み立てられた候補は、いつまでも `UNVERIFIED` のままである。**
+  これを引き上げる手段は存在しない。つまり「B005 の hint は未認証である」は、**v1 の経路に限れば
+  現在も真**であり、偽になったのは「受信側の設計には認証経路が無い」というより広い含意の方である。
+- **署名は「そのイベントが登録されている」ことを証明しない。** 攻撃者は自己整合な未登録イベントを
+  自由に作れる（spec 122 の rationale）。offline 検証が買うのは早い *候補表示* であって、早い
+  *信頼判断* ではない。Option 3 の「Who can grief」項（`:150`–`:151`）の
+  「receivers still must not treat a hint as registry-authenticated」は、この理由により現在も正しい。
+- 表示名は on-chain の定義とは照合されない。`EventDefinitionV1` に表示名の欄が無く、表示名を
+  認証するのは authority の署名の方だからである（spec 134 の 2026-09-05 erratum「display name」）。
+
+### 誰が hop-0 の v2 封筒を emit するかは、本文書では決めない
+
+現時点で beid はどの OS でも hop-0 の v2 封筒を emit していない。したがって実際に電波へ出ているのは
+v1 hint が常態であり、上の「v1 の候補は `UNVERIFIED` のまま」がそのまま効いている。当時の記述が
+現場の観測と一致して見えるのはこのためだが、一致しているのは観測であって設計ではない。
+
+**誰が hop-0 の v2 封筒を emit するかは
+[#432](https://github.com/thegreeting/beid/issues/432) で審議中であり、本文書では決めない。**
+決定文書は確定した答えを置く場所であり、未確定の答えをここに書くことが #440 で是正された誤りそのもの
+である。
+
+**期限付き注記: #432 が閉じたら、本節のこの段落を判断結果で更新すること。**
