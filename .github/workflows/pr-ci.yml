@@ -20,6 +20,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Clone Parallax at the pinned commit
+        env:
+          PARALLAX_READ_TOKEN: ${{ secrets.PARALLAX_READ_TOKEN }}
+        run: scripts/clone_parallax_pinned.sh
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -32,6 +36,9 @@ jobs:
         run: |
           java -version
           ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel
+      - name: Verify the Parallax comparison actually ran
+        if: env.PARALLAX_REPO != ''
+        run: scripts/check_parallax_comparison_ran.py
       - name: Compile Android instrumented tests
         working-directory: android
         run: ./gradlew :app:compileDebugAndroidTestKotlin --no-daemon --no-parallel
