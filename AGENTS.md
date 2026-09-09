@@ -143,8 +143,23 @@ names, so package placement is a public-API decision for this repository.
 Generated package namespaces are lowercase, and a local Swift binding with
 the same name shadows them.
 
-- Default to module-qualified spelling such as
-  `BeidSharedKit.report.SomeSharedType`.
+- Always module-qualify. **There are two correct spellings, and which one
+  applies is decided by where the Kotlin package sits relative to the shared
+  module's own root (`org/levarac/beid/shared`), not by preference:**
+  - **Inside that root** — `BeidSharedKit.<package>.<Type>`, e.g.
+    `BeidSharedKit.report.SomeSharedType`. This covers `aggregation`, `event`,
+    `report`, `sensing` and `swift`.
+  - **Outside it** — the fully-qualified exported path,
+    `ExportedKotlinPackages.<full.kotlin.path>.<Type>`, e.g.
+    `ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext`.
+    `parallax` is exported this way precisely because it is not under the
+    module root; the shorter spelling is not available for it.
+
+  The test, so a case you have not seen can be classified rather than guessed:
+  **ask whether the declaration's Kotlin package begins with the module root.**
+  Both spellings are module-qualified and both satisfy the ownership gate; a
+  reader who applies only the first form will wrongly conclude that every
+  `parallax` call site is malformed.
 - When a concrete type repeats, a private alias is acceptable only with a
   fully qualified right-hand side, for example
   `private typealias Ledger = BeidSharedKit.report.UnsentWindowLedger`.
