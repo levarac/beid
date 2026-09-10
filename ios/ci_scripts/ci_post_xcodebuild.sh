@@ -33,19 +33,26 @@ TESTFLIGHT_DIR="$IOS_DIR/TestFlight"
 mkdir -p "$TESTFLIGHT_DIR"
 
 if [[ "${CI_BRANCH:-}" == release/* ]]; then
-  SOURCE_JSON="release_notes.json"
+  # A release branch ships the marketing-style notes by name; there is no
+  # per-platform variant of that file.
+  SOURCE_ARGS=(--source release_notes.json)
+  SOURCE_DESCRIPTION="release_notes.json"
 else
-  SOURCE_JSON="what_to_test.json"
+  # --platform ios prefers what_to_test.ios.json and falls back to
+  # what_to_test.json. That preference lives in prepare_testflight_notes.py so
+  # this hook, the emi delivery lane and the Android lane all resolve it the
+  # same way, and so --missing-ok can skip generation without this script
+  # holding its own copy of the candidate list (beid#503).
+  SOURCE_ARGS=(--platform ios)
+  SOURCE_DESCRIPTION="what_to_test.ios.json, falling back to what_to_test.json"
 fi
 
-if [[ ! -f "$SOURCE_JSON" ]]; then
-  echo "warning: $SOURCE_JSON not found at repo root; skipping TestFlight note generation." >&2
-  exit 0
-fi
-
-echo "Generating TestFlight notes from $SOURCE_JSON (branch: ${CI_BRANCH:-unknown})"
+echo "Generating TestFlight notes from $SOURCE_DESCRIPTION (branch: ${CI_BRANCH:-unknown})"
 python3 scripts/prepare_testflight_notes.py \
-  --source "$SOURCE_JSON" \
+  "${SOURCE_ARGS[@]}" \
+  --repo-root . \
+  --skip-empty \
+  --missing-ok \
   --output-dir "$TESTFLIGHT_DIR"
 
 echo "TestFlight dir:"

@@ -747,9 +747,21 @@ dates). The contract every agent must know before touching delivery files:
 - GitHub Actionsのexportもmanual signingとし、ExportOptionsの
   `provisioningProfiles`で`org.levarac.beid`を同profileへ対応づける。これにより
   ASC cloud signing permissionに依存せず、runner-localのidentity/profileを使う。
-- GitHub Actions upload は現時点で TestFlight の **What to Test を反映しない**。
-  API upload 後に ASC API で notes を設定する処理は別 follow-up であり、この
-  temporary lane の upload 成否と混同しない。
+- GitHub Actions upload は **upload 後に What to Test を書き込む** (#503、
+  2026-09-11)。`scripts/gha/set_testflight_whats_new.py` が
+  `what_to_test.ios.json`(無ければ `what_to_test.json`)の文面を App Store
+  Connect API の `betaBuildLocalizations` の `whatsNew` へ入れる。Xcode Cloud は
+  `ios/TestFlight/WhatToTest.<locale>.txt` を自分で拾うのでこの経路は要らないが、
+  `xcodebuild -exportArchive` にその慣習は無く、API 以外の手段が無い。
+  **runner に新しい依存は入れていない** — ES256 JWT の署名は macOS 同梱の
+  `openssl` に投げ、残りは python3 標準ライブラリだけで書いてある。build 番号は
+  Apple が export 時に採番するので export 成果物から読み、読めなければ
+  **落ちる**。「一番新しい build」への fallback は意図的に持たせていない
+  (他人の build に文面を書き込むのは書かないことより悪い)。notes 書き込みの失敗は
+  job を落とす — テスターに文面が届かない緑の配信は、この lane が防ぐべき
+  silent failure そのものだから。⚠️ **この経路はまだ実配信で観測していない。**
+  `GHA_DELIVERY` は現在 off で、テスターに文面が見えることの確認は
+  dispatch#29 のゲートに置かれている。
 
 ### Temporary Android delivery lane (GitHub Actions)
 
@@ -786,9 +798,13 @@ dates). The contract every agent must know before touching delivery files:
   Ken側activation手順は`docs/google-play.md`を参照する。
 
 - **"Ship a TestFlight test build" = update `what_to_test.json`** (repo
-  root). The temporary GitHub Actions lane triggers from this change on
-  `main`, but does not yet copy the file into tester-facing "What to Test"
-  notes. Xcode Cloud does both when it is the active delivery path. Rewrite
+  root). Both delivery paths now trigger from this change on `main` **and**
+  publish its text as the tester-facing "What to Test" notes — Xcode Cloud
+  through `ios/TestFlight/WhatToTest.<locale>.txt`, the temporary GitHub
+  Actions lane through the App Store Connect API after its upload (#503).
+  The Android lane publishes the same text as Google Play release notes.
+  Neither publication has yet been observed by a tester; that observation is
+  dispatch#29's gate. Rewrite
   the file wholesale each time — what to check in *this* build
   only, 1-3 plain sentences (ASC locale: `en-US` only), no PR
   numbers, no internal jargon, no accumulated history.
