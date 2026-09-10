@@ -1904,6 +1904,11 @@ final class SensingCoordinator: ObservableObject {
           guard let selectedEventCode else {
             Self.log.error("Sensing was asked to start with no event selected; starting nothing.")
             self.stopParticipantRelay()
+            // Same reason as the refusal above: nothing was started, so the
+            // screen must not keep claiming otherwise.
+            self.phase = Self.payloadlessNativePhase(
+              BeidSharedKit.sensing.scanPhaseAfterStopSensing()
+            )
             return
           }
           self.beginRegistryVerifiedJoin(
