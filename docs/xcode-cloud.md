@@ -148,7 +148,11 @@ read a green run here as iOS coverage of the merge candidate.
 
 **"Did not run" has two different shapes here**: opening a *draft* PR still
 records a run whose job is `skipped`, whereas pushing to a draft PR records no
-run at all, because `synchronize` is not a trigger.
+run at all, because `synchronize` is not a trigger. A skipped job holds the
+runner for **zero seconds** — first observed on PR #486, 2026-09-10, where the
+job reported `steps=0` with identical `started_at` and `completed_at`. That is
+what makes the draft guard worth having given the cost model above: a draft PR
+cannot delay a TestFlight build, because it never occupies the runner at all.
 
 **`concurrency` is still keyed on `github.ref` with `cancel-in-progress: true`**,
 so back-to-back merges cancel the earlier `main` run — a run is guaranteed to

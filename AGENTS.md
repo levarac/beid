@@ -711,6 +711,10 @@ dates). The contract every agent must know before touching delivery files:
     **観測上の注意**: draft PR を open した時は run 自体は記録され、job が
     `skipped` になる。draft PR への push は `synchronize` が trigger でない
     ため run 自体が記録されない。「起動しない」の証拠はこの 2 つで形が違う。
+    **`skipped` の job が runner を占有する時間はゼロ秒**である (PR #486、
+    2026-09-10 に初観測。job が `steps=0` で `started_at` と `completed_at` が
+    同一)。上のコストモデルからすると、draft gate の価値はここにある —
+    draft PR は runner を一切占有しないので、TestFlight ビルドを遅らせ得ない。
     **`concurrency` は `github.ref` 単位で `cancel-in-progress: true` のまま**
     なので、main への連続 merge では前の main run が cancel される。merge 毎に
     run が「起動する」ことは保証されるが、**完走は保証されない**。
