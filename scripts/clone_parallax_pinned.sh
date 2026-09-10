@@ -23,11 +23,12 @@ PARALLAX_REMOTE="https://github.com/levarac/parallax.git"
 
 usage() {
     cat >&2 <<'USAGE'
-usage: clone_parallax_pinned.sh [--print-ref] [--source PATH]
+usage: clone_parallax_pinned.sh [--print-ref] [--print-source] [--source PATH]
 
-  --print-ref    print the pinned Parallax commit and exit; clone nothing
-  --source PATH  read the pinned commit from PATH instead of the default test source
-                 (for tests; the workflow always uses the default)
+  --print-ref     print the pinned Parallax commit and exit; clone nothing
+  --print-source  print the path this script reads the pinned commit from, and exit
+  --source PATH   read the pinned commit from PATH instead of the default test source
+                  (for tests; the workflow always uses the default)
 USAGE
 }
 
@@ -51,14 +52,24 @@ expected_ref() {
 }
 
 print_ref_only=0
+print_source_only=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --print-ref) print_ref_only=1; shift ;;
+        # Exists so the single-source check can locate the canonical file without
+        # naming it. A checker that hardcoded the path would itself become the
+        # second source of truth it is meant to forbid (beid#478).
+        --print-source) print_source_only=1; shift ;;
         --source) REF_SOURCE="${2:?--source needs a path}"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) printf 'clone_parallax_pinned: unknown argument: %s\n' "$1" >&2; usage; exit 2 ;;
     esac
 done
+
+if [ "$print_source_only" -eq 1 ]; then
+    printf '%s\n' "$REF_SOURCE"
+    exit 0
+fi
 
 ref="$(expected_ref "$REF_SOURCE")"
 
