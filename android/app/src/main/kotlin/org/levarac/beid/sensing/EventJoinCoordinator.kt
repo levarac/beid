@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import android.util.Log
 import java.io.File
 import java.time.Instant
 import java.util.UUID
@@ -339,7 +340,13 @@ class EventJoinCoordinator internal constructor(
         // window into an app that never starts. Off the main thread and
         // outside construction, the same refusal costs one window.
         windowObservationRuntime?.let { runtime ->
-            coroutineScope.launch(Dispatchers.IO) { runtime.recoverAfterRelaunch() }
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    runtime.recoverAfterRelaunch()
+                } catch (error: RuntimeException) {
+                    logWindowRecoveryFailure(error)
+                }
+            }
         }
     }
 
@@ -1020,3 +1027,37 @@ class EventJoinCoordinator internal constructor(
 }
 
 private val ProcessWindowObservationRuntimeOwner = WindowObservationRuntimeOwner()
+
+private const val WINDOW_RECOVERY_LOG_TAG = "BeidWindowRecovery"
+
+/**
+ * Where a failed relaunch recovery goes.
+ *
+ * Taking the recovery out of the accumulator's constructor removes it from
+ * Activity setup, but that is only half of what is needed. The scope this runs
+ * in is built with a `SupervisorJob` and **no** `CoroutineExceptionHandler`,
+ * so an uncaught throw inside its `launch` still reaches the default handler
+ * and takes the process down. Without this catch, relocating the work would
+ * have MOVED the crash rather than closed it — and moved is not fixed, because
+ * the inputs that cause it are durable. A corrupt artifact on disk, like a
+ * permanently refused signing key, is still there on the next launch, so the
+ * crash recurs every single time. That recurrence is the boot loop the
+ * relocation exists to prevent, and only the signing call sites are wrapped
+ * further in; every other throw site in the recovery is covered here.
+ *
+ * Continuing costs the unsent windows this pass could not reconcile. It
+ * destroys nothing: bytes that could not be used are quarantined rather than
+ * deleted, and the next launch tries again.
+ *
+ * `RuntimeException` rather than `Throwable`, and the logger's own failure
+ * swallowed, for the reasons spelled out on `logRelayRefusal` — an `Error`
+ * such as an exhausted heap is not this function's to absorb, and
+ * `android.util.Log` throws outright in a plain JVM unit test.
+ */
+internal fun logWindowRecoveryFailure(error: RuntimeException) {
+    try {
+        Log.w(WINDOW_RECOVERY_LOG_TAG, "relaunch window recovery failed", error)
+    } catch (_: RuntimeException) {
+        // The logger is unavailable. There is nothing to report it to.
+    }
+}

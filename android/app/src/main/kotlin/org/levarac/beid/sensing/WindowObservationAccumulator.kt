@@ -164,6 +164,19 @@ internal class WindowObservationAccumulator(
         return true
     }
 
+    /**
+     * ⚠️ `@Synchronized` does NOT cover this function's default argument.
+     * `eventCode` defaults to `context()?.eventCode`, and a Kotlin default
+     * argument is evaluated at the CALL SITE, before the monitor is acquired.
+     *
+     * Harmless today: that state is written only by `updateContext` on the
+     * main thread, and relaunch recovery never calls `observe` — it builds its
+     * own context from the draft. It stops being theoretical the moment
+     * anything calls `observe` off the main thread, and the recovery this
+     * class now schedules is the first genuine second thread it has ever had.
+     * Noted rather than changed, because changing it means moving the default
+     * inside the body and that is a signature change nothing yet needs.
+     */
     @Synchronized
     fun observe(enin: Long, rpid: String, reporterRpid: String?, recording: Boolean, eventCode: String? = context()?.eventCode) {
         if (eventCode != null && !beginEvent(eventCode)) return
