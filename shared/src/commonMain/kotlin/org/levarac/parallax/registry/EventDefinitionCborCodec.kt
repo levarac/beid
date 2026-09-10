@@ -610,7 +610,7 @@ internal object EventDefinitionCborCodec {
     private fun fail(reason: DefinitionDecodeError, message: String): Nothing =
         throw DefinitionDecodeException(reason, message)
 
-    private class StrictCborReader(private val bytes: ByteArray) {
+    internal class StrictCborReader(private val bytes: ByteArray) {
         private var offset: Int = 0
 
         fun expectTag(expected: Long) {
