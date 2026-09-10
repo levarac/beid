@@ -416,12 +416,16 @@ final class SensingCoordinator: ObservableObject {
   /// That property holds what `AppCoordinator.resolveCanonicalEventIdHex`
   /// returned: a code-to-id lookup, with no reading of the event's definition.
   /// Spec 134 step 3 wants the authoritative definition before re-broadcast,
-  /// so the gate opens only once `EventIdentityVerification` reaches
-  /// `.verified` — the same bar Android now applies by requiring a
-  /// `RegistryVerifiedJoinContext` before it joins at all (beid#374), rather
-  /// than the id lookup alone. Android's `resolveObservationContext`, which
-  /// this comment used to name, no longer exists: the verification moved in
-  /// front of the join instead of annotating it afterwards.
+  /// so this holds the `eventIdHex` of the `RegistryVerifiedJoinContext` the
+  /// join gate admitted — the definition's own id, established by this host's
+  /// own authenticated read before the join. That is the same bar and the same
+  /// wiring Android applies (beid#374, `EventJoinCoordinator.beginVerifiedJoin`).
+  ///
+  /// Written in exactly two places (beid#437): opened in `applyJoinGateDecision`
+  /// on admit, cleared in `stopParticipantRelay`. It used to be written by the
+  /// `EventIdentityVerification` lifecycle instead, which cost a second
+  /// authenticated read per join and could leave a legitimately joined device
+  /// unable to relay with nothing shown to explain it.
   private var relayGateEventIdHex: String?
 
   /// The most recent spec 134 decision, for visibility only. It never feeds a
@@ -1607,15 +1611,17 @@ final class SensingCoordinator: ObservableObject {
       forEventID: eventID,
       to: outcome
     )
-    // The relay gate opens here and nowhere else. Android opens its
-    // equivalent when the join itself is granted a
-    // `RegistryVerifiedJoinContext` (beid#374); its
-    // `acceptVerifiedObservationContext`, which this comment used to name, was
-    // deleted in that change — it was a test-only hook that opened the relay
-    // gate with no evidence at all. Every outcome other than `.verified`
-    // closes this one: an event whose definition this app could not read is
-    // one it must not re-broadcast on behalf of.
-    relayGateEventIdHex = outcome == .verified ? hint : nil
+    // This lifecycle no longer touches the relay gate (beid#437). It used to
+    // open the gate on `.verified` and close it on every other outcome, which
+    // made one join spend two authenticated registry reads and left a device
+    // that had legitimately joined a verified event unable to relay, with no
+    // reason shown, whenever the second read failed. The gate now opens from
+    // the capability the join gate admitted and closes only in
+    // `stopParticipantRelay`, so it has a single writer.
+    //
+    // The republish below stays. It rebuilds the gate state from the current
+    // candidate snapshot and cached definitions, which this outcome may have
+    // changed, and carries the gate's existing id forward unchanged.
     republishRelayGateState()
     eventIdentityVerificationRequest = nil
   }
@@ -1623,9 +1629,13 @@ final class SensingCoordinator: ObservableObject {
   /// Invalidates the current lookup before any lifecycle operation can expose
   /// a later session to its callback.
   private func invalidateEventIdentityVerification() {
-    // Whatever replaces this lookup has not been verified yet, so the gate
-    // closes with it rather than staying open on the previous answer.
-    relayGateEventIdHex = nil
+    // Does not close the relay gate (beid#437). Replacing this lookup says
+    // nothing about whether this device is still joined, and the join is what
+    // the gate is about; `stopParticipantRelay` is the only closer. Of the
+    // three callers, `leaveEvent` and `resetSessionState` already stop the
+    // relay; `retryEventIdentityVerification` is reachable only from a
+    // verification that already failed, a state in which the old code had
+    // written nil to the gate anyway.
     republishRelayGateState()
     eventIdentityVerificationGeneration &+= 1
     eventIdentityVerificationRequest?.cancel()
@@ -1756,9 +1766,12 @@ final class SensingCoordinator: ObservableObject {
     guard !code.isEmpty else { return false }
     joinedEventCode = code
     joinedCanonicalEventIdHex = canonicalEventIdHex
-    // Selecting deliberately does not open the relay gate. The id above came
-    // from a code-to-id lookup, and relaying wants the event's definition
-    // read and agreed with first -- see `relayGateEventIdHex`.
+    // Selecting deliberately does not open the relay gate, and does not join:
+    // it records the choice and nothing else. The id above came from a
+    // code-to-id lookup, whereas both joining and relaying require the
+    // definition read and agreed with first — which is what
+    // `beginRegistryVerifiedJoin` does, and what issues the context the gate
+    // is opened from. See `relayGateEventIdHex`.
     return true
   }
 
@@ -1937,7 +1950,12 @@ final class SensingCoordinator: ObservableObject {
   /// This is the same by-type argument the join itself already rests on —
   /// `EventJoinControlling` offers no way to join without a capability — moved
   /// one level in, to the decision about whether to grant one.
-  private enum JoinGateDecision {
+  /// Not `private`, for the same test-seam reason as `startParticipantRelay()`
+  /// and `handleRelayDecision`: `EventDefinitionResolution` carries an
+  /// `internal` Kotlin constructor, so no Swift test can build the successful
+  /// resolution that `joinGateDecision` needs to return `.admit`. Reaching the
+  /// admit branch at all therefore requires handing the decision in.
+  enum JoinGateDecision {
     case admit(ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext)
     case refuse(EventJoinRefusal, String)
   }
@@ -2005,11 +2023,21 @@ final class SensingCoordinator: ObservableObject {
 
   /// Performs the decision. The **only** place a refused join is recorded, so
   /// deleting that one call turns every refusal test red rather than one.
-  private func applyJoinGateDecision(_ decision: JoinGateDecision) {
+  ///
+  /// Not `private`, for the reason given on `JoinGateDecision`.
+  func applyJoinGateDecision(_ decision: JoinGateDecision) {
     switch decision {
     case .admit(let context):
       joinRefusal = nil
       engine.joinAndStart(context)
+      // The relay gate opens here, from the capability the gate just admitted,
+      // in the same shape as Android's `EventJoinCoordinator.beginVerifiedJoin`
+      // (beid#437). The id is the definition's own `eventIdHex`, not the
+      // code-to-id `hint`. It is stored rather than handed straight to
+      // `republishRelayGateState` because every later republish — a candidate
+      // snapshot arriving, a definition being cached — reads this property and
+      // would otherwise close the gate that was just opened.
+      relayGateEventIdHex = context.eventIdHex
       startParticipantRelay()
     case .refuse(let refusal, let message):
       refuseJoin(refusal, message)
@@ -2405,6 +2433,12 @@ final class SensingCoordinator: ObservableObject {
     relayCadenceTask?.cancel()
     relayCadenceTask = nil
     relayControl.setParticipantRelayVerifier(nil)
+    // Clears the stored id, not only the published one (beid#437). Since the
+    // identity-verification lifecycle stopped writing this property, this is
+    // the only closer, and every no-argument `republishRelayGateState` rebuilds
+    // the gate from it — so leaving a stale id here would let the next
+    // candidate snapshot re-open the gate for an event already left.
+    relayGateEventIdHex = nil
     republishRelayGateState(joinedEventIdHex: nil)
   }
 
