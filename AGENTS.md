@@ -337,61 +337,32 @@ record:
    is not on it.
 3. **Source and control** — name where the configuration was read, and cite a
    control experiment on the same PR if one exists. **A control has to be able
-   to come out the other way**; the record below exists because the first one
-   cited here could not.
+   to come out the other way**; the record cited here before could not, and was
+   nonetheless treated as settled.
 
    **The matcher is evaluated over the PR's cumulative diff against base, not
-   over the delta of the individual push.** This is why the predicate in (1) is
-   defined as `gh pr view <n> --json files` rather than a `git diff` of the
-   push — and it means a push whose own files are *all* inside the exclusion
-   set still starts a build, whenever some earlier commit in the same PR
-   touched a file outside it.
+   over the delta of the individual push.** That is why the predicate in (1) is
+   `gh pr view <n> --json files` rather than a `git diff` of the push: a push
+   whose own files are *all* inside the exclusion set still starts a build when
+   some earlier commit in the same PR touched a file outside it.
 
-   **Why PR #428 did not settle this, though it was recorded as if it had.**
-   Its observation was: two pushes inside the set produced zero Xcode Cloud
-   check-runs, and one push adding a `.py` outside the set fired and succeeded.
-   That reads as push-level evaluation, and it was cited that way. But at the
-   time of those first two pushes #428's *cumulative* file set was also
-   entirely inside the exclusion set — so cumulative evaluation predicts
-   exactly the same three outcomes. **The record is consistent with both
-   readings, which makes it evidence of neither.** Nothing was measured wrong;
-   the experiment simply had no branch on which the two hypotheses disagree.
-
-   **The discriminating observation (PR #483, 2026-09-10).** A push whose delta
-   was `AGENTS.md` + `docs/xcode-cloud.md` — both inside the exclusion set —
-   landed on a PR whose cumulative set already contained
-   `scripts/tests/test_pr_ci_ios_macos_triggers.py`, outside it. Push-level
-   evaluation predicts no build; cumulative predicts a build. **Prediction was
-   recorded in the PR body before the push, and Xcode Cloud started**
-   (`Beid | PR Build & Test | Test - iOS` on `b3f44da`, read from
-   `repos/.../commits/<sha>/check-runs`). Push-level evaluation is therefore
-   ruled out.
-
-   **The negative half (PR #484, 2026-09-10).** The positive observation alone
-   shows only that a build *can* start when something outside the set is
-   present; it does not show the matcher ever suppresses anything. #484's
-   cumulative set was `.github/workflows/internal-google-play.yml` +
-   `docs/google-play.md` — 2 of 2 inside the exclusion set — and **Xcode Cloud
-   did not start**: zero check-runs *and* zero commit statuses on the head.
-   Both surfaces were read, because Xcode Cloud reports to commit statuses in
-   some configurations and reading only check-runs would confuse "reported
-   elsewhere" with "did not run". Lag was excluded too: on #483 the check
-   appeared within a minute of the push, while #484 was still empty on both
-   surfaces more than five minutes after its push, once the Actions checks had
-   gone terminal.
-
-   The pair is the control. Positive alone cannot distinguish a working matcher
-   from one that never suppresses; negative alone cannot distinguish a working
-   matcher from one that never starts.
+   **The measurements behind that sentence — both halves of the control, the
+   five registered predictions, why PR #428 could not decide it, and what a
+   falsifying observation would look like — live in
+   [`docs/xcode-cloud.md`](docs/xcode-cloud.md), which is their source of
+   truth.** They are not repeated here: this clause is read on every merge and
+   should stay short, while the evidence gains an entry per observation. Cite
+   that section rather than restating its contents, and add new observations
+   there.
 
    The transferable part is not the conclusion but the shape: **before citing a
    control, check whether the competing explanation would have produced a
    different result.** If it would not, say so and leave the question open
    rather than recording a conclusion the experiment cannot carry — otherwise
    the next reader inherits a settled-looking answer built on a non-control.
-   The same asymmetry applies to one-sided evidence generally: cases where a
-   thing happened establish that a condition is sufficient for it to be
-   possible, never that the condition is what suppresses it.
+   The same asymmetry applies to one-sided evidence generally: a check that only
+   asks whether the allowed set is too small will never find one that is too
+   large.
 4. **Void clause** — if **any** file at the final head is outside the exclusion
    set, absence of the check is the hard stop again and the remedy is a
    close→reopen retrigger, **not** this record. Re-evaluate (1) at the head SHA
