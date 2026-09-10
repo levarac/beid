@@ -92,9 +92,9 @@ submission path, so fixture data has no writable production input.
 
 beid consumes [levarac/barnard](https://github.com/levarac/barnard) from
 Maven Central with the exact coordinate
-`implementation("org.levarac:barnard:0.9.0")`. Both the Android application
+`implementation("org.levarac:barnard:0.9.1")`. Both the Android application
 and the SDK therefore resolve from published, reproducible artifacts; no
-submodule or Gradle composite build is required. Verified 2026-09-10 against
+submodule or Gradle composite build is required. Verified 2026-09-11 against
 `app/build.gradle.kts`.
 
 `settings.gradle.kts` provides `mavenCentral()` through
