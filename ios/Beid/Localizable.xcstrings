@@ -806,6 +806,7 @@
       }
     },
     "Venue Device": {},
+    "Version": {},
     "Assignment": {
       "comment": "Section header on the venue-device organizer screen (gh#138) for the label + validity-period fields — not a task/homework assignment."
     },

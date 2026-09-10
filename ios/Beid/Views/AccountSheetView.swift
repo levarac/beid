@@ -99,6 +99,20 @@ struct AccountSheetView: View {
         }
 
         EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
+
+        // beid#491: the build position, in the same shape as Android's row.
+        // Two builds showing the same height came from the same commit, which
+        // is what lets a tester report about iOS and one about Android be
+        // matched up.
+        Section {
+          LabeledContent {
+            Text(verbatim: AppVersion.displayString())
+              .foregroundStyle(DS.Color.textSecondary)
+              .accessibilityIdentifier("account.version.value")
+          } label: {
+            Text("Version")
+          }
+        }
       }
       .scrollContentBackground(.hidden)
       .background(DS.Color.surfaceCanvas)

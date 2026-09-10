@@ -165,6 +165,36 @@ by `scripts/tests/test_pr_ci_ios_macos_triggers.py`, which runs in the
 Repository sanity job, so a silent return to per-push runs turns that check
 red.
 
+## Build position vs store number (git height)
+
+Verified 2026-09-10.
+
+Two different numbers appear in the app's version row, and they have different
+owners. `1.0.0 (1234+374)` reads as `{MARKETING_VERSION} ({git height}+{CFBundleVersion})`.
+
+- **`CFBundleVersion` — the store number.** Xcode Cloud assigns it. It is the
+  only number App Store Connect, TestFlight and crash logs ever show. **gh#491
+  did not change how it is assigned** and nothing here should.
+- **git height — the build position.** `git rev-list --count HEAD`, injected
+  into `Info.plist` as `BeidGitHeight` by `ios/ci_scripts/ci_post_clone.sh`. It
+  is a function of the built commit's ancestry, so **an iOS build and an Android
+  build showing the same height were built from the same commit** — that is the
+  only thing it is for. It identifies a commit, not a release: a PR branch and
+  `main` have different heights, and merging changes the number again.
+
+**The post-clone script refuses to build a shallow clone rather than reporting a
+short height.** Xcode Cloud clones shallow; on a shallow clone
+`git rev-list --count HEAD` does not fail and does not return empty, it returns a
+**plausible smaller number**. So the script deepens, then checks
+`git rev-parse --is-shallow-repository` and exits non-zero if the repository is
+still shallow. An emptiness check cannot see this failure, which is why the
+guard is not written that way. A missing `Info.plist` is a hard failure for the
+same reason: a delivered build whose version row says `local` is worse than a red
+build.
+
+With no injected key the height position reads `local`, never `0` or an empty
+string, so a developer build's screenshot cannot be mistaken for a delivered one.
+
 ## Two convention files, two audiences
 
 | File | Repo location | Audience | Updated when |
