@@ -1,8 +1,9 @@
 # Venue bundle import and serving
 
 Scope: beid #432, lane 1. The profile is
-[parallax PR #72](https://github.com/levarac/parallax/pull/72), initially read at
-`5978c14495d3ab6a6ab9fe9f9523f4a37c83cd45`. The maintainer's current
+[the profile merged into Parallax main](https://github.com/levarac/parallax/blob/e3cc67e7864ea44d3e8502a68e456982f4cde58c/protocol/spec/v0.1/venue-bundle.md).
+Its bytes were compared with the implemented profile after merge and match
+exactly, including the bounds-before-signature ordering. The maintainer's current
 [issue body](https://github.com/thegreeting/beid/issues/432) owns product scope.
 
 ## Ownership record
@@ -64,6 +65,40 @@ android :shared:testAndroidHostTest :app:compileDebugKotlin`, with explicit
 430 passed, zero failed, four known skips; Android compile executed. All 20
 venue tests executed without a skip. This is shared/Android build evidence,
 not native wiring, Swift Export, SDK verification or radio evidence.
+
+Four subsequent one-site mutations removed the constructor count guard,
+constructor length guard, constructor input copy, and getter output copy.
+Each full shared run produced exactly its preregistered sole failing test:
+434 total, 429 passed, one failed, four known skips, exit 1. Source snapshots
+were restored after every run; source and working-diff SHA-256 matched their
+pre-experiment values. These runs validate the constructor and copy witnesses;
+they do not substitute for the future native ownership mutation.
+
+The local run above skipped the Parallax source comparison. CI at `3f5064c`
+executed it and failed: this change had incorrectly placed a beid-generated
+fixture and a Barnard vector in the directory reserved for pinned Parallax
+resources. With a private checkout at the exact `5215991b440db8e8bdc6279eee30affa0c532023`
+pin, the full shared suite reproduced the same sole failure: 434 total,
+430 passed, one failed, three skipped. All nine pre-existing Parallax resources
+matched their pinned blobs; the two newly added files had no such source.
+
+The repair relocates those two files to `src/commonTest/fixtures`, declares that
+resource root, and uses the declared roots for both native resource-copy tasks.
+The checksum gate and pin are unchanged. Before/after SHA-256 values match, and
+fixture regeneration from its new path is byte-identical. With the pin unchanged,
+the repaired full shared suite executed 434 tests: 431 passed, zero failed,
+three skipped. The exact comparison test passed rather than skipping. The full
+Android app suite executed 328 tests, all passed. Android compile was
+`UP-TO-DATE`, not a fresh compile. Both native resource-copy tasks ran; their
+four previously absent fixture outputs now match their source SHA-256 values.
+These are copy checks, not native test execution. The wrapper's two missing-XML
+warnings came from treating Copy task names containing `Test` as test tasks;
+JUnit separately confirms both real test tasks executed with the counts above.
+
+The remaining three skipped integration tests are
+`SepoliaEventRegistryIntegrationTest.readsDemoEventFromLiveReaderAtSafeBlock`,
+`LocalAnvilEventRegistryIntegrationTest.readsTheRealReaderFacadeAtAPinnedBlockAndCachesTheResult`,
+and `LocalAnvilEventRegistryIntegrationTest.fetchesTheAnchoredSignedDefinitionFromALocalHttpStub`.
 
 The lane proceeds against Barnard 0.8.0. Full multi-slice agreement is
 **pending-pin** until Barnard #200 is released and a separate beid change updates

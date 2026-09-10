@@ -28,8 +28,8 @@ internal actual fun readVectorResource(path: String): String {
         "${NSBundle.mainBundle.bundlePath}/../../../processedResources/$it/test/$path"
     }
     // Kotlin/Native's standalone test executable does not create an NSBundle
-    // for commonTest resources. Keep the fixture in its canonical
-    // commonTest/resources location and walk from both the simulator's
+    // for commonTest resources. Search the declared resources/ and fixtures/
+    // source directories and walk from both the simulator's
     // working directory and the test executable path. The latter remains
     // stable even when XCTest changes the process working directory.
     val sourceRoots = listOfNotNull(
@@ -44,8 +44,10 @@ internal actual fun readVectorResource(path: String): String {
             }
             repeat(16) {
                 val base = directory ?: return@repeat
-                add("$base/src/commonTest/resources/$path")
-                add("$base/shared/src/commonTest/resources/$path")
+                for (resourceDirectory in listOf("resources", "fixtures")) {
+                    add("$base/src/commonTest/$resourceDirectory/$path")
+                    add("$base/shared/src/commonTest/$resourceDirectory/$path")
+                }
                 val parent = base.substringBeforeLast('/')
                 directory = if (parent.isEmpty() || parent == base) null else parent
             }

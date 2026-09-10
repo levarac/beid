@@ -19,7 +19,7 @@ assert.equal(execFileSync("git", ["diff", referenceRef, "--", "protocol/referenc
 }), "");
 const api = await import(pathToFileURL(path.resolve(parallax, "protocol/reference/js/index.ts")).href);
 const { encodeCanonical } = await import(pathToFileURL(path.resolve(parallax, "protocol/reference/js/src/bytes.ts")).href);
-const upstream = await readFile(path.join(root, "shared/src/commonTest/resources/vectors/upstream/barnard-b005-envelope-v2.txt"), "utf8");
+const upstream = await readFile(path.join(root, "shared/src/commonTest/fixtures/vectors/upstream/barnard-b005-envelope-v2.txt"), "utf8");
 const values = Object.fromEntries(upstream.split("\n").filter(line => line && !line.startsWith("#")).map(line => {
   const at = line.indexOf("=");
   return [line.slice(0, at), line.slice(at + 1)];
@@ -97,6 +97,6 @@ const fixture = {
   authorityDirect: makeCase("v1_envelope", "v1_container"),
   delegate: makeCase("v2_envelope", "v2_container"),
 };
-const output = path.join(root, "shared/src/commonTest/resources/vectors/positive/venue-current-lease-v1.json");
+const output = path.join(root, "shared/src/commonTest/fixtures/vectors/positive/venue-current-lease-v1.json");
 await writeFile(output, JSON.stringify(fixture, null, 2) + "\n");
 console.log(JSON.stringify({ definitionVerifiedByParallax: true, copiedEnvelopeCases: 2, output }));
