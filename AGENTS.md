@@ -75,7 +75,9 @@ the venue-device organizer surface — `VenueDeviceBroadcasting` and
 VenueDeviceBroadcasting` returns hits under `ios/` and **none** under
 `android/`), tracked as dispatch#4. It is listed here because this file's own
 both-OS rule forbids a silent platform asymmetry: the gap may be deliberate,
-but it may not go unnamed.
+but it may not go unnamed. Naming it: for v1.0 this asymmetry **is**
+deliberate — the venue device ships iOS-first, and the Android venue surface
+is tracked as #460.
 Do not restate "Android has only one screen"—that was true when Issue #117
 was filed and has not been true since #119/#120/#123/#126/#118 landed.
 Do not restate that Android lacks owner-key binding or a records list either;
