@@ -100,12 +100,12 @@ The remaining three skipped integration tests are
 `LocalAnvilEventRegistryIntegrationTest.readsTheRealReaderFacadeAtAPinnedBlockAndCachesTheResult`,
 and `LocalAnvilEventRegistryIntegrationTest.fetchesTheAnchoredSignedDefinitionFromALocalHttpStub`.
 
-The lane proceeds against Barnard 0.8.0. Full multi-slice agreement is
-**pending-pin** until Barnard #200 is released and a separate beid change updates
-the pin. The multi-slice SDK integration test must name this dependency. Pure
-shared schedule tests remain executable independently of the SDK pin.
-
-Barnard #197 separately tracks the missing verified relay expiry. Registry read results
+Barnard 0.9.0 is now pinned on both hosts through the separate PR #477.
+The decoder foundation remains PR #474; identity/SDK/current-lease verification
+and iOS acquisition/UI/radio effects are separate follow-ups. Phase 1 retains
+its current-lease-only restriction. The public expiry and structural accessor
+make phase 2 possible, but neither full schedule verification nor multi-slice
+serving is implemented by this foundation. Registry read results
 do not themselves carry chain or source-contract coordinates; verification must
 bind them to the deployment that produced the read, rather than compare two
 untrusted copies of the same addresses.
@@ -134,3 +134,44 @@ Verification order:
 
 No radio proof is implied by simulator or vector evidence. Android serving is
 deliberately deferred to beid #460; shared rules are available for its adapter.
+
+## Decoder-layer witnesses after review
+
+The independent foundation review at `fb1d13a` found the decoder guards were
+correct but unwitnessed: the `VenueBundle` constructor repeats the same
+bounds, so public decode tests still rejected invalid input after removing the
+decoder checks. The reader helper is now internal, not public, and two tests
+call it directly without constructing a bundle. They use complete arrays at
+counts 0, 1, 512 and 513 and byte lengths 198, 199, 508 and 509. No huge declared
+array is constructed; a truncated header would merely witness missing input.
+
+The full shared suite executed 436 tests: 433 passed, zero failed, the three
+named external integration tests above skipped. Against the unchanged source
+of that successful run, removing only the decoder count guard produced exactly
+one failure, `envelopeReaderEnforcesCountBoundsWithoutTheBundleConstructor`.
+Removing only its byte-length guard produced exactly one failure,
+`envelopeReaderEnforcesByteBoundsWithoutTheBundleConstructor`. Each mutant ran
+the full 436-test suite: 432 passed, one failed, three skipped. The Parallax
+comparison executed and passed against `6fe165fd0146df4925fd1b59c236fe729dac7b29`
+in all three runs. Source and the entire working diff were restored and
+hash-checked after each. Baseline source SHA-256:
+`26fe63d94fe1ca3b47b80c64fa6dc6716674c9e09e80929ecaacfb07bc8bbe3a`.
+
+The allocation mechanism is REASONED, not experimentally reproduced:
+`StrictCborReader.readArrayLength` permits a declaration up to `Int.MAX_VALUE`,
+and `List(count)` allocates before reading its elements. A tiny complete CBOR
+length declaration therefore need not fit that allocation inside the input
+byte cap. The count guard precedes that allocation by construction. These
+small direct tests independently witness the guard, not allocation ordering.
+The whole-input test was renamed `rejectsOversizeWholeInputs` because its
+assertions do not dynamically prove ordering either.
+
+Ordinary reader byte accesses use `readByte`'s bounds check; its eight-byte
+unsigned path also peeks the first byte after requiring eight remaining bytes.
+Byte/text copies require lengths within the remaining buffer. This source
+argument explains rejection through `IllegalArgumentException` rather than an
+indexing exception; it is not a claim to have induced memory exhaustion.
+
+The rebase onto main `38ce700` preserved main's new Parallax pin and both
+updated digests. Rebase was queue position, not the membership repair: the
+experiment establishing that diagnosis ran with the old `5215991` pin unchanged.

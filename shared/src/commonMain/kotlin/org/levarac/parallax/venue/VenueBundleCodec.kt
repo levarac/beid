@@ -46,7 +46,10 @@ public fun decodeVenueBundle(bytes: ByteArray): VenueBundle? = try {
     null
 }
 
-private fun readBoundedEnvelopes(reader: StrictCborReader): List<ByteArray> {
+// Internal so tests can witness these guards independently of VenueBundle's
+// constructor. Keep the count guard before List(count): the CBOR declaration
+// is untrusted and the whole-input byte limit does not bound its declared count.
+internal fun readBoundedEnvelopes(reader: StrictCborReader): List<ByteArray> {
     val count = reader.readArrayLength()
     require(count in 1..MAX_VENUE_ENVELOPES)
     return List(count) {

@@ -1,9 +1,11 @@
 package org.levarac.parallax.venue
 
 import org.levarac.parallax.observation.CanonicalCbor
+import org.levarac.parallax.registry.EventDefinitionCborCodec.StrictCborReader
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -97,6 +99,40 @@ class VenueBundleCodecTest {
     }
 
     @Test
+    fun envelopeReaderEnforcesCountBoundsWithoutTheBundleConstructor() {
+        // Complete, small arrays ensure a missing guard cannot be masked by
+        // truncated input or VenueBundle's duplicate constructor validation.
+        for (count in listOf(0, 513)) {
+            assertFailsWith<IllegalArgumentException>("count $count") {
+                readBoundedEnvelopes(StrictCborReader(envelopeArrayBytes(count, 199)))
+            }
+        }
+        for (count in listOf(1, 512)) {
+            val reader = StrictCborReader(envelopeArrayBytes(count, 199))
+            val envelopes = readBoundedEnvelopes(reader)
+            reader.requireFinished()
+            assertEquals(count, envelopes.size)
+            for (envelope in envelopes) assertContentEquals(ByteArray(199) { 6 }, envelope)
+        }
+    }
+
+    @Test
+    fun envelopeReaderEnforcesByteBoundsWithoutTheBundleConstructor() {
+        for (size in listOf(198, 509)) {
+            assertFailsWith<IllegalArgumentException>("byte length $size") {
+                readBoundedEnvelopes(StrictCborReader(envelopeArrayBytes(1, size)))
+            }
+        }
+        for (size in listOf(199, 508)) {
+            val reader = StrictCborReader(envelopeArrayBytes(1, size))
+            val envelopes = readBoundedEnvelopes(reader)
+            reader.requireFinished()
+            assertEquals(1, envelopes.size)
+            assertContentEquals(ByteArray(size) { 6 }, envelopes.single())
+        }
+    }
+
+    @Test
     fun enforcesAddressAndDigestLengths() {
         for (size in listOf(0, 19, 21)) assertNull(decodeVenueBundle(bundleBytes(addressSize = size)))
         for (size in listOf(0, 31, 33)) assertNull(decodeVenueBundle(bundleBytes(eventIdSize = size)))
@@ -138,10 +174,13 @@ class VenueBundleCodecTest {
     }
 
     @Test
-    fun boundsTheWholeInputBeforeAllocatingNestedValues() {
+    fun rejectsOversizeWholeInputs() {
         assertNull(decodeVenueBundle(ByteArray(1_048_577)))
         assertNull(decodeVenueHandoff(ByteArray(4097)))
     }
+
+    private fun envelopeArrayBytes(count: Int, size: Int): ByteArray =
+        CanonicalCbor.encode(CanonicalCbor.array(List(count) { bytes(ByteArray(size) { 6 }) }))
 
     private fun bundleBytes(
         version: Long = 1,
