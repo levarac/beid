@@ -784,13 +784,22 @@ dates). The contract every agent must know before touching delivery files:
 
 - `.github/workflows/internal-google-play.yml` は `main` への push のうち
   `what_to_test.json` または `what_to_test.android.json` が変わった時と、
-  手動実行で起動する。`GHA_DELIVERY == on` の時だけ self-hosted runner `emi`
-  上でAABをbuild・署名し、Google Play internal testingへuploadする。
-- Android laneはiOS laneと同じ`GHA_DELIVERY`で止まるtemporary pathである。
+  手動実行で起動する。**`GHA_ANDROID_DELIVERY == on` の時だけ** self-hosted
+  runner `emi` 上でAABをbuild・署名し、Google Play internal testingへupload
+  する。
+- **Android lane の gate は iOS lane と別の変数である** (#401 で分離、
+  2026-09-10)。分離前は両方とも `GHA_DELIVERY` だった。`GHA_DELIVERY` は
+  `internal-testflight.yml` と `release-testflight.yml` も gate しており、
+  かつ `internal-testflight.yml` は `what_to_test.json` の `main` への push で
+  発火する — **この Android workflow を発火させるのと同じ file** である。
+  したがって変数が 1 つだと、Android の配信を有効にする操作と、同じ commit から
+  App Store Connect へ iOS を upload する操作が**区別できなかった**。
+  「Android だけ」を表現可能にするための分離であって、設定の整理ではない。
+  `GHA_ANDROID_DELIVERY` は iOS lane に影響せず、`GHA_DELIVERY` は Android lane
+  に影響しない。無効化も別々に行う。
   **Xcode Cloudの稼働状況をここに書かない** — 上の PR CI subsection と同じ理由で、
-  書き写した状態は次に枠が動いた瞬間に古くなる。どちらのlaneも
-  `GHA_DELIVERY=off`で無効化でき、現在の値は repository variable が正本。
-  Android側にXcode Cloudの代替元はないため、恒久運用は別途決める。
+  書き写した状態は次に枠が動いた瞬間に古くなる。現在の値は repository variable が
+  正本。Android側にXcode Cloudの代替元はないため、恒久運用は別途決める。
 - runnerは`ANDROID_HOME`と`KMP_JAVA_HOME`を持ち、Gradleは必ずrepositoryの
   `scripts/resolve_kmp_java_home.sh`が選ぶJDK 17で動かす。ambientなsystem Javaを
   使ってはならない。
