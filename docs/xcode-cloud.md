@@ -13,6 +13,27 @@ PR **Build & Test** workflow (`a465d6ac-e3b5-4fe0-b586-db7285435990`) was
 re-enabled, and TestFlight delivery runs from the Xcode Cloud **Internal Build**
 and **Release Build** workflows.
 
+**First end-to-end delivery through the restored path: 2026-09-10.** The
+配信 PR #426 changed `what_to_test.json`, the **Internal Build** workflow
+started automatically from that change, archived on the PR branch and again
+on `main`, and the owner confirmed the build reached TestFlight. The GitHub
+Actions lane stayed silent — its run shows `skipped`, which is `GHA_DELIVERY`
+being `off` working as designed rather than a failure.
+
+This entry exists because "the configuration points at Xcode Cloud" and "a
+build reached a tester" are different claims, and this document had only the
+first. The switch happened on 2026-09-07; nothing was delivered through it
+until #426, so for three days the active path was one nobody had exercised.
+**Record the next such switch the same way — a configuration change is not
+evidence of delivery.**
+
+Not confirmed in that observation, and worth checking on the next delivery:
+whether the What to Test text appeared for testers. That is the capability
+the temporary GitHub Actions lane never had (`ci_post_xcodebuild.sh`
+generates the notes and only Xcode Cloud picks them up), so it is the
+sharpest single test of whether the path is fully back rather than merely
+building.
+
 The GitHub Actions lane described below is retained as the documented fallback.
 It is dormant, not removed: the repository variable `GHA_DELIVERY` is `off`, and
 both workflows run only when it is exactly `on`. Two repository workflows provide
