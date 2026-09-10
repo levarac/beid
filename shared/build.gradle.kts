@@ -38,6 +38,9 @@ kotlin {
         }
 
         commonTest {
+            // resources/ contains only the Parallax-pinned corpus checked by the
+            // cross-repo gate. beid-generated and Barnard-owned fixtures live apart.
+            resources.srcDir("src/commonTest/fixtures")
             dependencies {
                 implementation(kotlin("test"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
@@ -54,13 +57,13 @@ kotlin {
 
 // Kotlin/Native does not automatically package commonTest resources into the test executable.
 // Keep the existing loader's stable processedResources layout populated for both native targets.
-val commonTestResourceDirectory = layout.projectDirectory.dir("src/commonTest/resources")
+val commonTestResourceDirectories = kotlin.sourceSets.getByName("commonTest").resources.srcDirs
 val copyIosSimulatorArm64TestResources = tasks.register<Copy>("copyIosSimulatorArm64TestResources") {
-    from(commonTestResourceDirectory)
+    from(commonTestResourceDirectories)
     into(layout.buildDirectory.dir("processedResources/iosSimulatorArm64/test"))
 }
 val copyIosArm64TestResources = tasks.register<Copy>("copyIosArm64TestResources") {
-    from(commonTestResourceDirectory)
+    from(commonTestResourceDirectories)
     into(layout.buildDirectory.dir("processedResources/iosArm64/test"))
 }
 tasks.matching { it.name == "iosSimulatorArm64Test" }.configureEach {
