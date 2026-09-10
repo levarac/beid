@@ -659,12 +659,17 @@ class EventDefinitionCborCodecTest {
         assertEquals(EventJoinMode.GATED, gated.definition.joinMode)
         assertEquals(1L, gated.definition.organizerClaim?.method)
 
+        // Method 1 is a RECOGNISED registry name that this version does not implement, so
+        // isVerified is false because nothing has been CHECKED. Do not delete: this is the
+        // assertion that fails if a later version makes the getter true on recognition alone.
         assertEquals(false, gated.definition.organizerClaim?.isVerified)
 
         val open = verifyClaimDefinition(vector, interop.requiredString("openPlusClaimHex"))
         assertEquals(EventJoinMode.OPEN, open.definition.joinMode)
         assertEquals(1L, open.definition.organizerClaim?.method)
-        // Same reason as above: recognised name, nothing checked, so still unverified.
+        // Same rule as the gated case above, asserted separately because this decodes a
+        // SECOND definition: method 1 is recognised, nothing is checked, so isVerified is
+        // false. Do not delete when implementing a method.
         assertEquals(false, open.definition.organizerClaim?.isVerified)
     }
 
