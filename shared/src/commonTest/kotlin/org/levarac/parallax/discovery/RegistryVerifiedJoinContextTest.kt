@@ -140,6 +140,113 @@ class RegistryVerifiedJoinContextTest {
     }
 
     /**
+     * beid#463. The operator lookup is a routing hint, and an operator can
+     * answer with a different real event than the one whose code was entered
+     * — by mistake or on purpose. For an open canonical code the entered code
+     * *is* the Event ID, so the answer is checkable without asking anyone: the
+     * definition that came back must be the one the code names.
+     *
+     * This is the positive control for the three refusals below. Without it a
+     * binding check that refused everything would still pass them.
+     */
+    /**
+     * The guard on the fixture itself. Everything below compares a literal
+     * against the definition the vector produces, so if the vector's Event ID
+     * ever changes, the positive control silently becomes a fourth
+     * mismatch test — passing, meaningless, and indistinguishable from the
+     * real thing. This fails first and says so.
+     */
+    @Test
+    fun theCanonicalOpenCodeFixtureIsTheVectorsOwnEventId() {
+        assertEquals(
+            CANONICAL_OPEN_CODE,
+            definitionContext(EventJoinMode.OPEN).eventIdHex,
+            "the canonical open code fixture has drifted from the event-definition vector",
+        )
+    }
+
+    @Test
+    fun aCanonicalOpenCodeMatchingTheResolvedEventIdIssuesTheCapability() {
+        val resolution = resolution()
+
+        assertEquals(
+            NearbyEventJoinEligibility.ELIGIBLE,
+            operatorLookupJoinEligibility(CANONICAL_OPEN_CODE, resolution, vectorValidFrom()),
+        )
+        val issued = assertNotNull(
+            RegistryVerifiedJoinContext.fromOperatorLookup(
+                CANONICAL_OPEN_CODE,
+                resolution,
+                vectorValidFrom(),
+            ),
+        )
+        assertEquals(CANONICAL_OPEN_CODE, issued.joinCode)
+    }
+
+    /**
+     * The refusal beid#463 exists for. The definition here is genuinely
+     * verified — it passed the codec, it declares open admission and the clock
+     * is inside its window — so every check that ran before this one says yes.
+     * Obtaining a definition is not permission to join it.
+     */
+    @Test
+    fun aCanonicalOpenCodeNamingADifferentEventIssuesNothing() {
+        val resolution = resolution()
+
+        assertEquals(
+            NearbyEventJoinEligibility.CODE_NOT_BOUND,
+            operatorLookupJoinEligibility(OTHER_CANONICAL_OPEN_CODE, resolution, vectorValidFrom()),
+        )
+        assertNull(
+            RegistryVerifiedJoinContext.fromOperatorLookup(
+                OTHER_CANONICAL_OPEN_CODE,
+                resolution,
+                vectorValidFrom(),
+            ),
+        )
+    }
+
+    /**
+     * The same refusal, reached through the spelling a user is most likely to
+     * paste: `normalizedEventCodeOrNull` trims and case-folds but does not
+     * strip `0x`, so a code copied from a wallet or an explorer arrives 66
+     * characters long. An implementation that recognized a canonical code by
+     * raw length alone would classify this as "not canonical", skip the
+     * binding entirely, and admit the wrong event — while every other test in
+     * this class still passed.
+     */
+    @Test
+    fun aPrefixedCanonicalOpenCodeNamingADifferentEventIssuesNothing() {
+        val resolution = resolution()
+        val prefixed = "0x" + OTHER_CANONICAL_OPEN_CODE
+
+        assertEquals(
+            NearbyEventJoinEligibility.CODE_NOT_BOUND,
+            operatorLookupJoinEligibility(prefixed, resolution, vectorValidFrom()),
+        )
+        assertNull(RegistryVerifiedJoinContext.fromOperatorLookup(prefixed, resolution, vectorValidFrom()))
+    }
+
+    /**
+     * And the boundary in the other direction: a deployment's human-readable
+     * code is not an Event ID and there is nothing on the device to compare it
+     * against, so it is admitted exactly as before. Stated as a test because
+     * the cheapest wrong version of the binding — refuse anything that is not
+     * the Event ID — would break every code-entry join in the product and pass
+     * all three tests above.
+     */
+    @Test
+    fun aHumanReadableEventCodeIsAdmittedWithNoBindingToCompareAgainst() {
+        val resolution = resolution()
+
+        assertEquals(
+            NearbyEventJoinEligibility.ELIGIBLE,
+            operatorLookupJoinEligibility(JOIN_CODE, resolution, vectorValidFrom()),
+        )
+        assertNotNull(RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution, vectorValidFrom()))
+    }
+
+    /**
      * The join code travels inside the capability, fixed at issue time. This
      * is what stops a later caller pairing a verified event with some other
      * string, which is the shape the whole gate exists to make impossible.
@@ -371,6 +478,28 @@ class RegistryVerifiedJoinContextTest {
          * lets a promotion actually complete here.
          */
         const val EVENT_ID = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+
+        /**
+         * The canonical open code for the definition the *event-definition*
+         * vector carries: `canonicalOpenCodeV1` is the lowercase hex of the
+         * whole 32-byte Event ID, so for an open event the code and the ID are
+         * the same string.
+         *
+         * Note that this is **not** [EVENT_ID]. That constant belongs to the
+         * nearby-candidate fixtures above and is a different event; using it
+         * here would have made the positive control below assert a mismatch
+         * while reading like a match. The literal is spelled out rather than
+         * derived so a reader can see the value, and
+         * `theCanonicalOpenCodeFixtureIsTheVectorsOwnEventId` asserts it still
+         * is the vector's, so a changed vector fails loudly instead of quietly
+         * turning the positive control into a fourth mismatch test.
+         */
+        const val CANONICAL_OPEN_CODE =
+            "5d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab3195"
+
+        /** A well-formed canonical open code for some other event. */
+        const val OTHER_CANONICAL_OPEN_CODE =
+            "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
         const val HASH = "6c86c6aac5fb24bc"
         const val OTHER_HASH = "0011223344556677"
         val CONTAINER = byteArrayOf(3, 0, 1, 2)

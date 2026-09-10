@@ -45,7 +45,35 @@ jobs:
           sudo docker image prune --all --force >/dev/null 2>&1 || true
           echo "After:"; df -h /
 
+      # fetch-depth: 0 is load-bearing, not hygiene (beid#491). The default
+      # depth-1 checkout is a shallow clone, and `git rev-list --count HEAD` on
+      # a shallow clone does not fail and does not return empty -- it returns a
+      # PLAUSIBLE SMALLER NUMBER. The git height would then be silently wrong in
+      # a shipped build, with nothing to distinguish it from a right one. iOS
+      # meets the same requirement by deepening in ci_post_clone.sh; Android
+      # meets it here.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate git height
+        id: git-height
+        run: |
+          set -euo pipefail
+          # Guard on shallowness, not on emptiness: an emptiness check cannot
+          # see a truncated height, which is the only failure that actually
+          # happens here.
+          if [ "$(git rev-parse --is-shallow-repository)" != "false" ]; then
+            echo "::error::Repository is a shallow clone; git height would be truncated."
+            exit 1
+          fi
+          git_height="$(git rev-list --count HEAD)"
+          if [[ ! "$git_height" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Computed git height is not a positive integer: '$git_height'"
+            exit 1
+          fi
+          printf 'BEID_GIT_HEIGHT=%s\n' "$git_height" >> "$GITHUB_ENV"
+          echo "Git height: $git_height"
 
       - name: Setup Java (hosted runners only)
         if: runner.environment == 'github-hosted'
@@ -133,6 +161,21 @@ jobs:
         run: scripts/gha/check-play-delivery.sh
       - name: Build and sign release AAB
         run: scripts/gha/build-and-sign-android.sh
+      # The release notes testers read are produced here rather than by the
+      # upload action: r0adkll/upload-google-play reads whatsnew-<locale> files
+      # verbatim and does not enforce Google Play's 500-character limit, so a
+      # longer note would be rejected by the Play API *after* the bundle had
+      # already been uploaded. prepare_testflight_notes.py clips it and says so
+      # in the log (beid#503). --platform android prefers
+      # what_to_test.android.json and falls back to what_to_test.json.
+      - name: Prepare Google Play release notes
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_testflight_notes.py \
+            --platform android \
+            --repo-root . \
+            --skip-empty \
+            --play-output-dir "$RUNNER_TEMP/whatsnew"
       - name: Upload AAB to Google Play internal testing
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
@@ -142,3 +185,4 @@ jobs:
           tracks: internal
           status: completed
           releaseName: GHA ${{ env.ANDROID_VERSION_CODE }}
+          whatsNewDirectory: ${{ runner.temp }}/whatsnew

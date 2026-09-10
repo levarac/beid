@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		014EFF3C5268B71F222C207C /* SessionParticipationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80776036F593C26215147B46 /* SessionParticipationListView.swift */; };
+		04348FFAAEB9C9CDC881D668 /* VenueArtifactAcquisition.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3561B972C4187D3C2F5410B /* VenueArtifactAcquisition.swift */; };
 		04FAF61220EF2EDF7B54F01F /* ScanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */; };
 		0539921BF96B4A87706974FB /* EventIdentityVerificationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C906FD35459E7A26F40FEB22 /* EventIdentityVerificationSource.swift */; };
 		05FF89CD532B46703B2E9C8D /* Illustrations.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */; };
@@ -46,6 +47,7 @@
 		3F4F7436CE946FC446816422 /* UnsentWindowLedgerRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F76E12B71ED26CFB7AF316F /* UnsentWindowLedgerRuntime.swift */; };
 		40B872B82F4E3D4FEB48C9C0 /* EventIdentityVerificationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B97F1CE6BE6E1A98E511D8 /* EventIdentityVerificationUITests.swift */; };
 		419B39D19457938733AE8093 /* CollectionHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0867D0CE75A381FD6D20CC45 /* CollectionHomeView.swift */; };
+		43019C1B3C92954575CA26C3 /* VenuePublicArtifactStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D764CF34303FF0E427BB098 /* VenuePublicArtifactStore.swift */; };
 		44014CB908EB5E90A24769BE /* UnsentWindowLedgerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5E4675B28D0F28D480086D /* UnsentWindowLedgerStore.swift */; };
 		4441FDF7FAD3AF9BC23E027F /* ParticipantRelayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7EEF5A97CB64364C9279EE /* ParticipantRelayTests.swift */; };
 		45DB2C8AAC2D70D97C8D4B53 /* SelfProofStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA4E3BC04874E00A36445CB8 /* SelfProofStore.swift */; };
@@ -72,8 +74,10 @@
 		6997A7F8099B9742B3F3EC17 /* SelfProofCheckpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C67609A206E5D182BCFECF3 /* SelfProofCheckpoint.swift */; };
 		6A3EBE0C491228EBED4028E1 /* DemoWalletConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */; };
 		6A599DE79B7D6BFF11C01F49 /* RecordingBindingSheetUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CADBE5E0B665DA97DF1CF7B6 /* RecordingBindingSheetUITests.swift */; };
+		6C2024C447D74FFF5AC7448A /* VenueSignedContainerBroadcasting.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B1CB226F7B72C56E19D9E0 /* VenueSignedContainerBroadcasting.swift */; };
 		71F154E7FBE8E63624DDC68F /* EventSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0333AAF8319263B67E8FE36 /* EventSession.swift */; };
 		737AD87C8947B5348871BBC6 /* ReportSubmissionOperatorIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 227F031B1D42A852CC6278C8 /* ReportSubmissionOperatorIntegrationTests.swift */; };
+		73D38FD54E87835C190F79A9 /* VenueSignedServingViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1180BEAD30BF126D07BDE1 /* VenueSignedServingViewModelTests.swift */; };
 		74A66D42D8B3D3B3D03A7496 /* RegistryDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0412932757042A17306C358 /* RegistryDependencies.swift */; };
 		77142B7104D24CD50E325988 /* EventBindingSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A0CFB332AC5A882931E08F /* EventBindingSheetView.swift */; };
 		7751E6264525D31A67AB8F79 /* UnsentWindowLedgerStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B4FA5BD564665A2C992A91 /* UnsentWindowLedgerStoreTests.swift */; };
@@ -97,6 +101,7 @@
 		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
 		9AF57AA98679B17508065714 /* SensingCryptography.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */; };
 		9E337258C7DB06C41ADCC141 /* RecordSchemaEnvelopeMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D133F06DAE45C0813736C592 /* RecordSchemaEnvelopeMigrationTests.swift */; };
+		9E3E13E74E31642055354E0E /* VenueSignedServingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA117D55E966AD51D4A45492 /* VenueSignedServingViewModel.swift */; };
 		9E85C338D129992CB713A690 /* DemoScenarioInvariantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 947190410BDDDD3DB0C6F24D /* DemoScenarioInvariantTests.swift */; };
 		A006F2405034ACE75AA59A55 /* OnboardingFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */; };
 		A270412A7278D241A8A344C7 /* EventMembershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */; };
@@ -107,6 +112,7 @@
 		A9FCF4EEF2564227A009A346 /* WindowReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1EACAE869F3E0B456C222A /* WindowReport.swift */; };
 		AAA084FCDB8DD4558C438B58 /* CorruptStoreQuarantineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */; };
 		AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C21DF46165889A3C206F0C /* ProofStore.swift */; };
+		AC838397C89B73E5985B8EB8 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4FE5A931CEAE1C522175B35 /* AppVersion.swift */; };
 		ACCA8EA1D39994F420C779BA /* SelfProofTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */; };
 		ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E157C35B263F222E1DBDD5 /* ProofSignature.swift */; };
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
@@ -122,6 +128,7 @@
 		C245ACDEBE37610E23901578 /* MetaMaskSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A5B8C4B06C06990493D8FA /* MetaMaskSupport.swift */; };
 		C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */; };
 		C681656D4F0FBFB5973E28A4 /* ProofTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C78211E54CB26A88AE8857 /* ProofTests.swift */; };
+		C79B3DE80CD3087ECBA576B1 /* VenueSignedServingTestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B963FB802DF55AE1EDCC715A /* VenueSignedServingTestDoubles.swift */; };
 		C9D57E857A49E7EE593B6365 /* EventIdentityVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36546FA758ACEADAB6A72464 /* EventIdentityVerification.swift */; };
 		CAFE8F781147CAA5382816E2 /* BeidKeychainKeyStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EF2389970BED4997DBC2826 /* BeidKeychainKeyStorage.swift */; };
 		CB158153C98D8C18CBAFFEF8 /* SessionAggregateExposureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EAEB0CA3E864A05492129FB /* SessionAggregateExposureTests.swift */; };
@@ -159,6 +166,7 @@
 		F23D870545BBEFF8C0585E4C /* TransparencyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */; };
 		F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */; };
 		F332E3A91E9FAB5075CF59FA /* BackgroundingCheckpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761F9CFAD7A962A48ACF6410 /* BackgroundingCheckpointTests.swift */; };
+		F4577AE9C8E34AEB8F62B745 /* VenueSignedServingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5157DE43C6934B2D9C92AC3 /* VenueSignedServingView.swift */; };
 		F5A2C42AA783E9F15EAE309B /* ReportSubmissionStateQueryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D8A4D0AA5745D9AAC65FBF /* ReportSubmissionStateQueryTests.swift */; };
 		F5F7A3F981CD58049736AE04 /* SessionAggregateSnapshotStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5459592F237296DD025E2E77 /* SessionAggregateSnapshotStoreTests.swift */; };
 		F8EEF80F16E6515536765320 /* DeviceCountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5703915F87566D192896C7B /* DeviceCountTests.swift */; };
@@ -215,6 +223,7 @@
 		13B01383C582BD797CC2808F /* BeidConfigThresholdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidConfigThresholdTests.swift; sourceTree = "<group>"; };
 		185FBB42606BCEC9392EA753 /* DemoWalletConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoWalletConnector.swift; sourceTree = "<group>"; };
 		1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothPermissionView.swift; sourceTree = "<group>"; };
+		1D764CF34303FF0E427BB098 /* VenuePublicArtifactStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenuePublicArtifactStore.swift; sourceTree = "<group>"; };
 		1E5E4675B28D0F28D480086D /* UnsentWindowLedgerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsentWindowLedgerStore.swift; sourceTree = "<group>"; };
 		2169FFDF6767C427D481ED17 /* ItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailView.swift; sourceTree = "<group>"; };
 		2216225A599F7A2681ED2BC7 /* ParticipantRelayVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipantRelayVerifier.swift; sourceTree = "<group>"; };
@@ -306,10 +315,13 @@
 		B2A0822EAE8F243702AA4F1C /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		B3E95383AD24579017E2EF0B /* DailySummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySummaryView.swift; sourceTree = "<group>"; };
 		B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingMode.swift; sourceTree = "<group>"; };
+		B4FE5A931CEAE1C522175B35 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		B7AD88E0F753B2ED79B95DCB /* VenueBundleVerification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueBundleVerification.swift; sourceTree = "<group>"; };
 		B80C88CDD0300DFD1CEBD0F9 /* EventJoinRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventJoinRegistry.swift; sourceTree = "<group>"; };
+		B963FB802DF55AE1EDCC715A /* VenueSignedServingTestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueSignedServingTestDoubles.swift; sourceTree = "<group>"; };
 		BAE9AB6A36B71BDF979C1435 /* EventGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventGrouping.swift; sourceTree = "<group>"; };
 		BB47871AF9ADE5CDBDBA2EA6 /* SelfProofRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofRecord.swift; sourceTree = "<group>"; };
+		BC1180BEAD30BF126D07BDE1 /* VenueSignedServingViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueSignedServingViewModelTests.swift; sourceTree = "<group>"; };
 		BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BD44A5AAE447B59BE320F525 /* VenueServingContractFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueServingContractFixture.swift; sourceTree = "<group>"; };
 		BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSchemaEnvelope.swift; sourceTree = "<group>"; };
@@ -321,6 +333,7 @@
 		C307E6ACEDA06F3CE4546F10 /* SharedRuntimeProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedRuntimeProbe.swift; sourceTree = "<group>"; };
 		C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinError.swift; sourceTree = "<group>"; };
 		C4B72321D5649C6DAE0C3B30 /* VenueDeviceBroadcastingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceBroadcastingTests.swift; sourceTree = "<group>"; };
+		C5157DE43C6934B2D9C92AC3 /* VenueSignedServingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueSignedServingView.swift; sourceTree = "<group>"; };
 		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 		C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyProvider.swift; sourceTree = "<group>"; };
 		C7FC09FE3BAF5926B776ED4E /* libBeidMetaMaskSupport.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libBeidMetaMaskSupport.a; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -335,6 +348,7 @@
 		D133F06DAE45C0813736C592 /* RecordSchemaEnvelopeMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSchemaEnvelopeMigrationTests.swift; sourceTree = "<group>"; };
 		D311A637FF67CA20C99F7E5B /* Beid.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Beid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D8F7094F03F3DA765492BFFC /* WindowReportStoreDurabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportStoreDurabilityTests.swift; sourceTree = "<group>"; };
+		DA117D55E966AD51D4A45492 /* VenueSignedServingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueSignedServingViewModel.swift; sourceTree = "<group>"; };
 		DBBF900C092346BBFDF6BA96 /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		DD20AA979B50E95A1823BDB5 /* SharedRuntimeProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedRuntimeProbeTests.swift; sourceTree = "<group>"; };
 		DE886DB77235ACE898E6D2CF /* BindingMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingMessage.swift; sourceTree = "<group>"; };
@@ -342,6 +356,8 @@
 		E0A3B3879ACAFE05FB7C4A7A /* SensingCryptographyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCryptographyTests.swift; sourceTree = "<group>"; };
 		E1737F0C115BD86F89789893 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 		E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinTests.swift; sourceTree = "<group>"; };
+		E2B1CB226F7B72C56E19D9E0 /* VenueSignedContainerBroadcasting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueSignedContainerBroadcasting.swift; sourceTree = "<group>"; };
+		E3561B972C4187D3C2F5410B /* VenueArtifactAcquisition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueArtifactAcquisition.swift; sourceTree = "<group>"; };
 		E5BB356649CFA49B043B3467 /* OnboardingFlagTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlagTests.swift; sourceTree = "<group>"; };
 		E70EFED294E0C9F293F23146 /* AggregationRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AggregationRuntimeTests.swift; sourceTree = "<group>"; };
 		EA3CE2FB164C46CBBFC4478E /* SensingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -404,9 +420,12 @@
 				4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */,
 				7FAD458D67D1864749F00726 /* SensingCoordinator.swift */,
 				CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */,
+				E3561B972C4187D3C2F5410B /* VenueArtifactAcquisition.swift */,
 				B7AD88E0F753B2ED79B95DCB /* VenueBundleVerification.swift */,
 				0CBBE87F0D227CFFF2509D9E /* VenueDeviceBroadcasting.swift */,
 				A6B5D084B36D8B81C91BD987 /* VenueDeviceOrganizerViewModel.swift */,
+				E2B1CB226F7B72C56E19D9E0 /* VenueSignedContainerBroadcasting.swift */,
+				DA117D55E966AD51D4A45492 /* VenueSignedServingViewModel.swift */,
 			);
 			path = Sensing;
 			sourceTree = "<group>";
@@ -436,6 +455,7 @@
 		2F6F38F46CD774BC65D25626 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				B4FE5A931CEAE1C522175B35 /* AppVersion.swift */,
 				A1B082CA78E849F1BF2B24F9 /* BeidApp.swift */,
 				F4EF63521813A9A66345C1DA /* Info.plist */,
 				C0412932757042A17306C358 /* RegistryDependencies.swift */,
@@ -463,6 +483,7 @@
 				1E5E4675B28D0F28D480086D /* UnsentWindowLedgerStore.swift */,
 				FCC678447413084162F17C12 /* VenueDeviceAssignmentRecord.swift */,
 				AA596FDBF8F1F004E195D54E /* VenueDeviceAssignmentStore.swift */,
+				1D764CF34303FF0E427BB098 /* VenuePublicArtifactStore.swift */,
 				7A1EACAE869F3E0B456C222A /* WindowReport.swift */,
 				00C453FB39D62870ECDBCBF0 /* WindowReportStore.swift */,
 			);
@@ -517,6 +538,7 @@
 				831658C5506647E4B2DBFB48 /* FakeVenueDeviceBroadcasting.swift */,
 				CD430BD5099C75924A32EB13 /* ScriptedVenuePorts.swift */,
 				BD44A5AAE447B59BE320F525 /* VenueServingContractFixture.swift */,
+				B963FB802DF55AE1EDCC715A /* VenueSignedServingTestDoubles.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -546,6 +568,7 @@
 				912FC62DE59B0394056CF446 /* SignalLostView.swift */,
 				480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */,
 				596FC02E4F5386F9BC759C20 /* VenueDeviceOrganizerView.swift */,
+				C5157DE43C6934B2D9C92AC3 /* VenueSignedServingView.swift */,
 				7F95B2F947E49234FCD1421B /* WalletConnectView.swift */,
 				10807372081AA25A74942BE3 /* WelcomeView.swift */,
 			);
@@ -631,6 +654,7 @@
 				C4B72321D5649C6DAE0C3B30 /* VenueDeviceBroadcastingTests.swift */,
 				79956B9713B57740F9E34243 /* VenueDeviceOrganizerViewModelTests.swift */,
 				28130177943FD5AF67651CDB /* VenueServingPortContractTests.swift */,
+				BC1180BEAD30BF126D07BDE1 /* VenueSignedServingViewModelTests.swift */,
 				FFE8C761D36D7256D3FFC51B /* WalletConnectTests.swift */,
 				0969D5632A59660576ACA113 /* WalletHintStoreTests.swift */,
 				3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */,
@@ -878,6 +902,7 @@
 				263C863A858418EFF3DBD26D /* AggregationRuntime.swift in Sources */,
 				3EEA86E51D83334A77A2A6C9 /* AppCoordinator.swift in Sources */,
 				8BDF56249613D448E3FEB5EF /* AppScreen.swift in Sources */,
+				AC838397C89B73E5985B8EB8 /* AppVersion.swift in Sources */,
 				98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */,
 				C3DB410DB70359DF415ADE02 /* BeidApp.swift in Sources */,
 				95A3A750404DCA7A584953FC /* BeidConfig.swift in Sources */,
@@ -949,12 +974,17 @@
 				F23D870545BBEFF8C0585E4C /* TransparencyView.swift in Sources */,
 				3F4F7436CE946FC446816422 /* UnsentWindowLedgerRuntime.swift in Sources */,
 				44014CB908EB5E90A24769BE /* UnsentWindowLedgerStore.swift in Sources */,
+				04348FFAAEB9C9CDC881D668 /* VenueArtifactAcquisition.swift in Sources */,
 				399BB79A30F6FD0DB230E86E /* VenueBundleVerification.swift in Sources */,
 				D9C7575BA9CA4B5E9BC83F75 /* VenueDeviceAssignmentRecord.swift in Sources */,
 				D244F2EF45BA1F0ED4C3BCF8 /* VenueDeviceAssignmentStore.swift in Sources */,
 				EEC27BE7A4E3F2AFFDB4C08B /* VenueDeviceBroadcasting.swift in Sources */,
 				473D03D984F655C405F1F543 /* VenueDeviceOrganizerView.swift in Sources */,
 				A80515ECEF55B20697AC3DF4 /* VenueDeviceOrganizerViewModel.swift in Sources */,
+				43019C1B3C92954575CA26C3 /* VenuePublicArtifactStore.swift in Sources */,
+				6C2024C447D74FFF5AC7448A /* VenueSignedContainerBroadcasting.swift in Sources */,
+				F4577AE9C8E34AEB8F62B745 /* VenueSignedServingView.swift in Sources */,
+				9E3E13E74E31642055354E0E /* VenueSignedServingViewModel.swift in Sources */,
 				EA7FEE6965ECAD90E27FFC4B /* WalletConnectView.swift in Sources */,
 				2BE226469BAD8E51D02C60A2 /* WalletConnector.swift in Sources */,
 				3E5D5ABF35D8F5E4D68F43B1 /* WelcomeView.swift in Sources */,
@@ -1022,6 +1052,8 @@
 				2C4CD8555EE587E369D6BF79 /* VenueDeviceOrganizerViewModelTests.swift in Sources */,
 				1CC8EB9F7EF9C9C28082A39F /* VenueServingContractFixture.swift in Sources */,
 				32748E6878B0222D43791988 /* VenueServingPortContractTests.swift in Sources */,
+				C79B3DE80CD3087ECBA576B1 /* VenueSignedServingTestDoubles.swift in Sources */,
+				73D38FD54E87835C190F79A9 /* VenueSignedServingViewModelTests.swift in Sources */,
 				F322950DEB1B139B5AA06C62 /* WalletConnectTests.swift in Sources */,
 				8E46266E6961044BFC6ABA8C /* WalletHintStoreTests.swift in Sources */,
 				90D18555A4C059568D9201EA /* WindowReportFinalizationTests.swift in Sources */,
@@ -1418,7 +1450,7 @@
 			repositoryURL = "https://github.com/levarac/barnard.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.9.0;
+				version = 0.9.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

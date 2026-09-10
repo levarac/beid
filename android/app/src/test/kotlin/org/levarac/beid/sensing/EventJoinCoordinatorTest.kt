@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import org.levarac.barnard.BarnardPermissionError
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.barnard.BarnardPermissionStatus
+import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
 
@@ -297,7 +298,10 @@ class EventJoinCoordinatorTest {
         val status = fakeStatus(canScan = true, canAdvertise = true)
         val error = BarnardPermissionError(code = "E_NO_ACTIVITY", message = "no activity attached", status = status)
 
-        assertEquals(EventJoinUiState.JoinFailed, mapPermissionResultToState(BarnardPermissionResult.Failed(error)))
+        assertEquals(
+            EventJoinUiState.JoinFailed(EventJoinFailureReason.UNKNOWN),
+            mapPermissionResultToState(BarnardPermissionResult.Failed(error)),
+        )
     }
 
     @Test
@@ -309,6 +313,9 @@ class EventJoinCoordinatorTest {
             status = status,
         )
 
-        assertEquals(EventJoinUiState.JoinFailed, mapPermissionResultToState(BarnardPermissionResult.Failed(error)))
+        assertEquals(
+            EventJoinUiState.JoinFailed(EventJoinFailureReason.UNKNOWN),
+            mapPermissionResultToState(BarnardPermissionResult.Failed(error)),
+        )
     }
 }

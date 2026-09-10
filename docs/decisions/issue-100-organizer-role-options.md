@@ -238,6 +238,7 @@ iOS の `SensingCoordinator.swift` と Android の `EventJoinCoordinator.kt` /
   beid 側の判断であり、出典は spec ではなく code の側にある。
   どちらの factory がどの OS に配線されているかは、**本文書には書かない**。それは code の現況であって
   決定ではなく、ここに書き留めれば `:27` や `:46` とまったく同じ形で陳腐化するからである。
+  共有コード上の経路は `shared/src/commonMain/kotlin/org/levarac/parallax/discovery/RegistryVerifiedJoinContext.kt` の 2 つの factory を参照し、emitter の判断は [issue #432](https://github.com/thegreeting/beid/issues/432) を参照すること。
 - `REGISTRY_VERIFIED` を割り当てるのは **host だけ**である。SDK は決して割り当てない
   （DESIGN-NOTES §0.2d「The host signs, the engine serves. … The SDK holds no authority key and
   has no registry access, so it cannot sign and must not appear to: it does not re-encode,
@@ -275,7 +276,7 @@ v1 hint が常態であり、上の「v1 の候補は `UNVERIFIED` のまま」�
 本文書が barnard **0.8.0** を指している箇所（`:27`、`:209`、`:211`）は、**記述当時の状態としてそのまま
 残す**。決定記録は履歴であって現在値ではないため、遡って書き換えない。
 
-現在の pin は **0.9.0**（`android/app/build.gradle.kts`、`ios/project.yml`、生成される
+この追記の時点の pin は **0.9.0**（`android/app/build.gradle.kts`、`ios/project.yml`、生成される
 `ios/Beid.xcodeproj/project.pbxproj`、`Package.resolved` の 4 参照すべて）。0.9.0 で本文書に関係する
 変更は、spec 134 step 4 の**妥当期間の一致が「完全一致」から「包含」へ改められた**こと
 （barnard#200 の 2026-09-10 erratum）である。`definitionStart <= validFromEnin` かつ

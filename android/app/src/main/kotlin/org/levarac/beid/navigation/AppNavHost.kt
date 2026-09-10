@@ -91,6 +91,11 @@ fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore) {
             EventJoinRoute(
                 session,
                 onOpenAccount = { navController.navigate(Screen.Account.route) },
+                // beid#463. The same destination Account reaches, now also
+                // reachable from the surface where a participant discovers the
+                // radio found nothing — which is where they actually are when
+                // they need it.
+                onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
             )
         }
 

@@ -7,7 +7,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import org.levarac.beid.shared.report.UnsentWindowLedgerLoadResult
 import org.levarac.beid.shared.report.UnsentWindowLedgerTransition
@@ -31,10 +30,14 @@ internal data class UnsentWindowLedgerStoreRecovery(
  *
  * This class decides only filesystem ordering and atomic replacement. Ledger
  * transitions, snapshot syntax, and report eligibility remain in `shared`.
- * No production caller exists yet: beid#121 was reduced to proving byte parity
- * against shared's golden vectors and porting corrupt-snapshot isolation, since
- * Android has no ledger writer to wire this to. Wiring and listing move to the
- * slice that adds a writer.
+ *
+ * This paragraph used to say that no production caller existed, which was true
+ * when beid#121 landed byte parity against shared's golden vectors without a
+ * writer to wire it to. It is no longer true: `EventJoinCoordinator`'s
+ * `Activity` constructor passes `activity.filesDir` and the process-wide
+ * `WindowObservationRuntimeOwner`, so a real device opens and closes rows here.
+ * What is still absent on Android is a *drain* — nothing submits these windows
+ * — which is a different gap from having no writer.
  */
 internal class UnsentWindowLedgerStore private constructor(
     private val file: File,
@@ -137,8 +140,6 @@ internal class UnsentWindowLedgerStore private constructor(
 
     companion object {
         private val locksByPath = ConcurrentHashMap<String, Any>()
-        private const val MAX_QUARANTINED_SNAPSHOT_COUNT = 5
-        private const val QUARANTINE_INFIX = ".corrupt-"
 
         fun defaultFile(filesDir: File): File = File(filesDir, "unsent-window-ledger-v1.snapshot")
 
@@ -167,58 +168,12 @@ internal class UnsentWindowLedgerStore private constructor(
                     store.durableRevision()
                     UnsentWindowLedgerStoreRecovery(store = store, quarantinedFile = null)
                 } catch (_: InvalidUnsentWindowLedgerSnapshotException) {
-                    val quarantined = quarantineFile(file)
-                    pruneOldQuarantinedSnapshots(file)
-                    UnsentWindowLedgerStoreRecovery(store = store, quarantinedFile = quarantined)
+                    UnsentWindowLedgerStoreRecovery(
+                        store = store,
+                        quarantinedFile = CorruptSnapshotQuarantine.quarantine(file),
+                    )
                 }
             }
-        }
-
-        private fun quarantineFile(file: File): File {
-            val parent = requireNotNull(file.absoluteFile.parentFile)
-            val quarantined = File(
-                parent,
-                "${file.name}$QUARANTINE_INFIX${System.currentTimeMillis()}-${UUID.randomUUID()}",
-            )
-            Files.move(file.toPath(), quarantined.toPath())
-            return quarantined
-        }
-
-        /**
-         * Quarantine files accumulate one per corruption event with nothing
-         * that ever removes them. Cap how many survive: on a device that
-         * corrupts repeatedly, this bounds worst-case disk usage to a small
-         * constant while still keeping the most recent occurrences around
-         * for diagnosis. Mirrors iOS's `maxQuarantinedSnapshotCount` of 5.
-         */
-        private fun pruneOldQuarantinedSnapshots(file: File) {
-            val parent = file.absoluteFile.parentFile ?: return
-            val prefix = "${file.name}$QUARANTINE_INFIX"
-            val quarantined = (parent.listFiles() ?: return)
-                .mapNotNull { candidate ->
-                    quarantineTimestampMilliseconds(candidate.name, prefix)?.let { timestamp ->
-                        candidate to timestamp
-                    }
-                }
-                .sortedBy { (_, timestamp) -> timestamp }
-            if (quarantined.size <= MAX_QUARANTINED_SNAPSHOT_COUNT) {
-                return
-            }
-            quarantined
-                .take(quarantined.size - MAX_QUARANTINED_SNAPSHOT_COUNT)
-                .forEach { (candidate, _) -> candidate.delete() }
-        }
-
-        private fun quarantineTimestampMilliseconds(name: String, prefix: String): Long? {
-            if (!name.startsWith(prefix)) {
-                return null
-            }
-            val afterPrefix = name.substring(prefix.length)
-            val dashIndex = afterPrefix.indexOf('-')
-            if (dashIndex < 0) {
-                return null
-            }
-            return afterPrefix.substring(0, dashIndex).toLongOrNull()
         }
     }
 }

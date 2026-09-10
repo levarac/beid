@@ -17,6 +17,12 @@ val eventCodeLookupUrlTemplate = providers.gradleProperty("beid.eventCodeLookupU
 val eventCodeHashLookupUrlTemplate = providers.gradleProperty("beid.eventCodeHashLookupUrlTemplate")
     .orElse("https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code-hash/{hash}")
 
+// Blank or absent both mean "not produced by CI". Never surface 0 or an empty
+// string: the version row must say "local" so a screenshot from a developer
+// build can never be mistaken for a delivered one (beid#491).
+val gitHeight: String =
+    (project.findProperty("gitHeight") as? String)?.takeIf { it.isNotBlank() } ?: "local"
+
 android {
     namespace = "org.levarac.beid"
     compileSdk = 36
@@ -50,6 +56,11 @@ android {
             "EVENT_KEY_SET_URL_TEMPLATE",
             eventKeySetUrlTemplate.get().asBuildConfigString(),
         )
+        // Git height = the build position shared with iOS (beid#491). CI passes
+        // -PgitHeight; a developer build has no property and reads "local".
+        // versionCode above is deliberately untouched: the store number and the
+        // build position are different numbers with different owners.
+        buildConfigField("String", "GIT_HEIGHT", gitHeight.asBuildConfigString())
     }
 
     compileOptions {
@@ -96,7 +107,7 @@ dependencies {
     implementation(project(":shared"))
 
     // Native (Flutter-free) BLE mutual-observation SDK published to Maven Central.
-    implementation("org.levarac:barnard:0.9.0")
+    implementation("org.levarac:barnard:0.9.1")
 
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")

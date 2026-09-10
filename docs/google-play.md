@@ -4,7 +4,7 @@ This document is the source of truth for beid's temporary Android delivery
 lane. It records repository behavior, runner-local prerequisites, and the
 manual activation steps that must be completed before API uploads can work.
 
-## Current temporary status — 2026-08-28
+## Current temporary status — 2026-08-28, release-note publication 2026-09-11
 
 `.github/workflows/internal-google-play.yml` builds a signed Android App
 Bundle and uploads it to Google Play internal testing. It runs on pushes to
@@ -44,9 +44,29 @@ workflow file can run on either `emi` or a GitHub-hosted runner without
 edits — see "Hosted-runner support" below. This mirrors the pattern
 `ShiokazeHD/umidori` uses for its own Android delivery lane.
 
-`what_to_test.json` and `what_to_test.android.json` are trigger inputs only in
-this temporary lane. Publishing their text as localized Google Play release
-notes is not automated in this slice.
+`what_to_test.json` and `what_to_test.android.json` are both the lane's trigger
+**and** the text testers read. Since beid#503 a `Prepare Google Play release
+notes` step runs `scripts/prepare_testflight_notes.py --platform android`,
+which prefers `what_to_test.android.json` and falls back to
+`what_to_test.json`, and writes one `whatsnew-<locale>` file per locale into
+`$RUNNER_TEMP/whatsnew`. The upload step passes that directory as the
+`whatsNewDirectory` input.
+
+The 500-character clip is applied by that step rather than left to the upload
+action, and this is not a stylistic choice. `r0adkll/upload-google-play` takes
+the locale from the *filename* and sends the file's bytes verbatim, with no
+length check of its own (read at the pinned commit
+`e738b9dd8f2476ea806d921b64aacd24f34515a5`, `src/whatsnew.ts`). A longer note
+is therefore rejected by the Play API at the point the edit is committed —
+which is *after* the bundle has already been uploaded. Clipping earlier turns
+that into a truncated note plus a log line naming both lengths. TestFlight's
+own notes are deliberately **not** clipped at Play's limit; see
+`docs/xcode-cloud.md`.
+
+⚠️ **Nobody has yet seen this text in the Play Console.** The lane is still
+inactive (`GHA_ANDROID_DELIVERY` unset/`off`), so what is verified today is the
+wiring, by contract tests that execute the workflow step's own shell. The
+tester-visible confirmation is dispatch#29's gate, not this document's claim.
 
 ## Repository pipeline
 
@@ -144,6 +164,37 @@ the licences are accepted, so `yes` dies of SIGPIPE and `pipefail` would
 otherwise fail the step (gh#401). The subshell absorbs only `yes`'s death —
 appending `|| true` to the whole pipeline instead would also hide a genuine
 `sdkmanager` failure.
+
+## Build position vs store number (git height)
+
+Verified 2026-09-10.
+
+The Android version row is `1.0.0 (1234+1000000091)`, which reads as
+`{versionName} ({git height}+{versionCode})`. The two numbers have different
+owners.
+
+- **`versionCode` — the store number.** Assigned by the delivery workflow from
+  the run (`1e9 + run×10 + attempt`), as described above. **gh#491 did not change
+  how it is assigned**, and `versionCode = 1` in `android/app/build.gradle.kts`
+  stays as the source-level placeholder.
+- **git height — the build position.** `git rev-list --count HEAD`, computed by
+  `internal-google-play.yml` and passed to Gradle as `-PgitHeight`, surfaced as
+  `BuildConfig.GIT_HEIGHT`. It is a function of the built commit's ancestry, so
+  **an Android build and an iOS build showing the same height were built from the
+  same commit** — that is the only thing it is for. It identifies a commit, not a
+  release.
+
+**`fetch-depth: 0` on the checkout is load-bearing, not hygiene.** The default
+depth-1 checkout is shallow, and on a shallow clone `git rev-list --count HEAD`
+does not fail and does not return empty — it returns a **plausible smaller
+number**, which would ship a wrong build position indistinguishable from a right
+one. The height step therefore guards on
+`git rev-parse --is-shallow-repository`, not on emptiness. iOS meets the same
+requirement by deepening in `ci_post_clone.sh`.
+
+`build-and-sign-android.sh` refuses to deliver when `BEID_GIT_HEIGHT` is unset
+under CI rather than falling back to `local`; outside CI it omits the flag so a
+developer build reads `local` from Gradle's own default. Never `0`, never empty.
 
 ## Ken-side activation list
 

@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.levarac.beid.ui.AppVersion
 import org.levarac.beid.R
 import org.levarac.beid.sensing.BluetoothRadioMonitor
 import org.levarac.beid.sensing.EventJoinSession
@@ -42,6 +43,7 @@ object AccountScreenTestTags {
     const val RECORDS_BUTTON = "account_records_button"
     const val MANUAL_EVENT_CODE_BUTTON = "account_manual_event_code_button"
     const val RELAY_NOTE = "account_relay_note"
+    const val VERSION_TEXT = "account_version_text"
 }
 
 /**
@@ -150,6 +152,17 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRec
                 onClick = viewModel::leaveEvent,
                 enabled = isSessionActive,
                 modifier = Modifier.testTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON),
+            )
+
+            // beid#491: the build position, in the same shape as iOS's row.
+            // Two builds showing the same height came from the same commit,
+            // which is what lets a tester report about Android and one about
+            // iOS be matched up.
+            Text(
+                text = stringResource(R.string.account_version_label, AppVersion.displayString()),
+                style = MaterialTheme.typography.bodySmall,
+                color = BeidTheme.colors.textSecondary,
+                modifier = Modifier.testTag(AccountScreenTestTags.VERSION_TEXT),
             )
         }
     }

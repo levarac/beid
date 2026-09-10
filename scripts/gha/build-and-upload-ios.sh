@@ -146,3 +146,15 @@ xcodebuild \
   -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
 echo "TestFlight upload completed. App Store Connect processing may continue after this job exits."
+
+# Xcode Cloud attaches "What to Test" itself from ios/TestFlight/WhatToTest.<locale>.txt.
+# This lane uploads with -exportArchive, which has no such convention, so the
+# same text has to be written through the App Store Connect API (beid#503).
+# It runs after the upload because the build must exist before notes can be
+# attached to it, and it is allowed to fail the job: a delivery whose testers
+# see no notes is the silent failure this lane exists to prevent.
+echo "Publishing the What to Test text to this build..."
+python3 scripts/gha/set_testflight_whats_new.py \
+  --bundle-id "$BEID_BUNDLE_ID" \
+  --export-path "$EXPORT_PATH" \
+  --repo-root "$REPO_ROOT"
