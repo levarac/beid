@@ -633,6 +633,13 @@ dates). The contract every agent must know before touching delivery files:
     「draft でない」を表現できない。`event_name` の節は必須で、これを外すと
     `push` と `workflow_dispatch` では `github.event.pull_request` が存在せず
     式全体が false になり、main の計測が止まる。
+    **PR で走ったことは、merge される head で走ったことを意味しない。**
+    `synchronize` が trigger でない以上、非 draft の PR はこの lane を
+    「open した時の head で 1 回」だけ走らせ、その後の push は head を
+    変えたまま再実行しない (un-draft 後も同じ)。したがって
+    **「PR でこの lane が緑だった」から merge 対象 commit の iOS 検証を
+    導いてはならない**。merged 版を担保するのは `main` への push の方で、
+    それは merge の後に走る。
     **観測上の注意**: draft PR を open した時は run 自体は記録され、job が
     `skipped` になる。draft PR への push は `synchronize` が trigger でない
     ため run 自体が記録されない。「起動しない」の証拠はこの 2 つで形が違う。

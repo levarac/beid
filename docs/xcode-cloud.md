@@ -115,13 +115,24 @@ Keep the `event_name` clause: `github.event.pull_request` does not exist for
 `push` or `workflow_dispatch`, so removing it would silently disable the lane
 on `main`.
 
-Two further points are easy to misread, so read them before citing this lane as
-evidence. **"Did not run" has two different shapes here**: opening a *draft* PR
-still records a run whose job is `skipped`, whereas pushing to a draft PR
-records no run at all, because `synchronize` is not a trigger. And the
-`concurrency` group is still keyed on `github.ref` with
-`cancel-in-progress: true`, so back-to-back merges cancel the earlier `main`
-run — a run is guaranteed to *start* per merge, not to finish.
+Three further points are easy to misread, so read them before citing this lane
+as evidence.
+
+**A run on a PR is not a run on the head that gets merged.** Because
+`synchronize` is not a trigger, a non-draft PR runs this lane exactly once, on
+the head it was opened with; every push after that changes the head without
+re-running it. The same holds after an un-draft. So "this lane was green on the
+PR" licenses no claim about the commit actually being merged — the `push` to
+`main` is what covers the merged result, and it runs after the fact. Do not
+read a green run here as iOS coverage of the merge candidate.
+
+**"Did not run" has two different shapes here**: opening a *draft* PR still
+records a run whose job is `skipped`, whereas pushing to a draft PR records no
+run at all, because `synchronize` is not a trigger.
+
+**`concurrency` is still keyed on `github.ref` with `cancel-in-progress: true`**,
+so back-to-back merges cancel the earlier `main` run — a run is guaranteed to
+*start* per merge, not to finish.
 
 The repository's authoritative statement of PR CI lane responsibilities is the
 [PR CI contract](../AGENTS.md#pr-ci); this section summarizes it for delivery
