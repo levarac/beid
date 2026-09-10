@@ -30,6 +30,8 @@ import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanEventSession
 import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.shared.event.EventJoinFailureReason
+import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -166,13 +168,22 @@ class EventJoinScreenTest {
         assertNull(session.joinedCode)
     }
 
+    /**
+     * Both strings are read from the catalog rather than written here as
+     * literals (changed in beid#463). The assertion is the same one this test
+     * has always made — that the searching state and its guidance are both on
+     * screen — but pinning the English wording made it fail when that wording
+     * was edited, which is a copy change, not a behaviour change. The wording
+     * itself is the string catalog's business.
+     */
     @Test
     fun zeroCandidatesShowsSearchingAndRescueWithoutManualEntry() {
         val viewModel = EventJoinViewModel(FakeEventJoinSession())
-        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {}) } }
 
-        composeTestRule.onNodeWithText("Searching for nearby events…").assertIsDisplayed()
-        composeTestRule.onNodeWithText("You can enter a code from Account if no event appears.").assertIsDisplayed()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_searching_nearby)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_rescue_guidance)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
     }
 
@@ -183,7 +194,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel, onOpenAccount = {})
+                EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {})
             }
         }
 
@@ -200,7 +211,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel, onOpenAccount = {})
+                EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {})
             }
         }
 
@@ -219,7 +230,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel, onOpenAccount = {})
+                EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {})
             }
         }
 
@@ -243,7 +254,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel, onOpenAccount = { accountOpened = true })
+                EventJoinScreen(viewModel, onOpenAccount = { accountOpened = true }, onOpenManualEventCode = {})
             }
         }
 
@@ -258,7 +269,7 @@ class EventJoinScreenTest {
 
         composeTestRule.setContent {
             BeidAppTheme {
-                EventJoinScreen(viewModel, onOpenAccount = {})
+                EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {})
             }
         }
 
@@ -284,7 +295,7 @@ class EventJoinScreenTest {
         val viewModel = EventJoinViewModel(session)
 
         composeTestRule.setContent {
-            BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) }
+            BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {}) }
         }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
@@ -314,7 +325,7 @@ class EventJoinScreenTest {
         )
         val viewModel = EventJoinViewModel(session)
 
-        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {}) } }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(eventCodeHash))
             .assertIsDisplayed()
@@ -354,7 +365,7 @@ class EventJoinScreenTest {
         session.markRecordingCeremonyShown()
         val viewModel = EventJoinViewModel(session)
 
-        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}) } }
+        composeTestRule.setContent { BeidAppTheme { EventJoinScreen(viewModel, onOpenAccount = {}, onOpenManualEventCode = {}) } }
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard("2222222222222222")).assertDoesNotExist()
@@ -363,4 +374,179 @@ class EventJoinScreenTest {
         }
     }
 
+    /**
+     * beid#463 acceptance condition 1, at the surface: once the search has run
+     * its course without finding anything joinable, the rescue route is on the
+     * screen the participant is already looking at — not filed under Account,
+     * which is where it was and where nobody stuck in a doorway would look.
+     */
+    @Test
+    fun theRescueRouteAppearsOnceTheSearchFoundNothingJoinable() {
+        var openedManualEventCode = 0
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = EventJoinScreenState(
+                        sessionState = EventJoinUiState.Idle,
+                        searchOutcome = NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
+                    ),
+                    onOpenAccount = {},
+                    onOpenManualEventCode = { openedManualEventCode += 1 },
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertHasClickAction()
+            .performClick()
+
+        assertEquals(1, openedManualEventCode, "the rescue button must reach the event-code destination")
+    }
+
+    /**
+     * The other side of the same condition, and the one that makes it a claim
+     * rather than a decoration: while the search is still running the route is
+     * not offered, so its appearance actually means something happened.
+     */
+    @Test
+    fun theRescueRouteIsAbsentWhileTheSearchIsStillRunning() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = EventJoinScreenState(
+                        sessionState = EventJoinUiState.Idle,
+                        searchOutcome = NearbyEventSearchOutcome.SEARCHING,
+                    ),
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON).assertDoesNotExist()
+    }
+
+    /**
+     * A screen of candidates that cannot be joined is the same dead end as an
+     * empty one, and it is the case an implementation keyed on "is the card
+     * list empty" gets wrong — silently, because the screen looks busy.
+     */
+    @Test
+    fun unjoinableCardsOnScreenDoNotHideTheRescueRoute() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = EventJoinScreenState(
+                        sessionState = EventJoinUiState.Idle,
+                        nearbyEventCards = listOf(
+                            NearbyEventCard("Unnamed beacon nearby", null, null, null, "2222222222222222"),
+                        ),
+                        searchOutcome = NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
+                    ),
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    /**
+     * beid#463 acceptance condition 3 at the surface. The expected copy is
+     * read from the resource rather than written into the test: a test holding
+     * its own copy of the sentence passes when production and the catalog have
+     * drifted apart, which is the one thing it exists to catch.
+     */
+    @Test
+    fun aNetworkRefusalSaysTheNetworkIsWhatFailed() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.setContent {
+            BeidAppTheme {
+                ManualEventCodeContent(
+                    state = EventJoinScreenState(
+                        fieldError = EventJoinFieldError.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED),
+                    ),
+                    onEventCodeChanged = {},
+                    onSubmit = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.FIELD_ERROR).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.event_join_error_network_required))
+            .assertIsDisplayed()
+    }
+
+    /**
+     * And the distinction that message exists to draw. A code that resolved to
+     * a different event is not a network problem, and telling the participant
+     * it is would send them to fix the wrong thing. Asserted as two different
+     * strings rather than as one specific string, so it fails if the copy is
+     * ever collapsed back into a single generic refusal.
+     */
+    @Test
+    fun aCodeMismatchDoesNotReuseTheNetworkMessage() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val networkCopy = context.getString(R.string.event_join_error_network_required)
+        val mismatchCopy = context.getString(R.string.event_join_error_code_mismatch)
+        assertTrue(networkCopy != mismatchCopy, "a code mismatch and a dead network must not read alike")
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                ManualEventCodeContent(
+                    state = EventJoinScreenState(
+                        fieldError = EventJoinFieldError.JoinFailed(EventJoinFailureReason.CODE_MISMATCH),
+                    ),
+                    onEventCodeChanged = {},
+                    onSubmit = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText(mismatchCopy).assertIsDisplayed()
+        composeTestRule.onNodeWithText(networkCopy).assertDoesNotExist()
+    }
+
+    /**
+     * beid#463 acceptance condition 2 at the surface: the affordance that makes
+     * a 64-character code enterable exists and is wired. What it does with the
+     * clipboard is asserted in `EventJoinViewModelTest`, where no Android
+     * clipboard is needed to say it.
+     */
+    @Test
+    fun theEventCodeScreenOffersPaste() {
+        var pasteRequests = 0
+        composeTestRule.setContent {
+            BeidAppTheme {
+                ManualEventCodeContent(
+                    state = EventJoinScreenState(),
+                    onEventCodeChanged = {},
+                    onPasteEventCode = { pasteRequests += 1 },
+                    onSubmit = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PASTE_BUTTON)
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals(1, pasteRequests)
+    }
 }

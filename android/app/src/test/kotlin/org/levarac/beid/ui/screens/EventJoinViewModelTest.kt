@@ -15,6 +15,8 @@ import kotlinx.coroutines.test.setMain
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.shared.event.EventJoinFailureReason
+import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 
 /**
  * Unit tests for [EventJoinViewModel] against a [FakeEventJoinSession] — no
@@ -218,5 +220,157 @@ class EventJoinViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(remaining.eventCodeHashHex, viewModel.uiState.value.selectedNearbyEventHashHex)
+    }
+
+    /**
+     * beid#463 acceptance condition 2, stated the way the issue states it: not
+     * that the field refuses hex, but that a participant can finish without
+     * typing any. A canonical open code is 64 hex characters and the issue
+     * rules out hand-entering one as a route that does not exist in practice,
+     * so the test that matters is that one paste and one submit are the whole
+     * interaction.
+     *
+     * The falsifier is deliberate. If paste were implemented by routing the
+     * clipboard through the same per-keystroke entry point the keyboard uses,
+     * this test would still pass on the joined code — so it also asserts that
+     * the typing path was never entered, by leaving `onEventCodeChanged`
+     * unused and checking the field arrived at the pasted value in one step.
+     */
+    @Test
+    fun aPastedCanonicalCodeJoinsWithoutAnyCharacterBeingTyped() = runTest {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEventCodePasted(CANONICAL_OPEN_CODE)
+        viewModel.submit()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(CANONICAL_OPEN_CODE, viewModel.uiState.value.eventCode)
+        assertEquals(
+            CANONICAL_OPEN_CODE,
+            session.joinedCode,
+            "a pasted canonical open code must reach the session exactly as pasted",
+        )
+        assertNull(viewModel.uiState.value.fieldError)
+    }
+
+    /**
+     * A paste of the same code with the surrounding whitespace a clipboard
+     * usually brings, and in the case a wallet produces. Normalization is
+     * `shared/`'s (`normalizedEventCodeOrNull`), and this asserts the paste
+     * route reaches it rather than sidestepping it with its own trim.
+     */
+    @Test
+    fun aPastedCodeIsNormalizedByTheSharedRuleBeforeItReachesTheSession() = runTest {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEventCodePasted("  " + CANONICAL_OPEN_CODE.uppercase() + "\n")
+        viewModel.submit()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(CANONICAL_OPEN_CODE, session.joinedCode)
+    }
+
+    /**
+     * An empty clipboard must not wipe a code the participant already has in
+     * the field. A mis-tap on Paste is a very ordinary thing to do while
+     * standing in a venue doorway holding the only copy of a 64-character
+     * string.
+     */
+    @Test
+    fun pastingAnEmptyClipboardLeavesTheExistingCodeAlone() = runTest {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEventCodeChanged("ethtokyo2026")
+        viewModel.onEventCodePasted(null)
+        viewModel.onEventCodePasted("   ")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("ethtokyo2026", viewModel.uiState.value.eventCode)
+    }
+
+    /**
+     * beid#463 acceptance condition 3, at this layer: a refusal has to become
+     * something the screen can render, carrying the reason the session decided.
+     * Asserted against the shared enum rather than against any string — the
+     * copy lives in the string catalog and this layer must not know it.
+     */
+    @Test
+    fun aRefusedJoinBecomesAFieldErrorCarryingTheReason() = runTest {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        session.emit(EventJoinUiState.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(
+            EventJoinFieldError.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED),
+            viewModel.uiState.value.fieldError,
+        )
+    }
+
+    /**
+     * The reason has to survive the trip rather than being flattened on
+     * arrival. Without this, an implementation that produced one generic
+     * JoinFailed for every refusal would pass the test above.
+     */
+    @Test
+    fun eachRefusalReasonSurvivesIntoTheFieldError() = runTest {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        for (reason in EventJoinFailureReason.entries) {
+            session.emit(EventJoinUiState.Idle)
+            testDispatcher.scheduler.advanceUntilIdle()
+            session.emit(EventJoinUiState.JoinFailed(reason))
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(
+                EventJoinFieldError.JoinFailed(reason),
+                viewModel.uiState.value.fieldError,
+                "reason $reason must reach the surface intact",
+            )
+        }
+    }
+
+    /** A refusal must not stay on screen once the session has moved on. */
+    @Test
+    fun leavingTheFailedStateClearsTheFieldError() = runTest {
+        val session = FakeEventJoinSession(EventJoinUiState.JoinFailed(EventJoinFailureReason.EVENT_NOT_FOUND))
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        session.emit(EventJoinUiState.VerifyingRegistry)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.fieldError)
+    }
+
+    /** The rescue offer is the session's decision; this layer only republishes it. */
+    @Test
+    fun theRescueOfferReachesTheScreenState() = runTest {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(NearbyEventSearchOutcome.SEARCHING, viewModel.uiState.value.searchOutcome)
+
+        session.emitSearchOutcome(NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED, viewModel.uiState.value.searchOutcome)
+    }
+
+    private companion object {
+        /** A well-formed canonical open code: the lowercase hex of a whole 32-byte Event ID. */
+        const val CANONICAL_OPEN_CODE =
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -28,8 +29,11 @@ import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.shared.event.EventJoinFailureReason
+import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
+import org.levarac.beid.ui.designsystem.BeidSecondaryButton
 import org.levarac.beid.ui.designsystem.BeidTextField
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidSpacing
@@ -50,13 +54,34 @@ object EventJoinScreenTestTags {
     const val ACCOUNT_ENTRY = "event_join_account_entry"
     const val NEARBY_EVENT_LIST = "nearby_event_list"
 
+    /** beid#463: the rescue route out of a search that found nothing joinable. */
+    const val RESCUE_ENTRY_BUTTON = "event_join_rescue_entry_button"
+
+    /** beid#463: fills the code field from the clipboard, so no one hand-types 64 hex characters. */
+    const val PASTE_BUTTON = "event_join_paste_button"
+
     fun nearbyEventCard(eventCodeHashHex: String): String = "nearby_event_card_$eventCodeHashHex"
 }
 
+/**
+ * The one place a refusal becomes a sentence (beid#463).
+ *
+ * The branch is on the shared [EventJoinFailureReason] rather than on anything
+ * this file decides, and it is exhaustive with no `else`: a reason added later
+ * has to be given copy here rather than silently inheriting the generic
+ * message, which is how the network case got hidden in the first place.
+ */
 @Composable
 private fun EventJoinFieldError.message(): String = when (this) {
     EventJoinFieldError.EmptyCode -> stringResource(R.string.event_join_error_empty_code)
-    EventJoinFieldError.JoinFailed -> stringResource(R.string.event_join_error_join_failed)
+    is EventJoinFieldError.JoinFailed -> when (reason) {
+        EventJoinFailureReason.NETWORK_REQUIRED -> stringResource(R.string.event_join_error_network_required)
+        EventJoinFailureReason.EVENT_NOT_FOUND -> stringResource(R.string.event_join_error_event_not_found)
+        EventJoinFailureReason.CODE_MISMATCH -> stringResource(R.string.event_join_error_code_mismatch)
+        EventJoinFailureReason.EVENT_NOT_ACTIVE -> stringResource(R.string.event_join_error_event_not_active)
+        EventJoinFailureReason.VERIFICATION_FAILED -> stringResource(R.string.event_join_error_verification_failed)
+        EventJoinFailureReason.UNKNOWN -> stringResource(R.string.event_join_error_join_failed)
+    }
 }
 
 /**
@@ -71,12 +96,17 @@ private fun EventJoinFieldError.message(): String = when (this) {
  * production path and the read-only scenario/preview path share (beid#363).
  */
 @Composable
-fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
+fun EventJoinScreen(
+    viewModel: EventJoinViewModel,
+    onOpenAccount: () -> Unit,
+    onOpenManualEventCode: () -> Unit,
+) {
     val uiState by viewModel.uiState.collectAsState()
 
     EventJoinContent(
         state = uiState,
         onOpenAccount = onOpenAccount,
+        onOpenManualEventCode = onOpenManualEventCode,
         onJoinNearbyEvent = viewModel::joinNearbyEvent,
         onOpenSettings = viewModel::openAppSettings,
         onSimulateSignalLost = viewModel::simulateSignalLost,
@@ -118,6 +148,12 @@ fun EventJoinScreen(viewModel: EventJoinViewModel, onOpenAccount: () -> Unit) {
 fun EventJoinContent(
     state: EventJoinScreenState,
     onOpenAccount: () -> Unit,
+    /**
+     * beid#463's rescue route. Defaulted to a no-op for the read-only
+     * scenario/preview path, which has no navigator — the same reason
+     * [onJoinNearbyEvent] is a no-op there.
+     */
+    onOpenManualEventCode: () -> Unit = {},
     onJoinNearbyEvent: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onSimulateSignalLost: () -> Unit,
@@ -174,6 +210,25 @@ fun EventJoinContent(
                     enabled = sessionState is EventJoinUiState.Idle,
                     onJoin = onJoinNearbyEvent,
                 )
+                // beid#463. Offered on the shared outcome, never on "the card
+                // list looks empty": a screen full of candidates that cannot be
+                // joined is the same dead end as an empty one, and the rule
+                // that knows the difference lives in `shared/` so iOS offers
+                // the route at the same moment.
+                if (state.searchOutcome == NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED) {
+                    Text(
+                        text = stringResource(R.string.event_join_rescue_prompt),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BeidTheme.colors.textSecondary,
+                    )
+                    BeidSecondaryButton(
+                        text = stringResource(R.string.event_join_rescue_enter_code),
+                        contentColor = BeidTheme.colors.textPrimary,
+                        borderColor = BeidTheme.colors.textSecondary,
+                        onClick = onOpenManualEventCode,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
+                    )
+                }
                 if (sessionState !is EventJoinUiState.Idle) {
                     Text(
                         text = statusText(sessionState),
@@ -198,9 +253,14 @@ fun EventJoinContent(
 @Composable
 fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    // The clipboard is read here and nowhere below: `ManualEventCodeContent`
+    // stays a function of its state, and the ViewModel receives a plain
+    // string, so neither of them needs an Android clipboard to be testable.
+    val clipboard = LocalClipboardManager.current
     ManualEventCodeContent(
         state = uiState,
         onEventCodeChanged = viewModel::onEventCodeChanged,
+        onPasteEventCode = { viewModel.onEventCodePasted(clipboard.getText()?.text) },
         onSubmit = viewModel::submit,
     )
 }
@@ -221,6 +281,7 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
 fun ManualEventCodeContent(
     state: EventJoinScreenState,
     onEventCodeChanged: (String) -> Unit,
+    onPasteEventCode: () -> Unit = {},
     onSubmit: () -> Unit,
 ) {
     Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
@@ -244,6 +305,18 @@ fun ManualEventCodeContent(
                     Text(error.message(), color = BeidTheme.colors.textPrimary)
                 }
             }
+            // beid#463. A canonical open code is 64 hex characters, which the
+            // issue rules out hand-entering as a route that does not exist in
+            // practice. The field stays editable for a venue's short
+            // human-readable code; this is what makes the canonical one usable
+            // at all.
+            BeidSecondaryButton(
+                text = stringResource(R.string.event_join_paste_code),
+                contentColor = BeidTheme.colors.textPrimary,
+                borderColor = BeidTheme.colors.textSecondary,
+                onClick = onPasteEventCode,
+                modifier = Modifier.testTag(EventJoinScreenTestTags.PASTE_BUTTON),
+            )
             BeidPrimaryButton(
                 text = stringResource(R.string.event_join_button),
                 containerColor = BeidTheme.colors.actionPrimary,
@@ -334,10 +407,14 @@ private fun NearbyEventCards(
  * directly against a fake session, without a real [EventJoinSession].
  */
 @Composable
-fun EventJoinRoute(session: EventJoinSession, onOpenAccount: () -> Unit) {
+fun EventJoinRoute(
+    session: EventJoinSession,
+    onOpenAccount: () -> Unit,
+    onOpenManualEventCode: () -> Unit,
+) {
     LaunchedEffect(session) { session.startNearbyEventDiscovery() }
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
-    EventJoinScreen(viewModel, onOpenAccount)
+    EventJoinScreen(viewModel, onOpenAccount, onOpenManualEventCode)
 }
 
 @Composable
@@ -347,7 +424,10 @@ private fun statusText(state: EventJoinUiState): String = when (state) {
     is EventJoinUiState.VerifyingRegistry -> stringResource(R.string.event_join_status_verifying_registry)
     is EventJoinUiState.Sensing -> phaseStatusText(state.phase)
     is EventJoinUiState.PermissionDenied -> stringResource(R.string.event_join_status_permission_denied)
-    is EventJoinUiState.JoinFailed -> stringResource(R.string.event_join_error_join_failed)
+    // Same copy as the field-level message, reached through the same shared
+    // reason, so the status line and the inline error cannot say two different
+    // things about one refusal.
+    is EventJoinUiState.JoinFailed -> EventJoinFieldError.JoinFailed(state.reason).message()
 }
 
 @Composable
@@ -404,6 +484,25 @@ private fun EventJoinScreenPermissionDeniedPreview() {
     EventJoinContentPreview(EventJoinScreenState(sessionState = EventJoinUiState.PermissionDenied))
 }
 
+/**
+ * beid#463's rescue offer, and the case it exists for: a card on screen that
+ * cannot be joined. An implementation that decided this on an empty list would
+ * render this preview without the button.
+ */
+@Preview(name = "Idle — search found nothing joinable, rescue offered", showBackground = true)
+@Composable
+private fun EventJoinScreenRescueOfferedPreview() {
+    EventJoinContentPreview(
+        EventJoinScreenState(
+            sessionState = EventJoinUiState.Idle,
+            nearbyEventCards = listOf(
+                NearbyEventCard("Unnamed beacon nearby", null, null, null, "2222222222222222"),
+            ),
+            searchOutcome = NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
+        ),
+    )
+}
+
 @Composable
 private fun ManualEventCodeContentPreview(error: EventJoinFieldError) {
     BeidAppTheme {
@@ -422,13 +521,21 @@ private fun ManualEventCodeEmptyCodeErrorPreview() {
 }
 
 /**
- * Pins [EventJoinFieldError.JoinFailed]'s copy/visual even though it has no
- * live producer yet (see the kdoc on [EventJoinFieldError]) — Preview is the
- * only way to exercise it until [EventJoinSession] gains a distinct
- * join-failure state.
+ * The refusal a participant on a dead network sees (beid#463, acceptance
+ * condition 3). Pinned as its own preview rather than folded into a generic
+ * join-failure one, because the whole point is that this message differs from
+ * every other refusal: it is the only one that does not ask them to check the
+ * code.
  */
-@Preview(name = "Manual entry — error, join failed (dormant, see kdoc)", showBackground = true)
+@Preview(name = "Manual entry — error, network required", showBackground = true)
 @Composable
-private fun ManualEventCodeJoinFailedErrorPreview() {
-    ManualEventCodeContentPreview(EventJoinFieldError.JoinFailed)
+private fun ManualEventCodeNetworkRequiredErrorPreview() {
+    ManualEventCodeContentPreview(EventJoinFieldError.JoinFailed(EventJoinFailureReason.NETWORK_REQUIRED))
+}
+
+/** The refusal for a code that resolved to some other event (beid#463). */
+@Preview(name = "Manual entry — error, code did not match the event", showBackground = true)
+@Composable
+private fun ManualEventCodeMismatchErrorPreview() {
+    ManualEventCodeContentPreview(EventJoinFieldError.JoinFailed(EventJoinFailureReason.CODE_MISMATCH))
 }

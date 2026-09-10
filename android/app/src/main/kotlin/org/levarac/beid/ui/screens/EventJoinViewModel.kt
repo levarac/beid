@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.shared.event.EventJoinFailureReason
+import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 import org.levarac.beid.shared.event.normalizedEventCodeOrNull
 
 /**
@@ -17,17 +19,18 @@ import org.levarac.beid.shared.event.normalizedEventCodeOrNull
  * mirroring iOS's `EventCodeEntryView.errorMessage` (`ios/Beid/Views/
  * EventCodeEntryView.swift`) — same copy, same "clear on edit" behavior.
  *
- * [JoinFailed] has no producer yet: [EventJoinSession]'s underlying state
- * machine ([EventJoinUiState]) collapses every non-permission join outcome
- * into [EventJoinUiState.PermissionDenied] — it doesn't yet distinguish "the
- * SDK rejected this code" from "permission was denied". Wiring this branch
- * is a coordinator change, out of this ViewModel's scope — the case is kept
- * here, sharing the same rendering path as [EmptyCode], so the future wiring
- * is a one-line state change rather than new UI.
+ * [JoinFailed] is produced as of beid#463, from
+ * [EventJoinUiState.JoinFailed]'s reason. Before it, this class carried a note
+ * saying the case had no producer because the session collapsed every
+ * non-permission outcome together — which is precisely the gap acceptance
+ * condition 3 names: a participant who cannot reach the network has to be told
+ * that, and a screen that renders nothing at all cannot tell them anything.
  */
 sealed class EventJoinFieldError {
     data object EmptyCode : EventJoinFieldError()
-    data object JoinFailed : EventJoinFieldError()
+
+    /** A join that was attempted and refused. [reason] is decided in `shared/`, the copy for it is not. */
+    data class JoinFailed(val reason: EventJoinFailureReason) : EventJoinFieldError()
 }
 
 /** Everything [org.levarac.beid.ui.screens.EventJoinScreen] needs to render, combined into one flow. */
@@ -37,6 +40,7 @@ data class EventJoinScreenState(
     val sessionState: EventJoinUiState = EventJoinUiState.Idle,
     val nearbyEventCards: List<org.levarac.beid.sensing.NearbyEventCard> = emptyList(),
     val selectedNearbyEventHashHex: String? = null,
+    val searchOutcome: NearbyEventSearchOutcome = NearbyEventSearchOutcome.SEARCHING,
 )
 
 /**
@@ -55,7 +59,23 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
     init {
         viewModelScope.launch {
             session.state.collect { sessionState ->
-                _uiState.update { it.copy(sessionState = sessionState) }
+                _uiState.update {
+                    it.copy(
+                        sessionState = sessionState,
+                        // A refusal is surfaced under the field, where the code
+                        // that caused it is still on screen and still editable.
+                        // Any other state clears it: leaving the error visible
+                        // through the next attempt would attach last attempt's
+                        // explanation to this attempt's code.
+                        fieldError = (sessionState as? EventJoinUiState.JoinFailed)
+                            ?.let { failed -> EventJoinFieldError.JoinFailed(failed.reason) },
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            session.nearbyEventSearchOutcome.collect { outcome ->
+                _uiState.update { it.copy(searchOutcome = outcome) }
             }
         }
         viewModelScope.launch {
@@ -80,6 +100,26 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun onEventCodeChanged(code: String) {
         _uiState.update { it.copy(eventCode = code, fieldError = null) }
+    }
+
+    /**
+     * Fills the field from the clipboard in one action (beid#463).
+     *
+     * A separate entry point from [onEventCodeChanged] rather than a call into
+     * it, because the thing that has to be true here is not "the field ends up
+     * holding this text" but "the participant never typed it". A canonical
+     * open code is 64 hex characters; the issue rules out hand-entering one as
+     * a route that does not exist in practice, and a paste that went through
+     * the per-keystroke path would be indistinguishable in a test from someone
+     * typing it, which is exactly the claim acceptance condition 2 makes.
+     *
+     * Blank clipboard content is ignored rather than clearing the field: a
+     * mis-tap on paste with an empty clipboard should not destroy a code the
+     * participant already has in front of them.
+     */
+    fun onEventCodePasted(clipboardText: String?) {
+        val pasted = clipboardText?.takeIf { it.isNotBlank() } ?: return
+        _uiState.update { it.copy(eventCode = pasted, fieldError = null) }
     }
 
     fun submit() {

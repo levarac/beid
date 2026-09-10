@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import kotlinx.coroutines.flow.StateFlow
+import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 
 /**
  * A nearby beacon candidate. Its name is an unauthenticated B005 announcement;
@@ -50,6 +51,17 @@ interface EventJoinSession {
 
     /** Every nearby candidate is displayable; only cards with an Event ID are joinable. */
     val nearbyEventCards: StateFlow<List<NearbyEventCard>>
+
+    /**
+     * Whether the surface should still be searching or should now offer the
+     * paste rescue route (beid#463).
+     *
+     * Separate from [nearbyEventCards] because it is not a function of them
+     * alone: a search that has found nothing joinable for twenty seconds and
+     * one that started two seconds ago look identical in the card list, and
+     * only one of them means the participant is stuck.
+     */
+    val nearbyEventSearchOutcome: StateFlow<NearbyEventSearchOutcome>
 
     /** Starts passive nearby-event discovery when the EventJoin surface becomes active. */
     fun startNearbyEventDiscovery()
