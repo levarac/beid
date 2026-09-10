@@ -159,6 +159,9 @@ targets:
     platform: iOS
     sources:
       - BeidTests
+      # One frozen public artifact for the venue provider/consumer contract.
+      - path: ../shared/src/commonTest/fixtures/vectors/positive/venue-current-lease-v1.json
+        buildPhase: resources
       # The app's source tree, copied into the test bundle as a folder
       # reference. `ParticipantRelayIsolationTests` reads app source to assert
       # that certain names appear nowhere in it, and a test bundle cannot
