@@ -10,10 +10,22 @@ manual activation steps that must be completed before API uploads can work.
 Bundle and uploads it to Google Play internal testing. It runs on pushes to
 `main` that change `what_to_test.json` or `what_to_test.android.json`, and can
 also be started manually. The job runs only when the repository variable
-`GHA_DELIVERY` is exactly `on`, uses the self-hosted `emi` runner, and keeps
-Android deliveries serialized without cancelling an in-progress upload.
+`GHA_ANDROID_DELIVERY` is exactly `on`, uses the self-hosted `emi` runner, and
+keeps Android deliveries serialized without cancelling an in-progress upload.
 
-The workflow is still not activated (`GHA_DELIVERY` remains unset/`off`), but
+**This is an Android-only switch, and that is the point.** It used to be
+`GHA_DELIVERY`, which also gates the two temporary iOS lanes
+(`internal-testflight.yml`, `release-testflight.yml`). Since
+`internal-testflight.yml` triggers on a push to `main` that changes
+`what_to_test.json` — the very file that also triggers this workflow — a single
+shared variable made "turn on Android delivery" indistinguishable from "turn on
+an iOS upload to App Store Connect from the same commit". The gates were split
+in gh#401 so that arming Android arms Android only. Setting
+`GHA_ANDROID_DELIVERY` has no effect on the iOS lanes, and setting
+`GHA_DELIVERY` has no effect on this one.
+
+The workflow is still not activated (`GHA_ANDROID_DELIVERY` remains
+unset/`off`), but
 the store-side bootstrap is done: the `org.levarac.beid` Play Console app
 exists (same Levarac developer account as meissa), an upload keystore was
 generated, and the mandatory first AAB upload was completed manually via the
@@ -24,7 +36,7 @@ upload does not need the CI runner. The Play publishing service account is
 GCP project), granted "Release apps to testing tracks" scoped to just this
 app. Remaining: either place the upload keystore and this service-account
 JSON on `emi` at the paths below, or set the GitHub Secrets described in
-"Hosted-runner support" — then flip `GHA_DELIVERY` to `on`.
+"Hosted-runner support" — then flip `GHA_ANDROID_DELIVERY` to `on`.
 
 The job's `runs-on` also now resolves through the repository variable
 `RUNS_ON_ANDROID` (`${{ vars.RUNS_ON_ANDROID || 'emi' }}`), so the same
@@ -182,7 +194,10 @@ should be expected to go green.
 
 ## Disabling the temporary lane
 
-Set the repository variable `GHA_DELIVERY` to `off`. The job-level gate then
-skips this Android lane and both temporary iOS lanes without deleting workflow
-files or runner credentials. Credential removal and any permanent Android
-release process are separate owner decisions.
+Set the repository variable `GHA_ANDROID_DELIVERY` to `off`. The job-level gate
+then skips this Android lane without deleting workflow files or runner
+credentials. **It does not touch the two temporary iOS lanes** — those are
+gated by `GHA_DELIVERY` and must be disabled separately. Before gh#401 one
+variable did both, which is also why turning one on could not be done without
+turning the other on. Credential removal and any permanent Android release
+process are separate owner decisions.

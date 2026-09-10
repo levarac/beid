@@ -19,7 +19,14 @@ concurrency:
 jobs:
   deliver:
     name: Build and upload AAB to internal testing
-    if: ${{ vars.GHA_DELIVERY == 'on' }}
+    # Android has its OWN switch, deliberately not the iOS one. `GHA_DELIVERY`
+    # also gates internal-testflight.yml and release-testflight.yml, and
+    # internal-testflight.yml fires on a push to `main` that changes
+    # `what_to_test.json` -- the same file that fires this workflow. Sharing
+    # one variable therefore means arming Android also arms an iOS upload to
+    # App Store Connect, from the same commit, without anyone asking for it.
+    # Separate gates are what make "Android only" expressible at all (gh#401).
+    if: ${{ vars.GHA_ANDROID_DELIVERY == 'on' }}
     runs-on: ${{ vars.RUNS_ON_ANDROID || 'emi' }}
     timeout-minutes: 90
     steps:
