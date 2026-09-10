@@ -45,12 +45,26 @@ if (( version_code > 2100000000 )); then
 fi
 export BEID_ANDROID_VERSION_CODE="$version_code"
 
+# The git height is computed by the workflow (which owns the checkout depth that
+# makes it correct) and arrives here through the environment. Under CI its
+# absence is a hard failure rather than a fallback to "local": a delivered build
+# that calls itself local is worse than a red one, and it is exactly the silent
+# degradation this key exists to make impossible. Outside CI the flag is omitted
+# so a developer's local build gets Gradle's own "local" default (beid#491).
+gradle_height_args=()
+if [[ -n "${BEID_GIT_HEIGHT:-}" ]]; then
+  gradle_height_args=("-PgitHeight=${BEID_GIT_HEIGHT}")
+elif [[ -n "${CI:-}" ]]; then
+  fail "BEID_GIT_HEIGHT is unset under CI; refusing to deliver a build whose version row would read 'local'."
+fi
+
 echo "Building Android release AAB with versionCode $version_code..."
 (
   cd "$REPO_ROOT/android"
   ./gradlew \
     :app:bundleRelease \
     -I "$SCRIPT_DIR/android-version-code.init.gradle" \
+    "${gradle_height_args[@]}" \
     --no-daemon
 )
 

@@ -145,6 +145,37 @@ otherwise fail the step (gh#401). The subshell absorbs only `yes`'s death —
 appending `|| true` to the whole pipeline instead would also hide a genuine
 `sdkmanager` failure.
 
+## Build position vs store number (git height)
+
+Verified 2026-09-10.
+
+The Android version row is `1.0.0 (1234+1000000091)`, which reads as
+`{versionName} ({git height}+{versionCode})`. The two numbers have different
+owners.
+
+- **`versionCode` — the store number.** Assigned by the delivery workflow from
+  the run (`1e9 + run×10 + attempt`), as described above. **gh#491 did not change
+  how it is assigned**, and `versionCode = 1` in `android/app/build.gradle.kts`
+  stays as the source-level placeholder.
+- **git height — the build position.** `git rev-list --count HEAD`, computed by
+  `internal-google-play.yml` and passed to Gradle as `-PgitHeight`, surfaced as
+  `BuildConfig.GIT_HEIGHT`. It is a function of the built commit's ancestry, so
+  **an Android build and an iOS build showing the same height were built from the
+  same commit** — that is the only thing it is for. It identifies a commit, not a
+  release.
+
+**`fetch-depth: 0` on the checkout is load-bearing, not hygiene.** The default
+depth-1 checkout is shallow, and on a shallow clone `git rev-list --count HEAD`
+does not fail and does not return empty — it returns a **plausible smaller
+number**, which would ship a wrong build position indistinguishable from a right
+one. The height step therefore guards on
+`git rev-parse --is-shallow-repository`, not on emptiness. iOS meets the same
+requirement by deepening in `ci_post_clone.sh`.
+
+`build-and-sign-android.sh` refuses to deliver when `BEID_GIT_HEIGHT` is unset
+under CI rather than falling back to `local`; outside CI it omits the flag so a
+developer build reads `local` from Gradle's own default. Never `0`, never empty.
+
 ## Ken-side activation list
 
 These prerequisites were confirmed missing in the 2026-08-20 preflight; status

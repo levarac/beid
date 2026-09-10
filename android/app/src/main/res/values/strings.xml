@@ -88,6 +88,8 @@
     <string name="account_leave_event_button">Leave Event</string>
     <!-- Nav row on the Account screen (mirrors iOS's AccountSheetView "Past Events" row) that opens the Records screen. -->
     <string name="account_records_button">Records</string>
+    <!-- %1$s is the build version, e.g. "1.0.0 (1234+1000000091)". Not copy: do not translate the value. -->
+    <string name="account_version_label">Version %1$s</string>
 
     <!-- Records screen (beid#121): flat, reverse-chronological list of collected proofs, reached from Account. Reduced scope — no event grouping, no tap-to-detail; see RecordsScreen.kt's kdoc. -->
     <string name="records_title">Records</string>
