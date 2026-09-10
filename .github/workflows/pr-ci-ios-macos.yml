@@ -1,15 +1,27 @@
 name: PR iOS CI (self-hosted macOS, informational)
 
 on:
-  # Triggers are deliberately narrow (gh#479). This lane takes ~30 minutes on
-  # the single self-hosted macOS host that also serves human-run local iOS
-  # suites, and it gates nothing: Xcode Cloud's "Beid | PR Build & Test |
-  # Test - iOS" verifies the same head in ~12 minutes and is the effective
-  # gate. Firing on every PR push spent that host on intermediate heads nobody
-  # merges — measured 2026-09-10, ten runs held it for 274 minutes in one day,
-  # 147 of which were one PR's six pushes, with two runs overlapping for 17
-  # minutes. So there is no `synchronize` here. The heads worth 30 minutes are
-  # the one proposed for merge and `main` once the merge has landed.
+  # Triggers are deliberately narrow (gh#479). This lane takes ~30 minutes and
+  # gates nothing: Xcode Cloud's "Beid | PR Build & Test | Test - iOS" verifies
+  # the same head in ~12 minutes and is the effective gate.
+  #
+  # The cost is TestFlight delivery latency, not developer-machine contention.
+  # The repository has exactly one self-hosted runner (`emi`), and
+  # `internal-testflight.yml` and `release-testflight.yml` both require
+  # `[self-hosted, emi]` — that same single runner. Their concurrency group
+  # (`beid-ios-delivery`) differs from this lane's, so GitHub does not
+  # serialize them; the single runner does. A 30-minute informational run on
+  # an intermediate head that nobody merges can therefore sit in front of a
+  # TestFlight build testers are waiting for.
+  #
+  # Do not restate the earlier rationale that this run competes with local iOS
+  # suites on a developer's machine. It was wrong: `emi` is a separate host,
+  # and the machine those suites run on has no runner registered at all, so
+  # these runs never touched local Gradle or simulators. It is corrected here
+  # rather than deleted because it was cited in gh#479 and in review.
+  #
+  # Nothing is lost by narrowing: the merge-candidate head and `main` are each
+  # still measured exactly once. So there is no `synchronize` here.
   #
   # The `paths` list is repeated per event because GitHub Actions does not
   # support YAML anchors in workflow files. Keep the two copies identical.
@@ -73,7 +85,7 @@ jobs:
     # fromJSON is required because runs-on treats a plain string variable as
     # ONE label; it does not split on commas.
     runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
-    # Draft pulls do not get 30 minutes of the shared macOS host. `opened`
+    # Draft pulls do not get 30 minutes of the delivery runner. `opened`
     # above fires for drafts too, so this is where they are dropped. The
     # event_name clause keeps `push` and `workflow_dispatch` unaffected, since
     # `github.event.pull_request` is absent for them and would otherwise make

@@ -367,11 +367,31 @@ record:
    `repos/.../commits/<sha>/check-runs`). Push-level evaluation is therefore
    ruled out.
 
+   **The negative half (PR #484, 2026-09-10).** The positive observation alone
+   shows only that a build *can* start when something outside the set is
+   present; it does not show the matcher ever suppresses anything. #484's
+   cumulative set was `.github/workflows/internal-google-play.yml` +
+   `docs/google-play.md` — 2 of 2 inside the exclusion set — and **Xcode Cloud
+   did not start**: zero check-runs *and* zero commit statuses on the head.
+   Both surfaces were read, because Xcode Cloud reports to commit statuses in
+   some configurations and reading only check-runs would confuse "reported
+   elsewhere" with "did not run". Lag was excluded too: on #483 the check
+   appeared within a minute of the push, while #484 was still empty on both
+   surfaces more than five minutes after its push, once the Actions checks had
+   gone terminal.
+
+   The pair is the control. Positive alone cannot distinguish a working matcher
+   from one that never suppresses; negative alone cannot distinguish a working
+   matcher from one that never starts.
+
    The transferable part is not the conclusion but the shape: **before citing a
    control, check whether the competing explanation would have produced a
    different result.** If it would not, say so and leave the question open
    rather than recording a conclusion the experiment cannot carry — otherwise
    the next reader inherits a settled-looking answer built on a non-control.
+   The same asymmetry applies to one-sided evidence generally: cases where a
+   thing happened establish that a condition is sufficient for it to be
+   possible, never that the condition is what suppresses it.
 4. **Void clause** — if **any** file at the final head is outside the exclusion
    set, absence of the check is the hard stop again and the remedy is a
    close→reopen retrigger, **not** this record. Re-evaluate (1) at the head SHA
@@ -648,10 +668,25 @@ dates). The contract every agent must know before touching delivery files:
     (1)(2) には従来どおり `paths` filter がかかり、`ios/` `shared/`
     Android build 関連パスの変更でのみ起動する。`workflow_dispatch` に
     `paths` は効かないので、手動実行は常に走る。`synchronize` を外した理由は、
-    この lane が 1 回あたり約 30 分 host を占有しながら merge を gate せず、
-    同じ head を Xcode Cloud の `Beid | PR Build & Test | Test - iOS` が
-    約 12 分で検証しているため。2026-09-10 の実測では 10 run が 1 日に host を
-    274 分占有し、うち 147 分は 1 本の PR の 6 push 分だった。
+    この lane が 1 回あたり約 30 分かかりながら merge を gate せず、同じ head を
+    Xcode Cloud の `Beid | PR Build & Test | Test - iOS` が約 12 分で検証して
+    いるため。**コストの実体は TestFlight 配信の遅延であって、開発機の取り合い
+    ではない。** この repository の self-hosted runner は `emi` ただ 1 つで、
+    `internal-testflight.yml` と `release-testflight.yml` はどちらも
+    `runs-on: [self-hosted, emi]`、つまり同じ 1 つの runner を要求する。
+    配信側の concurrency group (`beid-ios-delivery`) はこの lane のものとは
+    別なので、両者を直列化しているのは GitHub の concurrency ではなく
+    **runner が 1 つしかないこと**である。したがって誰も merge しない中間 head
+    への 30 分の informational run が、**テスターが待っている TestFlight
+    ビルドの前に居座り得る**。2026-09-10 の実測では 10 run が 1 日にその runner
+    を 274 分占有し、うち 147 分は 1 本の PR の 6 push 分だった。
+    **訂正 (2026-09-10)**: この節は当初「同じ host をローカルの iOS フルスイート
+    と共有しており人手の検証が待たされる」と書いていた。**それは誤り。** `emi` は
+    別のホストで、それらのローカル実行が動く開発機には runner が 1 つも登録されて
+    いない (実測 0 プロセス)。よって当該 run がローカルの Gradle や simulator に
+    触れたことは一度も無い。絞る判断自体と実測値は変わらず、**害の同定だけが
+    間違っていた**。削除ではなく訂正として残すのは、旧記述が #479 とレビューで
+    引かれたため。
     **`opened` を入れてあるのは、`ready_for_review` が draft から上げた時に
     しか発火しないため。** issue #479 の本文は `ready_for_review` 単独を
     指定していたが、直近 25 本を timeline で数えると決着済み 22 本のうち
