@@ -68,6 +68,17 @@ class EventJoinCoordinatorRegistryGateTest {
         coordinator.joinEvent("ROUTED-BUT-UNVERIFIABLE")
         runCurrent()
 
+        // Pins this test's own name (beid#434). Without it the name is true and
+        // nothing enforces it: every assertion below passes just as well when
+        // the routing call fails and no definition read is ever made, so the
+        // name would silently become false the moment someone edited
+        // `FakeEventJoinRegistry.Answer.DEFINITION_FAILS`. Same idiom as
+        // `…WhileTheDefinitionReadIsPending` four tests down.
+        assertEquals(
+            1,
+            registry.definitionRequests,
+            "the definition read must actually have happened for it to have returned nothing",
+        )
         assertNoJoinAndNoSensing(engine, coordinator)
         assertEquals(
             EventJoinUiState.JoinFailed,
