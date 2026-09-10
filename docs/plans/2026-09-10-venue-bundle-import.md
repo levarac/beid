@@ -11,6 +11,7 @@ exactly, including the bounds-before-signature ordering. The maintainer's curren
 | family | class | current_ios | current_android | ruling_or_invariant | owner | shared_symbol | licensing_test | platform_callers | status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Venue artifact decode | C / INVENT | No venue importer found | No venue importer found | Exact deterministic CBOR bundle and handoff; reject malformed inputs | parallax #69 | VenueBundle / VenueHandoff | VenueBundleCodecTest / VenueBundleBoundsTest / VenueLeaseFixtureTest | iOS file/link import pending; Android adapter deferred to beid #460 | Shared RED/GREEN recorded; native wiring pending |
+| Venue identity import | C / INVENT | Provider not yet wired | Venue surface deferred to #460 | Clock-free handoff/deployment/source binding and named anchored signed definition, never permission to serve | beid #432 | verifyVenueBundleIdentity / VenueBundleIdentity | VenueBundleIdentityTest / RegistryClientTest | Native provider is the next follow-up step | Shared RED/GREEN verified; native call path pending |
 | Venue import verification | C / INVENT | None | None | Handoff and configured chain coordinates, anchored signed definition, SDK-verified envelopes, full schedule must agree | beid #432 / parallax #69 | VenueBundleImport | VenueBundleImportTest | iOS importer; Android adapter deferred | Design |
 | Venue serving schedule | C / INVENT | v1 hint; manually chosen local dates | No venue surface | Serve only one verified, current slice; stop at gaps, expiry or stale registry selection | beid #432 | VenueBundleServing | VenueBundleServingTest | iOS organizer model and dedicated venue engine | Design |
 
@@ -175,3 +176,55 @@ indexing exception; it is not a claim to have induced memory exhaustion.
 The rebase onto main `38ce700` preserved main's new Parallax pin and both
 updated digests. Rebase was queue position, not the membership repair: the
 experiment establishing that diagnosis ran with the old `5215991` pin unchanged.
+
+## Clock-free identity verification
+
+The identity result binds all handoff coordinates and the detached bundle
+digest to the configured Sepolia registry pair and actual resolver source.
+`RegistryResolution.readKey` is the existing resolver cache key passed through
+on success, not a second invented source-identity type. The reader address and
+both immutable registries match the deployment documented at Parallax
+`6fe165f`, `contracts/docs/sepolia-deploy.md`.
+
+The initial B CI run on `afe4090` included a newly landed main-branch guard
+that was absent from the local suite (79 versus 69 script tests). It detected
+this prose citation's duplicate full Parallax ref. After rebasing onto
+`9388eb9`, all 79 tests reproduced exactly that one failure; abbreviating the
+citation preserved the record and made all 79 pass. The guard's first live
+catch outside its fixtures was a true positive. No exception or allowlist was
+added. Checks previously observed on `afe4090` do not certify the rebased head.
+
+The selected record is the bundle's named sequence and digest, not the highest
+sequence or the record selected by today's clock. The definition is verified
+at that record's own validFrom. The cache key's latest-definition digest is
+checked against the raw read's metadata, never against the older named digest.
+The test uses a DISTINCT later digest so the wrong comparison cannot pass.
+
+Before implementation, the rebased null stub produced exactly the preregistered
+454 total, 441 passed, ten named failed, three integration skips, exit 1. The
+earlier pre-rebase run had 447 total: main added seven existing definition-codec
+tests. The ten failed names stayed the same; counts were not silently carried
+across the rebase. Signature-negative input aligns the altered signed bytes'
+definition digest, outer bundle digest, handoff and anchored record, and the
+existing codec explicitly reports INVALID_SIGNATURE before the wrapper check.
+
+After implementation the full shared suite executed 454 tests: 451 passed,
+zero failed, the same three integration tests skipped. All eleven new identity
+and source-provenance tests passed. The full Android app suite executed 328
+tests, all passed; compileDebugKotlin executed. Aggregate 782 total, 779 passed,
+zero failed, three skipped. The Parallax comparison executed and passed at
+the current `6fe165f` pin in both RED and GREEN.
+
+The wrapper accepts task names only: passing --max-workers=1 was rejected by
+argparse with exit 2 and zero tests before Gradle started. The equivalent
+org.gradle.workers.max=1 system property supplied through per-process
+GRADLE_OPTS keeps the wrapper unchanged and successfully limits the requested
+run. That launch failure is not behavioral RED.
+
+This identity result does not authenticate B005 envelopes, choose a current
+lease, validate whole-event coverage or start advertising. Native provider
+wiring, the SDK verification/current-lease step, provider/fake outcome
+correspondence and the production receiver segment remain to be implemented
+and verified. The raw-HTTP native test transport, when added, must be absent
+from Release/unset/unknown build configurations; it cannot prove TLS or live
+RPC reachability.
