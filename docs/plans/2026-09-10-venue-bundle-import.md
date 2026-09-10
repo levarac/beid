@@ -184,7 +184,15 @@ digest to the configured Sepolia registry pair and actual resolver source.
 `RegistryResolution.readKey` is the existing resolver cache key passed through
 on success, not a second invented source-identity type. The reader address and
 both immutable registries match the deployment documented at Parallax
-`6fe165fd0146df4925fd1b59c236fe729dac7b29`, `contracts/docs/sepolia-deploy.md`.
+`6fe165f`, `contracts/docs/sepolia-deploy.md`.
+
+The initial B CI run on `afe4090` included a newly landed main-branch guard
+that was absent from the local suite (79 versus 69 script tests). It detected
+this prose citation's duplicate full Parallax ref. After rebasing onto
+`9388eb9`, all 79 tests reproduced exactly that one failure; abbreviating the
+citation preserved the record and made all 79 pass. The guard's first live
+catch outside its fixtures was a true positive. No exception or allowlist was
+added. Checks previously observed on `afe4090` do not certify the rebased head.
 
 The selected record is the bundle's named sequence and digest, not the highest
 sequence or the record selected by today's clock. The definition is verified
