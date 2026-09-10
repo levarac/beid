@@ -183,9 +183,10 @@ final class SensingCoordinator: ObservableObject {
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
   /// `.pendingConnect`; the interstitial that drives the rest is 2b.
   @Published private(set) var bindingState: EventBindingState = .none
-  /// Event code most recently confirmed by `joinEvent(_:)`, if any. Feeds
-  /// `startSensing(eventCode:)` once the user has joined manually via
-  /// `EventCodeEntryView` — see `AppCoordinator.joinEvent(code:)`.
+  /// Barnard join code selected for the current event, if any. Manual entry
+  /// stores the normalized user code here before `startSensing(eventCode:)`;
+  /// a successful nearby capability stores its canonical Event ID here at the
+  /// join boundary because that evidence shape uses the ID as `joinCode`.
   @Published private(set) var joinedEventCode: String?
   /// Why the most recent real-path join attempt was refused, or nil when the
   /// last attempt was not refused (beid#410).
@@ -196,10 +197,11 @@ final class SensingCoordinator: ObservableObject {
   /// sensing screen with the radio off, indefinitely. A gate that refuses
   /// silently is indistinguishable from one that is broken.
   @Published private(set) var joinRefusal: EventJoinRefusal?
-  /// Canonical registry Event ID returned by the code lookup for
-  /// `joinedEventCode`. It is an untrusted routing hint until the dedicated
-  /// event-definition resolution completes; event codes are not sufficient to
-  /// derive this value locally.
+  /// Canonical registry Event ID for `joinedEventCode`. On manual entry it is
+  /// the code lookup's untrusted routing hint until the dedicated definition
+  /// resolution completes. On nearby join it comes from the freshly issued
+  /// `RegistryVerifiedJoinContext`. This display/session field is never itself
+  /// authority for joining.
   @Published private(set) var joinedCanonicalEventIdHex: String?
   /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
   /// played for the current session. Lives here rather than as view-local
@@ -644,6 +646,11 @@ final class SensingCoordinator: ObservableObject {
 
   /// At most one in-flight expiry wake-up, rescheduled on every publish.
   private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
+  /// True only while this coordinator has started a Central-only scan for
+  /// the pre-join surface. Joining transfers the already-running scan to
+  /// Barnard's automatic operation without stopping it; dismissing before a
+  /// join stops only when this flag proves the flow owns that scan.
+  private var discoveryOnlyScanOwned = false
   private let nearbyRegistryClient:
     ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   /// The join gate's registry read, behind a protocol a test can answer
@@ -1116,6 +1123,11 @@ final class SensingCoordinator: ObservableObject {
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
+    nearbyDiscoveryStore:
+      ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
+    nearbyDiscoveryClock: @escaping () -> Int64 = {
+      Int64((Date().timeIntervalSince1970 * 1_000).rounded())
+    },
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1135,8 +1147,10 @@ final class SensingCoordinator: ObservableObject {
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
+      nearbyDiscoveryClock: nearbyDiscoveryClock,
       eventJoinControl: eventJoinControl,
       eventJoinRegistry: eventJoinRegistry,
+      nearbyDiscoveryStore: nearbyDiscoveryStore,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds
     )
@@ -1161,6 +1175,8 @@ final class SensingCoordinator: ObservableObject {
       ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
+    nearbyDiscoveryStore injectedNearbyDiscoveryStore:
+      ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1199,8 +1215,8 @@ final class SensingCoordinator: ObservableObject {
     self.nearbyRegistryClient = nearbyRegistryClient
     self.eventJoinRegistry = eventJoinRegistry
       ?? nearbyRegistryClient.map { RegistryEventJoinRegistry(client: $0) }
-    let nearbyDiscoveryStore = ExportedKotlinPackages.org.levarac.parallax.discovery
-      .createNearbyEventDiscoveryStore()
+    let nearbyDiscoveryStore = injectedNearbyDiscoveryStore
+      ?? ExportedKotlinPackages.org.levarac.parallax.discovery.createNearbyEventDiscoveryStore()
     self.nearbyDiscoveryStore = nearbyDiscoveryStore
     self.nearbyEventCandidates = nearbyDiscoveryStore.snapshot
     self.relayVerifier = ParticipantRelayVerifier(
@@ -1231,6 +1247,8 @@ final class SensingCoordinator: ObservableObject {
   deinit {
     let request = eventIdentityVerificationRequest
     let expiryTask = nearbyDiscoveryExpiryTask
+    let eventJoinControl = engine
+    let stopOwnedDiscoveryScan = discoveryOnlyScanOwned
     // Mirrors Android's `dispose()`. Barnard's engine outlives nothing here,
     // but the relay is the one thing this object switched on that keeps a
     // radio busy, so it is switched off on the way out rather than left to a
@@ -1242,6 +1260,9 @@ final class SensingCoordinator: ObservableObject {
       request?.cancel()
       expiryTask?.cancel()
       cadenceTask?.cancel()
+      if stopOwnedDiscoveryScan {
+        eventJoinControl.stopDiscoveryScan()
+      }
       relayControl.setParticipantRelayVerifier(nil)
     }
   }
@@ -1749,10 +1770,11 @@ final class SensingCoordinator: ObservableObject {
     )
   }
 
-  /// Selects a manually entered event code — the wallet-optional path
-  /// (`EventCodeEntryView`) for choosing which event to sense, since there is
-  /// no BLE auto-discovery yet. Returns whether the code was accepted as a
-  /// selection.
+  /// Selects a manually entered event code through the wallet-optional
+  /// `EventCodeEntryView` path. Nearby-card selection does not call this
+  /// method; `joinNearbyEvent` instead reissues shape (a) evidence directly
+  /// from the current discovery snapshot. Returns whether the typed code was
+  /// accepted as a pending manual selection.
   ///
   /// **Selecting is not joining (beid#410).** Barnard is told nothing here.
   /// This used to call `BarnardEngine.joinEvent` on its very next line, which
@@ -1785,7 +1807,7 @@ final class SensingCoordinator: ObservableObject {
   }
 
   /// Calls the Barnard SDK's leave API (`BarnardEngine.leaveEvent`) to clear
-  /// a manually joined event code, symmetric with `joinEvent(_:)`.
+  /// whichever manual or nearby join code is current.
   func leaveEvent() {
     invalidateEventIdentityVerification()
     // Leaving invalidates an in-flight join the same way stopping does: a
@@ -1858,10 +1880,10 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.submitPending()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
     if useDemoEventMode {
-      // Untouched by the gate. Demo mode never reaches Barnard at all, and it
-      // is the App Review path (`ios/README.md`), which AGENTS.md records as
-      // having been regressed once already by work in this area. It also never
-      // read `selectedEventCode`, before or now.
+      // Untouched by the gate. Demo mode never reaches Barnard at all and is
+      // available only for Debug walkthroughs; Release builds hardwire it off,
+      // so it is not a shipping App Review path. It also never read
+      // `selectedEventCode`, before or now.
       var selectedScenario = demoScenario ?? BeidConfig.demoScenario()
       if let demoEvent {
         selectedScenario = selectedScenario.replacingEvent(demoEvent)
@@ -1905,13 +1927,14 @@ final class SensingCoordinator: ObservableObject {
   /// that invalidates a stale one. Android's `beginVerifiedJoin` carries a
   /// request identity through its own permission wait for the same reason.
   ///
-  /// Evidence shape (b), the operator-lookup path, is the only one wired here,
-  /// because it is the only join path iOS currently has: `EventCodeEntryView`
-  /// is how an event is chosen, since there is no BLE auto-discovery yet.
-  /// Shape (a), `fromNearbyCandidate`, needs a candidate this host's own
-  /// registry read already promoted to `REGISTRY_VERIFIED`, and iOS has no
-  /// surface that joins a discovered candidate yet — that arrives with the
-  /// participation-surface work (#141/#100), and this is where it hooks in.
+  /// iOS now wires both evidence shapes into one capability-only boundary.
+  /// Typed `EventCodeEntryView` input takes shape (b): operator lookup followed
+  /// by this live definition read and `fromOperatorLookup`. A nearby-card tap
+  /// takes shape (a): `joinNearbyEvent` re-reads the current, locally promoted
+  /// candidate snapshot after permission and calls `fromNearbyCandidate`.
+  /// Neither path can reach Barnard through this coordinator unless its shared
+  /// issuer returns a `RegistryVerifiedJoinContext`; both converge on
+  /// `applyJoinGateDecision(.admit)` and `EventJoinControlling.joinAndStart`.
   ///
   /// Every refusal below starts nothing. There is deliberately no fallback
   /// branch that joins anyway on a failed or unavailable read: that is the
@@ -2043,6 +2066,10 @@ final class SensingCoordinator: ObservableObject {
     switch decision {
     case .admit(let context):
       joinRefusal = nil
+      // `startAuto()` keeps an already-running Central scan alive and adds
+      // advertising. From this instant it is automatic-operation transport,
+      // not a discovery-only scan this pre-join flow may later stop.
+      discoveryOnlyScanOwned = false
       engine.joinAndStart(context)
       // The relay gate opens here, from the capability the gate just admitted,
       // in the same shape as Android's `EventJoinCoordinator.beginVerifiedJoin`
@@ -2206,6 +2233,111 @@ final class SensingCoordinator: ObservableObject {
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
 
+  /// Starts Central-only B005 discovery while no event has been selected.
+  ///
+  /// `AppCoordinator.startScan()` called `startSensing()` with no selected
+  /// event until beid#141. Once beid#410 correctly removed the hardcoded
+  /// fallback and made that request start nothing, the Collection button had
+  /// become a no-op on a real device. Scan-only Barnard operation restores
+  /// the button's intended meaning without reopening either string join door.
+  /// Simulator Debug keeps its established scripted DemoEvent path because it
+  /// has no BLE radio; that path never reaches Barnard.
+  func startNearbyEventDiscovery() {
+    guard case .idle = phase else { return }
+    if useDemoEventMode {
+      startSensing()
+      return
+    }
+    guard !discoveryOnlyScanOwned, !isScanning, !isAdvertising else { return }
+    discoveryOnlyScanOwned = true
+    engine.startDiscoveryScan()
+  }
+
+  /// Ends the pre-join discovery session and stops the Central scan only when
+  /// this flow started it. Once a join transfers scanning to `startAuto()`,
+  /// `discoveryOnlyScanOwned` is false and dismissing this surface cannot stop
+  /// the joined session's automatic operation.
+  func stopNearbyEventDiscovery() {
+    let shouldStopOwnedScan = discoveryOnlyScanOwned && !isAdvertising
+    discoveryOnlyScanOwned = false
+    clearNearbyEventDiscovery()
+    if shouldStopOwnedScan {
+      engine.stopDiscoveryScan()
+    }
+  }
+
+  /// Applies the shared TTL refresh immediately. Production's scheduled
+  /// expiry task and race tests use the same entry so the published snapshot
+  /// is always the current join authority.
+  func refreshNearbyEventDiscovery() {
+    let refreshedAt = nearbyDiscoveryClock()
+    let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .refreshNearbyEventDiscovery(
+        store: nearbyDiscoveryStore,
+        nowEpochMillis: refreshedAt
+      )
+    publishNearbyEventDiscovery(update.snapshot, asOf: refreshedAt)
+  }
+
+  /// One-tap nearby join (beid#141). The action carries only the stable B005
+  /// hash. After the permission wait resumes, this method re-reads the
+  /// coordinator's current snapshot and asks the shared issuer for a fresh
+  /// capability; a displayed Event ID, list position, selected state, or
+  /// display-only validity window is never join authority.
+  func joinNearbyEvent(eventCodeHashHex: String) {
+    guard case .idle = phase else { return }
+    resetSessionState()
+    let generation = joinAttemptGeneration
+    reportSubmissionRuntime?.submitPending()
+    phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
+    engine.requestJoinPermissions { [weak self] canScan, canAdvertise in
+      guard let self else { return }
+      Task { @MainActor in
+        guard self.isCurrentJoinAttempt(generation) else { return }
+        guard canScan, canAdvertise else {
+          self.stopParticipantRelay()
+          self.phase = Self.payloadlessNativePhase(
+            BeidSharedKit.sensing.scanPhaseAfterStopSensing()
+          )
+          return
+        }
+        // Consume this permission completion before issuing. If an engine
+        // incorrectly answers the same callback twice, only the first answer
+        // can reach Barnard.
+        self.joinAttemptGeneration &+= 1
+        let nowEpochSeconds = self.nearbyDiscoveryClock() / 1_000
+        guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
+          .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
+            candidates: self.nearbyEventCandidates,
+            eventCodeHashHex: eventCodeHashHex,
+            nowEpochSeconds: nowEpochSeconds
+          )
+        else {
+          let verdict = ExportedKotlinPackages.org.levarac.parallax.discovery
+            .nearbyCandidateJoinEligibility(
+              candidates: self.nearbyEventCandidates,
+              eventCodeHashHex: eventCodeHashHex,
+              nowEpochSeconds: nowEpochSeconds
+            )
+          self.refuseJoin(
+            .definitionNotEligible,
+            "Current nearby candidate is not eligible (\(String(describing: verdict))); starting nothing."
+          )
+          return
+        }
+        // On the nearby evidence shape the canonical Event ID is Barnard's
+        // join code. Keep native session naming and later verification routed
+        // to that same identity; the capability, not this assignment, is what
+        // authorizes the engine call below.
+        self.joinedEventCode = context.joinCode
+        self.joinedCanonicalEventIdHex = context.eventIdHex
+        self.pendingEventCode = context.joinCode
+        self.pendingCanonicalEventIdHex = context.eventIdHex
+        self.applyJoinGateDecision(.admit(context))
+      }
+    }
+  }
+
   /// Not `private`: `BarnardEventInfoHintEvent` has no public initializer
   /// (Barnard module boundary), so `BeidTests` cannot construct one to drive
   /// this path — taking the fields it actually needs as plain arguments
@@ -2315,10 +2447,11 @@ final class SensingCoordinator: ObservableObject {
       .snapshot
   }
 
-  /// Publishes one snapshot and rearms the single expiry wake-up from the
-  /// snapshot's own `nextExpiryAtEpochMillis`, so the published list stops
-  /// showing an event whose sources have gone quiet even when no further
-  /// hint ever arrives to drive a refresh.
+  /// Publishes one snapshot and rearms the single expiry wake-up for the
+  /// earlier of source TTL or the first millisecond after a retained
+  /// definition's inclusive validity window. The latter mirrors Android's
+  /// native scheduling effect: shared remains the authority on joinability,
+  /// while native wakes SwiftUI when that time-dependent answer can change.
   private func publishNearbyEventDiscovery(
     _ snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates,
     asOf now: Int64
@@ -2339,7 +2472,18 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
 
-    guard let nextExpiryAtEpochMillis = snapshot.nextExpiryAtEpochMillis else { return }
+    var nextExpiryAtEpochMillis = snapshot.nextExpiryAtEpochMillis
+    let nowEpochSeconds = now / 1_000
+    for index in 0..<snapshot.candidateCount {
+      guard
+        let validUntilEpochSeconds = snapshot.candidateAt(index: index)?
+          .definitionValidUntilEpochSeconds,
+        validUntilEpochSeconds >= nowEpochSeconds
+      else { continue }
+      let definitionExpiryAt = Self.firstEpochMillisAfter(validUntilEpochSeconds)
+      nextExpiryAtEpochMillis = min(nextExpiryAtEpochMillis ?? definitionExpiryAt, definitionExpiryAt)
+    }
+    guard let nextExpiryAtEpochMillis else { return }
     let delayMillis = nextExpiryAtEpochMillis <= now ? 0 : nextExpiryAtEpochMillis - now
     // `expiryAt` saturates at `Long.MAX_VALUE` in shared, so the nanosecond
     // conversion is done saturating rather than trapping.
@@ -2350,14 +2494,17 @@ final class SensingCoordinator: ObservableObject {
       )
       guard !Task.isCancelled, let self else { return }
       self.nearbyDiscoveryExpiryTask = nil
-      let refreshedAt = self.nearbyDiscoveryClock()
-      let update = ExportedKotlinPackages.org.levarac.parallax.discovery
-        .refreshNearbyEventDiscovery(
-          store: self.nearbyDiscoveryStore,
-          nowEpochMillis: refreshedAt
-        )
-      self.publishNearbyEventDiscovery(update.snapshot, asOf: refreshedAt)
+      self.refreshNearbyEventDiscovery()
     }
+  }
+
+  /// Android's `NearbyEventDiscoverySession.firstEpochMillisAfter`, including
+  /// its saturation rule. Definition validity is inclusive at whole-second
+  /// precision, so the UI answer can first change at this millisecond.
+  private static func firstEpochMillisAfter(_ epochSecond: Int64) -> Int64 {
+    let latestConvertibleSecond = Int64.max / 1_000
+    guard epochSecond < latestConvertibleSecond else { return Int64.max }
+    return (epochSecond + 1) * 1_000
   }
 
   /// Rebuilds the immutable value the relay verifier reads. Main actor only.

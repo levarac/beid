@@ -159,6 +159,116 @@
     "Nearby events": {},
     "Nearby events appear automatically — no codes, no search.": {},
     "Nearby peers are confirming your attendance automatically.": {},
+    "nearbyEvent.beaconName.conflict": {
+      "comment": "Warning shown when nearby beacons announce different names for the same event-code hash. Do not choose one of the names as authoritative.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multiple names reported nearby"
+          }
+        }
+      }
+    },
+    "nearbyEvent.beaconName.label": {
+      "comment": "Label above an event name received from a nearby Bluetooth beacon. The name is an untrusted announcement, not a verified event identity.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name announced by nearby beacon"
+          }
+        }
+      }
+    },
+    "nearbyEvent.beaconName.missing": {
+      "comment": "Fallback shown when a nearby Bluetooth candidate has no display name. The candidate remains visible.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No name announced by nearby beacon"
+          }
+        }
+      }
+    },
+    "nearbyEvent.manualEntry.button": {
+      "comment": "Secondary action on the nearby-event scan screen that opens manual event-code entry when discovery does not find the user's event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter event code"
+          }
+        }
+      }
+    },
+    "nearbyEvent.searching.rescue": {
+      "comment": "Guidance below the empty nearby-event list; the manual code-entry button is directly below this content.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If no event appears, enter the event code instead."
+          }
+        }
+      }
+    },
+    "nearbyEvent.searching.title": {
+      "comment": "Status shown while the pre-join Bluetooth scan has not found any nearby event candidates.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching for nearby events…"
+          }
+        }
+      }
+    },
+    "nearbyEvent.selected": {
+      "comment": "Display-only status on the sole currently joinable nearby-event card. The user must still tap the card to join.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected"
+          }
+        }
+      }
+    },
+    "nearbyEvent.validityPeriod": {
+      "comment": "Display-only validity period on a verified nearby-event card. The first value is the start date and time; the second is the end date and time. It never authorizes a join.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valid %1$@ – %2$@"
+          }
+        }
+      }
+    },
+    "nearbyEvent.verification.verified": {
+      "comment": "Status on an interactive nearby-event card whose registry evidence currently permits a join. This is separate from the display-only Selected state.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verified"
+          }
+        }
+      }
+    },
+    "nearbyEvent.verification.waiting": {
+      "comment": "Non-interactive nearby-event card status: registry evidence is not currently sufficient to join this candidate.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for event verification"
+          }
+        }
+      }
+    },
     "No proofs yet": {},
     "Not signed": {},
     "Off": {

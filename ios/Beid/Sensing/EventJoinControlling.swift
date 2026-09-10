@@ -15,9 +15,9 @@ import Foundation
 /// a narrow gate bolted beside a retained `BarnardEngine`. The point is what
 /// is *absent*: there is no `joinEvent(String)` and no argumentless
 /// `startAuto()` on this protocol, so a coordinator holding only an event code
-/// has no method to call. A narrow gate next to a raw engine would leave both
-/// of those reachable, and the next author would reach them — the defect this
-/// closes was written by someone who had them to hand.
+/// has no method that can begin participation. The separate scan-only pair is
+/// intentionally present for pre-join B005 discovery; it cannot advertise,
+/// join, derive an event key, or begin recording.
 ///
 /// This mirrors Android's `EventJoinEngine` (beid#374), which made the same
 /// move for the same reason. Barnard's string join API still exists and is
@@ -66,6 +66,12 @@ protocol EventJoinControlling: AnyObject {
     _ completion: @escaping (_ canScan: Bool, _ canAdvertise: Bool) -> Void
   )
 
+  /// Starts/stops Central-only scanning for the pre-join nearby-event flow.
+  /// These are effects only: Barnard continues to own B005 parsing and the
+  /// shared discovery reducer continues to own candidate state.
+  func startDiscoveryScan()
+  func stopDiscoveryScan()
+
   /// Joins the verified event and starts automatic operation, as one act.
   ///
   /// The two are merged rather than offered as an ordered pair because a pair
@@ -104,6 +110,14 @@ extension BarnardEngine: EventJoinControlling {
     requestPermissions { status in
       completion(status.canScan, status.canAdvertise)
     }
+  }
+
+  func startDiscoveryScan() {
+    startScan()
+  }
+
+  func stopDiscoveryScan() {
+    stopScan()
   }
 
   /// The only place in this app where an event code reaches Barnard's string
