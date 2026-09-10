@@ -434,6 +434,18 @@ final class ParticipantRelayTests: XCTestCase {
 
     coordinator.handleDetection(enin: 1, rpid: "peer-0", detectedDisplayId: nil)
 
+    // Asserted first, and it is what stops this test being vacuous. Everything
+    // below only means something if the detection actually took the `.sensing`
+    // branch and reached `beginEventFoundSessionState`. Without this, a later
+    // change that stopped the transition from firing would leave the gate
+    // trivially open and the test would still pass — reporting that a
+    // transition it never made does not close the gate.
+    guard case .eventFound = coordinator.phase else {
+      return XCTFail(
+        "the detection must take the sensing-to-eventFound transition, or this test proves nothing"
+      )
+    }
+
     XCTAssertEqual(
       coordinator.relayGateJoinedEventIdHexForTesting,
       context.eventIdHex,

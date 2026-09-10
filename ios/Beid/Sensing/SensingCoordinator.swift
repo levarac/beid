@@ -423,7 +423,10 @@ final class SensingCoordinator: ObservableObject {
   ///
   /// Opened in exactly one place (beid#437) — `applyJoinGateDecision` on admit
   /// — and closed in exactly one, `closeRelayGate`, which both
-  /// `stopParticipantRelay` and `resetSessionState` call.
+  /// `stopParticipantRelay` and `startSensing` call. It is deliberately *not*
+  /// called from `resetSessionState`; `closeRelayGate` says why, and that
+  /// reasoning is deliberately not restated here — one fact written out in two
+  /// places is how this sentence came to be wrong in the first place.
   ///
   /// It used to be written by the `EventIdentityVerification` lifecycle
   /// instead. That made the gate depend on a second registry read's outcome
