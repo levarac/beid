@@ -16,6 +16,25 @@
 
 ## 前提条件 — これを満たさないと測定が無意味になる
 
+### ⚠️ イベントがレジストリに登録されていること(2026-09-10 追記、最重要)
+
+**beid#410(2026-09-08 着地)以降、レジストリ検証を通らないイベントでは
+ラジオが一切開始しない。** `SensingCoordinator.beginRegistryVerifiedJoin` の
+doc がそう書いている ——「Verifies the selected event against the registry
+and, **only if the shared issuer grants a capability**, joins it and starts
+sensing」。
+
+**任意のイベントコードを打っても、何台並べても検知しない。** 電波が出て
+いないためであり、これは #218 が測ろうとしている現象とは別物である。
+
+**開始前に、使うイベントコードがレジストリに登録済みであることを確認する
+こと。** 登録は dispatch#12 / `levarac/parallax#39` の範囲で、dispatch#29 の
+出荷ゲートにも「ETHTokyo イベントを joinMode=open と eventCodeHash 付きの
+定義で provisioning し acceptance_enabled=1」とある。
+
+**この前提は 2026-09-10 にオーナーが実機で踏むまで、この手順書に書かれて
+いなかった。** #410 以前は不要だったため。
+
 ### 全端末を同一ビルドに更新する(必須)
 
 `#226` でイベントコードの正規化を `shared/` へ移した(2026-08-20、`eadbf2b`)。

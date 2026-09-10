@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "Two things are new. Event cards now appear only for events the app has checked against the registry, so if a card you expect is missing, tell us what you saw instead of nothing. And a phone that has already picked up an event now passes it on, so try standing away from the beacon next to someone who is already in the event and see whether the card reaches you. Still open from last time: connect a wallet with MetaMask, approve one signature, and confirm the app comes back on its own with the signature applied."
+    "text": "Please try joining an event and tell us what happens. The app now checks the event against the registry before it starts sensing, so if you enter a code and nothing seems to happen, that is what we most need to hear about — tell us the code you used and what the screen showed. Also still open from earlier builds: connect a wallet with MetaMask, approve one signature, and confirm the app comes back on its own with the signature applied."
   }
 ]
