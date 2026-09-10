@@ -238,6 +238,7 @@ iOS の `SensingCoordinator.swift` と Android の `EventJoinCoordinator.kt` /
   beid 側の判断であり、出典は spec ではなく code の側にある。
   どちらの factory がどの OS に配線されているかは、**本文書には書かない**。それは code の現況であって
   決定ではなく、ここに書き留めれば `:27` や `:46` とまったく同じ形で陳腐化するからである。
+  共有コード上の経路は `shared/src/commonMain/kotlin/org/levarac/parallax/discovery/RegistryVerifiedJoinContext.kt` の 2 つの factory を参照し、emitter の判断は [issue #432](https://github.com/thegreeting/beid/issues/432) を参照すること。
 - `REGISTRY_VERIFIED` を割り当てるのは **host だけ**である。SDK は決して割り当てない
   （DESIGN-NOTES §0.2d「The host signs, the engine serves. … The SDK holds no authority key and
   has no registry access, so it cannot sign and must not appear to: it does not re-encode,
