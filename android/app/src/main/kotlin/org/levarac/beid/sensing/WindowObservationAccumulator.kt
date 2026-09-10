@@ -5,12 +5,15 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
+import org.levarac.beid.persistence.WindowObservationDraftStore
 import org.levarac.beid.shared.report.UnsentWindowLedger
 import org.levarac.beid.shared.report.addPersistedUnsentWindowObservationForRecovery
+import org.levarac.beid.shared.report.addWindowObservationDraftRpid
 import org.levarac.beid.shared.report.closeUnsentWindow
 import org.levarac.beid.shared.report.confirmUnsentWindowLedgerPersistence
 import org.levarac.beid.shared.report.createUnsentWindowObservationRecoveryInput
 import org.levarac.beid.shared.report.createUnsentWindowLedger
+import org.levarac.beid.shared.report.createWindowObservationDraft
 import org.levarac.beid.shared.report.openUnsentWindow
 import org.levarac.beid.shared.report.reconcileUnsentWindowLedgerAfterRelaunch
 import org.levarac.parallax.observation.ObservationPreparationResult
@@ -69,6 +72,9 @@ internal class WindowObservationRuntimeOwner(
                 ledgerStore = UnsentWindowLedgerStore.recoveringCorruptSnapshot(
                     UnsentWindowLedgerStore.defaultFile(filesDir),
                 ).store,
+                draftStore = WindowObservationDraftStore(
+                    WindowObservationDraftStore.defaultFile(filesDir),
+                ),
                 observationDirectory = File(filesDir, "canonical-observations-v1"),
                 nowEpochSeconds = nowEpochSeconds,
                 newWindowId = newWindowId,
@@ -88,6 +94,7 @@ internal class WindowObservationAccumulator(
     private val context: () -> WindowObservationContext?,
     private val cryptography: SensingCryptography,
     private val ledgerStore: UnsentWindowLedgerStore,
+    private val draftStore: WindowObservationDraftStore,
     private val observationDirectory: File,
     private val nowEpochSeconds: () -> Double,
     private val newWindowId: () -> UUID = UUID::randomUUID,
@@ -106,7 +113,15 @@ internal class WindowObservationAccumulator(
     private var recordingObserved = false
 
     init {
-        if (reconcileAfterRelaunch) reconcileDurableArtifactsAfterRelaunch()
+        if (reconcileAfterRelaunch) {
+            // Order matters. The draft is promoted to a durable `.cose` FIRST
+            // so that the reconcile pass below sees it as an ordinary durable
+            // artifact. Reversing these two discards the still-open ledger row
+            // before its evidence exists, which is precisely the loss beid#372
+            // is about.
+            restoreDurableDraftEvidence()
+            reconcileDurableArtifactsAfterRelaunch()
+        }
     }
 
     fun beginEvent(eventCode: String): Boolean {
@@ -123,6 +138,7 @@ internal class WindowObservationAccumulator(
             if (!closeCurrentWindow()) return
         }
         if (this.enin == null) this.enin = enin
+        val alreadyOpen = openedWindowId != null
         val normalizedRpid = rpid.lowercase()
         val openedId = openedWindowId
         val acceptedRpid = if (openedId == null) {
@@ -139,6 +155,11 @@ internal class WindowObservationAccumulator(
         if (this.reporterRpid == null) this.reporterRpid = reporterRpid?.lowercase()
         recordingObserved = recordingObserved || recording
         openCurrentWindowIfEligible()
+        // A window that opened during this call already wrote its draft
+        // inside `openCurrentWindowIfEligible`; this is the incremental write
+        // for every later detection, without which the observation set would
+        // only ever reach storage when the window closes.
+        if (alreadyOpen && openedWindowId != null) persistDraft()
     }
 
     /** Closes only an actual ENIN/session boundary. Lifecycle cleanup must not call this. */
@@ -159,6 +180,7 @@ internal class WindowObservationAccumulator(
         openedWindowId = id
         openedContext = openingContext
         openedReporterRpid = openingReporter
+        persistDraft()
         return true
     }
 
@@ -180,6 +202,11 @@ internal class WindowObservationAccumulator(
         val stored = storeSignedObservation(signed)
         val digest = stored.observationDigest.toByteArray().toHex()
         persistObservation(id.toString().lowercase(), digest, stored.signedBytes.toByteArray())
+        // The evidence is durable as an artifact from here on, so the draft
+        // has nothing left to protect. Dropping it before the ledger write
+        // keeps the gap in which both exist as small as this can make it;
+        // `restoreDurableDraftEvidence` closes the gap that remains.
+        draftStore.clear()
         apply(closeUnsentWindow(ledger, id.toString().lowercase(), digest))
         clearCurrentWindow()
         return true
@@ -190,8 +217,9 @@ internal class WindowObservationAccumulator(
         observationContext: WindowObservationContext,
         observationReporterRpid: String,
         observedRpids: Collection<String>,
+        observationEnin: Long? = enin,
     ): PreparedObservationV1? {
-        val closingEnin = enin ?: return null
+        val closingEnin = observationEnin ?: return null
         val evidence = createMutualSensingWindowEvidence(
             idHex = id.toHex(),
             eventIdHex = observationContext.eventIdHex,
@@ -207,6 +235,7 @@ internal class WindowObservationAccumulator(
     }
 
     private fun clearCurrentWindow() {
+        draftStore.clear()
         enin = null
         rpids.clear()
         reporterRpid = null
@@ -237,6 +266,120 @@ internal class WindowObservationAccumulator(
         temporary.writeBytes(bytes)
         Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE)
     }
+
+    /**
+     * Writes the open window's observation set and context durably, replacing
+     * whatever was there before.
+     *
+     * Called once when the window opens and again after every accepted
+     * detection, so what is on disk is never older than the last observation
+     * this process accepted. Shared rejecting any of it is a programming
+     * error, not a runtime condition: the same values have already satisfied
+     * `preparedObservation`, which is strictly stricter.
+     */
+    private fun persistDraft() {
+        val id = openedWindowId ?: return
+        val draftContext = openedContext ?: return
+        val draftReporter = openedReporterRpid ?: return
+        val draftEnin = enin ?: return
+        val created = createWindowObservationDraft(
+            windowId = id.toString().lowercase(),
+            enin = draftEnin,
+            eventCode = draftContext.eventCode,
+            eventIdHex = draftContext.eventIdHex,
+            eventDefinitionDigestHex = draftContext.eventDefinitionDigestHex,
+            participantCommitmentHex = draftContext.participantCommitmentHex,
+            reporterRpidHex = draftReporter,
+        )
+        var draft = checkNotNull(created.draft) {
+            "Shared rejected an open window's draft: ${created.errorCode}"
+        }
+        rpids.forEach { observedRpid ->
+            val appended = addWindowObservationDraftRpid(draft, observedRpid)
+            draft = checkNotNull(appended.draft) {
+                "Shared rejected an observed RPID for the draft: ${appended.errorCode}"
+            }
+        }
+        draftStore.persist(draft)
+    }
+
+    /**
+     * Promotes a durable draft left by a previous process into a signed
+     * `.cose`, then drops it.
+     *
+     * Everything used here comes from storage. Nothing is read from the
+     * ledger, and no ledger transition is applied: this produces an artifact
+     * and stops. Closing the corresponding row is [reconcileDurableArtifactsAfterRelaunch]'s
+     * job, and it reaches the same answer whether or not a matching row still
+     * exists. Keeping the two one-directional is what makes "the session was
+     * restored" and "the evidence was restored" impossible to substitute for
+     * one another.
+     *
+     * `finalizedAt` is the one input that is deliberately not restored — it
+     * is when the report was finalized, and finalizing after a relaunch
+     * genuinely happens later. Every input that describes *what was observed*
+     * is restored exactly.
+     *
+     * A draft that decodes but cannot produce an eligible observation is
+     * quarantined rather than deleted or retried: it is evidence that
+     * something was lost, and the next window must not inherit it.
+     */
+    private fun restoreDurableDraftEvidence() {
+        val draft = draftStore.load() ?: return
+        if (hasDurableArtifactFor(draft.windowId)) {
+            // The previous process died after writing the artifact and before
+            // dropping the draft. Signing again would produce a second
+            // artifact for one window — a different `finalizedAt` means a
+            // different digest, so it would not even collide — and relaunch
+            // reconciliation fails closed on exactly that conflict.
+            draftStore.clear()
+            return
+        }
+        val restoredContext = WindowObservationContext(
+            eventCode = draft.eventCode,
+            eventIdHex = draft.eventIdHex,
+            eventDefinitionDigestHex = draft.eventDefinitionDigestHex,
+            participantCommitmentHex = draft.participantCommitmentHex,
+        )
+        val id = try {
+            UUID.fromString(draft.windowId)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        val observedRpids = List(draft.observedRpidCount) { index ->
+            requireNotNull(draft.observedRpidAt(index))
+        }
+        val prepared = id?.let {
+            preparedObservation(
+                id = it,
+                observationContext = restoredContext,
+                observationReporterRpid = draft.reporterRpidHex,
+                observedRpids = observedRpids,
+                observationEnin = draft.enin,
+            )
+        }
+        if (prepared == null) {
+            draftStore.quarantineUnusable()
+            return
+        }
+        val signature = cryptography.signWindowReport(
+            restoredContext.eventCode,
+            prepared.signatureStructure.toByteArray(),
+        )
+        val signed = prepared.signWithCompactSignatureHex(signature.r.toHex(), signature.s.toHex())
+        val stored = storeSignedObservation(signed)
+        persistObservation(
+            draft.windowId,
+            stored.observationDigest.toByteArray().toHex(),
+            stored.signedBytes.toByteArray(),
+        )
+        draftStore.clear()
+    }
+
+    private fun hasDurableArtifactFor(windowId: String): Boolean =
+        observationDirectory.listFiles().orEmpty().any { artifact ->
+            artifact.isFile && artifact.name.startsWith("$windowId--") && artifact.extension == "cose"
+        }
 
     private fun reconcileDurableArtifactsAfterRelaunch() {
         val recoveryInput = createUnsentWindowObservationRecoveryInput()

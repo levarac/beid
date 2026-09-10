@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
+import org.levarac.beid.persistence.WindowObservationDraftStore
 import org.levarac.beid.shared.report.createUnsentWindowObservationRecoveryInput
 import org.levarac.beid.shared.report.reconcileUnsentWindowLedgerAfterRelaunch
 
@@ -167,6 +168,7 @@ class EventJoinCoordinatorWindowLedgerTest {
                 ),
             ),
             ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
             observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.0 },
             newWindowId = { java.util.UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },

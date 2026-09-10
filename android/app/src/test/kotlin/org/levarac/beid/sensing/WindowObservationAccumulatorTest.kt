@@ -14,6 +14,7 @@ import org.levarac.beid.shared.report.confirmUnsentWindowLedgerPersistence
 import org.levarac.beid.shared.report.createUnsentWindowLedger
 import org.levarac.beid.shared.report.openUnsentWindow
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
+import org.levarac.beid.persistence.WindowObservationDraftStore
 import org.levarac.parallax.submission.restoreStoredObservation
 
 class WindowObservationAccumulatorTest {
@@ -26,6 +27,7 @@ class WindowObservationAccumulatorTest {
             context = { VECTOR_CONTEXT },
             cryptography = crypto,
             ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
             observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = sequenceIds(),
@@ -73,6 +75,7 @@ class WindowObservationAccumulatorTest {
             context = { VECTOR_CONTEXT },
             cryptography = crypto,
             ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
             observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = sequenceIds(),
@@ -103,7 +106,9 @@ class WindowObservationAccumulatorTest {
         val ledgerFile = directory.resolve("ledger.snapshot")
         val accumulator = WindowObservationAccumulator(
             context = { VECTOR_CONTEXT }, cryptography = VectorCryptography(),
-            ledgerStore = UnsentWindowLedgerStore(ledgerFile), observationDirectory = directory.resolve("observations"),
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
+            observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = { UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },
             ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
@@ -123,7 +128,9 @@ class WindowObservationAccumulatorTest {
         val ledgerFile = directory.resolve("ledger.snapshot")
         val accumulator = WindowObservationAccumulator(
             context = { null }, cryptography = VectorCryptography(),
-            ledgerStore = UnsentWindowLedgerStore(ledgerFile), observationDirectory = directory.resolve("observations"),
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
+            observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = sequenceIds(), ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
         )
@@ -141,7 +148,9 @@ class WindowObservationAccumulatorTest {
         val cryptography = VectorCryptography()
         val accumulator = WindowObservationAccumulator(
             context = { observationContext }, cryptography = cryptography,
-            ledgerStore = UnsentWindowLedgerStore(ledgerFile), observationDirectory = directory.resolve("observations"),
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
+            observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = sequenceIds(), ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
         )
@@ -162,7 +171,9 @@ class WindowObservationAccumulatorTest {
         val ledgerFile = directory.resolve("ledger.snapshot")
         val accumulator = WindowObservationAccumulator(
             context = { VECTOR_CONTEXT }, cryptography = VectorCryptography(),
-            ledgerStore = UnsentWindowLedgerStore(ledgerFile), observationDirectory = directory.resolve("observations"),
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
+            observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = sequenceIds(), ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
         )
@@ -179,7 +190,9 @@ class WindowObservationAccumulatorTest {
         val ledgerFile = directory.resolve("ledger.snapshot")
         val accumulator = WindowObservationAccumulator(
             context = { VECTOR_CONTEXT }, cryptography = VectorCryptography(),
-            ledgerStore = UnsentWindowLedgerStore(ledgerFile), observationDirectory = directory.resolve("observations"),
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
+            observationDirectory = directory.resolve("observations"),
             nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = { UUID.fromString(WINDOW_ID) },
             ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
@@ -205,6 +218,7 @@ class WindowObservationAccumulatorTest {
         val sourceAccumulator = WindowObservationAccumulator(
             context = { VECTOR_CONTEXT }, cryptography = VectorCryptography(),
             ledgerStore = UnsentWindowLedgerStore(source.resolve("ledger.snapshot")),
+            draftStore = WindowObservationDraftStore(source.resolve("draft.snapshot")),
             observationDirectory = source.resolve("observations"), nowEpochSeconds = { 1_800_000_000.75 },
             newWindowId = sequenceIds(), ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
         )
@@ -227,6 +241,7 @@ class WindowObservationAccumulatorTest {
 
         WindowObservationAccumulator(
             context = { null }, cryptography = VectorCryptography(), ledgerStore = ledgerStore,
+            draftStore = WindowObservationDraftStore(recovered.resolve("draft.snapshot")),
             observationDirectory = observations, nowEpochSeconds = { 1_800_000_001.0 },
             ledgerInstanceId = { error("existing ledger must be reused") }, reconcileAfterRelaunch = true,
         )
