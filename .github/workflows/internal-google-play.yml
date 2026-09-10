@@ -161,6 +161,21 @@ jobs:
         run: scripts/gha/check-play-delivery.sh
       - name: Build and sign release AAB
         run: scripts/gha/build-and-sign-android.sh
+      # The release notes testers read are produced here rather than by the
+      # upload action: r0adkll/upload-google-play reads whatsnew-<locale> files
+      # verbatim and does not enforce Google Play's 500-character limit, so a
+      # longer note would be rejected by the Play API *after* the bundle had
+      # already been uploaded. prepare_testflight_notes.py clips it and says so
+      # in the log (beid#503). --platform android prefers
+      # what_to_test.android.json and falls back to what_to_test.json.
+      - name: Prepare Google Play release notes
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_testflight_notes.py \
+            --platform android \
+            --repo-root . \
+            --skip-empty \
+            --play-output-dir "$RUNNER_TEMP/whatsnew"
       - name: Upload AAB to Google Play internal testing
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
@@ -170,3 +185,4 @@ jobs:
           tracks: internal
           status: completed
           releaseName: GHA ${{ env.ANDROID_VERSION_CODE }}
+          whatsNewDirectory: ${{ runner.temp }}/whatsnew
