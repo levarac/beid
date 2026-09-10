@@ -45,7 +45,7 @@ class EventJoinCoordinatorRegistryGateTest {
         runCurrent()
 
         assertNoJoinAndNoSensing(engine, coordinator)
-        assertEquals(EventJoinUiState.JoinFailed, coordinator.state.value)
+        assertIs<EventJoinUiState.JoinFailed>(coordinator.state.value)
     }
 
     /**
@@ -87,8 +87,7 @@ class EventJoinCoordinatorRegistryGateTest {
             "the definition read must actually have happened for it to have returned nothing",
         )
         assertNoJoinAndNoSensing(engine, coordinator)
-        assertEquals(
-            EventJoinUiState.JoinFailed,
+        assertIs<EventJoinUiState.JoinFailed>(
             coordinator.state.value,
             "an Event ID that routes but whose definition read comes back empty is not a verified event",
         )
@@ -146,8 +145,7 @@ class EventJoinCoordinatorRegistryGateTest {
         runCurrent()
 
         assertNoJoinAndNoSensing(engine, coordinator)
-        assertEquals(
-            EventJoinUiState.JoinFailed,
+        assertIs<EventJoinUiState.JoinFailed>(
             coordinator.state.value,
             "a deployment with no registry cannot verify anything, so it cannot join anything",
         )
@@ -174,7 +172,7 @@ class EventJoinCoordinatorRegistryGateTest {
         runCurrent()
 
         assertNoJoinAndNoSensing(engine, coordinator)
-        assertEquals(EventJoinUiState.JoinFailed, coordinator.state.value)
+        assertIs<EventJoinUiState.JoinFailed>(coordinator.state.value)
     }
 
     /**
@@ -192,7 +190,7 @@ class EventJoinCoordinatorRegistryGateTest {
         runCurrent()
 
         assertNoJoinAndNoSensing(engine, coordinator)
-        assertEquals(EventJoinUiState.JoinFailed, coordinator.state.value)
+        assertIs<EventJoinUiState.JoinFailed>(coordinator.state.value)
     }
 
     @Test

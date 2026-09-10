@@ -62,6 +62,11 @@ public enum class NearbyEventJoinEligibility {
      * The join code offered is not one this definition binds. Only reached on
      * the operator-lookup path, where a code is what the user typed rather
      * than something read off the radio.
+     *
+     * Two ways in: the code is empty, or — beid#463 — the code is a canonical
+     * open code and the operator answered with a *different* event. See
+     * [operatorLookupJoinEligibility] for why the second one is checkable
+     * without trusting anybody.
      */
     CODE_NOT_BOUND,
 }
@@ -291,6 +296,34 @@ public fun operatorLookupJoinEligibility(
     resolution.blockHashHex.normalizedHexOrNull()
         ?: return NearbyEventJoinEligibility.INCOMPLETE_REGISTRY_EVIDENCE
     if (joinCode.isEmpty()) return NearbyEventJoinEligibility.CODE_NOT_BOUND
+    // beid#463. The operator lookup is a routing hint and nothing more: it can
+    // answer with a different real event than the one whose code was entered,
+    // by mistake or on purpose, and everything downstream would then verify
+    // perfectly — the wrong event's definition really is signed, really is
+    // open, really is inside its window. What makes the answer checkable is
+    // that a canonical open code IS the Event ID (`canonicalOpenCodeV1` is the
+    // lowercase hex of all 32 bytes), so this device already holds the value
+    // the answer has to match and needs to ask no one for it.
+    //
+    // Recognized through `normalizedHexOrNull`, never by raw length: a code
+    // pasted from a wallet or an explorer arrives `0x`-prefixed and 66
+    // characters long, because `normalizedEventCodeOrNull` trims and case-
+    // folds but deliberately does not strip the prefix. Matching on raw length
+    // would classify exactly that input as "not canonical" and skip the check
+    // on the paths most likely to carry one.
+    //
+    // A code that is not a canonical open code has nothing here to compare
+    // against — a deployment's human-readable code is bound to its event only
+    // by the operator's own table — so it is admitted as before. Binding those
+    // needs an expected Event ID carried alongside the code in the handoff,
+    // which v1.0's paste route does not have.
+    val canonicalOpenCode = joinCode.normalizedHexOrNull()
+        ?.takeIf { it.length == CANONICAL_OPEN_CODE_HEX_LENGTH }
+    if (canonicalOpenCode != null &&
+        canonicalOpenCode != definition.eventIdHex.normalizedHexOrNull()
+    ) {
+        return NearbyEventJoinEligibility.CODE_NOT_BOUND
+    }
     if (definition.joinMode != EventJoinMode.OPEN) return NearbyEventJoinEligibility.NOT_OPEN_ADMISSION
     val validFrom = definition.validFrom.value
     val validUntil = definition.validUntil.value
@@ -299,3 +332,10 @@ public fun operatorLookupJoinEligibility(
     }
     return NearbyEventJoinEligibility.ELIGIBLE
 }
+
+/**
+ * Length of a canonical open join code in normalized (unprefixed, lowercase)
+ * hex characters — a whole 32-byte Event ID, which is what
+ * `canonicalOpenCodeV1` renders.
+ */
+private const val CANONICAL_OPEN_CODE_HEX_LENGTH: Int = 64

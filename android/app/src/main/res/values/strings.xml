@@ -39,7 +39,24 @@
     <string name="event_join_error_empty_code">Enter an event code to continue. Ask the event organizer for it.</string>
     <string name="event_join_error_join_failed">beid couldn\'t join that event. Check the code and try again.</string>
     <string name="event_join_searching_nearby">Searching for nearby events…</string>
-    <string name="event_join_rescue_guidance">You can enter a code from Account if no event appears.</string>
+    <!-- Shown under "Searching…" from the start. Reworded in beid#463: it used to send the participant to Account, which was the only place the code field lived. It is no longer the best route once the search gives up — a button appears here — so this no longer names a destination. -->
+    <string name="event_join_rescue_guidance">If no event appears, you can enter its code instead.</string>
+    <!-- beid#463 rescue route. Shown once the radio search has run its course without finding an event this device can join. Address the participant, not the device: they have been staring at a spinner and do not know whether the problem is the venue, their phone, or them. -->
+    <string name="event_join_rescue_prompt">No event found nearby. If you have the event code, you can enter it instead.</string>
+    <!-- Button label. "Enter" here means supplying the code by any means, including pasting it; it is not an instruction to type. -->
+    <string name="event_join_rescue_enter_code">Enter event code</string>
+    <!-- Button label on the event-code screen. Pastes the code from the clipboard. The full code is 64 characters, so this is the normal way to supply one, not a shortcut. -->
+    <string name="event_join_paste_code">Paste code</string>
+    <!-- Join refusal, beid#463. The device could not reach the network at all, so nothing about the event could be checked. This is the one refusal whose fix is not the code: say so plainly, or the participant will keep re-entering a code that was never the problem. -->
+    <string name="event_join_error_network_required">beid needs a connection to verify this event, and couldn\'t reach the network. Check your connection and try again.</string>
+    <!-- Join refusal: the lookup worked and no event is registered for this code. -->
+    <string name="event_join_error_event_not_found">No event is registered for that code. Check it with the event organizer.</string>
+    <!-- Join refusal: an event came back, and it was a different one than the code names. Deliberately does not accuse the organizer or the operator — the participant cannot tell a truncated paste from a bad lookup, and either way the next step is the same. -->
+    <string name="event_join_error_code_mismatch">That code didn\'t match the event beid found. Check that you have the whole code.</string>
+    <!-- Join refusal: the event exists and cannot be joined right now — outside its dates, or not open to join. -->
+    <string name="event_join_error_event_not_active">That event isn\'t open to join right now.</string>
+    <!-- Join refusal: an answer arrived and could not be verified. Distinct from the network case on purpose: nothing here is fixed by finding a better connection. -->
+    <string name="event_join_error_verification_failed">beid couldn\'t verify that event. Check the code with the event organizer.</string>
     <string name="event_join_beacon_name_label">Name announced by nearby beacon</string>
     <string name="event_join_beacon_name_missing">No name announced by nearby beacon</string>
     <string name="event_join_validity_period">Valid from %1$d to %2$d</string>

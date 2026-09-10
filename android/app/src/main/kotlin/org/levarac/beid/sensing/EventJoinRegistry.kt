@@ -40,33 +40,41 @@ internal interface EventJoinRegistry {
      * [RegistryClient.resolveEventId] documents it. The returned ID means
      * nothing until [resolveEventDefinition] verifies it; `null` is a lookup
      * that did not route.
+     *
+     * `errorCode` is the registry's own wire name for why, carried across
+     * because the payload alone cannot answer beid#463's question. A `null` ID
+     * says the read produced no evidence; it does not say whether the network
+     * was unreachable or the code names no event, and those two need opposite
+     * things from the participant. It is `null` alongside a non-null ID, and
+     * may also be `null` on a failure the registry did not name — which is a
+     * classification of UNKNOWN, never an assumed network problem.
      */
-    fun resolveEventId(code: String, completion: (String?) -> Unit)
+    fun resolveEventId(code: String, completion: (eventIdHex: String?, errorCode: String?) -> Unit)
 
-    /** `null` is a read that produced no verifiable definition. */
+    /** `null` is a read that produced no verifiable definition; `errorCode` says why, as on [resolveEventId]. */
     fun resolveEventDefinition(
         eventIdHex: String,
         useTimeEpochSeconds: Long,
-        completion: (EventDefinitionResolution?) -> Unit,
+        completion: (resolution: EventDefinitionResolution?, errorCode: String?) -> Unit,
     )
 }
 
 internal class RegistryClientEventJoinRegistry(
     private val client: RegistryClient,
 ) : EventJoinRegistry {
-    override fun resolveEventId(code: String, completion: (String?) -> Unit) {
+    override fun resolveEventId(code: String, completion: (String?, String?) -> Unit) {
         client.resolveEventId(code) { lookup ->
-            completion(lookup.eventIdHex?.takeIf { lookup.isSuccess })
+            completion(lookup.eventIdHex?.takeIf { lookup.isSuccess }, lookup.errorCode)
         }
     }
 
     override fun resolveEventDefinition(
         eventIdHex: String,
         useTimeEpochSeconds: Long,
-        completion: (EventDefinitionResolution?) -> Unit,
+        completion: (EventDefinitionResolution?, String?) -> Unit,
     ) {
         client.resolveEventDefinition(eventIdHex, safeRegistryReadPin(), useTimeEpochSeconds) { resolution ->
-            completion(resolution.takeIf { it.isSuccess })
+            completion(resolution.takeIf { it.isSuccess }, resolution.errorCode)
         }
     }
 }

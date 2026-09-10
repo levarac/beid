@@ -23,6 +23,8 @@ import org.levarac.barnard.BarnardRelayDecisionEvent
 import org.levarac.barnard.BarnardPermissionResult
 import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
+import org.levarac.parallax.discovery.nearbyCandidateJoinEligibility
+import org.levarac.parallax.discovery.operatorLookupJoinEligibility
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
@@ -30,6 +32,12 @@ import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.registry.RegistryDependencies
+import org.levarac.beid.shared.event.EventJoinFailureReason
+import org.levarac.beid.shared.event.NearbyEventSearchOutcome
+import org.levarac.beid.shared.event.RESCUE_ENTRY_DELAY_SECONDS
+import org.levarac.beid.shared.event.nearbyEventSearchOutcome as searchOutcomeFor
+import org.levarac.beid.shared.event.eventJoinFailureReasonForJoinEligibility
+import org.levarac.beid.shared.event.eventJoinFailureReasonForRegistryErrorCode
 
 /**
  * UI-facing state for [EventJoinCoordinator]. Mirrors the shape of iOS's
@@ -53,7 +61,13 @@ sealed class EventJoinUiState {
     data object VerifyingRegistry : EventJoinUiState()
     data class Sensing(val phase: ScanPhase) : EventJoinUiState()
     data object PermissionDenied : EventJoinUiState()
-    data object JoinFailed : EventJoinUiState()
+    /**
+     * Nothing was joined, and [reason] says what a participant can do about it
+     * (beid#463). Carried on the state rather than looked up separately so the
+     * refusal and its explanation cannot drift apart: there is no moment where
+     * the surface knows a join failed and does not yet know why.
+     */
+    data class JoinFailed(val reason: EventJoinFailureReason) : EventJoinUiState()
 }
 
 /**
@@ -72,7 +86,10 @@ sealed class EventJoinUiState {
  */
 fun mapPermissionResultToState(result: BarnardPermissionResult): EventJoinUiState = when (result) {
     is BarnardPermissionResult.Granted -> EventJoinUiState.PermissionDenied
-    is BarnardPermissionResult.Failed -> EventJoinUiState.JoinFailed
+    // UNKNOWN, not a guess: an SDK caller/lifecycle failure is neither a
+    // network problem nor anything about the event, and the honest
+    // classification for it is that none of the named reasons apply.
+    is BarnardPermissionResult.Failed -> EventJoinUiState.JoinFailed(EventJoinFailureReason.UNKNOWN)
 }
 
 /**
@@ -141,6 +158,38 @@ class EventJoinCoordinator internal constructor(
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
     override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = nearbyDiscovery.cards
+
+    private val _nearbyEventSearchOutcome =
+        MutableStateFlow(NearbyEventSearchOutcome.SEARCHING)
+    override val nearbyEventSearchOutcome: StateFlow<NearbyEventSearchOutcome> =
+        _nearbyEventSearchOutcome.asStateFlow()
+
+    /**
+     * When the current radio search began, by this session's own clock, or
+     * `null` while no search is running (beid#463).
+     *
+     * Set once per search rather than per scan restart: a participant standing
+     * in the same doorway is having one experience, and restarting the timer
+     * under them would keep the rescue route permanently just out of reach.
+     */
+    private var nearbyDiscoveryStartedAtEpochMillis: Long? = null
+
+    /**
+     * Everything watching for the rescue threshold, as one cancellable job.
+     *
+     * It holds two children. One wakes at the threshold, needed because the
+     * rule is a function of elapsed time and nothing else moves at that
+     * instant — a search that finds nothing produces no card updates, so
+     * without it the outcome would only be recomputed on an event that by
+     * definition never arrives. The other follows the card list, so a
+     * candidate that resolves late withdraws a standing offer.
+     *
+     * One job rather than two fields so that ending a search cannot cancel
+     * half of it. The card collector in particular has to die with the search:
+     * it is started per search, and leaving it running would add another
+     * collector on every stop-start cycle.
+     */
+    private var rescueEntryJob: Job? = null
     val nearbyEventCandidates: StateFlow<NearbyEventCandidates> = nearbyDiscovery.candidates
 
     /**
@@ -442,7 +491,15 @@ class EventJoinCoordinator internal constructor(
                     nowEpochSeconds = nowEpochMillis() / 1_000L,
                 )
                 if (context == null) {
-                    refuseJoinWithoutVerification()
+                    refuseJoinWithoutVerification(
+                        eventJoinFailureReasonForJoinEligibility(
+                            nearbyCandidateJoinEligibility(
+                                candidates = nearbyDiscovery.candidates.value,
+                                eventCodeHashHex = eventCodeHashHex,
+                                nowEpochSeconds = nowEpochMillis() / 1_000L,
+                            ),
+                        ),
+                    )
                     return@requestPermissions
                 }
                 joinVerificationOwner = null
@@ -455,10 +512,10 @@ class EventJoinCoordinator internal constructor(
     }
 
     /** A refusal decided before any registry read was started. */
-    private fun refuseJoinWithoutVerification() {
+    private fun refuseJoinWithoutVerification(reason: EventJoinFailureReason) {
         joinVerificationOwner = null
         stopParticipantRelay()
-        _state.value = EventJoinUiState.JoinFailed
+        _state.value = EventJoinUiState.JoinFailed(reason)
     }
 
     /**
@@ -475,15 +532,18 @@ class EventJoinCoordinator internal constructor(
         val owner = Any()
         joinVerificationOwner = owner
         if (registry == null) {
-            refuseJoin(owner)
+            // A deployment with nothing to ask is broken for everyone here and
+            // is not improved by finding a network, so it is not reported as a
+            // network failure however much it looks like one from the outside.
+            refuseJoin(owner, EventJoinFailureReason.VERIFICATION_FAILED)
             return
         }
         _state.value = EventJoinUiState.VerifyingRegistry
-        registry.resolveEventId(eventCode) { eventIdHex ->
+        registry.resolveEventId(eventCode) { eventIdHex, errorCode ->
             coroutineScope.launch {
                 if (!isCurrentJoinVerification(owner)) return@launch
                 if (eventIdHex == null) {
-                    refuseJoin(owner)
+                    refuseJoin(owner, eventJoinFailureReasonForRegistryErrorCode(errorCode))
                     return@launch
                 }
                 verifyDefinitionThenJoin(registry, eventCode, eventIdHex, owner)
@@ -498,22 +558,41 @@ class EventJoinCoordinator internal constructor(
         owner: Any,
     ) {
         val useTimeEpochSeconds = nowEpochMillis() / 1_000L
-        registry.resolveEventDefinition(eventIdHex, useTimeEpochSeconds) { resolution ->
+        registry.resolveEventDefinition(eventIdHex, useTimeEpochSeconds) { resolution, errorCode ->
             coroutineScope.launch {
                 if (!isCurrentJoinVerification(owner)) return@launch
+                if (resolution == null) {
+                    refuseJoin(owner, eventJoinFailureReasonForRegistryErrorCode(errorCode))
+                    return@launch
+                }
                 // Evidence shape (b). This host decides *when* to ask, never
                 // whether the answer is good enough: the definition verifying,
-                // open admission and validity at use time are all decided in
-                // `shared/`, so both platforms answer identically.
-                val context = resolution?.let {
-                    RegistryVerifiedJoinContext.fromOperatorLookup(
-                        joinCode = eventCode,
-                        resolution = it,
-                        nowEpochSeconds = useTimeEpochSeconds,
-                    )
-                }
+                // open admission, validity at use time and — beid#463 — the
+                // resolved Event ID actually being the one the pasted code
+                // names are all decided in `shared/`, so both platforms answer
+                // identically.
+                val context = RegistryVerifiedJoinContext.fromOperatorLookup(
+                    joinCode = eventCode,
+                    resolution = resolution,
+                    nowEpochSeconds = useTimeEpochSeconds,
+                )
                 if (context == null) {
-                    refuseJoin(owner)
+                    // Asked rather than assumed. The gate refuses a verified
+                    // definition for several different reasons and they are not
+                    // interchangeable to the person holding the phone: an
+                    // operator that answered with a different event is a
+                    // problem with the code they were handed, and telling them
+                    // the network failed would send them to fix the wrong thing.
+                    refuseJoin(
+                        owner,
+                        eventJoinFailureReasonForJoinEligibility(
+                            operatorLookupJoinEligibility(
+                                joinCode = eventCode,
+                                resolution = resolution,
+                                nowEpochSeconds = useTimeEpochSeconds,
+                            ),
+                        ),
+                    )
                     return@launch
                 }
                 joinVerificationOwner = null
@@ -529,11 +608,11 @@ class EventJoinCoordinator internal constructor(
      * The one refusal. Every way a join can fail to prove itself lands here so
      * the surface cannot be left waiting on an answer that will never come.
      */
-    private fun refuseJoin(owner: Any) {
+    private fun refuseJoin(owner: Any, reason: EventJoinFailureReason) {
         if (disposed || joinVerificationOwner !== owner) return
         joinVerificationOwner = null
         stopParticipantRelay()
-        _state.value = EventJoinUiState.JoinFailed
+        _state.value = EventJoinUiState.JoinFailed(reason)
     }
 
     /**
@@ -954,11 +1033,61 @@ class EventJoinCoordinator internal constructor(
     override fun startNearbyEventDiscovery() = startNearbyEventDiscoveryIfIdle()
 
     private fun startNearbyEventDiscoveryIfIdle() {
-        if (disposed || scanPhase != ScanPhase.Idle || discoveryOnlyScanOwned) return
+        if (disposed || scanPhase != ScanPhase.Idle) return
+        // Before the scan-ownership checks below, deliberately. The rescue
+        // countdown is about the participant standing on the join surface
+        // waiting for an event to appear, which is true whether or not this
+        // object happens to own the radio. Starting it only when we start a
+        // scan leaves a reachable hole: `stopNearbyEventDiscovery` declines to
+        // stop the scan while the engine is advertising, but still clears
+        // ownership, so a participant returning to the surface finds a scan
+        // already running, every branch below returning early — and the rescue
+        // route never offered, however long they wait. Idempotent, so calling
+        // it on every entry costs nothing.
+        beginRescueEntryCountdown()
+        if (discoveryOnlyScanOwned) return
         val engineState = engine.getState()
         if (engineState.isScanning || engineState.isAdvertising) return
         engine.startScan()
         discoveryOnlyScanOwned = true
+    }
+
+    private fun beginRescueEntryCountdown() {
+        if (nearbyDiscoveryStartedAtEpochMillis != null) return
+        nearbyDiscoveryStartedAtEpochMillis = nowEpochMillis()
+        refreshNearbyEventSearchOutcome()
+        rescueEntryJob?.cancel()
+        rescueEntryJob = coroutineScope.launch {
+            launch {
+                delay(RESCUE_ENTRY_DELAY_SECONDS * 1_000L)
+                refreshNearbyEventSearchOutcome()
+            }
+            // Recomputed on every card update too, so a candidate that
+            // resolves *after* the threshold withdraws the offer, and one that
+            // lapses back to unjoinable restores it. Neither direction is
+            // hypothetical: a registry read completing late does the first, an
+            // expiring definition does the second.
+            launch {
+                nearbyDiscovery.cards.collect { refreshNearbyEventSearchOutcome() }
+            }
+        }
+    }
+
+    /**
+     * Recomputes the offer from the shared rule. Deliberately holds no
+     * threshold and no "is it empty" test of its own — both live in
+     * `shared/`, so iOS reaches the same answer at the same moment.
+     */
+    private fun refreshNearbyEventSearchOutcome() {
+        val startedAt = nearbyDiscoveryStartedAtEpochMillis
+        if (startedAt == null) {
+            _nearbyEventSearchOutcome.value = NearbyEventSearchOutcome.SEARCHING
+            return
+        }
+        _nearbyEventSearchOutcome.value = searchOutcomeFor(
+            elapsedSecondsSinceSearchStarted = (nowEpochMillis() - startedAt) / 1_000L,
+            joinableCandidateCount = nearbyDiscovery.cards.value.count { it.eventIdHex != null },
+        )
     }
 
     fun stopNearbyEventDiscovery() {
@@ -969,7 +1098,22 @@ class EventJoinCoordinator internal constructor(
             !isAdvertising
         discoveryOnlyScanOwned = false
         nearbyDiscovery.reset()
+        endRescueEntryCountdown()
         if (shouldStopScan) engine.stopScan()
+    }
+
+    /**
+     * Ends the search and withdraws any standing rescue offer. Also clears the
+     * start time, so the next search is timed from when it actually began
+     * rather than inheriting an elapsed value from the last one — which would
+     * make the rescue route appear instantly on a surface the user had only
+     * just returned to.
+     */
+    private fun endRescueEntryCountdown() {
+        rescueEntryJob?.cancel()
+        rescueEntryJob = null
+        nearbyDiscoveryStartedAtEpochMillis = null
+        _nearbyEventSearchOutcome.value = NearbyEventSearchOutcome.SEARCHING
     }
 
     fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean =
@@ -988,6 +1132,7 @@ class EventJoinCoordinator internal constructor(
         finalizeSelfProofIfNeeded()
         stopParticipantRelay()
         discoveryOnlyScanOwned = false
+        endRescueEntryCountdown()
         nearbyDiscovery.dispose()
         scanPhase = applyStopSensing()
         resetSessionState()
