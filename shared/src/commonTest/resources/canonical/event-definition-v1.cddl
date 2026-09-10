@@ -28,5 +28,11 @@ event-definition-v1 = {
   12: 0..9007199254740991,
   13: 0..9007199254740991,
   ? 14: 0 / 1,
-  ? 15: bstr .size 8
+  ? 15: bstr .size 8,
+  ? 16: organizer-claim-v1
+}
+
+organizer-claim-v1 = {
+  1: uint,
+  2: bstr .size (1..1024)
 }
