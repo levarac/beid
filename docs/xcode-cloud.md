@@ -84,6 +84,63 @@ Test" notes. Xcode Cloud supplies those notes through
 after processing. That notes update is a follow-up, not part of this temporary
 upload lane.
 
+## The self-hosted iOS lane, and when it runs
+
+Verified 2026-09-10 against `.github/workflows/pr-ci-ios-macos.yml`.
+
+Xcode Cloud is not the only thing that builds iOS for a pull request.
+`.github/workflows/pr-ci-ios-macos.yml` runs a Debug simulator build/test plus
+an unsigned Release device build on the self-hosted `emi` runner. It is
+**informational** — it gates nothing, and Xcode Cloud's
+`Beid | PR Build & Test | Test - iOS` remains the effective gate on the head
+under review. Since gh#479 it fires on exactly three triggers, **not on every
+push to a PR**: `pull_request` of types `opened` and `ready_for_review`, `push`
+to `main`, and `workflow_dispatch`. The first two keep the `paths` filter that
+limits the lane to `ios/`, `shared/`, the Android build-configuration files,
+and `scripts/resolve_kmp_java_home.sh`; `paths` does not apply to
+`workflow_dispatch`, so a manual run always executes. The reason for narrowing
+it is host contention rather than cost: one run holds the machine for roughly
+30 minutes, that machine also serves human-run local iOS suites, and on
+2026-09-10 ten runs occupied it for 274 minutes in a single day — 147 of those
+minutes on one PR's six intermediate pushes, which nobody merges.
+
+The pairing of `opened` with a job-level draft guard is deliberate and the two
+halves are not separable. `ready_for_review` fires **only** on a draft→ready
+transition, so on its own it would miss every PR opened directly as non-draft —
+13 of the 22 settled PRs in the last 25 measured on 2026-09-10, iOS-affecting
+ones among them. Adding `opened` covers those, but `opened` also fires for
+draft pulls, so the job carries
+`if: github.event_name != 'pull_request' || github.event.pull_request.draft == false`.
+Keep the `event_name` clause: `github.event.pull_request` does not exist for
+`push` or `workflow_dispatch`, so removing it would silently disable the lane
+on `main`.
+
+Three further points are easy to misread, so read them before citing this lane
+as evidence.
+
+**A run on a PR is not a run on the head that gets merged.** Because
+`synchronize` is not a trigger, a non-draft PR runs this lane exactly once, on
+the head it was opened with; every push after that changes the head without
+re-running it. The same holds after an un-draft. So "this lane was green on the
+PR" licenses no claim about the commit actually being merged — the `push` to
+`main` is what covers the merged result, and it runs after the fact. Do not
+read a green run here as iOS coverage of the merge candidate.
+
+**"Did not run" has two different shapes here**: opening a *draft* PR still
+records a run whose job is `skipped`, whereas pushing to a draft PR records no
+run at all, because `synchronize` is not a trigger.
+
+**`concurrency` is still keyed on `github.ref` with `cancel-in-progress: true`**,
+so back-to-back merges cancel the earlier `main` run — a run is guaranteed to
+*start* per merge, not to finish.
+
+The repository's authoritative statement of PR CI lane responsibilities is the
+[PR CI contract](../AGENTS.md#pr-ci); this section summarizes it for delivery
+readers and defers to it on any disagreement. The trigger list itself is pinned
+by `scripts/tests/test_pr_ci_ios_macos_triggers.py`, which runs in the
+Repository sanity job, so a silent return to per-push runs turns that check
+red.
+
 ## Two convention files, two audiences
 
 | File | Repo location | Audience | Updated when |

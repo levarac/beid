@@ -336,9 +336,42 @@ record:
    appears, leaving a reader who trusts the list unable to classify a path that
    is not on it.
 3. **Source and control** — name where the configuration was read, and cite a
-   control experiment on the same PR if one exists (PR #428: two pushes inside
-   the set produced zero Xcode Cloud check-runs; one push adding a `.py`,
-   outside the set, fired and succeeded).
+   control experiment on the same PR if one exists. **A control has to be able
+   to come out the other way**; the record below exists because the first one
+   cited here could not.
+
+   **The matcher is evaluated over the PR's cumulative diff against base, not
+   over the delta of the individual push.** This is why the predicate in (1) is
+   defined as `gh pr view <n> --json files` rather than a `git diff` of the
+   push — and it means a push whose own files are *all* inside the exclusion
+   set still starts a build, whenever some earlier commit in the same PR
+   touched a file outside it.
+
+   **Why PR #428 did not settle this, though it was recorded as if it had.**
+   Its observation was: two pushes inside the set produced zero Xcode Cloud
+   check-runs, and one push adding a `.py` outside the set fired and succeeded.
+   That reads as push-level evaluation, and it was cited that way. But at the
+   time of those first two pushes #428's *cumulative* file set was also
+   entirely inside the exclusion set — so cumulative evaluation predicts
+   exactly the same three outcomes. **The record is consistent with both
+   readings, which makes it evidence of neither.** Nothing was measured wrong;
+   the experiment simply had no branch on which the two hypotheses disagree.
+
+   **The discriminating observation (PR #483, 2026-09-10).** A push whose delta
+   was `AGENTS.md` + `docs/xcode-cloud.md` — both inside the exclusion set —
+   landed on a PR whose cumulative set already contained
+   `scripts/tests/test_pr_ci_ios_macos_triggers.py`, outside it. Push-level
+   evaluation predicts no build; cumulative predicts a build. **Prediction was
+   recorded in the PR body before the push, and Xcode Cloud started**
+   (`Beid | PR Build & Test | Test - iOS` on `b3f44da`, read from
+   `repos/.../commits/<sha>/check-runs`). Push-level evaluation is therefore
+   ruled out.
+
+   The transferable part is not the conclusion but the shape: **before citing a
+   control, check whether the competing explanation would have produced a
+   different result.** If it would not, say so and leave the question open
+   rather than recording a conclusion the experiment cannot carry — otherwise
+   the next reader inherits a settled-looking answer built on a non-control.
 4. **Void clause** — if **any** file at the final head is outside the exclusion
    set, absence of the check is the hard stop again and the remedy is a
    close→reopen retrigger, **not** this record. Re-evaluate (1) at the head SHA
@@ -608,8 +641,48 @@ dates). The contract every agent must know before touching delivery files:
     `gh pr checks` が答える。
   - **`.github/workflows/pr-ci-ios-macos.yml`(#301、2026-09-02 追加)** —
     self-hosted runner `emi` 上の **informational-only** lane。job 名は
-    `iOS simulator (self-hosted macOS, informational)`。`ios/` `shared/`
-    Android build 関連パスの変更でのみ起動し、**required ではない**。
+    `iOS simulator (self-hosted macOS, informational)`。**required ではない**。
+    **起動条件は次の 3 つだけであり、PR への push 毎ではない**
+    (#479、2026-09-10 に変更): (1) `pull_request` の `opened` と
+    `ready_for_review`、(2) `push` の `main`、(3) `workflow_dispatch`。
+    (1)(2) には従来どおり `paths` filter がかかり、`ios/` `shared/`
+    Android build 関連パスの変更でのみ起動する。`workflow_dispatch` に
+    `paths` は効かないので、手動実行は常に走る。`synchronize` を外した理由は、
+    この lane が 1 回あたり約 30 分 host を占有しながら merge を gate せず、
+    同じ head を Xcode Cloud の `Beid | PR Build & Test | Test - iOS` が
+    約 12 分で検証しているため。2026-09-10 の実測では 10 run が 1 日に host を
+    274 分占有し、うち 147 分は 1 本の PR の 6 push 分だった。
+    **`opened` を入れてあるのは、`ready_for_review` が draft から上げた時に
+    しか発火しないため。** issue #479 の本文は `ready_for_review` 単独を
+    指定していたが、直近 25 本を timeline で数えると決着済み 22 本のうち
+    13 本が `ReadyForReviewEvent` を持たず (ios 直撃のものを含む)、それだと
+    PR の約 4 割しかカバーしない。非 draft で open された PR は open した
+    瞬間から merge 候補の head を持つので、`opened` を足す方が issue の
+    意図に沿う。**受け入れ基準 4 つは狭い方の集合でも満たせてしまうので、
+    基準の充足を正しさの証明として扱わないこと。**
+    **`opened` は draft PR でも発火するため、draft の除外は job 側の
+    `if` が担う** (`github.event_name != 'pull_request' ||
+    github.event.pull_request.draft == false`)。`paths` と `types` だけでは
+    「draft でない」を表現できない。`event_name` の節は必須で、これを外すと
+    `push` と `workflow_dispatch` では `github.event.pull_request` が存在せず
+    式全体が false になり、main の計測が止まる。
+    **PR で走ったことは、merge される head で走ったことを意味しない。**
+    `synchronize` が trigger でない以上、非 draft の PR はこの lane を
+    「open した時の head で 1 回」だけ走らせ、その後の push は head を
+    変えたまま再実行しない (un-draft 後も同じ)。したがって
+    **「PR でこの lane が緑だった」から merge 対象 commit の iOS 検証を
+    導いてはならない**。merged 版を担保するのは `main` への push の方で、
+    それは merge の後に走る。
+    **観測上の注意**: draft PR を open した時は run 自体は記録され、job が
+    `skipped` になる。draft PR への push は `synchronize` が trigger でない
+    ため run 自体が記録されない。「起動しない」の証拠はこの 2 つで形が違う。
+    **`concurrency` は `github.ref` 単位で `cancel-in-progress: true` のまま**
+    なので、main への連続 merge では前の main run が cancel される。merge 毎に
+    run が「起動する」ことは保証されるが、**完走は保証されない**。
+    起動条件そのものは `scripts/tests` 配下の contract test が固定しており、
+    Repository sanity job の `python3 -m unittest discover -s scripts/tests -t .`
+    で毎 PR 実行される (この subsection が件数もファイル名も書かないのは
+    上と同じ理由 — 追加のたびに古くなるため)。
     Debug simulator build/test の集計後、テスト結果にかかわらず Release device
     build (`CODE_SIGNING_ALLOWED=NO`) も実行し、Release-only の compile regression
     を検出する。個々の step を `continue-on-error` にはせず、lane 全体が
@@ -620,7 +693,10 @@ dates). The contract every agent must know before touching delivery files:
   **`scripts/check_pr_ci_doc_drift.py` はこの 2 本目を検査していない。**
   同スクリプトは `.github/workflows/pr-ci.yml` のみを対象としており、
   **iOS lane が変わってもこの記述は緑のまま古くなる**。lane を触る変更は、
-  検査に頼らずこの subsection を手で更新すること。
+  検査に頼らずこの subsection を手で更新すること。#479 で
+  `scripts/tests` に追加した contract test が固定するのは iOS lane の
+  **起動条件だけ**であって、この subsection の散文ではない。起動条件以外は
+  依然として手で追随させる必要がある。
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、
   上の KMP review gate を免除しない。KMP の independent review は作業上の

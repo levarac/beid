@@ -1,7 +1,26 @@
 name: PR iOS CI (self-hosted macOS, informational)
 
 on:
+  # Triggers are deliberately narrow (gh#479). This lane takes ~30 minutes on
+  # the single self-hosted macOS host that also serves human-run local iOS
+  # suites, and it gates nothing: Xcode Cloud's "Beid | PR Build & Test |
+  # Test - iOS" verifies the same head in ~12 minutes and is the effective
+  # gate. Firing on every PR push spent that host on intermediate heads nobody
+  # merges — measured 2026-09-10, ten runs held it for 274 minutes in one day,
+  # 147 of which were one PR's six pushes, with two runs overlapping for 17
+  # minutes. So there is no `synchronize` here. The heads worth 30 minutes are
+  # the one proposed for merge and `main` once the merge has landed.
+  #
+  # The `paths` list is repeated per event because GitHub Actions does not
+  # support YAML anchors in workflow files. Keep the two copies identical.
   pull_request:
+    # Both events that produce a merge-candidate head, and neither of them is
+    # `synchronize`. `ready_for_review` alone would miss every PR opened
+    # directly as non-draft — measured on this repo, 13 of the 22 settled PRs
+    # in the last 25 never fired it, iOS-affecting ones among them. `opened`
+    # also fires for DRAFT pulls, so the job carries an explicit draft guard;
+    # `paths` and `types` cannot express "non-draft" on their own.
+    types: [opened, ready_for_review]
     paths:
       - ".github/workflows/pr-ci-ios-macos.yml"
       - "ios/**"
@@ -12,6 +31,25 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+  push:
+    # Measure the merged result on main exactly once. Note the concurrency
+    # group below is keyed on github.ref with cancel-in-progress, so two merges
+    # landing back to back cancel the earlier main run: this guarantees a run
+    # starts per merge, not that every one finishes.
+    branches: [main]
+    paths:
+      - ".github/workflows/pr-ci-ios-macos.yml"
+      - "ios/**"
+      - "shared/**"
+      - "android/build.gradle.kts"
+      - "android/settings.gradle.kts"
+      - "android/gradle.properties"
+      - "android/gradlew"
+      - "android/gradle/wrapper/**"
+      - "scripts/resolve_kmp_java_home.sh"
+  # Escape hatch: run this lane against any ref on demand. `paths` does not
+  # apply to workflow_dispatch, so a manual run always executes.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -35,6 +73,15 @@ jobs:
     # fromJSON is required because runs-on treats a plain string variable as
     # ONE label; it does not split on commas.
     runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
+    # Draft pulls do not get 30 minutes of the shared macOS host. `opened`
+    # above fires for drafts too, so this is where they are dropped. The
+    # event_name clause keeps `push` and `workflow_dispatch` unaffected, since
+    # `github.event.pull_request` is absent for them and would otherwise make
+    # the whole expression false. Note a draft `opened` still records a run
+    # whose job is *skipped* — a skipped row is the expected evidence there,
+    # whereas a draft push records nothing at all, `synchronize` not being a
+    # trigger.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     timeout-minutes: 45
     steps:
       - name: Initialize CI output path
