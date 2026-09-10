@@ -70,8 +70,11 @@ public enum class NearbyEventRegistryResolutionResult {
  * - **A candidate assembled from v1 `eventInfoHint` traffic alone** stays at
  *   [UNVERIFIED] forever, since nothing can raise it, and so keeps the
  *   pre-existing [NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP]
- *   gate. Holding it to [REGISTRY_VERIFIED] would make it permanently
- *   unjoinable and regress the shipped v1 join path.
+ *   gate. Holding it to [REGISTRY_VERIFIED] would make it permanently unable
+ *   to pass that operator-lookup gate and regress the shipped v1 join path.
+ *   That gate is the typed-code path — `operatorLookupJoinEligibility` and
+ *   `RegistryVerifiedJoinContext.fromOperatorLookup` — not the nearby-candidate
+ *   path this state feeds, and the two answer different questions.
  *
  * This split is temporary by design. It exists only while v1 traffic is still
  * the common case; once organizers serve their own v2 containers, the v1

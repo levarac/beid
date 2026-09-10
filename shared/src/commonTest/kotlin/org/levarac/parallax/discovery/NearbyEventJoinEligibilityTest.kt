@@ -58,7 +58,7 @@ class NearbyEventJoinEligibilityTest {
      * either direction, which is how this combination went unpinned before.
      */
     @Test
-    fun radioSelfVerifiedWithAnOperatorLookupRegistrationIsNotJoinable() {
+    fun radioSelfVerifiedWithAnOperatorLookupRegistrationIsNotJoinableOnTheNearbyPath() {
         val store = createNearbyEventDiscoveryStore()
         recordHint(store)
         resolveRegistry(store, envelopeAgrees = false)
@@ -78,7 +78,7 @@ class NearbyEventJoinEligibilityTest {
     }
 
     @Test
-    fun hintOnlyCandidateStaysUnverifiedAndIsNotJoinable() {
+    fun hintOnlyCandidateStaysUnverifiedAndIsNotJoinableOnTheNearbyPath() {
         val store = createNearbyEventDiscoveryStore()
         recordHint(store)
         resolveRegistry(store, envelopeAgrees = false)
@@ -94,7 +94,7 @@ class NearbyEventJoinEligibilityTest {
     }
 
     @Test
-    fun aV2OnlyCandidateWithoutAnOperatorLookupStaysUnjoinable() {
+    fun aV2OnlyCandidateWithoutAnOperatorLookupStaysUnjoinableOnTheNearbyPath() {
         val store = createNearbyEventDiscoveryStore()
         recordEnvelope(store, agreesWithRegistry = false)
 
@@ -108,7 +108,7 @@ class NearbyEventJoinEligibilityTest {
     }
 
     @Test
-    fun agreementOnAVerifiedDefinitionPromotesAndUnlocksJoin() {
+    fun agreementOnAVerifiedDefinitionPromotesAndUnlocksJoinOnTheNearbyPath() {
         val store = createNearbyEventDiscoveryStore()
         recordEnvelope(store, agreesWithRegistry = false)
         resolveRegistry(store, envelopeAgrees = true)
