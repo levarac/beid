@@ -16,10 +16,15 @@ import kotlin.test.assertTrue
  * beid#374 — join, key use, recording and relay are permitted only after this
  * host's own registry read verified the event (spec 122's `REGISTRY_VERIFIED`).
  *
- * Named for the behaviour rather than the mechanism so the iOS counterpart can
- * mirror them one for one: iOS's `SensingCoordinator.joinEvent(_:canonicalEventIdHex:)`
- * still takes an optional ID and joins whatever the lookup returned, so these
- * three cases have no iOS twin yet.
+ * `joinEventStartsNeitherJoinNorSensingWhenNoRegistryIsConfigured` → iOS `testStartSensingLeavesNoSensingScreenWhenNoRegistryIsConfigured`.
+ * `joinEventStartsNeitherJoinNorSensingWhenTheRegistryLookupFails` → iOS `testStartSensingStartsNeitherJoinNorSensingWhenTheRegistryReadFails`.
+ * `joinEventStartsNeitherJoinNorSensingWhileTheRegistryLookupIsPending` → iOS `testStartSensingStartsNeitherJoinNorSensingWhileTheRegistryReadIsPending`.
+ * `aRefusedJoinLeavesNoRecordingAndNoRelay` → iOS `testARefusedJoinLeavesNoRecordingAndNoRelay` (same name on both).
+ *
+ * Those are the pairs established by name. The remaining cases in this class are
+ * deliberately not listed: naming a twin that exists stays true on its own, while
+ * asserting that one does NOT exist is the construct that made this comment stale
+ * in the first place. Check the iOS file rather than trusting a list here.
  *
  * "Pending" is expressed by a registry that never answers, not by a timer:
  * that is exactly the state a slow or unreachable operator endpoint leaves the
