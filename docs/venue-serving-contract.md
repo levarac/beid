@@ -51,6 +51,40 @@ enums: `VenueImportFailure`, `VenueServingBlock`, `VenueRadioState` and
 `allCases` separately makes outcome-coverage tests include additions. Neither
 control substitutes for the other.
 
+None of the four declares explicit raw values, so **each raw value is its own
+camelCase case name** — `handoffMismatch`, `notStarted`. That is load-bearing
+for the paragraph below.
+
+### Two spelling conventions in `shared/`, deliberately
+
+`shared/` carries two conventions for outcome codes, and this is a choice with a
+stated reason rather than an oversight:
+
+- **snake_case** for identity failure codes — `handoff_mismatch`,
+  `registry_unavailable` — in `VenueBundleIdentity.kt`.
+- **camelCase, matching the native case names verbatim** — `notStarted`,
+  `noCurrentEnvelope` — for the serving block codes in `VenueCurrentLease.kt`.
+
+The serving codes match the native names so outcome-coverage tests are a
+mechanical set equality with **no mapping standing between the two sides**. A
+mapping authored and also tested by the same person is the shape of test that
+cannot fail for the reason it exists, and that is what the first option would
+have produced.
+
+Today the two conventions never meet: the identity codes appear only in that one
+Kotlin file — no mapping table, no translation function, no native consumer —
+which is consistent with there being no production construction path yet. **Item
+4 is where a production path first appears, and which convention becomes the
+shared vocabulary is deferred to it.**
+
+Two conditions hold until then:
+
+- When item 4 needs a real mapping, **that mapping is handed to `chk-461-72` as a
+  separate object** and is not tested by its author alone.
+- **If the identity codes ever need to cross this boundary, raise it** rather
+  than normalising one convention into the other in passing. That is the moment
+  the deferred question comes due.
+
 Moving payloads into wrappers must not admit contradictory combinations:
 
 - `VenueServingRejection` has a failable initializer. `notStarted` requires a

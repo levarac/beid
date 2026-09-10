@@ -50,6 +50,50 @@ the shared API and UI so a one-ENIN permission cannot be mistaken for verified
 signed-window metadata. The current issue body, fetched on 2026-09-10 at
 08:52 UTC, now explicitly records the phase split and pending-pin checkbox.
 
+### Why the cap stays, now that the SDK exposes the expiry
+
+Ruled 2026-09-10, after the pinned SDK was found to address this policy
+directly. Recorded with its reason because the next reader arrives exactly where
+we did — at a pinned comment saying the fallback is unnecessary — and would
+otherwise re-derive the whole argument or quietly retire the cap.
+
+**The invariant.** The local permit stops no later than the next ENIN. The
+signed `relayExpiresAtEnin` is retained for diagnostics and phase-2 readiness and
+is **never presented as the local permit deadline**.
+
+`currentEnin + 1` is not merely a shorter bound. **It is the phase-1
+re-verification cadence.** Stopping at the next ENIN forces a fresh SDK
+verification every ENIN. Using the signed expiry as the serving stop would
+silently let *one* verification authorise service across later ENIN boundaries —
+up to eleven of them, given the 12-ENIN lifetime cap — and serving across
+boundaries without re-verifying is schedule handling, which this same ruling
+assigns to phase 2.
+
+What the pinned SDK actually says, at
+`d382de873fa355a7cb21d219b2e33903105e86fa`,
+`packages/swift/barnard/Sources/BarnardCore/BarnardB005EnvelopeV2.swift:52-57`,
+read at the pin rather than from a local checkout:
+
+1. **It permits, and does not require.** "a host **may** use this directly as a
+   relay lease bound instead of falling back to a pessimistic `currentEnin + 1`".
+   The modal is *may*. Directly checkable against the text.
+2. **It does not waive fresh verification.** This clause rests on the file
+   **never addressing verification cadence at all** — measured as zero hits
+   across six phrasings (`re-verif`, `reverif`, `cadence`, `each ENIN`,
+   `every ENIN`, `per ENIN`), against a positive control showing `verify` itself
+   appears fifteen times, so the search works. **This is an argument from
+   silence, and it is marked as one deliberately.** A reader who later finds a
+   cadence statement in a newer SDK has found the thing that would move this.
+
+The ruling does not depend on clause 2. It rests on what phase 1 is *for*, which
+is a scope decision, not a reading of the SDK. Clause 2 only establishes that
+nothing in the SDK contradicts it.
+
+**Forward condition.** If the product later wants `relayExpiresAtEnin` as the
+serving stop, **make cadence an explicit separate control** and add proof that
+each later ENIN is freshly verified. **Do not retire the cap merely because the
+SDK exposes the field.**
+
 The branch fast-forwarded to `248742dcfe0b5392988646dcbb55e3e9346e0994` under
 operator authorization. Its two-commit delta changes only `AGENTS.md`; the
 source inventory above is unchanged. On that base, the codec's null scaffolding
