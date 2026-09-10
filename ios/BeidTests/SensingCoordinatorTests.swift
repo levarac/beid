@@ -3,6 +3,7 @@
 
 import BarnardCore
 import BeidSharedKit
+import Combine
 import XCTest
 @testable import Beid
 
@@ -14,6 +15,11 @@ func makeIsolatedSensingCoordinator(
   participantRelayControl: (any ParticipantRelayControlling)? = nil,
   eventJoinControl: (any EventJoinControlling)? = nil,
   eventJoinRegistry: (any EventJoinRegistry)? = nil,
+  nearbyDiscoveryStore:
+    ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
+  nearbyDiscoveryClock: @escaping () -> Int64 = {
+    Int64((Date().timeIntervalSince1970 * 1_000).rounded())
+  },
   relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
 ) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
@@ -47,6 +53,8 @@ func makeIsolatedSensingCoordinator(
     reportSubmissionRuntime: reportSubmissionRuntime,
     eventJoinControl: eventJoinControl,
     eventJoinRegistry: eventJoinRegistry,
+    nearbyDiscoveryStore: nearbyDiscoveryStore,
+    nearbyDiscoveryClock: nearbyDiscoveryClock,
     participantRelayControl: participantRelayControl,
     relayCadenceNanoseconds: relayCadenceNanoseconds
   )
@@ -105,6 +113,16 @@ final class SensingCoordinatorTests: XCTestCase {
   static let eventIdHex = String(repeating: "ab", count: 32)
   static let keySetDigestHex = String(repeating: "cd", count: 32)
   static let eventCodeHashHex = String(repeating: "ef", count: 8)
+
+  private let nearbyVectorEventIdHex =
+    "5d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab3195"
+  private let nearbyVectorHashHex = "9adc61d60dda843e"
+  private let nearbyVectorDefinitionHashHex =
+    "ab6f2c1d9e4b8a7350c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7081"
+  private let nearbyVectorBlockHashHex =
+    "cd9e8f7a6b5c4d3e2f10112233445566778899aabbccddeeff00112233445566"
+  private let nearbyVectorValidFromEpochSeconds: Int64 = 1_799_997_000
+  private let nearbyVectorValidUntilEpochSeconds: Int64 = 1_800_003_299
 
   func testDemoEventModeRemainsOverridableInDebugSimulator() throws {
     #if DEBUG && targetEnvironment(simulator)
@@ -667,6 +685,346 @@ final class SensingCoordinatorTests: XCTestCase {
       Data(bytesFromKotlinByteArray: try XCTUnwrap(source.census)),
       census
     )
+  }
+
+  func testDiscoveryOnlyScanStartsAndStopsOnlyTheScanItOwns() {
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    coordinator.useDemoEventMode = false
+
+    coordinator.startNearbyEventDiscovery()
+    coordinator.startNearbyEventDiscovery()
+
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertEqual(coordinator.phase, .idle)
+
+    coordinator.stopNearbyEventDiscovery()
+    coordinator.stopNearbyEventDiscovery()
+
+    XCTAssertEqual(engine.stopDiscoveryScanCallCount, 1)
+  }
+
+  func testSuccessfulNearbyJoinTransfersDiscoveryScanOwnershipToAutomaticOperation() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let store = makeNearbyDiscoveryStore()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { 1_800_000_000_000 }
+    )
+    coordinator.useDemoEventMode = false
+
+    coordinator.startNearbyEventDiscovery()
+    coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
+    try? await Task.sleep(nanoseconds: 20_000_000)
+    coordinator.stopNearbyEventDiscovery()
+
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1)
+    XCTAssertEqual(engine.joinAndStartContexts.count, 1)
+    XCTAssertEqual(
+      engine.stopDiscoveryScanCallCount,
+      0,
+      "a joined automatic-operation scan is no longer owned by the pre-join flow"
+    )
+  }
+
+  func testNearbyCardProjectionKeepsUnresolvedCandidatesVisibleButNonInteractive() throws {
+    let store = makeNearbyDiscoveryStore(includeUnresolvedCandidate: true)
+    let snapshot = store.snapshot
+
+    let presentation = NearbyEventCardListPresentation(
+      candidates: snapshot,
+      nowEpochSeconds: 1_800_000_000
+    )
+
+    let sourceHashes = (0..<snapshot.candidateCount).compactMap {
+      snapshot.candidateAt(index: $0)?.eventCodeHashHex
+    }
+    XCTAssertEqual(
+      presentation.cards.map(\.eventCodeHashHex),
+      sourceHashes,
+      "the native display projection must preserve every shared candidate in shared order"
+    )
+    let joinable = try XCTUnwrap(
+      presentation.cards.first { $0.eventCodeHashHex == nearbyVectorHashHex }
+    )
+    XCTAssertEqual(joinable.eventIdHex, nearbyVectorEventIdHex)
+    XCTAssertEqual(joinable.displayValidFromEpochSeconds, nearbyVectorValidFromEpochSeconds)
+    XCTAssertEqual(joinable.displayValidUntilEpochSeconds, nearbyVectorValidUntilEpochSeconds)
+    XCTAssertEqual(joinable.joinActionEventCodeHashHex, nearbyVectorHashHex)
+    XCTAssertEqual(presentation.selectedEventCodeHashHex, nearbyVectorHashHex)
+
+    let unresolved = try XCTUnwrap(
+      presentation.cards.first { $0.eventCodeHashHex == "0102030405060708" }
+    )
+    XCTAssertNil(unresolved.eventIdHex)
+    XCTAssertNil(unresolved.joinActionEventCodeHashHex)
+  }
+
+  func testOneEligibleCandidateIsPreselectedWithoutAutoJoining() {
+    let engine = RecordingEventJoinControl()
+    let store = makeNearbyDiscoveryStore()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { 1_800_000_000_000 }
+    )
+    coordinator.useDemoEventMode = false
+
+    let presentation = NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates,
+      nowEpochSeconds: 1_800_000_000
+    )
+
+    XCTAssertEqual(presentation.selectedEventCodeHashHex, nearbyVectorHashHex)
+    XCTAssertFalse(engine.didJoin, "preselection is visual state and must never auto-join")
+  }
+
+  func testMultipleEligibleCandidatesAreNotPreselectedOrAutoJoined() {
+    let engine = RecordingEventJoinControl()
+    let first = NearbyEventCard(
+      beaconDisplayName: "First",
+      eventIdHex: "01",
+      displayValidFromEpochSeconds: nil,
+      displayValidUntilEpochSeconds: nil,
+      eventCodeHashHex: "0101010101010101"
+    )
+    let second = NearbyEventCard(
+      beaconDisplayName: "Second",
+      eventIdHex: "02",
+      displayValidFromEpochSeconds: nil,
+      displayValidUntilEpochSeconds: nil,
+      eventCodeHashHex: "0202020202020202"
+    )
+
+    let presentation = NearbyEventCardListPresentation(cards: [first, second])
+
+    XCTAssertNil(presentation.selectedEventCodeHashHex)
+    XCTAssertFalse(engine.didJoin)
+  }
+
+  func testZeroCandidatesShowsSearchingStateAndManualEntryRescue() {
+    let presentation = NearbyEventCardListPresentation(cards: [])
+
+    XCTAssertTrue(presentation.isSearching)
+    XCTAssertTrue(presentation.showsManualEntryRescue)
+    XCTAssertTrue(presentation.cards.isEmpty)
+  }
+
+  func testEligibleNearbyCandidateJoinsExactlyOnceThroughCapabilitySeam() async throws {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let store = makeNearbyDiscoveryStore()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { 1_800_000_000_000 }
+    )
+    coordinator.useDemoEventMode = false
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertEqual(engine.joinAndStartContexts.count, 1)
+    XCTAssertEqual(engine.joinedCodes, [nearbyVectorEventIdHex])
+    XCTAssertEqual(coordinator.phase, .sensing)
+  }
+
+  func testRenderedNearbyActionFailsClosedWhenCandidateExpiresDuringPermissionWait() async {
+    var nowEpochMillis: Int64 = 1_800_000_000_000
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let store = makeNearbyDiscoveryStore(observedAtEpochMillis: nowEpochMillis)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { nowEpochMillis }
+    )
+    coordinator.useDemoEventMode = false
+    let renderedActionHash = NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates,
+      nowEpochSeconds: nowEpochMillis / 1_000
+    ).cards.first?.joinActionEventCodeHashHex
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: renderedActionHash ?? "")
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+
+    nowEpochMillis += 300_001
+    coordinator.refreshNearbyEventDiscovery()
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    engine.grantHeldPermissionRequest()
+    try? await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
+  }
+
+  func testRenderedNearbyActionFailsClosedWhenCandidateExpiresBeforeTap() async throws {
+    var nowEpochMillis: Int64 = 1_800_000_000_000
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let store = makeNearbyDiscoveryStore(observedAtEpochMillis: nowEpochMillis)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { nowEpochMillis }
+    )
+    coordinator.useDemoEventMode = false
+    let renderedActionHash = try XCTUnwrap(
+      NearbyEventCardListPresentation(
+        candidates: coordinator.nearbyEventCandidates,
+        nowEpochSeconds: nowEpochMillis / 1_000
+      ).cards.first?.joinActionEventCodeHashHex
+    )
+
+    nowEpochMillis += 300_001
+    coordinator.refreshNearbyEventDiscovery()
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: renderedActionHash)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    engine.grantHeldPermissionRequest()
+    try? await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(engine.joinAndStartContexts.count, 0)
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
+  }
+
+  func testMissingDisplayWindowDoesNotOverrideAuthoritativeCandidateWindow() async throws {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let store = makeNearbyDiscoveryStore()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { 1_800_000_000_000 }
+    )
+    coordinator.useDemoEventMode = false
+    let card = NearbyEventCard(
+      beaconDisplayName: "Community night",
+      eventIdHex: nearbyVectorEventIdHex,
+      displayValidFromEpochSeconds: nil,
+      displayValidUntilEpochSeconds: nil,
+      eventCodeHashHex: nearbyVectorHashHex
+    )
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: try XCTUnwrap(card.joinActionEventCodeHashHex))
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertEqual(engine.joinAndStartContexts.count, 1)
+    XCTAssertEqual(engine.joinedCodes, [nearbyVectorEventIdHex])
+  }
+
+  func testDefinitionExpiryPublishesADisabledProjectionBeforeSourceTTL() async throws {
+    let validUntilEpochSeconds: Int64 = 1_800_000_000
+    var nowEpochMillis = validUntilEpochSeconds * 1_000 + 900
+    let store = makeNearbyDiscoveryStore(
+      observedAtEpochMillis: nowEpochMillis,
+      validFromEpochSeconds: validUntilEpochSeconds - 60,
+      validUntilEpochSeconds: validUntilEpochSeconds
+    )
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { nowEpochMillis }
+    )
+    let initial = try XCTUnwrap(
+      NearbyEventCardListPresentation(
+        candidates: coordinator.nearbyEventCandidates,
+        nowEpochSeconds: nowEpochMillis / 1_000
+      ).cards.first
+    )
+    XCTAssertEqual(initial.joinActionEventCodeHashHex, nearbyVectorHashHex)
+
+    coordinator.refreshNearbyEventDiscovery()
+    let expiryPublished = expectation(description: "definition expiry republishes nearby projection")
+    let publication = coordinator.$nearbyEventCandidates.dropFirst().sink { _ in
+      expiryPublished.fulfill()
+    }
+    nowEpochMillis += 100
+    await fulfillment(of: [expiryPublished], timeout: 1)
+    publication.cancel()
+
+    let expired = try XCTUnwrap(
+      NearbyEventCardListPresentation(
+        candidates: coordinator.nearbyEventCandidates,
+        nowEpochSeconds: nowEpochMillis / 1_000
+      ).cards.first
+    )
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNil(expired.eventIdHex)
+    XCTAssertNil(expired.joinActionEventCodeHashHex)
+    XCTAssertNil(expired.displayValidFromEpochSeconds)
+    XCTAssertNil(expired.displayValidUntilEpochSeconds)
+  }
+
+  private func makeNearbyDiscoveryStore(
+    includeUnresolvedCandidate: Bool = false,
+    observedAtEpochMillis: Int64 = 1_800_000_000_000,
+    validFromEpochSeconds: Int64? = nil,
+    validUntilEpochSeconds: Int64? = nil
+  ) -> ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore {
+    let store = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .createNearbyEventDiscoveryStore()
+    _ = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .recordNearbyEventRadioSelfVerifiedEnvelopeFromHex(
+        store: store,
+        peripheralId: "peripheral-verified",
+        eventDisplayName: "Community night",
+        eventCodeHashHex: nearbyVectorHashHex,
+        rawContainerHex: "03000004",
+        agreesWithRegistry: false,
+        additionalNamesOmitted: false,
+        additionalEventsOmitted: false,
+        observedAtEpochMillis: observedAtEpochMillis
+      )
+    guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .beginNearbyEventRegistryResolutionFromHex(
+        store: store,
+        eventCodeHashHex: nearbyVectorHashHex
+      )
+    else {
+      preconditionFailure("expected a registry-resolution attempt")
+    }
+    _ = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .completeNearbyEventRegistryResolutionFromHex(
+        store: store,
+        attempt: attempt,
+        result: .VERIFIED,
+        resolvedEventIdHex: nearbyVectorEventIdHex,
+        verifiedDefinitionJoinMode: .OPEN,
+        verifiedDefinitionEventIdHex: nearbyVectorEventIdHex,
+        verifiedDefinitionEventCodeHashHex: nearbyVectorHashHex,
+        envelopeAgreesWithRegistry: true,
+        verifiedDefinitionHashHex: nearbyVectorDefinitionHashHex,
+        registryBlockHashHex: nearbyVectorBlockHashHex,
+        verifiedDefinitionValidFromEpochSeconds: validFromEpochSeconds
+          ?? nearbyVectorValidFromEpochSeconds,
+        verifiedDefinitionValidUntilEpochSeconds: validUntilEpochSeconds
+          ?? nearbyVectorValidUntilEpochSeconds
+      )
+    if includeUnresolvedCandidate {
+      _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHintFromHex(
+        store: store,
+        peripheralId: "peripheral-unresolved",
+        eventDisplayName: "Unverified beacon",
+        eventCodeHashHex: "0102030405060708",
+        censusHex: nil,
+        additionalNamesOmitted: false,
+        additionalEventsOmitted: false,
+        observedAtEpochMillis: observedAtEpochMillis
+      )
+    }
+    return store
   }
 
   /// A B005 v2 envelope barnard reported as radio-self-verified becomes a

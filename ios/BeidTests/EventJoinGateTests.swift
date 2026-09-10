@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import XCTest
 @testable import Beid
 
@@ -39,59 +40,21 @@ import XCTest
 ///
 /// ## What still cannot be expressed here
 ///
-/// No test proves a *verified* event joins. `fromOperatorLookup` needs an
-/// `EventDefinitionResolution`, and that type — like `EventDefinitionContext`
-/// behind it — carries an `internal` Kotlin constructor, which Swift Export
-/// emits with only a `package` initializer. No Swift code can build one.
-/// Android hit the same wall and reaches a successful join by walking the real
-/// nearby promotion path; that fixture is Kotlin-side and iOS has no caller
-/// for that path yet. Closing this needs shared test support (beid#391).
+/// Swift still cannot construct the successful `EventDefinitionResolution`
+/// needed to prove the *operator-lookup* evidence shape admits. That type —
+/// like `EventDefinitionContext` behind it — has an internal Kotlin
+/// constructor, which Swift Export emits with only a package initializer.
+/// `RegistryClient` also has no public fakeable initializer.
 ///
-/// The same wall leaves one *refusal* unpinned: `.definitionNotEligible`.
-///
-/// It now means what its name says — the read **succeeded** and the shared
-/// issuer still refused the definition. Reaching it therefore needs a
-/// successful `EventDefinitionResolution`, which is the same thing this
-/// suite cannot build, so it is unpinned for exactly the reason the positive
-/// case is. Every clause is checkable in the generated `BeidSharedKit.swift`:
-/// the type exposes only getters plus a `package`-scoped
-/// `init(__externalRCRefUnsafe:options:)`; no exported function in that file
-/// returns it; its only producer is the `RegistryClient` completion; and
-/// `RegistryClient` has no public initializer, only
-/// `createSepoliaRegistryClient`, which refuses loopback HTTP for every URL
-/// template (beid#258 P1-1 round-3), so it cannot be pointed at a stub.
-///
-/// Until the adapter filtered on `isSuccess`, this case meant something else
-/// and something worse. `RegistryClient.resolveEventDefinition` hands back a
-/// **non-optional** resolution — a failed read arrives carrying
-/// `isSuccess == false`, never as nil — so every real failed read landed
-/// here, while `.registryReadFailed` was reachable only from a fake. The
-/// tested branch was the impossible one and the untested branch was the
-/// everyday one. `RegistryEventJoinRegistry` now filters, mirroring Android's
-/// `EventJoinRegistry.kt:69`, so the fake's nil is the shape production
-/// actually produces.
-///
-/// **That filter is itself unpinned by this suite, for the same reason.**
-/// Reaching it means handing `RegistryEventJoinRegistry` a real
-/// `RegistryClient`, which no fake can build — the same constructibility wall
-/// described above. So the statement is symmetric rather than one-sided: the
-/// case is unfalsifiable here *and* the line that repairs it is unpinned here,
-/// both because of the shared module's `internal` constructors. The filter
-/// rests on symmetry with Android's adapter and on inspection, which is
-/// weaker evidence than anything else in this file, and is said plainly here
-/// rather than left for a reader to notice by its absence.
-///
-/// **Remove this paragraph, and the `.definitionNotEligible` case in
-/// `EventJoinRefusal` that it describes, if that case is collapsed into
-/// `.registryReadFailed`** — the two are now one refusal wearing two labels,
-/// since a caller cannot distinguish them and no test can reach the second.
-/// Deleting the case and this note belong together, so this cannot rot into a
-/// description of something that no longer exists.
-///
-/// So this suite proves the gate refuses, and cannot prove it ever admits.
-/// That is stated rather than left as an absence, because a suite that only
-/// ever observes "nothing joined" cannot by itself distinguish a working gate
-/// from an app that joins nothing at all.
+/// beid#141 closes the broader positive-control gap through the other evidence
+/// shape: focused `SensingCoordinatorTests` walk the real nearby promotion
+/// reducer, issue `fromNearbyCandidate`, and assert one capability reaches
+/// `joinAndStart`. The nearby refusal below also reaches
+/// `.definitionNotEligible` directly with an unverified candidate. The
+/// remaining unpinned claim is narrower: `RegistryEventJoinRegistry` filters
+/// a failed non-optional production resolution to nil before the
+/// operator-lookup gate sees it. That adapter still rests on inspection and
+/// Android symmetry until a constructible Swift registry result exists.
 @MainActor
 final class EventJoinGateTests: XCTestCase {
   private let canonicalEventIdHex = "0x\(String(repeating: "a", count: 64))"
@@ -253,6 +216,37 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
     XCTAssertTrue(registry.requestedEventIdHexes.isEmpty, "a refused grant must not even reach the read")
     XCTAssertFalse(engine.didJoin)
+  }
+
+  func testNearbyJoinRefusesAnUnverifiedCandidateAfterPermissionCompletes() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let store = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .createNearbyEventDiscoveryStore()
+    _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHintFromHex(
+      store: store,
+      peripheralId: "peripheral-unverified",
+      eventDisplayName: "Unverified beacon",
+      eventCodeHashHex: "0102030405060708",
+      censusHex: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_800_000_000_000
+    )
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: { 1_800_000_000_000 }
+    )
+    coordinator.useDemoEventMode = false
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: "0102030405060708")
+    await settle()
+
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
+    XCTAssertEqual(coordinator.phase, .idle)
   }
 
   // MARK: - Answers that arrive after the user moved on

@@ -257,7 +257,7 @@ final class AppCoordinator: ObservableObject {
   /// double-taps Join, edits the code field while a lookup is in flight,
   /// taps a different past-events row before an earlier lookup returns, or
   /// leaves the join surface entirely (`cancelPendingJoinAttempt`). Only one
-  /// shared counter across all three composed methods: they all fight over
+  /// shared counter across all composed methods: they all fight over
   /// the same single-slot join state (`SensingCoordinator.joinedEventCode`),
   /// so the latest attempt or cancellation from any of them should win, not
   /// just the latest within its own surface.
@@ -308,6 +308,23 @@ final class AppCoordinator: ObservableObject {
     let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
     guard generation == joinAttemptGeneration else { return .superseded }
     return .completed(joinEventFromAccountSheet(code: code, canonicalEventIdHex: canonicalEventIdHex))
+  }
+
+  /// Manual rescue from the nearby-event scan surface. It preserves the same
+  /// operator-lookup evidence path as every other typed-code join, then starts
+  /// sensing inside the already-presented scan flow only after selection
+  /// succeeds. The later engine call still goes through the capability-only
+  /// `EventJoinControlling.joinAndStart` boundary.
+  func joinEventFromScanFlowResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
+    joinAttemptGeneration += 1
+    let generation = joinAttemptGeneration
+    let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
+    guard generation == joinAttemptGeneration else { return .superseded }
+    let error = attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
+    if error == nil {
+      sensingCoordinator.startSensing()
+    }
+    return .completed(error)
   }
 
   /// Call when the account-sheet join surface is dismissed (Cancel or
@@ -439,11 +456,17 @@ final class AppCoordinator: ObservableObject {
 
   func startScan() {
     scanPresented = true
-    sensingCoordinator.startSensing()
+    // Since beid#410, `startSensing()` correctly starts nothing when no event
+    // has been selected. Calling it here had therefore turned Collection's
+    // "Sense Event" button into a real-device no-op. This entry point means
+    // discovery again: Central-only B005 scanning, with no join or recording.
+    sensingCoordinator.startNearbyEventDiscovery()
   }
 
   func finishScan() {
+    cancelPendingJoinAttempt()
     scanPresented = false
+    sensingCoordinator.stopNearbyEventDiscovery()
     sensingCoordinator.reset()
   }
 

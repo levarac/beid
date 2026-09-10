@@ -69,6 +69,8 @@ final class RecordingEventJoinControl: EventJoinControlling, @unchecked Sendable
   var currentEventCode: String?
 
   private(set) var requestJoinPermissionsCallCount = 0
+  private(set) var startDiscoveryScanCallCount = 0
+  private(set) var stopDiscoveryScanCallCount = 0
   private(set) var joinAndStartContexts:
     [ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext] = []
   private(set) var leaveJoinedEventCallCount = 0
@@ -106,6 +108,14 @@ final class RecordingEventJoinControl: EventJoinControlling, @unchecked Sendable
     case .answersLate:
       heldPermissionCompletion = completion
     }
+  }
+
+  func startDiscoveryScan() {
+    startDiscoveryScanCallCount += 1
+  }
+
+  func stopDiscoveryScan() {
+    stopDiscoveryScanCallCount += 1
   }
 
   /// Answers a held permission request, granting both capabilities.
