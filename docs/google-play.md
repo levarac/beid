@@ -126,6 +126,13 @@ already has them, and installs JDK 17 via `actions/setup-java`, exporting it
 as `KMP_JAVA_HOME` — `resolve_kmp_java_home.sh`'s other detection branches are
 all macOS-specific and cannot succeed on a Linux runner.
 
+The licence-acceptance line in that step is written `(yes || true) | sdkmanager
+--licenses`, not `yes | sdkmanager --licenses`: `sdkmanager` stops reading once
+the licences are accepted, so `yes` dies of SIGPIPE and `pipefail` would
+otherwise fail the step (gh#401). The subshell absorbs only `yes`'s death —
+appending `|| true` to the whole pipeline instead would also hide a genuine
+`sdkmanager` failure.
+
 ## Ken-side activation list
 
 These prerequisites were confirmed missing in the 2026-08-20 preflight; status

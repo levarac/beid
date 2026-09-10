@@ -64,7 +64,18 @@ jobs:
         if: runner.environment == 'github-hosted'
         run: |
           set -euo pipefail
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          # `sdkmanager --licenses` stops reading once every licence is
+          # accepted, so `yes` is killed by SIGPIPE and exits 141. Under
+          # `pipefail` that becomes the pipeline's status and `set -e` aborts
+          # the step -- the failure this workflow died on (`yes: standard
+          # output: Broken pipe`, run 33724513582, 2026-09-03).
+          #
+          # `(yes || true)` absorbs the death of `yes` ONLY. Do not write
+          # `... || true` on the whole pipeline instead: that also swallows a
+          # genuine sdkmanager failure, turning a loud failure into a silent
+          # one. sdkmanager's own exit status still reaches `pipefail` here,
+          # and the unpiped call below is untouched.
+          (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-36" "build-tools;36.0.0"
 
