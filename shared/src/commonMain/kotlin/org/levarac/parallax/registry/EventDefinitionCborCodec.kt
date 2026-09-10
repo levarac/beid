@@ -34,6 +34,8 @@ internal object EventDefinitionCborCodec {
     private const val SIGNATURE_BYTES: Int = 64
     private const val KID_BYTES: Int = 8
     private const val EVENT_CODE_HASH_BYTES: Int = 8
+    private const val ORGANIZER_CLAIM_DATA_MIN: Int = 1
+    private const val ORGANIZER_CLAIM_DATA_MAX: Int = 1_024
     private const val MAX_AUTHORITY_KEYS: Int = 1_024
     private val ZERO_DIGEST = ByteArray(HASH_BYTES)
 
@@ -215,8 +217,8 @@ internal object EventDefinitionCborCodec {
     private fun decodeDefinitionPayload(bytes: ByteArray): RawDefinition {
         val reader = StrictCborReader(bytes)
         val fieldCount = reader.readMapLength()
-        require(fieldCount in 13..15) {
-            "Event Definition must contain 13 legacy, 14 gated, or 15 open fields"
+        require(fieldCount in 13..16) {
+            "Event Definition must contain 13 mandatory fields and at most 3 optional labels"
         }
         reader.expectUnsignedKey(1L)
         val version = reader.readUnsigned()
@@ -251,23 +253,44 @@ internal object EventDefinitionCborCodec {
         val validFrom = reader.readProtocolUInt("validFrom")
         reader.expectUnsignedKey(13L)
         val validUntil = reader.readProtocolUInt("validUntil")
-        val joinMode = if (fieldCount >= 14) {
-            reader.expectUnsignedKey(14L)
-            when (reader.readUnsigned()) {
-                0L -> EventJoinMode.OPEN
-                1L -> EventJoinMode.GATED
-                else -> fail(DefinitionDecodeError.MALFORMED, "Event Definition joinMode is unknown")
+        // The optional labels are decoded by PRESENCE, not by arithmetic on the field
+        // count. Label 16 is orthogonal to joinMode, so the count no longer determines
+        // WHICH optional labels are present: a legacy definition carrying only a claim
+        // and a gated definition carrying only joinMode both have 14 fields. Reading the
+        // key itself is the only thing that distinguishes them.
+        //
+        // Strictness is unchanged: keys must still be canonical, ascending and unique,
+        // and a label this version does not define is still refused.
+        var joinMode: EventJoinMode? = null
+        var eventCodeHash: ByteArray? = null
+        var organizerClaim: OrganizerClaim? = null
+        var previousKey = 13L
+        repeat(fieldCount - 13) {
+            val key = reader.readUnsigned()
+            require(key > previousKey) { "unknown, duplicate, or out-of-order CBOR map key" }
+            previousKey = key
+            when (key) {
+                14L -> joinMode = when (reader.readUnsigned()) {
+                    0L -> EventJoinMode.OPEN
+                    1L -> EventJoinMode.GATED
+                    else -> fail(DefinitionDecodeError.MALFORMED, "Event Definition joinMode is unknown")
+                }
+                15L -> eventCodeHash = reader.readByteString(EVENT_CODE_HASH_BYTES)
+                16L -> organizerClaim = readOrganizerClaim(reader)
+                else -> fail(
+                    DefinitionDecodeError.MALFORMED,
+                    "Event Definition carries an unknown optional label",
+                )
             }
-        } else {
-            null
-        }
-        val eventCodeHash = if (fieldCount == 15) {
-            reader.expectUnsignedKey(15L)
-            reader.readByteString(EVENT_CODE_HASH_BYTES)
-        } else {
-            null
         }
         reader.requireFinished()
+
+        // Labels 14 and 15 remain a nested prefix chain: an eventCodeHash without a
+        // joinMode was unrepresentable while the count decided which keys were read, and
+        // becomes representable once presence does. Enforce it rather than inherit it.
+        if (eventCodeHash != null && joinMode == null) {
+            fail(DefinitionDecodeError.MALFORMED, "eventCodeHash requires joinMode")
+        }
 
         when (joinMode) {
             EventJoinMode.OPEN -> {
@@ -318,6 +341,7 @@ internal object EventDefinitionCborCodec {
             validUntil = validUntil,
             joinMode = joinMode,
             eventCodeHash = eventCodeHash,
+            organizerClaim = organizerClaim,
         )
     }
 
@@ -577,6 +601,7 @@ internal object EventDefinitionCborCodec {
             authorityPublicKey = authorityKey,
             joinMode = joinMode,
             eventCodeHash = eventCodeHash,
+            organizerClaim = organizerClaim,
         )
 
     private data class ProtectedHeaders(val kid: ByteArray)
@@ -605,7 +630,32 @@ internal object EventDefinitionCborCodec {
         val validUntil: ProtocolUInt,
         val joinMode: EventJoinMode?,
         val eventCodeHash: ByteArray?,
+        val organizerClaim: OrganizerClaim?,
     )
+
+    /**
+     * Reads label 16. The registry is deliberately NOT consulted: an unrecognised method is
+     * retained and surfaced as unverified, which is the whole point of the reservation.
+     * Shape is still enforced, so "an unknown method is accepted" stays distinguishable from
+     * "nothing is checked".
+     */
+    private fun readOrganizerClaim(reader: StrictCborReader): OrganizerClaim {
+        require(reader.readMapLength() == 2) { "organizer claim must contain exactly method and data" }
+        reader.expectUnsignedKey(1L)
+        val method = reader.readUnsigned()
+        if (method == 0L) {
+            fail(DefinitionDecodeError.MALFORMED, "organizer claim method 0 is not a method")
+        }
+        reader.expectUnsignedKey(2L)
+        val data = reader.readByteString()
+        if (data.size !in ORGANIZER_CLAIM_DATA_MIN..ORGANIZER_CLAIM_DATA_MAX) {
+            fail(
+                DefinitionDecodeError.MALFORMED,
+                "organizer claim data must be $ORGANIZER_CLAIM_DATA_MIN..$ORGANIZER_CLAIM_DATA_MAX bytes",
+            )
+        }
+        return OrganizerClaim(method = method, data = data)
+    }
 
     private fun fail(reason: DefinitionDecodeError, message: String): Nothing =
         throw DefinitionDecodeException(reason, message)

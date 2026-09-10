@@ -33,6 +33,34 @@ public class EventKeySet internal constructor(
 }
 
 /**
+ * A reserved organizer claim (EventDefinition v1 label 16).
+ *
+ * [method] names an entry in the specification's method registry and [data] is opaque to this
+ * version. v1.0 reserves the slot and implements no method, so an unrecognised [method] is
+ * retained and surfaced as unverified rather than causing the definition to be rejected.
+ */
+public class OrganizerClaim internal constructor(
+    public val method: Long,
+    data: ByteArray,
+) {
+    private val dataBytes: ByteArray = data.copyOf()
+
+    /** A defensive copy; callers cannot mutate the verified claim. */
+    public fun dataToByteArray(): ByteArray = dataBytes.copyOf()
+
+    public val dataHex: String
+        get() = dataBytes.toPrefixedHex()
+
+    /**
+     * Always false in v1.0, which implements no method. A later version returns true only for a
+     * method it recognises AND has checked; it must never return true merely because a claim is
+     * present and well formed.
+     */
+    public val isVerified: Boolean
+        get() = false
+}
+
+/**
  * The canonical event-definition-v1 payload carried inside COSE_Sign1.
  *
  * The byte-bearing protocol values use defensive-copy wrappers. Numeric protocol values use
@@ -58,6 +86,8 @@ public class EventDefinition internal constructor(
     /** Null only for legacy key-1-through-13 definitions, which are never open-discoverable. */
     public val joinMode: EventJoinMode? = null,
     eventCodeHash: ByteArray? = null,
+    /** The reserved organizer claim at label 16, retained verbatim when present. */
+    public val organizerClaim: OrganizerClaim? = null,
 ) {
     private val eventCodeHashBytes: ByteArray? = eventCodeHash?.copyOf()
 
