@@ -201,6 +201,9 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
     XCTAssertFalse(engine.didJoin, "no event was selected, so there is nothing to sense for")
     XCTAssertEqual(engine.joinedCodes, [], "and Barnard must never receive the beid-demo-event fallback")
+    guard case .idle = coordinator.phase else {
+      return XCTFail("starting nothing must return the phase to idle, not leave it at \(coordinator.phase)")
+    }
   }
 
   func testStartSensingStartsNothingWhenPermissionsAreRefused() async {
@@ -216,6 +219,32 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
     XCTAssertTrue(registry.requestedEventIdHexes.isEmpty, "a refused grant must not even reach the read")
     XCTAssertFalse(engine.didJoin)
+    // NOTE: the phase is deliberately not asserted here yet. `startSensing`
+    // leaves it at `.sensing` after a refusal — a real defect (the screen
+    // claims to be sensing over a radio that never started) — but five
+    // ReportSubmissionOperatorIntegrationTests currently enter their session
+    // through exactly that hole, because the Simulator has no BLE radio and
+    // refuses the grant. Closing it needs an admitting registry seam, which
+    // `EventDefinitionResolution`'s internal constructor does not allow from
+    // Swift today. Tracked separately; do not "fix" this by asserting here.
+  }
+
+  /// The same refusal on the card path (beid#141). It already resets the
+  /// phase; this pins that down so the two entry points cannot drift apart
+  /// again in the other direction.
+  func testNearbyJoinReturnsToIdleWhenPermissionsAreRefused() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .denied
+    let registry = FakeEventJoinRegistry()
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: "0102030405060708")
+    await settle()
+
+    XCTAssertFalse(engine.didJoin)
+    guard case .idle = coordinator.phase else {
+      return XCTFail("a refused grant must return the phase to idle, not leave it at \(coordinator.phase)")
+    }
   }
 
   func testNearbyJoinRefusesAnUnverifiedCandidateAfterPermissionCompletes() async {
