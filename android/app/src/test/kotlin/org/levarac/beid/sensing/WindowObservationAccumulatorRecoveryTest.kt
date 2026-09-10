@@ -203,6 +203,82 @@ class WindowObservationAccumulatorRecoveryTest {
     }
 
     /**
+     * Constructing the accumulator must recover NOTHING. Recovery reaches the
+     * filesystem and the Keystore, and it is scheduled off the main thread by
+     * the caller precisely so that neither can happen during Activity setup.
+     *
+     * This is the witness for that relocation. Putting the work back into
+     * `init` would leave every other test in this file green, because they
+     * all end up recovering either way — only an assertion made in the gap
+     * between constructing and asking can tell the two apart.
+     */
+    @Test
+    fun constructingTheAccumulatorRecoversNothingUntilItIsAskedTo() {
+        val directory = Files.createTempDirectory("window-372-not-in-constructor").toFile()
+        WindowObservationDraftStore(draftFile(directory)).persist(durableDraft(REPORTER_RPID))
+        val cryptography = VectorCryptography()
+
+        val accumulator = WindowObservationAccumulator(
+            context = { null },
+            cryptography = cryptography,
+            ledgerStore = UnsentWindowLedgerStore(ledgerFile(directory)),
+            draftStore = WindowObservationDraftStore(draftFile(directory)),
+            observationDirectory = observationDirectory(directory),
+            nowEpochSeconds = { FINALIZED_AT },
+            newWindowId = { error("a relaunch must not invent a window id") },
+            ledgerInstanceId = { LEDGER_INSTANCE_ID },
+        )
+
+        assertNull(cryptography.signedBytes, "construction must not reach the signing key")
+        assertTrue(artifacts(directory).isEmpty(), "construction must not write an artifact")
+        assertTrue(draftFile(directory).exists(), "construction must not consume the draft")
+
+        accumulator.recoverAfterRelaunch()
+
+        assertContentEquals(
+            EXPECTED_SIGNATURE_STRUCTURE.hexBytes(),
+            cryptography.signedBytes,
+            "the same work must happen once it is explicitly asked for",
+        )
+        assertEquals(1, artifacts(directory).size)
+    }
+
+    /**
+     * A draft outlives its process by design; the event signing key need not.
+     * The user may have left the event, or the Keystore entry may have been
+     * invalidated by a lock-screen change, between the window being collected
+     * and the app next starting.
+     *
+     * This restore runs inside a constructor, so a key that throws would take
+     * the whole app down at launch rather than costing one window. Barnard is
+     * a binary dependency here with no sources, so what it actually does for
+     * an absent key cannot be read — which is the reason the guard is
+     * unconditional rather than tuned to one exception type. Both reachable
+     * crypto calls are covered, because covering only the one that looked
+     * likelier is how the other survives.
+     */
+    @Test
+    fun aRestoreWhoseSigningKeyIsGoneQuarantinesTheDraftInsteadOfFailingToStart() {
+        listOf(true, false).forEach { failsOnPublicKey ->
+            val directory = Files.createTempDirectory("window-372-key-gone").toFile()
+            WindowObservationDraftStore(draftFile(directory)).persist(durableDraft(REPORTER_RPID))
+
+            relaunched(
+                directory,
+                ThrowingCryptography(onPublicKey = failsOnPublicKey),
+                ledgerInstanceId = { LEDGER_INSTANCE_ID },
+            )
+
+            assertTrue(artifacts(directory).isEmpty(), "nothing may be signed without the key")
+            assertFalse(draftFile(directory).exists())
+            assertNotNull(
+                directory.listFiles().orEmpty().singleOrNull { it.name.contains(".corrupt-") },
+                "the unsignable evidence must be preserved rather than deleted",
+            )
+        }
+    }
+
+    /**
      * The window is opened in the ledger before its draft is written, so a
      * failure to record the open must leave nothing behind either. Otherwise
      * a relaunch would find evidence for a window the ledger never had, and
@@ -305,8 +381,12 @@ class WindowObservationAccumulatorRecoveryTest {
         nowEpochSeconds = { FINALIZED_AT },
         newWindowId = { error("a relaunch must not invent a window id") },
         ledgerInstanceId = ledgerInstanceId,
-        reconcileAfterRelaunch = true,
-    )
+    ).also {
+        // Recovery is an explicit call, not a constructor side effect —
+        // production schedules it off the main thread. A test that recovered
+        // by merely constructing would no longer be testing what ships.
+        it.recoverAfterRelaunch()
+    }
 
     private fun ledgerFile(directory: File) = directory.resolve("ledger.snapshot")
 
@@ -316,6 +396,22 @@ class WindowObservationAccumulatorRecoveryTest {
 
     private fun artifacts(directory: File): List<File> =
         observationDirectory(directory).listFiles().orEmpty().filter { it.extension == "cose" }
+
+    /** Fails at exactly one of the two points restore reaches the key. */
+    private class ThrowingCryptography(private val onPublicKey: Boolean) : FakeSensingCryptography(
+        eventSigningPublicKeyResult = PUBLIC_KEY.hexBytes(),
+        signWindowReportResult = SensingRecoverableSignature(
+            SIGNATURE_R.hexBytes(),
+            SIGNATURE_S.hexBytes(),
+            0,
+        ),
+    ) {
+        override fun eventSigningPublicKey(eventCode: String): ByteArray =
+            if (onPublicKey) throw IllegalStateException("event signing key is gone") else super.eventSigningPublicKey(eventCode)
+
+        override fun signWindowReport(eventCode: String, bytes: ByteArray): SensingRecoverableSignature =
+            if (onPublicKey) super.signWindowReport(eventCode, bytes) else throw IllegalStateException("event signing key is gone")
+    }
 
     private class VectorCryptography : FakeSensingCryptography(
         eventSigningPublicKeyResult = PUBLIC_KEY.hexBytes(),

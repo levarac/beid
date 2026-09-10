@@ -322,6 +322,17 @@ class EventJoinCoordinator internal constructor(
         coroutineScope.launch {
             nearbyDiscovery.candidates.collect { republishRelayGateState(candidates = it) }
         }
+        // Relaunch recovery reads storage and, since beid#372, asks the
+        // Keystore to sign what it recovers. It ran inside the accumulator's
+        // constructor until that PR moved it here. It must not: a signing key
+        // can refuse in ways that persist across launches and cannot be
+        // prompted for, and the durable draft that triggers it is still on
+        // disk every time, so a constructor that signs turns one unusable
+        // window into an app that never starts. Off the main thread and
+        // outside construction, the same refusal costs one window.
+        windowObservationRuntime?.let { runtime ->
+            coroutineScope.launch(Dispatchers.IO) { runtime.recoverAfterRelaunch() }
+        }
     }
 
     /**

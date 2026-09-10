@@ -243,8 +243,8 @@ class WindowObservationAccumulatorTest {
             context = { null }, cryptography = VectorCryptography(), ledgerStore = ledgerStore,
             draftStore = WindowObservationDraftStore(recovered.resolve("draft.snapshot")),
             observationDirectory = observations, nowEpochSeconds = { 1_800_000_001.0 },
-            ledgerInstanceId = { error("existing ledger must be reused") }, reconcileAfterRelaunch = true,
-        )
+            ledgerInstanceId = { error("existing ledger must be reused") },
+        ).recoverAfterRelaunch()
 
         assertEquals(2L, assertNotNull(ledgerStore.load()).persistenceRevision)
     }

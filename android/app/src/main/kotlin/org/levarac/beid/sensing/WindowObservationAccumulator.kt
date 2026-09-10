@@ -43,6 +43,15 @@ internal class WindowObservationRuntime internal constructor(
     }
 
     fun beginEvent(eventCode: String): Boolean = accumulator.beginEvent(eventCode)
+
+    /**
+     * Runs the relaunch recovery this runtime's storage is owed. Callers must
+     * invoke it off the main thread; see
+     * [WindowObservationAccumulator.recoverAfterRelaunch].
+     */
+    fun recoverAfterRelaunch() {
+        accumulator.recoverAfterRelaunch()
+    }
 }
 
 /** Owns the Activity-independent open-window runtime for one Android process. */
@@ -79,7 +88,6 @@ internal class WindowObservationRuntimeOwner(
                 nowEpochSeconds = nowEpochSeconds,
                 newWindowId = newWindowId,
                 ledgerInstanceId = ledgerInstanceId,
-                reconcileAfterRelaunch = true,
             ),
             contextState = contextState,
         ).also { runtime ->
@@ -99,7 +107,6 @@ internal class WindowObservationAccumulator(
     private val nowEpochSeconds: () -> Double,
     private val newWindowId: () -> UUID = UUID::randomUUID,
     ledgerInstanceId: () -> String = { UUID.randomUUID().toHex() },
-    reconcileAfterRelaunch: Boolean = false,
 ) {
     private var ledger: UnsentWindowLedger = ledgerStore.load()?.ledger
         ?: requireNotNull(createUnsentWindowLedger(ledgerInstanceId()).ledger)
@@ -111,19 +118,45 @@ internal class WindowObservationAccumulator(
     private var openedReporterRpid: String? = null
     private var activeEventCode: String? = null
     private var recordingObserved = false
+    private var recovered = false
 
-    init {
-        if (reconcileAfterRelaunch) {
-            // Order matters. The draft is promoted to a durable `.cose` FIRST
-            // so that the reconcile pass below sees it as an ordinary durable
-            // artifact. Reversing these two discards the still-open ledger row
-            // before its evidence exists, which is precisely the loss beid#372
-            // is about.
-            restoreDurableDraftEvidence()
-            reconcileDurableArtifactsAfterRelaunch()
-        }
+    /**
+     * Reads storage left by a previous process and reconciles it. **Call this
+     * off the main thread, and never from a constructor.**
+     *
+     * It used to run from this class's `init`, which reached the filesystem
+     * and — once beid#372 added evidence recovery — the event signing key,
+     * during `EventJoinCoordinator` construction during Activity setup.
+     * Constructor-time I/O was already there and its failures are transient
+     * or data-shaped, so a relaunch clears them. A hardware-backed signing
+     * key is different in kind: it can refuse with a user-not-authenticated
+     * or permanently-invalidated condition that PERSISTS across launches,
+     * cannot be prompted for because no UI exists yet, and is triggered by a
+     * durable draft that is still on disk every single time. That is not a
+     * crash the next launch clears; it is a boot loop escapable only by
+     * wiping app data.
+     *
+     * Making the recovery an explicit call the caller schedules is what
+     * removes that surface, rather than catching harder inside it. The catch
+     * inside [restoreDurableDraftEvidence] stays, because a draft that cannot
+     * be signed must still be set aside rather than retried forever.
+     *
+     * Safe to call more than once; the work happens on the first call only.
+     */
+    @Synchronized
+    fun recoverAfterRelaunch() {
+        if (recovered) return
+        recovered = true
+        // Order matters. The draft is promoted to a durable `.cose` FIRST so
+        // that the reconcile pass below sees it as an ordinary durable
+        // artifact. Reversing these two discards the still-open ledger row
+        // before its evidence exists, which is precisely the loss beid#372 is
+        // about.
+        restoreDurableDraftEvidence()
+        reconcileDurableArtifactsAfterRelaunch()
     }
 
+    @Synchronized
     fun beginEvent(eventCode: String): Boolean {
         val previousEventCode = activeEventCode ?: openedContext?.eventCode ?: context()?.eventCode
         if (previousEventCode != null && previousEventCode != eventCode && !close()) return false
@@ -131,6 +164,7 @@ internal class WindowObservationAccumulator(
         return true
     }
 
+    @Synchronized
     fun observe(enin: Long, rpid: String, reporterRpid: String?, recording: Boolean, eventCode: String? = context()?.eventCode) {
         if (eventCode != null && !beginEvent(eventCode)) return
         if (this.enin != null && this.enin != enin) {
@@ -163,6 +197,7 @@ internal class WindowObservationAccumulator(
     }
 
     /** Closes only an actual ENIN/session boundary. Lifecycle cleanup must not call this. */
+    @Synchronized
     fun close(): Boolean {
         openCurrentWindowIfEligible()
         return closeCurrentWindow()
@@ -202,11 +237,15 @@ internal class WindowObservationAccumulator(
         val stored = storeSignedObservation(signed)
         val digest = stored.observationDigest.toByteArray().toHex()
         persistObservation(id.toString().lowercase(), digest, stored.signedBytes.toByteArray())
-        // The evidence is durable as an artifact from here on, so the draft
-        // has nothing left to protect. Dropping it before the ledger write
-        // keeps the gap in which both exist as small as this can make it;
-        // `restoreDurableDraftEvidence` closes the gap that remains.
-        draftStore.clear()
+        // The draft is dropped by `clearCurrentWindow` below, AFTER the ledger
+        // write — deliberately not before it. Clearing earlier would shrink
+        // the window in which the artifact and the draft both exist, but
+        // `clear` can itself throw, and this gap, between the artifact
+        // becoming durable and the ledger recording it, is precisely the one
+        // whose interruption is expensive. Adding a throw site to it buys
+        // nothing, because `restoreDurableDraftEvidence` already discards a
+        // draft whose window has a durable artifact rather than signing it
+        // again.
         apply(closeUnsentWindow(ledger, id.toString().lowercase(), digest))
         clearCurrentWindow()
         return true
@@ -263,8 +302,18 @@ internal class WindowObservationAccumulator(
             return
         }
         val temporary = File.createTempFile("observation-", ".tmp", observationDirectory)
-        temporary.writeBytes(bytes)
-        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        try {
+            temporary.writeBytes(bytes)
+            Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            // A temp left behind by a failed write is never collected by
+            // anything, and this method now has one more caller than it did.
+            // Harmless in itself — relaunch reconciliation filters on the
+            // `.cose` extension, so a stray `.tmp` cannot brick startup — but
+            // the draft store already cleans up after itself and there is no
+            // reason this should not.
+            if (temporary.exists()) temporary.delete()
+        }
     }
 
     /**
@@ -320,9 +369,12 @@ internal class WindowObservationAccumulator(
      * genuinely happens later. Every input that describes *what was observed*
      * is restored exactly.
      *
-     * A draft that decodes but cannot produce an eligible observation is
-     * quarantined rather than deleted or retried: it is evidence that
-     * something was lost, and the next window must not inherit it.
+     * A draft that decodes but cannot produce a signed observation — because
+     * it is ineligible, or because the event signing key is no longer
+     * available — is quarantined rather than deleted or retried: it is
+     * evidence that something was lost, and the next window must not inherit
+     * it. Quarantining is also what keeps a stale draft from being able to
+     * stop the app from starting at all; see the comment at the catch.
      */
     private fun restoreDurableDraftEvidence() {
         val draft = draftStore.load() ?: return
@@ -349,24 +401,45 @@ internal class WindowObservationAccumulator(
         val observedRpids = List(draft.observedRpidCount) { index ->
             requireNotNull(draft.observedRpidAt(index))
         }
-        val prepared = id?.let {
-            preparedObservation(
-                id = it,
-                observationContext = restoredContext,
-                observationReporterRpid = draft.reporterRpidHex,
-                observedRpids = observedRpids,
-                observationEnin = draft.enin,
-            )
+        // Both the preparation and the signing reach the event signing key,
+        // and this runs inside a constructor — so a key that is gone would
+        // otherwise take the whole app down at launch rather than costing one
+        // window. A draft outlives its process by design; the key need not,
+        // since the user may have left the event, or the Keystore entry may
+        // have been invalidated by a lock-screen change. Barnard ships as a
+        // binary dependency with no sources here, so what it does for an
+        // absent key cannot be read — which is exactly why this is caught
+        // unconditionally rather than for the one exception type that seemed
+        // likely.
+        //
+        // The disk writes below are deliberately OUTSIDE this: a failed write
+        // is transient, and quarantining a draft for it would destroy
+        // recoverable evidence over a full disk. Leaving the draft in place
+        // lets the next launch try again.
+        val signed = try {
+            val prepared = id?.let {
+                preparedObservation(
+                    id = it,
+                    observationContext = restoredContext,
+                    observationReporterRpid = draft.reporterRpidHex,
+                    observedRpids = observedRpids,
+                    observationEnin = draft.enin,
+                )
+            }
+            prepared?.let {
+                val signature = cryptography.signWindowReport(
+                    restoredContext.eventCode,
+                    it.signatureStructure.toByteArray(),
+                )
+                it.signWithCompactSignatureHex(signature.r.toHex(), signature.s.toHex())
+            }
+        } catch (_: Exception) {
+            null
         }
-        if (prepared == null) {
+        if (signed == null) {
             draftStore.quarantineUnusable()
             return
         }
-        val signature = cryptography.signWindowReport(
-            restoredContext.eventCode,
-            prepared.signatureStructure.toByteArray(),
-        )
-        val signed = prepared.signWithCompactSignatureHex(signature.r.toHex(), signature.s.toHex())
         val stored = storeSignedObservation(signed)
         persistObservation(
             draft.windowId,
