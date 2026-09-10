@@ -96,7 +96,7 @@ dependencies {
     implementation(project(":shared"))
 
     // Native (Flutter-free) BLE mutual-observation SDK published to Maven Central.
-    implementation("org.levarac:barnard:0.8.0")
+    implementation("org.levarac:barnard:0.9.0")
 
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")
