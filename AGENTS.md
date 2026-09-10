@@ -336,9 +336,42 @@ record:
    appears, leaving a reader who trusts the list unable to classify a path that
    is not on it.
 3. **Source and control** — name where the configuration was read, and cite a
-   control experiment on the same PR if one exists (PR #428: two pushes inside
-   the set produced zero Xcode Cloud check-runs; one push adding a `.py`,
-   outside the set, fired and succeeded).
+   control experiment on the same PR if one exists. **A control has to be able
+   to come out the other way**; the record below exists because the first one
+   cited here could not.
+
+   **The matcher is evaluated over the PR's cumulative diff against base, not
+   over the delta of the individual push.** This is why the predicate in (1) is
+   defined as `gh pr view <n> --json files` rather than a `git diff` of the
+   push — and it means a push whose own files are *all* inside the exclusion
+   set still starts a build, whenever some earlier commit in the same PR
+   touched a file outside it.
+
+   **Why PR #428 did not settle this, though it was recorded as if it had.**
+   Its observation was: two pushes inside the set produced zero Xcode Cloud
+   check-runs, and one push adding a `.py` outside the set fired and succeeded.
+   That reads as push-level evaluation, and it was cited that way. But at the
+   time of those first two pushes #428's *cumulative* file set was also
+   entirely inside the exclusion set — so cumulative evaluation predicts
+   exactly the same three outcomes. **The record is consistent with both
+   readings, which makes it evidence of neither.** Nothing was measured wrong;
+   the experiment simply had no branch on which the two hypotheses disagree.
+
+   **The discriminating observation (PR #483, 2026-09-10).** A push whose delta
+   was `AGENTS.md` + `docs/xcode-cloud.md` — both inside the exclusion set —
+   landed on a PR whose cumulative set already contained
+   `scripts/tests/test_pr_ci_ios_macos_triggers.py`, outside it. Push-level
+   evaluation predicts no build; cumulative predicts a build. **Prediction was
+   recorded in the PR body before the push, and Xcode Cloud started**
+   (`Beid | PR Build & Test | Test - iOS` on `b3f44da`, read from
+   `repos/.../commits/<sha>/check-runs`). Push-level evaluation is therefore
+   ruled out.
+
+   The transferable part is not the conclusion but the shape: **before citing a
+   control, check whether the competing explanation would have produced a
+   different result.** If it would not, say so and leave the question open
+   rather than recording a conclusion the experiment cannot carry — otherwise
+   the next reader inherits a settled-looking answer built on a non-control.
 4. **Void clause** — if **any** file at the final head is outside the exclusion
    set, absence of the check is the hard stop again and the remedy is a
    close→reopen retrigger, **not** this record. Re-evaluate (1) at the head SHA
