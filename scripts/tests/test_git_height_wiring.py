@@ -175,5 +175,58 @@ class IosWiringTest(unittest.TestCase):
         )
 
 
+class HeightDefinitionParityTest(unittest.TestCase):
+    """Both lanes must compute the height from the SAME definition (beid#491).
+
+    The point of the number is that an iOS build and an Android build showing
+    the same height were built from the same commit. That holds only while both
+    lanes ask git the same question. Nothing else in this file checks it: the
+    Android step is executed, but iOS is only checked for writing the plist key,
+    so one lane's definition could change to `--first-parent` (a different
+    number for the same commit, see the issue's measurements: 261 vs 489 on
+    `main`) and every other test here would stay green.
+
+    The two are compared **to each other**, not to a literal spelled out here.
+    A test that pinned the expected definition in its own source would go green
+    again the moment someone updated the test to match a changed lane.
+    """
+
+    #: The location argument differs by lane and is not part of the definition:
+    #: iOS runs from the checkout root via `-C`, the workflow runs in the
+    #: workspace. Everything after `rev-list` is.
+    DEFINITION = re.compile(r"rev-list\s+(?P<definition>.+?)\)")
+
+    def _definition(self, path: Path, assignment: str) -> str:
+        for line in path.read_text(encoding="utf-8").split("\n"):
+            if re.search(assignment, line) and "rev-list" in line:
+                match = self.DEFINITION.search(line)
+                self.assertIsNotNone(match, f"unparsable height line in {path.name}: {line}")
+                return " ".join(match.group("definition").split())
+        self.fail(f"no executed height assignment found in {path.name}")
+
+    def test_both_lanes_ask_git_the_same_question(self) -> None:
+        ios = self._definition(IOS_POST_CLONE, r"GIT_HEIGHT\s*=")
+        android = self._definition(PLAY_WORKFLOW, r"git_height\s*=")
+
+        self.assertEqual(
+            ios,
+            android,
+            "iOS and Android compute the git height from different definitions; "
+            "two builds of the same commit would then show different numbers, "
+            "which is the only thing this number exists to prevent.",
+        )
+
+    def test_the_shared_definition_counts_every_ancestor_of_the_built_commit(self) -> None:
+        """`--first-parent` is the near-miss: same shape, different number.
+
+        Recorded because it is the plausible edit. It is a pure function of the
+        commit too, so it would look correct, but it changes meaning whenever
+        history is merged differently.
+        """
+        ios = self._definition(IOS_POST_CLONE, r"GIT_HEIGHT\s*=")
+
+        self.assertEqual(ios, "--count HEAD")
+
+
 if __name__ == "__main__":
     unittest.main()
