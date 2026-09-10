@@ -421,11 +421,17 @@ final class SensingCoordinator: ObservableObject {
   /// own authenticated read before the join. That is the same bar and the same
   /// wiring Android applies (beid#374, `EventJoinCoordinator.beginVerifiedJoin`).
   ///
-  /// Written in exactly two places (beid#437): opened in `applyJoinGateDecision`
-  /// on admit, cleared in `stopParticipantRelay`. It used to be written by the
-  /// `EventIdentityVerification` lifecycle instead, which cost a second
-  /// authenticated read per join and could leave a legitimately joined device
-  /// unable to relay with nothing shown to explain it.
+  /// Opened in exactly one place (beid#437) — `applyJoinGateDecision` on admit
+  /// — and closed in exactly one, `closeRelayGate`, which both
+  /// `stopParticipantRelay` and `resetSessionState` call.
+  ///
+  /// It used to be written by the `EventIdentityVerification` lifecycle
+  /// instead. That made the gate depend on a second registry read's outcome
+  /// when the join gate had already established the same fact, so a
+  /// legitimately joined device could be left unable to relay with nothing
+  /// shown to explain it. **The second read still happens** — #437 removed the
+  /// gate's dependency on it, not the read, which has its own user-visible
+  /// consumer.
   private var relayGateEventIdHex: String?
 
   /// The most recent spec 134 decision, for visibility only. It never feeds a
@@ -1613,11 +1619,17 @@ final class SensingCoordinator: ObservableObject {
     )
     // This lifecycle no longer touches the relay gate (beid#437). It used to
     // open the gate on `.verified` and close it on every other outcome, which
-    // made one join spend two authenticated registry reads and left a device
-    // that had legitimately joined a verified event unable to relay, with no
-    // reason shown, whenever the second read failed. The gate now opens from
-    // the capability the join gate admitted and closes only in
-    // `stopParticipantRelay`, so it has a single writer.
+    // made the gate depend on *this* read's answer even though the join gate
+    // had already obtained the same fact. A device that had legitimately
+    // joined a verified event was then unable to relay, with no reason shown,
+    // whenever this read failed. The gate now opens from the capability the
+    // join gate admitted, and closes in `closeRelayGate`.
+    //
+    // **This read itself is deliberately kept.** #437 removes the gate's
+    // dependency on it, not the read: its other consumer is the verification
+    // status this function publishes just above, which
+    // `EventIdentityVerificationRow` shows to the user. Whether that surface
+    // should exist at all belongs to #141/#100, not here.
     //
     // The republish below stays. It rebuilds the gate state from the current
     // candidate snapshot and cached definitions, which this outcome may have
@@ -2154,6 +2166,12 @@ final class SensingCoordinator: ObservableObject {
 
   private func resetSessionState() {
     invalidateEventIdentityVerification()
+    // A session boundary ends the joined event, so the gate closes here too and
+    // not only in `stopParticipantRelay` (beid#437). Two of this function's
+    // three callers never stop the relay on the way in; before #437 they
+    // cleared the gate by accident, through the write
+    // `invalidateEventIdentityVerification` used to perform.
+    closeRelayGate()
     aggregationRuntime = AggregationRuntime()
     sessionAggregate = nil
     demoDeviceSequence = 0
@@ -2433,11 +2451,31 @@ final class SensingCoordinator: ObservableObject {
     relayCadenceTask?.cancel()
     relayCadenceTask = nil
     relayControl.setParticipantRelayVerifier(nil)
-    // Clears the stored id, not only the published one (beid#437). Since the
-    // identity-verification lifecycle stopped writing this property, this is
-    // the only closer, and every no-argument `republishRelayGateState` rebuilds
-    // the gate from it — so leaving a stale id here would let the next
-    // candidate snapshot re-open the gate for an event already left.
+    closeRelayGate()
+  }
+
+  /// Closes the relay gate: clears the stored id *and* publishes the closure.
+  ///
+  /// One helper with two callers rather than two copies, because the property
+  /// and the published value have to move together (beid#437). Clearing only
+  /// the published one leaves the id behind for the next no-argument
+  /// `republishRelayGateState` — a candidate snapshot arriving, a definition
+  /// being cached, the relay re-arming — to put straight back on the air.
+  ///
+  /// Called from every point where the joined event stops existing:
+  /// `stopParticipantRelay` and `resetSessionState`. Both are needed and
+  /// neither implies the other. `resetSessionState` has three callers and only
+  /// `endSensing` stops the relay first, so the other two — `startSensing` and
+  /// `beginEventFoundSessionState` — reach a session boundary without ever
+  /// passing through `stopParticipantRelay`.
+  ///
+  /// This is a construction, not a reachability argument. Whether a
+  /// no-argument republish can actually fire on those paths before the next
+  /// admit is beside the point: a stale event id must not cross a session
+  /// boundary. (It can, in fact — a probe on beid#437 measured the admitted id
+  /// surviving both `startSensing` and a subsequent nearby-hint delivery — but
+  /// the rule does not depend on that measurement.)
+  private func closeRelayGate() {
     relayGateEventIdHex = nil
     republishRelayGateState(joinedEventIdHex: nil)
   }

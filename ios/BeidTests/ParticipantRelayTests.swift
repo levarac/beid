@@ -339,6 +339,54 @@ final class ParticipantRelayTests: XCTestCase {
     )
   }
 
+  /// beid#437 addendum 2. A session boundary clears the gate even on the
+  /// paths that reset **without** stopping the relay first.
+  ///
+  /// `resetSessionState` has three callers and only `endSensing` stops the
+  /// relay before it; `startSensing` and `beginEventFoundSessionState` do not.
+  /// Before #437 the gate was cleared on those two anyway, transitively:
+  /// `resetSessionState` calls `invalidateEventIdentityVerification`, which
+  /// used to write nil to the gate. #437 removes that write, so without a
+  /// closer on `resetSessionState` itself a joined event's id would outlive
+  /// the session it belonged to.
+  ///
+  /// Asserted by construction rather than by reachability: whether a
+  /// no-argument republish can actually fire on those paths before the next
+  /// admit is not the point, because a stale id must not cross a session
+  /// boundary at all.
+  func testStartingANewSessionClearsTheGateWithoutStoppingTheRelayFirst() throws {
+    let relay = RecordingParticipantRelayControl()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      participantRelayControl: relay,
+      eventJoinControl: RecordingEventJoinControl()
+    )
+    coordinator.useDemoEventMode = false
+    let context = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.discovery
+        .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
+          candidates: candidates(promote: true, joinable: true),
+          eventCodeHashHex: hashHex,
+          nowEpochSeconds: joinableNowEpochSeconds
+        ),
+      "the fixture must produce a join context before the gate can be observed"
+    )
+    coordinator.applyJoinGateDecision(.admit(context))
+    XCTAssertNotNil(
+      coordinator.relayGateJoinedEventIdHexForTesting,
+      "the gate must be open before a reset can be observed to clear it"
+    )
+
+    // Resets at its third statement, before any permission work, and does not
+    // stop the relay on the way.
+    coordinator.startSensing()
+
+    XCTAssertNil(
+      coordinator.relayGateJoinedEventIdHexForTesting,
+      "a session boundary must clear the stored gate id even when the relay was never stopped"
+    )
+  }
+
   // MARK: - Cadence
 
   /// The counterpart of Android's
