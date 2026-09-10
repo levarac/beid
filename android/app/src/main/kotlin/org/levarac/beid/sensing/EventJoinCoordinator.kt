@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import android.util.Log
 import java.io.File
 import java.time.Instant
 import java.util.UUID
@@ -378,6 +379,23 @@ class EventJoinCoordinator internal constructor(
         // emitted, so collecting the snapshot picks up both together.
         coroutineScope.launch {
             nearbyDiscovery.candidates.collect { republishRelayGateState(candidates = it) }
+        }
+        // Relaunch recovery reads storage and, since beid#372, asks the
+        // Keystore to sign what it recovers. It ran inside the accumulator's
+        // constructor until that PR moved it here. It must not: a signing key
+        // can refuse in ways that persist across launches and cannot be
+        // prompted for, and the durable draft that triggers it is still on
+        // disk every time, so a constructor that signs turns one unusable
+        // window into an app that never starts. Off the main thread and
+        // outside construction, the same refusal costs one window.
+        windowObservationRuntime?.let { runtime ->
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    runtime.recoverAfterRelaunch()
+                } catch (error: Exception) {
+                    logWindowRecoveryFailure(error)
+                }
+            }
         }
     }
 
@@ -1154,3 +1172,59 @@ class EventJoinCoordinator internal constructor(
 }
 
 private val ProcessWindowObservationRuntimeOwner = WindowObservationRuntimeOwner()
+
+private const val WINDOW_RECOVERY_LOG_TAG = "BeidWindowRecovery"
+
+/**
+ * Where a failed relaunch recovery goes.
+ *
+ * Taking the recovery out of the accumulator's constructor removes it from
+ * Activity setup, but that is only half of what is needed. The scope this runs
+ * in is built with a `SupervisorJob` and **no** `CoroutineExceptionHandler`,
+ * so an uncaught throw inside its `launch` still reaches the default handler
+ * and takes the process down. Without this catch, relocating the work would
+ * have MOVED the crash rather than closed it — and moved is not fixed, because
+ * the inputs that cause it are durable. A corrupt artifact on disk, like a
+ * permanently refused signing key, is still there on the next launch, so the
+ * crash recurs every single time. That recurrence is the boot loop the
+ * relocation exists to prevent, and only the signing call sites are wrapped
+ * further in; every other throw site in the recovery is covered here.
+ *
+ * Continuing costs the unsent windows this pass could not reconcile. It
+ * destroys nothing: bytes that could not be used are quarantined rather than
+ * deleted, and the next launch tries again.
+ *
+ * `Exception` rather than `Throwable`, here and at the call site: an `Error`
+ * such as an exhausted heap is not this function's to absorb, while
+ * everything this path raises short of that is. `Exception` rather than
+ * `RuntimeException` because the width was measured rather than guessed.
+ * `java.io.IOException` extends `java.lang.Exception` and is **not** a
+ * `RuntimeException`, and it is what an unwritable observations directory, a
+ * full disk, a failed `ATOMIC_MOVE`, an unreadable artifact or a ledger
+ * snapshot that cannot be persisted all produce — the likelier failures on a
+ * path whose entire job is reading storage. Narrowed to `RuntimeException`
+ * this covered only the `check`/`error`/`require` family, and every one of
+ * those filesystem failures went on reaching the default handler — the boot
+ * loop described above, left open for its most probable cause.
+ * `WindowObservationAccumulatorRecoveryTest`'s
+ * `relaunchRecoveryFailsWithATypeNarrowingToRuntimeExceptionWouldMiss`
+ * measures the type rather than asserting it from this comment. Widening
+ * changes nothing about cancellation: `CancellationException` is itself a
+ * `RuntimeException`, so the narrower form caught it too, and
+ * `recoverAfterRelaunch` is blocking code with no suspension point that could
+ * raise one.
+ *
+ * The reasoning on `logRelayRefusal` governs the INNER catch below and only
+ * it: `android.util.Log` throws outright in a plain JVM unit test, so a
+ * logger that cannot write is ignored rather than propagated. It says nothing
+ * about how wide this parameter or the call-site catch should be, which is a
+ * different question about different code — and the hole was in the question
+ * it does not answer.
+ */
+internal fun logWindowRecoveryFailure(error: Exception) {
+    try {
+        Log.w(WINDOW_RECOVERY_LOG_TAG, "relaunch window recovery failed", error)
+    } catch (_: RuntimeException) {
+        // The logger is unavailable. There is nothing to report it to.
+    }
+}
