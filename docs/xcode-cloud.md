@@ -98,11 +98,31 @@ push to a PR**: `pull_request` of types `opened` and `ready_for_review`, `push`
 to `main`, and `workflow_dispatch`. The first two keep the `paths` filter that
 limits the lane to `ios/`, `shared/`, the Android build-configuration files,
 and `scripts/resolve_kmp_java_home.sh`; `paths` does not apply to
-`workflow_dispatch`, so a manual run always executes. The reason for narrowing
-it is host contention rather than cost: one run holds the machine for roughly
-30 minutes, that machine also serves human-run local iOS suites, and on
-2026-09-10 ten runs occupied it for 274 minutes in a single day — 147 of those
-minutes on one PR's six intermediate pushes, which nobody merges.
+`workflow_dispatch`, so a manual run always executes.
+
+**The reason for narrowing it is TestFlight delivery latency, not cost and not
+developer-machine contention.** The repository has exactly one self-hosted
+runner, `emi`. `internal-testflight.yml` and `release-testflight.yml` both
+declare `runs-on: [self-hosted, emi]` — the same single runner this lane uses.
+Their concurrency group (`beid-ios-delivery`) is not this lane's, so GitHub
+does not serialize the two; the single runner does. A 30-minute informational
+run on an intermediate head that nobody merges can therefore sit in front of a
+TestFlight build that testers are waiting for. On 2026-09-10 ten runs of this
+lane occupied that runner for 274 minutes in a single day, 147 of them on one
+PR's six intermediate pushes.
+
+**Correction, 2026-09-10 — the rationale first recorded here was wrong.** This
+section originally said the lane competed for a machine that "also serves
+human-run local iOS suites". It does not. `emi` is a separate host, and the
+developer machine those suites run on has no self-hosted runner registered at
+all, so these runs never touched local Gradle or simulators. The narrowing is
+still correct and the measured numbers are unchanged — only the harm they
+cause was misidentified, and the real one (delaying tester builds) is the
+stronger argument. It is corrected in place rather than deleted because the
+original wording was cited in gh#479 and during review, and because a reader
+who met the old claim elsewhere needs to find out here that it was retracted.
+Note that nothing is lost by narrowing either way: the merge-candidate head and
+`main` are each still measured exactly once.
 
 The pairing of `opened` with a job-level draft guard is deliberate and the two
 halves are not separable. `ready_for_review` fires **only** on a draft→ready
@@ -128,7 +148,11 @@ read a green run here as iOS coverage of the merge candidate.
 
 **"Did not run" has two different shapes here**: opening a *draft* PR still
 records a run whose job is `skipped`, whereas pushing to a draft PR records no
-run at all, because `synchronize` is not a trigger.
+run at all, because `synchronize` is not a trigger. A skipped job holds the
+runner for **zero seconds** — first observed on PR #486, 2026-09-10, where the
+job reported `steps=0` with identical `started_at` and `completed_at`. That is
+what makes the draft guard worth having given the cost model above: a draft PR
+cannot delay a TestFlight build, because it never occupies the runner at all.
 
 **`concurrency` is still keyed on `github.ref` with `cancel-in-progress: true`**,
 so back-to-back merges cancel the earlier `main` run — a run is guaranteed to
