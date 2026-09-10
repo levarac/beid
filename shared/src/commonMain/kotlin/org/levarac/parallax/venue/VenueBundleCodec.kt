@@ -118,8 +118,9 @@ private fun isAbsoluteVenueUri(value: String): Boolean {
     return true
 }
 
-internal const val MAX_VENUE_BUNDLE_BYTES: Int = 1_048_576
-internal const val MAX_VENUE_HANDOFF_BYTES: Int = 4096
+/** Acquisition ceilings shared with native readers; checked again during decode. */
+public const val MAX_VENUE_BUNDLE_BYTES: Int = 1_048_576
+public const val MAX_VENUE_HANDOFF_BYTES: Int = 4096
 private const val BUNDLE_DIGEST_DOMAIN: String = "levarac:venue-bundle-digest:v1\u0000"
 private val URI_SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
 private val BASE64URL = Regex("[A-Za-z0-9_-]+={0,2}")
