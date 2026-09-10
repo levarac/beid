@@ -642,6 +642,11 @@ class EventDefinitionCborCodecTest {
             "domain-constant-record",
             verified.definition.organizerClaim?.dataToByteArray()?.decodeToString(),
         )
+        // Method 1 is a RECOGNISED registry name that this version does not implement.
+        // isVerified must be false because nothing has been CHECKED, not merely because the
+        // method is unknown. This is the assertion that goes red the day someone implements
+        // method 1 and makes the getter conditional on recognition alone.
+        assertEquals(false, verified.definition.organizerClaim?.isVerified)
     }
 
     @Test
@@ -654,9 +659,13 @@ class EventDefinitionCborCodecTest {
         assertEquals(EventJoinMode.GATED, gated.definition.joinMode)
         assertEquals(1L, gated.definition.organizerClaim?.method)
 
+        assertEquals(false, gated.definition.organizerClaim?.isVerified)
+
         val open = verifyClaimDefinition(vector, interop.requiredString("openPlusClaimHex"))
         assertEquals(EventJoinMode.OPEN, open.definition.joinMode)
         assertEquals(1L, open.definition.organizerClaim?.method)
+        // Same reason as above: recognised name, nothing checked, so still unverified.
+        assertEquals(false, open.definition.organizerClaim?.isVerified)
     }
 
     @Test
