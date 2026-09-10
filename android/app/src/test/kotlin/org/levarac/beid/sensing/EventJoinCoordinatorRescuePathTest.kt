@@ -176,6 +176,40 @@ class EventJoinCoordinatorRescuePathTest {
     }
 
     /**
+     * The hole the countdown's position closes. A participant can arrive on
+     * the join surface while a scan is already running and this object does
+     * not own it — `stopNearbyEventDiscovery` declines to stop the radio while
+     * the engine is advertising, yet still releases ownership. Every
+     * scan-ownership branch then returns early on the way back in. If the
+     * countdown lived behind those branches, the rescue route would never be
+     * offered to that participant no matter how long they waited, and nothing
+     * on screen would say why.
+     */
+    @Test
+    fun aSurfaceEnteredWhileSomethingElseIsAlreadyScanningStillOffersRescue() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+        engine.engineState = engine.engineState.copy(isScanning = true)
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+
+        assertEquals(
+            0,
+            engine.startScanCalls,
+            "the precondition is that this object did NOT start the scan; without that it proves nothing",
+        )
+
+        advanceTimeBy(RESCUE_ENTRY_DELAY_SECONDS * 1_000L + 1L)
+        runCurrent()
+
+        assertEquals(
+            NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
+            coordinator.nearbyEventSearchOutcome.value,
+        )
+    }
+
+    /**
      * Acceptance condition 3. The registry could not be reached, and that has
      * to arrive at the surface as a network problem rather than as a generic
      * refusal — the participant has no other way to tell "no event here" from

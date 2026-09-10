@@ -1033,12 +1033,23 @@ class EventJoinCoordinator internal constructor(
     override fun startNearbyEventDiscovery() = startNearbyEventDiscoveryIfIdle()
 
     private fun startNearbyEventDiscoveryIfIdle() {
-        if (disposed || scanPhase != ScanPhase.Idle || discoveryOnlyScanOwned) return
+        if (disposed || scanPhase != ScanPhase.Idle) return
+        // Before the scan-ownership checks below, deliberately. The rescue
+        // countdown is about the participant standing on the join surface
+        // waiting for an event to appear, which is true whether or not this
+        // object happens to own the radio. Starting it only when we start a
+        // scan leaves a reachable hole: `stopNearbyEventDiscovery` declines to
+        // stop the scan while the engine is advertising, but still clears
+        // ownership, so a participant returning to the surface finds a scan
+        // already running, every branch below returning early — and the rescue
+        // route never offered, however long they wait. Idempotent, so calling
+        // it on every entry costs nothing.
+        beginRescueEntryCountdown()
+        if (discoveryOnlyScanOwned) return
         val engineState = engine.getState()
         if (engineState.isScanning || engineState.isAdvertising) return
         engine.startScan()
         discoveryOnlyScanOwned = true
-        beginRescueEntryCountdown()
     }
 
     private fun beginRescueEntryCountdown() {
