@@ -73,7 +73,7 @@ class EventJoinCoordinatorRegistryGateTest {
         // the routing call fails and no definition read is ever made, so the
         // name would silently become false the moment someone edited
         // `FakeEventJoinRegistry.Answer.DEFINITION_FAILS`. Same idiom as
-        // `…WhileTheDefinitionReadIsPending` four tests down.
+        // `joinEventStartsNeitherJoinNorSensingWhileTheDefinitionReadIsPending`.
         assertEquals(
             1,
             registry.definitionRequests,
