@@ -1183,6 +1183,151 @@
           }
         }
       }
+    },
+    "Venue serving": {
+      "comment": "Title of the venue signed-serving screen. 'Serving' means this device is making an event's signed information available to nearby devices."
+    },
+    "Bundle URL": {
+      "comment": "Field label. The address of the public venue bundle file."
+    },
+    "Handoff URL": {
+      "comment": "Field label. The address of the public handoff file that accompanies a bundle."
+    },
+    "Supply bundle": {
+      "comment": "Button. Verb: fetch and verify the bundle at the addresses entered above."
+    },
+    "Reload stored bundle": {
+      "comment": "Button. Verb: verify the previously stored bundle again from scratch."
+    },
+    "Source": {
+      "comment": "Section header for where the venue bundle is fetched from."
+    },
+    "Radio": {
+      "comment": "Section header for the Bluetooth radio's current state."
+    },
+    "Stop serving": {
+      "comment": "Button. Verb: stop making the event's signed information available."
+    },
+    "Stored bundles are verified again each time they are loaded.": {
+      "comment": "Explains that storing a bundle is not a shortcut past verification."
+    },
+    "Not serving.": {
+      "comment": "Nothing is being made available to nearby devices."
+    },
+    "Fetching the bundle.": {
+      "comment": "In progress: downloading or reading the bundle file."
+    },
+    "Verifying identity.": {
+      "comment": "In progress: checking which event the bundle belongs to."
+    },
+    "Identity verified. Checking whether it may be served now.": {
+      "comment": "Which event this is has been confirmed, but whether it is allowed to be served at this moment has not been decided yet. Deliberately does not name the event: the name is not available at this stage."
+    },
+    "This bundle could not be read.": {
+      "comment": "The file was malformed or too large."
+    },
+    "The handoff does not match this bundle.": {
+      "comment": "The two supplied files do not belong together."
+    },
+    "This bundle is for a deployment this app does not support.": {
+      "comment": "'Deployment' is the operator environment the bundle was issued for."
+    },
+    "The registry could not be reached, so the bundle was not verified.": {
+      "comment": "Network failure during verification. Nothing was judged invalid."
+    },
+    "This bundle came from a different registry source than the one configured.": {
+      "comment": "The bundle's origin does not match this app's configured source."
+    },
+    "This event has no anchored record in the registry.": {
+      "comment": "'Anchored record' is the registry entry that vouches for the event."
+    },
+    "The event definition in this bundle was rejected.": {
+      "comment": "The event's own description failed verification."
+    },
+    "This device's clock is unavailable, so serving cannot be scheduled.": {
+      "comment": "Without a clock the stop time cannot be honored, so nothing is served."
+    },
+    "This event has not started yet.": {
+      "comment": "Too early to serve."
+    },
+    "This event's current lease has ended.": {
+      "comment": "'Lease' is the bounded period this device was permitted to serve."
+    },
+    "There is no envelope covering the present moment.": {
+      "comment": "'Envelope' is the signed record covering a period of time."
+    },
+    "The envelope covering now did not verify.": {
+      "comment": "The signed record for the current period failed its signature check."
+    },
+    "A newer definition exists for this event. Load the current bundle.": {
+      "comment": "The stored bundle has been superseded."
+    },
+    "The registry could not be reached, so eligibility is unknown.": {
+      "comment": "Network failure while checking permission. Not a denial."
+    },
+    "Stopped.": {
+      "comment": "Radio state: not advertising."
+    },
+    "Waiting for Bluetooth.": {
+      "comment": "Radio state: Bluetooth is not ready yet but is expected to become ready."
+    },
+    "Advertising requested. The system has not confirmed it is on air.": {
+      "comment": "Radio state. Deliberately hedged: the system reports advertising as started before the hardware confirms it and never sends a success signal, so this must not be worded as confirmed, broadcasting, or on air."
+    },
+    "The radio stopped.": {
+      "comment": "Radio state: advertising ended because of a failure. The specific cause is shown beneath this."
+    },
+    "The signed container was rejected and nothing is being served.": {
+      "comment": "The radio refused the signed bytes."
+    },
+    "Bluetooth is unavailable for this device.": {
+      "comment": "Bluetooth is off, unauthorized, or unsupported."
+    },
+    "Advertising could not start.": {
+      "comment": "The system refused to begin advertising."
+    },
+    "The device could not publish its discovery service.": {
+      "comment": "The Bluetooth service other devices read from could not be set up."
+    },
+    "Only https and file sources are supported.": {
+      "comment": "The address used an unsupported scheme."
+    },
+    "That address redirected elsewhere, so it was not followed.": {
+      "comment": "Redirects are deliberately refused because the bytes would come from an address the operator did not name."
+    },
+    "That file is larger than a venue bundle may be.": {
+      "comment": "Size limit refusal."
+    },
+    "That file could not be read.": {
+      "comment": "Local file read failure."
+    },
+    "The bundle could not be fetched.": {
+      "comment": "Network failure."
+    },
+    "https://": {
+      "comment": "Placeholder text shown in an empty address field."
+    },
+    "venue.serving.storedSource": {
+      "comment": "Shows where the currently stored venue bundle came from. The value is a host name or a file name, not a person or an event name.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stored source: %@"
+          }
+        }
+      }
+    },
+    "venue.serving.servingUntil": {
+      "comment": "The value is a time of day. This instant is fixed by the permit and is exclusive - serving stops at it, it does not continue through it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serving until %@."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
