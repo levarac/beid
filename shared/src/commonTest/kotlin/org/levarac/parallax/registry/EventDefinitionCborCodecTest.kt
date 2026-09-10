@@ -43,6 +43,14 @@ class EventDefinitionCborCodecTest {
                 readVectorResource("canonical/event-definition-v1.cddl").encodeToByteArray(),
             ).toHexWithoutPrefix(),
         )
+        // Pinned to levarac/parallax main at 6fe165f. A regeneration upstream changes this
+        // digest, so the refresh becomes a visible failure here instead of being absorbed.
+        assertEquals(
+            "203b1d3e03b09ab5671e02a7fc4e8223a0efa0ec8e7b423b4ac2e821a039b69e",
+            Sha256.digest(
+                readVectorResource("vectors/positive/organizer-claim-v1.json").encodeToByteArray(),
+            ).toHexWithoutPrefix(),
+        )
         assertEquals(
             "c44c2c108aa2d00ac00f97a8104bac0f262d48c50576bf20bc5106477585dd26",
             Sha256.digest(
@@ -560,6 +568,8 @@ class EventDefinitionCborCodecTest {
         joinMode: Long?,
         eventCodeHash: ByteArray?,
         legacyKey14Hash: ByteArray? = null,
+        organizerClaim: Pair<Long, ByteArray>? = null,
+        extraLabel: Long? = null,
     ): ByteArray {
         val original = vector.requiredString("signedEventDefinitionHex").vectorHexBytes()
         val registration = vector.anchorRegistration()
@@ -585,6 +595,13 @@ class EventDefinitionCborCodecTest {
         if (joinMode != null) fields += CanonicalCbor.uint(14) to CanonicalCbor.uint(joinMode)
         if (legacyKey14Hash != null) fields += CanonicalCbor.uint(14) to CanonicalCbor.bytes(legacyKey14Hash)
         if (eventCodeHash != null) fields += CanonicalCbor.uint(15) to CanonicalCbor.bytes(eventCodeHash)
+        if (organizerClaim != null) {
+            fields += CanonicalCbor.uint(16) to CanonicalCbor.map(
+                CanonicalCbor.uint(1) to CanonicalCbor.uint(organizerClaim.first),
+                CanonicalCbor.uint(2) to CanonicalCbor.bytes(organizerClaim.second),
+            )
+        }
+        if (extraLabel != null) fields += CanonicalCbor.uint(extraLabel) to CanonicalCbor.uint(1)
         val payload = CanonicalCbor.encode(
             CanonicalCbor.map(*fields.toTypedArray()),
         )
@@ -601,6 +618,176 @@ class EventDefinitionCborCodecTest {
             ),
         )
     }
+
+    // --- thegreeting/beid#458: organizer claim (label 16) ---------------------
+    //
+    // Label 16 is ORTHOGONAL to joinMode (label 14): it may appear with or without
+    // it. The decoder therefore selects optional labels by PRESENCE. A decoder that
+    // infers WHICH optional labels are present from the payload map's field count
+    // accepts the claim only on OPEN definitions, which is the inverse of the
+    // reserved-optional contract. The interop bytes below are emitted by
+    // levarac/parallax and are the witness for that.
+
+    @Test
+    fun organizerClaimDecodesWithoutJoinModeAndIsRetained() {
+        val claim = readEventDefinitionVector("vectors/positive/organizer-claim-v1.json")
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val signedHex = claim.getValue("interop").jsonObject.requiredString("legacyPlusClaimHex")
+
+        val verified = verifyClaimDefinition(vector, signedHex)
+
+        assertEquals(null, verified.definition.joinMode)
+        assertEquals(1L, verified.definition.organizerClaim?.method)
+        assertEquals(
+            "domain-constant-record",
+            verified.definition.organizerClaim?.dataToByteArray()?.decodeToString(),
+        )
+    }
+
+    @Test
+    fun organizerClaimDecodesAlongsideJoinModeAndIsRetained() {
+        val claim = readEventDefinitionVector("vectors/positive/organizer-claim-v1.json")
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val interop = claim.getValue("interop").jsonObject
+
+        val gated = verifyClaimDefinition(vector, interop.requiredString("gatedPlusClaimHex"))
+        assertEquals(EventJoinMode.GATED, gated.definition.joinMode)
+        assertEquals(1L, gated.definition.organizerClaim?.method)
+
+        val open = verifyClaimDefinition(vector, interop.requiredString("openPlusClaimHex"))
+        assertEquals(EventJoinMode.OPEN, open.definition.joinMode)
+        assertEquals(1L, open.definition.organizerClaim?.method)
+    }
+
+    @Test
+    fun unrecognisedOrganizerClaimMethodIsRetainedUnverifiedInsteadOfRejected() {
+        val claim = readEventDefinitionVector("vectors/positive/organizer-claim-v1.json")
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+
+        val verified = verifyClaimDefinition(
+            vector,
+            claim.requiredString("unknownMethodSignedEventDefinitionHex"),
+        )
+
+        assertEquals(99L, verified.definition.organizerClaim?.method)
+        assertEquals(false, verified.definition.organizerClaim?.isVerified)
+        assertEquals(
+            "unrecognised method payload",
+            verified.definition.organizerClaim?.dataToByteArray()?.decodeToString(),
+        )
+    }
+
+    @Test
+    fun definitionWithoutAnOrganizerClaimLeavesTheFieldAbsent() {
+        val claim = readEventDefinitionVector("vectors/positive/organizer-claim-v1.json")
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+
+        val verified = verifyClaimDefinition(
+            vector,
+            claim.requiredString("absentSignedEventDefinitionHex"),
+        )
+
+        assertEquals(null, verified.definition.organizerClaim)
+    }
+
+    @Test
+    fun accepting16DoesNotMakeTheDecoderAcceptAnUnknownLabel() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        // Label 17 is not reserved by the specification and must still be refused.
+        // This is the guard on the guard: presence-based decoding must not buy
+        // acceptance of the claim by becoming permissive about labels in general.
+        val signed = signedDefinitionWithJoinFields(
+            vector,
+            joinMode = null,
+            eventCodeHash = null,
+            extraLabel = 17L,
+        )
+
+        assertFailsWith<DefinitionDecodeException> { verifyRawClaimDefinition(vector, signed) }
+    }
+
+    @Test
+    fun organizerClaimDoesNotLetEventCodeHashSkipJoinMode() {
+        val claim = readEventDefinitionVector("vectors/positive/organizer-claim-v1.json")
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        // Keys 1..13, 15 and 16 with 14 omitted. Under count-based decoding this
+        // shape could not be expressed at all; presence-based decoding makes it
+        // representable, so the prefix-chain rule has to be enforced explicitly.
+        val signedHex = claim.getValue("interop").jsonObject
+            .requiredString("rejectedClaimWithoutJoinModeHex")
+
+        assertFailsWith<DefinitionDecodeException> {
+            verifyClaimDefinition(vector, signedHex)
+        }
+    }
+
+    @Test
+    fun organizerClaimShapeViolationsFailClosedWhileAnUnknownMethodDoesNot() {
+        val vector = readEventDefinitionVector("vectors/positive/event-definition-v1.json")
+        val refused = listOf(
+            0L to ByteArray(16),
+            1L to ByteArray(0),
+            1L to ByteArray(1_025),
+        )
+        // signedDefinitionWithJoinFields re-uses the original COSE signature over a new
+        // payload, so EVERY definition it builds has an invalid signature. Asserting only
+        // that decoding throws would therefore pass on the signature and prove nothing
+        // about shape. Assert the REASON: a shape violation must be reported as MALFORMED,
+        // which the codec can only do by rejecting before it reaches the signature.
+        refused.forEach { (method, data) ->
+            val signed = signedDefinitionWithJoinFields(
+                vector,
+                joinMode = null,
+                eventCodeHash = null,
+                organizerClaim = method to data,
+            )
+            val error = assertFailsWith<DefinitionDecodeException>("method=$method data=${data.size}") {
+                verifyRawClaimDefinition(vector, signed)
+            }
+            assertEquals(DefinitionDecodeError.MALFORMED, error.reason, "method=$method data=${data.size}")
+        }
+        // A method outside the registry is NOT a shape violation, so it must survive the
+        // shape gate and fail later on the re-used signature instead of earlier as MALFORMED.
+        // Acceptance of an unrecognised method on a CORRECTLY signed definition is proved by
+        // unrecognisedOrganizerClaimMethodIsRetainedUnverifiedInsteadOfRejected.
+        val unknownMethod = signedDefinitionWithJoinFields(
+            vector,
+            joinMode = null,
+            eventCodeHash = null,
+            organizerClaim = 4_096L to ByteArray(1_024),
+        )
+        val survived = assertFailsWith<DefinitionDecodeException> {
+            verifyRawClaimDefinition(vector, unknownMethod)
+        }
+        assertEquals(DefinitionDecodeError.INVALID_SIGNATURE, survived.reason)
+    }
+
+    private fun verifyClaimDefinition(
+        vector: kotlinx.serialization.json.JsonObject,
+        signedHex: String,
+    ): EventDefinitionCborCodec.VerifiedDefinition =
+        verifyRawClaimDefinition(vector, signedHex.vectorHexBytes())
+
+    private fun verifyRawClaimDefinition(
+        vector: kotlinx.serialization.json.JsonObject,
+        signed: ByteArray,
+    ): EventDefinitionCborCodec.VerifiedDefinition =
+        verifyExtendedDefinition(
+            vector,
+            signed.toHexWithoutPrefix(),
+            definitionDigestHex(signed),
+        )
+
+    /**
+     * The anchored definition digest is domain-separated, not a bare SHA-256 of the signed
+     * bytes. The separator is fixed by the protocol and lives in parallax's
+     * wire-identifiers.ts, whose digest this repository already pins, so a change to it
+     * fails ParallaxEventDefinitionSourceChecksumTest rather than silently rotting here.
+     */
+    private fun definitionDigestHex(signed: ByteArray): String =
+        Sha256.digest(
+            "levarac:event-definition-digest:v1\u0000".encodeToByteArray() + signed,
+        ).toHexWithoutPrefix()
 
     private fun verifyExtendedDefinition(
         vector: kotlinx.serialization.json.JsonObject,
