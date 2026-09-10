@@ -1422,7 +1422,7 @@
 			repositoryURL = "https://github.com/levarac/barnard.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.9.0;
+				version = 0.9.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
