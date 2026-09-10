@@ -422,11 +422,9 @@ final class SensingCoordinator: ObservableObject {
   /// wiring Android applies (beid#374, `EventJoinCoordinator.beginVerifiedJoin`).
   ///
   /// Opened in exactly one place (beid#437) — `applyJoinGateDecision` on admit
-  /// — and closed in exactly one, `closeRelayGate`, which both
-  /// `stopParticipantRelay` and `startSensing` call. It is deliberately *not*
-  /// called from `resetSessionState`; `closeRelayGate` says why, and that
-  /// reasoning is deliberately not restated here — one fact written out in two
-  /// places is how this sentence came to be wrong in the first place.
+  /// — and closed in exactly one, `closeRelayGate`. Where that helper is
+  /// called from, and why each caller closes the gate, is documented on
+  /// `closeRelayGate` itself.
   ///
   /// It used to be written by the `EventIdentityVerification` lifecycle
   /// instead. That made the gate depend on a second registry read's outcome
@@ -1646,11 +1644,7 @@ final class SensingCoordinator: ObservableObject {
   private func invalidateEventIdentityVerification() {
     // Does not close the relay gate (beid#437). Replacing this lookup says
     // nothing about whether this device is still joined, and the join is what
-    // the gate is about; `stopParticipantRelay` is the only closer. Of the
-    // three callers, `leaveEvent` and `resetSessionState` already stop the
-    // relay; `retryEventIdentityVerification` is reachable only from a
-    // verification that already failed, a state in which the old code had
-    // written nil to the gate anyway.
+    // the gate is about. `closeRelayGate` documents what does close it.
     republishRelayGateState()
     eventIdentityVerificationGeneration &+= 1
     eventIdentityVerificationRequest?.cancel()
