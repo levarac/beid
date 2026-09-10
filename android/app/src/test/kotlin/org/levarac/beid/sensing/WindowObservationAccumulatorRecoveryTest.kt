@@ -1,11 +1,13 @@
 package org.levarac.beid.sensing
 
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -328,6 +330,70 @@ class WindowObservationAccumulatorRecoveryTest {
         assertFalse(draftFile(directory).exists())
     }
 
+    /**
+     * What type this recovery fails with, measured rather than assumed.
+     *
+     * `EventJoinCoordinator` schedules [WindowObservationAccumulator.recoverAfterRelaunch]
+     * into a scope built from a `SupervisorJob` with no
+     * `CoroutineExceptionHandler`, and catches whatever escapes it so it can
+     * be handed to [logWindowRecoveryFailure]. Anything that catch does not
+     * cover reaches the default handler and takes the process down — and the
+     * durable input that caused it is still on disk at the next launch, so it
+     * recurs every time. That recurrence is the boot loop the catch exists to
+     * close, which makes the catch's width the whole question, and nothing
+     * measured what this path actually throws until this test.
+     *
+     * It throws `java.io.IOException`, which extends `java.lang.Exception` and
+     * is **not** a `RuntimeException`. A ledger file replaced by a directory is
+     * the cheapest condition that reaches it — no full disk, no revoked signing
+     * key, and no coroutine, because `recoverAfterRelaunch` is a plain
+     * `@Synchronized` method this test calls on its own thread. The same
+     * technique already stands in `WindowObservationAccumulatorTest`'s
+     * `failedOpenPersistenceDoesNotAdvanceMemoryAndCanRetryTheSameWindow`.
+     *
+     * ⚠️ **Which half is proven and which is argued.** *Proven:* what this path
+     * throws, and that the guard is wide enough to be handed it — narrowing
+     * [logWindowRecoveryFailure]'s parameter back to `RuntimeException` stops
+     * this file compiling. *Argued:* that the `catch` clause in
+     * `EventJoinCoordinator`'s `init` then catches it at runtime. Narrowing
+     * *only* that clause back leaves this test green, because a
+     * `RuntimeException` still satisfies an `Exception` parameter, and reaching
+     * the clause means awaiting a failure inside an async `launch` — the flaky
+     * test this deliberately is not.
+     *
+     * The distinction is the point rather than an apology for it. What made the
+     * missing witness unacceptable was never the absence itself but that the
+     * absence HID A TYPE ERROR for two hours, and that is the half this closes.
+     */
+    @Test
+    fun relaunchRecoveryFailsWithATypeNarrowingToRuntimeExceptionWouldMiss() {
+        val directory = Files.createTempDirectory("window-372-unwritable-ledger").toFile()
+        val dying = openAccumulator(directory, VectorCryptography())
+        dying.observe(ENIN, RPID_TWO, REPORTER_RPID, recording = true)
+        dying.observe(ENIN, RPID_ONE, REPORTER_RPID, recording = true)
+        // The process dies with the window still open, which is what leaves the
+        // reconcile below a row to close and therefore a ledger write to make.
+        assertTrue(artifacts(directory).isEmpty(), "nothing may be signed yet")
+
+        // Built before the ledger file is replaced. The store validates its
+        // snapshot on construction, so breaking the file first would move the
+        // failure into the constructor and measure a different call.
+        val relaunched = relaunchedWithoutRecovering(directory, VectorCryptography())
+        check(ledgerFile(directory).delete())
+        check(ledgerFile(directory).mkdir())
+
+        val thrown = assertFailsWith<IOException> { relaunched.recoverAfterRelaunch() }
+
+        assertFalse(
+            thrown is RuntimeException,
+            "recovery fails with a checked exception, so a guard narrowed to RuntimeException never sees it",
+        )
+        // The guard has to absorb this exact object. This call is the witness:
+        // it does not compile while the parameter is narrower than what the
+        // line above proves recovery produces.
+        logWindowRecoveryFailure(thrown)
+    }
+
     /** A window closed the ordinary way in its own process, for byte comparison. */
     private fun controlArtifact(): File {
         val directory = Files.createTempDirectory("window-372-control").toFile()
@@ -372,6 +438,21 @@ class WindowObservationAccumulatorRecoveryTest {
         directory: File,
         cryptography: SensingCryptography,
         ledgerInstanceId: () -> String = { error("the existing ledger must be reused") },
+    ) = relaunchedWithoutRecovering(directory, cryptography, ledgerInstanceId).also {
+        // Recovery is an explicit call, not a constructor side effect —
+        // production schedules it off the main thread. A test that recovered
+        // by merely constructing would no longer be testing what ships.
+        it.recoverAfterRelaunch()
+    }
+
+    /**
+     * The relaunch shape with the recovery call left to the caller, for the
+     * one test that has to change the filesystem in between.
+     */
+    private fun relaunchedWithoutRecovering(
+        directory: File,
+        cryptography: SensingCryptography,
+        ledgerInstanceId: () -> String = { error("the existing ledger must be reused") },
     ) = WindowObservationAccumulator(
         context = { null },
         cryptography = cryptography,
@@ -381,12 +462,7 @@ class WindowObservationAccumulatorRecoveryTest {
         nowEpochSeconds = { FINALIZED_AT },
         newWindowId = { error("a relaunch must not invent a window id") },
         ledgerInstanceId = ledgerInstanceId,
-    ).also {
-        // Recovery is an explicit call, not a constructor side effect —
-        // production schedules it off the main thread. A test that recovered
-        // by merely constructing would no longer be testing what ships.
-        it.recoverAfterRelaunch()
-    }
+    )
 
     private fun ledgerFile(directory: File) = directory.resolve("ledger.snapshot")
 

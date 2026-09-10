@@ -343,7 +343,7 @@ class EventJoinCoordinator internal constructor(
             coroutineScope.launch(Dispatchers.IO) {
                 try {
                     runtime.recoverAfterRelaunch()
-                } catch (error: RuntimeException) {
+                } catch (error: Exception) {
                     logWindowRecoveryFailure(error)
                 }
             }
@@ -1049,12 +1049,34 @@ private const val WINDOW_RECOVERY_LOG_TAG = "BeidWindowRecovery"
  * destroys nothing: bytes that could not be used are quarantined rather than
  * deleted, and the next launch tries again.
  *
- * `RuntimeException` rather than `Throwable`, and the logger's own failure
- * swallowed, for the reasons spelled out on `logRelayRefusal` — an `Error`
- * such as an exhausted heap is not this function's to absorb, and
- * `android.util.Log` throws outright in a plain JVM unit test.
+ * `Exception` rather than `Throwable`, here and at the call site: an `Error`
+ * such as an exhausted heap is not this function's to absorb, while
+ * everything this path raises short of that is. `Exception` rather than
+ * `RuntimeException` because the width was measured rather than guessed.
+ * `java.io.IOException` extends `java.lang.Exception` and is **not** a
+ * `RuntimeException`, and it is what an unwritable observations directory, a
+ * full disk, a failed `ATOMIC_MOVE`, an unreadable artifact or a ledger
+ * snapshot that cannot be persisted all produce — the likelier failures on a
+ * path whose entire job is reading storage. Narrowed to `RuntimeException`
+ * this covered only the `check`/`error`/`require` family, and every one of
+ * those filesystem failures went on reaching the default handler — the boot
+ * loop described above, left open for its most probable cause.
+ * `WindowObservationAccumulatorRecoveryTest`'s
+ * `relaunchRecoveryFailsWithATypeNarrowingToRuntimeExceptionWouldMiss`
+ * measures the type rather than asserting it from this comment. Widening
+ * changes nothing about cancellation: `CancellationException` is itself a
+ * `RuntimeException`, so the narrower form caught it too, and
+ * `recoverAfterRelaunch` is blocking code with no suspension point that could
+ * raise one.
+ *
+ * The reasoning on `logRelayRefusal` governs the INNER catch below and only
+ * it: `android.util.Log` throws outright in a plain JVM unit test, so a
+ * logger that cannot write is ignored rather than propagated. It says nothing
+ * about how wide this parameter or the call-site catch should be, which is a
+ * different question about different code — and the hole was in the question
+ * it does not answer.
  */
-internal fun logWindowRecoveryFailure(error: RuntimeException) {
+internal fun logWindowRecoveryFailure(error: Exception) {
     try {
         Log.w(WINDOW_RECOVERY_LOG_TAG, "relaunch window recovery failed", error)
     } catch (_: RuntimeException) {
