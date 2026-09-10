@@ -13,6 +13,15 @@ Both the ref and the canonical path come from `clone_parallax_pinned.sh`
 checker that restated either one would be the second source of truth it exists
 to forbid.
 
+The convention this enforces, and which makes the rule true rather than
+merely enforced: **a full 40-hex ref is a declaration; a mention of a ref in
+prose is written in abbreviated form.** A dated record ("the comparison passed
+against 6fe165f") is evidence, not a source of truth, and an abbreviated sha
+still identifies the commit uniquely -- so the record loses nothing, while
+"exactly one full 40-hex, in the canonical file" becomes true by convention
+instead of by exception. Do not "helpfully" expand an abbreviated ref in a
+record back to the full hash.
+
 **Full 40-hex only. Abbreviated prefixes are deliberately not scanned.**
 `scripts/tests/test_parallax_ci_wiring.py` asserts that a short sha is refused
 as a pin, and its fixture is a 7-hex prefix of a *superseded* ref. That fixture
@@ -117,9 +126,14 @@ def main() -> int:
         for path, lineno, line in strays:
             print(f"  {path.relative_to(REPO_ROOT)}:{lineno}: {line}", file=sys.stderr)
         print(
-            "\nThe pin must have exactly one source of truth. Remove the copy, or "
-            "refer to the ref in an abbreviated form if the mention is a dated "
-            "record rather than a second definition.",
+            "\nThe pin must have exactly one source of truth.\n"
+            "Convention: a full 40-hex ref is a DECLARATION; a mention in prose is "
+            "written ABBREVIATED.\n"
+            "  - a second declaration -> remove it and read the canonical one\n"
+            "  - a dated record or narrative mention -> abbreviate it "
+            f"(`{ref[:7]}` identifies the commit uniquely)\n"
+            "A record is evidence, not a source of truth: abbreviating keeps the "
+            "fact, expanding it later re-creates this failure.",
             file=sys.stderr,
         )
         return 1

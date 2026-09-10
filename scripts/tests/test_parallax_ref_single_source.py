@@ -123,6 +123,27 @@ class SingleSourceCheckTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class ThisRepositoryHoldsTheInvariantTest(unittest.TestCase):
+    """Run the check against the real repository, not just fixtures.
+
+    This is the wiring. Without it the suite would only prove the check *can*
+    detect a planted copy, while a real second copy sat in the tree unnoticed --
+    and one did: `docs/plans/2026-09-10-venue-bundle-import.md` carried the full
+    pin from the moment it landed, after the issue that asked for this check had
+    already measured the tree as clean. Fixture tests would all have stayed
+    green through that.
+
+    It runs in the Repository sanity job via `unittest discover`, so no workflow
+    change is needed to make it a gate.
+    """
+
+    def test_the_pinned_ref_appears_only_in_its_canonical_source(self) -> None:
+        result = subprocess.run(
+            ["python3", str(CHECK)], capture_output=True, text=True, cwd=REPO_ROOT
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
 class CanonicalPathIsNotRestatedTest(unittest.TestCase):
     def test_the_checker_reads_the_path_from_the_pin_script(self) -> None:
         """The checker must not name the canonical file itself (beid#478).
