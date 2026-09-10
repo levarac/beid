@@ -111,6 +111,15 @@ final class ParticipantRelayVerifier: BarnardRelayVerifier {
     return state
   }
 
+  /// The joined event id the verifier is currently answering with.
+  ///
+  /// Exposed so a test can assert what was *published*, not only what the
+  /// coordinator stored. The two have to move together — that is the whole
+  /// reason `SensingCoordinator.closeRelayGate` exists — and a test that reads
+  /// only the stored side cannot tell a published closure from a forgotten
+  /// one. Nothing in the app reads this.
+  var publishedJoinedEventIdHexForTesting: String? { currentState.joinedEventIdHex }
+
   func verifyRelayEnvelope(_ bytes: [UInt8], currentEnin: UInt32) -> BarnardRelayVerification {
     // Barnard hands over the signed envelope, not the container it arrived
     // in. Re-wrapping at hop zero recovers a shape `verify` accepts; the hop

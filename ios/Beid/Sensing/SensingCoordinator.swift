@@ -1847,6 +1847,11 @@ final class SensingCoordinator: ObservableObject {
     let selectedEventCode = eventCode ?? joinedEventCode
     let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
+    // Starting a session ends whatever event the previous one was joined to, so
+    // the gate closes here (beid#437). Explicitly here rather than inside
+    // `resetSessionState`, because that function is also how the *phase*
+    // advances inside a session — see `closeRelayGate`.
+    closeRelayGate()
     pendingCanonicalEventIdHex = canonicalEventIdHex
     pendingEventCode = selectedEventCode
     // Captured after the reset, which bumped it. Everything downstream of the
@@ -2166,12 +2171,6 @@ final class SensingCoordinator: ObservableObject {
 
   private func resetSessionState() {
     invalidateEventIdentityVerification()
-    // A session boundary ends the joined event, so the gate closes here too and
-    // not only in `stopParticipantRelay` (beid#437). Two of this function's
-    // three callers never stop the relay on the way in; before #437 they
-    // cleared the gate by accident, through the write
-    // `invalidateEventIdentityVerification` used to perform.
-    closeRelayGate()
     aggregationRuntime = AggregationRuntime()
     sessionAggregate = nil
     demoDeviceSequence = 0
@@ -2462,19 +2461,28 @@ final class SensingCoordinator: ObservableObject {
   /// `republishRelayGateState` — a candidate snapshot arriving, a definition
   /// being cached, the relay re-arming — to put straight back on the air.
   ///
-  /// Called from every point where the joined event stops existing:
-  /// `stopParticipantRelay` and `resetSessionState`. Both are needed and
-  /// neither implies the other. `resetSessionState` has three callers and only
-  /// `endSensing` stops the relay first, so the other two — `startSensing` and
-  /// `beginEventFoundSessionState` — reach a session boundary without ever
-  /// passing through `stopParticipantRelay`.
+  /// Called from exactly two places, and both are session boundaries:
+  /// `stopParticipantRelay`, and `startSensing` immediately after its reset.
+  /// Neither implies the other, so both are needed — `startSensing` begins a
+  /// new session without passing through `stopParticipantRelay`.
   ///
-  /// This is a construction, not a reachability argument. Whether a
-  /// no-argument republish can actually fire on those paths before the next
-  /// admit is beside the point: a stale event id must not cross a session
-  /// boundary. (It can, in fact — a probe on beid#437 measured the admitted id
-  /// surviving both `startSensing` and a subsequent nearby-hint delivery — but
-  /// the rule does not depend on that measurement.)
+  /// **A phase transition does not close the gate.** This is deliberately
+  /// *not* called from `resetSessionState`, even though that is where
+  /// `startSensing` clears the rest of its state, because `resetSessionState`
+  /// is also reached from `beginEventFoundSessionState` — the
+  /// sensing-to-eventFound transition *inside* the joined event, at the first
+  /// peer detection. Closing there shut the gate at the exact moment relay
+  /// starts to matter, and nothing reopened it: the only opener is the join
+  /// admit, which had already happened. beid#437 shipped that regression for
+  /// one revision on the strength of the word "boundary" being applied to a
+  /// transition, so the distinction is stated here rather than left implied.
+  ///
+  /// The clearing itself is a construction, not a reachability argument.
+  /// Whether a no-argument republish can actually fire between a session
+  /// boundary and the next admit is beside the point: a stale event id must
+  /// not cross one. (It can, in fact — a probe on beid#437 measured the
+  /// admitted id surviving both `startSensing` and a subsequent nearby-hint
+  /// delivery — but the rule does not depend on that measurement.)
   private func closeRelayGate() {
     relayGateEventIdHex = nil
     republishRelayGateState(joinedEventIdHex: nil)

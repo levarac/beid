@@ -387,6 +387,69 @@ final class ParticipantRelayTests: XCTestCase {
     )
   }
 
+  /// beid#437 addendum 3. A phase transition inside the joined event does not
+  /// close the relay gate.
+  ///
+  /// `handleDetection`'s `.sensing` case calls `beginEventFoundSessionState`,
+  /// which calls `resetSessionState`. That is the sensing-to-eventFound
+  /// transition **inside** the event this device is joined to — the first peer
+  /// detection — not a session boundary. A closer attached to
+  /// `resetSessionState` therefore shut the gate at the exact moment relay
+  /// starts to matter, and nothing reopened it, because the only opener is the
+  /// join admit that had already happened.
+  ///
+  /// **The acceptance criteria for #437 never asked for this**, which is why
+  /// two full-suite mutation runs came back clean: mutation shows a guard has
+  /// a witness, and cannot show a guard fires where it should not, because the
+  /// objecting test does not exist so nothing goes red.
+  ///
+  /// Asserts the published value as well as the stored one. They have to move
+  /// together, and a test reading only the stored side cannot tell a published
+  /// closure from a forgotten one.
+  func testAPhaseTransitionInsideTheJoinedEventLeavesTheGateOpen() throws {
+    let relay = RecordingParticipantRelayControl()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      participantRelayControl: relay,
+      eventJoinControl: RecordingEventJoinControl()
+    )
+    coordinator.useDemoEventMode = false
+    // Reaches `.sensing` so the detection below takes the transition branch.
+    coordinator.startSensing(eventCode: "community-night")
+    let context = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.discovery
+        .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
+          candidates: candidates(promote: true, joinable: true),
+          eventCodeHashHex: hashHex,
+          nowEpochSeconds: joinableNowEpochSeconds
+        ),
+      "the fixture must produce a join context before the gate can be observed"
+    )
+    coordinator.applyJoinGateDecision(.admit(context))
+    XCTAssertEqual(
+      coordinator.relayGateJoinedEventIdHexForTesting,
+      context.eventIdHex,
+      "the gate must be open before the transition can be observed to leave it alone"
+    )
+
+    coordinator.handleDetection(enin: 1, rpid: "peer-0", detectedDisplayId: nil)
+
+    XCTAssertEqual(
+      coordinator.relayGateJoinedEventIdHexForTesting,
+      context.eventIdHex,
+      "a phase transition inside the joined event must not close the relay gate"
+    )
+    let verifier = try XCTUnwrap(
+      relay.verifier as? ParticipantRelayVerifier,
+      "the relay must be armed with this app's verifier once the join is admitted"
+    )
+    XCTAssertEqual(
+      verifier.publishedJoinedEventIdHexForTesting,
+      context.eventIdHex,
+      "the published gate id must survive the transition too, not only the stored one"
+    )
+  }
+
   // MARK: - Cadence
 
   /// The counterpart of Android's
