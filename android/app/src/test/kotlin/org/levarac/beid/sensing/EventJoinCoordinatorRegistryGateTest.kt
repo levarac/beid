@@ -41,8 +41,26 @@ class EventJoinCoordinatorRegistryGateTest {
         assertEquals(EventJoinUiState.JoinFailed, coordinator.state.value)
     }
 
+    /**
+     * The definition read comes back **empty**, which is what a failed read
+     * looks like on this side: `EventJoinRegistry`'s adapter filters a
+     * non-successful resolution to `null` before the gate sees it.
+     *
+     * Renamed in beid#434. It used to be called
+     * `…WhenTheDefinitionDoesNotVerify`, which promises the *other* refusal —
+     * a definition that arrives and is then judged ineligible. This drives
+     * neither more nor less than a null read: `FakeEventJoinRegistry.Answer`
+     * has `DEFINITION_FAILS` succeed the routing call and return `null` from
+     * `resolveEventDefinition`, exactly as `LOOKUP_FAILS` does. **The two
+     * answers differ only in whether `resolveEventId` succeeds.**
+     *
+     * The ineligible case is not reachable from this module at all: the
+     * fake cannot build a non-null `EventDefinitionResolution`, because that
+     * type's constructor is `internal` to `shared/` — which is the seam
+     * beid#434 exists to add.
+     */
     @Test
-    fun joinEventStartsNeitherJoinNorSensingWhenTheDefinitionDoesNotVerify() = runTest {
+    fun joinEventStartsNeitherJoinNorSensingWhenTheDefinitionReadReturnsNothing() = runTest {
         val engine = FakeEventJoinEngine()
         val registry = FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.DEFINITION_FAILS)
         val coordinator = coordinator(engine, registry)
@@ -50,11 +68,22 @@ class EventJoinCoordinatorRegistryGateTest {
         coordinator.joinEvent("ROUTED-BUT-UNVERIFIABLE")
         runCurrent()
 
+        // Pins this test's own name (beid#434). Without it the name is true and
+        // nothing enforces it: every assertion below passes just as well when
+        // the routing call fails and no definition read is ever made, so the
+        // name would silently become false the moment someone edited
+        // `FakeEventJoinRegistry.Answer.DEFINITION_FAILS`. Same idiom as
+        // `joinEventStartsNeitherJoinNorSensingWhileTheDefinitionReadIsPending`.
+        assertEquals(
+            1,
+            registry.definitionRequests,
+            "the definition read must actually have happened for it to have returned nothing",
+        )
         assertNoJoinAndNoSensing(engine, coordinator)
         assertEquals(
             EventJoinUiState.JoinFailed,
             coordinator.state.value,
-            "an Event ID that routes but whose definition does not verify is not a verified event",
+            "an Event ID that routes but whose definition read comes back empty is not a verified event",
         )
     }
 
