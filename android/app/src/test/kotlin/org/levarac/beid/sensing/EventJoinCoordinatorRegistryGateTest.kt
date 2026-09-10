@@ -21,10 +21,12 @@ import kotlin.test.assertTrue
  * `joinEventStartsNeitherJoinNorSensingWhileTheRegistryLookupIsPending` → iOS `testStartSensingStartsNeitherJoinNorSensingWhileTheRegistryReadIsPending`.
  * `aRefusedJoinLeavesNoRecordingAndNoRelay` → iOS `testARefusedJoinLeavesNoRecordingAndNoRelay` (same name on both).
  *
- * Those are the pairs established by name. The remaining cases in this class are
- * deliberately not listed: naming a twin that exists stays true on its own, while
- * asserting that one does NOT exist is the construct that made this comment stale
- * in the first place. Check the iOS file rather than trusting a list here.
+ * Four of this class's ten tests are paired above. The remaining six have no
+ * counterpart that is obvious from the iOS names, and are deliberately left
+ * unpaired rather than recorded as absent: naming a twin that exists stays true
+ * on its own, while asserting that one does NOT exist is the construct that made
+ * this comment stale in the first place. Check the iOS file rather than trusting
+ * a list here.
  *
  * "Pending" is expressed by a registry that never answers, not by a timer:
  * that is exactly the state a slow or unreachable operator endpoint leaves the
