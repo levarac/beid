@@ -26,9 +26,15 @@ struct EventCodeEntryView: View {
     /// not shown — the presenting sheet's own Cancel toolbar button is the
     /// escape hatch instead.
     case accountSheet
+    /// Pushed inside `ScanFlowView` as the rescue route when nearby discovery
+    /// finds no joinable card. Success keeps the full-screen flow presented,
+    /// starts sensing through the existing operator-lookup gate, and pops this
+    /// manual-entry screen back to the phase content.
+    case scanFlow
   }
 
   @EnvironmentObject private var coordinator: AppCoordinator
+  @Environment(\.dismiss) private var dismiss
   @State private var code: String
   @State private var errorMessage: LocalizedStringKey?
   @FocusState private var codeFieldFocused: Bool
@@ -129,12 +135,17 @@ struct EventCodeEntryView: View {
         outcome = await coordinator.joinEventResolvingCanonicalId(code: submittedCode)
       case .accountSheet:
         outcome = await coordinator.joinEventFromAccountSheetResolvingCanonicalId(code: submittedCode)
+      case .scanFlow:
+        outcome = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: submittedCode)
       }
       // `.superseded` must not touch `errorMessage` at all — a stale attempt
       // resuming after a newer one (or a cancellation) started must never
       // overwrite whatever the current attempt already showed.
       guard case .completed(let error) = outcome else { return }
       errorMessage = message(for: error)
+      if mode == .scanFlow, error == nil {
+        dismiss()
+      }
     }
   }
 

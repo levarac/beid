@@ -174,7 +174,7 @@ enum ScanFlowContent {
   ) -> some View {
     switch phase {
     case .idle, .sensing:
-      SensingView()
+      SensingView(sensing: sensing)
     case .eventFound(let event):
       EventFoundView(
         event: event,

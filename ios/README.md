@@ -309,6 +309,22 @@ reviewed release mechanism. Walkthroughs run from Debug builds, including on
 the Simulator, remain available without letting fabricated proof data enter
 the shipping sensing path.
 
+The collection home's “Sense Event” action starts a discovery-only Barnard
+scan while the full-screen `ScanFlowView` is in its pre-join state. This uses
+`startScan()` / `stopScan()` rather than joining or starting automatic
+operation: the flow stops only the scan it owns, and a successful verified
+join transfers cleanly into automatic operation. After beid#410,
+`AppCoordinator.startScan()` had called `startSensing()` with no selected
+event; the new registry gate correctly started nothing, so the action had
+become a no-op. Discovery-only scanning restores the button's intended
+walk-up meaning and feeds the existing shared discovery, deduplication,
+expiry, and registry-promotion pipeline. Nearby cards then issue a fresh
+`RegistryVerifiedJoinContext` from the current candidate snapshot at tap time;
+manual event-code entry remains available as the operator-lookup rescue path.
+Simulator Debug continues into the scripted DemoEvent from this entry point,
+because it has no BLE radio; that exception never calls Barnard and does not
+exist in Release builds.
+
 When demo mode is off — including in every Release build — `startSensing()`
 instead asks for permissions and then, only if this host's own registry read
 verifies the selected event, joins it and starts sensing as one act

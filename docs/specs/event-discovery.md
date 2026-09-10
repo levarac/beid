@@ -170,6 +170,36 @@ change to `OnboardingMode`) and is included in Sub-slice 1 (§10.1).
    (`SensingCoordinator.startSensing`'s existing real-path branch, lines
    239-246, unchanged).
 
+**SUPERSEDED — 2026-09-10 (beid#141; dispatch#21's 2026-09-03 v1.0
+decision).** The original steps above remain as the historical design record.
+What remains current is the transition from `CollectionHomeView` into the
+pre-join `ScanFlowView` encounter field and the placement of the complete
+shared candidate snapshot there. The discovery-only effect is now Barnard `startScan()` /
+`stopScan()`, not an argumentless automatic-operation start: the pre-join flow
+owns that scan, stops only the scan it owns when it ends, and transfers cleanly
+to automatic operation when a join succeeds.
+
+The premise in steps 4–5 that B005 does not carry the raw event code remains
+true. The conclusion that a user must therefore type a code no longer follows.
+Registry promotion now supplies the verified evidence shape accepted by
+`RegistryVerifiedJoinContext.fromNearbyCandidate`, so v1.0 joins an eligible
+nearby candidate with one tap. It is never zero tap: one eligible candidate is
+visually preselected but still requires a tap; multiple candidates remain a
+list whose eligible cards each require one tap. There is no prevalence choice
+and no automatic join. Every nearby candidate remains visible, while shared
+eligibility controls whether its display projection is interactive. A tap
+carries only the stable event-code hash and reissues the capability from the
+coordinator's then-current candidate snapshot; projected Event ID and validity
+metadata are display-only and never join authority.
+
+`EventCodeEntryView` remains the rescue route from the same scan navigation flow.
+Its operator-lookup evidence shape and the nearby-candidate evidence shape both
+reach the same capability-only `EventJoinControlling.joinAndStart` boundary.
+After beid#410, `AppCoordinator.startScan()` had become a no-op in practice
+because it called `startSensing()` without a selected event; restoring an
+explicit discovery-only scan gives the existing “Sense Event” button its
+intended walk-up meaning without inventing another join mechanism.
+
 ### 3.2 Pre-shared-code case (someone was handed a code in advance)
 
 Same as today (`EventCodeEntryView` → `AppCoordinator.joinEvent(code:)` →
@@ -318,6 +348,13 @@ next to an event name is exactly the kind of short, ambiguous-out-of-context
 string AGENTS.md flags as needing one). Tapping a row navigates into
 `EventCodeEntryView` per §3.1 step 4 — it never joins directly.
 
+**SUPERSEDED — 2026-09-10.** The final sentence above is historical; follow
+§3.1's 2026-09-10 SUPERSEDED block. Every candidate still renders its
+untrusted beacon name, but a card whose shared nearby-candidate issuer returns
+a capability is explicitly shown as verified and is one-tap joinable. An
+unresolved card stays visible and non-interactive. `EventCodeEntryView` is a
+separate rescue action, not the destination of a nearby-card tap.
+
 ### 5.2 What a hint must never do
 
 Concrete, not principled — each of these is a specific UI/behavior
@@ -328,6 +365,12 @@ guarantee, not a bulleted value statement:
   (§4.2) — both require an explicit user action (a tap, or having followed
   a link they chose to open) that supplies an actual code. No code path
   introduced by this spec calls `joinEvent` from inside hint-handling code.
+
+  **SUPERSEDED — 2026-09-10.** “Never joins” now means a received hint never
+  auto-joins and hint-handling code never starts participation. Per §3.1's
+  2026-09-10 block, the user's explicit tap on a currently eligible projected
+  card may join directly after the coordinator reissues a capability from its
+  current snapshot. No raw code comes from B005 or the UI action.
 - **Never suppresses or overrides a directly observed event or peer.**
   Spec Central Behavior §6 (line 393): "B005 absence, failure, or mismatch
   MUST NOT suppress a directly observed advertisement or an otherwise valid
@@ -348,6 +391,12 @@ guarantee, not a bulleted value statement:
   exactly as successfully as it does today — mismatch proves nothing about
   legitimacy (spec line 469-470: "Hash equality is not authentication and
   hash inequality does not prove that either event is legitimate").
+
+  **SUPERSEDED — 2026-09-10.** The optional typed-code/hint cross-check is not
+  the nearby-card join mechanism. Manual typed-code joining keeps its
+  operator-lookup evidence path; nearby-card joining uses registry-promoted
+  candidate evidence and a fresh `fromNearbyCandidate` capability, as §3.1's
+  2026-09-10 block specifies.
 
 ### 5.3 Conflict handling — an actual answer, not a deferral
 
@@ -385,6 +434,12 @@ shown" row rather than attempting to parse the event's own payload (which,
 per `eventInfoForDiscoveryHint`, `BarnardEventInfo.swift:189-195`, is
 already replaced by an empty marker in that case — parsing it as a real
 hint would be wrong).
+
+**SUPERSEDED — 2026-09-10 (beid#450).** The native UI does not impose the
+suggested smaller cap or synthesize an overflow row. It projects every
+candidate in the already-bounded shared snapshot, in shared order, matching
+Android; `additionalEventsOmitted` is not rendered in this slice. Overflow is
+tracked jointly for both platforms in beid#450.
 
 ## 6. Serving side
 
@@ -758,6 +813,15 @@ Depends on nothing in §9. This is the entire user-visible feature for a
 typical user today, since §9.a's recommendation means most real events
 won't have a serving device for a while regardless.
 
+**SUPERSEDED IN PART — 2026-09-10.** Preserve the acceptance bullets below as
+the original sub-slice record, but apply §3.1's 2026-09-10 replacement to the
+three obsolete mechanics: a nearby-card tap no longer navigates to or prefills
+code entry, discovery uses owned `startScan()` / `stopScan()` rather than
+argumentless `startAuto()`, and no typed-code/hint cross-check is required for
+nearby join. The `EventCodeEntryView` navigation bullet remains current only as
+the explicit manual rescue route. Candidate ingestion, bounded display, and
+conflict behavior remain current unless superseded elsewhere.
+
 - `EventCodeEntryView` reachable from `SensingView` via a new "Enter code
   manually" link, pushed within `ScanFlowView`'s existing `NavigationStack`
   (§2, §3.1 step 4). New test (`EventCodeJoinTests.swift`): the link is
@@ -780,11 +844,16 @@ won't have a serving device for a while regardless.
   `configure(eventCode:)` call; stopped/superseded cleanly on either
   joining (transitions into the existing real-path `configure`+`startAuto`)
   or the scan sheet closing (`AppCoordinator.finishScan()`, unchanged).
+  **SUPERSEDED — 2026-09-10:** use the owned Central-only `startScan()` /
+  `stopScan()` lifecycle defined in §3.1's current block.
 - Cross-check copy (§3.1 step 5, §5.2): new test confirms a successful join
   is identical in outcome (same `SensingCoordinator.joinEvent` return
   value, same phase transition) whether or not a matching/mismatching hint
   was present — the hash comparison affects only display copy, never the
   join's success/failure.
+  **SUPERSEDED — 2026-09-10:** nearby cards issue through
+  `fromNearbyCandidate`; typed-code joins retain their separate operator-lookup
+  path, with no cross-check between the two required.
 - `beid://join?code=...` deep link (§4.2): new branch in `BeidApp.onOpenURL`,
   alongside the three existing connector calls, routing to
   `AppCoordinator.joinEvent(code:)`. New test covering the two concrete
