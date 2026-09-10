@@ -152,7 +152,7 @@ one failure, `envelopeReaderEnforcesCountBoundsWithoutTheBundleConstructor`.
 Removing only its byte-length guard produced exactly one failure,
 `envelopeReaderEnforcesByteBoundsWithoutTheBundleConstructor`. Each mutant ran
 the full 436-test suite: 432 passed, one failed, three skipped. The Parallax
-comparison executed and passed against `6fe165fd0146df4925fd1b59c236fe729dac7b29`
+comparison executed and passed against `6fe165f`
 in all three runs. Source and the entire working diff were restored and
 hash-checked after each. Baseline source SHA-256:
 `26fe63d94fe1ca3b47b80c64fa6dc6716674c9e09e80929ecaacfb07bc8bbe3a`.
