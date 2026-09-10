@@ -28,11 +28,14 @@ until #426, so for three days the active path was one nobody had exercised.
 evidence of delivery.**
 
 Not confirmed in that observation, and worth checking on the next delivery:
-whether the What to Test text appeared for testers. That is the capability
-the temporary GitHub Actions lane never had (`ci_post_xcodebuild.sh`
-generates the notes and only Xcode Cloud picks them up), so it is the
+whether the What to Test text appeared for testers. That was the capability
+the temporary GitHub Actions lane never had — `ci_post_xcodebuild.sh`
+generates the notes and only Xcode Cloud picks them up — so it is the
 sharpest single test of whether the path is fully back rather than merely
-building.
+building. beid#503 gave that lane its own route to the same field, through
+the App Store Connect API (see below), **but that route has never run**:
+`GHA_DELIVERY` is off, so no delivery has exercised it. The check described
+here is therefore still owed, and is now owed for two paths rather than one.
 
 The GitHub Actions lane described below is retained as the documented fallback.
 It is dormant, not removed: the repository variable `GHA_DELIVERY` is `off`, and
@@ -59,6 +62,36 @@ and Xcode Cloud configuration remain unchanged. The upload asks Apple to assign
 the next build number. Authentication is runner-local: the script reads
 `$ASC_CRED_DIR/env` and its referenced key file at runtime. Credentials must
 not be copied into GitHub secrets, repository files, or logs.
+
+After the upload, `scripts/gha/set_testflight_whats_new.py` writes the same
+What to Test text this repository already ships to Xcode Cloud into the new
+build's `betaBuildLocalizations.whatsNew` through the App Store Connect API
+(beid#503). This lane needs the API because it uploads with
+`xcodebuild -exportArchive`, which has no equivalent of the `TestFlight/`
+directory convention — there is no non-API route to that field here.
+
+- **No new runner dependency.** The ES256 JWT is signed by the `openssl`
+  binary macOS already ships; everything else is python3 standard library.
+  The DER-to-raw signature conversion that this requires is the one
+  error-prone step (a wrong conversion yields a well-formed signature that
+  simply never verifies) and is round-tripped through `openssl` in
+  `scripts/tests/test_set_testflight_whats_new.py`.
+- **The build number is read, never guessed.** `manageAppVersionAndBuildNumber`
+  has Apple assign it during export, so the script reads it from
+  `DistributionSummary.plist`, or failing that from the single exported
+  `.ipa`'s `Info.plist`. If neither yields one it fails and lists what the
+  export directory actually contained. There is deliberately no "most recent
+  build" fallback: attaching one build's tester notes to another build is
+  worse than attaching none.
+- **A failure to write the notes fails the job.** The upload has already
+  succeeded by that point, so the alternative is a green delivery whose
+  testers see nothing — a silent failure indistinguishable from success. The
+  log line `TestFlight upload completed` is printed before this step, so the
+  two states remain distinguishable in a failed run.
+- ⚠️ **This has never run.** `GHA_DELIVERY` is off and Xcode Cloud is the
+  active delivery path, so what is verified is the wiring and the request
+  shapes, by tests that use an injected transport and never reach Apple. The
+  tester-visible confirmation is dispatch#29's gate.
 
 Code signing uses the dedicated runner-local keychain
 `~/Library/Keychains/beid-ci.keychain-db`. At job start the script unlocks it
@@ -301,20 +334,36 @@ executable):
   version. The resolver accepts only the fixed Homebrew JDK 17 path in Xcode
   Cloud; it never falls through to an ambient `JAVA_HOME` or JDK 25.
 - **`ci_post_xcodebuild.sh`** — runs after the archive build. Picks
-  `release_notes.json` when `$CI_BRANCH` matches `release/*`, otherwise
-  `what_to_test.json`, and converts it (via
-  `scripts/prepare_testflight_notes.py`) into
+  `release_notes.json` when `$CI_BRANCH` matches `release/*`; otherwise it
+  passes `--platform ios` to `scripts/prepare_testflight_notes.py`, which
+  prefers `what_to_test.ios.json` and falls back to `what_to_test.json`
+  (beid#503). Either way the result is written as
   `ios/TestFlight/WhatToTest.<locale>.txt`. Xcode Cloud picks these up
   automatically as the build's TestFlight "What to Test" notes — this is a
   documented Apple convention (a `TestFlight/` directory next to the
   `.xcodeproj`), not a custom upload step, so no ASC API credentials are
   needed for this part.
 
-Nothing in these scripts calls the App Store Connect API or needs secrets —
+  **The platform preference lives in the Python, not in this hook.** All three
+  publication paths — this one, the `emi` TestFlight lane and the Android
+  lane — resolve their source file through the same function, so a change to
+  the preference cannot apply to one lane and not the others. This hook holds
+  no copy of the candidate list, which is also why it passes `--missing-ok`
+  rather than testing for the files itself.
+
+  **These notes are not clipped to 500 characters.** That limit is Google
+  Play's; TestFlight accepts far more, and applying Play's limit here would
+  silently shorten what iOS testers read to satisfy a rule that is not theirs.
+  The clip is applied only to the Play output.
+
+Nothing in **these** scripts calls the App Store Connect API or needs secrets —
 scope is intentionally just "get a TestFlight build out with the right
-notes." Pushing `release_notes.json` into an actual App Store version's
-"What's New" text (via an ASC API script) is out of scope
-until beid has real App Store submissions to automate.
+notes." That is a statement about the Xcode Cloud hooks specifically; the
+temporary GitHub Actions lane does now call the API, for the reason given in
+its own section below. Pushing `release_notes.json` into an actual App Store
+version's "What's New" text (via an ASC API script) remains out of scope
+until beid has real App Store submissions to automate — an App Store version's
+"What's New" and a build's TestFlight "What to Test" are different fields.
 
 The generated Beid target also has an always-run pre-build phase that invokes
 Gradle's `:shared:embedSwiftExportForXcode` task before Swift compilation. It

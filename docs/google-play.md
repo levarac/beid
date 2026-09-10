@@ -44,9 +44,29 @@ workflow file can run on either `emi` or a GitHub-hosted runner without
 edits — see "Hosted-runner support" below. This mirrors the pattern
 `ShiokazeHD/umidori` uses for its own Android delivery lane.
 
-`what_to_test.json` and `what_to_test.android.json` are trigger inputs only in
-this temporary lane. Publishing their text as localized Google Play release
-notes is not automated in this slice.
+`what_to_test.json` and `what_to_test.android.json` are both the lane's trigger
+**and** the text testers read. Since beid#503 a `Prepare Google Play release
+notes` step runs `scripts/prepare_testflight_notes.py --platform android`,
+which prefers `what_to_test.android.json` and falls back to
+`what_to_test.json`, and writes one `whatsnew-<locale>` file per locale into
+`$RUNNER_TEMP/whatsnew`. The upload step passes that directory as the
+`whatsNewDirectory` input.
+
+The 500-character clip is applied by that step rather than left to the upload
+action, and this is not a stylistic choice. `r0adkll/upload-google-play` takes
+the locale from the *filename* and sends the file's bytes verbatim, with no
+length check of its own (read at the pinned commit
+`e738b9dd8f2476ea806d921b64aacd24f34515a5`, `src/whatsnew.ts`). A longer note
+is therefore rejected by the Play API at the point the edit is committed —
+which is *after* the bundle has already been uploaded. Clipping earlier turns
+that into a truncated note plus a log line naming both lengths. TestFlight's
+own notes are deliberately **not** clipped at Play's limit; see
+`docs/xcode-cloud.md`.
+
+⚠️ **Nobody has yet seen this text in the Play Console.** The lane is still
+inactive (`GHA_ANDROID_DELIVERY` unset/`off`), so what is verified today is the
+wiring, by contract tests that execute the workflow step's own shell. The
+tester-visible confirmation is dispatch#29's gate, not this document's claim.
 
 ## Repository pipeline
 
