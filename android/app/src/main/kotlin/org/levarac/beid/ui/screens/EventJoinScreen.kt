@@ -135,11 +135,15 @@ fun EventJoinContent(
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
         ) {
             // Plain clickable text — this screen's only entry point into the new Account
-            // screen (beid#126). iOS has no direct equivalent to mirror here (its Account
-            // sheet opens from a CollectionHomeView toolbar button that doesn't exist on
-            // Android yet), so kept minimal and undesigned: existing typography/color
-            // tokens only, no new icon or reusable component. Stays visible in every
-            // state, including Sensing (beid#336) — Android's only door to Account.
+            // screen (beid#126). The two platforms reach Account from different surfaces:
+            // on iOS from a toolbar button in `CollectionHomeView`
+            // (`CollectionHomeView.swift` sets `accountSheetPresented`, which presents
+            // `AccountSheetView`); on Android from this text, on the Join screen. Which
+            // surface should host it on Android is the collection-home/navigation
+            // decision tracked by beid#141, so this is kept minimal and undesigned:
+            // existing typography/color tokens only, no new icon or reusable component.
+            // Stays visible in every state, including Sensing (beid#336) — Android's only
+            // door to Account.
             Text(
                 text = stringResource(R.string.account_title),
                 style = MaterialTheme.typography.bodyMedium,

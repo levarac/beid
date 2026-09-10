@@ -229,9 +229,17 @@ class EventJoinCoordinator internal constructor(
      *
      * **Why this exact position (immediately after [activeProofId] is
      * assigned in [onPhaseDecided], before any other side effect) matters:**
-     * Android has no counterpart to iOS's `SelfProofCheckpointStore` — PR
-     * #314 disclosed that a process kill before [leaveEvent]/[dispose]
-     * silently drops the self-proof for the whole session. Firing this at
+     * Android's self-proof persistence is
+     * [org.levarac.beid.persistence.SelfProofRecordStore], and it is written
+     * from exactly one place: `finalizeSelfProofIfNeeded`, reached from
+     * [leaveEvent]/[dispose]. iOS additionally checkpoints mid-session
+     * (`SelfProofCheckpointStore`, driven by
+     * `SensingCoordinator.checkpointSelfProofStateIfNeeded` and reconciled by
+     * `reconcileSelfProofCheckpointIfNeeded`), so it survives a process kill
+     * that Android does not — the loss PR #314 disclosed. The difference is
+     * *when the write happens*, not whether a store exists; measured
+     * 2026-09-10, and the way to re-check it is to look at what calls
+     * `SelfProofRecordStore.add`. Firing this at
      * the earliest possible point lets a future consumer (this issue's own
      * still-open ledger-writer fork decision) create its durable row for
      * the session right away, degrading the worst-case loss from "the
