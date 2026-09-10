@@ -258,6 +258,12 @@ Non-goals line 46 ("Automatically joining, selecting, or suppressing an
 event") and Central Behavior §4 (spec lines 386-387, "MUST require the user
 to confirm before joining").
 
+**追記（2026-09-10）: 上の「2 つだけ」は v1 の `.eventInfoHint` についての列挙である。**
+v1 hint に限れば現在も正しく、書き換えていない。ただし B005 には barnard の v2 署名封筒があり、
+v2 封筒を伴う候補は受信状態（`UNVERIFIED` / `RADIO_SELF_VERIFIED` / `REGISTRY_VERIFIED`）を持つ
+別の経路を辿る。その経路で何が許されるかの正本は barnard spec 122「Receiver policy」と
+spec 134 であり、ここでは再記述しない。**この列挙を「hint 一般について網羅的」と読まないこと。**
+
 ## 4. How a code reaches a user
 
 ### 4.1 What exists today, verified this session
@@ -329,6 +335,15 @@ technical case is one-sided given what already exists in the repo — see
 the Phase 2 report for why this was not escalated.
 
 ## 5. Trust model for unauthenticated hints
+
+### 現在の v2 署名封筒と受信状態（2026-09-10 追記）
+
+B005 には v1 の未署名 `eventInfoHint` に加えて、barnard の **v2 署名封筒**がある。
+受信状態は [`NearbyEventReceiverState`](../../shared/src/commonMain/kotlin/org/levarac/parallax/discovery/NearbyEventDiscovery.kt)
+の `UNVERIFIED` / `RADIO_SELF_VERIFIED` / `REGISTRY_VERIFIED` の 3 つである。
+各状態の規範と表示・join の gate は barnard spec 122「Receiver policy」、署名を保った
+relay の規範は barnard spec 134 を正本とする。ここでは再記述せず、以降の
+「unauthenticated hint」は v1、またはまだ検証されていない候補についての記述として読む。
 
 ### 5.1 UI element and labeling
 
