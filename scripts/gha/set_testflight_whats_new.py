@@ -193,6 +193,13 @@ def discover_build_number(export_path: Path) -> Tuple[str, str]:
     somebody else's build, which is worse than not writing them at all. For the
     same reason there is deliberately no "most recent build" fallback.
     """
+    if not export_path.is_dir():
+        # Without this the listing below raises FileNotFoundError and the
+        # operator gets a traceback instead of the sentence this function
+        # exists to print. The job fails either way; only the diagnostic is
+        # lost, which is the part that has to survive a 3am delivery.
+        raise AscError(f"the export directory does not exist: {export_path}")
+
     summary = export_path / "DistributionSummary.plist"
     if summary.is_file():
         with summary.open("rb") as handle:

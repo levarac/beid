@@ -199,6 +199,66 @@ class BuildNumberDiscoveryTest(unittest.TestCase):
             self.assertIn("Packaging.log", str(caught.exception))
 
 
+class LoudFailureTest(unittest.TestCase):
+    """The fatal-on-failure property, witnessed by running it.
+
+    This was previously asserted only by grepping the delivery shell script for
+    the absence of `|| true` — a text assertion standing in for the behaviour
+    that justifies the whole design. Measured before the guard below existed,
+    the script did fail (exit 1) but printed a `FileNotFoundError` traceback
+    instead of its own message, so the safety property held and the diagnostic
+    did not.
+    """
+
+    def test_a_missing_export_directory_fails_with_a_sentence_not_a_traceback(self) -> None:
+        script = Path(writer.__file__)
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "what_to_test.json").write_text(
+                json.dumps([{"language": "en-US", "text": "probe"}]), encoding="utf-8"
+            )
+            environment = dict(os.environ)
+            environment.update(
+                {"ASC_KEY_ID": "x", "ASC_ISSUER_ID": "y", "ASC_KEY_PATH": "/nonexistent.p8"}
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(script), "--bundle-id", "org.levarac.beid",
+                 "--export-path", str(root / "no-such-export"), "--repo-root", str(root)],
+                capture_output=True, text=True, check=False, env=environment,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("export directory does not exist", result.stderr)
+
+    @unittest.skipIf(shutil.which("openssl") is None, "openssl is required to sign")
+    def test_an_api_failure_is_not_swallowed(self) -> None:
+        """A failed write must reach the caller, not leave a green delivery."""
+        def refusing_transport(method, url, body, token):
+            raise writer.AscError("App Store Connect said no")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "what_to_test.json").write_text(
+                json.dumps([{"language": "en-US", "text": "probe"}]), encoding="utf-8"
+            )
+            export = root / "export"
+            export.mkdir()
+            with (export / "DistributionSummary.plist").open("wb") as handle:
+                plistlib.dump({"Beid.ipa": [{"buildNumber": "77"}]}, handle)
+
+            environment = {"ASC_KEY_ID": "KEYID", "ASC_ISSUER_ID": "ISSUERID",
+                           "ASC_KEY_PATH": str(make_p256_key(root))}
+            with unittest.mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaises(writer.AscError):
+                    writer.main(
+                        ["--bundle-id", "org.levarac.beid", "--export-path", str(export),
+                         "--repo-root", str(root)],
+                        transport=refusing_transport,
+                    )
+
+
 class RecordingTransport:
     """Answers App Store Connect's shape without a network."""
 
