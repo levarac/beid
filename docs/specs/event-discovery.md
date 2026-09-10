@@ -330,6 +330,15 @@ the Phase 2 report for why this was not escalated.
 
 ## 5. Trust model for unauthenticated hints
 
+### 現在の v2 署名封筒と受信状態（2026-09-10 追記）
+
+B005 には v1 の未署名 `eventInfoHint` に加えて、barnard の **v2 署名封筒**がある。
+受信状態は [`NearbyEventReceiverState`](../../shared/src/commonMain/kotlin/org/levarac/parallax/discovery/NearbyEventDiscovery.kt)
+の `UNVERIFIED` / `RADIO_SELF_VERIFIED` / `REGISTRY_VERIFIED` の 3 つである。
+各状態の規範と表示・join の gate は barnard spec 122「Receiver policy」、署名を保った
+relay の規範は barnard spec 134 を正本とする。ここでは再記述せず、以降の
+「unauthenticated hint」は v1、またはまだ検証されていない候補についての記述として読む。
+
 ### 5.1 UI element and labeling
 
 A new, bounded list on `SensingView` (§3.1 step 3), each row showing
