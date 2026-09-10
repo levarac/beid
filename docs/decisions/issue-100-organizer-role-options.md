@@ -269,3 +269,18 @@ v1 hint が常態であり、上の「v1 の候補は `UNVERIFIED` のまま」�
 である。
 
 **期限付き注記: #432 が閉じたら、本節のこの段落を判断結果で更新すること。**
+
+### 追記（2026-09-10）: barnard の pin が 0.9.0 へ移った
+
+本文書が barnard **0.8.0** を指している箇所（`:27`、`:209`、`:211`）は、**記述当時の状態としてそのまま
+残す**。決定記録は履歴であって現在値ではないため、遡って書き換えない。
+
+現在の pin は **0.9.0**（`android/app/build.gradle.kts`、`ios/project.yml`、生成される
+`ios/Beid.xcodeproj/project.pbxproj`、`Package.resolved` の 4 参照すべて）。0.9.0 で本文書に関係する
+変更は、spec 134 step 4 の**妥当期間の一致が「完全一致」から「包含」へ改められた**こと
+（barnard#200 の 2026-09-10 erratum）である。`definitionStart <= validFromEnin` かつ
+`validThroughEnin <= definitionEnd` を満たせばよい。完全一致は 12 ENIN の中継上限より長いイベント定義に
+対して充足不能であり、spec 134 自身が指示する「より遅い `validFromEnin` での封筒の再発行」を
+拒否してしまっていた。
+
+上の「その後（2026-09-10）」節の判断そのものは、この erratum によって変わらない。
