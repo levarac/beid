@@ -170,6 +170,17 @@ public fun evaluateVenueCurrentLease(
         if (scheduling == null) return@forEachIndexed
         sawVerifiedCandidate = true
         val eninSeconds = scheduling.eninSeconds.toLong()
+        // Defensive, kept deliberately, and NOT redundant the way the guard
+        // below is. `eninSeconds` comes from a UInt16 the SDK fills, so no real
+        // verified envelope reaches this with a non-positive value and no test
+        // covers the branch — deleting it turns nothing red, measured.
+        //
+        // Delete it anyway and the very next line divides by it: an immediate
+        // ArithmeticException on a path nothing guards. So a surviving mutant
+        // here is expected and is not evidence the line is dead weight. The
+        // distinction worth keeping: the guard below duplicates a check someone
+        // else already performs, while this one is the only thing standing
+        // between a zero and a division.
         if (eninSeconds <= 0L) return@forEachIndexed
         val currentEnin = floorDivLong(clock, eninSeconds)
 

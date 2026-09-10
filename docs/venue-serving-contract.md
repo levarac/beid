@@ -79,8 +79,9 @@ shared vocabulary is deferred to it.**
 
 Two conditions hold until then:
 
-- When item 4 needs a real mapping, **that mapping is handed to `chk-461-72` as a
-  separate object** and is not tested by its author alone.
+- When item 4 needs a real mapping, **that mapping goes to an independent
+  reviewer — one dispatched independently of its author — as a separate
+  object**, and is not tested by its author alone.
 - **If the identity codes ever need to cross this boundary, raise it** rather
   than normalising one convention into the other in passing. That is the moment
   the deferred question comes due.

@@ -37,7 +37,7 @@ eligible slice stop serving; an old envelope is never stretched to fill a gap.
 
 ## Dependencies and evidence
 
-Updated scope ruling from subpm-levarac, 2026-09-10: phase 1 proves a **current
+Updated scope ruling from the venue lane owner, 2026-09-10: phase 1 proves a **current
 lease**, ending no later than `currentEnin + 1`, after real SDK verification at
 the current ENIN. It does not claim complete signed schedule coverage. The full
 import/schedule rows above describe phase 2 and are not phase-1 completion claims.
