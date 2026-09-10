@@ -16,6 +16,8 @@ here is witnessed at the cheapest layer that can still fail:
 
 import json
 import base64
+import os
+import unittest.mock
 import plistlib
 import shutil
 import subprocess
@@ -269,6 +271,60 @@ class PublicationTest(unittest.TestCase):
 
         self.assertIn("77", str(caught.exception))
         self.assertEqual(len(slept), 2)  # waits between attempts, not after the last
+
+
+@unittest.skipIf(shutil.which("openssl") is None, "openssl is required to sign")
+class EndToEndTest(unittest.TestCase):
+    """The one witness that ties source file to request body.
+
+    Everything else here tests a part. This runs `main` over a synthetic
+    checkout and export, through the real token construction, and asserts on
+    the `whatsNew` that would go to Apple. Pointing `read_notes` at the wrong
+    platform, or breaking the token path, turns it red.
+    """
+
+    def test_the_ios_note_file_is_what_reaches_the_api(self) -> None:
+        transport = RecordingTransport(localizations=[])
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "what_to_test.json").write_text(
+                json.dumps([{"language": "en-US", "text": "shared text"}]), encoding="utf-8"
+            )
+            (root / "what_to_test.ios.json").write_text(
+                json.dumps([{"language": "en-US", "text": "ios text"}]), encoding="utf-8"
+            )
+            export = root / "export"
+            export.mkdir()
+            with (export / "DistributionSummary.plist").open("wb") as handle:
+                plistlib.dump({"Beid.ipa": [{"buildNumber": "77"}]}, handle)
+
+            environment = {
+                "ASC_KEY_ID": "KEYID",
+                "ASC_ISSUER_ID": "ISSUERID",
+                "ASC_KEY_PATH": str(make_p256_key(root)),
+            }
+            with unittest.mock.patch.dict(os.environ, environment, clear=False):
+                code = writer.main(
+                    ["--bundle-id", "org.levarac.beid", "--export-path", str(export),
+                     "--repo-root", str(root)],
+                    transport=transport,
+                )
+
+            self.assertEqual(code, 0)
+            post = next(call for call in transport.calls if call[0] == "POST")
+            self.assertEqual(post[2]["data"]["attributes"]["whatsNew"], "ios text")
+
+    def test_a_repository_with_no_note_file_leaves_the_build_alone(self) -> None:
+        """A missing file reads the same as an empty one, after a good upload."""
+        transport = RecordingTransport()
+        with TemporaryDirectory() as tmp:
+            code = writer.main(
+                ["--bundle-id", "org.levarac.beid", "--export-path", tmp, "--repo-root", tmp],
+                transport=transport,
+            )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(transport.calls, [])
 
 
 class EmptyNotesTest(unittest.TestCase):

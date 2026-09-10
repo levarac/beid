@@ -4,7 +4,7 @@ This document is the source of truth for beid's temporary Android delivery
 lane. It records repository behavior, runner-local prerequisites, and the
 manual activation steps that must be completed before API uploads can work.
 
-## Current temporary status — 2026-08-28
+## Current temporary status — 2026-08-28, release-note publication 2026-09-11
 
 `.github/workflows/internal-google-play.yml` builds a signed Android App
 Bundle and uploads it to Google Play internal testing. It runs on pushes to

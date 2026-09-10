@@ -335,7 +335,14 @@ def read_notes(repo_root: Path) -> List[Dict[str, str]]:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import prepare_testflight_notes as formatter  # noqa: E402  (path set above)
 
-    source = formatter.resolve_source("ios", repo_root)
+    try:
+        source = formatter.resolve_source("ios", repo_root)
+    except formatter.NoSourceError as error:
+        # Same reading as an empty note file: the repository has nothing to say
+        # about this build. Raising here would fail a job whose upload already
+        # succeeded, over the absence of a file rather than a real fault.
+        print(f"warning: {error}; leaving the build's notes unchanged.")
+        return []
     print(f"Reading TestFlight What to Test from {source}")
     return formatter.load_notes(source, skip_empty=True)
 

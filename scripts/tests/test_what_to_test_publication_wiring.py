@@ -257,6 +257,13 @@ class EmiTestFlightPathTest(unittest.TestCase):
         self.assertIn("set -euo pipefail", text)
         self.assertNotIn("|| true", invocation)
 
+    def test_the_workflow_runs_the_delivery_script_that_publishes_them(self) -> None:
+        """Without this, the lane's own workflow is never referenced at all."""
+        self.assertIn(
+            "run: scripts/gha/build-and-upload-ios.sh",
+            IOS_WORKFLOW.read_text(encoding="utf-8"),
+        )
+
     def test_it_is_told_which_export_to_read_the_build_number_from(self) -> None:
         text = IOS_DELIVERY.read_text(encoding="utf-8")
         invocation = text[text.index("scripts/gha/set_testflight_whats_new.py") :]
