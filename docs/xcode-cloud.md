@@ -322,6 +322,114 @@ recreates and copies the `BeidSharedKit` Swift module and static library into
 the current Xcode build products directory, so a clean Xcode Cloud runner does
 not depend on generated Swift artifacts being committed to the repository.
 
+## When Xcode Cloud declines to start — the measurement record
+
+**This section is the source of truth for what has actually been measured about
+`DO_NOT_START_IF_ALL_FILES_MATCH`.** The *rule* for citing that behaviour in a
+merge record lives in the [PR CI / review-gate carve-out](../AGENTS.md#review-gate--suspended-as-of-2026-08-19),
+which points here rather than restating the evidence. Rule and evidence are
+split because the rule is read on every merge and should stay short, while the
+evidence accretes an entry per observation.
+
+Verified 2026-09-10.
+
+### What is being decided
+
+Xcode Cloud's start condition is configured in ASC as a set of path matchers:
+if **every** changed file matches, the build does not start. The open question
+was **which diff "changed files" means** — the individual push, or the pull
+request's cumulative diff against its base.
+
+### The control, both halves
+
+A one-sided record cannot settle this, and the earlier record here was
+one-sided in a way that was easy to miss. **A record that only ever asks
+whether the allowed set is too small will never discover one that is too
+large.** So both halves are required:
+
+- **Negative half** — cumulative set entirely inside the exclusion set, build
+  must NOT start. Without it, a matcher that never suppresses anything would
+  look identical to a working one.
+- **Positive half** — something outside the exclusion set present, build must
+  start. Without it, a matcher that never starts anything would look identical
+  to a working one.
+
+### The five observations
+
+Every prediction below was **written into the PR body before the push that
+tested it**, not fitted afterwards. That ordering is the point: a table of
+agreements assembled after the fact and a table of predictions registered in
+advance carry the same numbers and very different weight.
+
+| PR | Changed files (cumulative) | Outside the exclusion set? | Prediction (written first) | Observed |
+|---|---|---|---|---|
+| #483 | workflow `.yml`, `AGENTS.md`, `docs/*.md`, **`scripts/tests/*.py`** | yes | starts | **started, success** |
+| #484 | workflow `.yml`, `docs/*.md` | no | does not start | **no check-runs, no commit statuses** |
+| #486 | workflow `.yml`, `AGENTS.md`, `docs/*.md` | no | does not start | **no check-runs, no commit statuses** |
+| #487 | workflow `.yml`, `AGENTS.md`, `docs/*.md` | no | does not start | **no check-runs, no commit statuses** |
+| #489 | `docs/*.md`, **`scripts/*.py` ×3** | yes | starts | **started, success** |
+
+#483 is the observation that separates the two hypotheses. Its *push* changed
+only `AGENTS.md` and `docs/xcode-cloud.md` — both inside the exclusion set — so
+per-push evaluation predicts no build. Its *cumulative* set already contained a
+`.py` file from an earlier commit, so cumulative evaluation predicts a build.
+The build started.
+
+### How the negative half was read
+
+A "did not start" claim is only as good as the surfaces checked.
+
+- **Both surfaces.** Xcode Cloud reports to commit statuses in some
+  configurations, so `check-runs` alone would confuse *reported elsewhere* with
+  *did not run*. Every negative above is zero on **both**
+  `repos/.../commits/<sha>/check-runs` and `repos/.../commits/<sha>/status`.
+- **Lag excluded.** On the positive cases the check appeared within about a
+  minute of the push. Each negative was still empty on both surfaces more than
+  five minutes after its push, with the GitHub Actions checks already terminal.
+
+### The conclusion, and what would overturn it
+
+**The matcher is evaluated over the pull request's cumulative diff against its
+base, not over the delta of the individual push.** This is the best hypothesis
+consistent with all five observations, and it is inconsistent with per-push
+evaluation. It is **not a proof** — ASC's behaviour is configuration owned
+outside this repository and can change without a commit here.
+
+**A falsifying observation would be**: a push whose own files are all inside
+the exclusion set, landing on a PR whose cumulative set contains a file outside
+it, that produces **no** build — or the mirror, a PR whose cumulative set is
+entirely inside the set that starts one anyway. Either result means this
+section is wrong and the practical predicate below must be re-derived rather
+than patched.
+
+### Why the earlier record could not decide it
+
+Kept because the failure is more reusable than the conclusion. The record
+previously cited as the control was PR #428: two pushes inside the set produced
+zero check-runs, and one push adding a `.py` outside the set started a build.
+That reads as per-push evaluation. But at the time of those first two pushes
+#428's *cumulative* set was also entirely inside the exclusion set — so
+cumulative evaluation predicts exactly the same three outcomes. **The record was
+consistent with both hypotheses, which makes it evidence for neither**, and it
+was nonetheless cited as settled. Nothing was measured wrong; the experiment
+simply contained no branch on which the two hypotheses disagree.
+
+**Before citing a control, ask whether the competing explanation would have
+produced a different result.** If it would not, say the question is open rather
+than recording a conclusion the experiment cannot carry.
+
+### The practical predicate
+
+Enumerate the PR's cumulative file list — `gh pr view <n> --json files`, **not**
+a `git diff` of the push — at the head being merged. If every path falls inside
+the exclusion set, absence of the iOS check is configuration. If even one falls
+outside, absence is the hard stop.
+
+The exclusion set itself is configured in ASC and is not restated as a contract
+here; as read from the ASC API on 2026-09-09 it was {`docs/`, `.github/`,
+`*.md`}. Treat that as a dated observation and re-read ASC whenever a PR's
+classification is not obvious.
+
 ## Workflow configuration in ASC
 
 Xcode Cloud workflow settings live in App Store Connect (App Store

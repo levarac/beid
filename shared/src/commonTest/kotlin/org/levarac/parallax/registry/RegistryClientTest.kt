@@ -5,8 +5,39 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class RegistryClientTest {
+    @Test
+    fun successfulRawReadCarriesTheActualResolverSourceAndPinnedEvent() = runTest {
+        val primary = RecordingRegistryTransport(RegistryTestFixtures.headerResponse(), RegistryTestFixtures.callResponse())
+        val secondary = RecordingRegistryTransport(RegistryTestFixtures.callResponse())
+        val client = RegistryClient(RegistryResolver(
+            chainId = 11_155_111,
+            readerAddressHex = RegistryTestFixtures.READER,
+            primary = JsonRpcEthCallAdapter(RegistryTestFixtures.ENDPOINT, RegistryTestFixtures.READER, primary),
+            secondary = JsonRpcEthCallAdapter(RegistryTestFixtures.SECONDARY_ENDPOINT, RegistryTestFixtures.READER, secondary),
+            etherscan = null,
+            cache = InMemoryRegistryCache(),
+        ))
+        val response = CompletableDeferred<RegistryResolution>()
+        try {
+            client.resolve(RegistryTestFixtures.eventId.toPrefixedHex(), safeRegistryReadPin()) { response.complete(it) }
+            val result = response.await()
+            assertTrue(result.isSuccess)
+            val key = assertNotNull(result.readKey)
+            assertEquals(11_155_111L, key.chainId)
+            assertEquals(RegistryTestFixtures.READER, key.registryAddressHex)
+            assertEquals(RegistryTestFixtures.eventId.toPrefixedHex(), key.eventIdHex)
+            assertEquals(0x1234L, key.blockNumber)
+            assertEquals(RegistryTestFixtures.BLOCK_HASH, key.blockHashHex)
+            assertEquals(result.definitionHashHex, key.definitionHashHex)
+        } finally {
+            client.close()
+        }
+    }
+
     @Test
     fun resolveEventIdByCodeHashWithoutTemplateIsFailClosed() = runTest {
         val client = requireNotNull(createSepoliaRegistryClient(RegistryTestFixtures.READER, null))

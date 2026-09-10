@@ -16,6 +16,8 @@ public class RegistryResolution internal constructor(
     public val definitionHashHex: String?,
     public val errorCode: String?,
     public val errorMessage: String?,
+    /** The actual resolver read's source, requested event and pinned block; absent on failure. */
+    public val readKey: RegistryCacheKey? = null,
 )
 
 public class EventDefinitionResolution internal constructor(
@@ -76,6 +78,7 @@ public class RegistryClient internal constructor(
                     definitionHashHex = result.cacheKey.definitionHashHex,
                     errorCode = null,
                     errorMessage = null,
+                    readKey = result.cacheKey,
                 )
             } catch (error: CancellationException) {
                 RegistryResolution(
@@ -454,4 +457,4 @@ private val EventCodeLookupError.wireName: String
         EventCodeLookupError.INVALID_RESPONSE -> "event_code_lookup_invalid_response"
     }
 
-private const val SEPOLIA_CHAIN_ID: Long = 11_155_111L
+internal const val SEPOLIA_CHAIN_ID: Long = 11_155_111L
