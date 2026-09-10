@@ -608,8 +608,30 @@ dates). The contract every agent must know before touching delivery files:
     `gh pr checks` が答える。
   - **`.github/workflows/pr-ci-ios-macos.yml`(#301、2026-09-02 追加)** —
     self-hosted runner `emi` 上の **informational-only** lane。job 名は
-    `iOS simulator (self-hosted macOS, informational)`。`ios/` `shared/`
-    Android build 関連パスの変更でのみ起動し、**required ではない**。
+    `iOS simulator (self-hosted macOS, informational)`。**required ではない**。
+    **起動条件は次の 3 つだけであり、PR への push 毎ではない**
+    (#479、2026-09-10 に変更): (1) `pull_request` の `ready_for_review`、
+    (2) `push` の `main`、(3) `workflow_dispatch`。(1)(2) には従来どおり
+    `paths` filter がかかり、`ios/` `shared/` Android build 関連パスの変更
+    でのみ起動する。`workflow_dispatch` に `paths` は効かないので、手動実行は
+    常に走る。`synchronize` を外した理由は、この lane が 1 回あたり約 30 分
+    host を占有しながら merge を gate せず、同じ head を Xcode Cloud の
+    `Beid | PR Build & Test | Test - iOS` が約 12 分で検証しているため。
+    2026-09-10 の実測では 10 run が 1 日に host を 274 分占有し、うち 147 分は
+    1 本の PR の 6 push 分だった。
+    **`ready_for_review` は draft から上げた時にしか発火しない。**最初から
+    非 draft で open した PR ではこの lane は PR 時点で 1 度も走らない
+    (直近 25 本を timeline で数えた時点で、決着済み 22 本のうち 13 本が該当)。
+    その head は Xcode Cloud が検証し、merge 後の main push でこの lane が
+    測る。iOS の検証網が消えるわけではないが、**この lane のカバー率が
+    PR 全体ではないことを「緑だから検証された」と読み替えないこと。**
+    **`concurrency` は `github.ref` 単位で `cancel-in-progress: true` のまま**
+    なので、main への連続 merge では前の main run が cancel される。merge 毎に
+    run が「起動する」ことは保証されるが、**完走は保証されない**。
+    起動条件そのものは `scripts/tests` 配下の contract test が固定しており、
+    Repository sanity job の `python3 -m unittest discover -s scripts/tests -t .`
+    で毎 PR 実行される (この subsection が件数もファイル名も書かないのは
+    上と同じ理由 — 追加のたびに古くなるため)。
     Debug simulator build/test の集計後、テスト結果にかかわらず Release device
     build (`CODE_SIGNING_ALLOWED=NO`) も実行し、Release-only の compile regression
     を検出する。個々の step を `continue-on-error` にはせず、lane 全体が
@@ -620,7 +642,10 @@ dates). The contract every agent must know before touching delivery files:
   **`scripts/check_pr_ci_doc_drift.py` はこの 2 本目を検査していない。**
   同スクリプトは `.github/workflows/pr-ci.yml` のみを対象としており、
   **iOS lane が変わってもこの記述は緑のまま古くなる**。lane を触る変更は、
-  検査に頼らずこの subsection を手で更新すること。
+  検査に頼らずこの subsection を手で更新すること。#479 で
+  `scripts/tests` に追加した contract test が固定するのは iOS lane の
+  **起動条件だけ**であって、この subsection の散文ではない。起動条件以外は
+  依然として手で追随させる必要がある。
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、
   上の KMP review gate を免除しない。KMP の independent review は作業上の

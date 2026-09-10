@@ -1,7 +1,23 @@
 name: PR iOS CI (self-hosted macOS, informational)
 
 on:
+  # Triggers are deliberately narrow (gh#479). This lane takes ~30 minutes on
+  # the single self-hosted macOS host that also serves human-run local iOS
+  # suites, and it gates nothing: Xcode Cloud's "Beid | PR Build & Test |
+  # Test - iOS" verifies the same head in ~12 minutes and is the effective
+  # gate. Firing on every PR push spent that host on intermediate heads nobody
+  # merges — measured 2026-09-10, ten runs held it for 274 minutes in one day,
+  # 147 of which were one PR's six pushes, with two runs overlapping for 17
+  # minutes. So there is no `synchronize` here. The heads worth 30 minutes are
+  # the one proposed for merge and `main` once the merge has landed.
+  #
+  # The `paths` list is repeated per event because GitHub Actions does not
+  # support YAML anchors in workflow files. Keep the two copies identical.
   pull_request:
+    # Un-drafting is the merge-candidate signal. Note this does NOT fire for a
+    # PR opened directly as non-draft; such heads are still verified by Xcode
+    # Cloud, and the `main` push below measures the merged result.
+    types: [ready_for_review]
     paths:
       - ".github/workflows/pr-ci-ios-macos.yml"
       - "ios/**"
@@ -12,6 +28,25 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+  push:
+    # Measure the merged result on main exactly once. Note the concurrency
+    # group below is keyed on github.ref with cancel-in-progress, so two merges
+    # landing back to back cancel the earlier main run: this guarantees a run
+    # starts per merge, not that every one finishes.
+    branches: [main]
+    paths:
+      - ".github/workflows/pr-ci-ios-macos.yml"
+      - "ios/**"
+      - "shared/**"
+      - "android/build.gradle.kts"
+      - "android/settings.gradle.kts"
+      - "android/gradle.properties"
+      - "android/gradlew"
+      - "android/gradle/wrapper/**"
+      - "scripts/resolve_kmp_java_home.sh"
+  # Escape hatch: run this lane against any ref on demand. `paths` does not
+  # apply to workflow_dispatch, so a manual run always executes.
+  workflow_dispatch:
 
 permissions:
   contents: read
