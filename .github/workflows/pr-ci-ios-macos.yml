@@ -14,10 +14,13 @@ on:
   # The `paths` list is repeated per event because GitHub Actions does not
   # support YAML anchors in workflow files. Keep the two copies identical.
   pull_request:
-    # Un-drafting is the merge-candidate signal. Note this does NOT fire for a
-    # PR opened directly as non-draft; such heads are still verified by Xcode
-    # Cloud, and the `main` push below measures the merged result.
-    types: [ready_for_review]
+    # Both events that produce a merge-candidate head, and neither of them is
+    # `synchronize`. `ready_for_review` alone would miss every PR opened
+    # directly as non-draft — measured on this repo, 13 of the 22 settled PRs
+    # in the last 25 never fired it, iOS-affecting ones among them. `opened`
+    # also fires for DRAFT pulls, so the job carries an explicit draft guard;
+    # `paths` and `types` cannot express "non-draft" on their own.
+    types: [opened, ready_for_review]
     paths:
       - ".github/workflows/pr-ci-ios-macos.yml"
       - "ios/**"
@@ -70,6 +73,15 @@ jobs:
     # fromJSON is required because runs-on treats a plain string variable as
     # ONE label; it does not split on commas.
     runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
+    # Draft pulls do not get 30 minutes of the shared macOS host. `opened`
+    # above fires for drafts too, so this is where they are dropped. The
+    # event_name clause keeps `push` and `workflow_dispatch` unaffected, since
+    # `github.event.pull_request` is absent for them and would otherwise make
+    # the whole expression false. Note a draft `opened` still records a run
+    # whose job is *skipped* — a skipped row is the expected evidence there,
+    # whereas a draft push records nothing at all, `synchronize` not being a
+    # trigger.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     timeout-minutes: 45
     steps:
       - name: Initialize CI output path

@@ -610,21 +610,32 @@ dates). The contract every agent must know before touching delivery files:
     self-hosted runner `emi` 上の **informational-only** lane。job 名は
     `iOS simulator (self-hosted macOS, informational)`。**required ではない**。
     **起動条件は次の 3 つだけであり、PR への push 毎ではない**
-    (#479、2026-09-10 に変更): (1) `pull_request` の `ready_for_review`、
-    (2) `push` の `main`、(3) `workflow_dispatch`。(1)(2) には従来どおり
-    `paths` filter がかかり、`ios/` `shared/` Android build 関連パスの変更
-    でのみ起動する。`workflow_dispatch` に `paths` は効かないので、手動実行は
-    常に走る。`synchronize` を外した理由は、この lane が 1 回あたり約 30 分
-    host を占有しながら merge を gate せず、同じ head を Xcode Cloud の
-    `Beid | PR Build & Test | Test - iOS` が約 12 分で検証しているため。
-    2026-09-10 の実測では 10 run が 1 日に host を 274 分占有し、うち 147 分は
-    1 本の PR の 6 push 分だった。
-    **`ready_for_review` は draft から上げた時にしか発火しない。**最初から
-    非 draft で open した PR ではこの lane は PR 時点で 1 度も走らない
-    (直近 25 本を timeline で数えた時点で、決着済み 22 本のうち 13 本が該当)。
-    その head は Xcode Cloud が検証し、merge 後の main push でこの lane が
-    測る。iOS の検証網が消えるわけではないが、**この lane のカバー率が
-    PR 全体ではないことを「緑だから検証された」と読み替えないこと。**
+    (#479、2026-09-10 に変更): (1) `pull_request` の `opened` と
+    `ready_for_review`、(2) `push` の `main`、(3) `workflow_dispatch`。
+    (1)(2) には従来どおり `paths` filter がかかり、`ios/` `shared/`
+    Android build 関連パスの変更でのみ起動する。`workflow_dispatch` に
+    `paths` は効かないので、手動実行は常に走る。`synchronize` を外した理由は、
+    この lane が 1 回あたり約 30 分 host を占有しながら merge を gate せず、
+    同じ head を Xcode Cloud の `Beid | PR Build & Test | Test - iOS` が
+    約 12 分で検証しているため。2026-09-10 の実測では 10 run が 1 日に host を
+    274 分占有し、うち 147 分は 1 本の PR の 6 push 分だった。
+    **`opened` を入れてあるのは、`ready_for_review` が draft から上げた時に
+    しか発火しないため。** issue #479 の本文は `ready_for_review` 単独を
+    指定していたが、直近 25 本を timeline で数えると決着済み 22 本のうち
+    13 本が `ReadyForReviewEvent` を持たず (ios 直撃のものを含む)、それだと
+    PR の約 4 割しかカバーしない。非 draft で open された PR は open した
+    瞬間から merge 候補の head を持つので、`opened` を足す方が issue の
+    意図に沿う。**受け入れ基準 4 つは狭い方の集合でも満たせてしまうので、
+    基準の充足を正しさの証明として扱わないこと。**
+    **`opened` は draft PR でも発火するため、draft の除外は job 側の
+    `if` が担う** (`github.event_name != 'pull_request' ||
+    github.event.pull_request.draft == false`)。`paths` と `types` だけでは
+    「draft でない」を表現できない。`event_name` の節は必須で、これを外すと
+    `push` と `workflow_dispatch` では `github.event.pull_request` が存在せず
+    式全体が false になり、main の計測が止まる。
+    **観測上の注意**: draft PR を open した時は run 自体は記録され、job が
+    `skipped` になる。draft PR への push は `synchronize` が trigger でない
+    ため run 自体が記録されない。「起動しない」の証拠はこの 2 つで形が違う。
     **`concurrency` は `github.ref` 単位で `cancel-in-progress: true` のまま**
     なので、main への連続 merge では前の main run が cancel される。merge 毎に
     run が「起動する」ことは保証されるが、**完走は保証されない**。

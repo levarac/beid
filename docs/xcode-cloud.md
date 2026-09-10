@@ -94,21 +94,32 @@ an unsigned Release device build on the self-hosted `emi` runner. It is
 **informational** — it gates nothing, and Xcode Cloud's
 `Beid | PR Build & Test | Test - iOS` remains the effective gate on the head
 under review. Since gh#479 it fires on exactly three triggers, **not on every
-push to a PR**: `pull_request` of type `ready_for_review`, `push` to `main`,
-and `workflow_dispatch`. The first two keep the `paths` filter that limits the
-lane to `ios/`, `shared/`, the Android build-configuration files, and
-`scripts/resolve_kmp_java_home.sh`; `paths` does not apply to
+push to a PR**: `pull_request` of types `opened` and `ready_for_review`, `push`
+to `main`, and `workflow_dispatch`. The first two keep the `paths` filter that
+limits the lane to `ios/`, `shared/`, the Android build-configuration files,
+and `scripts/resolve_kmp_java_home.sh`; `paths` does not apply to
 `workflow_dispatch`, so a manual run always executes. The reason for narrowing
 it is host contention rather than cost: one run holds the machine for roughly
 30 minutes, that machine also serves human-run local iOS suites, and on
 2026-09-10 ten runs occupied it for 274 minutes in a single day — 147 of those
 minutes on one PR's six intermediate pushes, which nobody merges.
 
-Two consequences are easy to misread, so read them here before citing this
-lane as evidence. `ready_for_review` fires only when a PR is taken **out of
-draft**, so a PR opened directly as non-draft never runs this lane at PR time;
-that head is still covered by Xcode Cloud, and the `main` push measures the
-merged result. And the `concurrency` group is still keyed on `github.ref` with
+The pairing of `opened` with a job-level draft guard is deliberate and the two
+halves are not separable. `ready_for_review` fires **only** on a draft→ready
+transition, so on its own it would miss every PR opened directly as non-draft —
+13 of the 22 settled PRs in the last 25 measured on 2026-09-10, iOS-affecting
+ones among them. Adding `opened` covers those, but `opened` also fires for
+draft pulls, so the job carries
+`if: github.event_name != 'pull_request' || github.event.pull_request.draft == false`.
+Keep the `event_name` clause: `github.event.pull_request` does not exist for
+`push` or `workflow_dispatch`, so removing it would silently disable the lane
+on `main`.
+
+Two further points are easy to misread, so read them before citing this lane as
+evidence. **"Did not run" has two different shapes here**: opening a *draft* PR
+still records a run whose job is `skipped`, whereas pushing to a draft PR
+records no run at all, because `synchronize` is not a trigger. And the
+`concurrency` group is still keyed on `github.ref` with
 `cancel-in-progress: true`, so back-to-back merges cancel the earlier `main`
 run — a run is guaranteed to *start* per merge, not to finish.
 

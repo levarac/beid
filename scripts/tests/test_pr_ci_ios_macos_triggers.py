@@ -58,14 +58,31 @@ def event_section(block: str, event: str) -> str:
 
 
 class PrCiIosMacosTriggerTest(unittest.TestCase):
-    def test_pull_request_fires_only_on_ready_for_review(self) -> None:
+    def test_pull_request_fires_only_on_merge_candidate_heads(self) -> None:
         block = trigger_block(workflow_text())
         section = event_section(block, "pull_request")
 
-        self.assertIn("    types: [ready_for_review]\n", section)
-        for event in ("synchronize", "opened", "reopened", "edited"):
+        self.assertIn("    types: [opened, ready_for_review]\n", section)
+        for event in ("synchronize", "reopened", "edited"):
             with self.subTest(event=event):
                 self.assertNotIn(event, section)
+
+    def test_draft_pull_requests_are_dropped_at_the_job(self) -> None:
+        """`opened` fires for drafts too, so the guard is load-bearing.
+
+        Without it, narrowing the triggers would still hand every draft PR a
+        30-minute slot on the shared macOS host. The `event_name` clause is
+        equally load-bearing: `github.event.pull_request` does not exist for
+        `push` or `workflow_dispatch`, so dropping it would disable the lane
+        on main.
+        """
+        text = workflow_text()
+
+        self.assertIn(
+            "    if: ${{ github.event_name != 'pull_request'"
+            " || github.event.pull_request.draft == false }}\n",
+            text,
+        )
 
     def test_push_is_limited_to_main(self) -> None:
         block = trigger_block(workflow_text())
