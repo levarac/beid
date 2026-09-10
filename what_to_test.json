@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "Please try joining an event and tell us what happens. The app now checks the event against the registry before it starts sensing, so if you enter a code and nothing seems to happen, that is what we most need to hear about — tell us the code you used and what the screen showed. Also still open from earlier builds: connect a wallet with MetaMask, approve one signature, and confirm the app comes back on its own with the signature applied."
+    "text": "You should not need to type an event code any more. Tap Sense Event and nearby events now appear as cards — tap one to start recording. A card marked Verified is the app agreeing with the registry; a card without that is shown but cannot be tapped, which is intended. If no card appears, the code entry is still there below the list, and we want to hear which one you had to use. Still open from earlier builds: connect a wallet with MetaMask, approve one signature, and confirm the app returns on its own."
   }
 ]
