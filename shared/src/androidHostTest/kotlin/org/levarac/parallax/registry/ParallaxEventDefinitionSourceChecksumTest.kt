@@ -14,10 +14,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-// Parallax main verified on 2026-09-08. To bump, fetch Parallax main, review the
+// Parallax main verified on 2026-09-10. To bump, fetch Parallax main, review the
 // vector/CDDL/wire-identifier changes, and replace this full commit ID in the same
 // change that reconciles the vendored resources/checksums. Never use a moving branch.
-private const val EXPECTED_PARALLAX_REF = "5215991b440db8e8bdc6279eee30affa0c532023"
+private const val EXPECTED_PARALLAX_REF = "6fe165fd0146df4925fd1b59c236fe729dac7b29"
 
 /**
  * Sibling directory consulted when [PARALLAX_REPO_ENV] says nothing: `../parallax`
@@ -340,7 +340,7 @@ class ParallaxEventDefinitionSourceChecksumTest {
         assertSourceChecksum(
             root = root,
             sourcePath = "protocol/reference/js/src/wire-identifiers.ts",
-            expectedSha256 = "0x4a439506c0d88c771182cdc84b13ba2fdcc8bae858fa594f491a805b6e76992b",
+            expectedSha256 = "0x36fb3d4b1577940dd00a158e6e608700e28d875f5d6a1043b980aa21a0300f24",
         )
     }
 
