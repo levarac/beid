@@ -812,7 +812,7 @@ final class SensingCoordinator: ObservableObject {
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
     if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
-      return 2_000_000_000
+      return 700_000_000
     }
     #endif
     return 700_000_000
