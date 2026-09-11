@@ -28,18 +28,21 @@ on:
   #
   # The Release-for-device build used to run here and now lives in
   # `main-ios-release-build.yml`, on push to main only (gh#479). It was about
-  # 11 of this lane's 33 minutes — the three most recent clean runs measured
-  # that step at 10.8, 10.8 and 11.2 — inside a lane whose purpose is
-  # simulator tests, and it never needed a merge candidate to be useful.
-  # Moving it shortens the queue for TestFlight delivery, which contends for
-  # this same single runner.
+  # 11 of this lane's 33 minutes, inside a lane whose purpose is simulator
+  # tests, and it never needed a merge candidate to be useful. Runs 116, 117
+  # and 118 measured that step at 10.82, 13.87 and 11.2; 117 is set aside
+  # because two jobs from another repository sharing this host ran inside its
+  # Release window. Moving the step shortens the queue for TestFlight
+  # delivery, which contends for this same single runner.
   #
   # Measured after the split: 23.87 min of job execution on 2026-09-11
   # (run 119), with zero Release steps in the executed job. That run's
   # build-for-testing was 16.15 against 13.12 on the immediately preceding
   # run, a 3.03 excess whose cause is UNRESOLVED. The source is identical
-  # between the two heads. The beid runner's own queue was clear — run 119
-  # started three seconds after run 118 released it — but THAT IS THE QUEUE,
+  # between the two heads. No other beid job EXECUTED concurrently, and 119's
+  # job began three seconds after 118's job ENDED — 119 itself had queued
+  # about fifty-one minutes before that, so this is a statement about what
+  # ran beside it, not about a clear queue. And EXECUTION ON THIS RUNNER IS
   # NOT THE HOST: emi also hosts a separately-registered runner for another
   # repository, and one of its jobs ran entirely inside this step, 4.40 of
   # its 16.15 minutes, where the preceding run's window had none. That is a
@@ -47,11 +50,11 @@ on:
   # contention was never measured directly. The run is not repeatable, so the
   # anomaly is recorded rather than explained.
   #
-  # That figure is emi as configured on the day, where a background
-  # scheduling priority makes every number several times an unthrottled
-  # host's. It is a measurement of this machine, not of the lane inherently.
-  # No expected value is stated here: a comment on main carries the authority
-  # of a measurement whether or not one was taken.
+  # That figure is emi as configured on the day: a background scheduling
+  # priority confined the runner to the efficiency cores. NOTHING IN THIS
+  # LANE HAS BEEN MEASURED UNTHROTTLED, so no ratio between the two is stated
+  # here — a comment on main carries the authority of a measurement whether
+  # or not one was taken.
   pull_request:
     # Both events that produce a merge-candidate head, and neither of them is
     # `synchronize`. `ready_for_review` alone would miss every PR opened
