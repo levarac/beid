@@ -150,6 +150,7 @@ internal class WindowObservationRuntimeOwner(
             // drain ever asks for one — see [SubmissionEmissionOrigin]'s doc.
             // `drain` is assigned below, before this lambda can ever run.
             onSubmissionEmitted = { submission, origin -> drain.receiveEmittedSubmission(submission, origin) },
+            onWindowClosed = { drain.drain() },
         )
         drain = WindowObservationSubmissionDrain(
             accumulator = accumulator,
@@ -193,6 +194,8 @@ internal class WindowObservationAccumulator(
      * not exercise the drain may leave it at the no-op default.
      */
     private val onSubmissionEmitted: (UnsentWindowSubmission, SubmissionEmissionOrigin) -> Unit = { _, _ -> },
+    /** beid#525's "after a window's durable close" drain trigger — see [closeCurrentWindow]. */
+    private val onWindowClosed: () -> Unit = {},
 ) {
     private var ledger: UnsentWindowLedger = ledgerStore.load()?.ledger
         ?: requireNotNull(createUnsentWindowLedger(ledgerInstanceId()).ledger)
@@ -392,6 +395,14 @@ internal class WindowObservationAccumulator(
         // again.
         apply(closeUnsentWindow(ledger, id.toString().lowercase(), digest))
         clearCurrentWindow()
+        // beid#525's "after a window's durable close" drain trigger. Safe to
+        // call while still holding this instance's monitor: `@Synchronized`
+        // is reentrant for the calling thread, and the drain's own
+        // `beginNextSubmissionAttempt` call is itself `@Synchronized` on
+        // this same accumulator. Only the synchronous, already-local
+        // ledger-touching part runs on this thread; `SubmissionClient`
+        // dispatches the actual HTTP call onto its own coroutine scope.
+        onWindowClosed()
         return true
     }
 
