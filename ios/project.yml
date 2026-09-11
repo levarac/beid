@@ -4,6 +4,10 @@ options:
   developmentLanguage: en
   deploymentTarget:
     iOS: "17.0"
+configs:
+  Debug: debug
+  Internal: debug
+  Release: release
 packages:
   Barnard:
     url: https://github.com/levarac/barnard.git
@@ -140,6 +144,9 @@ targets:
           - "$(BUILT_PRODUCTS_DIR)/Starscream.o"
           - "-lecies"
       configs:
+        Internal:
+          KOTLIN_FRAMEWORK_BUILD_TYPE: debug
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BEID_INTERNAL_DEMO"
         Release:
           # Runner-only indirection: empty under Xcode Cloud, explicit in GHA.
           PROVISIONING_PROFILE_SPECIFIER: "$(BEID_PROVISIONING_PROFILE)"
@@ -165,6 +172,9 @@ targets:
       base:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
+      configs:
+        Internal:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BEID_INTERNAL_DEMO"
   BeidUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -191,3 +201,18 @@ schemes:
       targets:
         - BeidTests
         - BeidUITests
+  Beid-Internal:
+    build:
+      targets:
+        Beid: all
+        BeidTests: [test]
+    run:
+      config: Internal
+    test:
+      config: Internal
+      language: en
+      region: US
+      targets:
+        - BeidTests
+    archive:
+      config: Internal
