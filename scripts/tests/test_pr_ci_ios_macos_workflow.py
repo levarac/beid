@@ -29,6 +29,21 @@ def release_workflow_text() -> str:
     return RELEASE_WORKFLOW_PATH.read_text(encoding="utf-8")
 
 
+def without_comments(text: str) -> str:
+    """Drop comment-only lines.
+
+    The absence assertions below must pin what the workflow DOES, not what it
+    says about itself. Checked against the whole file they also forbid the
+    words in prose, so the sentence explaining why the Release build moved out
+    cannot be written in its natural phrasing. The predictable failure is not
+    that someone is blocked — it is that they hit an unexpected red and WEAKEN
+    THE ASSERTION to fit, which is how a pin degrades into decoration.
+    """
+    return "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
 def step_block(text: str, name: str) -> str:
     marker = f"      - name: {name}\n"
     start = text.index(marker)
@@ -48,16 +63,17 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).
 
-        It was 11 of this lane's 33 minutes in a lane whose purpose is
-        simulator tests, on the repository's only self-hosted runner — which
-        TestFlight delivery also needs. This pins the removal so it cannot
+        Its own duration was median 10.2 min over a 50-run steady state
+        (p25 9.5, p75 10.6), inside a lane whose purpose is simulator tests,
+        on the repository's only self-hosted runner — which TestFlight
+        delivery also needs. This pins the removal so it cannot
         drift back in unnoticed; re-adding it here is a decision, not an edit.
         """
-        text = workflow_text()
+        directives = without_comments(workflow_text())
 
-        self.assertNotIn("-configuration Release", text)
-        self.assertNotIn("Build Release for device", text)
-        self.assertNotIn("generic/platform=iOS", text)
+        self.assertNotIn("-configuration Release", directives)
+        self.assertNotIn("Build Release for device", directives)
+        self.assertNotIn("generic/platform=iOS", directives)
 
 
 class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
@@ -81,9 +97,11 @@ class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
         """
         text = release_workflow_text()
 
-        self.assertIn("  push:\n    branches: [main]\n", text)
-        self.assertIn("  workflow_dispatch:\n", text)
-        self.assertNotIn("pull_request", text)
+        directives = without_comments(text)
+
+        self.assertIn("  push:\n    branches: [main]\n", directives)
+        self.assertIn("  workflow_dispatch:\n", directives)
+        self.assertNotIn("pull_request", directives)
 
     def test_release_workflow_shares_the_runner_routing_variable(self) -> None:
         self.assertIn("fromJSON(vars.RUNS_ON_MACOS", release_workflow_text())

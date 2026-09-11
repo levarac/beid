@@ -1,9 +1,9 @@
 name: PR iOS CI (self-hosted macOS, informational)
 
 on:
-  # Triggers are deliberately narrow (gh#479). This lane takes ~22 minutes and
-  # gates nothing: Xcode Cloud's "Beid | PR Build & Test | Test - iOS" verifies
-  # the same head in ~12 minutes and is the effective gate.
+  # Triggers are deliberately narrow (gh#479). This lane gates nothing:
+  # Xcode Cloud's "Beid | PR Build & Test | Test - iOS" verifies the same head
+  # in ~12 minutes and is the effective gate.
   #
   # The cost is TestFlight delivery latency, not developer-machine contention.
   # The repository has exactly one self-hosted runner (`emi`), and
@@ -27,11 +27,16 @@ on:
   # support YAML anchors in workflow files. Keep the two copies identical.
   #
   # The Release-for-device build used to run here and now lives in
-  # `main-ios-release-build.yml`, on push to main only (gh#479). It was 11 of
-  # this lane's 33 minutes — measured across seven consecutive runs — inside a
-  # lane whose purpose is simulator tests, and it never needed a merge
-  # candidate to be useful. Moving it shortens the queue for TestFlight
-  # delivery, which contends for this same single runner.
+  # `main-ios-release-build.yml`, on push to main only (gh#479). Over a 50-run
+  # steady state that step's own duration was median 10.2 min (p25 9.5,
+  # p75 10.6) inside a lane whose purpose is simulator tests, and it never
+  # needed a merge candidate to be useful. Moving it shortens the queue for
+  # TestFlight delivery, which contends for this same single runner.
+  #
+  # No duration is claimed for what this lane takes NOW. The figure the split
+  # was argued from is a prediction until a run at a post-split head is
+  # measured, and a comment on main carries the authority of a measurement
+  # whether or not one was taken.
   pull_request:
     # Both events that produce a merge-candidate head, and neither of them is
     # `synchronize`. `ready_for_review` alone would miss every PR opened

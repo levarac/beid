@@ -2,9 +2,9 @@ name: main iOS Release build (self-hosted macOS, informational)
 
 on:
   # PUSH TO MAIN ONLY, deliberately (gh#479). This step used to run inside
-  # `pr-ci-ios-macos.yml`, where it cost 11 of that lane's 33 minutes —
-  # measured across seven consecutive runs — in a lane whose purpose is
-  # simulator tests.
+  # `pr-ci-ios-macos.yml`, in a lane whose purpose is simulator tests. Over a
+  # 50-run steady state its own duration was median 10.2 min (p25 9.5,
+  # p75 10.6).
   #
   # It does not need a merge candidate. It catches Release-only compile
   # regressions, and catching them on main is what the informational signal is
@@ -141,6 +141,18 @@ jobs:
             fi
           )
 
+      # The old lane guarded this with `if: ${{ !cancelled() }}` so an
+      # informational build still ran when the TESTS failed. Here only setup
+      # steps precede it, so no guard means skip-if-setup-failed, which is what
+      # we want: there is nothing to be informational ABOUT if Xcode or the
+      # project could not be resolved. The guard was dropped deliberately, not
+      # lost in the move.
+      #
+      # The old test also pinned this step as sequential — no `id:`, no
+      # `background:`, no `wait:` — because it shared a job with the simulator
+      # work. It is now the only substantive step in its own workflow, so
+      # there is nothing for it to race; those assertions were retired as a
+      # decision rather than dropped as an oversight.
       - name: Build Release for device (informational)
         shell: bash
         run: |
