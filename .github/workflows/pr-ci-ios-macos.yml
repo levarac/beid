@@ -37,10 +37,15 @@ on:
   # Measured after the split: 23.87 min of job execution on 2026-09-11
   # (run 119), with zero Release steps in the executed job. That run's
   # build-for-testing was 16.15 against 13.12 on the immediately preceding
-  # run, a 3.03 excess whose cause is UNRESOLVED — not the source, which is
-  # identical between the two heads, and not runner contention, since it
-  # started three seconds after the previous run released the machine. The
-  # run is not repeatable, so the anomaly is recorded rather than explained.
+  # run, a 3.03 excess whose cause is UNRESOLVED. The source is identical
+  # between the two heads. The beid runner's own queue was clear — run 119
+  # started three seconds after run 118 released it — but THAT IS THE QUEUE,
+  # NOT THE HOST: emi also hosts a separately-registered runner for another
+  # repository, and one of its jobs ran entirely inside this step, 4.40 of
+  # its 16.15 minutes, where the preceding run's window had none. That is a
+  # CO-OCCURRENCE AND NOT A DEMONSTRATED CAUSE — 3.03 is not 4.40, and core
+  # contention was never measured directly. The run is not repeatable, so the
+  # anomaly is recorded rather than explained.
   #
   # That figure is emi as configured on the day, where a background
   # scheduling priority makes every number several times an unthrottled
