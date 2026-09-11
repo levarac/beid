@@ -73,6 +73,7 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/ci_derived_data.sh"
   push:
     # Measure the merged result on main exactly once. Note the concurrency
     # group below is keyed on github.ref with cancel-in-progress, so two merges
@@ -89,6 +90,7 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/ci_derived_data.sh"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
@@ -210,6 +212,16 @@ jobs:
             echo "SIMULATOR_UDID=$simulator_udid"
           } >> "$GITHUB_ENV"
 
+      # Persistent DerivedData under the runner user, keyed on Xcode build
+      # version + XcodeGen pin + Package.resolved + a manual bump file, so a
+      # second run on the same key compiles only what changed. Cold/warm and
+      # the key are written to the job summary; the build step below goes
+      # through the same script for wipe-on-failure with one clean retry.
+      # Contract: scripts/ci_derived_data.sh and scripts/tests/test_ci_derived_data.py.
+      - name: Resolve DerivedData cache
+        shell: bash
+        run: scripts/ci_derived_data.sh resolve
+
       - name: Verify XcodeGen pin and generated project
         shell: bash
         run: |
@@ -249,13 +261,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          xcodebuild \
+          scripts/ci_derived_data.sh build "Build for testing" -- xcodebuild \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            -derivedDataPath "$CI_DERIVED_DATA" \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             build-for-testing
 
@@ -269,7 +281,7 @@ jobs:
             -configuration Debug \
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            -derivedDataPath "$CI_DERIVED_DATA" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
             SWIFT_OPTIMIZATION_LEVEL=-O \
             test-without-building

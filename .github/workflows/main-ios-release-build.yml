@@ -29,6 +29,7 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/ci_derived_data.sh"
   # Escape hatch: run against any ref on demand. `paths` does not apply to
   # workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
@@ -116,6 +117,16 @@ jobs:
             echo "JAVA_HOME=$kmp_java_home"
           } >> "$GITHUB_ENV"
 
+      # Same persistent DerivedData as the simulator lane (same script, same
+      # key, same per-runner path), so this build is INCREMENTAL BY DECISION:
+      # run 1 of this workflow already hit a warm default DerivedData by
+      # accident (76 s, one SwiftCompile line) because it passed no
+      # -derivedDataPath. The job summary names the state (cold/warm) so this
+      # step's wall time is never quoted as a cold number.
+      - name: Resolve DerivedData cache
+        shell: bash
+        run: scripts/ci_derived_data.sh resolve
+
       - name: Verify XcodeGen pin and generated project
         shell: bash
         run: |
@@ -157,11 +168,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild \
+          scripts/ci_derived_data.sh build "Build Release for device" -- xcodebuild \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -sdk iphoneos \
+            -derivedDataPath "$CI_DERIVED_DATA" \
             build \
             CODE_SIGNING_ALLOWED=NO

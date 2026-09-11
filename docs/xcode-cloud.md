@@ -198,6 +198,30 @@ by `scripts/tests/test_pr_ci_ios_macos_triggers.py`, which runs in the
 Repository sanity job, so a silent return to per-push runs turns that check
 red.
 
+### DerivedData persists on the runner (both self-hosted lanes)
+
+Verified 2026-09-11 against `scripts/ci_derived_data.sh`. `pr-ci-ios-macos.yml` and
+`main-ios-release-build.yml` both call `scripts/ci_derived_data.sh resolve` after
+selecting Xcode and before building, and build through
+`scripts/ci_derived_data.sh build <label> -- xcodebuild …`. The DerivedData lives
+under the runner user, not under `RUNNER_TEMP`:
+`~/Library/Caches/ci-derived-data/thegreeting-beid/<runner name>/<key>`, per
+runner so an ephemeral second runner on the same host never shares a directory
+with the first. The key is a sha256 over the Xcode build version, the XcodeGen
+pin, the content of `Package.resolved`, and `ios/ci_scripts/DERIVED_DATA_CACHE_BUMP`
+— edit that file to invalidate every key. The three most recently used keys are
+kept per runner; older ones are deleted.
+
+The job summary names the state (**cold** = new key, **warm** = reused) and the
+key, and every build line carries the word "incremental": **the Release build's
+wall time on this lane is an incremental number and must not be quoted as a
+cold one.** On a build failure the script wipes the DerivedData; if the failed
+attempt was warm it retries exactly once on the clean directory so a
+stale-module false red heals itself, and the summary says "clean retry". A cold
+attempt that failed is not retried. `test-without-building` reuses the same
+path and is not wrapped: a test failure is not a stale-module symptom, and
+wiping on it would discard the state the next run needs.
+
 ## Build position vs store number (git height)
 
 Verified 2026-09-10.
