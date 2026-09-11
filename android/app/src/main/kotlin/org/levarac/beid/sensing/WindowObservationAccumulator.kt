@@ -661,6 +661,35 @@ internal class WindowObservationAccumulator(
      */
     private fun restoreDurableDraftEvidence() {
         val draft = draftStore.load() ?: return
+        // Runs before either exit below, not duplicated at each one: a
+        // durable draft with no `SubmissionRecord` at all (not merely an
+        // unresolved one) is possible at more than one point in this
+        // function — the crash between `persistDraft()` and
+        // `persistSubmissionRecord()` in `openCurrentWindowIfEligible` is
+        // one; a second crash, after this function's own `persistObservation`
+        // call below made the artifact durable but before it recorded that,
+        // reaches `hasDurableArtifactFor(...)` true on the NEXT relaunch and
+        // returns right here without ever touching `submissionRecordStore`.
+        // Two copies of the same guard is how the second instance escaped
+        // the first fix; hoisting it here instead covers every exit this
+        // function has, including the quarantine path below, where it costs
+        // nothing (an artifact that is never produced never becomes
+        // eligible for a submission, so an unresolved record for it is
+        // simply unused, not wrong). Without this, the drain would find no
+        // record, be unable to recover `eventIdHex` from
+        // `UnsentWindowSubmission` (which carries none), and `hold()` would
+        // call `recordTerminalFailure` on a windowId
+        // `JsonRecordFileStore.updateRecord` cannot find — a silent no-op —
+        // permanently and invisibly stalling every window behind this one on
+        // the device. `draft.eventIdHex` is the same field already used to
+        // build `restoredContext` below; no new field, no new store method.
+        // The registry-lookup fallback then resolves it exactly as it does
+        // for the nearby-join path. Guarded on absence, not unconditional: a
+        // crash after the original open-time write already succeeded must
+        // not overwrite an already-resolved record with an unresolved one.
+        if (submissionRecordStore.recordFor(draft.windowId) == null) {
+            persistSubmissionRecord(draft.windowId, draft.eventIdHex, configuration = null)
+        }
         if (hasDurableArtifactFor(draft.windowId)) {
             // The previous process died after writing the artifact and before
             // dropping the draft. Signing again would produce a second
@@ -729,24 +758,6 @@ internal class WindowObservationAccumulator(
             stored.observationDigest.toByteArray().toHex(),
             stored.signedBytes.toByteArray(),
         )
-        // A crash between `persistDraft()` and `persistSubmissionRecord()` in
-        // `openCurrentWindowIfEligible` leaves a durable draft with no
-        // `SubmissionRecord` at all — not merely an unresolved one. Without
-        // this, the drain would find no record, be unable to recover
-        // `eventIdHex` from `UnsentWindowSubmission` (which carries none),
-        // and `hold()` would call `recordTerminalFailure` on a windowId
-        // `JsonRecordFileStore.updateRecord` cannot find — a silent no-op —
-        // permanently and invisibly stalling every window behind this one on
-        // the device. `draft.eventIdHex` is the same field already used to
-        // build `restoredContext` above; no new field, no new store method.
-        // The registry-lookup fallback then resolves it exactly as it does
-        // for the nearby-join path — this reuses that machinery rather than
-        // duplicating it. Guarded on absence, not unconditional: a crash
-        // AFTER both writes succeeded must not overwrite an already-resolved
-        // record with an unresolved one.
-        if (submissionRecordStore.recordFor(draft.windowId) == null) {
-            persistSubmissionRecord(draft.windowId, draft.eventIdHex, configuration = null)
-        }
         draftStore.clear()
     }
 
