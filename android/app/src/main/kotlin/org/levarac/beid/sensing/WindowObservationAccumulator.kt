@@ -729,6 +729,24 @@ internal class WindowObservationAccumulator(
             stored.observationDigest.toByteArray().toHex(),
             stored.signedBytes.toByteArray(),
         )
+        // A crash between `persistDraft()` and `persistSubmissionRecord()` in
+        // `openCurrentWindowIfEligible` leaves a durable draft with no
+        // `SubmissionRecord` at all — not merely an unresolved one. Without
+        // this, the drain would find no record, be unable to recover
+        // `eventIdHex` from `UnsentWindowSubmission` (which carries none),
+        // and `hold()` would call `recordTerminalFailure` on a windowId
+        // `JsonRecordFileStore.updateRecord` cannot find — a silent no-op —
+        // permanently and invisibly stalling every window behind this one on
+        // the device. `draft.eventIdHex` is the same field already used to
+        // build `restoredContext` above; no new field, no new store method.
+        // The registry-lookup fallback then resolves it exactly as it does
+        // for the nearby-join path — this reuses that machinery rather than
+        // duplicating it. Guarded on absence, not unconditional: a crash
+        // AFTER both writes succeeded must not overwrite an already-resolved
+        // record with an unresolved one.
+        if (submissionRecordStore.recordFor(draft.windowId) == null) {
+            persistSubmissionRecord(draft.windowId, draft.eventIdHex, configuration = null)
+        }
         draftStore.clear()
     }
 
