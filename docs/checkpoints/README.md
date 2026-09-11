@@ -1,4 +1,18 @@
-# Checkpoint — event-join card: "can I join this event?"
+# Checkpoints — format, and the worked example that produced it
+
+This directory holds one checkpoint record per feature, named for the feature
+(`event-join-card.md`, and so on). The format and the pilot's standing are
+defined in `AGENTS.md` under "Cross-platform checkpoint". **The pilot is not in
+force and a checkpoint is not a merge gate.**
+
+This file is not itself a checkpoint. It is the worked example the format was
+derived from, kept because the format's least obvious rule — trace backward
+from the bound output, and ask where each input is *cleared* as well as
+written — only makes sense alongside the case that produced it.
+
+---
+
+## Worked example — event-join card: "can I join this event?"
 
 **Status: retrospective read-only trial. Not a merge gate, not a dispatched
 review.** The divergence recorded below was found on 2026-09-12 by reading both

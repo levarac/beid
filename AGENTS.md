@@ -149,7 +149,8 @@ Why it is proposed: on 2026-09-12 two independent reviewers each produced a
 proof that a shared decision was consumed identically by both platforms, and
 both were wrong. The divergence was downstream, in native consumption, where a
 shared-level proof cannot see it — the hazard the Both-OS feature rule already
-names one paragraph above. See `docs/checkpoints/event-join-card.md`.
+names one paragraph above. The worked example is in
+`docs/checkpoints/README.md`.
 
 For a PR the lead or sub-PM designates, add or update
 `docs/checkpoints/<feature-slug>.md` with one field per product decision the PR
