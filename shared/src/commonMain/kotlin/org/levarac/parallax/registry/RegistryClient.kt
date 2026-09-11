@@ -328,6 +328,24 @@ public fun createSepoliaRegistryClient(
     eventKeySetUrlTemplate: String? = null,
     eventCodeLookupUrlTemplate: String? = null,
     eventCodeHashLookupUrlTemplate: String? = null,
+): RegistryClient? = createSepoliaRegistryClientWithTransport(
+    readerAddressHex = readerAddressHex,
+    etherscanApiKey = etherscanApiKey,
+    definitionUrlTemplate = definitionUrlTemplate,
+    eventKeySetUrlTemplate = eventKeySetUrlTemplate,
+    eventCodeLookupUrlTemplate = eventCodeLookupUrlTemplate,
+    eventCodeHashLookupUrlTemplate = eventCodeHashLookupUrlTemplate,
+    transportFactory = ::createPlatformRegistryHttpTransport,
+)
+
+internal fun createSepoliaRegistryClientWithTransport(
+    readerAddressHex: String,
+    etherscanApiKey: String? = null,
+    definitionUrlTemplate: String? = null,
+    eventKeySetUrlTemplate: String? = null,
+    eventCodeLookupUrlTemplate: String? = null,
+    eventCodeHashLookupUrlTemplate: String? = null,
+    transportFactory: () -> RegistryHttpTransport,
 ): RegistryClient? {
     if (readerAddressHex.isBlank()) return null
     val readerAddress = try {
@@ -335,7 +353,7 @@ public fun createSepoliaRegistryClient(
     } catch (_: IllegalArgumentException) {
         return null
     }
-    val transport = createPlatformRegistryHttpTransport()
+    val transport = transportFactory()
     var definitionConfigurationError: DefinitionFetchException? = null
     var eventKeySetConfigurationError: DefinitionFetchException? = null
     var eventCodeLookupConfigurationError: EventCodeLookupException? = null

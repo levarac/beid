@@ -1,11 +1,21 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.swiftexport.ExperimentalSwiftExportDsl
 import org.gradle.api.tasks.Copy
+import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
+import org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.kotlin.multiplatform.library")
 }
+
+// Test response injection must be absent unless Xcode explicitly requests
+// Debug. Missing, unknown and contradictory build settings all fail closed.
+val iosDebugTestSupportEnabled =
+    providers.environmentVariable("CONFIGURATION").orNull == "Debug" &&
+        providers.environmentVariable("KOTLIN_FRAMEWORK_BUILD_TYPE").orNull.let {
+            it == null || it == "DEBUG"
+        }
 
 kotlin {
     androidLibrary {
@@ -30,6 +40,11 @@ kotlin {
     }
 
     sourceSets {
+        if (iosDebugTestSupportEnabled) {
+            matching { it.name == "iosMain" }.configureEach {
+                kotlin.srcDir("src/iosDebugTestSupport/kotlin")
+            }
+        }
         commonMain {
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
@@ -52,6 +67,16 @@ kotlin {
                 implementation("junit:junit:4.13.2")
             }
         }
+    }
+}
+
+// Check the actual binary type, including binaries registered by other plugins.
+// Dependency resolution runs even under --dry-run, before any native link.
+tasks.withType<KotlinNativeLink>().configureEach {
+    if (iosDebugTestSupportEnabled && binary.buildType != NativeBuildType.DEBUG) {
+        dependsOn(providers.provider<List<String>> {
+            throw GradleException("VENUE_DEBUG_HTTP_SUPPORT_CANNOT_LINK_RELEASE")
+        })
     }
 }
 
