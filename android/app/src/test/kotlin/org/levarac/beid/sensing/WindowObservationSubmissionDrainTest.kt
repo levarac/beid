@@ -364,6 +364,117 @@ class WindowObservationSubmissionDrainTest {
         }
     }
 
+    /**
+     * The second instance of the same defect, one call-frame up in the same
+     * function: a crash AFTER `restoreDurableDraftEvidence()`'s own
+     * `persistObservation(...)` made the artifact durable, but before it
+     * could reach `submissionRecordStore` — so the artifact is durable, the
+     * draft is still present (never cleared), and no `SubmissionRecord`
+     * exists. On the next relaunch, `hasDurableArtifactFor(...)` is true, so
+     * the pre-fix code took the early `draftStore.clear(); return` branch
+     * without ever touching the record store — a second, narrower crash
+     * window into the same permanent, device-wide, silent stall as
+     * [crashBetweenDraftAndSubmissionRecordDoesNotStallTheDeviceForever].
+     *
+     * The durable artifact is produced by a throwaway "source" accumulator
+     * — the same technique `WindowObservationAccumulatorTest`'s own
+     * `relaunchReconcilesAnArtifactMovedBeforeItsLedgerClose` uses — rather
+     * than hand-built bytes, since `reconcileDurableArtifactsAfterRelaunch`
+     * later verifies the artifact's digest against its filename.
+     */
+    @Test
+    fun crashAfterArtifactBecomesDurableButBeforeSubmissionRecordDoesNotStallTheDeviceForever() {
+        val directory = Files.createTempDirectory("drain-crash-after-artifact").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            val sourceDirectory = Files.createTempDirectory("drain-crash-after-artifact-source").toFile()
+            val sourceAccumulator = WindowObservationAccumulator(
+                context = {
+                    WindowObservationContext(
+                        eventCode = EVENT_CODE,
+                        eventIdHex = EVENT_ID_HEX,
+                        eventDefinitionDigestHex = DEFINITION_DIGEST_HEX,
+                        participantCommitmentHex = PARTICIPANT_COMMITMENT_HEX,
+                    )
+                },
+                cryptography = vectorCryptography(),
+                ledgerStore = UnsentWindowLedgerStore(sourceDirectory.resolve("ledger.snapshot")),
+                draftStore = WindowObservationDraftStore(sourceDirectory.resolve("draft.snapshot")),
+                observationDirectory = sourceDirectory.resolve("observations"),
+                nowEpochSeconds = { FINALIZED_AT },
+                newWindowId = { UUID.fromString(WINDOW_ID) },
+                ledgerInstanceId = { LEDGER_INSTANCE_ID },
+            )
+            sourceAccumulator.observe(ENIN, RPID_ONE, REPORTER_RPID, recording = true)
+            sourceAccumulator.observe(ENIN, RPID_TWO, REPORTER_RPID, recording = true)
+            check(sourceAccumulator.close())
+            val sourceArtifact = requireNotNull(sourceDirectory.resolve("observations").listFiles()?.singleOrNull())
+
+            // Ledger row for WINDOW_ID is still OPEN: relaunch A's crash was
+            // inside `restoreDurableDraftEvidence`, before
+            // `reconcileDurableArtifactsAfterRelaunch` — the function that
+            // would close it — ever ran.
+            val ledgerStore = UnsentWindowLedgerStore(ledgerFile(directory))
+            val created = requireNotNull(createUnsentWindowLedger(LEDGER_INSTANCE_ID).ledger)
+            val opened = openUnsentWindow(created, WINDOW_ID)
+            ledgerStore.persist(opened)
+            confirmUnsentWindowLedgerPersistence(opened.ledger, opened.persistenceRevision)
+
+            // The draft is still present — relaunch A died before
+            // `draftStore.clear()`.
+            val draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot"))
+            var draft = requireNotNull(
+                createWindowObservationDraft(
+                    windowId = WINDOW_ID,
+                    enin = ENIN,
+                    eventCode = EVENT_CODE,
+                    eventIdHex = EVENT_ID_HEX,
+                    eventDefinitionDigestHex = DEFINITION_DIGEST_HEX,
+                    participantCommitmentHex = PARTICIPANT_COMMITMENT_HEX,
+                    reporterRpidHex = REPORTER_RPID,
+                ).draft,
+            )
+            listOf(RPID_ONE, RPID_TWO).forEach { rpid ->
+                draft = requireNotNull(addWindowObservationDraftRpid(draft, rpid).draft)
+            }
+            draftStore.persist(draft)
+
+            // The artifact IS durable — relaunch A's `persistObservation`
+            // already succeeded.
+            val observationDirectory = directory.resolve("observations").also { it.mkdirs() }
+            sourceArtifact.copyTo(observationDirectory.resolve(sourceArtifact.name))
+
+            assertNull(submissionRecordStore(directory).recordFor(WINDOW_ID), "precondition: the crash left no record at all")
+
+            // "Relaunch B": fresh accumulator + drain over the same files.
+            val resolver = FakeConfigurationResolver(resolvedConfiguration(endpoint))
+            val secondProcessCryptography = vectorCryptography()
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = secondProcessCryptography,
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+            )
+            accumulator.recoverAfterRelaunch()
+            drain.resumeAfterRestore()
+
+            waitUntil { server.postCount == 1 }
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            Thread.sleep(150)
+
+            assertEquals(1, server.postCount, "the recovered window must actually drain, not stall forever")
+            assertEquals(1, resolver.callCount)
+            assertEquals(
+                0,
+                secondProcessCryptography.calls.count { it is FakeSensingCryptography.Call.SignWindowReport },
+                "relaunch B must never re-sign an artifact that is already durable",
+            )
+        } finally {
+            server.stop()
+        }
+    }
+
     private class FakeConfigurationResolver(
         private val configuration: SubmissionOperatorConfiguration?,
     ) : WindowObservationSubmissionDrain.SubmissionConfigurationResolver {
