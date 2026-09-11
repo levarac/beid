@@ -138,6 +138,58 @@ example, a platform-only effect or an Android production flow that does not
 exist yet. Silence is not a reason. Shared tests alone also do not prove that
 either app calls the shared implementation.
 
+### Cross-platform checkpoint — PILOT, PENDING OWNER APPROVAL
+
+**This section is not in force.** It records a proposed pilot for owner review.
+It adds no merge condition, changes no merge authority, and does not re-enable
+the suspended independent-review gate. Until the owner rules, a checkpoint
+record is a review artifact only.
+
+Why it is proposed: on 2026-09-12 two independent reviewers each produced a
+proof that a shared decision was consumed identically by both platforms, and
+both were wrong. The divergence was downstream, in native consumption, where a
+shared-level proof cannot see it — the hazard the Both-OS feature rule already
+names one paragraph above. See `docs/checkpoints/event-join-card.md`.
+
+For a PR the lead or sub-PM designates, add or update
+`docs/checkpoints/<feature-slug>.md` with one field per product decision the PR
+changes:
+
+**Decision route — trace backward from the observable product behavior.** Name
+the final consumer on each platform: the file, function and condition that
+decides whether the user can act, what value is displayed, or which effect
+runs. Then trace every value that condition reads back to its canonical
+`shared/` source, listing each native lookup, nullable conversion, fallback,
+guard and mapping on the way. When a value comes from mutable native state,
+name where that state is written, cleared and pruned. **Do not stop at the
+shared entry point or its return value** — stopping there is what produced the
+two wrong proofs, and it is an answer that can be entirely true while missing
+the divergence. Record `unmatched conditions: none` only when the backward
+trace has been shown for both platforms; otherwise record what differs, or
+`unknown` when it could not be traced.
+
+Where the two platforms reach the same decision by different shared entry
+points, trace both to their common source and list every condition that differs
+along the way. A reviewer does not adjudicate which platform is right: an
+unmatched condition is recorded as `owner ruling required`.
+
+The scope statement stays where it already is, in the PR description under the
+Both-OS feature rule. This record does not restate it.
+
+Record the checkpoint path, the result, and the exact head SHA in the PR
+record — not in the committed file, since committing a SHA changes the head. A
+later push voids the record.
+
+Two things this pilot deliberately does not do. It adds no mirrored-constant
+check: a sweep on 2026-09-12 found zero hand-duplicated shared constants, so
+such a check would pass vacuously on every PR, which is the shape this
+repository already found worse than no gate at all. And it does not introduce a
+cross-cutting reviewer: dispatching one independently of the author would
+satisfy re-enable condition 1 of "Review gate — SUSPENDED as of 2026-08-19", so
+that requires the owner's one-time choice — re-enable, stay suspended, or
+replace with the narrower role — before such a review becomes part of any
+pre-merge operation.
+
 ### Swift Export package names are API
 
 Moving a Kotlin declaration between packages changes generated Swift source
