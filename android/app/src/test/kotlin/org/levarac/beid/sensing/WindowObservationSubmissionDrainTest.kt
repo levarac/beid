@@ -12,6 +12,11 @@ import kotlin.test.assertNull
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.persistence.WindowObservationDraftStore
+import org.levarac.beid.shared.report.addWindowObservationDraftRpid
+import org.levarac.beid.shared.report.confirmUnsentWindowLedgerPersistence
+import org.levarac.beid.shared.report.createUnsentWindowLedger
+import org.levarac.beid.shared.report.createWindowObservationDraft
+import org.levarac.beid.shared.report.openUnsentWindow
 import org.levarac.parallax.submission.SubmissionClient
 import org.levarac.parallax.submission.SubmissionOperatorConfiguration
 import org.levarac.parallax.submission.createSubmissionClient
@@ -284,6 +289,76 @@ class WindowObservationSubmissionDrainTest {
             drain.drain()
             Thread.sleep(150)
             assertEquals(0, server.postCount)
+        } finally {
+            server.stop()
+        }
+    }
+
+    /**
+     * A crash between `persistDraft()` and `persistSubmissionRecord()`
+     * (`WindowObservationAccumulator.kt:340-341`) leaves a durable draft
+     * with no `SubmissionRecord` at all — not merely an unresolved one.
+     * Built directly on the shared ledger/draft primitives (the same ones
+     * `WindowObservationAccumulator` itself uses) rather than by
+     * interrupting the accumulator mid-call, since there is no seam to
+     * interrupt a private function at.
+     *
+     * The assertion is durable evidence of recovery (a POST actually
+     * happens after restart), not merely that a code path was reached —
+     * this is precisely the failure that made the original defect silent.
+     */
+    @Test
+    fun crashBetweenDraftAndSubmissionRecordDoesNotStallTheDeviceForever() {
+        val directory = Files.createTempDirectory("drain-crash-at-open").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            // Simulate the crash: ledger open row + draft are durable, no
+            // SubmissionRecord was ever written for this window.
+            val ledgerStore = UnsentWindowLedgerStore(ledgerFile(directory))
+            val created = requireNotNull(createUnsentWindowLedger(LEDGER_INSTANCE_ID).ledger)
+            val opened = openUnsentWindow(created, WINDOW_ID)
+            ledgerStore.persist(opened)
+            confirmUnsentWindowLedgerPersistence(opened.ledger, opened.persistenceRevision)
+
+            val draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot"))
+            var draft = requireNotNull(
+                createWindowObservationDraft(
+                    windowId = WINDOW_ID,
+                    enin = ENIN,
+                    eventCode = EVENT_CODE,
+                    eventIdHex = EVENT_ID_HEX,
+                    eventDefinitionDigestHex = DEFINITION_DIGEST_HEX,
+                    participantCommitmentHex = PARTICIPANT_COMMITMENT_HEX,
+                    reporterRpidHex = REPORTER_RPID,
+                ).draft,
+            )
+            listOf(RPID_ONE, RPID_TWO).forEach { rpid ->
+                draft = requireNotNull(addWindowObservationDraftRpid(draft, rpid).draft)
+            }
+            draftStore.persist(draft)
+            assertNull(submissionRecordStore(directory).recordFor(WINDOW_ID), "precondition: the crash left no record at all")
+
+            // "Restart": fresh accumulator + drain over the same files. The
+            // registry-lookup fallback (not the context's own
+            // submissionConfiguration, which recovery never consults) is
+            // what must resolve this window's configuration.
+            val resolver = FakeConfigurationResolver(resolvedConfiguration(endpoint))
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+            )
+            accumulator.recoverAfterRelaunch()
+            drain.resumeAfterRestore()
+
+            waitUntil { server.postCount == 1 }
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            Thread.sleep(150)
+
+            assertEquals(1, server.postCount, "the recovered window must actually drain, not stall forever")
+            assertEquals(1, resolver.callCount)
         } finally {
             server.stop()
         }
