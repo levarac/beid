@@ -301,9 +301,28 @@ final class SensingCoordinatorTests: XCTestCase {
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
 
+    // A stated permission outcome instead of the real engine's.
+    //
+    // This test is about the loading window, not about permissions, and it
+    // previously reached that window through the real engine on a BLE-less
+    // Simulator — whose answer is a property of the host, not of anything
+    // under test. `.neverAnswers` says plainly that no grant arrives.
+    //
+    // **What keeps the phase at `.sensing` below is neither of those.** The
+    // coordinator wraps the permission completion in `Task { @MainActor }`,
+    // so its body runs in a later turn; by then `handleDetection` has called
+    // `resetSessionState`, which bumps `joinAttemptGeneration`, and the
+    // callback discards itself as belonging to an abandoned attempt. Setting
+    // this to `.denied` was tried: the assertions still pass. So the phase
+    // here is protected by that ordering, not by the outcome — and whether
+    // a detection *should* be able to invalidate a pending join is beid#513,
+    // a question about the app rather than about this test.
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .neverAnswers
     let coordinator = SensingCoordinator(
       loadingFromDirectory: directory,
-      sensingCryptography: DeterministicSensingCryptography()
+      sensingCryptography: DeterministicSensingCryptography(),
+      eventJoinControl: engine
     )
     coordinator.useDemoEventMode = false
 
@@ -311,14 +330,12 @@ final class SensingCoordinatorTests: XCTestCase {
     // run any of its body — construction is guaranteed still mid-flight.
     XCTAssertTrue(coordinator.isLedgerLoading, "loading must still be in progress immediately after construction")
 
-    // No `eventCode:` argument: `startSensing`'s real (non-demo) path only
-    // calls `engine.configure(eventCode:)` inside `engine.requestPermissions`'s
-    // completion, gated on `canScan`/`canAdvertise` — never satisfied on a
-    // BLE-less Simulator (AGENTS.md), so `engine.getCurrentEventCode()`
-    // stays `nil` and `handleDetection`'s `.sensing` case falls back to
-    // "Unknown Event" regardless of load timing. Matches every sibling test
-    // in `WindowReportFinalizationTests.swift` using this same real-path
-    // pattern, none of which assert an exact `eventCode`/session id either.
+    // No `eventCode:` argument: nothing downstream of the permission
+    // completion runs while the grant is outstanding, so
+    // `currentJoinedEventCode()` stays `nil` and `handleDetection`'s
+    // `.sensing` case falls back to "Unknown Event" regardless of load
+    // timing. Sibling tests in `WindowReportFinalizationTests.swift` use the
+    // same pattern and likewise assert no exact `eventCode`/session id.
     coordinator.startSensing()
     // Two detections, queued in arrival order — the second alone would
     // reach .recording at the configured threshold if replayed out of
@@ -380,7 +397,16 @@ final class SensingCoordinatorTests: XCTestCase {
     addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
 
     let crypto = DeterministicSensingCryptography()
-    let coordinator = SensingCoordinator(loadingFromDirectory: directory, sensingCryptography: crypto)
+    // Stated rather than inherited from the Simulator's answer about a radio
+    // it does not have — see the sibling test above, including what does and
+    // does not actually protect the phase.
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .neverAnswers
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: crypto,
+      eventJoinControl: engine
+    )
     coordinator.useDemoEventMode = false
 
     // No `await` has happened yet, so the background load task cannot have

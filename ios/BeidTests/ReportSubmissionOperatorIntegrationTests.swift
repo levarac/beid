@@ -588,10 +588,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       enabled: true
     ))
 
-    let coordinator = makeIsolatedSensingCoordinator(
-      for: self,
-      sensingCryptography: cryptography,
-      reportSubmissionRuntime: runtime
+    let coordinator = makeSubmissionCoordinator(
+      cryptography: cryptography,
+      runtime: runtime
     )
     try await driveOneRealWindow(coordinator: coordinator)
 
@@ -629,10 +628,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       enabled: true,
       provider: provider
     ))
-    let coordinator = makeIsolatedSensingCoordinator(
-      for: self,
-      sensingCryptography: cryptography,
-      reportSubmissionRuntime: runtime
+    let coordinator = makeSubmissionCoordinator(
+      cryptography: cryptography,
+      runtime: runtime
     )
 
     try await driveOneRealWindow(coordinator: coordinator, eventIdHex: eventIdHex)
@@ -667,10 +665,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       enabled: true,
       provider: firstProvider
     ))
-    let firstCoordinator = makeIsolatedSensingCoordinator(
-      for: self,
-      sensingCryptography: cryptography,
-      reportSubmissionRuntime: firstRuntime
+    let firstCoordinator = makeSubmissionCoordinator(
+      cryptography: cryptography,
+      runtime: firstRuntime
     )
 
     try await driveOneRealWindow(coordinator: firstCoordinator, eventIdHex: eventIdHex)
@@ -728,10 +725,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     )
     XCTAssertNil(runtime)
 
-    let coordinator = makeIsolatedSensingCoordinator(
-      for: self,
-      sensingCryptography: cryptography,
-      reportSubmissionRuntime: runtime
+    let coordinator = makeSubmissionCoordinator(
+      cryptography: cryptography,
+      runtime: runtime
     )
     try await driveOneRealWindow(coordinator: coordinator)
     try await Task.sleep(nanoseconds: 100_000_000)
@@ -781,10 +777,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     firstRuntime.receiptPersistenceGate = { false }
 
-    let firstCoordinator = makeIsolatedSensingCoordinator(
-      for: self,
-      sensingCryptography: cryptography,
-      reportSubmissionRuntime: firstRuntime
+    let firstCoordinator = makeSubmissionCoordinator(
+      cryptography: cryptography,
+      runtime: firstRuntime
     )
     try await driveOneRealWindow(coordinator: firstCoordinator)
     try await server.waitFor(postCount: 1)
@@ -845,10 +840,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       enabled: true
     ))
 
-    let coordinator = makeIsolatedSensingCoordinator(
-      for: self,
-      sensingCryptography: cryptography,
-      reportSubmissionRuntime: runtime
+    let coordinator = makeSubmissionCoordinator(
+      cryptography: cryptography,
+      runtime: runtime
     )
     try await driveOneRealWindow(coordinator: coordinator)
     try await server.waitFor(postCount: 1)
@@ -1025,6 +1019,40 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       )
     }
     _ = coordinator.stopSensing()
+  }
+
+  /// A coordinator whose join gate can actually admit.
+  ///
+  /// These tests drive `handleDetection` directly, so what they need from
+  /// `startSensing` is a real session — not the Simulator's answer about a
+  /// radio it does not have. Until beid#473 they got one **by accident**: the
+  /// Simulator refuses the permission grant, and `startSensing` left its
+  /// optimistic `.sensing` phase in place anyway, so the session existed
+  /// because of a defect. Fixing that defect broke all five of these tests at
+  /// once, which is how the dependency was found — they had been exercising
+  /// the submission pipeline from a state the app could not legitimately
+  /// reach on that platform.
+  ///
+  /// Now the grant is granted and the registry admits, both explicitly, so
+  /// the session these tests run in is one the gate actually allowed.
+  @MainActor
+  private func makeSubmissionCoordinator(
+    cryptography: any SensingCryptography,
+    runtime: (any WindowReportSubmissionRuntimeProtocol)?
+  ) -> SensingCoordinator {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      FakeEventJoinRegistry.admittingResolution(eventIdHex: eventIdHex)
+    )
+    return makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: cryptography,
+      reportSubmissionRuntime: runtime,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
+    )
   }
 
   private func makeConfiguration(
