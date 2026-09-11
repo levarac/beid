@@ -54,9 +54,15 @@ it no longer gates or supplies the card's fields.
 read the same three fields from the same shared candidate under the same
 `joinable` gate.
 
-**traced path this PR closes** (traced, not reproduced on device — see
-beid#454 and the retrospective record above for the full derivation): a
-candidate evicted from `store.sources` at the 256-live-source cap
+**path this PR closes — mechanism reproduced in a unit test, field occurrence
+inferred, not measured**: `NearbyEventCardSingleSourceOfTruthTest` drives this
+path against the real (non-mocked) session and store code and fails on
+pre-fix code for exactly this reason, which is what demonstrates the
+mechanism occurs — see beid#454 and the retrospective record above for the
+full derivation. What is not reproduced is the device-level precondition
+below (256+ live sources actually arising at venue scale); that remains
+inferred from Android MAC rotation, not measured. A candidate evicted from
+`store.sources` at the 256-live-source cap
 (`NearbyEventDiscovery.kt`'s `MAX_LIVE_SOURCE_COUNT`) and re-observed before
 its retained registry record's own TTL rebuilds to shared-`ELIGIBLE` from
 retained evidence. Pre-fix, `verifiedMetadataByHash` had already been pruned
