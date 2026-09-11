@@ -37,36 +37,59 @@ a submission.
 | whether a config exists at all | `RegistryVerifiedJoinContext.definition` at join time, threaded through a new `WindowObservationContext.submissionConfiguration` field, persisted at window-open — **native**, not shared |
 | endpoint / receipt key / operator id | same verified definition, converted once at join time |
 
-**unmatched conditions**: **yes — one, confirmed by reading the code, not
-inferred.** `RegistryVerifiedJoinContext.fromNearbyCandidate` (used by
-`EventJoinCoordinator.joinNearbyEvent`, the nearby-card-tap join path)
-deliberately returns `definition = null` — its own doc comment says the
+**unmatched conditions, as first recorded**: **yes — one, confirmed by reading
+the code, not inferred.** `RegistryVerifiedJoinContext.fromNearbyCandidate`
+(used by `EventJoinCoordinator.joinNearbyEvent`, the nearby-card-tap join
+path) deliberately returns `definition = null` — its own doc comment says the
 promotion already performed the read and re-fetching would ask the network
 again for an answer the device has. But the retained answer
 (`NearbyEventDiscoverySession.verifiedDefinitionByHash`) is a
 `BarnardEventDefinitionV1` (Barnard's spec-134 agreement shape), not an
 `EventDefinitionContext`, and does not carry a submission endpoint or receipt
-key. So **windows opened while joined via a nearby-card tap have no
-resolvable submission configuration and are held** (this PR's part 2 behavior,
-tested by #525 acceptance criterion 4) — not as a bug this PR introduces, but
-as an existing gap in what the join path retains, newly made visible because
-this is the first consumer that needs the full definition after join.
+key. So windows opened while joined via a nearby-card tap had no resolvable
+submission configuration at open time.
 
-**severity**: real, not hypothetical — traced through the code
-(`RegistryVerifiedJoinContext.kt`, `NearbyEventDiscoverySession.kt:307`,
+**severity, as first recorded**: real, not hypothetical — traced through the
+code (`RegistryVerifiedJoinContext.kt`, `NearbyEventDiscoverySession.kt:307`,
 `EventJoinCoordinator.kt:492-530`), not reproduced on device. Card-tap join is
 the venue-scale path; manual event-code entry (which does carry a definition,
 via `verifyDefinitionThenJoin`) is unaffected.
 
-**result**: `owner ruling required`. Two ways to close it, neither taken in
-this PR because both are bigger than #525's four parts:
+**result, as first recorded**: `owner ruling required`, with two candidate
+fixes named, neither taken in the first pass — reported rather than decided,
+since both looked bigger than #525's four parts.
 
-1. Give the nearby-join path its own independent registry lookup for a full
-   `EventDefinitionContext`, mirroring how iOS's `ReportSubmissionRuntime`
-   resolves fresh from `eventIdHex` at capture time regardless of how the
-   event was joined — the behavioral pattern the maker brief pointed at.
-2. Retain the full `EventDefinitionContext` (not just the Barnard-shaped
-   projection) on the nearby-discovery path so `fromNearbyCandidate` can carry
-   it forward.
+## Update — closed in this same PR, option 1 taken
 
-Flagged in the PR description and in the maker's report; not decided here.
+The lead and a reviewing agent independently verified option 1
+(`ios/Beid/Sensing/ReportSubmissionRuntime.swift:38-58` never trusts join-time
+context at all; it resolves fresh by event id at capture time, regardless of
+how the event was joined) and found it was not, in fact, bigger than this
+issue: `EventJoinCoordinator` already holds the exact seam needed
+(`EventJoinRegistry.resolveEventDefinition`, `EventJoinRegistry.kt:55`), and
+`WindowObservationSubmissionDrain` is constructed one hop away from it
+(`WindowObservationRuntimeOwner.acquire`, whose only caller is
+`EventJoinCoordinator`). No `shared/` change, no new external dependency.
+
+**What changed**: `SubmissionRecord` now always carries the window's own
+`eventIdHex` (from `WindowObservationContext`, not from a verified
+definition), even when no configuration could be resolved at open time. When
+`WindowObservationSubmissionDrain` finds a held record, it calls a new
+`SubmissionConfigurationResolver` seam — shaped around the public
+`SubmissionOperatorConfiguration`, not the shared module's
+`internal`-constructor `EventDefinitionContext`/`EventDefinitionResolution`
+(the same constraint that shaped iOS's own
+`EventDefinitionContextProvider`/`VerifiedSubmissionDefinition` split) — to
+resolve one fresh, by event id, before falling back to holding. A successful
+resolution is persisted (`SubmissionRecordStore.recordResolvedConfiguration`)
+so the lookup runs once per artifact, not on every drain trigger.
+
+**Still true, unchanged by this update**: never submit under a guessed or
+fallback configuration. If the lookup itself fails, times out, or produces no
+usable definition, the artifact is held exactly as before, with the reason
+surfaced.
+
+**result, updated**: closed for the nearby-card-tap path specifically.
+Nothing else in this decision route changed — the shared reducer still has no
+opinion on configuration, and the "which configuration governs a submission"
+decision is still entirely native.

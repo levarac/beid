@@ -225,6 +225,82 @@ class WindowObservationSubmissionDrainTest {
         }
     }
 
+    /** The nearby-card-tap join path: no join-time verified Event Definition, resolved fresh by a registry lookup. */
+    @Test
+    fun nearbyJoinWindowDrainsAfterARegistryLookupResolvesItsConfiguration() {
+        val directory = Files.createTempDirectory("drain-nearby-join-resolves").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            val resolver = FakeConfigurationResolver(resolvedConfiguration(endpoint))
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null, // no join-time definition, as on the nearby-card path
+                configurationResolver = resolver,
+            )
+            closeOneWindow(accumulator)
+
+            drain.drain()
+
+            waitUntil { server.postCount == 1 }
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            Thread.sleep(150)
+
+            assertEquals(1, server.postCount)
+            assertEquals(1, resolver.callCount, "the registry lookup must run exactly once for this artifact")
+            val record = requireNotNull(submissionRecordStore(directory).recordFor(WINDOW_ID))
+            assertNull(record.unresolvedReason, "a resolved lookup must clear the unresolved reason")
+            assertNotNull(record.submissionEndpoint, "the resolved configuration must be persisted")
+        } finally {
+            server.stop()
+        }
+    }
+
+    /** Same gap, but the registry lookup itself fails — held, never a guess. */
+    @Test
+    fun nearbyJoinWindowWhoseRegistryLookupFailsIsHeldWithZeroPosts() {
+        val directory = Files.createTempDirectory("drain-nearby-join-lookup-fails").toFile()
+        val server = newStubOperatorServer()
+        server.start()
+        try {
+            val resolver = FakeConfigurationResolver(configuration = null)
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+            )
+            closeOneWindow(accumulator)
+
+            drain.drain()
+            Thread.sleep(250)
+
+            assertEquals(0, server.postCount, "a failed registry lookup must never be guessed around")
+            assertEquals(1, resolver.callCount)
+            val record = requireNotNull(submissionRecordStore(directory).recordFor(WINDOW_ID))
+            assertEquals("invalid_configuration", record.terminalErrorCode)
+
+            drain.drain()
+            Thread.sleep(150)
+            assertEquals(0, server.postCount)
+        } finally {
+            server.stop()
+        }
+    }
+
+    private class FakeConfigurationResolver(
+        private val configuration: SubmissionOperatorConfiguration?,
+    ) : WindowObservationSubmissionDrain.SubmissionConfigurationResolver {
+        var callCount = 0
+            private set
+
+        override fun resolve(eventIdHex: String, completion: (SubmissionOperatorConfiguration?) -> Unit) {
+            callCount++
+            completion(configuration)
+        }
+    }
+
     // --- fixtures ---
 
     private fun buildSystem(
@@ -232,6 +308,7 @@ class WindowObservationSubmissionDrainTest {
         cryptography: SensingCryptography,
         submissionConfiguration: SubmissionOperatorConfiguration?,
         receiptPersistenceGate: () -> Boolean = { true },
+        configurationResolver: WindowObservationSubmissionDrain.SubmissionConfigurationResolver? = null,
     ): Pair<WindowObservationAccumulator, WindowObservationSubmissionDrain> {
         val context = WindowObservationContext(
             eventCode = EVENT_CODE,
@@ -261,6 +338,7 @@ class WindowObservationSubmissionDrainTest {
             nowEpochMilliseconds = { NOW_EPOCH_MILLIS },
             allowInsecureLoopbackForTests = true,
             receiptPersistenceGate = receiptPersistenceGate,
+            configurationResolver = configurationResolver,
         )
         return accumulator to drain
     }
