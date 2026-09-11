@@ -1,9 +1,21 @@
 # Checkpoint — Android submission drain (thegreeting/beid#525)
 
-**Status: prospective, written before implementation, per the pilot in `docs/checkpoints/README.md`. Not a merge gate.**
+**Status: prospective, written before implementation, using the checkpoint
+format this maker's brief pointed at. Not a merge gate.**
+
+Correction (post-rebase): `docs/checkpoints/README.md` — the file this
+status line originally cited, and the file whose "worked example" section
+this record's structure was modeled on — no longer exists on `origin/main`.
+Beid#454's merge replaced it with a real, non-prospective checkpoint for that
+same divergence, `docs/checkpoints/event-join-card.md`; the format itself is
+tracked by the still-open beid#516, not by a standing AGENTS.md section (that
+section is gone from current `origin/main` too). Neither change affects this
+record's own content below, which is about a different decision
+(submission configuration, not event-card projection).
 
 Recorded by the maker agent for #525. Repository state: `origin/main` at worktree
-creation, `bb8b663`.
+creation, `bb8b663`; rebased onto `origin/main` (`5b523fc`, beid#454's merge)
+before the update below.
 
 ## Scope
 
