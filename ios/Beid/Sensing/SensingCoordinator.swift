@@ -1899,6 +1899,14 @@ final class SensingCoordinator: ObservableObject {
           guard self.isCurrentJoinAttempt(joinGeneration) else { return }
           guard canScan, canAdvertise else {
             self.stopParticipantRelay()
+            // Undo the optimistic `.sensing` set above. Without this the
+            // screen keeps saying it is sensing over a radio that never
+            // started — a reading a user cannot tell apart from sensing that
+            // has simply found nobody yet. `joinNearbyEvent` already did
+            // this; the two entry points had drifted apart (beid#470).
+            self.phase = Self.payloadlessNativePhase(
+              BeidSharedKit.sensing.scanPhaseAfterStopSensing()
+            )
             return
           }
           guard let selectedEventCode else {
