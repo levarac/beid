@@ -16,6 +16,16 @@ trap cleanup EXIT
 
 cd "$REPO_ROOT"
 
+: "${BEID_DELIVERY_CHANNEL:?BEID_DELIVERY_CHANNEL must be internal or release}"
+: "${BEID_IOS_SCHEME:?BEID_IOS_SCHEME must name the delivery scheme}"
+: "${BEID_IOS_CONFIGURATION:?BEID_IOS_CONFIGURATION must name the delivery configuration}"
+read -r IOS_SCHEME IOS_CONFIGURATION < <(
+  python3 scripts/gha/resolve_ios_delivery.py \
+    "$BEID_DELIVERY_CHANNEL" \
+    "$BEID_IOS_SCHEME" \
+    "$BEID_IOS_CONFIGURATION"
+)
+
 XCODEGEN_VERSION="$(< ios/ci_scripts/XCODEGEN_VERSION)"
 INSTALLED_VERSION=""
 if command -v xcodegen >/dev/null 2>&1; then
@@ -107,8 +117,8 @@ echo "Archiving Beid for a generic iOS device..."
 xcodebuild \
   -quiet \
   -project ios/Beid.xcodeproj \
-  -scheme Beid \
-  -configuration Release \
+  -scheme "$IOS_SCHEME" \
+  -configuration "$IOS_CONFIGURATION" \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE_PATH" \
   -allowProvisioningUpdates \

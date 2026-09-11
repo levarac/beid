@@ -19,6 +19,10 @@ jobs:
     if: ${{ vars.GHA_DELIVERY == 'on' }}
     runs-on: [self-hosted, emi]
     timeout-minutes: 90
+    env:
+      BEID_DELIVERY_CHANNEL: release
+      BEID_IOS_SCHEME: Beid
+      BEID_IOS_CONFIGURATION: Release
     steps:
       - uses: actions/checkout@v4
       # The delivery script resolves its JDK through
