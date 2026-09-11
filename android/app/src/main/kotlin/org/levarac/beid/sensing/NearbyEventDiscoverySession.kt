@@ -121,6 +121,20 @@ internal class NearbyEventDiscoverySession(
     private val store = createNearbyEventDiscoveryStore()
     private val _candidates = MutableStateFlow(store.snapshot)
     private val _cards = MutableStateFlow<List<NearbyEventCard>>(emptyList())
+
+    /**
+     * A cache, never a gate (beid#454). The card projection reads
+     * `eventIdHex` / validity window from the shared candidate directly, the
+     * same source iOS's `SensingView` already reads, so joinability has
+     * exactly one shared answer on both platforms. This map exists only for
+     * [publishAndSchedule]'s expiry-scheduling scan below; it is pruned on
+     * the same live-hash and TTL rules as the other native per-hash caches,
+     * so it can go briefly missing for a candidate that source eviction
+     * (`NearbyEventDiscovery.kt`'s `MAX_LIVE_SOURCE_COUNT`) dropped and
+     * re-admitted, while the candidate's own registry evidence survives that
+     * eviction untouched. A card must never depend on this map being present
+     * -- that dependency is exactly what made Android and iOS disagree.
+     */
     private val verifiedMetadataByHash = mutableMapOf<String, VerifiedNearbyEventMetadata>()
 
     /**
@@ -386,14 +400,24 @@ internal class NearbyEventDiscoverySession(
                         eventCodeHashHex = candidate.eventCodeHashHex,
                         nowEpochSeconds = nowEpochSeconds,
                     ) == NearbyEventJoinEligibility.ELIGIBLE
-                    val verified = verifiedMetadataByHash[candidate.eventCodeHashHex]
-                        ?.takeIf { joinable }
+                    // beid#454, the third thing found on this same object: the
+                    // fields themselves used to come from verifiedMetadataByHash,
+                    // a native cache the shared gate above never consults. A
+                    // source-eviction edge case (NearbyEventDiscovery.kt's
+                    // MAX_LIVE_SOURCE_COUNT) can drop and re-admit a candidate
+                    // while that cache stays empty for it, so a candidate this
+                    // gate calls ELIGIBLE could render with no eventIdHex --
+                    // Android refusing a card iOS's single-source read shows as
+                    // joinable. Reading the candidate directly, as iOS already
+                    // does, removes the second source of truth entirely.
                     add(
                         NearbyEventCard(
                             beaconDisplayName = candidate.displayNameAt(0),
-                            eventIdHex = verified?.eventIdHex,
-                            displayValidFromEpochSeconds = verified?.validFromEpochSeconds,
-                            displayValidUntilEpochSeconds = verified?.validUntilEpochSeconds,
+                            eventIdHex = candidate.resolvedEventIdHex.takeIf { joinable },
+                            displayValidFromEpochSeconds = candidate.definitionValidFromEpochSeconds
+                                .takeIf { joinable },
+                            displayValidUntilEpochSeconds = candidate.definitionValidUntilEpochSeconds
+                                .takeIf { joinable },
                             eventCodeHashHex = candidate.eventCodeHashHex,
                         ),
                     )
