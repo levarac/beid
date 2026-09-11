@@ -46,7 +46,30 @@ internal class WindowObservationSubmissionDrain(
      * `ReportSubmissionRuntime.receiptPersistenceGate`.
      */
     private val receiptPersistenceGate: () -> Boolean = { true },
+    /**
+     * A fresh, independent way to resolve a configuration by event id when
+     * the window's own persisted record has none — beid#525's nearby-join
+     * gap. `null` (the default) means "no such capability", equivalent to
+     * every lookup always failing.
+     *
+     * Shaped around [SubmissionOperatorConfiguration] rather than the
+     * shared module's `EventDefinitionContext`/`EventDefinitionResolution`
+     * on purpose: both of those have `internal` constructors in `:shared`
+     * and cannot be faked from `:app` tests, exactly the constraint that
+     * shaped iOS's own `EventDefinitionContextProvider` /
+     * `VerifiedSubmissionDefinition` seam
+     * (`ios/Beid/Sensing/ReportSubmissionRuntime.swift`). Production wires
+     * this to a real registry read (`WindowObservationRuntimeOwner.acquire`);
+     * a test can inject a fake that returns a configuration built with the
+     * public `createSubmissionOperatorConfiguration(...)` factory.
+     */
+    private val configurationResolver: SubmissionConfigurationResolver? = null,
 ) {
+    /** See [WindowObservationSubmissionDrain]'s `configurationResolver` doc. */
+    fun interface SubmissionConfigurationResolver {
+        fun resolve(eventIdHex: String, completion: (SubmissionOperatorConfiguration?) -> Unit)
+    }
+
     /** beid#525's "after a window's durable close" / "on foreground resume" / "when a retry time arrives" triggers. */
     fun drain() {
         accumulator.beginNextSubmissionAttempt(nowEpochMilliseconds())
@@ -82,11 +105,49 @@ internal class WindowObservationSubmissionDrain(
 
         val record = submissionRecordStore.recordFor(windowId)
         val configuration = record?.let(::restoreConfiguration)
-        if (configuration == null) {
-            hold(submission.submissionKey, windowId, record?.unresolvedReason ?: "no submission record for window $windowId")
+        if (configuration != null) {
+            proceedWithConfiguration(submission, origin, windowId, digestHex, configuration)
             return
         }
 
+        val eventIdHex = record?.eventIdHex
+        val resolver = configurationResolver
+        if (eventIdHex == null || resolver == null) {
+            hold(submission.submissionKey, windowId, record?.unresolvedReason ?: "no submission record for window $windowId")
+            return
+        }
+        // beid#525's nearby-join gap: this window's own join-time context
+        // carried no verified Event Definition. A fresh, independent
+        // registry lookup by event id — exactly the pattern iOS's
+        // `ReportSubmissionRuntime` always uses, regardless of how the event
+        // was joined — is the only other legitimate source of a
+        // configuration. Never fall back to any other event's configuration
+        // if this fails.
+        resolver.resolve(eventIdHex) { resolved ->
+            if (resolved == null) {
+                hold(submission.submissionKey, windowId, "registry lookup for event $eventIdHex produced no usable Event Definition")
+                return@resolve
+            }
+            submissionRecordStore.recordResolvedConfiguration(
+                windowId = windowId,
+                submissionEndpoint = resolved.submissionEndpoint,
+                receiptPublicKeyHex = resolved.receiptPublicKey.toByteArray().toLowercaseHex(),
+                operatorIdHex = resolved.operatorId.toByteArray().toLowercaseHex(),
+                eventDefinitionDigestHex = resolved.eventDefinitionDigest?.toByteArray()?.toLowercaseHex(),
+                validFrom = resolved.validFrom,
+                validUntil = resolved.validUntil,
+            )
+            proceedWithConfiguration(submission, origin, windowId, digestHex, resolved)
+        }
+    }
+
+    private fun proceedWithConfiguration(
+        submission: UnsentWindowSubmission,
+        origin: SubmissionEmissionOrigin,
+        windowId: String,
+        digestHex: String,
+        configuration: SubmissionOperatorConfiguration,
+    ) {
         val storedBytes = accumulator.loadStoredObservationBytes(windowId, digestHex)
         if (storedBytes == null) {
             hold(submission.submissionKey, windowId, "missing durable observation bytes for window $windowId")

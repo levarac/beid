@@ -54,6 +54,38 @@ internal class SubmissionRecordStore(file: File) {
             transform = { it.copy(terminalErrorCode = errorCode) },
         )
 
+    /**
+     * Replaces a held record's configuration once a later registry lookup
+     * (beid#525, the nearby-join path) resolves one — clears
+     * [SubmissionRecord.unresolvedReason] atomically with setting the
+     * resolved fields, so the invariant in [SubmissionRecord]'s `init` always
+     * holds. Never called on a record that already has a configuration:
+     * `WindowObservationSubmissionDrain` only attempts a registry lookup when
+     * [recordFor] returned an unresolved record.
+     */
+    fun recordResolvedConfiguration(
+        windowId: String,
+        submissionEndpoint: String,
+        receiptPublicKeyHex: String,
+        operatorIdHex: String?,
+        eventDefinitionDigestHex: String?,
+        validFrom: Long?,
+        validUntil: Long?,
+    ): Boolean = store.updateRecord(
+        predicate = { it.windowId == windowId },
+        transform = {
+            it.copy(
+                submissionEndpoint = submissionEndpoint,
+                receiptPublicKeyHex = receiptPublicKeyHex,
+                operatorIdHex = operatorIdHex,
+                eventDefinitionDigestHex = eventDefinitionDigestHex,
+                validFrom = validFrom,
+                validUntil = validUntil,
+                unresolvedReason = null,
+            )
+        },
+    )
+
     companion object {
         const val SCHEMA_VERSION = 1
 
@@ -61,10 +93,10 @@ internal class SubmissionRecordStore(file: File) {
 
         private fun toJson(record: SubmissionRecord): JsonObject = buildJsonObject {
             put("windowId", record.windowId)
+            put("eventIdHex", record.eventIdHex)
             put("submissionEndpoint", record.submissionEndpoint)
             put("receiptPublicKeyHex", record.receiptPublicKeyHex)
             put("operatorIdHex", record.operatorIdHex)
-            put("eventIdHex", record.eventIdHex)
             put("eventDefinitionDigestHex", record.eventDefinitionDigestHex)
             put("validFrom", record.validFrom)
             put("validUntil", record.validUntil)
@@ -75,10 +107,10 @@ internal class SubmissionRecordStore(file: File) {
 
         private fun fromJson(json: JsonObject): SubmissionRecord = SubmissionRecord(
             windowId = json.getValue("windowId").jsonPrimitive.content,
+            eventIdHex = json.getValue("eventIdHex").jsonPrimitive.content,
             submissionEndpoint = json.stringOrNull("submissionEndpoint"),
             receiptPublicKeyHex = json.stringOrNull("receiptPublicKeyHex"),
             operatorIdHex = json.stringOrNull("operatorIdHex"),
-            eventIdHex = json.stringOrNull("eventIdHex"),
             eventDefinitionDigestHex = json.stringOrNull("eventDefinitionDigestHex"),
             validFrom = json.longOrNull("validFrom"),
             validUntil = json.longOrNull("validUntil"),

@@ -121,6 +121,15 @@ internal class WindowObservationRuntimeOwner(
         nowEpochSeconds: () -> Double,
         submissionClient: org.levarac.parallax.submission.SubmissionClient =
             org.levarac.parallax.submission.createSubmissionClient(),
+        /**
+         * beid#525's nearby-join gap: when a window's join-time context
+         * carried no verified Event Definition (the nearby-card-tap join
+         * path), the drain resolves one fresh, by event id, through this
+         * same registry seam [EventJoinCoordinator] already holds for its
+         * own join gate. `null` means no such capability — every affected
+         * artifact stays held.
+         */
+        eventJoinRegistry: EventJoinRegistry? = null,
     ): WindowObservationRuntime {
         val filesPath = filesDir.toPath().toAbsolutePath().normalize().toString()
         activeRuntime?.let { runtime ->
@@ -157,6 +166,17 @@ internal class WindowObservationRuntimeOwner(
             submissionRecordStore = submissionRecordStore,
             client = submissionClient,
             nowEpochMilliseconds = { (nowEpochSeconds() * 1_000.0).toLong() },
+            configurationResolver = eventJoinRegistry?.let { registry ->
+                WindowObservationSubmissionDrain.SubmissionConfigurationResolver { eventIdHex, completion ->
+                    registry.resolveEventDefinition(eventIdHex, nowEpochSeconds().toLong()) { resolution, _ ->
+                        completion(
+                            resolution?.context?.let {
+                                org.levarac.parallax.submission.createSubmissionOperatorConfigurationFromEventDefinition(it)
+                            },
+                        )
+                    }
+                }
+            },
         )
         return WindowObservationRuntime(
             accumulator = accumulator,
@@ -318,7 +338,7 @@ internal class WindowObservationAccumulator(
         openedContext = openingContext
         openedReporterRpid = openingReporter
         persistDraft()
-        persistSubmissionRecord(id.toString().lowercase(), openingContext.submissionConfiguration)
+        persistSubmissionRecord(id.toString().lowercase(), openingContext.eventIdHex, openingContext.submissionConfiguration)
         return true
     }
 
@@ -336,15 +356,15 @@ internal class WindowObservationAccumulator(
      * store is the only durable copy — written once, while the context that
      * produced it is still the live one.
      */
-    private fun persistSubmissionRecord(windowId: String, configuration: SubmissionOperatorConfiguration?) {
+    private fun persistSubmissionRecord(windowId: String, eventIdHex: String, configuration: SubmissionOperatorConfiguration?) {
         submissionRecordStore.add(
             if (configuration != null) {
                 SubmissionRecord(
                     windowId = windowId,
+                    eventIdHex = eventIdHex,
                     submissionEndpoint = configuration.submissionEndpoint,
                     receiptPublicKeyHex = configuration.receiptPublicKey.toByteArray().toHex(),
                     operatorIdHex = configuration.operatorId.toByteArray().toHex(),
-                    eventIdHex = configuration.eventId?.toByteArray()?.toHex(),
                     eventDefinitionDigestHex = configuration.eventDefinitionDigest?.toByteArray()?.toHex(),
                     validFrom = configuration.validFrom,
                     validUntil = configuration.validUntil,
@@ -353,13 +373,18 @@ internal class WindowObservationAccumulator(
             } else {
                 SubmissionRecord(
                     windowId = windowId,
+                    eventIdHex = eventIdHex,
                     submissionEndpoint = null,
                     receiptPublicKeyHex = null,
                     operatorIdHex = null,
-                    eventIdHex = null,
                     eventDefinitionDigestHex = null,
                     validFrom = null,
                     validUntil = null,
+                    // beid#525: the drain resolves this later by eventIdHex
+                    // via a fresh registry lookup (the nearby-card-tap join
+                    // path never had a verified Event Definition to derive
+                    // from at open time) — see
+                    // WindowObservationSubmissionDrain.SubmissionConfigurationResolver.
                     unresolvedReason = "no verified Event Definition was available when this window opened",
                 )
             },

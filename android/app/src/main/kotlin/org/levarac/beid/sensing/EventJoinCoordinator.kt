@@ -248,6 +248,7 @@ class EventJoinCoordinator internal constructor(
             filesDir = ledgerFilesDir,
             cryptography = sensingCryptography,
             nowEpochSeconds = { nowEpochMillis() / 1_000.0 },
+            eventJoinRegistry = eventJoinRegistry,
         )
     } else {
         null
