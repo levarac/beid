@@ -895,6 +895,7 @@ final class SensingCoordinator: ObservableObject {
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
+    eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard
   ) {
     self.init(
@@ -907,6 +908,7 @@ final class SensingCoordinator: ObservableObject {
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
+      eventJoinControl: eventJoinControl,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults
     )
   }
@@ -938,6 +940,7 @@ final class SensingCoordinator: ObservableObject {
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)?,
+    eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     nearbyRegistryClient:
       ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil
@@ -954,7 +957,8 @@ final class SensingCoordinator: ObservableObject {
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
       initialLedgerFailure: nil,
-      nearbyRegistryClient: nearbyRegistryClient
+      nearbyRegistryClient: nearbyRegistryClient,
+      eventJoinControl: eventJoinControl
     )
     // Only this initializer chain is actually loading — see
     // `isLedgerLoading`'s doc comment for why the default is `false`.
