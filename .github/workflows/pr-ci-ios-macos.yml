@@ -256,7 +256,7 @@ jobs:
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
-            SWIFT_OPTIMIZATION_LEVEL=-O \
+            SWIFT_OPTIMIZATION_LEVEL=-Onone \
             build-for-testing
 
       - name: Test without rebuilding
@@ -271,7 +271,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
-            SWIFT_OPTIMIZATION_LEVEL=-O \
+            SWIFT_OPTIMIZATION_LEVEL=-Onone \
             test-without-building
 
       - name: Summarize structured test results
