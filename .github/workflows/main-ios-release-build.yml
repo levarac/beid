@@ -1,0 +1,167 @@
+name: main iOS Release build (self-hosted macOS, informational)
+
+on:
+  # PUSH TO MAIN ONLY, deliberately (gh#479). This step used to run inside
+  # `pr-ci-ios-macos.yml`, in a lane whose purpose is simulator tests, where it
+  # was about 11 of that lane's 33 minutes. The three most recent clean runs
+  # measured this step at 10.8, 10.8 and 11.2.
+  #
+  # It does not need a merge candidate. It catches Release-only compile
+  # regressions, and catching them on main is what the informational signal is
+  # for; running it per PR bought an earlier signal at the price of the queue.
+  # That price is real: `emi` is the repository's only self-hosted runner and
+  # `internal-testflight.yml` and `release-testflight.yml` both require it, so
+  # minutes spent here sit in front of TestFlight builds testers are waiting
+  # for. Sampled queue waits on this runner were 0s, 0s, 27min and 58min.
+  #
+  # `paths` mirrors the lane this moved out of, minus the entries that only
+  # affect simulator testing. Keep it in sync with `pr-ci-ios-macos.yml` when
+  # that list changes.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/main-ios-release-build.yml"
+      - "ios/**"
+      - "shared/**"
+      - "android/build.gradle.kts"
+      - "android/settings.gradle.kts"
+      - "android/gradle.properties"
+      - "android/gradlew"
+      - "android/gradle/wrapper/**"
+      - "scripts/resolve_kmp_java_home.sh"
+  # Escape hatch: run against any ref on demand. `paths` does not apply to
+  # workflow_dispatch, so a manual run always executes.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keyed on the ref with cancel-in-progress, like the lane this came from:
+  # two merges landing back to back cancel the earlier run. That guarantees a
+  # run STARTS per merge, not that every one finishes.
+  group: main-ios-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-release-build:
+    name: iOS Release device build (self-hosted macOS, informational)
+    # Same routing variable as `pr-ci-ios-macos.yml`: a repo variable applies
+    # to every branch at once, where a baked-in label would need a PR per
+    # branch to change. fromJSON is required because `runs-on` treats a plain
+    # string variable as ONE label and does not split on commas.
+    runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Point KMP JDK resolver at setup-java
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'KMP_JAVA_HOME=%s\n' "$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Resolve Xcode and JDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          # Selects the same Xcode as the simulator lane, by the same test.
+          # A device build does not itself need the iOS 26.5 runtime, but
+          # picking Xcode by a different rule here would let this lane and
+          # that one disagree about which toolchain "main builds with",
+          # which is the kind of divergence nobody notices until it matters.
+          candidates=()
+          if [[ -n "${DEVELOPER_DIR:-}" ]]; then
+            candidates+=("$DEVELOPER_DIR")
+          fi
+          for app in /Applications/Xcode*.app; do
+            candidates+=("$app/Contents/Developer")
+          done
+
+          selected_developer_dir=""
+          for candidate in "${candidates[@]}"; do
+            if [[ ! -x "$candidate/usr/bin/xcodebuild" ]]; then
+              continue
+            fi
+            if DEVELOPER_DIR="$candidate" xcrun simctl list runtimes --json \
+              | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 26.5" for item in runtimes) else 1)'; then
+              selected_developer_dir="$candidate"
+              break
+            fi
+          done
+
+          if [[ -z "$selected_developer_dir" ]]; then
+            echo "error: no full Xcode installation with the iOS 26.5 runtime is available" >&2
+            exit 1
+          fi
+          export DEVELOPER_DIR="$selected_developer_dir"
+
+          kmp_java_home="$(scripts/resolve_kmp_java_home.sh)"
+          "$kmp_java_home/bin/java" -version
+          xcodebuild -version
+
+          {
+            echo "DEVELOPER_DIR=$selected_developer_dir"
+            echo "KMP_JAVA_HOME=$kmp_java_home"
+            echo "JAVA_HOME=$kmp_java_home"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify XcodeGen pin and generated project
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_version="$(tr -d '[:space:]' < ios/ci_scripts/XCODEGEN_VERSION)"
+          installed_version=""
+          if command -v xcodegen >/dev/null 2>&1; then
+            installed_version="$(xcodegen --version | awk '{print $2}')"
+          fi
+          if [[ "$installed_version" != "$expected_version" ]]; then
+            echo "error: XcodeGen $expected_version is required; found ${installed_version:-none}" >&2
+            exit 1
+          fi
+
+          echo "Using XcodeGen: $(xcodegen --version)"
+          scripts/xcodegen_generate_checked.sh
+          (
+            cd ios
+            if [[ -n "$(git status --porcelain -- Beid.xcodeproj)" ]]; then
+              echo "error: Beid.xcodeproj is out of sync with project.yml" >&2
+              git status --porcelain -- Beid.xcodeproj >&2
+              exit 1
+            fi
+          )
+
+      # The old lane guarded this with `if: ${{ !cancelled() }}` so an
+      # informational build still ran when the TESTS failed. Here only setup
+      # steps precede it, so no guard means skip-if-setup-failed, which is what
+      # we want: there is nothing to be informational ABOUT if Xcode or the
+      # project could not be resolved. The guard was dropped deliberately, not
+      # lost in the move.
+      #
+      # The old test also pinned this step as sequential — no `id:`, no
+      # `background:`, no `wait:` — because it shared a job with the simulator
+      # work. It is now the only substantive step in its own workflow, so
+      # there is nothing for it to race; those assertions were retired as a
+      # decision rather than dropped as an oversight.
+      - name: Build Release for device (informational)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project ios/Beid.xcodeproj \
+            -scheme Beid \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -sdk iphoneos \
+            build \
+            CODE_SIGNING_ALLOWED=NO

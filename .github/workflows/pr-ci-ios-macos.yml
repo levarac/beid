@@ -1,9 +1,9 @@
 name: PR iOS CI (self-hosted macOS, informational)
 
 on:
-  # Triggers are deliberately narrow (gh#479). This lane takes ~30 minutes and
-  # gates nothing: Xcode Cloud's "Beid | PR Build & Test | Test - iOS" verifies
-  # the same head in ~12 minutes and is the effective gate.
+  # Triggers are deliberately narrow (gh#479). This lane gates nothing:
+  # Xcode Cloud's "Beid | PR Build & Test | Test - iOS" verifies the same head
+  # in ~12 minutes and is the effective gate.
   #
   # The cost is TestFlight delivery latency, not developer-machine contention.
   # The repository has exactly one self-hosted runner (`emi`), and
@@ -25,6 +25,36 @@ on:
   #
   # The `paths` list is repeated per event because GitHub Actions does not
   # support YAML anchors in workflow files. Keep the two copies identical.
+  #
+  # The Release-for-device build used to run here and now lives in
+  # `main-ios-release-build.yml`, on push to main only (gh#479). It was about
+  # 11 of this lane's 33 minutes, inside a lane whose purpose is simulator
+  # tests, and it never needed a merge candidate to be useful. Runs 116, 117
+  # and 118 measured that step at 10.82, 13.87 and 11.2; 117 is set aside
+  # because two jobs from another repository sharing this host ran inside its
+  # Release window. Moving the step shortens the queue for TestFlight
+  # delivery, which contends for this same single runner.
+  #
+  # Measured after the split: 23.87 min of job execution on 2026-09-11
+  # (run 119), with zero Release steps in the executed job. That run's
+  # build-for-testing was 16.15 against 13.12 on the immediately preceding
+  # run, a 3.03 excess whose cause is UNRESOLVED. The source is identical
+  # between the two heads. No other beid job EXECUTED concurrently, and 119's
+  # job began three seconds after 118's job ENDED — 119 itself had queued
+  # about fifty-one minutes before that, so this is a statement about what
+  # ran beside it, not about a clear queue. And EXECUTION ON THIS RUNNER IS
+  # NOT THE HOST: emi also hosts a separately-registered runner for another
+  # repository, and one of its jobs ran entirely inside this step, 4.40 of
+  # its 16.15 minutes, where the preceding run's window had none. That is a
+  # CO-OCCURRENCE AND NOT A DEMONSTRATED CAUSE — 3.03 is not 4.40, and core
+  # contention was never measured directly. The run is not repeatable, so the
+  # anomaly is recorded rather than explained.
+  #
+  # That figure is emi as configured on the day: a background scheduling
+  # priority confined the runner to the efficiency cores. NOTHING IN THIS
+  # LANE HAS BEEN MEASURED UNTHROTTLED, so no ratio between the two is stated
+  # here — a comment on main carries the authority of a measurement whether
+  # or not one was taken.
   pull_request:
     # Both events that produce a merge-candidate head, and neither of them is
     # `synchronize`. `ready_for_review` alone would miss every PR opened
@@ -311,20 +341,6 @@ jobs:
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY
-
-      - name: Build Release for device (informational)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project ios/Beid.xcodeproj \
-            -scheme Beid \
-            -configuration Release \
-            -destination "generic/platform=iOS" \
-            -sdk iphoneos \
-            build \
-            CODE_SIGNING_ALLOWED=NO
 
       - name: Shutdown simulator
         if: always()
