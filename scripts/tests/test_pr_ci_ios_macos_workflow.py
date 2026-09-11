@@ -63,10 +63,9 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).
 
-        Its own duration was median 10.2 min over a 50-run steady state
-        (p25 9.5, p75 10.6), inside a lane whose purpose is simulator tests,
-        on the repository's only self-hosted runner — which TestFlight
-        delivery also needs. This pins the removal so it cannot
+        It was about 11 of this lane's 33 minutes, inside a lane whose
+        purpose is simulator tests, on the repository's only self-hosted
+        runner — which TestFlight delivery also needs. This pins the removal so it cannot
         drift back in unnoticed; re-adding it here is a decision, not an edit.
         """
         directives = without_comments(workflow_text())

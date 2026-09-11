@@ -2,9 +2,9 @@ name: main iOS Release build (self-hosted macOS, informational)
 
 on:
   # PUSH TO MAIN ONLY, deliberately (gh#479). This step used to run inside
-  # `pr-ci-ios-macos.yml`, in a lane whose purpose is simulator tests. Over a
-  # 50-run steady state its own duration was median 10.2 min (p25 9.5,
-  # p75 10.6).
+  # `pr-ci-ios-macos.yml`, in a lane whose purpose is simulator tests, where it
+  # was about 11 of that lane's 33 minutes. The three most recent clean runs
+  # measured this step at 10.8, 10.8 and 11.2.
   #
   # It does not need a merge candidate. It catches Release-only compile
   # regressions, and catching them on main is what the informational signal is

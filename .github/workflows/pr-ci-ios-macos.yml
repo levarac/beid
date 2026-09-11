@@ -27,11 +27,12 @@ on:
   # support YAML anchors in workflow files. Keep the two copies identical.
   #
   # The Release-for-device build used to run here and now lives in
-  # `main-ios-release-build.yml`, on push to main only (gh#479). Over a 50-run
-  # steady state that step's own duration was median 10.2 min (p25 9.5,
-  # p75 10.6) inside a lane whose purpose is simulator tests, and it never
-  # needed a merge candidate to be useful. Moving it shortens the queue for
-  # TestFlight delivery, which contends for this same single runner.
+  # `main-ios-release-build.yml`, on push to main only (gh#479). It was about
+  # 11 of this lane's 33 minutes — the three most recent clean runs measured
+  # that step at 10.8, 10.8 and 11.2 — inside a lane whose purpose is
+  # simulator tests, and it never needed a merge candidate to be useful.
+  # Moving it shortens the queue for TestFlight delivery, which contends for
+  # this same single runner.
   #
   # No duration is claimed for what this lane takes NOW. The figure the split
   # was argued from is a prediction until a run at a post-split head is
