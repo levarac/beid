@@ -1,7 +1,7 @@
 name: PR iOS CI (self-hosted macOS, informational)
 
 on:
-  # Triggers are deliberately narrow (gh#479). This lane takes ~30 minutes and
+  # Triggers are deliberately narrow (gh#479). This lane takes ~22 minutes and
   # gates nothing: Xcode Cloud's "Beid | PR Build & Test | Test - iOS" verifies
   # the same head in ~12 minutes and is the effective gate.
   #
@@ -25,6 +25,13 @@ on:
   #
   # The `paths` list is repeated per event because GitHub Actions does not
   # support YAML anchors in workflow files. Keep the two copies identical.
+  #
+  # The Release-for-device build used to run here and now lives in
+  # `main-ios-release-build.yml`, on push to main only (gh#479). It was 11 of
+  # this lane's 33 minutes — measured across seven consecutive runs — inside a
+  # lane whose purpose is simulator tests, and it never needed a merge
+  # candidate to be useful. Moving it shortens the queue for TestFlight
+  # delivery, which contends for this same single runner.
   pull_request:
     # Both events that produce a merge-candidate head, and neither of them is
     # `synchronize`. `ready_for_review` alone would miss every PR opened
@@ -311,20 +318,6 @@ jobs:
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY
-
-      - name: Build Release for device (informational)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project ios/Beid.xcodeproj \
-            -scheme Beid \
-            -configuration Release \
-            -destination "generic/platform=iOS" \
-            -sdk iphoneos \
-            build \
-            CODE_SIGNING_ALLOWED=NO
 
       - name: Shutdown simulator
         if: always()
