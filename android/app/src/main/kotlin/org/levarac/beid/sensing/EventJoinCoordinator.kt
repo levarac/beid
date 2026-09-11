@@ -248,6 +248,7 @@ class EventJoinCoordinator internal constructor(
             filesDir = ledgerFilesDir,
             cryptography = sensingCryptography,
             nowEpochSeconds = { nowEpochMillis() / 1_000.0 },
+            eventJoinRegistry = eventJoinRegistry,
         )
     } else {
         null
@@ -656,6 +657,19 @@ class EventJoinCoordinator internal constructor(
                 eventCode = context.joinCode,
                 eventIdHex = context.eventIdHex,
                 eventDefinitionDigestHex = context.definitionHashHex,
+                // beid#525: only the operator-lookup join path (manual event
+                // code entry) carries a full verified Event Definition here.
+                // `context.definition` is `null` on the nearby-card-tap path
+                // by that evidence shape's own design (see
+                // `RegistryVerifiedJoinContext.fromNearbyCandidate`'s doc) —
+                // a window opened during a nearby-joined session therefore
+                // has no resolvable submission configuration and is held,
+                // per beid#525's design decision, rather than guessed at.
+                // See `docs/checkpoints/android-submission-drain.md` for the
+                // real gap this leaves and the two ways to close it.
+                submissionConfiguration = context.definition?.let {
+                    org.levarac.parallax.submission.createSubmissionOperatorConfigurationFromEventDefinition(it)
+                },
             ),
         )
         discoveryOnlyScanOwned = false
