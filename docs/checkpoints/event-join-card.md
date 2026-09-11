@@ -81,9 +81,39 @@ answers `ELIGIBLE` — Android shows a disabled card where iOS shows an enabled
 one.
 
 **severity, stated precisely**: the *structural* divergence is confirmed by
-construction, read on both platforms at `bb8b663`. A *concrete reachable*
-scenario is inferred from the code and **has not been reproduced on device**.
-Do not cite this record as a reproduced defect.
+construction, read on both platforms at `bb8b663`. A reachable path is **traced
+through the code below but has not been reproduced on device.** Do not cite
+this record as a reproduced defect.
+
+**traced path to a live disagreement** (each step read at `bb8b663`):
+
+1. `NearbyEventDiscovery.kt:619-624` — when `store.sources` is at
+   `MAX_LIVE_SOURCE_COUNT` (256, `:8`), adding a new source evicts the oldest.
+   The eviction removes from `store.sources` **only**.
+2. `store.registry` and `store.receiverStates` are pruned to live hashes solely
+   in `expireAt` (`:883-892`), which runs on TTL expiry. So an evicted hash
+   keeps its registry record. Android drops its own map entry at
+   `NearbyEventDiscoverySession.kt:363`.
+3. On re-observation before the next TTL sweep, a fresh source is added
+   (`:615-634`) and the retained registry record is left alone — only
+   `LOOKUP_UNAVAILABLE` is reset (`:636-638`). The rebuilt candidate carries the
+   retained status, event id, digest, block hash and window, so
+   `nearbyCandidateJoinEligibility` answers `ELIGIBLE` again.
+4. `beginNearbyEventRegistryResolutionFromHex` returns null because
+   `record.status != UNRESOLVED` (`:676`). `updateVerifiedCard` has exactly one
+   caller — `NearbyEventDiscoverySession.kt:332`, inside that resolution
+   callback — so the native map is never rebuilt. Android's card stays disabled
+   while iOS's is enabled.
+
+**precondition**: at least 256 live (hash, peripheral) sources. Not reached at
+the #469 rehearsal scale of 20-30 devices; plausible at venue scale, where
+Android MAC rotation inflates distinct peripheral identifiers. This precondition
+is the reason the divergence has not been observed, not a reason it cannot occur.
+
+**same shape, one line away**: `verifiedDefinitionByHash`
+(`NearbyEventDiscoverySession.kt:140`, pruned `:365`, rebuilt only `:307`) has
+the identical eviction gap for the relay verifier. The iOS side of that pair has
+not been checked.
 
 **secondary, lower severity (inferred)**: the two platforms obtain
 `nowEpochSeconds` independently — iOS `floor(Date().timeIntervalSince1970)` at
@@ -101,8 +131,22 @@ decision, not a reviewer's call. The two candidate rulings:
 2. the native map encodes a real additional requirement, in which case it
    belongs in the shared decision so both platforms enforce it.
 
+Ruling 1 is the one the Ownership boundary already implies: the three values are
+available on the shared candidate (`NearbyEventDiscovery.kt:113`, `:938-939`) and
+iOS reads them there (`SensingView.swift:77-82`). Recorded as a recommendation,
+not a decision.
+
 This is the same question `beid#454` asks, reached by a different route than
 that issue describes.
+
+**the durable artifact, and the reason this record is not the point.** The fix
+should carry a parity test in `:app:testDebugUnitTest` — already run by
+`.github/workflows/pr-ci.yml:38`, so no new CI surface — asserting that whenever
+the shared predicate answers `ELIGIBLE` for a candidate, the projected card's
+`eventIdHex` equals that candidate's `resolvedEventIdHex`. That test is a
+machine artifact: unlike this file, it does not depend on anyone reading it.
+A prose checkpoint can go unread exactly as a documented reviewer went
+undispatched; a failing test cannot.
 
 ## What this record demonstrates for `beid#515`
 

@@ -155,18 +155,26 @@ For a PR the lead or sub-PM designates, add or update
 `docs/checkpoints/<feature-slug>.md` with one field per product decision the PR
 changes:
 
-**Decision route — trace backward from the observable product behavior.** Name
-the final consumer on each platform: the file, function and condition that
-decides whether the user can act, what value is displayed, or which effect
-runs. Then trace every value that condition reads back to its canonical
-`shared/` source, listing each native lookup, nullable conversion, fallback,
-guard and mapping on the way. When a value comes from mutable native state,
-name where that state is written, cleared and pruned. **Do not stop at the
-shared entry point or its return value** — stopping there is what produced the
-two wrong proofs, and it is an answer that can be entirely true while missing
-the divergence. Record `unmatched conditions: none` only when the backward
-trace has been shown for both platforms; otherwise record what differs, or
-`unknown` when it could not be traced.
+**Decision route — the unit is the consumed output, not the call.** For each
+product-visible output that depends on the decision, name the field the UI
+actually binds to (for example `NearbyEventCard.eventIdHex`). Then, per
+platform, record: the expression that assigns it, with file and line; every
+input of that expression that is **not** the shared call's return value; and,
+for each such input, where it is written and where it is cleared. Writing
+`unmatched conditions: none` asserts that the expression has no input other
+than the shared return value. Use `unknown` when a trace could not be
+completed.
+
+The write-and-clear clause is the part that discriminates. A divergence of
+this kind lives in the asymmetry between a narrow write path and several
+broader clear paths, so a record that names only where native state is
+populated will not surface it.
+
+**Do not answer at the level of the shared entry point.** "Native path →
+shared call → result, unmatched conditions: none" can be entirely true and
+still omit the divergence; that is the exact shape of two independent wrong
+proofs on 2026-09-12. Anchoring on the bound output makes the minimal truthful
+answer contain the finding.
 
 Where the two platforms reach the same decision by different shared entry
 points, trace both to their common source and list every condition that differs
