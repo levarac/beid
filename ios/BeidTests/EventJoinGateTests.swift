@@ -219,14 +219,72 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
     XCTAssertTrue(registry.requestedEventIdHexes.isEmpty, "a refused grant must not even reach the read")
     XCTAssertFalse(engine.didJoin)
-    // NOTE: the phase is deliberately not asserted here yet. `startSensing`
-    // leaves it at `.sensing` after a refusal — a real defect (the screen
-    // claims to be sensing over a radio that never started) — but five
-    // ReportSubmissionOperatorIntegrationTests currently enter their session
-    // through exactly that hole, because the Simulator has no BLE radio and
-    // refuses the grant. Closing it needs an admitting registry seam, which
-    // `EventDefinitionResolution`'s internal constructor does not allow from
-    // Swift today. Tracked separately; do not "fix" this by asserting here.
+    // Proving the radio stayed off is not enough: `startSensing` moves the
+    // phase to `.sensing` before it asks for permission, so a refusal that
+    // returns without undoing that leaves the Sensing screen up over a radio
+    // that never started. The user waits for detections that cannot arrive,
+    // and the screen agrees with them. Observed on device 2026-09-10.
+    guard case .idle = coordinator.phase else {
+      return XCTFail("a refused grant must return the phase to idle, not leave it at \(coordinator.phase)")
+    }
+  }
+
+  /// The first test in this repository that drives the join gate to **admit**.
+  ///
+  /// Every other gate test asserts the refusing half. That was not a choice:
+  /// until beid#473 there was no way to build a successful
+  /// `EventDefinitionResolution` from Swift, so the branch that decides *when
+  /// a device may switch its radio on* had no coverage at all. A regression
+  /// that refused every event would have kept this suite green.
+  func testGateAdmitsAVerifiedOpenEventAndStartsTheRadio() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      FakeEventJoinRegistry.admittingResolution(eventIdHex: canonicalEventIdHex)
+    )
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+
+    coordinator.startSensing()
+    await settle()
+
+    XCTAssertEqual(
+      registry.requestedEventIdHexes,
+      [canonicalEventIdHex],
+      "the gate must ask the registry about the canonical id, not the typed code"
+    )
+    XCTAssertTrue(engine.didJoin, "a verified open event is what the gate exists to allow")
+    XCTAssertEqual(engine.joinedCodes, ["ethtokyo2026"])
+    guard case .sensing = coordinator.phase else {
+      return XCTFail("an admitted join must leave the session sensing, not \(coordinator.phase)")
+    }
+  }
+
+  /// The same read, refused for one reason: the definition is not open
+  /// admission. Routed through the real decision rather than a second one, so
+  /// this stays honest if the eligibility rules change.
+  func testGateRefusesAGatedEventEvenWhenTheReadSucceeds() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      FakeEventJoinRegistry.admittingResolution(
+        eventIdHex: canonicalEventIdHex,
+        joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.GATED
+      )
+    )
+    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+
+    coordinator.startSensing()
+    await settle()
+
+    XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex], "the read still happened")
+    XCTAssertFalse(engine.didJoin, "a successful read is not by itself permission to join")
+    guard case .idle = coordinator.phase else {
+      return XCTFail("a refused join must return the phase to idle, not \(coordinator.phase)")
+    }
   }
 
   /// The same refusal on the card path (beid#141). It already resets the

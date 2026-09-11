@@ -38,6 +38,41 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
     /// only claimed to do. Two cases for one behavior is what let `holds`
     /// become a no-op without any test noticing — see `isHoldingRead`.
     case holds
+    /// Answers with `resolution` immediately. Build one with
+    /// `FakeEventJoinRegistry.admittingResolution(...)`, or hand-build a
+    /// rejected one to cover a refusing branch of the real gate.
+    ///
+    /// This case could not exist until beid#473 added a Kotlin seam for
+    /// constructing an `EventDefinitionResolution`; every constructor in that
+    /// chain is `internal`, so Swift had no way to express a successful read.
+    case resolves(
+      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution
+    )
+  }
+
+  /// A registry answer the beid#410 gate admits.
+  ///
+  /// The validity window is centred on `nowEpochSeconds`, which defaults to
+  /// the **wall clock the coordinator itself will read**, so a test does not
+  /// have to reason about the clock to get past the expiry check. A fixed
+  /// default was tried first and expired the moment real time passed it.
+  /// Pass a window that excludes `now`, or `joinMode: ...GATED`, to exercise
+  /// the refusing branches through the *real* decision rather than a second
+  /// one.
+  static func admittingResolution(
+    eventIdHex: String,
+    nowEpochSeconds: Int64 = Int64(Date().timeIntervalSince1970),
+    joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode =
+      ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN
+  ) -> ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution {
+    BeidSharedKit.jointestsupport.createEventDefinitionResolutionForTesting(
+      eventIdHex: eventIdHex,
+      definitionHashHex: "0x" + String(repeating: "b", count: 64),
+      blockHashHex: "0x" + String(repeating: "c", count: 64),
+      validFromEpochSeconds: nowEpochSeconds - 86_400,
+      validUntilEpochSeconds: nowEpochSeconds + 86_400,
+      joinMode: joinMode
+    )
   }
 
   var answer: Answer = .readFails
@@ -80,6 +115,8 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
       completion(nil)
     case .holds:
       heldCompletion = completion
+    case let .resolves(resolution):
+      completion(resolution)
     }
     return FakeEventJoinRequest { [weak self] in
       self?.cancelCount += 1
@@ -87,14 +124,23 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
   }
 
   /// Answers a held read as a failure.
-  ///
-  /// Named for what it can actually do. There is no `answerHeldReadAsSuccess`,
-  /// because there is no way to build the resolution a success would carry —
-  /// see the type doc.
   func answerHeldReadAsFailure() {
     let completion = heldCompletion
     heldCompletion = nil
     completion?(nil)
+  }
+
+  /// Answers a held read with a resolution.
+  ///
+  /// This used to be impossible, and the type doc said so: there was no way to
+  /// build the resolution a success would carry. beid#473 added the seam.
+  func answerHeldRead(
+    with resolution: ExportedKotlinPackages.org.levarac.parallax.registry
+      .EventDefinitionResolution
+  ) {
+    let completion = heldCompletion
+    heldCompletion = nil
+    completion?(resolution)
   }
 }
 
