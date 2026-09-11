@@ -146,13 +146,14 @@ This mirrors the manual event-code-entry slice landing on iOS in parallel
 (scope note in the task brief: a stub/simple version is intentional here, not
 a placeholder for missing work). `EventJoinCoordinator`
 (`sensing/EventJoinCoordinator.kt`) is a thin wrapper, not a full port of
-iOS's `SensingCoordinator` — no BLE-off/signal-lost recovery states, no
-production persistence flow. A native
-`persistence/UnsentWindowLedgerStore.kt` exists and its JVM tests exercise the
-shared snapshot codec, but wiring it into an Android sensing lifecycle remains
-deferred to Issue #121. That wiring, plus the rest of iOS's post-join flow
-(sensing → event found → recording with a one-time proof entrance, plus
-signal-loss recovery and collection home), remains follow-up work.
+iOS's `SensingCoordinator` — no BLE-off/signal-lost recovery states. A native
+`persistence/UnsentWindowLedgerStore.kt` is wired into the sensing lifecycle:
+`WindowObservationAccumulator` opens and closes rows on it as windows are
+observed, and `WindowObservationSubmissionDrain` (beid#525) submits durably
+closed windows to the event's operator. What remains is the rest of iOS's
+post-join flow (sensing → event found → recording with a one-time proof
+entrance, plus signal-loss recovery and collection home), which stays
+follow-up work.
 
 **Why `BarnardEngine` is owned by `MainActivity`, not the composable**:
 `requestPermissions` is Activity-driven — the hosting `Activity` must forward
