@@ -342,6 +342,41 @@ class CiDerivedDataTest(unittest.TestCase):
         self.assertTrue((elsewhere / "precious").exists())
         self.assertIn("refus", result.stderr.lower())
 
+    def test_wipe_itself_refuses_an_out_of_root_path_even_when_called_in_a_conditional_context(self) -> None:
+        """Defence in depth for the guard inside wipe (checker finding F3 on gh#520).
+
+        cmd_build rejects a bad CI_DERIVED_DATA at its entry, so the other
+        refusal test never reaches the guard inside wipe. Here the script is
+        sourced and wipe is called directly as `wipe <path> || true`: inside a
+        function invoked in a conditional context bash suppresses `set -e`, so
+        the only thing standing between a rejected path and `rm -rf` is wipe
+        checking guard_cache_path's return value itself.
+        """
+        env = self.sandbox.env()
+        elsewhere = self.sandbox.root / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "precious").write_text("do not delete\n", encoding="utf-8")
+
+        result = subprocess.run(
+            [
+                "/bin/bash",
+                "-c",
+                'source "$1"; wipe "$2" || true; test -e "$2/precious" && echo kept',
+                "bash",
+                str(SCRIPT),
+                str(elsewhere),
+            ],
+            cwd=self.sandbox.workspace,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertTrue((elsewhere / "precious").exists(), result.stderr)
+        self.assertIn("kept", result.stdout)
+        self.assertIn("refus", result.stderr.lower())
+        self.assertNotIn("wiping", result.stderr)
+
     def test_build_requires_resolve_to_have_run(self) -> None:
         env = self.sandbox.env()
 

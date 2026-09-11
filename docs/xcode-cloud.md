@@ -222,6 +222,18 @@ attempt that failed is not retried. `test-without-building` reuses the same
 path and is not wrapped: a test failure is not a stale-module symptom, and
 wiping on it would discard the state the next run needs.
 
+Two consequences of the key excluding configuration, SDK and lane. First, the
+PR lane (Debug, iphonesimulator) and the Release lane (Release, iphoneos) resolve
+to the **same key and the same directory** on `emi`; that is safe for
+`xcodebuild`, which namespaces products by configuration and platform, but a
+wipe removes the whole key directory, so a warm Release build that fails on
+`main` makes the next PR simulator run read **cold**, and vice versa, with no
+signal at the affected lane beyond its own "cold" line. Second, nothing locks
+that directory: it is safe only because `emi` runs exactly one beid runner and a
+runner takes one job at a time. The two lanes sit in different `concurrency`
+groups, so a second beid runner on the same host would need a lock in
+`scripts/ci_derived_data.sh` before it is registered.
+
 ## Build position vs store number (git height)
 
 Verified 2026-09-10.

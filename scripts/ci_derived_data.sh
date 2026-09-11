@@ -86,7 +86,10 @@ guard_cache_path() {
 
 wipe() {
   local path="$1"
-  guard_cache_path "$path"
+  # Checked explicitly: inside a function invoked in a conditional context
+  # (`wipe x || true`, `if wipe x`) bash suppresses `set -e`, and the guard's
+  # failure would otherwise fall straight through to rm -rf.
+  guard_cache_path "$path" || return 1
   log "wiping $path"
   rm -rf "$path"
 }
@@ -248,4 +251,8 @@ main() {
   esac
 }
 
-main "$@"
+# Run only when executed, not when sourced: the contract tests source this file
+# to call wipe directly (see test_ci_derived_data.py).
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
