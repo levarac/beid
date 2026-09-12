@@ -246,10 +246,12 @@ final class VenueSignedServingViewModel: ObservableObject {
       artifact = try await acquisition.acquire(bundleSource: bundleSource, handoffSource: handoffSource)
     } catch let failure as VenueAcquisitionFailure {
       guard generation == self.generation else { return }
+      abandonReplacement()
       status = .acquisitionFailed(failure)
       return
     } catch {
       guard generation == self.generation else { return }
+      abandonReplacement()
       status = .acquisitionFailed(.transportFailure)
       return
     }
@@ -265,6 +267,29 @@ final class VenueSignedServingViewModel: ObservableObject {
     )
     storedSourceDescription = sourceDescription
     await importAndEvaluate(artifact, generation: generation)
+  }
+
+  /// Drops the standing intent to serve after a replacement could not be
+  /// fetched, WITHOUT touching the stored record.
+  ///
+  /// `supply` sets `wantsServing` and clears `receipt` before acquiring, so a
+  /// failed fetch leaves a device that intends to serve, holds no receipt, and
+  /// still has the PREVIOUS event's bundle in the store. The next foreground
+  /// return or clock change would then pass its `wantsServing` guard, find no
+  /// receipt in `refresh`, fall through to `restoreFromStorage`, and put the
+  /// event the operator was replacing back on the air. Their last visible
+  /// signal would be an error and the device's next autonomous act would be to
+  /// broadcast what the error was about.
+  ///
+  /// The intent is cleared; the data is not. The stored bundle is still there
+  /// and still loadable, deliberately: the operator may well want it back, and
+  /// the screen's reload button calls `restoreFromStorage()` directly, which
+  /// sets `wantsServing` itself. What this removes is only the AUTOMATIC
+  /// resumption. `supply` already ran `invalidate()`, so nothing is on the air
+  /// and no deadline is armed — the device lands idle with an error on screen
+  /// and stays there until the operator chooses one of the two buttons.
+  private func abandonReplacement() {
+    wantsServing = false
   }
 
   /// Re-imports the stored public bytes. This is the ONLY restore path: the

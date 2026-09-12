@@ -373,6 +373,114 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(viewModel.radio, VenueRadioUpdate(state: .failed, failure: .bluetoothUnavailable))
   }
 
+  // MARK: - A failed replacement fetch must not resume the replaced event
+
+  private var importCalls: [ScriptedVenuePorts.Call] {
+    ports.calls.filter {
+      if case .importing = $0 { return true }
+      return false
+    }
+  }
+
+  /// After the operator points at a new source and the fetch fails, the device
+  /// must do NOTHING on its own — not quietly resume the event they were
+  /// replacing.
+  ///
+  /// `supply` sets `wantsServing = true` and `receipt = nil` before acquiring.
+  /// Its catch branches reported the failure but left the intent standing, and
+  /// the store still held the OLD bundle. So the next foreground return passed
+  /// its `wantsServing` guard, `refresh` found no receipt and fell through to
+  /// `restoreFromStorage`, and the previous event went back on the air. The
+  /// operator's last visible signal was an error; the device's next autonomous
+  /// act was to broadcast the thing that error was about.
+  ///
+  /// The replies scripted below are deliberately the ones that SUCCEED. Under
+  /// the previous version this test does not fail on an unscripted call — it
+  /// fails by actually installing and serving the replaced event, which is the
+  /// harm stated as output.
+  ///
+  /// Reverting the two catch branches in `supply` to their previous bodies
+  /// turns this RED; see the PR body for the captured output.
+  func testFailedReplacementFetchDoesNotLetTheNextForegroundResumeTheReplacedEvent() async throws {
+    // A previous event's bundle is already stored, as it would be after a
+    // successful supply in an earlier session.
+    store.store(
+      VenuePublicArtifactRecord(
+        bundleBytes: fixture.artifact.bundleBytes,
+        handoffBytes: fixture.artifact.handoffBytes,
+        sourceDescription: "previous.example",
+        storedAt: Date()
+      )
+    )
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    // The operator points at a replacement and the fetch fails.
+    acquisition.replies = [.failure(.transportFailure)]
+    await viewModel.supply(
+      bundleSource: URL(string: "https://replacement.example/bundle")!,
+      handoffSource: URL(string: "https://replacement.example/handoff")!,
+      sourceDescription: "replacement.example"
+    )
+    XCTAssertEqual(viewModel.status, .acquisitionFailed(.transportFailure))
+    let importsBeforeForeground = importCalls.count
+
+    // Drive the real sequence rather than inspecting the flag: asserting
+    // `wantsServing` is false would keep passing if the guard later moved.
+    await viewModel.sceneWillEnterForeground()
+
+    XCTAssertEqual(
+      importCalls.count, importsBeforeForeground,
+      "a failed replacement must not re-import the bundle it was replacing"
+    )
+    XCTAssertTrue(installCalls.isEmpty, "the replaced event must never go back on the air by itself")
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(
+      viewModel.status, .acquisitionFailed(.transportFailure),
+      "the operator's last signal must still be on screen, not replaced by a serving state"
+    )
+  }
+
+  /// The stored record itself is untouched, and the explicit reload path still
+  /// works. The fix clears the operator's INTENT, not their data: a stored
+  /// bundle they may well want to load again deliberately stays exactly where
+  /// it was, reachable from the screen's own button.
+  func testFailedReplacementLeavesTheStoredBundleLoadableOnDemand() async throws {
+    store.store(
+      VenuePublicArtifactRecord(
+        bundleBytes: fixture.artifact.bundleBytes,
+        handoffBytes: fixture.artifact.handoffBytes,
+        sourceDescription: "previous.example",
+        storedAt: Date()
+      )
+    )
+    let viewModel = makeViewModel()
+    acquisition.replies = [.failure(.unreadable)]
+    await viewModel.supply(
+      bundleSource: URL(string: "https://replacement.example/bundle")!,
+      handoffSource: URL(string: "https://replacement.example/handoff")!,
+      sourceDescription: "replacement.example"
+    )
+    XCTAssertEqual(viewModel.status, .acquisitionFailed(.unreadable))
+    XCTAssertNotNil(store.record, "a failed fetch must not delete what was already stored")
+
+    // The operator presses "reload stored bundle", which is the path
+    // `VenueSignedServingView` wires to `restoreFromStorage()` directly.
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await viewModel.restoreFromStorage()
+
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(
+        displayName: VenueServingContractFixture.displayName,
+        stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+      ),
+      "clearing the intent must not disable the explicit reload the operator can still choose"
+    )
+  }
+
   // MARK: - The production clock supplier this view model reads (beid#530)
 
   /// `VenueDeviceClock.read` must round its `Date` UP, not truncate it.
