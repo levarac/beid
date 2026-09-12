@@ -769,7 +769,6 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
   private static func barnardDefinition(
     from definition: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinition
   ) -> DefinitionOutcome {
-    let eventCodeHash = definition.eventCodeHashHex.flatMap { Self.bytes(fromHex: $0) }
     switch Self.definitionProjection(of: definition) {
     case .gatedUnsupported:
       return .gatedUnsupported
@@ -779,9 +778,11 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
       // `.open` is returned only for `EventJoinMode.OPEN` carrying a
       // well-formed 8-byte hash, so both of these hold by construction. They
       // are re-checked rather than force-unwrapped so a later change to the
-      // classifier degrades to a refusal instead of a crash.
+      // classifier degrades to a refusal instead of a crash. The hash is
+      // decoded from the same expression `definitionProjection(of:)` uses, so
+      // there is one derivation to check rather than two to compare.
       guard
-        let eventCodeHash,
+        let eventCodeHash = definition.eventCodeHashHex.flatMap({ Self.bytes(fromHex: $0) }),
         let joinMode = VenueBundleVerificationLogic.barnardJoinMode(definition.joinMode)
       else { return .unusable }
       return .usable(BarnardEventDefinitionV1(
