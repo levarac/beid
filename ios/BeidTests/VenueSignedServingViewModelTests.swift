@@ -296,6 +296,58 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     )
   }
 
+  /// A radio failure arriving SYNCHRONOUSLY, from inside `installAndStart`,
+  /// must take the failure path rather than being stepped over.
+  ///
+  /// This is the ordinary Bluetooth-off path, not a corner. `installAndStart`
+  /// returns normally when the radio is unavailable — `startAdvertise()`
+  /// cannot throw and the envelope configuration validates structure only —
+  /// while `startAdvertiseInternal` reports the constraint inline, with no
+  /// dispatch. So the handler runs while `install` is still between its call
+  /// and its `status = .serving`.
+  ///
+  /// The first version of this fix guarded on `case .serving`, which is not
+  /// yet true at that instant, so the failure was dropped and `.serving` was
+  /// then set anyway. Worse, it worked on the FIRST failure and not on any
+  /// retry: `peripheralManagerDidUpdateState` emits nothing when state settles
+  /// to `.poweredOff` with nothing advertising, so the first advertise sees
+  /// `.unknown` and produces no constraint (the asynchronous path, which the
+  /// earlier fix handled), while every advertise after that produces the
+  /// synchronous one.
+  ///
+  /// Reverting `install` and `handleRadioUpdate` to that previous version —
+  /// no `isInstalling`/`pendingInstallFailure`, `guard case .serving` alone —
+  /// turns this RED; see the PR body for the captured output.
+  func testRadioFailureArrivingDuringInstallIsNotSteppedOverBySettingServing() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    ports.nextSynchronousStateDuringInstall =
+      try XCTUnwrap(VenueRadioUpdate(state: .failed, failure: .bluetoothUnavailable))
+
+    await supply(viewModel)
+
+    XCTAssertEqual(viewModel.status, .radioRefused(.bluetoothUnavailable))
+    XCTAssertEqual(viewModel.radio, VenueRadioUpdate(state: .failed, failure: .bluetoothUnavailable))
+    // The same four faces the asynchronous test asserts. Status alone would
+    // pass while the deadline stayed armed and the container stayed live.
+    XCTAssertFalse(expiry.isScheduled, "a radio that failed during install must not leave a deadline armed")
+    XCTAssertNil(ports.installedPermit)
+    let installIndex = try XCTUnwrap(
+      ports.calls.firstIndex {
+        if case .installing = $0 { return true }
+        return false
+      }
+    )
+    XCTAssertTrue(
+      ports.calls[installIndex...].contains {
+        if case .clearing = $0 { return true }
+        return false
+      },
+      "the container must be cleared AFTER the install that failed, not left live"
+    )
+  }
+
   /// A `.failed` update arriving when nothing is being served is recorded on
   /// `radio` but must not rewrite `status`.
   ///

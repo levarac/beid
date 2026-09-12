@@ -25,6 +25,21 @@ final class ScriptedVenuePorts: VenueBundleVerifying, VenueSignedContainerBroadc
   var importReplies: [Reply<VenueImportResult>] = []
   var evaluationReplies: [Reply<VenueServingDecision>] = []
   var nextInstallFailure: VenueRadioFailure?
+  /// A radio update emitted from INSIDE `installAndStart`, before it returns.
+  ///
+  /// Barnard really does this. `startAdvertiseInternal` calls
+  /// `emitConstraint("bluetooth_not_ready")` inline for `.poweredOff`,
+  /// `.unauthorized` and `.unsupported`, and `emitConstraint` is a direct
+  /// `onEvent?(...)` with no dispatch, so the consumer's handler runs BEFORE
+  /// `installAndStart` returns. `startAdvertise()` itself cannot throw and
+  /// `configureOwnEventInfoEnvelopeV2` validates container structure only, so
+  /// the install returns normally while the radio has already failed.
+  ///
+  /// Without this the fake can only express failures arriving AFTER
+  /// `installAndStart` returns, which is why a consumer that handled only
+  /// those looked fully covered. A whole class of defect was unreachable by
+  /// any test in this suite, not merely untested.
+  var nextSynchronousStateDuringInstall: VenueRadioUpdate?
   var onState: ((VenueRadioUpdate) -> Void)?
   private(set) var calls: [Call] = []
   private(set) var installedPermit: VenueServePermit?
@@ -88,6 +103,13 @@ final class ScriptedVenuePorts: VenueBundleVerifying, VenueSignedContainerBroadc
       throw failure
     }
     installedPermit = permit
+    // Emitted here, after the container is installed and before returning,
+    // because that is where barnard emits it: the envelope is configured
+    // first, then startAdvertise reports the constraint inline.
+    if let update = nextSynchronousStateDuringInstall {
+      nextSynchronousStateDuringInstall = nil
+      emit(update)
+    }
     // Deliberately emit no radio success. Tests must supply actual SDK-like
     // updates, including waiting, an optimistic request and later failures.
   }

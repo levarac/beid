@@ -145,6 +145,27 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// being cleared would drive this handler into unbounded recursion.
   private var isHandlingRadioFailure = false
 
+  /// True only for the duration of `installAndStart`.
+  ///
+  /// The radio can fail SYNCHRONOUSLY inside that call — barnard reports
+  /// `bluetooth_not_ready` inline, with no dispatch, and `startAdvertise()`
+  /// cannot throw — so the handler runs while `install` is still between its
+  /// call and its `status = .serving`. Nothing is `.serving` yet at that
+  /// instant, which is precisely why the failure cannot be handled by the
+  /// same state test the asynchronous case uses.
+  private var isInstalling = false
+
+  /// A failure that arrived during `installAndStart`, for `install` to act on
+  /// once the call returns.
+  ///
+  /// Recorded rather than acted on immediately so the teardown does not run
+  /// underneath a call that has not returned yet, and so `install` never sets
+  /// `.serving` over it. The alternative — setting `.serving` BEFORE the call
+  /// so the ordinary guard catches it — was rejected: it would display
+  /// serving before any byte reached the radio, trading a false negative for
+  /// a false positive in the one display beid#531 relies on.
+  private var pendingInstallFailure: VenueRadioFailure?
+
   /// The radio's state is always recorded. A FAILURE additionally tears down
   /// the serving state, because the screen is the only thing telling the
   /// operator whether this device is actually serving.
@@ -158,6 +179,13 @@ final class VenueSignedServingViewModel: ObservableObject {
   private func handleRadioUpdate(_ update: VenueRadioUpdate) {
     radio = update
     guard update.state == .failed, let failure = update.failure else { return }
+    if isInstalling {
+      // Arrived from inside `installAndStart`, which has not returned. Hand it
+      // to `install` rather than tearing down under a call still in progress;
+      // `install` takes its failure path instead of claiming `.serving`.
+      pendingInstallFailure = failure
+      return
+    }
     // Only a device that believes it is serving has anything to tear down.
     // This handler is long-lived and fires outside any request, so a late
     // failure can also arrive after an explicit stop or onto a blocked
@@ -189,8 +217,16 @@ final class VenueSignedServingViewModel: ObservableObject {
     status = .radioRefused(failure)
     // `wantsServing` is deliberately NOT cleared. A radio failure is not an
     // operator stop, so a later foreground return or clock change may retry.
-    // That cannot silently serve into a dead radio: the retry re-runs
-    // `install`, and a radio still failing reports itself again.
+    //
+    // What makes that retry safe is the `pendingInstallFailure` check in
+    // `install`, NOT this handler. On a retry against a still-dead radio,
+    // barnard reports the constraint synchronously from inside
+    // `installAndStart` and this handler is not the code that acts on it —
+    // nothing is `.serving` at that instant. An earlier version of this
+    // comment claimed the retry "reports itself again" through here, which
+    // was false in exactly the path it was defending: the failure was
+    // recorded and then stepped over, and `.serving` was displayed against a
+    // dead radio on every retry after the first.
   }
 
   // MARK: - Requests
@@ -358,6 +394,9 @@ final class VenueSignedServingViewModel: ObservableObject {
       return
     }
 
+    pendingInstallFailure = nil
+    isInstalling = true
+    defer { isInstalling = false }
     do {
       try broadcasting.installAndStart(permit)
     } catch {
@@ -370,6 +409,22 @@ final class VenueSignedServingViewModel: ObservableObject {
       broadcasting.clearAndStop()
       let failure = (error as? VenueRadioFailure) ?? .containerInstallRejected
       // Report the effect failure as itself, never as a verification verdict.
+      radio = VenueRadioUpdate(state: .failed, failure: failure)!
+      status = .radioRefused(failure)
+      return
+    }
+
+    // `installAndStart` returned without throwing, which is NOT the same as
+    // the radio being up: barnard returns normally with the radio dead and
+    // reports the constraint through `onState` on the way. Check before
+    // claiming to serve, or this method writes `.serving` straight over a
+    // failure that already arrived.
+    if let failure = pendingInstallFailure {
+      pendingInstallFailure = nil
+      // Same three steps, in the same order, as the thrown-install path
+      // above: clear the container first, then report the radio, then the
+      // status. No deadline has been armed yet, so there is none to cancel.
+      broadcasting.clearAndStop()
       radio = VenueRadioUpdate(state: .failed, failure: failure)!
       status = .radioRefused(failure)
       return
