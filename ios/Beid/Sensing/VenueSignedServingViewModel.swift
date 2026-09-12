@@ -265,18 +265,42 @@ final class VenueSignedServingViewModel: ObservableObject {
     switch decision {
     case .blocked(let rejection):
       status = .blocked(rejection)
+      scheduleRecheckIfNeeded(for: rejection, generation: generation)
     case .permitted(let permit):
-      install(permit, generation: generation)
+      await install(permit, imported: imported, generation: generation)
     }
   }
 
-  private func install(_ permit: VenueServePermit, generation: Int) {
+  /// `.notStarted` is the one rejection that names its own wake-up instant
+  /// (`recheckAtUnixSeconds`). Without arming a timer for it, a device
+  /// holding a not-yet-started pack never re-evaluates on its own and stays
+  /// blocked until some unrelated event (foreground, clock change) happens
+  /// to trigger a refresh (beid#530).
+  private func scheduleRecheckIfNeeded(for rejection: VenueServingRejection, generation: Int) {
+    guard rejection.reason == .notStarted, let recheckAt = rejection.recheckAtUnixSeconds else { return }
+    guard case .available(let now) = clock() else { return }
+    expiry.schedule(stopAtUnixSeconds: recheckAt, now: now) { [weak self] in
+      Task { @MainActor in await self?.handleExpiry(generation: generation) }
+    }
+  }
+
+  private func install(_ permit: VenueServePermit, imported: VenueImportedBundle, generation: Int) async {
     // The deadline must be schedulable before the bytes go on the air. Read
     // the clock first: serving with no stop instant is the one outcome worse
     // than not serving at all.
     let reading = clock()
     guard case .available(let now) = reading else {
       status = .blocked(VenueServingRejection(reason: .clockUnavailable)!)
+      return
+    }
+    guard now < permit.stopAtUnixSeconds else {
+      // The permit expired between the moment `evaluate` issued it and this
+      // clock read (beid#530). Re-run evaluate with a fresh clock reading
+      // rather than install already-expired signed bytes: the permit's
+      // exclusive deadline exists exactly to stop this, and installing
+      // anyway for a narrower window would still be the vulnerability the
+      // deadline exists to prevent, only smaller.
+      await evaluate(imported, generation: generation)
       return
     }
 

@@ -165,8 +165,59 @@ final class VenueSignedServingViewModelTests: XCTestCase {
 
       XCTAssertEqual(viewModel.status, .blocked(blocked))
       XCTAssertTrue(installCalls.isEmpty, "a blocked evaluation must never install: \(reason)")
-      XCTAssertFalse(expiry.isScheduled, "a blocked evaluation must not arm a deadline: \(reason)")
+      if reason == .notStarted {
+        // beid#530: `.notStarted` is the one rejection that names its own
+        // wake-up instant, and it must arm a timer for it -- otherwise a
+        // device holding a not-yet-started pack never re-evaluates on its
+        // own once blocked.
+        XCTAssertEqual(
+          expiry.scheduledStopAt, blocked.recheckAtUnixSeconds,
+          "notStarted must arm its own recheck: \(reason)"
+        )
+        XCTAssertEqual(expiry.scheduledNow, now)
+      } else {
+        XCTAssertFalse(expiry.isScheduled, "a blocked evaluation must not arm a deadline: \(reason)")
+      }
     }
+  }
+
+  // MARK: - beid#530 — expired permit during evaluation, and notStarted's recheck
+
+  /// Proves the need for the `now < permit.stopAtUnixSeconds` guard in
+  /// `install(_:imported:generation:)` (beid#530) by reverting that method to
+  /// its pre-fix body against this exact test; see the PR body for the
+  /// captured RED output.
+  func testPermitThatExpiredDuringEvaluationIsNeverInstalled() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.deferred, .immediate(.blocked(try rejection(.expired)))]
+
+    acquisition.replies = [.artifact(fixture.artifact)]
+    let task = Task {
+      await viewModel.supply(
+        bundleSource: URL(string: "https://venue.example/bundle")!,
+        handoffSource: URL(string: "https://venue.example/handoff")!,
+        sourceDescription: "venue.example"
+      )
+    }
+    // Import recorded, then the first (deferred) evaluation recorded.
+    await ports.waitForCallCount(2)
+
+    // The clock advances to exactly the permit's exclusive deadline while
+    // evaluation is still outstanding, so the permit is stale the instant
+    // its result arrives.
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    ports.completeEvaluation(id: 0, with: .permitted(fixture.permit()))
+    await task.value
+
+    XCTAssertTrue(
+      installCalls.isEmpty,
+      "a permit that expired during evaluation must never reach installAndStart"
+    )
+    XCTAssertNil(ports.installedPermit)
+    // install() re-ran evaluate with the fresh clock reading rather than
+    // installing, and the second scripted reply is what that re-run consumed.
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
   }
 
   // MARK: - Scenario 5 — a current lease, then expiry
