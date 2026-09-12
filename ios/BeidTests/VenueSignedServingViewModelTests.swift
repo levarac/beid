@@ -200,14 +200,19 @@ final class VenueSignedServingViewModelTests: XCTestCase {
         sourceDescription: "venue.example"
       )
     }
-    // Import recorded, then the first (deferred) evaluation recorded.
-    await ports.waitForCallCount(2)
+    // supply()'s own invalidate() clears first, then import, then the first
+    // (deferred) evaluation is recorded -- three calls, not two.
+    await ports.waitForCallCount(3)
 
     // The clock advances to exactly the permit's exclusive deadline while
     // evaluation is still outstanding, so the permit is stale the instant
     // its result arrives.
     clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
-    ports.completeEvaluation(id: 0, with: .permitted(fixture.permit()))
+    // Request id 1, not 0: importBundle's own (immediate) call already
+    // consumed id 0 from the ports' shared counter, exactly as
+    // testImportedIdentityAloneNeverInstallsOrClaimsReady's completeEvaluation(id: 1, ...)
+    // already establishes above.
+    ports.completeEvaluation(id: 1, with: .permitted(fixture.permit()))
     await task.value
 
     XCTAssertTrue(
