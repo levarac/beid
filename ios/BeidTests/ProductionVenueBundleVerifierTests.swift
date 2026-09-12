@@ -312,6 +312,50 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     )
   }
 
+  // MARK: - Phase-1 scope: why the coverage gate is not wired to a refusal
+
+  /// The phase-1 scope claim, stated over the real producer fixture.
+  ///
+  /// This test passes both before and after the coverage gate was unwired,
+  /// and is recorded as such rather than offered as fail-then-pass evidence:
+  /// it asserts facts about the fixture, not about the call site. The call
+  /// site itself is unreachable offline for the reason this class's header
+  /// already gives -- `VenueBundleIdentity` (`VenueBundleIdentity.kt:17`) and
+  /// `EventDefinition` (`EventDefinitionModels.kt:70`) both have Kotlin
+  /// `internal` constructors, so Swift can construct neither input
+  /// `evaluateCurrentLease` takes.
+  ///
+  /// What it does pin down is why the gate had to go. The single envelope
+  /// barnard's producer actually emits IS servable at a current ENIN inside
+  /// its own window, and the same envelope CANNOT tile the definition's whole
+  /// validity window. Under the removed gate those two facts together refused
+  /// the pack before `evaluateVenueCurrentLease` could issue a current permit
+  /// or a `notStarted` recheck. The venue lane owner's 2026-09-10 ruling in
+  /// `docs/plans/2026-09-10-venue-bundle-import.md` puts whole-window
+  /// coverage in phase 2.
+  func testTheRealProducerFixtureIsServableNowYetCannotTileItsOwnDefinitionWindow() throws {
+    let verified = try verifiedFixtureEnvelope()
+    // Servable at a current ENIN inside its window. This is the phase-1
+    // claim: a current lease after real SDK verification at that ENIN.
+    XCTAssertNotNil(BarnardB005EnvelopeV2.verify(
+      container: try Self.realContainer(),
+      currentEnin: Self.realContainerCurrentEnin,
+      nameValidator: nameValidator
+    ))
+    // The same envelope, measured against the shared fixture's definition
+    // window, is a coverage gap -- computed from the VERIFIED bounds rather
+    // than from hand-written numbers.
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.coverageOutcome(
+        referenceEninSeconds: verified.eninSeconds,
+        validFromUnixSeconds: 1_799_997_000,
+        validUntilUnixSeconds: 1_800_003_299,
+        coverageIntervals: [(verified.validFromEnin, verified.relayExpiresAtEnin)]
+      ),
+      .gap
+    )
+  }
+
   // MARK: - Wiring: reachable offline without a chain
 
   func testMalformedBundleBytesAreRejectedWithoutTouchingTheRegistry() async {
