@@ -24,6 +24,18 @@ enum VenueImportFailure: String, CaseIterable, Hashable {
   case registrySourceMismatch
   case anchoredRecordMissing
   case definitionRejected
+  /// The anchored definition gates entry on a code, and serving gated events
+  /// is not supported. NATIVE-ONLY: `shared/` emits no identity code for
+  /// this, so `importFailure(forIdentityCode:)` never produces it and stays a
+  /// closed table over `shared/`'s six codes. `malformedOrOutOfBounds` is the
+  /// existing precedent for a case this host decides on its own.
+  ///
+  /// Decided at import rather than at serving: the operator should learn when
+  /// they load the pack, not by watching it quietly fail to serve. A gated
+  /// definition reaching `evaluate` therefore means the registry changed the
+  /// definition after a successful import, which is what `staleDefinition`
+  /// already means.
+  case gatedEventUnsupported
 }
 
 enum VenueServingBlock: String, CaseIterable, Hashable {
@@ -257,6 +269,24 @@ enum VenueBundleVerificationLogic {
     case unusable
   }
 
+  /// The import-time verdict for a projection. `nil` means import may
+  /// proceed.
+  ///
+  /// Only the gated case is decided here, deliberately. Import is clock-free
+  /// and identity-only, and a definition that fails to project for any OTHER
+  /// reason -- no join mode at all, or an open definition whose hash is
+  /// missing or malformed -- keeps the path it has always had, where the
+  /// serving decision is what refuses it. Widening this to `.unusable` would
+  /// relocate an existing refusal, which is not what this change is for.
+  static func importFailure(forProjection projection: DefinitionProjection) -> VenueImportFailure? {
+    switch projection {
+    case .gatedUnsupported:
+      return .gatedEventUnsupported
+    case .open, .unusable:
+      return nil
+    }
+  }
+
   static func definitionProjection(
     joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode?,
     eventCodeHash: [UInt8]?
@@ -441,7 +471,15 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
       return .rejected(.registryUnavailable)
     case .rejected(let code):
       return .rejected(VenueBundleVerificationLogic.importFailure(forIdentityCode: code) ?? .definitionRejected)
-    case .ok:
+    case .ok(let identity):
+      // Identity is sound, but this host serves open events only. Refusing
+      // here rather than at serving time is what makes the outcome legible:
+      // the operator is told when they load the pack.
+      if let failure = VenueBundleVerificationLogic.importFailure(
+        forProjection: Self.definitionProjection(of: identity.definition)
+      ) {
+        return .rejected(failure)
+      }
       return .imported(VenueImportedBundle(
         identity: VenueArtifactIdentity(
           eventIdHex: Self.hexString(Self.swiftBytes(fromKotlin: bundle.eventId.toByteArray())),
@@ -581,23 +619,16 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     case .usable(let definition):
       barnardDefinition = definition
     case .gatedUnsupported:
-      // This production path supports OPEN events only. A gated definition
-      // publishes no eventCodeHash (`EventDefinitionCborCodec.kt:304-305`),
-      // so there is nothing to compare a B005 envelope's hash against, and
-      // sourcing one through a trusted input is not phase-1 work.
-      //
-      // REASON CODE IS PROVISIONAL, PENDING A VOCABULARY DECISION. No
-      // existing `VenueServingBlock` says "gated events are unsupported":
-      // `staleDefinition` claims a newer definition exists, `noCurrentEnvelope`
-      // and `envelopeRejected` both blame the envelope, and the envelope here
-      // is fine. `VenueServingBlock`'s raw values are required to match
-      // `shared/`'s block codes verbatim (`VenueCurrentLease.kt:53`), so a
-      // native-only eighth case cannot simply be added. Until that is
-      // decided this keeps the pre-existing outcome rather than inventing a
-      // code that collides -- but the branch is now explicit and classified
-      // (`VenueBundleVerificationLogic.definitionProjection`), so the decision
-      // lands here as a one-line change instead of a re-derivation.
-      return .blocked(VenueServingRejection(reason: .envelopeRejected)!)
+      // `importBundle` already refuses a gated definition
+      // (`.gatedEventUnsupported`), so reaching this arm means the registry
+      // replaced the definition with a gated one AFTER a successful import.
+      // That is exactly what `staleDefinition` means -- "this bundle's
+      // registration truth changed" -- and its copy, which tells the operator
+      // a newer definition exists and to load the current bundle, is true
+      // here. A native-only `VenueServingBlock` case is not available:
+      // `VenueCurrentLease.kt:50-53` requires these raw values to match
+      // `shared/`'s block codes verbatim, with no translation step.
+      return .blocked(VenueServingRejection(reason: .staleDefinition)!)
     case .unusable:
       // The anchored definition carries no usable joinMode/eventCodeHash
       // pair, so no envelope can be compared against it at all. There is no
@@ -723,13 +754,23 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     case unusable
   }
 
+  /// The one place a `shared/` `EventDefinition` is read into the classifier,
+  /// so `importBundle` and `evaluate` cannot drift apart on what "gated"
+  /// means.
+  private static func definitionProjection(
+    of definition: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinition
+  ) -> VenueBundleVerificationLogic.DefinitionProjection {
+    VenueBundleVerificationLogic.definitionProjection(
+      joinMode: definition.joinMode,
+      eventCodeHash: definition.eventCodeHashHex.flatMap { Self.bytes(fromHex: $0) }
+    )
+  }
+
   private static func barnardDefinition(
     from definition: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinition
   ) -> DefinitionOutcome {
     let eventCodeHash = definition.eventCodeHashHex.flatMap { Self.bytes(fromHex: $0) }
-    switch VenueBundleVerificationLogic.definitionProjection(
-      joinMode: definition.joinMode, eventCodeHash: eventCodeHash
-    ) {
+    switch Self.definitionProjection(of: definition) {
     case .gatedUnsupported:
       return .gatedUnsupported
     case .unusable:

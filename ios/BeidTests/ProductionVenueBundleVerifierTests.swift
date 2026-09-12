@@ -242,6 +242,30 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     )
   }
 
+  /// Import refuses a gated definition, with its own outcome.
+  ///
+  /// Before this, nothing was decided about join mode at import: every
+  /// definition that verified was imported, and a gated one then failed at
+  /// serving time as `envelopeRejected` -- a verdict about an envelope that
+  /// had verified fine. Reverting `importFailure(forProjection:)` to that
+  /// previous behaviour (`return nil` for every projection, i.e. import never
+  /// decides on join mode) turns this RED; see the PR body for the captured
+  /// output.
+  func testImportRefusesAGatedDefinitionWithItsOwnOutcome() {
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.importFailure(forProjection: .gatedUnsupported),
+      .gatedEventUnsupported
+    )
+  }
+
+  /// Import decides ONLY the gated case. An open event imports, and a
+  /// definition that will not project for some other reason keeps the path it
+  /// has always had -- refused at serving time, not relocated to import.
+  func testImportDecidesOnlyTheGatedCaseAndRelocatesNoOtherRefusal() {
+    XCTAssertNil(VenueBundleVerificationLogic.importFailure(forProjection: .open))
+    XCTAssertNil(VenueBundleVerificationLogic.importFailure(forProjection: .unusable))
+  }
+
   // MARK: - VenueBundleVerificationLogic: ENIN window arithmetic
 
   func testDefinitionEninWindowMatchesTheKnownFixtureConversion() {

@@ -221,6 +221,8 @@ struct VenueSignedServingView: View {
       return "This event has no anchored record in the registry."
     case .definitionRejected:
       return "The event definition in this bundle was rejected."
+    case .gatedEventUnsupported:
+      return "This event needs an entry code. Serving those is not supported yet."
     }
   }
 
