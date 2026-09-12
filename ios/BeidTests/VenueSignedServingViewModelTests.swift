@@ -225,6 +225,82 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
   }
 
+  // MARK: - The production clock supplier this view model reads (beid#530)
+
+  /// `VenueDeviceClock.read` must round its `Date` UP, not truncate it.
+  ///
+  /// Truncating turns a reading taken 0.1 s BEFORE a permit's exclusive
+  /// `stopAtUnixSeconds` into `stopAt - 1`. That passes `install`'s
+  /// `now < permit.stopAtUnixSeconds` guard, and `VenueExpiryTimer.schedule`
+  /// then computes `stopAt - now == 1` and sleeps a whole second -- so the
+  /// timer fires roughly 0.9 s AFTER the exclusive deadline, with expired
+  /// signed bytes on the air for that interval. Rounding up yields `stopAt`,
+  /// the guard fails, and the permit is refused. That direction can only ever
+  /// refuse EARLIER than the true instant, never later, which is the safe way
+  /// to be wrong about a deadline.
+  ///
+  /// This test drives the REAL `VenueDeviceClock.read`, deliberately. Every
+  /// other test in this file hands the view model a hand-built
+  /// `.available(...)`, which would pass identically before and after this
+  /// fix and would prove nothing: the defect and its fix both live inside
+  /// `read`. Reverting `read`'s body to `Int64(now().timeIntervalSince1970)`
+  /// turns this RED; see the PR body for the captured output.
+  func testSubSecondClockReadBeforeTheDeadlineRefusesRatherThanServingPastIt() async throws {
+    let stopAt = VenueServingContractFixture.exclusiveStopUnixSeconds
+    clockReading = VenueDeviceClock.read(now: { Date(timeIntervalSince1970: Double(stopAt) - 0.1) })
+
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    // Two replies: the permit `install` has to refuse, then the verdict the
+    // re-evaluation it runs instead consumes. Without the second reply the
+    // refusal path would ask the ports for an unscripted evaluation.
+    ports.evaluationReplies = [
+      .immediate(.permitted(fixture.permit())),
+      .immediate(.blocked(try rejection(.expired))),
+    ]
+
+    await supply(viewModel)
+
+    XCTAssertTrue(
+      installCalls.isEmpty,
+      "a clock reading 0.1s before the exclusive deadline must not install: truncating it to stopAt - 1 "
+        + "passes the guard and then leaves expired signed bytes on the air for the timer's whole second"
+    )
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+  }
+
+  /// The same rounding, asserted directly on the clock rather than through
+  /// the view model, so a future reader can see the reading itself.
+  func testClockRoundsASubSecondReadingUpRatherThanTruncatingItBackwards() {
+    let stopAt = VenueServingContractFixture.exclusiveStopUnixSeconds
+    XCTAssertEqual(
+      VenueDeviceClock.read(now: { Date(timeIntervalSince1970: Double(stopAt) - 0.1) }),
+      .available(unixSeconds: stopAt)
+    )
+    // An exact whole second is already the instant it names; rounding up must
+    // not push it forward by one.
+    XCTAssertEqual(
+      VenueDeviceClock.read(now: { Date(timeIntervalSince1970: Double(stopAt)) }),
+      .available(unixSeconds: stopAt)
+    )
+  }
+
+  /// Rounding up must not lift an implausible reading over the sanity floor
+  /// and make `.unavailable` unreachable. 2001-01-01T00:00:00Z is the instant
+  /// factory-reset devices and simulators without network time frequently
+  /// boot at, which is the case `VenueDeviceClock`'s floor exists to catch.
+  func testRoundingUpLeavesTheSanityFloorAndNegativeReadingsUnavailable() {
+    XCTAssertEqual(VenueDeviceClock.read(now: { Date(timeIntervalSince1970: 978_307_200) }), .unavailable)
+    XCTAssertEqual(
+      VenueDeviceClock.read(now: { Date(timeIntervalSince1970: Double(VenueDeviceClock.sanityFloorUnixSeconds - 1)) }),
+      .unavailable
+    )
+    // Before the epoch: rounding toward +infinity must stay well below the
+    // floor rather than landing on it.
+    XCTAssertEqual(VenueDeviceClock.read(now: { Date(timeIntervalSince1970: -1.5) }), .unavailable)
+  }
+
   // MARK: - Scenario 5 — a current lease, then expiry
 
   func testPermittedLeaseInstallsExactPermitBytesAndArmsTheExclusiveDeadline() async throws {
