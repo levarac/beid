@@ -449,6 +449,55 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(VenueDeviceClock.read(now: { Date(timeIntervalSince1970: -1.5) }), .unavailable)
   }
 
+  /// A clock that moves BACKWARD across an ENIN boundary during evaluation
+  /// must not install either.
+  ///
+  /// The permit is verified for one specific ENIN — `currentEnin` — whose
+  /// wall-clock window is `[currentEnin * eninSeconds, (currentEnin + 1) *
+  /// eninSeconds)`, the upper end being `stopAtUnixSeconds`. The guard in
+  /// `install` checked only that upper end, so a reading that fell BEFORE the
+  /// verified slice still passed it, and an envelope verified for a later
+  /// slice was installed for an earlier one it was never checked against.
+  ///
+  /// This is the exact mirror of beid#530. That defect and its round-up fix
+  /// both closed the upper end; the lower end was open the whole time. The
+  /// clock-change notification is asynchronous and cannot win this race.
+  ///
+  /// Reverting the guard to `now < permit.stopAtUnixSeconds` alone turns this
+  /// RED; see the PR body for the captured output.
+  func testClockMovingBackBeforeTheVerifiedEninDuringEvaluationIsNeverInstalled() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.deferred, .immediate(.blocked(try rejection(.expired)))]
+
+    acquisition.replies = [.artifact(fixture.artifact)]
+    let task = Task {
+      await viewModel.supply(
+        bundleSource: URL(string: "https://venue.example/bundle")!,
+        handoffSource: URL(string: "https://venue.example/handoff")!,
+        sourceDescription: "venue.example"
+      )
+    }
+    await ports.waitForCallCount(3)
+
+    // One second before the permit's own slice begins, and so still comfortably
+    // below `stopAtUnixSeconds` — which is exactly why the upper-bound-only
+    // guard let it through.
+    clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds - 1)
+    ports.completeEvaluation(id: 1, with: .permitted(fixture.permit()))
+    await task.value
+
+    XCTAssertTrue(
+      installCalls.isEmpty,
+      "an envelope verified for a later ENIN must never be installed for an earlier one"
+    )
+    XCTAssertNil(ports.installedPermit)
+    // Re-evaluated with the fresh reading rather than serving: the second
+    // scripted reply is what that re-run consumed.
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+    XCTAssertFalse(expiry.isScheduled, "nothing was installed, so no deadline may be armed")
+  }
+
   // MARK: - Scenario 5 — a current lease, then expiry
 
   func testPermittedLeaseInstallsExactPermitBytesAndArmsTheExclusiveDeadline() async throws {

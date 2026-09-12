@@ -383,13 +383,27 @@ final class VenueSignedServingViewModel: ObservableObject {
       status = .blocked(VenueServingRejection(reason: .clockUnavailable)!)
       return
     }
-    guard now < permit.stopAtUnixSeconds else {
-      // The permit expired between the moment `evaluate` issued it and this
-      // clock read (beid#530). Re-run evaluate with a fresh clock reading
-      // rather than install already-expired signed bytes: the permit's
-      // exclusive deadline exists exactly to stop this, and installing
-      // anyway for a narrower window would still be the vulnerability the
-      // deadline exists to prevent, only smaller.
+    // BOTH ends, deliberately. The permit was verified for one ENIN, whose
+    // wall-clock span is `[startAtUnixSeconds, stopAtUnixSeconds)`, and a
+    // reading outside EITHER end is a reading the envelope was never checked
+    // against.
+    //
+    // The upper end is beid#530: the permit expired between the moment
+    // `evaluate` issued it and this clock read, and installing anyway for a
+    // narrower window would still be the vulnerability the deadline exists to
+    // prevent, only smaller.
+    //
+    // The lower end is its mirror, and was open while the upper end was fixed
+    // twice. A clock moving BACKWARD across an ENIN boundary during
+    // `evaluate` still satisfies `now < stopAtUnixSeconds` while falling
+    // before the slice the envelope was verified for, so an upper-bound-only
+    // guard installed it for a slice nothing had checked. The clock-change
+    // notification is asynchronous and cannot win that race, so this guard is
+    // the only thing standing in it.
+    //
+    // Either way the answer is re-asked with the fresh reading rather than
+    // recomputed from the permit already in hand.
+    guard now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
       await evaluate(imported, generation: generation)
       return
     }

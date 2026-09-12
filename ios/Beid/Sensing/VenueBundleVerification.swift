@@ -142,6 +142,15 @@ final class VenueServePermit {
   let displayName: String
   let payloadDigestHex: String
   let currentEnin: Int64
+  /// The INCLUSIVE start of the ENIN this permit was verified for.
+  ///
+  /// Carried as its own field rather than left to the consumer to compute,
+  /// for the same reason `stopAtUnixSeconds` is: a permit names the window it
+  /// was verified for, at BOTH ends, and a consumer that derived either end
+  /// would be choosing a slice rather than being told one. Together these two
+  /// are `[startAtUnixSeconds, stopAtUnixSeconds)` — exactly the wall-clock
+  /// span of `currentEnin`, nothing wider.
+  let startAtUnixSeconds: Int64
   let stopAtUnixSeconds: Int64
   let verificationScope: VenueVerificationScope = .currentLeaseOnly
 
@@ -151,6 +160,7 @@ final class VenueServePermit {
     displayName: String,
     payloadDigestHex: String,
     currentEnin: Int64,
+    startAtUnixSeconds: Int64,
     stopAtUnixSeconds: Int64
   ) {
     self.identity = identity
@@ -158,6 +168,7 @@ final class VenueServePermit {
     self.displayName = displayName
     self.payloadDigestHex = payloadDigestHex
     self.currentEnin = currentEnin
+    self.startAtUnixSeconds = startAtUnixSeconds
     self.stopAtUnixSeconds = stopAtUnixSeconds
   }
 }
@@ -768,6 +779,13 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         displayName: servable.verified.eventDisplayName,
         payloadDigestHex: Self.sha256Hex(servable.verified.signedEnvelope),
         currentEnin: lease.currentEnin,
+        // The ENIN's own inclusive start, from the SAME `eninSeconds` the
+        // envelope was verified with and that `shared/` used to derive both
+        // `currentEnin` (floorDiv of the clock) and `stopAtUnixSeconds`
+        // ((currentEnin + 1) * eninSeconds). Multiplying here rather than
+        // dividing `stopAtUnixSeconds` back down keeps this independent of
+        // that relationship instead of assuming it.
+        startAtUnixSeconds: lease.currentEnin * Int64(servable.verified.eninSeconds),
         stopAtUnixSeconds: lease.stopAtUnixSeconds
       )
       return .permitted(permit)
@@ -884,6 +902,7 @@ enum VenueServingContractTestFactory {
     displayName: String,
     payloadDigestHex: String,
     currentEnin: Int64,
+    startAtUnixSeconds: Int64,
     stopAtUnixSeconds: Int64
   ) -> VenueServePermit {
     VenueServePermit(
@@ -892,6 +911,7 @@ enum VenueServingContractTestFactory {
       displayName: displayName,
       payloadDigestHex: payloadDigestHex,
       currentEnin: currentEnin,
+      startAtUnixSeconds: startAtUnixSeconds,
       stopAtUnixSeconds: stopAtUnixSeconds
     )
   }
