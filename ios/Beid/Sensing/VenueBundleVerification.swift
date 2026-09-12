@@ -325,12 +325,19 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
   }
 
   func importBundle(bundleBytes: Data, handoffBytes: Data) async -> VenueImportResult {
+    // Hex, not a constructed ByteArray: Swift Export's ByteArray constructor
+    // is a fatalError() stub in this toolchain (confirmed by reading the
+    // generated bridging source at
+    // shared/build/SwiftExport/iosSimulatorArm64/Debug/files/KotlinStdlib/KotlinStdlib.swift),
+    // so decodeVenueBundleHex/decodeVenueHandoffHex are the only working path
+    // a Swift caller has into these decoders. See their doc comments in
+    // VenueBundleCodec.kt.
     guard
-      let bundle = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueBundle(
-        bytes: ExportedKotlinPackages.kotlin.ByteArray(bundleBytes)
+      let bundle = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueBundleHex(
+        hex: Self.hexString([UInt8](bundleBytes))
       ),
-      let handoff = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueHandoff(
-        bytes: ExportedKotlinPackages.kotlin.ByteArray(handoffBytes)
+      let handoff = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueHandoffHex(
+        hex: Self.hexString([UInt8](handoffBytes))
       )
     else {
       return .rejected(.malformedOrOutOfBounds)
@@ -358,11 +365,11 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
       return .blocked(VenueServingRejection(reason: .clockUnavailable)!)
     }
     guard
-      let bundle = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueBundle(
-        bytes: ExportedKotlinPackages.kotlin.ByteArray(imported.publicArtifact.bundleBytes)
+      let bundle = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueBundleHex(
+        hex: Self.hexString([UInt8](imported.publicArtifact.bundleBytes))
       ),
-      let handoff = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueHandoff(
-        bytes: ExportedKotlinPackages.kotlin.ByteArray(imported.publicArtifact.handoffBytes)
+      let handoff = ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueHandoffHex(
+        hex: Self.hexString([UInt8](imported.publicArtifact.handoffBytes))
       )
     else {
       // The receipt's own stored bytes no longer decode. This can only
@@ -631,13 +638,6 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
 
   private static func sha256Hex(_ bytes: [UInt8]) -> String {
     SHA256.hash(data: Data(bytes)).map { String(format: "%02x", $0) }.joined()
-  }
-}
-
-private extension ExportedKotlinPackages.kotlin.ByteArray {
-  convenience init(_ data: Data) {
-    let bytes = [UInt8](data)
-    self.init(size: Int32(bytes.count)) { index in Int8(bitPattern: bytes[Int(index)]) }
   }
 }
 

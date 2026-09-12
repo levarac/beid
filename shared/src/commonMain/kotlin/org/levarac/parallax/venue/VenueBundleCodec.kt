@@ -7,6 +7,7 @@ import org.levarac.parallax.observation.ImmutableBytes
 import org.levarac.parallax.registry.Address20
 import org.levarac.parallax.registry.EventDefinitionCborCodec.StrictCborReader
 import org.levarac.parallax.registry.Sha256
+import org.levarac.parallax.registry.decodeHex
 
 /** Returns null for malformed input; success is structural, never permission to serve. */
 public fun decodeVenueBundle(bytes: ByteArray): VenueBundle? = try {
@@ -97,6 +98,34 @@ public fun decodeVenueHandoffLink(link: String): VenueHandoff? = try {
     require(fragment.length <= 5464 && BASE64URL.matches(fragment))
     val padded = fragment.padEnd((fragment.length + 3) / 4 * 4, '=')
     decodeVenueHandoff(Base64.UrlSafe.decode(padded))
+} catch (_: IllegalArgumentException) {
+    null
+}
+
+/**
+ * Hex-string [decodeVenueBundle], for Swift callers. Kotlin Swift Export's `ByteArray`
+ * constructor is a `fatalError()` stub in the toolchain this project pins -- Swift can read an
+ * existing `ByteArray` but cannot construct one from freshly-supplied bytes at all -- so hex is
+ * the only path a Swift caller has into this decoder (beid#432). Delegates entirely to
+ * [decodeVenueBundle]; this function owns only the hex-to-bytes conversion and its own input
+ * bound, never a second copy of the decode logic.
+ *
+ * The bound is on the HEX INPUT itself, checked before any decode, so an oversize string is
+ * refused before an unbounded `ByteArray` is ever allocated -- [decodeVenueBundle]'s own
+ * `MAX_VENUE_BUNDLE_BYTES` check would otherwise only catch this after the allocation already
+ * happened.
+ */
+public fun decodeVenueBundleHex(hex: String): VenueBundle? = try {
+    require(hex.length <= MAX_VENUE_BUNDLE_BYTES * 2)
+    decodeVenueBundle(hex.decodeHex())
+} catch (_: IllegalArgumentException) {
+    null
+}
+
+/** Hex-string [decodeVenueHandoff]; see [decodeVenueBundleHex] for why this exists. */
+public fun decodeVenueHandoffHex(hex: String): VenueHandoff? = try {
+    require(hex.length <= MAX_VENUE_HANDOFF_BYTES * 2)
+    decodeVenueHandoff(hex.decodeHex())
 } catch (_: IllegalArgumentException) {
     null
 }
