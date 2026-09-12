@@ -806,6 +806,9 @@
       }
     },
     "Venue Device": {},
+    "Venue Device (Signed)": {
+      "comment": "Account-sheet row opening the signed venue-serving screen (gh#432), shown just below the plain \"Venue Device\" row. \"Signed\" distinguishes the cryptographically signed container this screen serves from the unsigned hint the older row broadcasts — it does not mean the device or the user is signed in."
+    },
     "Version": {},
     "Assignment": {
       "comment": "Section header on the venue-device organizer screen (gh#138) for the label + validity-period fields — not a task/homework assignment."
