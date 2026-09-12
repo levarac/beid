@@ -130,6 +130,25 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// broadcast the event the operator was replacing.
   private var servingIntentEpoch = 0
 
+  /// True for the whole of a `supply` call, from asking for a source until
+  /// that request has resolved one way or the other.
+  ///
+  /// `refresh()` consults it BEFORE doing anything, because `receipt == nil`
+  /// has three causes and only one of them warrants restoring the stored
+  /// artifact:
+  ///
+  /// - nothing was ever supplied — restore, which is what the fallback exists
+  ///   for
+  /// - a supply is IN FLIGHT — the operator has asked for something else and
+  ///   is waiting for it
+  /// - a supply just FAILED — they asked for something else and did not get it
+  ///
+  /// Reading all three as the first one put the event being REPLACED on the
+  /// air while its replacement was still downloading. This flag separates the
+  /// second cause; the third is handled by retracting the intent, so the
+  /// lifecycle entry points never reach `refresh()` at all.
+  private var isSupplyInFlight = false
+
   /// Takes ownership of `wantsServing` for the caller. Every writer of that
   /// flag calls this, so "am I still the owner" is answerable by comparison.
   @discardableResult
@@ -262,6 +281,11 @@ final class VenueSignedServingViewModel: ObservableObject {
   func supply(bundleSource: URL, handoffSource: URL, sourceDescription: String) async {
     let generation = invalidate()
     let intent = takeServingIntent()
+    // Covers the whole call, not just the fetch: a refresh landing during the
+    // import or the evaluation would bump the generation just the same and
+    // discard the request the operator is waiting for.
+    isSupplyInFlight = true
+    defer { isSupplyInFlight = false }
     wantsServing = true
     // Replaced input: the previous receipt describes a different artifact and
     // must not survive into this request.
@@ -350,9 +374,22 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// expiry, foreground return and clock changes. It asks the verifier for a
   /// new decision; it never extends the deadline it was previously given.
   func refresh() async {
+    // BEFORE `invalidate()`, deliberately, and this ordering is the fix rather
+    // than an optimisation. `invalidate()` bumps the generation, and a supply
+    // in flight is guarded on that generation — so refreshing underneath one
+    // does not merely restore the wrong artifact, it also makes the
+    // replacement the operator is waiting for fail its own guard when it
+    // arrives and be discarded with nothing shown. A guard placed at the
+    // `receipt == nil` fallback below would be too late to prevent that: the
+    // generation has already moved by the time the fallback is reached.
+    //
+    // A supply owns the device until it resolves. Nothing here has anything to
+    // re-decide meanwhile.
+    guard !isSupplyInFlight else { return }
     let generation = invalidate()
     guard let receipt else {
-      // Nothing has been imported this run, so there is nothing to re-decide.
+      // Nothing has been imported this run and nothing is being supplied, so
+      // the stored artifact is the only thing this could be about.
       await restoreFromStorage()
       return
     }

@@ -559,6 +559,165 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
   }
 
+  /// Bytes that are recognisably NOT the stored artifact, so a test can say
+  /// WHICH event reached the verifier rather than merely that one did.
+  private var replacementArtifact: VenuePublicArtifact {
+    VenuePublicArtifact(bundleBytes: Data([0xA1, 0xA2, 0xA3]), handoffBytes: Data([0xB1, 0xB2]))
+  }
+
+  private var importedBundleBytes: [Data] {
+    ports.calls.compactMap {
+      if case .importing(_, let bundle, _) = $0 { return bundle }
+      return nil
+    }
+  }
+
+  /// Route 2: a clock change while a replacement is still downloading must not
+  /// put the event being replaced on the air.
+  ///
+  /// Nothing fails here, which is what makes it a different defect from the
+  /// acquisition-failure one. `supply` sets `wantsServing` before acquiring,
+  /// so `systemClockDidChange()` passes its guard, `refresh()` finds no
+  /// receipt — because the supply has not produced one YET — and falls through
+  /// to `restoreFromStorage()`. The stored bytes are the ones the operator is
+  /// replacing.
+  ///
+  /// `receipt == nil` has three causes and only one of them warrants
+  /// restoring: nothing ever supplied. "A supply is in flight" and "a supply
+  /// just failed" both mean the operator has asked for something else.
+  func testClockChangeWhileAReplacementIsInFlightDoesNotServeTheReplacedEvent() async throws {
+    store.store(
+      VenuePublicArtifactRecord(
+        bundleBytes: fixture.artifact.bundleBytes,
+        handoffBytes: fixture.artifact.handoffBytes,
+        sourceDescription: "previous.example",
+        storedAt: Date()
+      )
+    )
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    acquisition.replies = [.deferred]
+    let task = Task {
+      await viewModel.supply(
+        bundleSource: URL(string: "https://replacement.example/bundle")!,
+        handoffSource: URL(string: "https://replacement.example/handoff")!,
+        sourceDescription: "replacement.example"
+      )
+    }
+    await acquisition.waitForAcquisitionCount(1)
+
+    // The wall clock moves while the replacement is still downloading.
+    await viewModel.systemClockDidChange()
+
+    XCTAssertFalse(
+      importedBundleBytes.contains(fixture.artifact.bundleBytes),
+      "the event being replaced must not be imported while its replacement is still downloading"
+    )
+    XCTAssertTrue(installCalls.isEmpty, "nothing may go on the air during a pending replacement")
+    XCTAssertNil(ports.installedPermit)
+
+    // Let the in-flight supply finish so the task does not outlive the test.
+    XCTAssertTrue(acquisition.completeAcquisition(id: 0, with: replacementArtifact))
+    await task.value
+  }
+
+  /// Route 3, the worst of the three: the replacement SUCCEEDS and is silently
+  /// discarded, leaving the replaced event on the air with nothing on screen
+  /// to say so.
+  ///
+  /// `refresh()` calls `invalidate()` before it does anything else, so a clock
+  /// change during a pending supply bumps the generation. When the fetch then
+  /// succeeds, `supply` hits its own generation guard and returns — the new
+  /// bundle is never stored, never imported, never served, and no error is
+  /// raised because nothing failed.
+  ///
+  /// This is why the guard has to sit BEFORE `invalidate()` rather than at the
+  /// `receipt == nil` fallback: by the time the fallback is reached the
+  /// generation has already moved and the supply is already doomed.
+  ///
+  /// A test that only looked for an error state would pass here while the
+  /// device served the wrong event, so this asserts WHICH bytes reached the
+  /// verifier.
+  func testAReplacementThatSucceedsDuringAClockChangeIsNotSilentlyDiscarded() async throws {
+    store.store(
+      VenuePublicArtifactRecord(
+        bundleBytes: fixture.artifact.bundleBytes,
+        handoffBytes: fixture.artifact.handoffBytes,
+        sourceDescription: "previous.example",
+        storedAt: Date()
+      )
+    )
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    acquisition.replies = [.deferred]
+    let task = Task {
+      await viewModel.supply(
+        bundleSource: URL(string: "https://replacement.example/bundle")!,
+        handoffSource: URL(string: "https://replacement.example/handoff")!,
+        sourceDescription: "replacement.example"
+      )
+    }
+    await acquisition.waitForAcquisitionCount(1)
+
+    await viewModel.systemClockDidChange()
+    // The replacement arrives successfully, after the clock change.
+    XCTAssertTrue(acquisition.completeAcquisition(id: 0, with: replacementArtifact))
+    await task.value
+
+    XCTAssertTrue(
+      importedBundleBytes.contains(replacementArtifact.bundleBytes),
+      "the replacement the operator asked for must actually be imported, not silently dropped"
+    )
+    XCTAssertFalse(
+      importedBundleBytes.contains(fixture.artifact.bundleBytes),
+      "the replaced event must not be the one that ends up served"
+    )
+    XCTAssertEqual(
+      store.record?.bundleBytes, replacementArtifact.bundleBytes,
+      "a replacement that succeeded must be the one stored"
+    )
+    XCTAssertEqual(viewModel.storedSourceDescription, "replacement.example")
+  }
+
+  /// Requirement 3: the fallback still exists for the case it was written for.
+  /// Nothing supplied this run, a stored record present, a foreground return —
+  /// the stored artifact is restored, exactly as before.
+  func testAForegroundReturnWithNothingSuppliedStillRestoresTheStoredArtifact() async throws {
+    store.store(
+      VenuePublicArtifactRecord(
+        bundleBytes: fixture.artifact.bundleBytes,
+        handoffBytes: fixture.artifact.handoffBytes,
+        sourceDescription: "previous.example",
+        storedAt: Date()
+      )
+    )
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    // The operator presses reload, which is the only way `wantsServing`
+    // becomes true without a supply, then backgrounds and returns.
+    await viewModel.restoreFromStorage()
+    XCTAssertTrue(importedBundleBytes.contains(fixture.artifact.bundleBytes))
+
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await viewModel.sceneWillEnterForeground()
+
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(
+        displayName: VenueServingContractFixture.displayName,
+        stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+      ),
+      "the restore path the fallback exists for must keep working"
+    )
+  }
+
   /// The stored record itself is untouched, and the explicit reload path still
   /// works. The fix clears the operator's INTENT, not their data: a stored
   /// bundle they may well want to load again deliberately stays exactly where
