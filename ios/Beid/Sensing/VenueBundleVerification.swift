@@ -295,12 +295,21 @@ enum VenueBundleVerificationLogic {
   /// not render a Kotlin enum as a Swift enum: it becomes a final class whose
   /// entries are static properties (see `BeidSharedKit.swift`), so the
   /// compiler cannot prove this switch exhaustive and `@unknown` — which is
-  /// only meaningful for a non-frozen enum — is rejected outright. The
-  /// consequence worth knowing is that a case added in `shared/` will NOT
-  /// break this build the way `VenueServingBlock`'s native enums do; it will
-  /// land on `.unusable` silently. That is the safe direction, and
-  /// `testEverySharedVerdictMapsToItsOwnNativeCase` is what would have to be
-  /// updated to notice.
+  /// only meaningful for a non-frozen enum — is rejected outright.
+  ///
+  /// So a case added in `shared/` will NOT break this build the way
+  /// `VenueServingBlock`'s native enums do; it lands on `.unusable` silently.
+  /// That is the safe direction, but silence is not enough here: binding a
+  /// future Android consumer to the SAME decision is the whole reason this
+  /// classification lives in `shared/`, and a divergence nobody is told about
+  /// costs exactly that guarantee.
+  ///
+  /// What catches it is `testEverySharedVerdictMapsToItsOwnNativeCase`, which
+  /// compares `VenueDefinitionClassification.allCases.count` against its
+  /// mapping table — the generated class conforms to `CaseIterable`, so the
+  /// count comes from the type rather than from anything hand-written here.
+  /// A new `shared/` case turns that test red naming the shortfall. Keep that
+  /// assertion: without it nothing at all would notice.
   static func definitionProjection(
     for classification: ExportedKotlinPackages.org.levarac.parallax.venue.VenueDefinitionClassification
   ) -> DefinitionProjection {

@@ -230,6 +230,22 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
       XCTAssertEqual(VenueBundleVerificationLogic.definitionProjection(for: verdict), expected)
     }
     XCTAssertEqual(Set(table.map(\.1)).count, table.count, "two shared verdicts must not share one native case")
+    // The table above is hand-written, so on its own it can only check the
+    // cases it already mentions -- a case added in `shared/` would simply go
+    // unlisted, and nothing else would catch it: Swift Export renders the
+    // Kotlin enum as a class, so the compiler cannot demand exhaustiveness
+    // either (see `definitionProjection(for:)`). Binding a future Android
+    // consumer to the SAME decision is why this classification lives in
+    // `shared/` at all, so an unnoticed divergence here would cost exactly
+    // the guarantee the move was made to buy. The generated class conforms to
+    // `CaseIterable`, so the type can be asked directly.
+    XCTAssertEqual(
+      Classification.allCases.count,
+      table.count,
+      "shared/ declares \(Classification.allCases.count) VenueDefinitionClassification cases but this native "
+        + "mapping table covers \(table.count). Add the missing case to the table and to "
+        + "VenueBundleVerificationLogic.definitionProjection(for:)."
+    )
   }
 
   /// Import refuses a gated definition, with its own outcome.
