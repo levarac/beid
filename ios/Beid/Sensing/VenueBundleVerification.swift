@@ -294,8 +294,14 @@ enum VenueBundleVerificationLogic {
   /// The `default` is a plain one, not `@unknown default`. Swift Export does
   /// not render a Kotlin enum as a Swift enum: it becomes a final class whose
   /// entries are static properties (see `BeidSharedKit.swift`), so the
-  /// compiler cannot prove this switch exhaustive and `@unknown` — which is
-  /// only meaningful for a non-frozen enum — is rejected outright.
+  /// compiler cannot prove this switch exhaustive.
+  ///
+  /// `@unknown` is rejected HERE specifically because this switch's subject is
+  /// that class, and `@unknown` has to attach to an enum. It is not a rule
+  /// about exported types in general: `barnardJoinMode` above switches over
+  /// `EventJoinMode?`, and an Optional IS a Swift enum, so its
+  /// `@unknown default` is correct and must stay — it is that function's
+  /// fail-closed guard against a future third `EventJoinMode` case.
   ///
   /// So a case added in `shared/` will NOT break this build the way
   /// `VenueServingBlock`'s native enums do; it lands on `.unusable` silently.
