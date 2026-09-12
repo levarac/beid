@@ -21,7 +21,7 @@ enum VenueDeviceClock {
   /// 2025-09-04T00:00:00Z, a date safely before this feature's development
   /// began. Any device clock reading earlier than this is treated as
   /// unavailable rather than trusted to bound a signed permit's deadline.
-  static let sanityFloorUnixSeconds: Int64 = 1_757_030_400
+  static let sanityFloorUnixSeconds: Int64 = 1_756_944_000
 
   static func read(now: () -> Date = Date.init) -> VenueClockReading {
     let seconds = Int64(now().timeIntervalSince1970)

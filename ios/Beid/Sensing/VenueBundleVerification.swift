@@ -295,6 +295,37 @@ enum VenueBundleVerificationLogic {
     }
     return coveredThrough < requiredEnd
   }
+
+  /// The coverage verdict, as an exhaustive three-way outcome rather than an
+  /// optional/boolean pair a caller could chain with `if let` and
+  /// accidentally fall through on `nil`. `.uncomputable` covers BOTH "no
+  /// envelope verified at all" (`referenceEninSeconds == nil`) and "the
+  /// definition's own window will not convert to ENIN terms"
+  /// (`definitionEninWindow` returns `nil`) -- "could not determine
+  /// coverage" and "coverage is satisfied" must never produce the same
+  /// outcome, so both map to a refusal here, not to a pass-through. Whether
+  /// the second case is actually reachable given this file's window formula
+  /// matching `BarnardB005EnvelopeV2.registryAgreement`'s is a cross-repo
+  /// invariant this file cannot enforce on its own, so it is not assumed
+  /// impossible.
+  enum CoverageOutcome: Equatable { case uncomputable, gap, covered }
+
+  static func coverageOutcome(
+    referenceEninSeconds: UInt16?,
+    validFromUnixSeconds: Int64,
+    validUntilUnixSeconds: Int64,
+    coverageIntervals: [(from: Int64, to: Int64)]
+  ) -> CoverageOutcome {
+    guard let referenceEninSeconds,
+          let window = definitionEninWindow(
+            validFromUnixSeconds: validFromUnixSeconds,
+            validUntilUnixSeconds: validUntilUnixSeconds,
+            eninSeconds: Int64(referenceEninSeconds)
+          )
+    else { return .uncomputable }
+    return hasCoverageGap(candidates: coverageIntervals, requiredStart: window.start, requiredEnd: window.end)
+      ? .gap : .covered
+  }
 }
 
 /// Production `VenueBundleVerifying`. This is the first production caller of
@@ -492,6 +523,17 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     var currentLeaseCandidates:
       [ExportedKotlinPackages.org.levarac.parallax.venue.VenueVerifiedScheduling?] = []
     var servableByIndex: [Int: (verified: BarnardB005VerifiedEnvelope, container: [UInt8])] = [:]
+    // KNOWN LIMITATION, latent rather than live: intervals here are summed
+    // as raw ENIN numbers without checking that every appended envelope
+    // shares the same eninSeconds granularity. A single real bundle today
+    // only ever carries one envelope (barnard's producer emits one per
+    // bundle; nothing writes a multi-envelope VenueBundleV1 yet -- see
+    // levarac/parallax#108), so this cannot be exercised now. It would
+    // matter for a bundle whose envelopes legitimately (or adversarially)
+    // mix eninSeconds values once multi-envelope bundles exist: mixing
+    // ENIN numbers computed at different granularities would compare
+    // incompatible units. `referenceEninSeconds` below is the single
+    // granularity `coverageOutcome` checks against.
     var coverageIntervals: [(from: Int64, to: Int64)] = []
     var referenceEninSeconds: UInt16?
 
@@ -540,21 +582,27 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
       servableByIndex[index] = (leaseVerified, container)
     }
 
-    if let referenceEninSeconds,
-       let window = VenueBundleVerificationLogic.definitionEninWindow(
-         validFromUnixSeconds: identity.definition.validFrom.value,
-         validUntilUnixSeconds: identity.definition.validUntil.value,
-         eninSeconds: Int64(referenceEninSeconds)
-       ),
-       VenueBundleVerificationLogic.hasCoverageGap(
-         candidates: coverageIntervals, requiredStart: window.start, requiredEnd: window.end
-       )
-    {
+    switch VenueBundleVerificationLogic.coverageOutcome(
+      referenceEninSeconds: referenceEninSeconds,
+      validFromUnixSeconds: identity.definition.validFrom.value,
+      validUntilUnixSeconds: identity.definition.validUntil.value,
+      coverageIntervals: coverageIntervals
+    ) {
+    case .uncomputable:
+      // Coverage could not be established at all -- either nothing verified
+      // and agreed with the registry, or the definition's own window will
+      // not convert to ENIN terms. Refuse rather than fall through to the
+      // current-lease decision: "could not determine coverage" must never
+      // read as "coverage is satisfied."
+      return .blocked(VenueServingRejection(reason: .envelopeRejected)!)
+    case .gap:
       // A verified future (or past) slice is missing from this bundle. The
       // current instant may still be servable on its own, but a bundle
       // that cannot cover its own declared event span was not delivered
       // intact, so nothing from it is served.
       return .blocked(VenueServingRejection(reason: .envelopeRejected)!)
+    case .covered:
+      break
     }
 
     let decision = ExportedKotlinPackages.org.levarac.parallax.venue.evaluateVenueCurrentLease(

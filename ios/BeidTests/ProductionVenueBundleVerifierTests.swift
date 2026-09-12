@@ -268,6 +268,50 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     ))
   }
 
+  // MARK: - coverageOutcome: fail closed, never a pass-through, when coverage is uncomputable
+
+  /// "Could not determine coverage" must never read as "coverage is
+  /// satisfied." Reverting `coverageOutcome` to the `if let ... else fall
+  /// through to .covered` shape it replaced turns this RED: see the PR body
+  /// for the captured output.
+  func testCoverageOutcomeRefusesRatherThanPassingThroughWhenNothingVerified() {
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.coverageOutcome(
+        referenceEninSeconds: nil, validFromUnixSeconds: 0, validUntilUnixSeconds: 100, coverageIntervals: []
+      ),
+      .uncomputable
+    )
+  }
+
+  func testCoverageOutcomeRefusesRatherThanPassingThroughWhenTheDefinitionWindowIsMalformed() {
+    // validFrom > validUntil, despite a reference eninSeconds being
+    // available from some verified envelope -- this must refuse, not fall
+    // through as though coverage were satisfied.
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.coverageOutcome(
+        referenceEninSeconds: 300, validFromUnixSeconds: 100, validUntilUnixSeconds: 0, coverageIntervals: []
+      ),
+      .uncomputable
+    )
+  }
+
+  func testCoverageOutcomeDistinguishesAGapFromFullCoverage() {
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.coverageOutcome(
+        referenceEninSeconds: 300, validFromUnixSeconds: 1_799_997_000, validUntilUnixSeconds: 1_800_003_299,
+        coverageIntervals: [(6_000_000, 6_000_004)]
+      ),
+      .gap
+    )
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.coverageOutcome(
+        referenceEninSeconds: 300, validFromUnixSeconds: 1_799_997_000, validUntilUnixSeconds: 1_800_003_299,
+        coverageIntervals: [(5_999_990, 6_000_010)]
+      ),
+      .covered
+    )
+  }
+
   // MARK: - Wiring: reachable offline without a chain
 
   func testMalformedBundleBytesAreRejectedWithoutTouchingTheRegistry() async {
