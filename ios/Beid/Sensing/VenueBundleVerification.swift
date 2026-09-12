@@ -242,20 +242,21 @@ enum VenueBundleVerificationLogic {
     }
   }
 
-  /// Whether an anchored definition can be projected onto a
-  /// `BarnardEventDefinitionV1` at all, as an exhaustive outcome rather than
-  /// the single `nil` this replaced.
+  /// The native mirror of `shared/`'s `VenueDefinitionClassification`.
   ///
-  /// The two inputs are not independent, which is why one `nil` was the wrong
-  /// shape. `EventDefinitionCborCodec.kt:298-307` REQUIRES an open definition
-  /// to carry an `eventCodeHash` (and requires it to equal the canonical
-  /// `eventCodeHashForOpenEventV1(eventId)`), and FORBIDS a gated one from
-  /// carrying any. A decoded definition therefore announces its join mode by
-  /// hash presence alone: "gated" and "hash missing" are the same observation
-  /// seen from two sides. Collapsing them lost which one it was, so every
-  /// gated event surfaced as `envelopeRejected` -- a verdict about an
-  /// envelope that had verified perfectly well.
-  enum DefinitionProjection: Equatable {
+  /// The DECISION lives in `shared/` (`classifyVenueDefinition`), not here:
+  /// what a join declaration means is a protocol fact both platforms must
+  /// answer identically, and `AGENTS.md` puts common error and recovery
+  /// categories on the shared side. This type exists only so the rest of this
+  /// file switches over a native enum, in the same shape as `barnardJoinMode`
+  /// and `servingBlock(forCode:)` -- a mapping, never a second opinion.
+  ///
+  /// It is deliberately NOT named for what this build supports. `shared/`'s
+  /// case names record the input ("gated requires a hash from outside the
+  /// definition"), which stays true when gated support lands; the native
+  /// names below record what THIS path can currently do with that input,
+  /// which is a host concern and may change.
+  enum DefinitionProjection: Hashable {
     /// An open event, carrying the well-formed 8-byte hash B005 compares
     /// against.
     case open
@@ -287,19 +288,30 @@ enum VenueBundleVerificationLogic {
     }
   }
 
+  /// Maps `shared/`'s verdict onto this file's vocabulary. A case `shared/`
+  /// adds later fails closed to `.unusable` rather than being guessed at.
+  ///
+  /// The `default` is a plain one, not `@unknown default`. Swift Export does
+  /// not render a Kotlin enum as a Swift enum: it becomes a final class whose
+  /// entries are static properties (see `BeidSharedKit.swift`), so the
+  /// compiler cannot prove this switch exhaustive and `@unknown` — which is
+  /// only meaningful for a non-frozen enum — is rejected outright. The
+  /// consequence worth knowing is that a case added in `shared/` will NOT
+  /// break this build the way `VenueServingBlock`'s native enums do; it will
+  /// land on `.unusable` silently. That is the safe direction, and
+  /// `testEverySharedVerdictMapsToItsOwnNativeCase` is what would have to be
+  /// updated to notice.
   static func definitionProjection(
-    joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode?,
-    eventCodeHash: [UInt8]?
+    for classification: ExportedKotlinPackages.org.levarac.parallax.venue.VenueDefinitionClassification
   ) -> DefinitionProjection {
-    switch joinMode {
-    case .GATED:
-      return .gatedUnsupported
-    case .OPEN:
-      guard let eventCodeHash, eventCodeHash.count == 8 else { return .unusable }
+    switch classification {
+    case .OPEN_WITH_EVENT_CODE_HASH:
       return .open
-    case nil:
+    case .GATED_REQUIRES_EXTERNAL_HASH:
+      return .gatedUnsupported
+    case .NO_USABLE_JOIN_DECLARATION:
       return .unusable
-    @unknown default:
+    default:
       return .unusable
     }
   }
@@ -761,8 +773,7 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     of definition: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinition
   ) -> VenueBundleVerificationLogic.DefinitionProjection {
     VenueBundleVerificationLogic.definitionProjection(
-      joinMode: definition.joinMode,
-      eventCodeHash: definition.eventCodeHashHex.flatMap { Self.bytes(fromHex: $0) }
+      for: ExportedKotlinPackages.org.levarac.parallax.venue.classifyVenueDefinition(definition: definition)
     )
   }
 
@@ -775,14 +786,16 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     case .unusable:
       return .unusable
     case .open:
-      // `.open` is returned only for `EventJoinMode.OPEN` carrying a
-      // well-formed 8-byte hash, so both of these hold by construction. They
-      // are re-checked rather than force-unwrapped so a later change to the
-      // classifier degrades to a refusal instead of a crash. The hash is
-      // decoded from the same expression `definitionProjection(of:)` uses, so
-      // there is one derivation to check rather than two to compare.
+      // `shared/` returns `OPEN_WITH_EVENT_CODE_HASH` only for an open
+      // definition carrying a well-formed 8-byte hash, so all three of these
+      // hold by construction. They are re-checked rather than force-unwrapped
+      // because `BarnardEventDefinitionV1` is about to be handed these exact
+      // bytes: the length is a precondition of the value being built here, not
+      // a restatement of shared's verdict, and a later change on either side
+      // degrades to a refusal instead of a crash.
       guard
         let eventCodeHash = definition.eventCodeHashHex.flatMap({ Self.bytes(fromHex: $0) }),
+        eventCodeHash.count == 8,
         let joinMode = VenueBundleVerificationLogic.barnardJoinMode(definition.joinMode)
       else { return .unusable }
       return .usable(BarnardEventDefinitionV1(

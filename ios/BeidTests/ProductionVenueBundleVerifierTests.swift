@@ -195,51 +195,41 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
 
   // MARK: - VenueBundleVerificationLogic: definition projection
 
-  /// A GATED definition must classify as its own outcome, not as a missing
-  /// hash.
+  /// `shared/`'s gated verdict maps to the native case that refuses to serve.
   ///
-  /// `EventDefinitionCborCodec.kt:304-305` fails decoding with "gated Event
-  /// Definition forbids eventCodeHash", so a gated definition never carries
-  /// one. The guard this classifier replaced required a hash unconditionally,
-  /// which meant every gated definition produced the same `nil` as a
-  /// malformed one and surfaced as `envelopeRejected` -- a verdict about an
-  /// envelope that had verified fine.
-  ///
-  /// Reverting `definitionProjection`'s body to that previous rule
-  /// (`guard let eventCodeHash, eventCodeHash.count == 8 else { return
-  /// .unusable }` applied before the join mode is examined) turns this RED;
-  /// see the PR body for the captured output.
-  func testGatedDefinitionsClassifyAsUnsupportedRatherThanAsAMissingHash() {
+  /// The DECISION this used to make now lives in `shared/`
+  /// (`classifyVenueDefinition`), exercised against real codec output by
+  /// `VenueDefinitionClassificationTest`, which is where the "a gated
+  /// definition carries no eventCodeHash" reasoning and the 8-byte check are
+  /// now asserted. What is left on this side is the mapping, and that is what
+  /// this tests. Reverting `definitionProjection(for:)`'s body to `.unusable`
+  /// for every input turns this RED; see the PR body for the captured output.
+  func testSharedGatedVerdictMapsToTheNativeRefusal() {
     XCTAssertEqual(
       VenueBundleVerificationLogic.definitionProjection(
-        joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.GATED,
-        eventCodeHash: nil
+        for: ExportedKotlinPackages.org.levarac.parallax.venue
+          .VenueDefinitionClassification.GATED_REQUIRES_EXTERNAL_HASH
       ),
       .gatedUnsupported
     )
   }
 
-  /// The fail-closed rails around that branch, unchanged by the split: an
-  /// open event projects only with a well-formed 8-byte hash, and an absent
-  /// join mode never projects at all.
-  func testOpenDefinitionsProjectOnlyWithAWellFormedEightByteHash() {
-    let openMode = ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN
-    XCTAssertEqual(
-      VenueBundleVerificationLogic.definitionProjection(joinMode: openMode, eventCodeHash: [UInt8](repeating: 0, count: 8)),
-      .open
-    )
-    XCTAssertEqual(
-      VenueBundleVerificationLogic.definitionProjection(joinMode: openMode, eventCodeHash: nil),
-      .unusable
-    )
-    XCTAssertEqual(
-      VenueBundleVerificationLogic.definitionProjection(joinMode: openMode, eventCodeHash: [UInt8](repeating: 0, count: 7)),
-      .unusable
-    )
-    XCTAssertEqual(
-      VenueBundleVerificationLogic.definitionProjection(joinMode: nil, eventCodeHash: [UInt8](repeating: 0, count: 8)),
-      .unusable
-    )
+  /// Every `shared/` verdict maps to exactly one native case, and no two
+  /// collapse together. A mapping that sent two verdicts to the same native
+  /// case would make a gated pack indistinguishable from a malformed one
+  /// again, which is the defect this whole chain exists to prevent.
+  func testEverySharedVerdictMapsToItsOwnNativeCase() {
+    typealias Classification =
+      ExportedKotlinPackages.org.levarac.parallax.venue.VenueDefinitionClassification
+    let table: [(Classification, VenueBundleVerificationLogic.DefinitionProjection)] = [
+      (.OPEN_WITH_EVENT_CODE_HASH, .open),
+      (.GATED_REQUIRES_EXTERNAL_HASH, .gatedUnsupported),
+      (.NO_USABLE_JOIN_DECLARATION, .unusable),
+    ]
+    for (verdict, expected) in table {
+      XCTAssertEqual(VenueBundleVerificationLogic.definitionProjection(for: verdict), expected)
+    }
+    XCTAssertEqual(Set(table.map(\.1)).count, table.count, "two shared verdicts must not share one native case")
   }
 
   /// Import refuses a gated definition, with its own outcome.
