@@ -225,6 +225,102 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
   }
 
+  // MARK: - An asynchronous radio failure after a successful install
+
+  private var clearCalls: [ScriptedVenuePorts.Call] {
+    ports.calls.filter {
+      if case .clearing = $0 { return true }
+      return false
+    }
+  }
+
+  /// A radio that dies AFTER a successful install must stop the serving
+  /// state, not leave the screen claiming to serve.
+  ///
+  /// The constructor's `onState` handler used to be one statement --
+  /// `self?.radio = update` -- which never looked at `update.state`. So an
+  /// asynchronous `bluetoothUnavailable`/`advertiseFailed`/`gattServiceFailed`
+  /// left `status` on `.serving`, the expiry timer armed and the container
+  /// installed, while nothing was on the air.
+  ///
+  /// That display is a safety control, not a convenience: beid#531 was decided
+  /// to ship WITHOUT an operator confirmation gate on the basis that the
+  /// operator can see what is being broadcast. A control that can report
+  /// serving while the radio is dead is not one.
+  ///
+  /// Reverting the handler to that single statement turns this RED; see the PR
+  /// body for the captured output.
+  func testAsynchronousRadioFailureAfterInstallStopsServingRatherThanClaimingIt() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await supply(viewModel)
+
+    // Precondition. Without it every assertion below could pass simply
+    // because nothing ever reached the radio.
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(
+        displayName: VenueServingContractFixture.displayName,
+        stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+      )
+    )
+    XCTAssertTrue(expiry.isScheduled)
+    XCTAssertNotNil(ports.installedPermit)
+    let clearsBeforeFailure = clearCalls.count
+
+    // The radio dies with no request in flight and nothing thrown: just an
+    // SDK callback arriving on a view model that believes it is serving.
+    ports.emit(try XCTUnwrap(VenueRadioUpdate(state: .failed, failure: .advertiseFailed)))
+
+    XCTAssertEqual(viewModel.status, .radioRefused(.advertiseFailed))
+    XCTAssertEqual(viewModel.radio, VenueRadioUpdate(state: .failed, failure: .advertiseFailed))
+    // Asserting the status alone would pass while the deadline stayed armed
+    // and the container stayed live, which is most of the defect.
+    XCTAssertFalse(expiry.isScheduled, "a dead radio must not leave the permit's deadline armed")
+    XCTAssertGreaterThan(
+      clearCalls.count, clearsBeforeFailure,
+      "the container must be cleared, not left installed under a failed radio"
+    )
+    XCTAssertNil(ports.installedPermit)
+
+    // A radio failure is not an operator stop. A later foreground return must
+    // still be able to retry, so `wantsServing` has to survive this.
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.expired)))]
+    await viewModel.sceneWillEnterForeground()
+    XCTAssertEqual(
+      viewModel.status, .blocked(try rejection(.expired)),
+      "a radio failure must not be sticky like an explicit stop: the operator can still retry"
+    )
+  }
+
+  /// A `.failed` update arriving when nothing is being served is recorded on
+  /// `radio` but must not rewrite `status`.
+  ///
+  /// The handler is long-lived and fires outside any request, so a late
+  /// failure can arrive after an operator stop or onto a blocked screen.
+  /// Letting it overwrite `status` there would replace a verification verdict,
+  /// or a deliberate idle state, with a stale effect failure.
+  func testRadioFailureArrivingWhileNothingIsServingLeavesTheStatusAlone() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.expired)))]
+
+    await supply(viewModel)
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+
+    ports.emit(try XCTUnwrap(VenueRadioUpdate(state: .failed, failure: .bluetoothUnavailable)))
+
+    XCTAssertEqual(
+      viewModel.status, .blocked(try rejection(.expired)),
+      "a radio failure must not overwrite a verification verdict the verifier actually issued"
+    )
+    // The radio's own state is still reported: it is a fact about the radio.
+    XCTAssertEqual(viewModel.radio, VenueRadioUpdate(state: .failed, failure: .bluetoothUnavailable))
+  }
+
   // MARK: - The production clock supplier this view model reads (beid#530)
 
   /// `VenueDeviceClock.read` must round its `Date` UP, not truncate it.

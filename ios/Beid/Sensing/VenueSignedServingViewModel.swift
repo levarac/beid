@@ -135,8 +135,62 @@ final class VenueSignedServingViewModel: ObservableObject {
     radio = VenueRadioUpdate(state: .stopped)!
     storedSourceDescription = store.record?.sourceDescription
     self.broadcasting.onState = { [weak self] update in
-      self?.radio = update
+      self?.handleRadioUpdate(update)
     }
+  }
+
+  /// Guards against a `clearAndStop()` whose own `onState` reports `.failed`.
+  /// The scripted fake emits `.stopped` there, but the port does not promise
+  /// that, and without this a production adapter that reported a failure while
+  /// being cleared would drive this handler into unbounded recursion.
+  private var isHandlingRadioFailure = false
+
+  /// The radio's state is always recorded. A FAILURE additionally tears down
+  /// the serving state, because the screen is the only thing telling the
+  /// operator whether this device is actually serving.
+  ///
+  /// beid#531 was decided to ship without an operator confirmation gate, on
+  /// the basis that the operator can see what is being broadcast once
+  /// advertising starts. That makes this display a safety control. Leaving
+  /// `status` on `.serving` after the radio died would make the control lie in
+  /// the direction hardest to notice: the operator believes they are serving,
+  /// attendees cannot join, and nothing on screen disagrees.
+  private func handleRadioUpdate(_ update: VenueRadioUpdate) {
+    radio = update
+    guard update.state == .failed, let failure = update.failure else { return }
+    // Only a device that believes it is serving has anything to tear down.
+    // This handler is long-lived and fires outside any request, so a late
+    // failure can also arrive after an explicit stop or onto a blocked
+    // screen; there it must not overwrite a verdict the verifier issued or an
+    // idle state the operator chose.
+    //
+    // The cost of this rule, stated because it is a real one: the port
+    // carries no request id, so a failure belonging to a PREVIOUS permit that
+    // arrives after a newer one installed will tear the newer one down. That
+    // is the over-eager direction, and it is the safe one — it ends in a
+    // visible `.radioRefused` the operator can retry from, never in bytes
+    // left on the air or a screen claiming to serve.
+    guard case .serving = status else { return }
+    guard !isHandlingRadioFailure else { return }
+    isHandlingRadioFailure = true
+    defer { isHandlingRadioFailure = false }
+
+    // `invalidate()` rather than a hand-rolled sequence: it already clears the
+    // radio BEFORE bumping the generation, in that order and for the reason
+    // documented on it, and cancels the permit's deadline. Clearing it here
+    // also re-enters this handler with `.stopped`, which is why `radio` is
+    // reassigned afterwards rather than before -- otherwise that re-entrant
+    // `.stopped` would be the last write and the radio would read as stopped
+    // while the status reported a failure.
+    invalidate()
+    radio = VenueRadioUpdate(state: .failed, failure: failure)!
+    // Report the effect failure as itself, never as a verification verdict --
+    // the same separation the synchronous install-failure path keeps.
+    status = .radioRefused(failure)
+    // `wantsServing` is deliberately NOT cleared. A radio failure is not an
+    // operator stop, so a later foreground return or clock change may retry.
+    // That cannot silently serve into a dead radio: the retry re-runs
+    // `install`, and a radio still failing reports itself again.
   }
 
   // MARK: - Requests
