@@ -49,13 +49,33 @@ final class StubVenueArtifactAcquisition: VenueArtifactAcquiring {
   enum Reply {
     case artifact(VenuePublicArtifact)
     case failure(VenueAcquisitionFailure)
+    /// Leaves the acquisition suspended until the test resolves it.
+    ///
+    /// A real fetch takes time, and things happen to the app during it — the
+    /// operator backgrounds it, the scene lifecycle fires, the generation
+    /// moves. Without this the double resolves inside `supply`'s own `await`
+    /// and no test can place ANY event between the request and its outcome,
+    /// which made a whole family of mid-flight interleavings unreachable
+    /// rather than merely untested. `ScriptedVenuePorts.Reply.deferred` exists
+    /// for the same reason on the verification seam.
+    case deferred
   }
 
   var replies: [Reply] = []
   private(set) var requestedSources: [(bundle: URL, handoff: URL)] = []
+  private var pending: [Int: CheckedContinuation<VenuePublicArtifact, Error>] = [:]
+  private var nextRequestID = 0
+  private var observers: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+
+  var pendingAcquisitionIDs: [Int] { pending.keys.sorted() }
 
   func acquire(bundleSource: URL, handoffSource: URL) async throws -> VenuePublicArtifact {
+    let id = nextRequestID
+    nextRequestID += 1
     requestedSources.append((bundleSource, handoffSource))
+    let ready = observers.filter { $0.count <= requestedSources.count }
+    observers.removeAll { $0.count <= requestedSources.count }
+    for observer in ready { observer.continuation.resume() }
     guard !replies.isEmpty else {
       XCTFail("StubVenueArtifactAcquisition received an unscripted acquisition")
       throw VenueAcquisitionFailure.transportFailure
@@ -63,7 +83,30 @@ final class StubVenueArtifactAcquisition: VenueArtifactAcquiring {
     switch replies.removeFirst() {
     case .artifact(let artifact): return artifact
     case .failure(let failure): throw failure
+    case .deferred:
+      return try await withCheckedThrowingContinuation { pending[id] = $0 }
     }
+  }
+
+  /// Await a recorded request without polling, so a test can act at a precise
+  /// point between the request and its outcome.
+  func waitForAcquisitionCount(_ count: Int) async {
+    guard requestedSources.count < count else { return }
+    await withCheckedContinuation { observers.append((count, $0)) }
+  }
+
+  @discardableResult
+  func failAcquisition(id: Int, with failure: VenueAcquisitionFailure) -> Bool {
+    guard let continuation = pending.removeValue(forKey: id) else { return false }
+    continuation.resume(throwing: failure)
+    return true
+  }
+
+  @discardableResult
+  func completeAcquisition(id: Int, with artifact: VenuePublicArtifact) -> Bool {
+    guard let continuation = pending.removeValue(forKey: id) else { return false }
+    continuation.resume(returning: artifact)
+    return true
   }
 }
 

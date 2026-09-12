@@ -112,6 +112,32 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// installs. A stop must outlast the app going to the background.
   private var wantsServing = false
 
+  /// Ownership token for `wantsServing`, bumped by every writer of it.
+  ///
+  /// `generation` cannot answer this question, and using it was the defect.
+  /// The two are asking different things:
+  ///
+  /// - `generation` asks "has this request been superseded, so must it stop
+  ///   touching the screen." A lifecycle invalidation bumps it —
+  ///   `sceneDidEnterBackground()` calls `invalidate()` — WITHOUT establishing
+  ///   any new intent.
+  /// - this asks "is the intent currently in force still the one this request
+  ///   established, so may this request retract it."
+  ///
+  /// Gating the retraction on `generation` conflated them: a replacement fetch
+  /// that failed after a background return looked superseded, skipped
+  /// abandoning its own intent, and left the device free to restore and
+  /// broadcast the event the operator was replacing.
+  private var servingIntentEpoch = 0
+
+  /// Takes ownership of `wantsServing` for the caller. Every writer of that
+  /// flag calls this, so "am I still the owner" is answerable by comparison.
+  @discardableResult
+  private func takeServingIntent() -> Int {
+    servingIntentEpoch += 1
+    return servingIntentEpoch
+  }
+
   init(
     verifier: any VenueBundleVerifying,
     broadcasting: any VenueSignedContainerBroadcasting,
@@ -235,6 +261,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// imports and evaluates them.
   func supply(bundleSource: URL, handoffSource: URL, sourceDescription: String) async {
     let generation = invalidate()
+    let intent = takeServingIntent()
     wantsServing = true
     // Replaced input: the previous receipt describes a different artifact and
     // must not survive into this request.
@@ -245,13 +272,13 @@ final class VenueSignedServingViewModel: ObservableObject {
     do {
       artifact = try await acquisition.acquire(bundleSource: bundleSource, handoffSource: handoffSource)
     } catch let failure as VenueAcquisitionFailure {
+      abandonReplacement(ifStillOwnedBy: intent)
       guard generation == self.generation else { return }
-      abandonReplacement()
       status = .acquisitionFailed(failure)
       return
     } catch {
+      abandonReplacement(ifStillOwnedBy: intent)
       guard generation == self.generation else { return }
-      abandonReplacement()
       status = .acquisitionFailed(.transportFailure)
       return
     }
@@ -288,7 +315,17 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// resumption. `supply` already ran `invalidate()`, so nothing is on the air
   /// and no deadline is armed — the device lands idle with an error on screen
   /// and stays there until the operator chooses one of the two buttons.
-  private func abandonReplacement() {
+  /// Runs BEFORE the generation guard in both catch branches, deliberately.
+  /// Whether this request may still paint the screen and whether it must
+  /// retract its own intent are separate questions, and a backgrounded app
+  /// answers them differently: it may not paint, and it must still retract.
+  ///
+  /// `ifStillOwnedBy` is what keeps that from reopening the case it replaced.
+  /// A request only retracts the intent it established itself; once a newer
+  /// `supply`, a `restoreFromStorage` or an explicit `stop` has taken
+  /// ownership, this is a no-op and their intent stands.
+  private func abandonReplacement(ifStillOwnedBy intent: Int) {
+    guard intent == servingIntentEpoch else { return }
     wantsServing = false
   }
 
@@ -296,6 +333,9 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// bytes go back through the verifier exactly as if they had just arrived.
   func restoreFromStorage() async {
     let generation = invalidate()
+    // Takes ownership of the intent, so an older in-flight `supply` that fails
+    // afterwards cannot retract the intent this restore just established.
+    takeServingIntent()
     wantsServing = true
     receipt = nil
     guard let record = store.record else {
@@ -324,6 +364,10 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// this device back on the air.
   func stop() {
     invalidate()
+    // An explicit stop owns the intent too: a `supply` still in flight must
+    // not be the one that decides what the flag means after the operator has
+    // deliberately stopped.
+    takeServingIntent()
     wantsServing = false
     receipt = nil
     status = .idle

@@ -442,6 +442,123 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     )
   }
 
+  /// The same defect through the lifecycle door: backgrounding mid-fetch must
+  /// not let the failed replacement leave its intent standing.
+  ///
+  /// `sceneDidEnterBackground()` calls `invalidate()`, which bumps the
+  /// generation, and deliberately does not touch `wantsServing`. The catch
+  /// branches tested generation equality before abandoning the replacement, so
+  /// a fetch that failed after a background return returned early and left the
+  /// intent in force. On foreground, `refresh()` found no receipt, fell
+  /// through to `restoreFromStorage()`, and the replaced event went back on
+  /// the air.
+  ///
+  /// Generation equality cannot carry this: it answers "was this request
+  /// superseded", and a lifecycle invalidation supersedes a request without
+  /// establishing a new intent. Those are different questions and this test is
+  /// the one that separates them.
+  ///
+  /// The scripted replies are again the ones that SUCCEED, so the previous
+  /// version fails by actually serving the replaced event rather than on an
+  /// unscripted call. Reverting `supply`'s catch branches to gate
+  /// `abandonReplacement()` behind the generation guard turns this RED.
+  func testBackgroundingDuringAReplacementFetchStillAbandonsTheFailedIntent() async throws {
+    store.store(
+      VenuePublicArtifactRecord(
+        bundleBytes: fixture.artifact.bundleBytes,
+        handoffBytes: fixture.artifact.handoffBytes,
+        sourceDescription: "previous.example",
+        storedAt: Date()
+      )
+    )
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    // The replacement fetch is still in flight.
+    acquisition.replies = [.deferred]
+    let task = Task {
+      await viewModel.supply(
+        bundleSource: URL(string: "https://replacement.example/bundle")!,
+        handoffSource: URL(string: "https://replacement.example/handoff")!,
+        sourceDescription: "replacement.example"
+      )
+    }
+    await acquisition.waitForAcquisitionCount(1)
+
+    // The operator backgrounds the app while it is fetching. This bumps the
+    // generation without touching the intent.
+    viewModel.sceneDidEnterBackground()
+    // Only now does the fetch fail.
+    XCTAssertTrue(acquisition.failAcquisition(id: 0, with: .transportFailure))
+    await task.value
+
+    let importsBeforeForeground = importCalls.count
+    await viewModel.sceneWillEnterForeground()
+
+    XCTAssertEqual(
+      importCalls.count, importsBeforeForeground,
+      "a replacement that failed while backgrounded must not re-import the bundle it was replacing"
+    )
+    XCTAssertTrue(installCalls.isEmpty, "the replaced event must never go back on the air by itself")
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(
+      viewModel.status, .idle,
+      "the screen was reset by backgrounding and nothing may put it back into a serving state"
+    )
+  }
+
+  /// The property round 10 verified, kept explicit so the invalidation fix
+  /// above cannot be "simplified" into reopening it: a stale request that
+  /// fails must never clear an intent a NEWER request established.
+  func testAStaleFailedFetchDoesNotClearTheIntentOfANewerRequest() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    acquisition.replies = [.deferred, .artifact(fixture.artifact)]
+    let stale = Task {
+      await viewModel.supply(
+        bundleSource: URL(string: "https://stale.example/bundle")!,
+        handoffSource: URL(string: "https://stale.example/handoff")!,
+        sourceDescription: "stale.example"
+      )
+    }
+    await acquisition.waitForAcquisitionCount(1)
+
+    // A newer supply lands and succeeds while the first is still in flight.
+    await viewModel.supply(
+      bundleSource: URL(string: "https://current.example/bundle")!,
+      handoffSource: URL(string: "https://current.example/handoff")!,
+      sourceDescription: "current.example"
+    )
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(
+        displayName: VenueServingContractFixture.displayName,
+        stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+      )
+    )
+
+    // The superseded fetch now fails. It must not tear down the newer one.
+    XCTAssertTrue(acquisition.failAcquisition(id: 0, with: .transportFailure))
+    await stale.value
+
+    XCTAssertEqual(
+      viewModel.status,
+      .serving(
+        displayName: VenueServingContractFixture.displayName,
+        stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+      ),
+      "a stale failure must not clear the intent or the state a newer request established"
+    )
+    // And a foreground return must still be able to refresh, which it cannot
+    // do if the stale failure cleared the newer intent.
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.expired)))]
+    await viewModel.sceneWillEnterForeground()
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+  }
+
   /// The stored record itself is untouched, and the explicit reload path still
   /// works. The fix clears the operator's INTENT, not their data: a stored
   /// bundle they may well want to load again deliberately stays exactly where
