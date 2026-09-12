@@ -193,6 +193,55 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     XCTAssertNil(VenueBundleVerificationLogic.barnardJoinMode(nil))
   }
 
+  // MARK: - VenueBundleVerificationLogic: definition projection
+
+  /// A GATED definition must classify as its own outcome, not as a missing
+  /// hash.
+  ///
+  /// `EventDefinitionCborCodec.kt:304-305` fails decoding with "gated Event
+  /// Definition forbids eventCodeHash", so a gated definition never carries
+  /// one. The guard this classifier replaced required a hash unconditionally,
+  /// which meant every gated definition produced the same `nil` as a
+  /// malformed one and surfaced as `envelopeRejected` -- a verdict about an
+  /// envelope that had verified fine.
+  ///
+  /// Reverting `definitionProjection`'s body to that previous rule
+  /// (`guard let eventCodeHash, eventCodeHash.count == 8 else { return
+  /// .unusable }` applied before the join mode is examined) turns this RED;
+  /// see the PR body for the captured output.
+  func testGatedDefinitionsClassifyAsUnsupportedRatherThanAsAMissingHash() {
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.definitionProjection(
+        joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.GATED,
+        eventCodeHash: nil
+      ),
+      .gatedUnsupported
+    )
+  }
+
+  /// The fail-closed rails around that branch, unchanged by the split: an
+  /// open event projects only with a well-formed 8-byte hash, and an absent
+  /// join mode never projects at all.
+  func testOpenDefinitionsProjectOnlyWithAWellFormedEightByteHash() {
+    let openMode = ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.definitionProjection(joinMode: openMode, eventCodeHash: [UInt8](repeating: 0, count: 8)),
+      .open
+    )
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.definitionProjection(joinMode: openMode, eventCodeHash: nil),
+      .unusable
+    )
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.definitionProjection(joinMode: openMode, eventCodeHash: [UInt8](repeating: 0, count: 7)),
+      .unusable
+    )
+    XCTAssertEqual(
+      VenueBundleVerificationLogic.definitionProjection(joinMode: nil, eventCodeHash: [UInt8](repeating: 0, count: 8)),
+      .unusable
+    )
+  }
+
   // MARK: - VenueBundleVerificationLogic: ENIN window arithmetic
 
   func testDefinitionEninWindowMatchesTheKnownFixtureConversion() {

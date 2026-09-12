@@ -230,6 +230,50 @@ enum VenueBundleVerificationLogic {
     }
   }
 
+  /// Whether an anchored definition can be projected onto a
+  /// `BarnardEventDefinitionV1` at all, as an exhaustive outcome rather than
+  /// the single `nil` this replaced.
+  ///
+  /// The two inputs are not independent, which is why one `nil` was the wrong
+  /// shape. `EventDefinitionCborCodec.kt:298-307` REQUIRES an open definition
+  /// to carry an `eventCodeHash` (and requires it to equal the canonical
+  /// `eventCodeHashForOpenEventV1(eventId)`), and FORBIDS a gated one from
+  /// carrying any. A decoded definition therefore announces its join mode by
+  /// hash presence alone: "gated" and "hash missing" are the same observation
+  /// seen from two sides. Collapsing them lost which one it was, so every
+  /// gated event surfaced as `envelopeRejected` -- a verdict about an
+  /// envelope that had verified perfectly well.
+  enum DefinitionProjection: Equatable {
+    /// An open event, carrying the well-formed 8-byte hash B005 compares
+    /// against.
+    case open
+    /// The event gates entry on a code. A gated definition publishes no
+    /// `eventCodeHash` by construction, so this path has nothing to compare a
+    /// B005 envelope's hash against. Sourcing one through a trusted input is
+    /// a design phase 1 does not have; gated events are unsupported here.
+    case gatedUnsupported
+    /// Neither: no join mode at all, or an open definition whose hash is
+    /// missing or malformed. Fails closed.
+    case unusable
+  }
+
+  static func definitionProjection(
+    joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode?,
+    eventCodeHash: [UInt8]?
+  ) -> DefinitionProjection {
+    switch joinMode {
+    case .GATED:
+      return .gatedUnsupported
+    case .OPEN:
+      guard let eventCodeHash, eventCodeHash.count == 8 else { return .unusable }
+      return .open
+    case nil:
+      return .unusable
+    @unknown default:
+      return .unusable
+    }
+  }
+
   /// Floor division/modulo matching Kotlin's `Math.floorDiv`/`floorMod`
   /// (rounds toward negative infinity; Swift's `/`/`%` truncate toward
   /// zero). Duplicated from `BarnardB005EnvelopeV2.registryAgreement`'s
@@ -532,10 +576,32 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     bundle: ExportedKotlinPackages.org.levarac.parallax.venue.VenueBundle,
     now: Int64
   ) async -> VenueServingDecision {
-    guard let barnardDefinition = Self.barnardDefinition(from: identity.definition) else {
-      // The anchored definition lacks a joinMode/eventCodeHash pair, so no
-      // envelope can be compared against it at all. There is no dedicated
-      // outcome for this; every candidate is treated as rejected.
+    let barnardDefinition: BarnardEventDefinitionV1
+    switch Self.barnardDefinition(from: identity.definition) {
+    case .usable(let definition):
+      barnardDefinition = definition
+    case .gatedUnsupported:
+      // This production path supports OPEN events only. A gated definition
+      // publishes no eventCodeHash (`EventDefinitionCborCodec.kt:304-305`),
+      // so there is nothing to compare a B005 envelope's hash against, and
+      // sourcing one through a trusted input is not phase-1 work.
+      //
+      // REASON CODE IS PROVISIONAL, PENDING A VOCABULARY DECISION. No
+      // existing `VenueServingBlock` says "gated events are unsupported":
+      // `staleDefinition` claims a newer definition exists, `noCurrentEnvelope`
+      // and `envelopeRejected` both blame the envelope, and the envelope here
+      // is fine. `VenueServingBlock`'s raw values are required to match
+      // `shared/`'s block codes verbatim (`VenueCurrentLease.kt:53`), so a
+      // native-only eighth case cannot simply be added. Until that is
+      // decided this keeps the pre-existing outcome rather than inventing a
+      // code that collides -- but the branch is now explicit and classified
+      // (`VenueBundleVerificationLogic.definitionProjection`), so the decision
+      // lands here as a one-line change instead of a re-derivation.
+      return .blocked(VenueServingRejection(reason: .envelopeRejected)!)
+    case .unusable:
+      // The anchored definition carries no usable joinMode/eventCodeHash
+      // pair, so no envelope can be compared against it at all. There is no
+      // dedicated outcome for this; every candidate is treated as rejected.
       return .blocked(VenueServingRejection(reason: .envelopeRejected)!)
     }
 
@@ -648,22 +714,44 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     )
   }
 
+  /// Why this is not an optional: see
+  /// `VenueBundleVerificationLogic.DefinitionProjection`. A gated definition
+  /// and a malformed one are different facts and must not share one `nil`.
+  private enum DefinitionOutcome {
+    case usable(BarnardEventDefinitionV1)
+    case gatedUnsupported
+    case unusable
+  }
+
   private static func barnardDefinition(
     from definition: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinition
-  ) -> BarnardEventDefinitionV1? {
-    guard
-      let joinMode = VenueBundleVerificationLogic.barnardJoinMode(definition.joinMode),
-      let eventCodeHashHex = definition.eventCodeHashHex,
-      let eventCodeHash = Self.bytes(fromHex: eventCodeHashHex), eventCodeHash.count == 8
-    else { return nil }
-    return BarnardEventDefinitionV1(
-      eventId: Self.swiftBytes(fromKotlin: definition.eventId.toByteArray()),
-      keySetDigest: Self.swiftBytes(fromKotlin: definition.keySetDigest.toByteArray()),
-      joinMode: joinMode,
-      eventCodeHash: eventCodeHash,
-      validFromUnixSeconds: definition.validFrom.value,
-      validUntilUnixSeconds: definition.validUntil.value
-    )
+  ) -> DefinitionOutcome {
+    let eventCodeHash = definition.eventCodeHashHex.flatMap { Self.bytes(fromHex: $0) }
+    switch VenueBundleVerificationLogic.definitionProjection(
+      joinMode: definition.joinMode, eventCodeHash: eventCodeHash
+    ) {
+    case .gatedUnsupported:
+      return .gatedUnsupported
+    case .unusable:
+      return .unusable
+    case .open:
+      // `.open` is returned only for `EventJoinMode.OPEN` carrying a
+      // well-formed 8-byte hash, so both of these hold by construction. They
+      // are re-checked rather than force-unwrapped so a later change to the
+      // classifier degrades to a refusal instead of a crash.
+      guard
+        let eventCodeHash,
+        let joinMode = VenueBundleVerificationLogic.barnardJoinMode(definition.joinMode)
+      else { return .unusable }
+      return .usable(BarnardEventDefinitionV1(
+        eventId: Self.swiftBytes(fromKotlin: definition.eventId.toByteArray()),
+        keySetDigest: Self.swiftBytes(fromKotlin: definition.keySetDigest.toByteArray()),
+        joinMode: joinMode,
+        eventCodeHash: eventCodeHash,
+        validFromUnixSeconds: definition.validFrom.value,
+        validUntilUnixSeconds: definition.validUntil.value
+      ))
+    }
   }
 
   // MARK: - Byte/hex conversions
