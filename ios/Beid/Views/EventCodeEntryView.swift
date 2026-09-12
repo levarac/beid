@@ -149,6 +149,19 @@ struct EventCodeEntryView: View {
     }
   }
 
+  /// Copy per refusal reason. The reason is `shared/`'s decision; these
+  /// sentences are this host's, and they are deliberately the same English
+  /// Android already ships (`event_join_error_*` in `strings.xml`) so one
+  /// situation does not read as two different products.
+  ///
+  /// Before beid#472 every branch below was one sentence — "beid couldn't
+  /// join that event. Check the code and try again." — which told a
+  /// participant with no network to check a code that was correct.
+  ///
+  /// The `default` branch is load-bearing: a reason added in `shared/`
+  /// without this switch being updated falls to the generic sentence rather
+  /// than failing to build, and `eventJoinFailureReasonKey`'s doc says so
+  /// from the other side.
   private func message(for error: EventCodeJoinError?) -> LocalizedStringKey? {
     switch error {
     case nil:

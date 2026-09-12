@@ -122,6 +122,10 @@ struct SensingView: View {
               .lineSpacing(2)
               .fixedSize(horizontal: false, vertical: true)
 
+            if let joinRefusalMessage {
+              joinRefusalNotice(joinRefusalMessage)
+            }
+
             if isPreJoin {
               nearbyEvents
             }
@@ -169,6 +173,53 @@ struct SensingView: View {
       candidates: sensing.nearbyEventCandidates,
       nowEpochSeconds: Int64(Date().timeIntervalSince1970.rounded(.down))
     )
+  }
+
+  /// What to say about a refused join, or nil when nothing was refused.
+  ///
+  /// The reason is `shared/`'s (`eventJoinFailureReasonKey`); these sentences
+  /// are this host's, and they are the same English Android already ships
+  /// (`event_join_error_*`), so one situation does not read as two different
+  /// products.
+  ///
+  /// Until beid#472 there was nothing here at all. `SensingCoordinator` held
+  /// the refusal and no view read it, so a radio that never started looked
+  /// exactly like one that had found nobody yet — including to the owner,
+  /// during a field session on 2026-09-10.
+  private var joinRefusalMessage: LocalizedStringKey? {
+    guard let key = sensing.joinRefusalReasonKey else { return nil }
+    switch key {
+    case "network_required":
+      return "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
+    case "event_not_found":
+      return "No event is registered for that code. Check it with the event organizer."
+    case "code_mismatch":
+      return "That code didn't match the event beid found. Check that you have the whole code."
+    case "event_not_active":
+      return "That event isn't open to join right now."
+    case "verification_failed":
+      return "beid couldn't verify that event. Check the code with the event organizer."
+    default:
+      // A reason added in `shared/` without this switch being updated says
+      // less rather than saying something false.
+      return "beid couldn't join that event. Check the code and try again."
+    }
+  }
+
+  /// DESIGN.md §15's error formula — what happened and one action — rendered
+  /// in the non-signal caution register (§5: `statusCaution` is for errors
+  /// that are not about BLE signal, which a refused join is not).
+  private func joinRefusalNotice(_ message: LocalizedStringKey) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundStyle(DS.Color.statusCaution)
+      Text(message)
+        .font(DS.Font.supporting)
+        .foregroundStyle(DS.Color.textPrimary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .combine)
   }
 
   @ViewBuilder

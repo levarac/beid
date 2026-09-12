@@ -189,9 +189,14 @@ final class AppCoordinator: ObservableObject {
   @discardableResult
   func joinEvent(
     code rawCode: String,
-    canonicalEventIdHex: String? = nil
+    canonicalEventIdHex: String? = nil,
+    lookupErrorCode: String? = nil
   ) -> EventCodeJoinError? {
-    if let error = attemptJoinEvent(code: rawCode, canonicalEventIdHex: canonicalEventIdHex) {
+    if let error = attemptJoinEvent(
+      code: rawCode,
+      canonicalEventIdHex: canonicalEventIdHex,
+      lookupErrorCode: lookupErrorCode
+    ) {
       return error
     }
     screen = .bluetoothPermission
@@ -206,9 +211,14 @@ final class AppCoordinator: ObservableObject {
   @discardableResult
   func joinEventFromAccountSheet(
     code rawCode: String,
-    canonicalEventIdHex: String? = nil
+    canonicalEventIdHex: String? = nil,
+    lookupErrorCode: String? = nil
   ) -> EventCodeJoinError? {
-    if let error = attemptJoinEvent(code: rawCode, canonicalEventIdHex: canonicalEventIdHex) {
+    if let error = attemptJoinEvent(
+      code: rawCode,
+      canonicalEventIdHex: canonicalEventIdHex,
+      lookupErrorCode: lookupErrorCode
+    ) {
       return error
     }
     eventCodeEntrySheetPresented = false
@@ -243,19 +253,50 @@ final class AppCoordinator: ObservableObject {
   /// for every URL template, so there is no other way to get a real,
   /// test-controllable suspension point here without either a flaky
   /// wall-clock-dependent test or this seam (beid#258 P1-1 round-3).
-  var resolveCanonicalEventIdHexOverride: ((String) async -> String?)?
+  /// Returns the whole lookup, not just the id: a test that cannot express
+  /// "the registry answered with this error code" cannot reach the reasons
+  /// beid#472 exists to show, and the shape here should be the shape
+  /// production produces.
+  var resolveCanonicalEventIdHexOverride: ((String) async -> CanonicalEventIdLookup)?
+
+  /// What a code-to-id lookup produced: the id when it answered, and the
+  /// registry's own `errorCode` when it did not.
+  ///
+  /// The error code used to be dropped on the floor here. That is what made
+  /// "you are offline" and "no such event" indistinguishable to the caller,
+  /// and so to the participant — the one distinction `shared/`'s
+  /// `eventJoinFailureReasonForRegistryErrorCode` exists to draw, and which
+  /// Android has drawn since beid#463 (beid#472).
+  struct CanonicalEventIdLookup {
+    let eventIdHex: String?
+    /// `nil` when the lookup answered, or when there was nothing to ask
+    /// (no registry configured, code not normalizable) — those are not
+    /// registry error codes and must not be classified as if they were.
+    let errorCode: String?
+
+    static let noAnswer = CanonicalEventIdLookup(eventIdHex: nil, errorCode: nil)
+  }
 
   func resolveCanonicalEventIdHex(forCode rawCode: String) async -> String? {
+    await lookUpCanonicalEventId(forCode: rawCode).eventIdHex
+  }
+
+  func lookUpCanonicalEventId(forCode rawCode: String) async -> CanonicalEventIdLookup {
     if let resolveCanonicalEventIdHexOverride {
       return await resolveCanonicalEventIdHexOverride(rawCode)
     }
-    guard let registryClient else { return nil }
+    guard let registryClient else { return .noAnswer }
     guard let normalized = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) else {
-      return nil
+      return .noAnswer
     }
     return await withCheckedContinuation { continuation in
       registryClient.resolveEventId(code: normalized) { resolution in
-        continuation.resume(returning: resolution.isSuccess ? resolution.eventIdHex : nil)
+        continuation.resume(
+          returning: CanonicalEventIdLookup(
+            eventIdHex: resolution.isSuccess ? resolution.eventIdHex : nil,
+            errorCode: resolution.isSuccess ? nil : resolution.errorCode
+          )
+        )
       }
     }
   }
@@ -303,9 +344,15 @@ final class AppCoordinator: ObservableObject {
   func joinEventResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
     joinAttemptGeneration += 1
     let generation = joinAttemptGeneration
-    let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
+    let lookup = await lookUpCanonicalEventId(forCode: code)
     guard generation == joinAttemptGeneration else { return .superseded }
-    return .completed(joinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex))
+    return .completed(
+      joinEvent(
+        code: code,
+        canonicalEventIdHex: lookup.eventIdHex,
+        lookupErrorCode: lookup.errorCode
+      )
+    )
   }
 
   /// Same composition as `joinEventResolvingCanonicalId`, for the
@@ -313,9 +360,15 @@ final class AppCoordinator: ObservableObject {
   func joinEventFromAccountSheetResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
     joinAttemptGeneration += 1
     let generation = joinAttemptGeneration
-    let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
+    let lookup = await lookUpCanonicalEventId(forCode: code)
     guard generation == joinAttemptGeneration else { return .superseded }
-    return .completed(joinEventFromAccountSheet(code: code, canonicalEventIdHex: canonicalEventIdHex))
+    return .completed(
+      joinEventFromAccountSheet(
+        code: code,
+        canonicalEventIdHex: lookup.eventIdHex,
+        lookupErrorCode: lookup.errorCode
+      )
+    )
   }
 
   /// Manual rescue from the nearby-event scan surface. It preserves the same
@@ -326,9 +379,13 @@ final class AppCoordinator: ObservableObject {
   func joinEventFromScanFlowResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
     joinAttemptGeneration += 1
     let generation = joinAttemptGeneration
-    let canonicalEventIdHex = await resolveCanonicalEventIdHex(forCode: code)
+    let lookup = await lookUpCanonicalEventId(forCode: code)
     guard generation == joinAttemptGeneration else { return .superseded }
-    let error = attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
+    let error = attemptJoinEvent(
+      code: code,
+      canonicalEventIdHex: lookup.eventIdHex,
+      lookupErrorCode: lookup.errorCode
+    )
     if error == nil {
       sensingCoordinator.startSensing()
     }
@@ -365,15 +422,19 @@ final class AppCoordinator: ObservableObject {
   /// `.trimmingCharacters` check.
   private func attemptJoinEvent(
     code rawCode: String,
-    canonicalEventIdHex: String? = nil
+    canonicalEventIdHex: String? = nil,
+    lookupErrorCode: String? = nil
   ) -> EventCodeJoinError? {
     guard let normalized = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) else {
       return .emptyCode
     }
     guard sensingCoordinator.joinEvent(
       normalized,
-      canonicalEventIdHex: canonicalEventIdHex
-    ) else { return .joinFailed }
+      canonicalEventIdHex: canonicalEventIdHex,
+      lookupErrorCode: lookupErrorCode
+    ) else {
+      return .joinFailed
+    }
     return nil
   }
 
