@@ -299,9 +299,22 @@ enum VenueBundleVerificationLogic {
   /// `@unknown` is rejected HERE specifically because this switch's subject is
   /// that class, and `@unknown` has to attach to an enum. It is not a rule
   /// about exported types in general: `barnardJoinMode` above switches over
-  /// `EventJoinMode?`, and an Optional IS a Swift enum, so its
-  /// `@unknown default` is correct and must stay — it is that function's
-  /// fail-closed guard against a future third `EventJoinMode` case.
+  /// `EventJoinMode?`, and an Optional IS a Swift enum, so `@unknown` has
+  /// something to attach to there and compiles.
+  ///
+  /// It does not follow that it does anything. `EventJoinMode` is itself an
+  /// exported class, not an enum (`BeidSharedKit.swift:2880`), so nothing
+  /// enumerates its cases and that `@unknown default` cannot warn when one is
+  /// added — despite the annotation, that switch still draws `warning: switch
+  /// must be exhaustive` with `note: add missing case: '.some(_)'`, which is
+  /// the compiler saying it can see Optional's structure and not the wrapped
+  /// class's cases. Both arms are fail-closed catch-alls and nothing more.
+  /// Leave it in place, but do not credit it with warning anyone.
+  ///
+  /// A third `EventJoinMode` case is caught on the Kotlin side instead:
+  /// `classifyVenueDefinition`'s `when` covers `GATED`, `OPEN` and `null`
+  /// with no `else` arm, so a third case fails that build before anything
+  /// reaches Swift. That is the stronger guard and it is the one to preserve.
   ///
   /// So a case added in `shared/` will NOT break this build the way
   /// `VenueServingBlock`'s native enums do; it lands on `.unusable` silently.
