@@ -7,10 +7,19 @@ import SwiftUI
 /// and handoff from a file or an https URL, shows what verification decided,
 /// and serves the permitted container until the instant the permit fixed.
 ///
-/// NOT reachable from production navigation in this PR. The production
-/// verifier is a separate follow-up and does not exist yet, so wiring this in
-/// would put a screen in front of a venue operator with nothing behind it.
-/// The v1 `VenueDeviceOrganizerView` remains the reachable venue surface.
+/// Reachable from `AccountSheetView`'s "Venue Device (Signed)" row as of this
+/// PR, alongside (not replacing) the v1 `VenueDeviceOrganizerView` entry.
+///
+/// KNOWN OPEN GAP, not closed by this PR: nothing between `supply()` and an
+/// installed permit asks the operator to confirm the event being served.
+/// `ProductionVenueBundleVerifier` verifies that a bundle+handoff pair is
+/// mutually consistent and chain-anchored, but per its own doc, agreement
+/// between a bundle and its handoff is not proof of OPERATOR INTENT: swapping
+/// both for a different, legitimately registered event passes every check
+/// here. Closing this needs an independently-sourced expected Event ID and an
+/// explicit "start serving" action gating `install`, which is a real change
+/// to this view model's state machine and its existing test suite, not a
+/// wiring change -- flagged for an owner decision rather than made here.
 ///
 /// The four `switch` statements below have NO `default` case, deliberately.
 /// Adding a case to any of the four venue enums must break this build: a
