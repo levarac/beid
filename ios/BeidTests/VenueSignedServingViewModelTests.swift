@@ -874,6 +874,38 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(VenueDeviceClock.read(now: { Date(timeIntervalSince1970: -1.5) }), .unavailable)
   }
 
+  /// A registry `validFrom` can be supplied in the wrong unit (for example,
+  /// milliseconds), producing a recheck instant far beyond UInt64 nanoseconds.
+  /// The production timer must saturate that delay rather than trapping while
+  /// still allowing the operator to cancel the pending wait.
+  func testExpiryTimerSaturatesHugeRecheckWithoutOverflow() async {
+    let timer = VenueExpiryTimer()
+    var fired = false
+
+    timer.schedule(stopAtUnixSeconds: Int64.max, now: 0) {
+      fired = true
+    }
+    timer.cancel()
+    await Task.yield()
+
+    XCTAssertFalse(fired, "a cancelled saturated recheck must not fire")
+  }
+
+  /// The exclusive deadline remains immediate when it has already been
+  /// reached; saturation must not alter that normal boundary behavior.
+  func testExpiryTimerFiresImmediatelyAtExclusiveDeadline() async {
+    let timer = VenueExpiryTimer()
+    var fired = false
+
+    timer.schedule(stopAtUnixSeconds: 10, now: 10) {
+      fired = true
+    }
+    await Task.yield()
+
+    XCTAssertTrue(fired)
+    timer.cancel()
+  }
+
   /// A clock that moves BACKWARD across an ENIN boundary during evaluation
   /// must not install either.
   ///
@@ -1470,6 +1502,25 @@ extension VenueSignedServingViewModelTests {
     let evaluations = ports.calls.filter { if case .evaluating = $0 { return true }; return false }
     XCTAssertEqual(evaluations.count, 2, "W18 initial evaluation plus one fresh retry")
     XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+  }
+
+  /// A delayed first verification can return a permit after its window has
+  /// ended. The VM must perform only one fresh decision, then surface a
+  /// terminal expired state without installing or spinning on the registry.
+  func testW20DelayedVerificationCrossingDeadlineStopsAfterOneFreshDecision() async throws {
+    let model = makeViewModel()
+    let pending = await startPending(.evaluation, model: model)
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.expired)))]
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+
+    finishPending(.evaluation, success: true)
+    await pending.value
+
+    let evaluations = ports.calls.filter { if case .evaluating = $0 { return true }; return false }
+    XCTAssertEqual(evaluations.count, 2)
+    XCTAssertTrue(installCalls.isEmpty)
+    XCTAssertEqual(model.status, .blocked(try rejection(.expired)))
     XCTAssertFalse(expiry.isScheduled)
   }
 
