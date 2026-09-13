@@ -36,6 +36,43 @@ import org.levarac.parallax.submission.createSubmissionOperatorConfiguration
  */
 class WindowObservationSubmissionDrainTest {
     @Test
+    fun retryableFailureSchedulesDrainWhenNoNewObservationArrives() {
+        val directory = Files.createTempDirectory("drain-retry-schedule").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            var nowEpochMilliseconds = NOW_EPOCH_MILLIS
+            val scheduler = RecordingRetryScheduler()
+            val resolver = FakeConfigurationResolver(
+                listOf(
+                    SubmissionConfigurationResolution.RetryableFailure("timeout"),
+                    SubmissionConfigurationResolution.Resolved(resolvedConfiguration(endpoint)),
+                ),
+            )
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+                retryScheduler = scheduler,
+                nowEpochMilliseconds = { nowEpochMilliseconds },
+            )
+            // The fixture has one durable submission; there is no later
+            // observation to provide another trigger.
+            closeOneWindow(accumulator)
+            drain.drain()
+
+            assertEquals(1, resolver.callCount)
+            assertEquals(1, scheduler.scheduledCount)
+            assertEquals(RETRY_BACKOFF_MILLIS, scheduler.delayMillis)
+            nowEpochMilliseconds += RETRY_BACKOFF_MILLIS
+            scheduler.task.invoke()
+            waitUntil { server.postCount == 1 }
+        } finally {
+            server.stop()
+        }
+    }
+    @Test
     fun happyPathDrainsExactlyOnePostAndPersistsAcceptance() {
         val directory = Files.createTempDirectory("drain-happy-path").toFile()
         val server = newStubOperatorServer()
@@ -655,6 +692,19 @@ class WindowObservationSubmissionDrainTest {
         }
     }
 
+    private class RecordingRetryScheduler : WindowObservationSubmissionDrain.RetryScheduler {
+        var scheduledCount = 0
+        var delayMillis = 0L
+        lateinit var task: () -> Unit
+
+        override fun schedule(delayMillis: Long, task: () -> Unit): WindowObservationSubmissionDrain.RetryHandle {
+            scheduledCount++
+            this.delayMillis = delayMillis
+            this.task = task
+            return WindowObservationSubmissionDrain.RetryHandle { }
+        }
+    }
+
     // --- fixtures ---
 
     private fun buildSystem(
@@ -663,6 +713,7 @@ class WindowObservationSubmissionDrainTest {
         submissionConfiguration: SubmissionOperatorConfiguration?,
         receiptPersistenceGate: () -> Boolean = { true },
         configurationResolver: WindowObservationSubmissionDrain.SubmissionConfigurationResolver? = null,
+        retryScheduler: WindowObservationSubmissionDrain.RetryScheduler? = null,
         nowEpochMilliseconds: () -> Long = { NOW_EPOCH_MILLIS },
     ): Pair<WindowObservationAccumulator, WindowObservationSubmissionDrain> {
         val context = WindowObservationContext(
@@ -694,6 +745,7 @@ class WindowObservationSubmissionDrainTest {
             allowInsecureLoopbackForTests = true,
             receiptPersistenceGate = receiptPersistenceGate,
             configurationResolver = configurationResolver,
+            retryScheduler = retryScheduler,
         )
         return accumulator to drain
     }

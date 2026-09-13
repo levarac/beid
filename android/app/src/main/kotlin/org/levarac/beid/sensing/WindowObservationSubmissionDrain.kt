@@ -2,6 +2,9 @@ package org.levarac.beid.sensing
 
 import android.util.Log
 import java.io.IOException
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import org.levarac.beid.persistence.SubmissionRecord
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.shared.report.UnsentWindowSubmission
@@ -75,16 +78,37 @@ internal class WindowObservationSubmissionDrain(
      * public `createSubmissionOperatorConfiguration(...)` factory.
      */
     private val configurationResolver: SubmissionConfigurationResolver? = null,
+    private val retryScheduler: RetryScheduler? = null,
 ) {
+    @Volatile private var closed = false
+    private var scheduledRetry: RetryHandle? = null
+
     /** See [WindowObservationSubmissionDrain]'s `configurationResolver` doc. */
     fun interface SubmissionConfigurationResolver {
         fun resolve(eventIdHex: String, completion: (SubmissionConfigurationResolution) -> Unit)
     }
 
+    fun interface RetryHandle { fun cancel() }
+
+    fun interface RetryScheduler {
+        fun schedule(delayMillis: Long, task: () -> Unit): RetryHandle
+
+        fun close() = Unit
+    }
+
     /** beid#525's "after a window's durable close" / "on foreground resume" / "when a retry time arrives" triggers. */
     fun drain() {
+        if (closed) return
+        scheduledRetry = null
         accumulator.beginNextSubmissionAttempt(nowEpochMilliseconds())
             ?.let { handle(it, SubmissionEmissionOrigin.FRESH) }
+    }
+
+    fun close() {
+        closed = true
+        scheduledRetry?.cancel()
+        scheduledRetry = null
+        retryScheduler?.close()
     }
 
     /**
@@ -103,6 +127,7 @@ internal class WindowObservationSubmissionDrain(
 
     /** [WindowObservationAccumulator]'s sink for a submission its own writer-side ledger writes coincidentally surfaced. */
     fun receiveEmittedSubmission(submission: UnsentWindowSubmission, origin: SubmissionEmissionOrigin) {
+        if (closed) return
         handle(submission, origin)
     }
 
@@ -142,6 +167,7 @@ internal class WindowObservationSubmissionDrain(
                         retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
                     )
                     logSubmissionOutcome("scheduled registry retry for window $windowId: ${resolution.errorCode}")
+                    scheduleRetry()
                 }
 
                 is SubmissionConfigurationResolution.PermanentlyUnusable -> {
@@ -260,6 +286,7 @@ internal class WindowObservationSubmissionDrain(
                 retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
             )
             logSubmissionOutcome("scheduled retry for window $windowId: ${result.errorCode}")
+            scheduleRetry()
         } else {
             if (!persistSubmissionRecord(submission.submissionKey, windowId, "terminal_failure") {
                 submissionRecordStore.recordTerminalFailure(windowId, result.errorCode ?: "submission_failed")
@@ -294,7 +321,12 @@ internal class WindowObservationSubmissionDrain(
             false
         }
         if (persisted) return true
-        logSubmissionOutcome("record_persistence_failed operation=$operation window=$windowId")
+        val detail = if (submissionRecordStore.recordFor(windowId) == null) {
+            "record_missing"
+        } else {
+            "write_failed"
+        }
+        logSubmissionOutcome("record_persistence_failed operation=$operation detail=$detail window=$windowId")
         // Keep the report unacknowledged. A later attempt performs receipt
         // lookup before posting, including when the operator already accepted
         // the bytes whose receipt could not be saved locally.
@@ -302,7 +334,15 @@ internal class WindowObservationSubmissionDrain(
             submissionKey,
             retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
         )
+        scheduleRetry()
         return false
+    }
+
+    private fun scheduleRetry() {
+        if (closed) return
+        val scheduler = retryScheduler ?: return
+        scheduledRetry?.cancel()
+        scheduledRetry = scheduler.schedule(RETRY_BACKOFF_MILLIS) { drain() }
     }
 
     private fun restoreConfiguration(record: SubmissionRecord): SubmissionOperatorConfiguration? {
@@ -340,5 +380,21 @@ internal class WindowObservationSubmissionDrain(
          * schedule this issue does not ask for.
          */
         const val RETRY_BACKOFF_MILLIS = 30_000L
+    }
+}
+
+/** Process-scoped timer used by the Android runtime; daemon thread avoids pinning test JVMs. */
+internal class DefaultSubmissionRetryScheduler : WindowObservationSubmissionDrain.RetryScheduler {
+    private val executor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "beid-submission-retry").apply { isDaemon = true }
+    }
+
+    override fun schedule(delayMillis: Long, task: () -> Unit): WindowObservationSubmissionDrain.RetryHandle {
+        val future: ScheduledFuture<*> = executor.schedule(task, delayMillis, TimeUnit.MILLISECONDS)
+        return WindowObservationSubmissionDrain.RetryHandle { future.cancel(false) }
+    }
+
+    override fun close() {
+        executor.shutdownNow()
     }
 }

@@ -193,6 +193,7 @@ internal class WindowObservationRuntimeOwner(
                     }
                 }
             },
+            retryScheduler = DefaultSubmissionRetryScheduler(),
         )
         return WindowObservationRuntime(
             accumulator = accumulator,
