@@ -36,6 +36,7 @@ struct VenuePublicArtifactRecord: Codable, Equatable {
 @MainActor
 final class VenuePublicArtifactStore: ObservableObject {
   @Published private(set) var record: VenuePublicArtifactRecord?
+  @Published private(set) var persistenceWriteFailure: Error?
 
   /// Set when `load()` preserved a file that failed to decode, so the event
   /// is not invisible. Same contract as `VenueDeviceAssignmentStore`'s.

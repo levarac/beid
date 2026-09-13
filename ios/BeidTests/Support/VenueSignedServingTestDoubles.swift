@@ -14,11 +14,11 @@ final class FakeVenueExpiryScheduler: VenueExpiryScheduling {
   private(set) var scheduledStopAt: Int64?
   private(set) var scheduledNow: Int64?
   private(set) var cancelCount = 0
-  private var pending: (() -> Void)?
+  private var pending: (@MainActor () async -> Void)?
 
   var isScheduled: Bool { pending != nil }
 
-  func schedule(stopAtUnixSeconds: Int64, now: Int64, fire: @escaping () -> Void) {
+  func schedule(stopAtUnixSeconds: Int64, now: Int64, fire: @escaping @MainActor () async -> Void) {
     scheduledStopAt = stopAtUnixSeconds
     scheduledNow = now
     pending = fire
@@ -37,7 +37,22 @@ final class FakeVenueExpiryScheduler: VenueExpiryScheduling {
       return
     }
     self.pending = nil
-    pending()
+    Task { await pending() }
+  }
+
+  /// Takes a queued callback independently of cancel, to model delivery races.
+  func takeQueuedFire() -> (@MainActor () async -> Void)? {
+    defer { pending = nil }
+    return pending
+  }
+
+  /// Acknowledges the entire async handler, including a no-effect failure.
+  func fireAndWait(file: StaticString = #filePath, line: UInt = #line) async {
+    guard let fire = takeQueuedFire() else {
+      XCTFail("fired an expiry timer that was never scheduled", file: file, line: line)
+      return
+    }
+    await fire()
   }
 }
 

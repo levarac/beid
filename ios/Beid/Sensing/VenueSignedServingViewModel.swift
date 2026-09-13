@@ -10,7 +10,7 @@ import Foundation
 protocol VenueExpiryScheduling: AnyObject {
   /// `stopAtUnixSeconds` is EXCLUSIVE and comes from the permit. Nothing here
   /// recomputes an ENIN boundary or rounds the instant; it only waits for it.
-  func schedule(stopAtUnixSeconds: Int64, now: Int64, fire: @escaping () -> Void)
+  func schedule(stopAtUnixSeconds: Int64, now: Int64, fire: @escaping @MainActor () async -> Void)
   func cancel()
 }
 
@@ -18,20 +18,20 @@ protocol VenueExpiryScheduling: AnyObject {
 final class VenueExpiryTimer: VenueExpiryScheduling {
   private var task: Task<Void, Never>?
 
-  func schedule(stopAtUnixSeconds: Int64, now: Int64, fire: @escaping () -> Void) {
+  func schedule(stopAtUnixSeconds: Int64, now: Int64, fire: @escaping @MainActor () async -> Void) {
     cancel()
     let seconds = stopAtUnixSeconds - now
     // The instant is exclusive, so an already-reached deadline fires at once
     // rather than being nudged forward to make it schedulable.
     guard seconds > 0 else {
-      fire()
+      task = Task { await fire() }
       return
     }
     task = Task { [weak self] in
       try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
       guard !Task.isCancelled else { return }
       self?.task = nil
-      fire()
+      await fire()
     }
   }
 
@@ -412,6 +412,10 @@ final class VenueSignedServingViewModel: ObservableObject {
 
   // MARK: - Lifecycle
 
+  // Session boundary API. The RED witness precedes its implementation.
+  func beginSession(isForeground: Bool) {}
+  func endSession() {}
+
   /// Scene departure requires clearing: the app is no longer in a position to
   /// observe expiry or a radio failure, so it must not leave bytes on the air.
   func sceneDidEnterBackground() {
@@ -476,7 +480,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     guard rejection.reason == .notStarted, let recheckAt = rejection.recheckAtUnixSeconds else { return }
     guard case .available(let now) = clock() else { return }
     expiry.schedule(stopAtUnixSeconds: recheckAt, now: now) { [weak self] in
-      Task { @MainActor in await self?.handleExpiry(generation: generation) }
+      await self?.handleExpiry(generation: generation)
     }
   }
 
@@ -554,7 +558,7 @@ final class VenueSignedServingViewModel: ObservableObject {
 
     // Run a timer against the exclusive instant the permit fixed.
     expiry.schedule(stopAtUnixSeconds: permit.stopAtUnixSeconds, now: now) { [weak self] in
-      Task { @MainActor in await self?.handleExpiry(generation: generation) }
+      await self?.handleExpiry(generation: generation)
     }
   }
 

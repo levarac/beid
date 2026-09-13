@@ -1255,3 +1255,435 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     )
   }
 }
+
+
+// MARK: - Accepted Issue 545 ownership model: behavioral regression witnesses
+
+extension VenueSignedServingViewModelTests {
+  private enum PendingStage: String, CaseIterable {
+    case acquisition, importing, evaluation
+  }
+
+  private func resetOwnershipHarness() {
+    ports = ScriptedVenuePorts()
+    acquisition = StubVenueArtifactAcquisition()
+    store = makeTemporaryArtifactStore()
+    expiry = FakeVenueExpiryScheduler()
+    clockReading = .available(unixSeconds: now)
+  }
+
+  private func seedStoredArtifact() {
+    store.store(VenuePublicArtifactRecord(
+      bundleBytes: fixture.artifact.bundleBytes,
+      handoffBytes: fixture.artifact.handoffBytes,
+      sourceDescription: "previous.example", storedAt: Date()
+    ))
+  }
+
+  private func startPending(
+    _ stage: PendingStage, model: VenueSignedServingViewModel
+  ) async -> Task<Void, Never> {
+    acquisition.replies = stage == .acquisition ? [.deferred] : [.artifact(replacementArtifact)]
+    ports.importReplies = stage == .importing ? [.deferred] : [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = stage == .evaluation ? [.deferred] : [.immediate(.permitted(fixture.permit()))]
+    let task = Task {
+      await model.supply(
+        bundleSource: URL(string: "https://replacement.example/bundle")!,
+        handoffSource: URL(string: "https://replacement.example/handoff")!,
+        sourceDescription: "replacement.example"
+      )
+    }
+    switch stage {
+    case .acquisition: await acquisition.waitForAcquisitionCount(1)
+    case .importing: await ports.waitForCallCount(2)
+    case .evaluation: await ports.waitForCallCount(3)
+    }
+    return task
+  }
+
+  private func finishPending(_ stage: PendingStage, success: Bool) {
+    switch stage {
+    case .acquisition:
+      if success { XCTAssertTrue(acquisition.completeAcquisition(id: 0, with: replacementArtifact)) }
+      else { XCTAssertTrue(acquisition.failAcquisition(id: 0, with: .transportFailure)) }
+    case .importing:
+      XCTAssertTrue(ports.completeImport(
+        id: 0, with: success ? .imported(fixture.imported()) : .rejected(.definitionRejected)
+      ))
+    case .evaluation:
+      XCTAssertTrue(ports.completeEvaluation(
+        id: 1, with: success ? .permitted(fixture.permit()) : .blocked(VenueServingRejection(reason: .expired)!)
+      ))
+    }
+  }
+
+  func testW04BackgroundSuccessPreservesReplacementWithBothForegroundOrders() async throws {
+    for foregroundBeforeResult in [false, true] {
+      resetOwnershipHarness()
+      seedStoredArtifact()
+      let model = makeViewModel()
+      let pending = await startPending(.acquisition, model: model)
+      model.sceneDidEnterBackground()
+      if foregroundBeforeResult { await model.sceneWillEnterForeground() }
+      finishPending(.acquisition, success: true)
+      await pending.value
+      if !foregroundBeforeResult {
+        XCTAssertNil(ports.installedPermit, "W04 no background install")
+        await model.sceneWillEnterForeground()
+      }
+      XCTAssertEqual(store.record?.bundleBytes, replacementArtifact.bundleBytes, "W04 selected B retained")
+      XCTAssertTrue(importedBundleBytes.contains(replacementArtifact.bundleBytes), "W04 B imported")
+      XCTAssertFalse(importedBundleBytes.contains(fixture.artifact.bundleBytes), "W04 A never restored")
+      XCTAssertNotNil(ports.installedPermit, "W04 current B can serve after foreground")
+      print("W04 foregroundBeforeResult=\(foregroundBeforeResult)")
+    }
+  }
+
+  func testW08ReloadDeadlineClearsWhileObsoleteSupplyIsPendingAtEveryStage() async throws {
+    for stage in PendingStage.allCases {
+      for completeOldBeforeDeadline in [false, true] {
+        resetOwnershipHarness()
+        seedStoredArtifact()
+        let model = makeViewModel()
+        let old = await startPending(stage, model: model)
+        ports.importReplies = [.immediate(.imported(fixture.imported()))]
+        ports.evaluationReplies = [
+          .immediate(.permitted(fixture.permit())),
+          .immediate(.blocked(VenueServingRejection(reason: .expired)!)),
+        ]
+        await model.restoreFromStorage()
+        XCTAssertNotNil(ports.installedPermit)
+        if completeOldBeforeDeadline {
+          finishPending(stage, success: true)
+          await old.value
+        }
+        let callsBefore = ports.calls.count
+        clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+        await expiry.fireAndWait()
+        XCTAssertNil(ports.installedPermit, "W08 deadline independent of obsolete \(stage)")
+        XCTAssertEqual(ports.calls.dropFirst(callsBefore).first, .clearing, "W08 clear first")
+        XCTAssertEqual(model.status, .blocked(VenueServingRejection(reason: .expired)!))
+        if !completeOldBeforeDeadline {
+          finishPending(stage, success: true)
+          await old.value
+        }
+        XCTAssertNil(ports.installedPermit, "W08 stale cleanup cannot resurrect")
+        print("W08 stage=\(stage.rawValue) oldBeforeDeadline=\(completeOldBeforeDeadline)")
+      }
+    }
+  }
+
+  func testW14CancelledTaskCannotCommitNormalLateResultAtAnyStage() async throws {
+    for stage in PendingStage.allCases {
+      for success in [false, true] {
+        resetOwnershipHarness()
+        seedStoredArtifact()
+        let model = makeViewModel()
+        let task = await startPending(stage, model: model)
+        let recordBeforeCancel = store.record
+        let importsBeforeCancel = importedBundleBytes
+        task.cancel()
+        finishPending(stage, success: success)
+        await task.value
+        XCTAssertNil(ports.installedPermit, "W14 cancelled \(stage) result=\(success)")
+        XCTAssertTrue(installCalls.isEmpty)
+        XCTAssertEqual(store.record, recordBeforeCancel, "W14 no post-cancel persistence")
+        XCTAssertEqual(importedBundleBytes, importsBeforeCancel, "W14 no next stage after cancel")
+        XCTAssertEqual(model.status, .idle, "W14 cancelled workflow retires locally")
+        print("W14 stage=\(stage.rawValue) success=\(success)")
+      }
+    }
+  }
+
+  func testW11ClockWhileBackgroundNeverInstallsAtAnyStage() async throws {
+    for stage in PendingStage.allCases {
+      resetOwnershipHarness()
+      seedStoredArtifact()
+      let model = makeViewModel()
+      let task = await startPending(stage, model: model)
+      model.sceneDidEnterBackground()
+      await model.systemClockDidChange()
+      finishPending(stage, success: true)
+      await task.value
+      await model.systemClockDidChange()
+      XCTAssertNil(ports.installedPermit, "W11 \(stage) background clock")
+      XCTAssertTrue(installCalls.isEmpty)
+      XCTAssertFalse(expiry.isScheduled)
+      print("W11 stage=\(stage.rawValue)")
+    }
+  }
+
+  func testW18RepeatedStalePermitsConsumeAtMostOneImmediateRetry() async throws {
+    let model = makeViewModel()
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    // A finite tail makes the defective recursion terminate, so RED is an
+    // assertion about excess work, never a test process hang or stack crash.
+    ports.evaluationReplies = [
+      .immediate(.permitted(fixture.permit())),
+      .immediate(.permitted(fixture.permit())),
+      .immediate(.permitted(fixture.permit())),
+      .immediate(.blocked(VenueServingRejection(reason: .expired)!)),
+    ]
+    await supply(model)
+    let evaluations = ports.calls.filter { if case .evaluating = $0 { return true }; return false }
+    XCTAssertEqual(evaluations.count, 2, "W18 initial evaluation plus one fresh retry")
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+  }
+
+  func testW19NonfutureNotStartedDoesNotArmAnImmediateLoop() async throws {
+    for offset in [Int64(0), -1] {
+      resetOwnershipHarness()
+      let model = makeViewModel()
+      ports.importReplies = [.immediate(.imported(fixture.imported()))]
+      ports.evaluationReplies = [.immediate(.blocked(
+        VenueServingRejection(reason: .notStarted, recheckAtUnixSeconds: now + offset)!
+      ))]
+      await supply(model)
+      XCTAssertFalse(expiry.isScheduled, "W19 recheck offset=\(offset) cannot enqueue immediate retries")
+      XCTAssertNil(ports.installedPermit)
+      print("W19 offset=\(offset)")
+    }
+  }
+}
+
+
+extension VenueSignedServingViewModelTests {
+  func testW05DuplicateAcquisitionAllResultAndCompletionOrders() async throws {
+    for oldFirst in [false, true] {
+      for oldSuccess in [false, true] {
+        for currentSuccess in [false, true] {
+          resetOwnershipHarness()
+          seedStoredArtifact()
+          let model = makeViewModel()
+          acquisition.replies = [.deferred, .deferred]
+          ports.importReplies = [.immediate(.imported(fixture.imported()))]
+          ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+          let first = Task {
+            await model.supply(bundleSource: URL(string: "https://old.example/b")!,
+                               handoffSource: URL(string: "https://old.example/h")!, sourceDescription: "old")
+          }
+          await acquisition.waitForAcquisitionCount(1)
+          let second = Task {
+            await model.supply(bundleSource: URL(string: "https://current.example/b")!,
+                               handoffSource: URL(string: "https://current.example/h")!, sourceDescription: "current")
+          }
+          await acquisition.waitForAcquisitionCount(2)
+          for id in oldFirst ? [0, 1] : [1, 0] {
+            let success = id == 0 ? oldSuccess : currentSuccess
+            if success {
+              XCTAssertTrue(acquisition.completeAcquisition(
+                id: id, with: id == 0 ? fixture.artifact : replacementArtifact
+              ))
+            } else { XCTAssertTrue(acquisition.failAcquisition(id: id, with: .transportFailure)) }
+            if id == 0 { await first.value } else { await second.value }
+            if oldFirst && id == 0 {
+              // The stale completion cannot release the pending current work.
+              await model.sceneWillEnterForeground()
+              await model.systemClockDidChange()
+              XCTAssertTrue(importedBundleBytes.isEmpty, "W05 obsolete completion released current workflow")
+            }
+          }
+          XCTAssertFalse(importedBundleBytes.contains(fixture.artifact.bundleBytes))
+          XCTAssertEqual(store.record?.sourceDescription, currentSuccess ? "current" : "previous.example")
+          XCTAssertEqual(store.record?.bundleBytes, currentSuccess ? replacementArtifact.bundleBytes : fixture.artifact.bundleBytes)
+          XCTAssertEqual(installCalls.count, currentSuccess ? 1 : 0)
+          print("W05 oldFirst=\(oldFirst) oldSuccess=\(oldSuccess) currentSuccess=\(currentSuccess)")
+        }
+      }
+    }
+  }
+
+  func testW06ObsoleteAcquisitionCannotReleaseCurrentImportOrEvaluation() async throws {
+    for stage in [PendingStage.importing, .evaluation] {
+      for oldSuccess in [false, true] {
+        resetOwnershipHarness()
+        let model = makeViewModel()
+        let old = await startPending(.acquisition, model: model)
+        acquisition.replies = [.artifact(replacementArtifact)]
+        ports.importReplies = stage == .importing ? [.deferred] : [.immediate(.imported(fixture.imported()))]
+        ports.evaluationReplies = stage == .evaluation ? [.deferred] : [.immediate(.permitted(fixture.permit()))]
+        let second = Task {
+          await model.supply(bundleSource: URL(string: "https://current.example/b")!,
+                             handoffSource: URL(string: "https://current.example/h")!, sourceDescription: "current")
+        }
+        await ports.waitForCallCount(stage == .importing ? 3 : 4)
+        let before = ports.calls.count
+        finishPending(.acquisition, success: oldSuccess)
+        await old.value
+        await model.sceneWillEnterForeground()
+        XCTAssertEqual(ports.calls.count, before, "W06 obsolete task must not unlock current \(stage)")
+        if stage == .importing {
+          XCTAssertTrue(ports.completeImport(id: 0, with: .imported(fixture.imported())))
+        } else {
+          XCTAssertTrue(ports.completeEvaluation(id: 1, with: .permitted(fixture.permit())))
+        }
+        await second.value
+        XCTAssertNotNil(ports.installedPermit)
+        XCTAssertEqual(store.record?.sourceDescription, "current")
+        print("W06 stage=\(stage.rawValue) oldSuccess=\(oldSuccess)")
+      }
+    }
+  }
+
+  func testW07ExplicitReloadOwnsEveryLateResultPartition() async throws {
+    for stage in PendingStage.allCases {
+      for success in [false, true] {
+        resetOwnershipHarness()
+        seedStoredArtifact()
+        let model = makeViewModel()
+        let old = await startPending(stage, model: model)
+        let selectedRecord = store.record
+        ports.importReplies = [.immediate(.imported(fixture.imported()))]
+        ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+        await model.restoreFromStorage()
+        let selectedStatus = model.status
+        let count = ports.calls.count
+        finishPending(stage, success: success)
+        await old.value
+        XCTAssertEqual(model.status, selectedStatus)
+        XCTAssertEqual(store.record, selectedRecord)
+        XCTAssertEqual(ports.calls.count, count, "W07 no obsolete side effects")
+        XCTAssertNotNil(ports.installedPermit)
+        print("W07 stage=\(stage.rawValue) oldSuccess=\(success)")
+      }
+    }
+  }
+
+  func testW09StopRetiresEveryLateResultPartition() async throws {
+    for stage in PendingStage.allCases {
+      for success in [false, true] {
+        resetOwnershipHarness()
+        seedStoredArtifact()
+        let model = makeViewModel()
+        let old = await startPending(stage, model: model)
+        model.stop()
+        let recordAtStop = store.record
+        let countAtStop = ports.calls.count
+        finishPending(stage, success: success)
+        await old.value
+        await model.sceneWillEnterForeground()
+        await model.systemClockDidChange()
+        XCTAssertEqual(model.status, .idle)
+        XCTAssertEqual(store.record, recordAtStop)
+        XCTAssertEqual(ports.calls.count, countAtStop)
+        XCTAssertNil(ports.installedPermit)
+        print("W09 stage=\(stage.rawValue) success=\(success)")
+      }
+    }
+  }
+
+  func testW10BackgroundRetainsSelectedWorkAcrossAllStagesAndForegroundOrders() async throws {
+    for stage in PendingStage.allCases {
+      for foregroundFirst in [false, true] {
+        resetOwnershipHarness()
+        seedStoredArtifact()
+        let model = makeViewModel()
+        let old = await startPending(stage, model: model)
+        if stage == .evaluation { ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))] }
+        model.sceneDidEnterBackground()
+        if foregroundFirst { await model.sceneWillEnterForeground() }
+        finishPending(stage, success: true)
+        await old.value
+        if !foregroundFirst {
+          XCTAssertNil(ports.installedPermit)
+          await model.sceneWillEnterForeground()
+        }
+        XCTAssertEqual(store.record?.bundleBytes, replacementArtifact.bundleBytes)
+        XCTAssertFalse(importedBundleBytes.contains(fixture.artifact.bundleBytes), "W10 no automatic A fallback")
+        XCTAssertNotNil(ports.installedPermit, "W10 selected workflow resumes \(stage)")
+        print("W10 stage=\(stage.rawValue) foregroundFirst=\(foregroundFirst)")
+      }
+    }
+  }
+
+  func testW15QueuedExpiryCannotReviveStoppedOrReplacedWorkflow() async throws {
+    for replacement in ["stop", "supply", "reload"] {
+      resetOwnershipHarness()
+      let model = makeViewModel()
+      ports.importReplies = [.immediate(.imported(fixture.imported()))]
+      ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+      await supply(model)
+      let queued = try XCTUnwrap(expiry.takeQueuedFire())
+      if replacement == "stop" {
+        model.stop()
+      } else {
+        ports.importReplies = [.immediate(.rejected(.definitionRejected))]
+        if replacement == "supply" { await supply(model) }
+        else { await model.restoreFromStorage() }
+      }
+      let count = ports.calls.count
+      let status = model.status
+      await queued()
+      XCTAssertEqual(ports.calls.count, count)
+      XCTAssertEqual(model.status, status)
+      XCTAssertNil(ports.installedPermit)
+      print("W15 replacement=\(replacement)")
+    }
+  }
+}
+
+
+extension VenueSignedServingViewModelTests {
+  func testW13SessionLossRetiresPendingWorkAndRejectsLateResults() async throws {
+    for stage in PendingStage.allCases {
+      resetOwnershipHarness()
+      seedStoredArtifact()
+      let model = makeViewModel()
+      model.beginSession(isForeground: true)
+      let old = await startPending(stage, model: model)
+      model.endSession()
+      let recordAtLoss = store.record
+      let countAtLoss = ports.calls.count
+      XCTAssertEqual(model.status, .idle, "W13 synchronous session retirement")
+      finishPending(stage, success: true)
+      await old.value
+      XCTAssertEqual(model.status, .idle)
+      XCTAssertNil(ports.installedPermit)
+      XCTAssertEqual(store.record, recordAtLoss)
+      XCTAssertEqual(ports.calls.count, countAtLoss)
+      // A new destination session starts stopped; it never restores by itself.
+      model.beginSession(isForeground: true)
+      await model.sceneWillEnterForeground()
+      XCTAssertEqual(model.status, .idle)
+      XCTAssertNil(ports.installedPermit)
+      print("W13 stage=\(stage.rawValue)")
+    }
+  }
+
+  func testW13SessionLossClearsCurrentEffectImmediately() async throws {
+    let model = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(model)
+    XCTAssertNotNil(ports.installedPermit)
+    model.endSession()
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+    XCTAssertEqual(model.status, .idle)
+  }
+}
+
+
+extension VenueSignedServingViewModelTests {
+  func testW22FailedSaveIsVisibleAndDoesNotMasqueradeAsDurableReplacement() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let url = directory.appendingPathComponent("artifact.json")
+    // Missing parent reliably fails atomic write without changing permissions.
+    let failingStore = VenuePublicArtifactStore(fileURL: url)
+    let record = VenuePublicArtifactRecord(
+      bundleBytes: fixture.artifact.bundleBytes, handoffBytes: fixture.artifact.handoffBytes,
+      sourceDescription: "memory-only", storedAt: Date()
+    )
+    failingStore.store(record)
+    XCTAssertEqual(failingStore.record, record, "W22 current session retains public bytes")
+    XCTAssertNotNil(failingStore.persistenceWriteFailure, "W22 write failure must be visible")
+    XCTAssertNil(VenuePublicArtifactStore(fileURL: url).record, "W22 no false restart retention")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    failingStore.store(record)
+    XCTAssertNil(failingStore.persistenceWriteFailure, "W22 an explicit successful retry clears failure")
+    XCTAssertEqual(VenuePublicArtifactStore(fileURL: url).record, record)
+  }
+}
