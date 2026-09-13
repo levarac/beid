@@ -7,7 +7,7 @@ options:
 packages:
   Barnard:
     url: https://github.com/levarac/barnard.git
-    exactVersion: 0.9.1
+    exactVersion: 0.9.2
   MetaMask:
     # Archived, non-commercially licensed dependency, now linked into
     # Release (DECISIONS 2026-08-21 "#250 で MetaMask を Release へ昇格させる"):

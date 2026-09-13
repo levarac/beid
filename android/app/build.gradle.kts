@@ -106,8 +106,13 @@ android {
 dependencies {
     implementation(project(":shared"))
 
+    // MetaMask's native Android SDK is archived upstream; pin the last Maven
+    // Central release deliberately while the app migrates to a maintained
+    // replacement. No relay or transaction API is used by this app.
+    implementation("io.metamask.androidsdk:metamask-android-sdk:0.6.6")
+
     // Native (Flutter-free) BLE mutual-observation SDK published to Maven Central.
-    implementation("org.levarac:barnard:0.9.1")
+    implementation("org.levarac:barnard:0.9.2")
 
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")

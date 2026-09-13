@@ -40,7 +40,7 @@ import org.levarac.beid.ui.screens.WelcomeScreen
  * not be dropped on Home with a dead radio.
  */
 @Composable
-fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore, sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null) {
+fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore, sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null, onStartWalletBinding: () -> Unit = {}) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val onboardingPreferences = remember { OnboardingPreferences(context) }
@@ -92,6 +92,7 @@ fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore, se
             EventJoinRoute(
                 session,
                 onOpenAccount = { navController.navigate(Screen.Account.route) },
+                onStartWalletBinding = onStartWalletBinding,
                 // beid#463. The same destination Account reaches, now also
                 // reachable from the surface where a participant discovers the
                 // radio found nothing — which is where they actually are when

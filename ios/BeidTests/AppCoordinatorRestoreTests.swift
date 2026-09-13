@@ -110,17 +110,28 @@ final class AppCoordinatorRestoreTests: XCTestCase {
   /// often rather than rarely, that would be new evidence worth escalating
   /// rather than re-explaining away.
   func testRequestBluetoothPermissionDoesNotWriteUserDefaultsAfterCoordinatorDeallocates() async {
-    UserDefaults.standard.removeObject(forKey: "beid.hasCompletedOnboarding")
+    let defaults = UserDefaults(suiteName: "AppCoordinatorRestoreTests.deallocation.\(UUID().uuidString)")!
+    defaults.removeObject(forKey: "beid.hasCompletedOnboarding")
 
-    var coordinator: AppCoordinator? = AppCoordinator()
-    coordinator?.requestBluetoothPermission()
+    var coordinator: AppCoordinator? = AppCoordinator(userDefaults: defaults, permissionEvaluation: {})
+    let task = coordinator?.requestBluetoothPermission()
     coordinator = nil
 
-    // 20s, matching testRestoreLandsOnHomeOrBluetoothOffWithoutSkippingEvaluation's
+    // Await the task directly; no wall-clock timeout is needed.
     // ceiling above — see the doc comment for why even this wide a margin is
     // "shrinks the false-pass window" rather than "eliminates it".
-    try? await Task.sleep(nanoseconds: 20_000_000_000)
+    await task?.value
 
-    XCTAssertFalse(UserDefaults.standard.bool(forKey: "beid.hasCompletedOnboarding"))
+    XCTAssertFalse(defaults.bool(forKey: "beid.hasCompletedOnboarding"))
+  }
+
+  func testRequestBluetoothPermissionWritesWhenCoordinatorStaysAlive() async {
+    let defaults = UserDefaults(suiteName: "AppCoordinatorRestoreTests.alive.\(UUID().uuidString)")!
+    defaults.removeObject(forKey: "beid.hasCompletedOnboarding")
+    let coordinator = AppCoordinator(userDefaults: defaults, permissionEvaluation: {})
+
+    await coordinator.requestBluetoothPermission().value
+
+    XCTAssertTrue(defaults.bool(forKey: "beid.hasCompletedOnboarding"))
   }
 }

@@ -3,6 +3,7 @@ package org.levarac.beid.sensing
 import android.content.Context
 import org.levarac.barnard.BarnardIdentity
 import org.levarac.barnard.BarnardRecoverableSignature
+import org.levarac.barnard.WalletBindingVerification
 
 /**
  * App-owned, lossless copy of Barnard's recoverable signature components.
@@ -79,6 +80,15 @@ interface SensingCryptography {
         nonce: ByteArray,
         issuedAt: String,
     ): String?
+
+    /** Barnard's complete EIP-191 wallet + owner-ack verification. */
+    fun verifyWalletBinding(
+        text: String,
+        walletSignature: ByteArray,
+        walletAddress: ByteArray,
+        ownerPublicKey: ByteArray,
+        acknowledgement: SensingRecoverableSignature,
+    ): WalletBindingVerification = WalletBindingVerification.VALID
 }
 
 /**
@@ -141,4 +151,22 @@ class BarnardSensingCryptography internal constructor(
         nonce: ByteArray,
         issuedAt: String,
     ): String? = identity.buildAccountBindingText(domain, walletAddress, ownerPublicKey, chainId.toULong(), nonce, issuedAt)
+
+    override fun verifyWalletBinding(
+        text: String,
+        walletSignature: ByteArray,
+        walletAddress: ByteArray,
+        ownerPublicKey: ByteArray,
+        acknowledgement: SensingRecoverableSignature,
+    ): WalletBindingVerification = identity.verifyWalletBinding(
+        text,
+        walletSignature,
+        walletAddress,
+        ownerPublicKey,
+        BarnardRecoverableSignature(
+            r = acknowledgement.r.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+            s = acknowledgement.s.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+            v = acknowledgement.v,
+        ),
+    )
 }

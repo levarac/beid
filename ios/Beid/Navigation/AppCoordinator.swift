@@ -33,6 +33,8 @@ final class AppCoordinator: ObservableObject {
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
   let bluetoothMonitor = BluetoothMonitor()
+  private let userDefaults: UserDefaults
+  private let permissionEvaluation: () async -> Void
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
 
@@ -48,12 +50,18 @@ final class AppCoordinator: ObservableObject {
     walletConnector: (any WalletConnector)? = nil,
     proofStore: ProofStore? = nil,
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
-      RegistryDependencies.createClient()
+      RegistryDependencies.createClient(),
+    userDefaults: UserDefaults = .standard,
+    permissionEvaluation: @escaping () async -> Void = {
+      try? await Task.sleep(nanoseconds: 300_000_000)
+    }
   ) {
     self.registryClient = registryClient
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
     self.walletConnector = walletConnector
     self.proofStore = proofStore ?? ProofStore()
+    self.userDefaults = userDefaults
+    self.permissionEvaluation = permissionEvaluation
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
     }
@@ -84,7 +92,7 @@ final class AppCoordinator: ObservableObject {
     #if DEBUG
     guard !ProcessInfo.processInfo.arguments.contains("-beid-ui-test") else { return false }
     #endif
-    return UserDefaults.standard.bool(forKey: Self.hasCompletedOnboardingKey)
+    return userDefaults.bool(forKey: Self.hasCompletedOnboardingKey)
   }
 
   /// Same launch-argument gate as `hasCompletedOnboardingPersisted` above,
@@ -406,17 +414,18 @@ final class AppCoordinator: ObservableObject {
     eventCodeEntrySheetPresented = true
   }
 
-  func requestBluetoothPermission() {
+  @discardableResult
+  func requestBluetoothPermission() -> Task<Void, Never> {
     bluetoothMonitor.start()
     // Give CoreBluetooth's delegate callback a beat to land before deciding.
-    Task { [weak self] in
-      try? await Task.sleep(nanoseconds: 300_000_000)
+    return Task { [weak self, permissionEvaluation] in
+      await permissionEvaluation()
       self?.evaluateBluetoothState()
     }
   }
 
   func evaluateBluetoothState() {
-    UserDefaults.standard.set(true, forKey: Self.hasCompletedOnboardingKey)
+    userDefaults.set(true, forKey: Self.hasCompletedOnboardingKey)
     screen = bluetoothMonitor.isPoweredOff ? .bluetoothOff : .home
   }
 
