@@ -4,11 +4,23 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class RegistryClientTest {
+    @Test
+    fun explicitRpcFactoryRejectsNonLoopbackHttpEndpoints() {
+        assertFailsWith<IllegalArgumentException> {
+            createSepoliaRegistryClientWithRpcEndpoints(
+                readerAddressHex = RegistryTestFixtures.READER,
+                primaryEndpointUrl = "http://example.test:8545",
+                secondaryEndpointUrl = "http://127.0.0.1:8545",
+            )
+        }
+    }
+
     @Test
     fun successfulRawReadCarriesTheActualResolverSourceAndPinnedEvent() = runTest {
         val primary = RecordingRegistryTransport(RegistryTestFixtures.headerResponse(), RegistryTestFixtures.callResponse())
