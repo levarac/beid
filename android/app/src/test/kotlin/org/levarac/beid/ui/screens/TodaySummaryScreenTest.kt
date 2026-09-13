@@ -23,21 +23,23 @@ class TodaySummaryScreenTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun nonzeroRecordCountRendersTodayCountAndSingleSubmissionStageLine() {
+    fun nonzeroRecordCountDoesNotRenderAnUngroundedSubmissionStage() {
         composeTestRule.setContent {
-            BeidAppTheme { TodaySummaryScreen(recordCount = 2, submissionEnabled = false) }
+            BeidAppTheme { TodaySummaryScreen(recordCount = 2) }
         }
 
         composeTestRule.onNodeWithText(
             context.resources.getQuantityString(R.plurals.today_summary_record_count, 2, 2),
         ).assertIsDisplayed()
-        composeTestRule.onNodeWithText(context.getString(R.string.today_summary_submission_disabled)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.today_summary_submission_unavailable)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Sending isn't turned on for this build.").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Not sent yet.").assertDoesNotExist()
     }
 
     @Test
     fun zeroRecordDayRendersExplicitEmptyState() {
         composeTestRule.setContent {
-            BeidAppTheme { TodaySummaryScreen(recordCount = 0, submissionEnabled = false) }
+            BeidAppTheme { TodaySummaryScreen(recordCount = 0) }
         }
 
         composeTestRule.onNodeWithText(context.getString(R.string.today_summary_empty_title)).assertIsDisplayed()
@@ -48,7 +50,7 @@ class TodaySummaryScreenTest {
     @Test
     fun neverRendersUngroundedAcceptedVerifiedOrPublicScopeRows() {
         composeTestRule.setContent {
-            BeidAppTheme { TodaySummaryScreen(recordCount = 2, submissionEnabled = false) }
+            BeidAppTheme { TodaySummaryScreen(recordCount = 2) }
         }
 
         composeTestRule.onNodeWithText("Accepted").assertDoesNotExist()

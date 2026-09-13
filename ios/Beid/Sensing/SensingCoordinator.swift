@@ -161,6 +161,13 @@ enum OwnerKeyRestorationNotice: String, Identifiable, Equatable {
   }
 }
 
+enum OwnerKeyOperationFailure: Identifiable, Equatable {
+  case unavailable
+  var id: String { "owner-key-unavailable" }
+  var title: String { String(localized: "ownerKeyFailure.title", defaultValue: "Proof key is unavailable") }
+  var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used for proofs. Proof-key operations are paused. Try again when your device is available.") }
+}
+
 /// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
 /// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
 /// state machine. The facade — not `BarnardIdentity` directly — is what this
@@ -179,6 +186,7 @@ final class SensingCoordinator: ObservableObject {
   /// even when the asynchronous load completed before that UI appeared.
   /// Cleared only by explicit user acknowledgement.
   @Published private(set) var ownerKeyRestorationNotice: OwnerKeyRestorationNotice?
+  @Published private(set) var ownerKeyOperationFailure: OwnerKeyOperationFailure?
   /// Wallet connect+binding lifecycle for the event currently being
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
   /// `.pendingConnect`; the interstitial that drives the rest is 2b.
@@ -522,8 +530,9 @@ final class SensingCoordinator: ObservableObject {
   /// alike, for a signal only meant to be checked once at startup by
   /// whoever wires that check (an `AppCoordinator`-level concern, per §8).
   var ownerPublicKeyMismatchDetected: Bool {
-    OwnerKeyRegenerationDetector.ownerPublicKeyMismatchDetected(
-      activeOwnerPublicKey: sensingCryptography.ownerPublicKey(),
+    guard let activeOwnerPublicKey = resolvedOwnerPublicKey() else { return false }
+    return OwnerKeyRegenerationDetector.ownerPublicKeyMismatchDetected(
+      activeOwnerPublicKey: activeOwnerPublicKey,
       selfProofRecords: selfProofStore.records,
       bindingRecords: bindingRecordStore.records
     )
@@ -1070,7 +1079,7 @@ final class SensingCoordinator: ObservableObject {
     // Resolve the owner key before reading Signal A. Quarantine happens
     // during that resolution, so reading `quarantinedOwnerKeySeedKey` first
     // can miss the event that this very startup check triggers.
-    let activeOwnerPublicKey = sensingCryptography.ownerPublicKey()
+    guard let activeOwnerPublicKey = resolvedOwnerPublicKey() else { return }
     let mismatchDetected = OwnerKeyRegenerationDetector.ownerPublicKeyMismatchDetected(
       activeOwnerPublicKey: activeOwnerPublicKey,
       selfProofRecords: selfProofStore.records,
@@ -1095,6 +1104,23 @@ final class SensingCoordinator: ObservableObject {
     if mismatchDetected {
       Self.ledgerLog.error("Owner public key does not match some already-persisted self-proof/binding record")
     }
+  }
+
+  private func resolvedOwnerPublicKey() -> Data? {
+    do {
+      let key = try sensingCryptography.ownerPublicKey()
+      ownerKeyOperationFailure = nil
+      return key
+    } catch {
+      ownerKeyOperationFailure = .unavailable
+      Self.ledgerLog.error("Owner key operation failed: \(String(describing: error), privacy: .public)")
+      return nil
+    }
+  }
+
+  func retryOwnerKeyOperation() {
+    guard resolvedOwnerPublicKey() != nil else { return }
+    logOwnerKeyRegenerationSignalsIfNeeded()
   }
 
   func acknowledgeOwnerKeyRestorationNotice() {
@@ -2129,7 +2155,14 @@ final class SensingCoordinator: ObservableObject {
 
   @discardableResult
   func stopSensing() -> SelfProofRecord? {
-    endSensing(stopEngine: true)
+    let selfProof = endSensing(stopEngine: true)
+#if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-continuous-sensing-fixture") {
+      isScanning = false
+      isAdvertising = false
+    }
+#endif
+    return selfProof
   }
 
   /// Manual trigger so the Signal Lost screen is reachable from the demo
@@ -2269,6 +2302,29 @@ final class SensingCoordinator: ObservableObject {
     discoveryOnlyScanOwned = true
     engine.startDiscoveryScan()
   }
+
+#if DEBUG
+  /// Seeds the real pre-join surface with a representative gate refusal for
+  /// UI-test runtime verification. This is deliberately an app-side fixture:
+  /// it does not call Barnard, the registry, or any production join path.
+  func injectJoinRefusalForUITesting() {
+    guard ProcessInfo.processInfo.arguments.contains("-beid-join-refusal-fixture") else {
+      return
+    }
+    joinRefusal = .registryReadFailed
+    phase = .idle
+  }
+
+  /// Seeds the transport state used by the home-surface runtime acceptance.
+  /// Production state still comes only from Barnard `.state` callbacks.
+  func injectContinuousSensingForUITesting() {
+    guard ProcessInfo.processInfo.arguments.contains("-beid-continuous-sensing-fixture") else {
+      return
+    }
+    isScanning = true
+    isAdvertising = true
+  }
+#endif
 
   /// Ends the pre-join discovery session and stops the Central scan only when
   /// this flow started it. Once a join transfers scanning to `startAuto()`,
@@ -2845,7 +2901,7 @@ final class SensingCoordinator: ObservableObject {
   private func beginEventFoundSessionState(_ session: EventSession) {
     resetSessionState()
     let eventSigningKey = sensingCryptography.eventSigningPublicKey(eventCode: session.id)
-    let ownerKey = sensingCryptography.ownerPublicKey()
+    guard let ownerKey = resolvedOwnerPublicKey() else { return }
     let salt = Data(randomSource.randomBytes(count: 16))
     activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
   }
@@ -2948,9 +3004,10 @@ final class SensingCoordinator: ObservableObject {
       else {
         return nil
       }
+      guard let ownerPublicKey = resolvedOwnerPublicKey() else { return nil }
       message = BindingMessage(
         walletAddress: walletAddressBytes,
-        ownerPublicKey: sensingCryptography.ownerPublicKey(),
+        ownerPublicKey: ownerPublicKey,
         chainId: numericChainId,
         nonce: Data(randomSource.randomBytes(count: 16)),
         issuedAt: BindingMessage.canonicalIssuedAt(Date())
@@ -3039,12 +3096,17 @@ final class SensingCoordinator: ObservableObject {
       break
     }
 
-    guard
-      let ackSignature = sensingCryptography.signWalletAcknowledgement(
+    let acknowledgement: SensingRecoverableSignature?
+    do {
+      acknowledgement = try sensingCryptography.signWalletAcknowledgement(
         walletAddress: message.walletAddress,
         walletSignature: walletSignatureBytes
       )
-    else {
+    } catch {
+      ownerKeyOperationFailure = .unavailable
+      return .notVerified
+    }
+    guard let ackSignature = acknowledgement else {
       return .notVerified
     }
 
@@ -3490,15 +3552,20 @@ final class SensingCoordinator: ObservableObject {
   ) -> SelfProofRecord? {
     let eventIdHash = EventIdHash.compute(eventCode: eventCode)
     let eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
-    let ownerPublicKey = sensingCryptography.ownerPublicKey()
-    guard
-      let signature = sensingCryptography.signSelfProof(
+    guard let ownerPublicKey = resolvedOwnerPublicKey() else { return nil }
+    let signature: SensingRecoverableSignature?
+    do {
+      signature = try sensingCryptography.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: eventSigningPublicKey,
         eninStart: eninStart,
         eninEnd: eninEnd
       )
-    else {
+    } catch {
+      ownerKeyOperationFailure = .unavailable
+      return nil
+    }
+    guard let signature else {
       return nil
     }
 

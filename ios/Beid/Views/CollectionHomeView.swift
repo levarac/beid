@@ -48,6 +48,8 @@ struct CollectionHomeView: View {
         ScrollView {
           BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
             VStack(alignment: .leading, spacing: DS.Space.m) {
+              ContinuousSensingStatus(sensing: coordinator.sensingCoordinator)
+
               if coordinator.proofStore.proofs.isEmpty {
                 emptyState
               } else {
@@ -197,6 +199,39 @@ struct CollectionHomeView: View {
       }
       Spacer()
     }
+  }
+}
+
+/// Compact home-surface status for sensing that continues after the scan
+/// sheet closes (beid#200). This is a separate observed view because
+/// `AppCoordinator` intentionally does not republish nested sensing state.
+private struct ContinuousSensingStatus: View {
+  @ObservedObject var sensing: SensingCoordinator
+
+  var body: some View {
+    if isSensing {
+      BeidPanel {
+        HStack(spacing: DS.Space.m) {
+          Label("Sensing continues in background", systemImage: "dot.radiowaves.left.and.right")
+            .font(DS.Font.supporting)
+            .foregroundStyle(DS.Color.textPrimary)
+            .accessibilityIdentifier("collection.continuous-sensing")
+
+          Spacer(minLength: DS.Space.s)
+
+          Button("Stop sensing") {
+            sensing.stopSensing()
+          }
+          .font(DS.Font.meta)
+          .buttonStyle(.bordered)
+          .accessibilityIdentifier("collection.stop-sensing")
+        }
+      }
+    }
+  }
+
+  private var isSensing: Bool {
+    sensing.isScanning || sensing.isAdvertising
   }
 }
 

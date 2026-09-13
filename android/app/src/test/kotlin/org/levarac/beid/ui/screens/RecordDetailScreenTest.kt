@@ -22,6 +22,9 @@ import org.junit.runner.RunWith
 import org.levarac.beid.R
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.shared.aggregation.addAggregationObservation
+import org.levarac.beid.shared.aggregation.aggregateObservationsForSession
+import org.levarac.beid.shared.aggregation.createAggregationObservationInput
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -136,6 +139,17 @@ class RecordDetailScreenTest {
 
         composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.TIME_BAND_BUILDUP_VALUE)
             .assertTextEquals(notYetAvailableText)
+    }
+
+    @Test
+    fun persistedAggregateRendersItsRealWindowSeries() {
+        val input = createAggregationObservationInput()
+        addAggregationObservation(input, 7L, "peer-7", "device-7", false)
+        val aggregate = aggregateObservationsForSession(input, windowsPerBand = 1)
+        composeTestRule.setContent { BeidAppTheme { RecordDetailScreen(record = record(), aggregate = aggregate) } }
+        composeTestRule.onNodeWithTag(RecordDetailScreenTestTags.TIME_BAND_BUILDUP_VALUE)
+            .assertTextEquals(recordedText)
+        composeTestRule.onNodeWithText("7: 1").assertIsDisplayed()
     }
 
     @Test

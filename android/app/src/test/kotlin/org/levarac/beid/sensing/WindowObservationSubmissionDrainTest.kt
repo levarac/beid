@@ -9,6 +9,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.persistence.WindowObservationDraftStore
@@ -34,6 +35,43 @@ import org.levarac.parallax.submission.createSubmissionOperatorConfiguration
  * relaunch would.
  */
 class WindowObservationSubmissionDrainTest {
+    @Test
+    fun retryableFailureSchedulesDrainWhenNoNewObservationArrives() {
+        val directory = Files.createTempDirectory("drain-retry-schedule").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            var nowEpochMilliseconds = NOW_EPOCH_MILLIS
+            val scheduler = RecordingRetryScheduler()
+            val resolver = FakeConfigurationResolver(
+                listOf(
+                    SubmissionConfigurationResolution.RetryableFailure("timeout"),
+                    SubmissionConfigurationResolution.Resolved(resolvedConfiguration(endpoint)),
+                ),
+            )
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+                retryScheduler = scheduler,
+                nowEpochMilliseconds = { nowEpochMilliseconds },
+            )
+            // The fixture has one durable submission; there is no later
+            // observation to provide another trigger.
+            closeOneWindow(accumulator)
+            drain.drain()
+
+            assertEquals(1, resolver.callCount)
+            assertEquals(1, scheduler.scheduledCount)
+            assertEquals(RETRY_BACKOFF_MILLIS, scheduler.delayMillis)
+            nowEpochMilliseconds += RETRY_BACKOFF_MILLIS
+            scheduler.task.invoke()
+            waitUntil { server.postCount == 1 }
+        } finally {
+            server.stop()
+        }
+    }
     @Test
     fun happyPathDrainsExactlyOnePostAndPersistsAcceptance() {
         val directory = Files.createTempDirectory("drain-happy-path").toFile()
@@ -262,14 +300,70 @@ class WindowObservationSubmissionDrainTest {
         }
     }
 
-    /** Same gap, but the registry lookup itself fails — held, never a guess. */
+    /** A transport failure is deferred, then the exact durable bytes are submitted after registry recovery. */
     @Test
-    fun nearbyJoinWindowWhoseRegistryLookupFailsIsHeldWithZeroPosts() {
-        val directory = Files.createTempDirectory("drain-nearby-join-lookup-fails").toFile()
+    fun nearbyJoinWindowWhoseRegistryLookupTimesOutRetriesTheSameBytesOnceAfterResolution() {
+        val directory = Files.createTempDirectory("drain-nearby-join-lookup-retries").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            var nowEpochMilliseconds = NOW_EPOCH_MILLIS
+            val resolver = FakeConfigurationResolver(
+                resolutions = listOf(
+                    submissionConfigurationResolutionForRegistryResult(configuration = null, errorCode = "timeout"),
+                    SubmissionConfigurationResolution.Resolved(resolvedConfiguration(endpoint)),
+                ),
+            )
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+                nowEpochMilliseconds = { nowEpochMilliseconds },
+            )
+            closeOneWindow(accumulator)
+            val originalBytes = requireNotNull(directory.resolve("observations").listFiles()?.singleOrNull()).readBytes()
+
+            drain.drain()
+            Thread.sleep(250)
+
+            assertEquals(0, server.postCount, "a timed-out registry lookup must never be guessed around")
+            assertEquals(1, resolver.callCount)
+            val record = requireNotNull(submissionRecordStore(directory).recordFor(WINDOW_ID))
+            assertNull(record.terminalErrorCode, "a transport failure must not become invalid_configuration")
+            assertTrue(
+                ledgerFile(directory).readText().contains("\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t"),
+                "the durable retry deadline must be finite",
+            )
+
+            nowEpochMilliseconds += RETRY_BACKOFF_MILLIS
+            drain.drain()
+            waitUntil { server.postCount == 1 }
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            Thread.sleep(150)
+
+            assertEquals(2, resolver.callCount)
+            assertEquals(1, server.getCount, "attempt two must look up a receipt before re-POSTing")
+            assertEquals(1, server.postCount)
+            assertContentEquals(originalBytes, server.postBodies.single())
+        } finally {
+            server.stop()
+        }
+    }
+
+    /** A definition that was fetched but failed verification stays held and is never POSTed. */
+    @Test
+    fun nearbyJoinWindowWhoseRegistryDefinitionIsUnusableIsHeldWithZeroPosts() {
+        val directory = Files.createTempDirectory("drain-nearby-join-unusable-definition").toFile()
         val server = newStubOperatorServer()
         server.start()
         try {
-            val resolver = FakeConfigurationResolver(configuration = null)
+            val resolver = FakeConfigurationResolver(
+                submissionConfigurationResolutionForRegistryResult(
+                    configuration = null,
+                    errorCode = "definition_hash_mismatch",
+                ),
+            )
             val (accumulator, drain) = buildSystem(
                 directory = directory,
                 cryptography = vectorCryptography(),
@@ -281,13 +375,18 @@ class WindowObservationSubmissionDrainTest {
             drain.drain()
             Thread.sleep(250)
 
-            assertEquals(0, server.postCount, "a failed registry lookup must never be guessed around")
+            assertEquals(0, server.postCount)
             assertEquals(1, resolver.callCount)
             val record = requireNotNull(submissionRecordStore(directory).recordFor(WINDOW_ID))
             assertEquals("invalid_configuration", record.terminalErrorCode)
+            assertTrue(
+                ledgerFile(directory).readText().contains("\tretryable_failed\t${Long.MAX_VALUE}\t"),
+                "permanently unusable verified evidence must remain held",
+            )
 
             drain.drain()
             Thread.sleep(150)
+            assertEquals(1, resolver.callCount)
             assertEquals(0, server.postCount)
         } finally {
             server.stop()
@@ -475,15 +574,134 @@ class WindowObservationSubmissionDrainTest {
         }
     }
 
+    @Test
+    fun missingSubmissionRecordDoesNotSilentlyBecomeAPermanentHold() {
+        val directory = Files.createTempDirectory("drain-missing-record").toFile()
+        val (accumulator, _) = buildSystem(directory, vectorCryptography(), null)
+        closeOneWindow(accumulator)
+        val emptyStore = SubmissionRecordStore(directory.resolve("missing-records.json"))
+        val drain = WindowObservationSubmissionDrain(
+            accumulator = accumulator,
+            submissionRecordStore = emptyStore,
+            client = createSubmissionClient(),
+            nowEpochMilliseconds = { NOW_EPOCH_MILLIS },
+        )
+
+        drain.drain()
+
+        assertTrue(
+            ledgerFile(directory).readText().contains("\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t"),
+            "a missing diagnostic record must surface as a finite persistence retry, not a successful permanent hold",
+        )
+        assertNull(emptyStore.recordFor(WINDOW_ID))
+    }
+
+    @Test
+    fun receiptWriteFailureDoesNotAcknowledgeAndRetryLooksUpWithoutReposting() {
+        val directory = Files.createTempDirectory("drain-receipt-write-failure").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        val recordFile = directory.resolve("submission-records.json")
+        var originalRecords = byteArrayOf()
+        var now = NOW_EPOCH_MILLIS
+        try {
+            val (accumulator, drain) = buildSystem(
+                directory, vectorCryptography(), resolvedConfiguration(endpoint),
+                nowEpochMilliseconds = { now },
+                receiptPersistenceGate = {
+                    originalRecords = recordFile.readBytes()
+                    check(recordFile.delete())
+                    check(recordFile.mkdir())
+                    recordFile.resolve("keep").writeText("block atomic replacement")
+                    true
+                },
+            )
+            closeOneWindow(accumulator)
+            drain.drain()
+            waitUntil { server.postCount == 1 }
+            waitUntil {
+                ledgerFile(directory).readText().contains("\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t")
+            }
+            assertTrue(recordFile.isDirectory, "failed receipt storage must remain untouched")
+
+            check(recordFile.resolve("keep").delete())
+            check(recordFile.delete())
+            recordFile.writeBytes(originalRecords)
+            now += RETRY_BACKOFF_MILLIS
+            drain.drain()
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            assertEquals(1, server.postCount, "storage recovery must look up the accepted receipt, never repost it")
+            assertEquals(1, server.getCount)
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun resolvedConfigurationWriteFailureStopsBeforeNetworkAndRemainsRetryable() {
+        val directory = Files.createTempDirectory("drain-configuration-write-failure").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        val recordFile = directory.resolve("submission-records.json")
+        try {
+            val resolver = WindowObservationSubmissionDrain.SubmissionConfigurationResolver { _, completion ->
+                check(recordFile.delete())
+                check(recordFile.mkdir())
+                recordFile.resolve("keep").writeText("block atomic replacement")
+                completion(SubmissionConfigurationResolution.Resolved(resolvedConfiguration(endpoint)))
+            }
+            val (accumulator, drain) = buildSystem(
+                directory, vectorCryptography(), null, configurationResolver = resolver,
+            )
+            closeOneWindow(accumulator)
+
+            drain.drain()
+
+            assertEquals(0, server.postCount)
+            assertEquals(0, server.getCount)
+            assertTrue(
+                ledgerFile(directory).readText().contains("\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t"),
+                "a failed configuration write must not strand an in-flight submission",
+            )
+        } finally {
+            server.stop()
+        }
+    }
+
     private class FakeConfigurationResolver(
-        private val configuration: SubmissionOperatorConfiguration?,
+        private val resolutions: List<SubmissionConfigurationResolution>,
     ) : WindowObservationSubmissionDrain.SubmissionConfigurationResolver {
+        constructor(configuration: SubmissionOperatorConfiguration?) : this(
+            listOf(
+                if (configuration != null) {
+                    SubmissionConfigurationResolution.Resolved(configuration)
+                } else {
+                    SubmissionConfigurationResolution.PermanentlyUnusable(errorCode = null)
+                },
+            ),
+        )
+
+        constructor(resolution: SubmissionConfigurationResolution) : this(listOf(resolution))
+
         var callCount = 0
             private set
 
-        override fun resolve(eventIdHex: String, completion: (SubmissionOperatorConfiguration?) -> Unit) {
+        override fun resolve(eventIdHex: String, completion: (SubmissionConfigurationResolution) -> Unit) {
             callCount++
-            completion(configuration)
+            completion(resolutions.getOrElse(callCount - 1) { resolutions.last() })
+        }
+    }
+
+    private class RecordingRetryScheduler : WindowObservationSubmissionDrain.RetryScheduler {
+        var scheduledCount = 0
+        var delayMillis = 0L
+        lateinit var task: () -> Unit
+
+        override fun schedule(delayMillis: Long, task: () -> Unit): WindowObservationSubmissionDrain.RetryHandle {
+            scheduledCount++
+            this.delayMillis = delayMillis
+            this.task = task
+            return WindowObservationSubmissionDrain.RetryHandle { }
         }
     }
 
@@ -495,6 +713,8 @@ class WindowObservationSubmissionDrainTest {
         submissionConfiguration: SubmissionOperatorConfiguration?,
         receiptPersistenceGate: () -> Boolean = { true },
         configurationResolver: WindowObservationSubmissionDrain.SubmissionConfigurationResolver? = null,
+        retryScheduler: WindowObservationSubmissionDrain.RetryScheduler? = null,
+        nowEpochMilliseconds: () -> Long = { NOW_EPOCH_MILLIS },
     ): Pair<WindowObservationAccumulator, WindowObservationSubmissionDrain> {
         val context = WindowObservationContext(
             eventCode = EVENT_CODE,
@@ -521,10 +741,11 @@ class WindowObservationSubmissionDrainTest {
             accumulator = accumulator,
             submissionRecordStore = submissionRecordStore,
             client = createSubmissionClient(),
-            nowEpochMilliseconds = { NOW_EPOCH_MILLIS },
+            nowEpochMilliseconds = nowEpochMilliseconds,
             allowInsecureLoopbackForTests = true,
             receiptPersistenceGate = receiptPersistenceGate,
             configurationResolver = configurationResolver,
+            retryScheduler = retryScheduler,
         )
         return accumulator to drain
     }
@@ -588,6 +809,7 @@ class WindowObservationSubmissionDrainTest {
         const val ENIN = 6_000_000L
         const val FINALIZED_AT = 1_800_000_000.75
         const val NOW_EPOCH_MILLIS = 1_800_000_000_000L
+        const val RETRY_BACKOFF_MILLIS = 30_000L
         const val EVENT_CODE = "event"
         val EVENT_ID_HEX = "21".repeat(32)
         val DEFINITION_DIGEST_HEX = "22".repeat(32)

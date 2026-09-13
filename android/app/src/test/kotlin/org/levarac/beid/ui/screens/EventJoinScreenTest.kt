@@ -50,6 +50,31 @@ class EventJoinScreenTest {
     private val session1 = ScanEventSession(eventCode = "ABC123")
 
     @Test
+    fun ownerKeyFailureExplainsPreservationAndKeepsExistingCardRetryEnabled() {
+        val hash = "1111111111111111"
+        var joinedHash: String? = null
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = EventJoinScreenState(
+                        sessionState = EventJoinUiState.OwnerKeyUnavailable(org.levarac.beid.sensing.OwnerKeyStorageFailure.TEMPORARILY_UNAVAILABLE),
+                        nearbyEventCards = listOf(NearbyEventCard("Verified beacon", "0x0123456789abcdef", 100L, 200L, hash)),
+                    ),
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = { joinedHash = it },
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_owner_key_unavailable)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(hash)).assertIsEnabled().performClick()
+        assertEquals(hash, joinedHash)
+    }
+
+    @Test
     fun directScenarioInjectionRendersWithoutAnEventJoinCoordinator() {
         val snapshot = AndroidDemoScenario.CrowdSurge.snapshot()
 

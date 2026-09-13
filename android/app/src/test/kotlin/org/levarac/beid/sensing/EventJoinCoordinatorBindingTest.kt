@@ -98,6 +98,58 @@ class EventJoinCoordinatorBindingTest {
     }
 
     @Test
+    fun mismatchedBindingAddressCannotReachOwnerSigningOrPersistence() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        var acknowledgementCalls = 0
+        val crypto = object : FakeSensingCryptography() {
+            override fun signWalletAcknowledgement(walletAddress: ByteArray, walletSignature: ByteArray): SensingRecoverableSignature? {
+                acknowledgementCalls += 1
+                return super.signWalletAcknowledgement(walletAddress, walletSignature)
+            }
+        }
+        val file = newTempRecordFile("binding-address-mismatch")
+        val store = BindingRecordStore(file)
+        val coordinator = coordinator(engine, crypto, bindingRecordStore = store, nearbyRegistry = registry)
+        var signatureUpdates = 0
+        coordinator.onProofSignatureStateChanged = { _, _, _ -> signatureUpdates += 1 }
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        confirmRecording(engine)
+        val originalMessage = assertNotNull(coordinator.beginBinding(walletAddress, chainId = 1))
+        val differentAddress = "0x" + "ab".repeat(20)
+        // The pending request is deliberately reused even if a second caller
+        // supplies another address. This makes the completion mismatch real.
+        assertEquals(originalMessage, coordinator.beginBinding(differentAddress, chainId = 1))
+        val stateBefore = coordinator.bindingState
+        val diskBefore = if (file.exists()) file.readBytes().toList() else null
+
+        for (address in listOf(differentAddress, "0xzz", "0x" + "ab".repeat(19))) {
+            assertNull(coordinator.completeBinding(address, "0x" + "0a".repeat(65)))
+            assertEquals(0, acknowledgementCalls)
+            assertTrue(store.records.isEmpty())
+            assertEquals(stateBefore, coordinator.bindingState)
+            assertEquals(diskBefore, if (file.exists()) file.readBytes().toList() else null)
+            assertEquals(0, signatureUpdates)
+        }
+    }
+
+    @Test
+    fun bindingAddressComparisonUsesBytesAndRetainsTheOriginalPendingMessage() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val store = BindingRecordStore(newTempRecordFile("binding-address-case"))
+        val coordinator = coordinator(engine, FakeSensingCryptography(), bindingRecordStore = store, nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        confirmRecording(engine)
+        val original = assertNotNull(coordinator.beginBinding(walletAddress, chainId = 1))
+        assertNull(coordinator.completeBinding("0x" + "ab".repeat(20), "0x" + "0a".repeat(65)))
+        assertEquals(original, coordinator.beginBinding(walletAddress, chainId = 1))
+        val sameAddress = "0x" + walletAddress.removePrefix("0x").uppercase()
+        val record = assertNotNull(coordinator.completeBinding(sameAddress, "0x" + "0a".repeat(65)))
+        assertEquals(listOf(record), store.records)
+    }
+
+    @Test
     fun completeBindingProducesAndPersistsABindingRecordAndMovesToBound() = runTest {
         val engine = FakeEventJoinEngine()
         val registry = FakeNearbyEventRegistry()

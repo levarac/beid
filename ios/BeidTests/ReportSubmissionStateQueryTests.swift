@@ -185,7 +185,7 @@ private final class NeverInvokedSensingCryptography: SensingCryptography {
     return Data()
   }
 
-  func ownerPublicKey() -> Data {
+  func ownerPublicKey() throws -> Data {
     XCTFail("not expected to be invoked by this test")
     return Data()
   }
@@ -200,7 +200,7 @@ private final class NeverInvokedSensingCryptography: SensingCryptography {
     eventSigningPublicKey: Data,
     eninStart: UInt64,
     eninEnd: UInt64
-  ) -> SensingRecoverableSignature? {
+  ) throws -> SensingRecoverableSignature? {
     XCTFail("not expected to be invoked by this test")
     return nil
   }
@@ -208,7 +208,7 @@ private final class NeverInvokedSensingCryptography: SensingCryptography {
   func signWalletAcknowledgement(
     walletAddress: Data,
     walletSignature: Data
-  ) -> SensingRecoverableSignature? {
+  ) throws -> SensingRecoverableSignature? {
     XCTFail("not expected to be invoked by this test")
     return nil
   }

@@ -317,8 +317,8 @@ private final class BarnardBackedSelfProofCryptography: SensingCryptography {
     fixedEventSigningPublicKey
   }
 
-  func ownerPublicKey() -> Data {
-    ownerKeyProvider.publicKeyCompressed()
+  func ownerPublicKey() throws -> Data {
+    try ownerKeyProvider.publicKeyCompressed()
   }
 
   func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
@@ -330,8 +330,8 @@ private final class BarnardBackedSelfProofCryptography: SensingCryptography {
     eventSigningPublicKey: Data,
     eninStart: UInt64,
     eninEnd: UInt64
-  ) -> SensingRecoverableSignature? {
-    ownerKeyProvider.signSelfProof(
+  ) throws -> SensingRecoverableSignature? {
+    try ownerKeyProvider.signSelfProof(
       eventIdHash: eventIdHash,
       eventSigningPublicKey: eventSigningPublicKey,
       eninStart: eninStart,
@@ -342,12 +342,12 @@ private final class BarnardBackedSelfProofCryptography: SensingCryptography {
   func signWalletAcknowledgement(
     walletAddress: Data,
     walletSignature: Data
-  ) -> SensingRecoverableSignature? {
+  ) throws -> SensingRecoverableSignature? {
     nil
   }
 }
 
-private struct FixedSeedKeyStorage: BarnardCoreKeyStorage {
+private struct FixedSeedKeyStorage: OwnerKeySeedResolving {
   let seed: Data
 
   func bytes(forKey key: String) -> [UInt8]? {
@@ -355,9 +355,10 @@ private struct FixedSeedKeyStorage: BarnardCoreKeyStorage {
   }
 
   func setBytes(_ bytes: [UInt8], forKey key: String) {}
+  func resolveSeed(forKey key: String, randomSource: any OwnerKeyRandomBytesGenerating) throws -> [UInt8] { Array(seed) }
 }
 
-private struct NeverCalledRandomSource: BarnardCoreRandomSource {
+private struct NeverCalledRandomSource: BarnardCoreRandomSource, OwnerKeyRandomBytesGenerating {
   func randomBytes(count: Int) -> [UInt8] {
     XCTFail("randomSource must not be used when a seed is already stored")
     return [UInt8](repeating: 0, count: count)

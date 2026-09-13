@@ -8,6 +8,7 @@ import org.levarac.barnard.BarnardIdentity
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -24,7 +25,16 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 class BarnardSensingCryptographyTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
-    private val cryptography = BarnardSensingCryptography(context)
+    private val cryptography = BarnardSensingCryptography(
+        context = context,
+        keyStorage = object : OwnerKeyStorage {
+            override fun readBytes(key: String): OwnerKeyReadResult = OwnerKeyReadResult.Present(sequentialSeed())
+            override fun putBytes(key: String, bytes: ByteArray) = Unit
+        },
+        randomSource = object : OwnerKeyRandomSource {
+            override fun randomBytes(count: Int): ByteArray = error("fixed seed must not use random source")
+        },
+    )
 
     @Test
     fun ownerPublicKeyIsStableAcrossCalls() {
@@ -33,6 +43,27 @@ class BarnardSensingCryptographyTest {
 
         assertEquals(33, first.size)
         assertTrue(first.contentEquals(second), "the owner key must not regenerate between calls")
+    }
+
+    @Test
+    fun migratedLegacySeedKeepsTheSamePublicIdentityThroughTheFacade() {
+        val preferences = ownerKeyPreferences(context)
+        val legacyValue = android.util.Base64.encodeToString(sequentialSeed(), android.util.Base64.NO_WRAP)
+        preferences.edit().clear().putString("beid.ownerKeySeed", legacyValue).commit()
+        val aesKey = javax.crypto.spec.SecretKeySpec(ByteArray(32) { 0x2a }, "AES")
+        val migrated = BarnardSensingCryptography(
+            context,
+            AndroidKeystoreOwnerKeyStorage(preferences, AesGcmOwnerKeyProtector({ aesKey }, { aesKey })),
+            object : OwnerKeyRandomSource {
+                override fun randomBytes(count: Int): ByteArray = error("migration must retain the existing seed")
+            },
+        )
+        try {
+            assertTrue(cryptography.ownerPublicKey().contentEquals(migrated.ownerPublicKey()))
+            assertTrue(preferences.getString("beid.ownerKeySeed", null)!!.startsWith("beid-owner-key:v1:"))
+        } finally {
+            preferences.edit().clear().commit()
+        }
     }
 
     @Test

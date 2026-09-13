@@ -1,6 +1,10 @@
 package org.levarac.beid.sensing
 
 import android.util.Log
+import java.io.IOException
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import org.levarac.beid.persistence.SubmissionRecord
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.shared.report.UnsentWindowSubmission
@@ -10,6 +14,15 @@ import org.levarac.parallax.submission.SubmissionOperatorConfiguration
 import org.levarac.parallax.submission.SubmissionResult
 import org.levarac.parallax.submission.createSubmissionOperatorConfigurationWithOperatorId
 import org.levarac.parallax.submission.restoreStoredObservation
+
+/** Preserves whether a registry lookup produced usable evidence, failed transiently, or failed closed. */
+internal sealed interface SubmissionConfigurationResolution {
+    data class Resolved(val configuration: SubmissionOperatorConfiguration) : SubmissionConfigurationResolution
+
+    data class RetryableFailure(val errorCode: String?) : SubmissionConfigurationResolution
+
+    data class PermanentlyUnusable(val errorCode: String?) : SubmissionConfigurationResolution
+}
 
 /**
  * beid#525's drain: the missing half of Android's writer
@@ -49,8 +62,9 @@ internal class WindowObservationSubmissionDrain(
     /**
      * A fresh, independent way to resolve a configuration by event id when
      * the window's own persisted record has none — beid#525's nearby-join
-     * gap. `null` (the default) means "no such capability", equivalent to
-     * every lookup always failing.
+     * gap. A missing resolver means "no such capability". A present resolver
+     * must keep a transient registry outage separate from permanently
+     * unusable evidence so the durable head report is not held forever.
      *
      * Shaped around [SubmissionOperatorConfiguration] rather than the
      * shared module's `EventDefinitionContext`/`EventDefinitionResolution`
@@ -64,16 +78,37 @@ internal class WindowObservationSubmissionDrain(
      * public `createSubmissionOperatorConfiguration(...)` factory.
      */
     private val configurationResolver: SubmissionConfigurationResolver? = null,
+    private val retryScheduler: RetryScheduler? = null,
 ) {
+    @Volatile private var closed = false
+    private var scheduledRetry: RetryHandle? = null
+
     /** See [WindowObservationSubmissionDrain]'s `configurationResolver` doc. */
     fun interface SubmissionConfigurationResolver {
-        fun resolve(eventIdHex: String, completion: (SubmissionOperatorConfiguration?) -> Unit)
+        fun resolve(eventIdHex: String, completion: (SubmissionConfigurationResolution) -> Unit)
+    }
+
+    fun interface RetryHandle { fun cancel() }
+
+    fun interface RetryScheduler {
+        fun schedule(delayMillis: Long, task: () -> Unit): RetryHandle
+
+        fun close() = Unit
     }
 
     /** beid#525's "after a window's durable close" / "on foreground resume" / "when a retry time arrives" triggers. */
     fun drain() {
+        if (closed) return
+        scheduledRetry = null
         accumulator.beginNextSubmissionAttempt(nowEpochMilliseconds())
             ?.let { handle(it, SubmissionEmissionOrigin.FRESH) }
+    }
+
+    fun close() {
+        closed = true
+        scheduledRetry?.cancel()
+        scheduledRetry = null
+        retryScheduler?.close()
     }
 
     /**
@@ -92,6 +127,7 @@ internal class WindowObservationSubmissionDrain(
 
     /** [WindowObservationAccumulator]'s sink for a submission its own writer-side ledger writes coincidentally surfaced. */
     fun receiveEmittedSubmission(submission: UnsentWindowSubmission, origin: SubmissionEmissionOrigin) {
+        if (closed) return
         handle(submission, origin)
     }
 
@@ -123,21 +159,41 @@ internal class WindowObservationSubmissionDrain(
         // was joined — is the only other legitimate source of a
         // configuration. Never fall back to any other event's configuration
         // if this fails.
-        resolver.resolve(eventIdHex) { resolved ->
-            if (resolved == null) {
-                hold(submission.submissionKey, windowId, "registry lookup for event $eventIdHex produced no usable Event Definition")
-                return@resolve
+        resolver.resolve(eventIdHex) { resolution ->
+            when (resolution) {
+                is SubmissionConfigurationResolution.RetryableFailure -> {
+                    accumulator.completeSubmissionRetryable(
+                        submission.submissionKey,
+                        retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
+                    )
+                    logSubmissionOutcome("scheduled registry retry for window $windowId: ${resolution.errorCode}")
+                    scheduleRetry()
+                }
+
+                is SubmissionConfigurationResolution.PermanentlyUnusable -> {
+                    hold(
+                        submission.submissionKey,
+                        windowId,
+                        "registry lookup for event $eventIdHex produced no usable Event Definition: ${resolution.errorCode}",
+                    )
+                }
+
+                is SubmissionConfigurationResolution.Resolved -> {
+                    val resolved = resolution.configuration
+                    if (!persistSubmissionRecord(submission.submissionKey, windowId, "configuration") {
+                        submissionRecordStore.recordResolvedConfiguration(
+                            windowId = windowId,
+                            submissionEndpoint = resolved.submissionEndpoint,
+                            receiptPublicKeyHex = resolved.receiptPublicKey.toByteArray().toLowercaseHex(),
+                            operatorIdHex = resolved.operatorId.toByteArray().toLowercaseHex(),
+                            eventDefinitionDigestHex = resolved.eventDefinitionDigest?.toByteArray()?.toLowercaseHex(),
+                            validFrom = resolved.validFrom,
+                            validUntil = resolved.validUntil,
+                        )
+                    }) return@resolve
+                    proceedWithConfiguration(submission, origin, windowId, digestHex, resolved)
+                }
             }
-            submissionRecordStore.recordResolvedConfiguration(
-                windowId = windowId,
-                submissionEndpoint = resolved.submissionEndpoint,
-                receiptPublicKeyHex = resolved.receiptPublicKey.toByteArray().toLowercaseHex(),
-                operatorIdHex = resolved.operatorId.toByteArray().toLowercaseHex(),
-                eventDefinitionDigestHex = resolved.eventDefinitionDigest?.toByteArray()?.toLowercaseHex(),
-                validFrom = resolved.validFrom,
-                validUntil = resolved.validUntil,
-            )
-            proceedWithConfiguration(submission, origin, windowId, digestHex, resolved)
         }
     }
 
@@ -215,7 +271,9 @@ internal class WindowObservationSubmissionDrain(
 
     /** Persists the receipt's exact bytes FIRST, then tells the ledger — beid#525's ordering requirement. */
     private fun acceptAndContinue(receipt: AcceptanceReceipt, submission: UnsentWindowSubmission, windowId: String) {
-        submissionRecordStore.recordAcceptance(windowId, receipt.signedBytes.toByteArray().toLowercaseHex())
+        if (!persistSubmissionRecord(submission.submissionKey, windowId, "acceptance") {
+            submissionRecordStore.recordAcceptance(windowId, receipt.signedBytes.toByteArray().toLowercaseHex())
+        }) return
         accumulator.completeSubmissionAcceptance(submission.submissionKey, acceptanceReceiptReference = windowId)
         // Acceptance frees the head-of-line slot; check for the next durable window.
         drain()
@@ -228,9 +286,12 @@ internal class WindowObservationSubmissionDrain(
                 retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
             )
             logSubmissionOutcome("scheduled retry for window $windowId: ${result.errorCode}")
+            scheduleRetry()
         } else {
+            if (!persistSubmissionRecord(submission.submissionKey, windowId, "terminal_failure") {
+                submissionRecordStore.recordTerminalFailure(windowId, result.errorCode ?: "submission_failed")
+            }) return
             accumulator.completeSubmissionRetryable(submission.submissionKey, retryNotBeforeEpochMilliseconds = Long.MAX_VALUE)
-            submissionRecordStore.recordTerminalFailure(windowId, result.errorCode ?: "submission_failed")
             logSubmissionOutcome("stopped automatic submission for window $windowId: ${result.errorCode}")
         }
         // Terminal or not-yet-due-retryable: the head-of-line slot stays
@@ -240,9 +301,48 @@ internal class WindowObservationSubmissionDrain(
 
     /** An artifact whose configuration or stored bytes cannot be trusted is held, never guessed at — beid#525 part 2. */
     private fun hold(submissionKey: String, windowId: String, reason: String) {
+        if (!persistSubmissionRecord(submissionKey, windowId, "hold") {
+            submissionRecordStore.recordTerminalFailure(windowId, "invalid_configuration")
+        }) return
         accumulator.completeSubmissionRetryable(submissionKey, retryNotBeforeEpochMilliseconds = Long.MAX_VALUE)
-        submissionRecordStore.recordTerminalFailure(windowId, "invalid_configuration")
         logSubmissionOutcome("held window $windowId: $reason")
+    }
+
+    /** Missing/suspended records and disk failures cannot stand in for a durable write. */
+    private fun persistSubmissionRecord(
+        submissionKey: String,
+        windowId: String,
+        operation: String,
+        write: () -> Boolean,
+    ): Boolean {
+        val persisted = try {
+            write()
+        } catch (_: IOException) {
+            false
+        }
+        if (persisted) return true
+        val detail = if (submissionRecordStore.recordFor(windowId) == null) {
+            "record_missing"
+        } else {
+            "write_failed"
+        }
+        logSubmissionOutcome("record_persistence_failed operation=$operation detail=$detail window=$windowId")
+        // Keep the report unacknowledged. A later attempt performs receipt
+        // lookup before posting, including when the operator already accepted
+        // the bytes whose receipt could not be saved locally.
+        accumulator.completeSubmissionRetryable(
+            submissionKey,
+            retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
+        )
+        scheduleRetry()
+        return false
+    }
+
+    private fun scheduleRetry() {
+        if (closed) return
+        val scheduler = retryScheduler ?: return
+        scheduledRetry?.cancel()
+        scheduledRetry = scheduler.schedule(RETRY_BACKOFF_MILLIS) { drain() }
     }
 
     private fun restoreConfiguration(record: SubmissionRecord): SubmissionOperatorConfiguration? {
@@ -280,5 +380,21 @@ internal class WindowObservationSubmissionDrain(
          * schedule this issue does not ask for.
          */
         const val RETRY_BACKOFF_MILLIS = 30_000L
+    }
+}
+
+/** Process-scoped timer used by the Android runtime; daemon thread avoids pinning test JVMs. */
+internal class DefaultSubmissionRetryScheduler : WindowObservationSubmissionDrain.RetryScheduler {
+    private val executor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "beid-submission-retry").apply { isDaemon = true }
+    }
+
+    override fun schedule(delayMillis: Long, task: () -> Unit): WindowObservationSubmissionDrain.RetryHandle {
+        val future: ScheduledFuture<*> = executor.schedule(task, delayMillis, TimeUnit.MILLISECONDS)
+        return WindowObservationSubmissionDrain.RetryHandle { future.cancel(false) }
+    }
+
+    override fun close() {
+        executor.shutdownNow()
     }
 }

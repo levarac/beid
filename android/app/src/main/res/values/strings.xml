@@ -128,9 +128,15 @@
     </plurals>
     <string name="today_summary_empty_title">No proofs yet today</string>
     <string name="today_summary_empty_message">Proofs you collect today will show up here.</string>
-    <string name="today_summary_submission_title">Submission</string>
-    <string name="today_summary_submission_enabled">Not sent yet.</string>
-    <string name="today_summary_submission_disabled">Sending isn\'t turned on for this build.</string>
+    <string name="today_summary_submission_title">Sending status · All saved observations</string>
+    <string name="today_summary_submission_unavailable">Sending status is unavailable.</string>
+    <string name="today_summary_submission_empty">No reports waiting to be sent.</string>
+    <string name="today_summary_submission_queued">Waiting to send: %1$d</string>
+    <string name="today_summary_submission_sending">Awaiting confirmation: %1$d</string>
+    <string name="today_summary_submission_retrying">Waiting to retry: %1$d</string>
+    <string name="today_summary_submission_stopped">Sending stopped: %1$d</string>
+    <string name="today_summary_submission_recovery">Saved observations are kept on this device. Check with the event organizer before trying again.</string>
+    <string name="today_summary_submission_accepted">Received by the operator: %1$d</string>
 
     <!-- Record detail screen (beid#122), reached by tapping a Records row. Own per-row vocabulary — never reuses records_signature_status_* (the list's derived-pill vocabulary) and never claims "Verified" (beid#144 is unowned; beid#240). -->
     <!-- Metric row label paired with a device count. "Devices", not people: distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual/reciprocal confirmation. Matches iOS's "detail.devicesSensed.label" wording on its own Proof Detail screen. -->
@@ -147,4 +153,5 @@
     <string name="record_detail_recorded">Recorded</string>
     <!-- Trailing value for an independent row above with nothing to show yet — either the capability doesn\'t exist in the product yet, or it exists but hasn\'t happened for this proof yet. Means there is nothing to report, not that an attempt was made and failed; never an error/warning/declined state. -->
     <string name="record_detail_not_yet_available">Not yet available</string>
+    <string name="event_join_owner_key_unavailable">Your identity key could not be opened. Your existing identity has been preserved. Try joining again after unlocking this device. If this continues, keep the app and its data and contact support.</string>
 </resources>

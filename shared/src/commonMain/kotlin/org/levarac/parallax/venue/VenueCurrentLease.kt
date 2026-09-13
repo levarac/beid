@@ -1,5 +1,8 @@
 package org.levarac.parallax.venue
 
+import org.levarac.parallax.registry.decodeHex
+import org.levarac.parallax.registry.definitionForUseTime
+
 /**
  * Scheduling facts taken from one SDK-verified B005 envelope.
  *
@@ -147,13 +150,20 @@ public fun evaluateVenueCurrentLease(
     // 1. No clock reading is a block, never a reason to invent an ENIN.
     val clock = clockUnixSeconds ?: return blockedBy("clockUnavailable")
 
-    // 2. The imported record must still be the current one.
-    val record = identity.registryContext.definitions.firstOrNull {
-        it.sequence == identity.bundle.definitionSequence
+    // 2. The imported record must be the definition selected for this instant.
+    // A future successor may already be anchored while the imported record is
+    // still the valid one. Conversely, once the successor is selected, the old
+    // bundle is stale even if the registry's latest sequence is ambiguous.
+    val importedRecord = identity.registryContext.definitions.firstOrNull {
+        it.sequence == identity.bundle.definitionSequence &&
+            it.definitionDigestHex.decodeHex(expectedBytes = 32)
+                .contentEquals(identity.bundle.definitionDigest.toByteArray())
     } ?: return blockedBy("staleDefinition")
-    if (identity.registryContext.latestSequence > record.sequence) {
+    val selectedRecord = definitionForUseTime(identity.registryContext, clock)
+    if (selectedRecord != null && selectedRecord.sequence != importedRecord.sequence) {
         return blockedBy("staleDefinition")
     }
+    val record = importedRecord
 
     // 3. Decided from the RECORD, not from any envelope. Before the event
     //    begins the caller has nothing to verify, so this is reached with an

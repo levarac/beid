@@ -28,6 +28,7 @@ import java.util.UUID
 import org.levarac.beid.R
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.ui.designsystem.BeidMetricRow
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidScreen
@@ -82,7 +83,7 @@ object RecordDetailScreenTestTags {
  * `ProofSignatureState`).
  */
 @Composable
-fun RecordDetailScreen(record: ProofRecord) {
+fun RecordDetailScreen(record: ProofRecord, aggregate: org.levarac.beid.shared.aggregation.SessionAggregate? = null) {
     BeidScreen(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
             Text(
@@ -121,17 +122,23 @@ fun RecordDetailScreen(record: ProofRecord) {
                     isAvailable = false,
                     valueModifier = Modifier.testTag(RecordDetailScreenTestTags.MUTUAL_CONFIRMATION_VALUE),
                 )
-                // beid#327 tracks Android's missing aggregation producer: EventJoinCoordinator/
-                // ProofRecordingBridge only ever carry a bare peersVerified Int today, nothing
-                // per-observation, so no Android proof has (or can yet have) a persisted
-                // session-aggregate snapshot for aggregateObservationsForSession to have produced.
-                // This row therefore always renders the honest gap state below, not a snapshot
-                // store that would only ever return null.
                 AvailabilityRow(
                     label = stringResource(R.string.record_detail_time_band_buildup_label),
-                    isAvailable = false,
+                    isAvailable = aggregate != null,
                     valueModifier = Modifier.testTag(RecordDetailScreenTestTags.TIME_BAND_BUILDUP_VALUE),
                 )
+                if (aggregate != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
+                        for (index in 0 until aggregate.windowCount) {
+                            val window = aggregate.windowAt(index) ?: continue
+                            Text(
+                                text = "${window.windowIndex}: ${window.peerCount}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BeidTheme.colors.textSecondary,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -196,14 +203,14 @@ private fun AvailabilityDot(isAvailable: Boolean) {
  * [AppNavHost]'s other guarded transitions.
  */
 @Composable
-fun RecordDetailRoute(proofRecordStore: ProofRecordStore, recordId: UUID, onRecordNotFound: () -> Unit) {
+fun RecordDetailRoute(proofRecordStore: ProofRecordStore, sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null, recordId: UUID, onRecordNotFound: () -> Unit) {
     val viewModel: RecordDetailViewModel = viewModel(
         factory = RecordDetailViewModel.Factory(proofRecordStore, recordId),
     )
     val record by viewModel.record.collectAsState()
     val currentRecord = record
     if (currentRecord != null) {
-        RecordDetailScreen(record = currentRecord)
+        RecordDetailScreen(record = currentRecord, aggregate = sessionAggregateSnapshotStore?.snapshot(recordId))
     } else {
         LaunchedEffect(recordId) { onRecordNotFound() }
     }

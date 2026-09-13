@@ -8,6 +8,8 @@ import org.levarac.beid.persistence.SubmissionRecord
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.persistence.WindowObservationDraftStore
+import org.levarac.beid.shared.event.EventJoinFailureReason
+import org.levarac.beid.shared.event.eventJoinFailureReasonForRegistryErrorCode
 import org.levarac.beid.shared.report.UnsentWindowLedger
 import org.levarac.beid.shared.report.UnsentWindowSubmission
 import org.levarac.beid.shared.report.addPersistedUnsentWindowObservationForRecovery
@@ -30,6 +32,17 @@ import org.levarac.parallax.observation.prepareMutualSensingObservation
 import org.levarac.parallax.submission.SubmissionOperatorConfiguration
 import org.levarac.parallax.submission.restoreStoredObservation
 import org.levarac.parallax.submission.storeSignedObservation
+
+/** Maps the registry's shared error classification into the drain's native effect result. */
+internal fun submissionConfigurationResolutionForRegistryResult(
+    configuration: SubmissionOperatorConfiguration?,
+    errorCode: String?,
+): SubmissionConfigurationResolution = when {
+    configuration != null -> SubmissionConfigurationResolution.Resolved(configuration)
+    eventJoinFailureReasonForRegistryErrorCode(errorCode) == EventJoinFailureReason.NETWORK_REQUIRED ->
+        SubmissionConfigurationResolution.RetryableFailure(errorCode)
+    else -> SubmissionConfigurationResolution.PermanentlyUnusable(errorCode)
+}
 
 internal data class WindowObservationContext(
     val eventCode: String,
@@ -168,15 +181,19 @@ internal class WindowObservationRuntimeOwner(
             nowEpochMilliseconds = { (nowEpochSeconds() * 1_000.0).toLong() },
             configurationResolver = eventJoinRegistry?.let { registry ->
                 WindowObservationSubmissionDrain.SubmissionConfigurationResolver { eventIdHex, completion ->
-                    registry.resolveEventDefinition(eventIdHex, nowEpochSeconds().toLong()) { resolution, _ ->
+                    registry.resolveEventDefinition(eventIdHex, nowEpochSeconds().toLong()) { resolution, errorCode ->
                         completion(
-                            resolution?.context?.let {
-                                org.levarac.parallax.submission.createSubmissionOperatorConfigurationFromEventDefinition(it)
-                            },
+                            submissionConfigurationResolutionForRegistryResult(
+                                configuration = resolution?.context?.let {
+                                    org.levarac.parallax.submission.createSubmissionOperatorConfigurationFromEventDefinition(it)
+                                },
+                                errorCode = errorCode,
+                            ),
                         )
                     }
                 }
             },
+            retryScheduler = DefaultSubmissionRetryScheduler(),
         )
         return WindowObservationRuntime(
             accumulator = accumulator,

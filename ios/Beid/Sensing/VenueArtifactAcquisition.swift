@@ -16,6 +16,7 @@ enum VenueAcquisitionFailure: String, CaseIterable, Hashable, Error {
   case oversize
   case unreadable
   case transportFailure
+  case eventIdentityMismatch
 }
 
 /// Bounded acquisition of the two public artifacts, from a file or over HTTPS.

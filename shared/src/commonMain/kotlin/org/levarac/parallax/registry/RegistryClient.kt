@@ -429,6 +429,27 @@ public fun createSepoliaRegistryClient(
     )
 }
 
+/** Creates a Sepolia client with explicit RPC endpoints for controlled integration tests. */
+public fun createSepoliaRegistryClientWithRpcEndpoints(
+    readerAddressHex: String,
+    primaryEndpointUrl: String,
+    secondaryEndpointUrl: String,
+): RegistryClient? {
+    if (readerAddressHex.isBlank()) return null
+    val readerAddress = try { validateReaderAddress(readerAddressHex) } catch (_: IllegalArgumentException) { return null }
+    val transport = createPlatformRegistryHttpTransport()
+    return RegistryClient(
+        RegistryResolver(
+            chainId = SEPOLIA_CHAIN_ID,
+            readerAddressHex = readerAddress,
+            primary = JsonRpcEthCallAdapter(primaryEndpointUrl, readerAddress, transport, allowInsecureLoopbackForTests = true),
+            secondary = JsonRpcEthCallAdapter(secondaryEndpointUrl, readerAddress, transport, allowInsecureLoopbackForTests = true),
+            etherscan = null,
+            cache = InMemoryRegistryCache(),
+        ),
+    )
+}
+
 private val DefinitionFetchError.wireName: String
     get() = when (this) {
         DefinitionFetchError.NOT_CONFIGURED -> "definition_not_configured"

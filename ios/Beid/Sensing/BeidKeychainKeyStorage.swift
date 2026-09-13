@@ -11,7 +11,7 @@ import Security
 protocol OwnerKeySeedResolving: BarnardCoreKeyStorage {
   func resolveSeed(
     forKey key: String,
-    randomSource: any BarnardCoreRandomSource
+    randomSource: any OwnerKeyRandomBytesGenerating
   ) throws -> [UInt8]
 }
 
@@ -178,7 +178,7 @@ final class BeidKeychainKeyStorage:
 
   func resolveSeed(
     forKey key: String,
-    randomSource: any BarnardCoreRandomSource
+    randomSource: any OwnerKeyRandomBytesGenerating
   ) throws -> [UInt8] {
     switch try readStrictSeed(forKey: key) {
     case .some(let keychainSeed):
@@ -191,9 +191,9 @@ final class BeidKeychainKeyStorage:
         return legacySeed
       }
 
-      let generated = randomSource.randomBytes(count: 32)
+      let generated = try randomSource.randomBytes(count: 32)
       guard generated.count == 32 else {
-        throw BeidKeychainKeyStorageError.invalidSeedLength(generated.count)
+        throw OwnerKeyOperationError.invalidRandomByteCount(generated.count)
       }
       try persistAndVerify(generated, forKey: key)
       return generated

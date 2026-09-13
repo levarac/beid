@@ -84,7 +84,7 @@ private final class TestSensingCryptography: SensingCryptography {
     publicKey
   }
 
-  func ownerPublicKey() -> Data {
+  func ownerPublicKey() throws -> Data {
     publicKey
   }
 
@@ -106,14 +106,14 @@ private final class TestSensingCryptography: SensingCryptography {
     eventSigningPublicKey: Data,
     eninStart: UInt64,
     eninEnd: UInt64
-  ) -> SensingRecoverableSignature? {
+  ) throws -> SensingRecoverableSignature? {
     nil
   }
 
   func signWalletAcknowledgement(
     walletAddress: Data,
     walletSignature: Data
-  ) -> SensingRecoverableSignature? {
+  ) throws -> SensingRecoverableSignature? {
     nil
   }
 }

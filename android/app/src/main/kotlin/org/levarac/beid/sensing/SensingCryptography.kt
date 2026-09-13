@@ -89,12 +89,26 @@ interface SensingCryptography {
  * `BarnardSensingCryptography`. A native testability boundary
  * (AGENTS.md), not a `shared/` decision.
  */
-class BarnardSensingCryptography(context: Context) : SensingCryptography {
+class BarnardSensingCryptography internal constructor(
+    context: Context,
+    keyStorage: OwnerKeyStorage,
+    randomSource: OwnerKeyRandomSource,
+) : SensingCryptography {
+    constructor(context: Context) : this(
+        context = context,
+        keyStorage = AndroidKeystoreOwnerKeyStorage(
+            ownerKeyPreferences(context),
+            AndroidKeystoreOwnerKeyProtector(),
+            durableSnapshot = { sharedPreferencesDurableSnapshot(ownerKeyPreferencesFile(context)) },
+        ),
+        randomSource = SecureRandomOwnerKeySource(),
+    )
+
     private val identity = BarnardIdentity(context)
     internal val ownerKeyProvider = OwnerKeyProvider(
         identity = identity,
-        keyStorage = SharedPreferencesOwnerKeyStorage(ownerKeyPreferences(context)),
-        randomSource = SecureRandomOwnerKeySource(),
+        keyStorage = keyStorage,
+        randomSource = randomSource,
     )
 
     override fun eventSigningPublicKey(eventCode: String): ByteArray =

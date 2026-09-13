@@ -100,7 +100,7 @@ final class OwnerKeyProviderSelfProofTests: XCTestCase {
     )
 
     let signature = try XCTUnwrap(
-      provider.signSelfProof(
+      try provider.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: Data(eventSigningPublicKey),
         eninStart: 100,
@@ -127,7 +127,7 @@ final class OwnerKeyProviderSelfProofTests: XCTestCase {
     )
 
     let signature = try XCTUnwrap(
-      provider.signSelfProof(
+      try provider.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: Data(eventSigningPublicKey),
         eninStart: 100,
@@ -156,7 +156,7 @@ final class OwnerKeyProviderSelfProofTests: XCTestCase {
     let walletSignature = Data((0x40...0x80).map(UInt8.init))
 
     let signature = try XCTUnwrap(
-      provider.signWalletAcknowledgement(
+      try provider.signWalletAcknowledgement(
         walletAddress: walletAddress,
         walletSignature: walletSignature
       )
@@ -272,7 +272,7 @@ private extension Data {
   }
 }
 
-private struct FixedSeedKeyStorage: BarnardCoreKeyStorage {
+private struct FixedSeedKeyStorage: OwnerKeySeedResolving {
   let seed: Data
 
   func bytes(forKey key: String) -> [UInt8]? {
@@ -280,9 +280,10 @@ private struct FixedSeedKeyStorage: BarnardCoreKeyStorage {
   }
 
   func setBytes(_ bytes: [UInt8], forKey key: String) {}
+  func resolveSeed(forKey key: String, randomSource: any OwnerKeyRandomBytesGenerating) throws -> [UInt8] { Array(seed) }
 }
 
-private struct NeverCalledRandomSource: BarnardCoreRandomSource {
+private struct NeverCalledRandomSource: BarnardCoreRandomSource, OwnerKeyRandomBytesGenerating {
   func randomBytes(count: Int) -> [UInt8] {
     XCTFail("randomSource must not be used when a seed is already stored")
     return [UInt8](repeating: 0, count: count)

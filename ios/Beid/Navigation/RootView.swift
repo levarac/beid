@@ -26,6 +26,7 @@ struct RootView: View {
     .modifier(OwnerKeyRestorationNoticePresenter(
       sensingCoordinator: coordinator.sensingCoordinator
     ))
+    .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
     .tint(DS.Color.actionPrimary)
     .animation(BeidDesign.Animation.soft, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
@@ -33,6 +34,27 @@ struct RootView: View {
         .tint(DS.Color.actionPrimary)
         .presentationBackground(.regularMaterial)
     }
+  }
+}
+
+private struct OwnerKeyFailurePresenter: ViewModifier {
+  @ObservedObject var sensingCoordinator: SensingCoordinator
+
+  func body(content: Content) -> some View {
+    content.alert(item: failureBinding) { failure in
+      Alert(
+        title: Text(verbatim: failure.title),
+        message: Text(verbatim: failure.message),
+        primaryButton: .default(Text(String(localized: "ownerKeyFailure.retry", defaultValue: "Try Again"))) {
+          sensingCoordinator.retryOwnerKeyOperation()
+        },
+        secondaryButton: .cancel(Text(String(localized: "ownerKeyFailure.dismiss", defaultValue: "Close")))
+      )
+    }
+  }
+
+  private var failureBinding: Binding<OwnerKeyOperationFailure?> {
+    Binding(get: { sensingCoordinator.ownerKeyOperationFailure }, set: { _ in })
   }
 }
 

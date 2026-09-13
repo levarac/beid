@@ -317,13 +317,19 @@ def run_android(args: argparse.Namespace) -> tuple[int, list[str]]:
     return shell_exit_code(child.returncode), warnings
 
 
-def ios_command(repo_root: Path, udid: str, result_bundle: Path, action: str, only_testing: Sequence[str]) -> list[str]:
+def ios_command(repo_root: Path, udid: str, result_bundle: Path, action: str, only_testing: Sequence[str], configuration: str = "Debug") -> list[str]:
     argv = [
         "xcodebuild", "-project", str(repo_root / "ios" / "Beid.xcodeproj"),
-        "-scheme", "Beid", "-destination", f"platform=iOS Simulator,id={udid}",
+        "-scheme", "Beid", "-configuration", configuration,
+        "-destination", f"platform=iOS Simulator,id={udid}",
         "-resultBundlePath", str(result_bundle),
     ]
     argv.extend(f"-only-testing:{test}" for test in only_testing)
+    if configuration == "Release":
+        # SwiftExport preparation currently emits the Simulator module for the
+        # host architecture. Keep the Release probe aligned with that output;
+        # Debug's historical invocation remains unchanged.
+        argv.extend(["ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "ENABLE_TESTABILITY=YES"])
     argv.append(action)
     return argv
 
@@ -460,7 +466,7 @@ def run_ios(args: argparse.Namespace) -> tuple[int, list[str]]:
         )
         if result_bundle.exists():
             raise RuntimeError(f"refusing to reuse existing xcresult: {result_bundle}")
-        child = run_primary_child(ios_command(repo_root, args.udid, result_bundle, args.action, args.only_testing), repo_root, raw_log, {}, announce=False)
+        child = run_primary_child(ios_command(repo_root, args.udid, result_bundle, args.action, args.only_testing, args.configuration), repo_root, raw_log, {}, announce=False)
     except OSError as error:
         print(warning(f"command launch failed: {error}"))
         return launch_error_code(error), warnings
@@ -532,6 +538,7 @@ def build_parser() -> argparse.ArgumentParser:
     state.add_argument("--erase-simulator", action="store_true")
     state.add_argument("--keep-simulator-state", action="store_true")
     ios.add_argument("--action", choices=("test", "test-without-building"), default="test")
+    ios.add_argument("--configuration", choices=("Debug", "Release"), default="Debug")
     ios.add_argument("--only-testing", action="append", default=[])
     return parser
 

@@ -16,6 +16,7 @@ import org.levarac.barnard.BarnardPermissionStatus
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
+import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 
 private fun fakeStatus(canScan: Boolean, canAdvertise: Boolean): BarnardPermissionStatus =
     BarnardPermissionStatus(
@@ -45,6 +46,27 @@ private fun fakeStatus(canScan: Boolean, canAdvertise: Boolean): BarnardPermissi
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorHooksTest {
+    @Test
+    fun ownerKeyFailureBlocksRecordingAndRetryCanUseTheSameIdentity() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        var unavailable = true
+        val crypto = object : FakeSensingCryptography() {
+            override fun ownerPublicKey(): ByteArray {
+                if (unavailable) throw OwnerKeyUnavailableException(OwnerKeyStorageFailure.TEMPORARILY_UNAVAILABLE)
+                return super.ownerPublicKey()
+            }
+        }
+        val coordinator = coordinator(engine, crypto, nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        assertEquals(0, engine.startAutoCalls)
+        assertFalse(coordinator.state.value is EventJoinUiState.Sensing)
+        unavailable = false
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        assertEquals(1, engine.startAutoCalls)
+        assertIs<EventJoinUiState.Sensing>(coordinator.state.value)
+    }
+
     @Test
     fun staleJoinActionCannotReplaceAnActiveProofOrResetItsAccountingAndBinding() = runTest {
         val engine = FakeEventJoinEngine()
@@ -106,6 +128,27 @@ class EventJoinCoordinatorHooksTest {
         engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
 
         assertEquals(1, callCount, "already-Recording detections, including a duplicate device, must never re-fire onProofCollected")
+    }
+
+    @Test
+    fun realDetectionPathPersistsTheProofOwnedAggregateOnceAndReloads() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val file = newTempRecordFile("aggregate-snapshots")
+        val snapshots = SessionAggregateSnapshotStore(file)
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry, snapshots = snapshots)
+        val ids = mutableListOf<UUID>()
+        coordinator.onProofCollected = { id, _, _ -> ids += id }
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        confirmRecording(engine)
+        val proofId = ids.single()
+        coordinator.leaveEvent()
+        val aggregate = snapshots.snapshot(proofId)
+        assertEquals(3, aggregate?.observationCount)
+        assertEquals(3, aggregate?.windowCount)
+        coordinator.dispose()
+        assertEquals(1, snapshots.records.size, "repeated teardown must not write a second row")
+        assertEquals(3, SessionAggregateSnapshotStore(file).snapshot(proofId)?.observationCount)
     }
 
     @Test
@@ -267,6 +310,7 @@ class EventJoinCoordinatorHooksTest {
         selfProofRecordStore: SelfProofRecordStore = SelfProofRecordStore(newTempRecordFile("self-proofs")),
         bindingRecordStore: BindingRecordStore = BindingRecordStore(newTempRecordFile("binding-records")),
         nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
+        snapshots: SessionAggregateSnapshotStore? = null,
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
         nearbyRegistry = nearbyRegistry,
@@ -275,6 +319,7 @@ class EventJoinCoordinatorHooksTest {
         sensingCryptography = cryptography,
         selfProofRecordStore = selfProofRecordStore,
         bindingRecordStore = bindingRecordStore,
+        sessionAggregateSnapshotStore = snapshots,
     )
 }
 

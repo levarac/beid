@@ -150,9 +150,9 @@ class VenueCurrentLeaseTest {
 
     @Test
     fun aSupersededDefinitionRecordIsStaleDefinition() {
-        // The imported record is still inside its own validity window; what
-        // makes it stale is that a higher-sequence record now exists.
-        val decision = staleDefinitionDecision()
+        // The successor is valid at the evaluation instant, so the imported
+        // record is stale because time selects the successor.
+        val decision = supersededDefinitionDecision()
         assertNull(decision.lease)
         assertEquals("staleDefinition", decision.blockCode)
     }
@@ -181,6 +181,44 @@ class VenueCurrentLeaseTest {
         assertEquals(produced.size, produced.toSet().size, "two scenarios produced the same block code")
         assertEquals(allNativeCases - nativeOnly, produced.toSet())
         assertTrue((produced.toSet() intersect nativeOnly).isEmpty())
+    }
+
+    @Test
+    fun aFutureSuccessorDoesNotRejectTheCurrentlySelectedDefinition() {
+        val decision = staleDefinitionDecision()
+
+        assertNotNull(
+            decision.lease,
+            "a successor that is not valid yet must not stale the current definition: ${decision.blockCode}",
+        )
+        assertNull(decision.blockCode)
+    }
+
+    @Test
+    fun anOldDefinitionIsRejectedAfterItsSuccessorBecomesValid() {
+        val vector = venueLeaseVector()
+        val imported = vector.venueDefinitionRecord()
+        val successor = RegistryDefinitionRecord(
+            sequence = imported.sequence + 1,
+            previousDefinitionDigestHex = imported.definitionDigestHex,
+            definitionDigestHex = imported.previousDefinitionDigestHex,
+            validFrom = imported.validUntil + 1,
+            validUntil = imported.validUntil + 6_000,
+            anchoredAt = imported.anchoredAt + 1,
+        )
+        val context = RegistryEventContext(
+            schemaVersion = 1, registration = vector.venueRegistration(), definitionState = 1,
+            latestSequence = successor.sequence, definitions = listOf(imported, successor),
+        )
+
+        val decision = evaluateVenueCurrentLease(
+            venueLeaseIdentity(context = context),
+            listOf(venueLeaseScheduling()),
+            successor.validFrom,
+        )
+
+        assertNull(decision.lease)
+        assertEquals("staleDefinition", decision.blockCode)
     }
 
     @Test
@@ -251,10 +289,10 @@ class VenueCurrentLeaseTest {
         "expired" to evaluate(clockSeconds = 6_000_002L * 300L, verifiedAtEnin = 6_000_001L),
         "noCurrentEnvelope" to evaluateWith(emptyList()),
         "envelopeRejected" to evaluateWith(listOf(null)),
-        "staleDefinition" to staleDefinitionDecision(),
+        "staleDefinition" to supersededDefinitionDecision(),
     )
 
-    private fun staleDefinitionDecision(): VenueCurrentLeaseDecision {
+    private fun futureSuccessorContext(): Pair<RegistryEventContext, RegistryDefinitionRecord> {
         val vector = venueLeaseVector()
         val imported = vector.venueDefinitionRecord()
         val successor = RegistryDefinitionRecord(
@@ -269,8 +307,16 @@ class VenueCurrentLeaseTest {
             schemaVersion = 1, registration = vector.venueRegistration(), definitionState = 1,
             latestSequence = successor.sequence, definitions = listOf(imported, successor),
         )
-        return evaluateVenueCurrentLease(
-            venueLeaseIdentity(context = context), listOf(venueLeaseScheduling()), venueLeaseClockSeconds(),
-        )
+        return context to successor
+    }
+
+    private fun staleDefinitionDecision(): VenueCurrentLeaseDecision {
+        val (context, _) = futureSuccessorContext()
+        return evaluateVenueCurrentLease(venueLeaseIdentity(context = context), listOf(venueLeaseScheduling()), venueLeaseClockSeconds())
+    }
+
+    private fun supersededDefinitionDecision(): VenueCurrentLeaseDecision {
+        val (context, successor) = futureSuccessorContext()
+        return evaluateVenueCurrentLease(venueLeaseIdentity(context = context), listOf(venueLeaseScheduling()), successor.validFrom)
     }
 }
