@@ -11,6 +11,15 @@ import org.levarac.parallax.submission.SubmissionResult
 import org.levarac.parallax.submission.createSubmissionOperatorConfigurationWithOperatorId
 import org.levarac.parallax.submission.restoreStoredObservation
 
+/** Preserves whether a registry lookup produced usable evidence, failed transiently, or failed closed. */
+internal sealed interface SubmissionConfigurationResolution {
+    data class Resolved(val configuration: SubmissionOperatorConfiguration) : SubmissionConfigurationResolution
+
+    data class RetryableFailure(val errorCode: String?) : SubmissionConfigurationResolution
+
+    data class PermanentlyUnusable(val errorCode: String?) : SubmissionConfigurationResolution
+}
+
 /**
  * beid#525's drain: the missing half of Android's writer
  * (`WindowObservationAccumulator` → `UnsentWindowLedgerStore`). Signed,
@@ -49,8 +58,9 @@ internal class WindowObservationSubmissionDrain(
     /**
      * A fresh, independent way to resolve a configuration by event id when
      * the window's own persisted record has none — beid#525's nearby-join
-     * gap. `null` (the default) means "no such capability", equivalent to
-     * every lookup always failing.
+     * gap. A missing resolver means "no such capability". A present resolver
+     * must keep a transient registry outage separate from permanently
+     * unusable evidence so the durable head report is not held forever.
      *
      * Shaped around [SubmissionOperatorConfiguration] rather than the
      * shared module's `EventDefinitionContext`/`EventDefinitionResolution`
@@ -67,7 +77,7 @@ internal class WindowObservationSubmissionDrain(
 ) {
     /** See [WindowObservationSubmissionDrain]'s `configurationResolver` doc. */
     fun interface SubmissionConfigurationResolver {
-        fun resolve(eventIdHex: String, completion: (SubmissionOperatorConfiguration?) -> Unit)
+        fun resolve(eventIdHex: String, completion: (SubmissionConfigurationResolution) -> Unit)
     }
 
     /** beid#525's "after a window's durable close" / "on foreground resume" / "when a retry time arrives" triggers. */
@@ -123,21 +133,38 @@ internal class WindowObservationSubmissionDrain(
         // was joined — is the only other legitimate source of a
         // configuration. Never fall back to any other event's configuration
         // if this fails.
-        resolver.resolve(eventIdHex) { resolved ->
-            if (resolved == null) {
-                hold(submission.submissionKey, windowId, "registry lookup for event $eventIdHex produced no usable Event Definition")
-                return@resolve
+        resolver.resolve(eventIdHex) { resolution ->
+            when (resolution) {
+                is SubmissionConfigurationResolution.RetryableFailure -> {
+                    accumulator.completeSubmissionRetryable(
+                        submission.submissionKey,
+                        retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
+                    )
+                    logSubmissionOutcome("scheduled registry retry for window $windowId: ${resolution.errorCode}")
+                }
+
+                is SubmissionConfigurationResolution.PermanentlyUnusable -> {
+                    hold(
+                        submission.submissionKey,
+                        windowId,
+                        "registry lookup for event $eventIdHex produced no usable Event Definition: ${resolution.errorCode}",
+                    )
+                }
+
+                is SubmissionConfigurationResolution.Resolved -> {
+                    val resolved = resolution.configuration
+                    submissionRecordStore.recordResolvedConfiguration(
+                        windowId = windowId,
+                        submissionEndpoint = resolved.submissionEndpoint,
+                        receiptPublicKeyHex = resolved.receiptPublicKey.toByteArray().toLowercaseHex(),
+                        operatorIdHex = resolved.operatorId.toByteArray().toLowercaseHex(),
+                        eventDefinitionDigestHex = resolved.eventDefinitionDigest?.toByteArray()?.toLowercaseHex(),
+                        validFrom = resolved.validFrom,
+                        validUntil = resolved.validUntil,
+                    )
+                    proceedWithConfiguration(submission, origin, windowId, digestHex, resolved)
+                }
             }
-            submissionRecordStore.recordResolvedConfiguration(
-                windowId = windowId,
-                submissionEndpoint = resolved.submissionEndpoint,
-                receiptPublicKeyHex = resolved.receiptPublicKey.toByteArray().toLowercaseHex(),
-                operatorIdHex = resolved.operatorId.toByteArray().toLowercaseHex(),
-                eventDefinitionDigestHex = resolved.eventDefinitionDigest?.toByteArray()?.toLowercaseHex(),
-                validFrom = resolved.validFrom,
-                validUntil = resolved.validUntil,
-            )
-            proceedWithConfiguration(submission, origin, windowId, digestHex, resolved)
         }
     }
 
