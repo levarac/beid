@@ -64,6 +64,7 @@ targets:
         BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
         BeidEventDefinitionURLTemplate: "$(BEID_EVENT_DEFINITION_URL_TEMPLATE)"
         BeidEventKeySetURLTemplate: "$(BEID_EVENT_KEY_SET_URL_TEMPLATE)"
+        BeidVenueBundleURLTemplate: "$(BEID_VENUE_BUNDLE_URL_TEMPLATE)"
         BeidEventCodeLookupURLTemplate: "$(BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE)"
         BeidEventCodeHashLookupURLTemplate: "$(BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE)"
         BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"

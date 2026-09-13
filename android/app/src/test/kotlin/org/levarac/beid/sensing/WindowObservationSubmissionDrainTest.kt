@@ -72,6 +72,55 @@ class WindowObservationSubmissionDrainTest {
             server.stop()
         }
     }
+
+    @Test
+    fun restoreReservesTimerForFiniteRetryDeadlineBeforeItIsDue() {
+        val directory = Files.createTempDirectory("drain-restore-retry-deadline").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            var now = NOW_EPOCH_MILLIS
+            val firstScheduler = RecordingRetryScheduler()
+            val firstResolver = FakeConfigurationResolver(
+                listOf(SubmissionConfigurationResolution.RetryableFailure("timeout")),
+            )
+            val (firstAccumulator, firstDrain) = buildSystem(
+                directory, vectorCryptography(), null,
+                configurationResolver = firstResolver,
+                retryScheduler = firstScheduler,
+                nowEpochMilliseconds = { now },
+            )
+            closeOneWindow(firstAccumulator)
+            firstDrain.drain()
+            // The first process has a transport failure after selection. Keep
+            // the durable finite deadline, but do not fire its in-process timer.
+            waitUntil { firstScheduler.scheduledCount == 1 }
+
+            val restoreScheduler = RecordingRetryScheduler()
+            val secondResolver = FakeConfigurationResolver(resolvedConfiguration(endpoint))
+            val (secondAccumulator, secondDrain) = buildSystem(
+                directory, vectorCryptography(), null,
+                configurationResolver = secondResolver,
+                retryScheduler = restoreScheduler,
+                nowEpochMilliseconds = { now },
+            )
+            secondAccumulator.recoverAfterRelaunch()
+            secondDrain.resumeAfterRestore()
+
+            assertEquals(1, restoreScheduler.scheduledCount)
+            assertEquals(RETRY_BACKOFF_MILLIS, restoreScheduler.delayMillis)
+            assertEquals(0, server.postCount)
+
+            now += RETRY_BACKOFF_MILLIS
+            restoreScheduler.task.invoke()
+            waitUntil { server.postCount == 1 }
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            assertEquals(1, server.getCount)
+            assertEquals(1, server.postCount)
+        } finally {
+            server.stop()
+        }
+    }
     @Test
     fun happyPathDrainsExactlyOnePostAndPersistsAcceptance() {
         val directory = Files.createTempDirectory("drain-happy-path").toFile()
