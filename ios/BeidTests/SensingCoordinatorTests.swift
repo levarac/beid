@@ -159,6 +159,19 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(coordinator.phase, .idle)
   }
 
+  /// The home indicator's stop action must reach the real engine seam. The
+  /// Barnard engine owns the asynchronous state callback that later publishes
+  /// `isScanning`/`isAdvertising == false`; this test pins the native request
+  /// that initiates that transition without pretending a fake is BLE evidence.
+  func testStopSensingRequestsAutomaticOperationStop() {
+    let engine = RecordingEventJoinControl()
+    let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+
+    coordinator.stopSensing()
+
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+  }
+
   func testDemoSequenceReachesRecordingPhaseAtThreshold() async {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
     let event = EventSession(id: "TEST-EVENT", name: "Test Event", venue: nil)
@@ -1390,6 +1403,54 @@ final class SensingCoordinatorTests: XCTestCase {
 
 @MainActor
 final class OwnerKeyRestorationNoticeTests: XCTestCase {
+  func testOwnerKeyFailurePresentationIsRetryableAndDistinctFromResetNotice() {
+    let failure = OwnerKeyOperationFailure.unavailable
+
+    XCTAssertEqual(failure.id, "owner-key-unavailable")
+    XCTAssertEqual(failure.title, "Proof key is unavailable")
+    XCTAssertTrue(failure.message.contains("operations are paused"))
+    XCTAssertNotEqual(failure.title, OwnerKeyRestorationNotice.identityWasReset.title)
+  }
+
+  func testOwnerKeyFailureAtStartupIsPublishedWithoutRestorationNotice() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("owner-key-operation-failure-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let crypto = StagedOwnerKeyFailureCryptography()
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: crypto,
+      ownerKeyRestorationAcknowledgementDefaults: UserDefaults(suiteName: UUID().uuidString)!
+    )
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertEqual(coordinator.ownerKeyOperationFailure, .unavailable)
+    XCTAssertNil(coordinator.ownerKeyRestorationNotice)
+    XCTAssertEqual(crypto.ownerPublicKeyCallCount, 1)
+  }
+
+  func testRetryOwnerKeyOperationClearsFailureWithoutResettingIdentity() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("owner-key-operation-retry-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let crypto = StagedOwnerKeyFailureCryptography()
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: crypto,
+      ownerKeyRestorationAcknowledgementDefaults: UserDefaults(suiteName: UUID().uuidString)!
+    )
+
+    await coordinator.waitForLedgerLoadToFinish()
+    crypto.failure = nil
+    coordinator.retryOwnerKeyOperation()
+
+    XCTAssertNil(coordinator.ownerKeyOperationFailure)
+    XCTAssertGreaterThanOrEqual(crypto.ownerPublicKeyCallCount, 2)
+  }
+
   func testSignalAExplainsThatThePreviousProofIdentityWasLost() {
     let notice = OwnerKeyRestorationNotice.classify(
       quarantinedSeedKey: "beid.ownerKeySeed.quarantine.test",
@@ -1542,7 +1603,24 @@ final class OwnerKeyRestorationNoticeTests: XCTestCase {
   }
 }
 
-private struct FixedOwnerKeyRandomSource: BarnardCoreRandomSource {
+private final class StagedOwnerKeyFailureCryptography: SensingCryptography {
+  var failure: OwnerKeyOperationError? = .storage(.readFailed(errSecInteractionNotAllowed))
+  private(set) var ownerPublicKeyCallCount = 0
+
+  func eventSigningPublicKey(eventCode: String) -> Data { Data([0x02] + [UInt8](repeating: 0x01, count: 32)) }
+  func ownerPublicKey() throws -> Data {
+    ownerPublicKeyCallCount += 1
+    if let failure { throw failure }
+    return Data([0x03] + [UInt8](repeating: 0x02, count: 32))
+  }
+  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
+    SensingRecoverableSignature(r: Data(repeating: 0, count: 32), s: Data(repeating: 0, count: 32), v: 0)
+  }
+  func signSelfProof(eventIdHash: Data, eventSigningPublicKey: Data, eninStart: UInt64, eninEnd: UInt64) throws -> SensingRecoverableSignature? { nil }
+  func signWalletAcknowledgement(walletAddress: Data, walletSignature: Data) throws -> SensingRecoverableSignature? { nil }
+}
+
+private struct FixedOwnerKeyRandomSource: BarnardCoreRandomSource, OwnerKeyRandomBytesGenerating {
   func randomBytes(count: Int) -> [UInt8] {
     [UInt8](repeating: 0x42, count: count)
   }

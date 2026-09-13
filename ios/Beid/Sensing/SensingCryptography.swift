@@ -33,7 +33,7 @@ struct SensingRecoverableSignature: Equatable {
 /// decision; implementations only forward one operation and map its result.
 protocol SensingCryptography: AnyObject {
   func eventSigningPublicKey(eventCode: String) -> Data
-  func ownerPublicKey() -> Data
+  func ownerPublicKey() throws -> Data
 
   func signWindowReport(
     eventCode: String,
@@ -45,12 +45,12 @@ protocol SensingCryptography: AnyObject {
     eventSigningPublicKey: Data,
     eninStart: UInt64,
     eninEnd: UInt64
-  ) -> SensingRecoverableSignature?
+  ) throws -> SensingRecoverableSignature?
 
   func signWalletAcknowledgement(
     walletAddress: Data,
     walletSignature: Data
-  ) -> SensingRecoverableSignature?
+  ) throws -> SensingRecoverableSignature?
 }
 
 /// Production adapter for the two Barnard-backed key owners used by sensing.
@@ -74,8 +74,8 @@ final class BarnardSensingCryptography: SensingCryptography {
     identity.signingPublicKey(eventCode: eventCode)
   }
 
-  func ownerPublicKey() -> Data {
-    ownerKeyProvider.publicKeyCompressed()
+  func ownerPublicKey() throws -> Data {
+    try ownerKeyProvider.publicKeyCompressed()
   }
 
   func signWindowReport(
@@ -92,8 +92,8 @@ final class BarnardSensingCryptography: SensingCryptography {
     eventSigningPublicKey: Data,
     eninStart: UInt64,
     eninEnd: UInt64
-  ) -> SensingRecoverableSignature? {
-    ownerKeyProvider.signSelfProof(
+  ) throws -> SensingRecoverableSignature? {
+    try ownerKeyProvider.signSelfProof(
       eventIdHash: eventIdHash,
       eventSigningPublicKey: eventSigningPublicKey,
       eninStart: eninStart,
@@ -104,8 +104,8 @@ final class BarnardSensingCryptography: SensingCryptography {
   func signWalletAcknowledgement(
     walletAddress: Data,
     walletSignature: Data
-  ) -> SensingRecoverableSignature? {
-    ownerKeyProvider.signWalletAcknowledgement(
+  ) throws -> SensingRecoverableSignature? {
+    try ownerKeyProvider.signWalletAcknowledgement(
       walletAddress: walletAddress,
       walletSignature: walletSignature
     ).map { SensingRecoverableSignature(barnardCore: $0) }

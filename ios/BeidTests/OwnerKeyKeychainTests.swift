@@ -10,6 +10,43 @@ import XCTest
 final class BeidKeychainKeyStorageTests: XCTestCase {
   private let seedKey = "beid.ownerKeySeed"
 
+  func testProviderPublishesRandomFailureWithoutWritingOrReplacingSeed() {
+    let existingSeed = Data(repeating: 0xA1, count: 32)
+    let keychain = FakeBeidKeychainAccess(storedData: existingSeed)
+    // A read error is represented by the result below even though this fake
+    // retains the original data.  That distinction proves a transient
+    // Keychain failure does not authorize replacing a seed that may exist.
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    let random = ThrowingOwnerKeyRandomSource(result: .failure(.randomFailed(-42)))
+    let provider = OwnerKeyProvider(
+      keyStorage: makeStorage(keychain: keychain),
+      randomSource: random
+    )
+
+    XCTAssertThrowsError(try provider.publicKeyCompressed()) { error in
+      XCTAssertEqual(error as? OwnerKeyOperationError, .storage(.readFailed(errSecInteractionNotAllowed)))
+    }
+    XCTAssertEqual(random.callCount, 0)
+    XCTAssertEqual(keychain.storedData, existingSeed)
+    XCTAssertNil(keychain.lastWrite)
+  }
+
+  func testProviderPublishesRandomFailureWithoutWritingANewSeed() {
+    let keychain = FakeBeidKeychainAccess()
+    let random = ThrowingOwnerKeyRandomSource(result: .failure(.randomFailed(-42)))
+    let provider = OwnerKeyProvider(
+      keyStorage: makeStorage(keychain: keychain),
+      randomSource: random
+    )
+
+    XCTAssertThrowsError(try provider.publicKeyCompressed()) { error in
+      XCTAssertEqual(error as? OwnerKeyOperationError, .randomFailed(-42))
+    }
+    XCTAssertEqual(random.callCount, 1)
+    XCTAssertNil(keychain.storedData)
+    XCTAssertNil(keychain.lastWrite)
+  }
+
   func testSystemKeychainRoundTripUsesBackupPreservingNonSynchronizableItem() throws {
     let key = "\(seedKey).roundTrip.\(UUID().uuidString)"
     let storage = BeidKeychainKeyStorage()
@@ -100,6 +137,46 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
     XCTAssertEqual(defaults.data(forKey: seedKey), legacySeed)
   }
 
+  func testProviderMapsKeychainWriteFailureWithoutRemovingLegacySeed() {
+    let legacySeed = Data(repeating: 0x45, count: 32)
+    let defaults = makeIsolatedDefaults()
+    defaults.set(legacySeed, forKey: seedKey)
+    let keychain = FakeBeidKeychainAccess(writeStatus: errSecInteractionNotAllowed)
+    let provider = OwnerKeyProvider(
+      keyStorage: makeStorage(keychain: keychain, defaults: defaults),
+      randomSource: CountingRandomSource(bytes: [UInt8](repeating: 0x55, count: 32))
+    )
+
+    XCTAssertThrowsError(try provider.publicKeyCompressed()) { error in
+      XCTAssertEqual(
+        error as? OwnerKeyOperationError,
+        .storage(.writeFailed(errSecInteractionNotAllowed))
+      )
+    }
+    XCTAssertEqual(defaults.data(forKey: seedKey), legacySeed)
+  }
+
+  func testProviderMapsKeychainReadbackFailureWithoutRemovingLegacySeed() {
+    let legacySeed = Data(repeating: 0x46, count: 32)
+    let defaults = makeIsolatedDefaults()
+    defaults.set(legacySeed, forKey: seedKey)
+    let keychain = FakeBeidKeychainAccess(
+      readResults: [.notFound, .notFound]
+    )
+    let provider = OwnerKeyProvider(
+      keyStorage: makeStorage(keychain: keychain, defaults: defaults),
+      randomSource: CountingRandomSource(bytes: [UInt8](repeating: 0x56, count: 32))
+    )
+
+    XCTAssertThrowsError(try provider.publicKeyCompressed()) { error in
+      XCTAssertEqual(
+        error as? OwnerKeyOperationError,
+        .storage(.verificationFailed)
+      )
+    }
+    XCTAssertEqual(defaults.data(forKey: seedKey), legacySeed)
+  }
+
   func testInterruptedMigrationConvergesWhenBothStoresContainSameSeed() throws {
     let seed = Data(repeating: 0x66, count: 32)
     let defaults = makeIsolatedDefaults()
@@ -127,7 +204,7 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
       randomSource: CountingRandomSource(bytes: [UInt8](repeating: 0x88, count: 32))
     )
 
-    _ = provider.publicKeyCompressed()
+    _ = try provider.publicKeyCompressed()
 
     let quarantineKey = try XCTUnwrap(provider.quarantinedSeedKey)
     XCTAssertTrue(quarantineKey.hasPrefix("\(seedKey).quarantine."))
@@ -148,21 +225,21 @@ final class BeidKeychainKeyStorageTests: XCTestCase {
       randomSource: CountingRandomSource(bytes: [])
     )
 
-    XCTAssertEqual(migratedProvider.publicKeyCompressed(), originalProvider.publicKeyCompressed())
+    XCTAssertEqual(try migratedProvider.publicKeyCompressed(), try originalProvider.publicKeyCompressed())
   }
 
-  func testProviderRereadsSeedInsteadOfRetainingPrivateKeyPair() {
+  func testProviderRereadsSeedInsteadOfRetainingPrivateKeyPair() throws {
     let firstSeed = Data(repeating: 0x01, count: 32)
     let keychain = FakeBeidKeychainAccess(storedData: firstSeed)
     let provider = OwnerKeyProvider(
       keyStorage: makeStorage(keychain: keychain),
       randomSource: CountingRandomSource(bytes: [])
     )
-    let firstPublicKey = provider.publicKeyCompressed()
+    let firstPublicKey = try provider.publicKeyCompressed()
 
     keychain.storedData = Data(repeating: 0x02, count: 32)
 
-    XCTAssertNotEqual(provider.publicKeyCompressed(), firstPublicKey)
+    XCTAssertNotEqual(try provider.publicKeyCompressed(), firstPublicKey)
     XCTAssertGreaterThanOrEqual(keychain.readCount, 2)
   }
 
@@ -188,17 +265,20 @@ private final class FakeBeidKeychainAccess: BeidKeychainAccessing {
   var storedData: Data?
   var readResults: [BeidKeychainReadResult]
   var persistWrites: Bool
+  var writeStatus: OSStatus
   private(set) var readCount = 0
   private(set) var lastWrite: BeidKeychainWrite?
 
   init(
     storedData: Data? = nil,
     readResults: [BeidKeychainReadResult] = [],
-    persistWrites: Bool = true
+    persistWrites: Bool = true,
+    writeStatus: OSStatus = errSecSuccess
   ) {
     self.storedData = storedData
     self.readResults = readResults
     self.persistWrites = persistWrites
+    self.writeStatus = writeStatus
   }
 
   func read(service: String, account: String) -> BeidKeychainReadResult {
@@ -211,6 +291,7 @@ private final class FakeBeidKeychainAccess: BeidKeychainAccessing {
 
   func write(_ write: BeidKeychainWrite) -> OSStatus {
     lastWrite = write
+    guard writeStatus == errSecSuccess else { return writeStatus }
     if persistWrites {
       storedData = write.data
     }
@@ -233,7 +314,7 @@ private final class FakeBeidKeychainAccess: BeidKeychainAccessing {
   }
 }
 
-private final class CountingRandomSource: BarnardCoreRandomSource {
+private final class CountingRandomSource: BarnardCoreRandomSource, OwnerKeyRandomBytesGenerating {
   let bytes: [UInt8]
   private(set) var callCount = 0
 
@@ -247,7 +328,21 @@ private final class CountingRandomSource: BarnardCoreRandomSource {
   }
 }
 
-private final class MutableSeedKeyStorage: BarnardCoreKeyStorage {
+private final class ThrowingOwnerKeyRandomSource: OwnerKeyRandomBytesGenerating {
+  let result: Result<[UInt8], OwnerKeyOperationError>
+  private(set) var callCount = 0
+
+  init(result: Result<[UInt8], OwnerKeyOperationError>) {
+    self.result = result
+  }
+
+  func randomBytes(count: Int) throws -> [UInt8] {
+    callCount += 1
+    return try result.get()
+  }
+}
+
+private final class MutableSeedKeyStorage: OwnerKeySeedResolving {
   var seed: [UInt8]
 
   init(seed: [UInt8]) {
@@ -260,5 +355,12 @@ private final class MutableSeedKeyStorage: BarnardCoreKeyStorage {
 
   func setBytes(_ bytes: [UInt8], forKey key: String) {
     seed = bytes
+  }
+
+  func resolveSeed(
+    forKey key: String,
+    randomSource: any OwnerKeyRandomBytesGenerating
+  ) throws -> [UInt8] {
+    seed
   }
 }

@@ -6,9 +6,133 @@ import Foundation
 import XCTest
 @testable import Beid
 
+private final class FailingFacadeKeychainAccess: BeidKeychainAccessing {
+  func read(service: String, account: String) -> BeidKeychainReadResult {
+    .failure(errSecInteractionNotAllowed)
+  }
+  func write(_ write: BeidKeychainWrite) -> OSStatus { XCTFail("write must not be reached"); return errSecInteractionNotAllowed }
+  func remove(service: String, account: String) -> OSStatus { errSecSuccess }
+  func attributes(service: String, account: String) -> BeidKeychainItemAttributes? { nil }
+}
+
+private struct FixedFacadeRandomSource: OwnerKeyRandomBytesGenerating {
+  func randomBytes(count: Int) throws -> [UInt8] { [UInt8](repeating: 0, count: count) }
+}
+
 final class SensingCryptographyTests: XCTestCase {
   private func hexString(_ data: Data) -> String {
     data.map { String(format: "%02x", $0) }.joined()
+  }
+
+  func testBarnardFacadePropagatesOwnerKeyStorageFailureAcrossOwnerOperations() {
+    let keychain = FailingFacadeKeychainAccess()
+    let provider = OwnerKeyProvider(
+      keyStorage: BeidKeychainKeyStorage(
+        keychain: keychain,
+        legacyStorage: BeidUserDefaultsKeyStorage(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+      ),
+      randomSource: FixedFacadeRandomSource()
+    )
+    let cryptography = BarnardSensingCryptography(ownerKeyProvider: provider)
+
+    XCTAssertThrowsError(try cryptography.ownerPublicKey()) { error in
+      XCTAssertEqual(error as? OwnerKeyOperationError, .storage(.readFailed(errSecInteractionNotAllowed)))
+    }
+    XCTAssertThrowsError(try cryptography.signSelfProof(
+      eventIdHash: Data(repeating: 0x01, count: 32),
+      eventSigningPublicKey: Data([0x02] + [UInt8](repeating: 0x02, count: 32)),
+      eninStart: 1,
+      eninEnd: 2
+    )) { error in
+      XCTAssertEqual(error as? OwnerKeyOperationError, .storage(.readFailed(errSecInteractionNotAllowed)))
+    }
+    XCTAssertThrowsError(try cryptography.signWalletAcknowledgement(
+      walletAddress: Data(repeating: 0x01, count: 20),
+      walletSignature: Data(repeating: 0x02, count: 65)
+    )) { error in
+      XCTAssertEqual(error as? OwnerKeyOperationError, .storage(.readFailed(errSecInteractionNotAllowed)))
+    }
+  }
+
+  @MainActor
+  func testOwnerKeyFailureDuringDemoSessionPersistsNoWindowOrSelfProofArtifacts() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("owner-key-artifact-suppression-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let crypto = DeterministicSensingCryptography()
+    crypto.walletAcknowledgementError = OwnerKeyOperationError.randomFailed(-42)
+    crypto.selfProofError = OwnerKeyOperationError.randomFailed(-42)
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: crypto
+    )
+
+    coordinator.runDemoSequence(
+      demoEvent: EventSession(id: "OWNER-FAIL-EVENT", name: "Owner failure", venue: nil),
+      stepDelayNanos: 0
+    )
+    await coordinator.waitForDemoSequenceToFinish()
+    _ = coordinator.reset()
+
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertTrue(BindingRecordStore(fileURL: directory.appendingPathComponent("binding-records.json")).records.isEmpty)
+    XCTAssertTrue(WindowReportStore(fileURL: directory.appendingPathComponent("window-reports.json")).reports.isEmpty)
+  }
+
+  @MainActor
+  func testOwnerKeyFailureAtEventCommitmentPersistsNoWindowReport() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("owner-key-commit-suppression-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let crypto = DeterministicSensingCryptography()
+    crypto.ownerPublicKeyError = OwnerKeyOperationError.randomFailed(-42)
+    let coordinator = SensingCoordinator(loadingFromDirectory: directory, sensingCryptography: crypto)
+
+    coordinator.runDemoSequence(
+      demoEvent: EventSession(id: "OWNER-FAIL-COMMIT", name: "Commit failure", venue: nil),
+      stepDelayNanos: 0
+    )
+    await coordinator.waitForDemoSequenceToFinish()
+    _ = coordinator.reset()
+
+    XCTAssertTrue(WindowReportStore(fileURL: directory.appendingPathComponent("window-reports.json")).reports.isEmpty)
+  }
+
+  @MainActor
+  func testOwnerKeyFailureDuringBindingAcknowledgementDoesNotPersistBinding() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("owner-key-binding-suppression-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let crypto = DeterministicSensingCryptography()
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: crypto
+    )
+    let event = EventSession(id: "OWNER-FAIL-BINDING", name: "Binding failure", venue: nil)
+    coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    guard let messageHex = coordinator.beginBinding(
+      walletAddress: "0x0000000000000000000000000000000000000001",
+      chainId: "eip155:1"
+    ) else {
+      return XCTFail("expected a binding message")
+    }
+    let walletPair = BarnardCoreSigning.deriveOwnerKeyPair(accountSecret: [UInt8](repeating: 0x32, count: 32))
+    let walletSignature = Self.signEip191(messageHex: messageHex, privateKey: walletPair.privateKey)
+    let walletSignatureHex = "0x" + walletSignature.map { String(format: "%02x", $0) }.joined()
+    crypto.walletAcknowledgementError = OwnerKeyOperationError.randomFailed(-42)
+
+    XCTAssertEqual(
+      coordinator.completeBinding(
+        walletAddress: "0x0000000000000000000000000000000000000001",
+        walletSignatureHex: walletSignatureHex
+      ),
+      .notVerified
+    )
+    XCTAssertTrue(BindingRecordStore(fileURL: directory.appendingPathComponent("binding-records.json")).records.isEmpty)
   }
 
   func testBarnardFacadeForwardsDistinctSelfProofRange() throws {
@@ -21,14 +145,14 @@ final class SensingCryptographyTests: XCTestCase {
       0xd8, 0x5c, 0x77, 0x8e, 0x4b, 0x8c, 0xef, 0x3c,
       0xa7, 0xab, 0xac, 0x09, 0xb9, 0x5c, 0x70, 0x9e, 0xe5,
     ])
-    let ownerPublicKey = cryptography.ownerPublicKey()
+    let ownerPublicKey = try cryptography.ownerPublicKey()
     let eninStart: UInt64 = 1
     let eninEnd = UInt64(BeidConfig.eventConfirmThreshold + 1)
 
     XCTAssertNotEqual(eninStart, eninEnd, "This test's guarantee rests on these two values differing. If they're equal, a swap or duplication becomes a no-op and the test passes while verifying nothing.")
 
     let signature = try XCTUnwrap(
-      cryptography.signSelfProof(
+      try cryptography.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: eventSigningPublicKey,
         eninStart: eninStart,
@@ -54,12 +178,12 @@ final class SensingCryptographyTests: XCTestCase {
 
   func testBarnardFacadeForwardsWalletAcknowledgementInputs() throws {
     let cryptography = BarnardSensingCryptography()
-    let ownerPublicKey = cryptography.ownerPublicKey()
+    let ownerPublicKey = try cryptography.ownerPublicKey()
     let walletAddress = Data((0x20...0x33).map(UInt8.init))
     let walletSignature = Data((0x40...0x80).map(UInt8.init))
 
     let signature = try XCTUnwrap(
-      cryptography.signWalletAcknowledgement(
+      try cryptography.signWalletAcknowledgement(
         walletAddress: walletAddress,
         walletSignature: walletSignature
       )
@@ -253,7 +377,7 @@ final class SensingCryptographyTests: XCTestCase {
     return bytes
   }
 
-  func testDeterministicFakeReturnsConfiguredValuesAndRecordsCallsInOrder() {
+  func testDeterministicFakeReturnsConfiguredValuesAndRecordsCallsInOrder() throws {
     let eventPublicKey = Data([0x02] + [UInt8](repeating: 0xa1, count: 32))
     let ownerPublicKey = Data([0x03] + [UInt8](repeating: 0xb2, count: 32))
     let windowSignature = SensingRecoverableSignature(
@@ -284,13 +408,13 @@ final class SensingCryptographyTests: XCTestCase {
     let walletSignature = Data(repeating: 0x05, count: 65)
 
     XCTAssertEqual(cryptography.eventSigningPublicKey(eventCode: "EVENT-A"), eventPublicKey)
-    XCTAssertEqual(cryptography.ownerPublicKey(), ownerPublicKey)
+    XCTAssertEqual(try cryptography.ownerPublicKey(), ownerPublicKey)
     XCTAssertEqual(
       cryptography.signWindowReport(eventCode: "EVENT-A", bytes: windowBytes),
       windowSignature
     )
     XCTAssertEqual(
-      cryptography.signSelfProof(
+      try cryptography.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: eventPublicKey,
         eninStart: 41,
@@ -299,7 +423,7 @@ final class SensingCryptographyTests: XCTestCase {
       selfProofSignature
     )
     XCTAssertEqual(
-      cryptography.signWalletAcknowledgement(
+      try cryptography.signWalletAcknowledgement(
         walletAddress: walletAddress,
         walletSignature: walletSignature
       ),
@@ -331,13 +455,13 @@ final class SensingCryptographyTests: XCTestCase {
       walletAcknowledgementSignature: nil
     )
 
-    XCTAssertNil(cryptography.signSelfProof(
+    XCTAssertNil(try cryptography.signSelfProof(
       eventIdHash: Data(repeating: 0x01, count: 32),
       eventSigningPublicKey: Data([0x02] + [UInt8](repeating: 0x03, count: 32)),
       eninStart: 1,
       eninEnd: 2
     ))
-    XCTAssertNil(cryptography.signWalletAcknowledgement(
+    XCTAssertNil(try cryptography.signWalletAcknowledgement(
       walletAddress: Data(repeating: 0x04, count: 20),
       walletSignature: Data(repeating: 0x05, count: 65)
     ))

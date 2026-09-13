@@ -806,6 +806,9 @@
       }
     },
     "Venue Device": {},
+    "Venue Device (Signed)": {
+      "comment": "Account-sheet row opening the signed venue-serving screen (gh#432), shown just below the plain \"Venue Device\" row. \"Signed\" distinguishes the cryptographically signed container this screen serves from the unsigned hint the older row broadcasts — it does not mean the device or the user is signed in."
+    },
     "Version": {},
     "Assignment": {
       "comment": "Section header on the venue-device organizer screen (gh#138) for the label + validity-period fields — not a task/homework assignment."
@@ -1244,6 +1247,9 @@
     },
     "The event definition in this bundle was rejected.": {
       "comment": "The event's own description failed verification."
+    },
+    "This event needs an entry code. Serving those is not supported yet.": {
+      "comment": "Refusal shown when the loaded pack is for an event people join with an entry code. This app can only serve events that are open to anyone. \"Serving\" means making the event's information available to nearby devices."
     },
     "This device's clock is unavailable, so serving cannot be scheduled.": {
       "comment": "Without a clock the stop time cannot be honored, so nothing is served."

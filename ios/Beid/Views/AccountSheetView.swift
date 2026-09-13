@@ -86,6 +86,29 @@ struct AccountSheetView: View {
           } label: {
             Label("Venue Device", systemImage: "antenna.radiowaves.left.and.right")
           }
+
+          // beid#432: the signed (v2) venue-serving screen, parallel to the
+          // v1 hint-broadcasting row above rather than replacing it. Real
+          // production dependencies, first wired here:
+          // `ProductionVenueBundleVerifier` (this PR), `VenueArtifactAcquisition`
+          // (first real instantiation; every existing test uses
+          // `StubVenueArtifactAcquisition`), and `VenueDeviceClock` (first
+          // production clock supplier; see its own doc comment for what
+          // ".unavailable" means here). `BarnardVenueSignedContainerBroadcasting`
+          // and `VenuePublicArtifactStore` were already production-ready.
+          NavigationLink {
+            VenueSignedServingView(viewModel: VenueSignedServingViewModel(
+              verifier: ProductionVenueBundleVerifier(registryClient: RegistryDependencies.createClient()),
+              broadcasting: BarnardVenueSignedContainerBroadcasting(),
+              acquisition: VenueArtifactAcquisition(),
+              store: VenuePublicArtifactStore(),
+              clock: { VenueDeviceClock.read() },
+              canonicalEventIdHex: coordinator.sensingCoordinator.joinedCanonicalEventIdHex,
+              bundleURLTemplate: RegistryDependencies.venueBundleURLTemplate()
+            ))
+          } label: {
+            Label("Venue Device (Signed)", systemImage: "checkmark.seal")
+          }
         }
 
         Section {

@@ -57,17 +57,12 @@ final class ParticipantRelayTests: XCTestCase {
     }
     XCTAssertEqual(validFrom, 995)
     XCTAssertEqual(validThrough, 1_100)
-    // The signed relay expiry is not readable from a verified envelope, so
-    // the answer is the smallest value that cannot overstate it.
-    XCTAssertEqual(expires, 1_001)
+    // The verified SDK envelope supplies the signed deadline unchanged.
+    XCTAssertEqual(expires, 1_080)
   }
 
-  /// The bound, not just the current value. Whatever ENIN the relay asks
-  /// about, the answer must never reach past the next one — that is the only
-  /// thing standing in for the signed expiry until levarac/barnard#197
-  /// exposes it.
-  func testTheAnswerNeverExceedsTheNextENINAtAnyCurrentENIN() {
-    for now: UInt32 in [996, 1_000, 1_050, 1_099] {
+  func testSignedExpiryIsUnchangedAtDifferentVerificationTimes() {
+    for now: UInt32 in [996, 1_000, 1_050, 1_079] {
       let result = participantRelayVerification(
         state: gateState(joinedEventIdHex: eventIdHex),
         signedEnvelopeHex: envelopeHex,
@@ -76,23 +71,17 @@ final class ParticipantRelayTests: XCTestCase {
         validFromEnin: 995,
         validThroughEnin: 1_100,
         currentEnin: now,
+        relayExpiresAtEnin: 1_080,
         agreesWithDefinition: { _ in true }
       )
       guard case .registryVerified(_, _, _, let expires) = result else {
         return XCTFail("expected the envelope to be relayable at ENIN \(now), got \(result)")
       }
-      XCTAssertLessThanOrEqual(
-        expires,
-        now + 1,
-        "relay expiry \(expires) reached past the next ENIN at \(now)"
-      )
+      XCTAssertEqual(expires, 1_080, "signed expiry must be preserved at \(now)")
     }
   }
 
-  /// The counterpart of Android's `the relay window never reaches past the
-  /// next ENIN`. Separate from the acceptance test above, which asserts the
-  /// value at one ENIN: this asserts the ceiling itself.
-  func testTheRelayWindowNeverReachesPastTheNextENIN() {
+  func testRelayWindowUsesTheSignedEnvelopeExpiry() {
     guard
       case .registryVerified(_, _, _, let expires) =
         verification(state: gateState(joinedEventIdHex: eventIdHex))
@@ -100,7 +89,7 @@ final class ParticipantRelayTests: XCTestCase {
       return XCTFail("expected the envelope to be relayable")
     }
 
-    XCTAssertEqual(expires, 1_001)
+    XCTAssertEqual(expires, 1_080)
   }
 
   func testADeviceThatIsNotJoinedRelaysNothing() {
@@ -571,6 +560,7 @@ final class ParticipantRelayTests: XCTestCase {
       validFromEnin: 995,
       validThroughEnin: 1_100,
       currentEnin: 1_000,
+      relayExpiresAtEnin: 1_080,
       agreesWithDefinition: { _ in agrees }
     )
   }

@@ -28,12 +28,12 @@ import Security
 final class OwnerKeyProvider {
   private static let seedKey = "beid.ownerKeySeed"
 
-  private let keyStorage: any BarnardCoreKeyStorage
-  private let randomSource: any BarnardCoreRandomSource
+  private let keyStorage: any OwnerKeySeedResolving
+  private let randomSource: any OwnerKeyRandomBytesGenerating
 
   init(
-    keyStorage: any BarnardCoreKeyStorage = BeidKeychainKeyStorage(),
-    randomSource: any BarnardCoreRandomSource = BeidSystemRandomSource()
+    keyStorage: any OwnerKeySeedResolving = BeidKeychainKeyStorage(),
+    randomSource: any OwnerKeyRandomBytesGenerating = SystemOwnerKeyRandomSource()
   ) {
     self.keyStorage = keyStorage
     self.randomSource = randomSource
@@ -51,8 +51,8 @@ final class OwnerKeyProvider {
   /// Compressed secp256k1 public key — the only owner-key component that
   /// ever leaves the device (per the key roster, secrets never leave;
   /// only public keys, signatures, and commitment hashes do).
-  func publicKeyCompressed() -> Data {
-    Data(keyPair().publicKeyCompressed)
+  func publicKeyCompressed() throws -> Data {
+    Data(try keyPair().publicKeyCompressed)
   }
 
   /// Owner-key-signed self-proof (`docs/specs/barnard-binding-conformance.md`
@@ -63,8 +63,8 @@ final class OwnerKeyProvider {
     eventSigningPublicKey: Data,
     eninStart: UInt64,
     eninEnd: UInt64
-  ) -> BarnardCoreRecoverableSignature? {
-    let pair = keyPair()
+  ) throws -> BarnardCoreRecoverableSignature? {
+    let pair = try keyPair()
     return BarnardCoreSigning.signSelfProof(
       ownerPrivateKey: pair.privateKey,
       eventIdHash: Array(eventIdHash),
@@ -81,21 +81,16 @@ final class OwnerKeyProvider {
   func signWalletAcknowledgement(
     walletAddress: Data,
     walletSignature: Data
-  ) -> BarnardCoreRecoverableSignature? {
+  ) throws -> BarnardCoreRecoverableSignature? {
     BarnardCoreSigning.signWalletAcknowledgement(
-      ownerPrivateKey: keyPair().privateKey,
+      ownerPrivateKey: try keyPair().privateKey,
       walletAddress: Array(walletAddress),
       walletSignature: Array(walletSignature)
     )
   }
 
-  private func keyPair() -> BarnardCoreSigningKeyPair {
-    let seed: [UInt8]
-    do {
-      seed = try resolveSeed()
-    } catch {
-      preconditionFailure("Owner key seed resolution failed: \(error)")
-    }
+  private func keyPair() throws -> BarnardCoreSigningKeyPair {
+    let seed = try resolveSeed()
 
     // Deliberately derive per operation after re-reading the seed. The
     // private key pair therefore has method-call scope instead of remaining
@@ -104,20 +99,32 @@ final class OwnerKeyProvider {
   }
 
   func resolveSeed() throws -> [UInt8] {
-    if let resolvingStorage = keyStorage as? any OwnerKeySeedResolving {
-      return try resolvingStorage.resolveSeed(
-        forKey: Self.seedKey,
-        randomSource: randomSource
-      )
+    do {
+      return try keyStorage.resolveSeed(forKey: Self.seedKey, randomSource: randomSource)
+    } catch let error as OwnerKeyOperationError {
+      throw error
+    } catch let error as BeidKeychainKeyStorageError {
+      throw OwnerKeyOperationError.storage(error)
     }
+  }
+}
 
-    return BarnardCoreKeyManager.loadOrCreate(
-      key: Self.seedKey,
-      minimumByteCount: 32,
-      generatedByteCount: 32,
-      storage: keyStorage,
-      randomSource: randomSource
-    )
+enum OwnerKeyOperationError: Error, Equatable {
+  case randomFailed(OSStatus)
+  case invalidRandomByteCount(Int)
+  case storage(BeidKeychainKeyStorageError)
+}
+
+protocol OwnerKeyRandomBytesGenerating {
+  func randomBytes(count: Int) throws -> [UInt8]
+}
+
+struct SystemOwnerKeyRandomSource: OwnerKeyRandomBytesGenerating {
+  func randomBytes(count: Int) throws -> [UInt8] {
+    var bytes = [UInt8](repeating: 0, count: count)
+    let status = SecRandomCopyBytes(kSecRandomDefault, count, &bytes)
+    guard status == errSecSuccess else { throw OwnerKeyOperationError.randomFailed(status) }
+    return bytes
   }
 }
 
@@ -140,7 +147,7 @@ protocol OwnerKeySeedQuarantineObserving: AnyObject {
 /// `bytes(forKey:)` — a non-`mutating` `BarnardCoreKeyStorage` requirement
 /// — to record that it happened, so `OwnerKeyProvider` can read it back
 /// afterward via `OwnerKeySeedQuarantineObserving`.
-final class BeidUserDefaultsKeyStorage: BarnardCoreKeyStorage, OwnerKeySeedQuarantineObserving {
+final class BeidUserDefaultsKeyStorage: OwnerKeySeedResolving, OwnerKeySeedQuarantineObserving {
   let defaults: UserDefaults
   private(set) var lastQuarantinedSeedKey: String?
 
@@ -174,6 +181,19 @@ final class BeidUserDefaultsKeyStorage: BarnardCoreKeyStorage, OwnerKeySeedQuara
     defaults.removeObject(forKey: key)
   }
 
+  func resolveSeed(
+    forKey key: String,
+    randomSource: any OwnerKeyRandomBytesGenerating
+  ) throws -> [UInt8] {
+    if let existing = bytes(forKey: key) { return existing }
+    let generated = try randomSource.randomBytes(count: 32)
+    guard generated.count == 32 else {
+      throw OwnerKeyOperationError.invalidRandomByteCount(generated.count)
+    }
+    setBytes(generated, forKey: key)
+    return generated
+  }
+
   /// Preserves whatever raw value is stored under `key` (wrong type or
   /// wrong length — `bytes(forKey:)` above has already determined it is one
   /// of the two) at a new key before clearing the canonical one, so
@@ -195,7 +215,9 @@ final class BeidUserDefaultsKeyStorage: BarnardCoreKeyStorage, OwnerKeySeedQuara
   }
 }
 
-/// App-layer mirror of the SDK's internal `BarnardSystemRandomSource`.
+/// App-layer mirror of the SDK's internal `BarnardSystemRandomSource` for
+/// non-owner-key session salts and nonces. Owner seed generation uses the
+/// throwing `SystemOwnerKeyRandomSource` above.
 struct BeidSystemRandomSource: BarnardCoreRandomSource {
   func randomBytes(count: Int) -> [UInt8] {
     var bytes = [UInt8](repeating: 0, count: count)
