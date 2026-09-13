@@ -61,41 +61,52 @@ class WalletBindingFlow(
     private val coordinator: EventJoinCoordinator,
     private val connector: WalletConnector,
 ) {
+    private var active = false
+
     fun start(onResult: (WalletConnectOutcome) -> Unit = {}) {
+        if (active) return
+        active = true
         connector.connect { connected ->
+            if (!active) return@connect
             when (connected) {
                 is WalletConnectOutcome.Connected -> {
                     val message = coordinator.beginBinding(connected.address, connected.chainId)
                     if (message == null) {
                         coordinator.failBinding("Wallet binding is unavailable while recording")
-                        onResult(WalletConnectOutcome.Failed("Wallet binding is unavailable while recording"))
+                        finish(onResult, WalletConnectOutcome.Failed("Wallet binding is unavailable while recording"))
                         return@connect
                     }
                     coordinator.markBindingAwaitingApproval()
                     connector.personalSign(connected.address, message) { signed ->
+                        if (!active) return@personalSign
                         when (signed) {
                             is WalletConnectOutcome.Signed -> {
                                 if (coordinator.completeBinding(connected.address, signed.signatureHex) == null) {
                                     coordinator.failBinding("Wallet signature did not pass Barnard verification")
-                                    onResult(WalletConnectOutcome.Failed("Wallet signature did not pass Barnard verification"))
-                                } else onResult(signed)
+                                    finish(onResult, WalletConnectOutcome.Failed("Wallet signature did not pass Barnard verification"))
+                                } else finish(onResult, signed)
                             }
                             is WalletConnectOutcome.Cancelled -> {
                                 coordinator.declineBinding()
-                                onResult(signed)
+                                finish(onResult, signed)
                             }
                             is WalletConnectOutcome.Failed -> {
                                 coordinator.failBinding(signed.reason)
-                                onResult(signed)
+                                finish(onResult, signed)
                             }
-                            is WalletConnectOutcome.Connected -> onResult(WalletConnectOutcome.Failed("MetaMask returned an invalid signing result"))
+                            is WalletConnectOutcome.Connected -> finish(onResult, WalletConnectOutcome.Failed("MetaMask returned an invalid signing result"))
                         }
                     }
                 }
-                is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); onResult(connected) }
-                is WalletConnectOutcome.Failed -> { coordinator.failBinding(connected.reason); onResult(connected) }
-                is WalletConnectOutcome.Signed -> onResult(WalletConnectOutcome.Failed("MetaMask returned an invalid account result"))
+                is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); finish(onResult, connected) }
+                is WalletConnectOutcome.Failed -> { coordinator.failBinding(connected.reason); finish(onResult, connected) }
+                is WalletConnectOutcome.Signed -> finish(onResult, WalletConnectOutcome.Failed("MetaMask returned an invalid account result"))
             }
         }
+    }
+
+    private fun finish(onResult: (WalletConnectOutcome) -> Unit, result: WalletConnectOutcome) {
+        active = false
+        onResult(result)
     }
 }

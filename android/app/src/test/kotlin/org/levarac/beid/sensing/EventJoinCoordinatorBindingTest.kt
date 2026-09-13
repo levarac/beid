@@ -244,6 +244,18 @@ class EventJoinCoordinatorBindingTest {
         assertTrue(coordinator.bindingState is EventBindingState.Failed)
     }
 
+    @Test
+    fun walletSignatureCannotBePersistedUnderADifferentAddress() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val store = BindingRecordStore(newTempRecordFile("binding-records"))
+        val coordinator = coordinator(engine, FakeSensingCryptography(), bindingRecordStore = store, nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        coordinator.beginBinding(walletAddress, chainId = 1)
+        val otherAddress = "0x" + "22".repeat(20)
+        assertNull(coordinator.completeBinding(otherAddress, "0x" + "0a".repeat(65)))
+        assertTrue(store.records.isEmpty())
+    }
+
     private class FakeWalletConnector(
         private val connection: WalletConnectOutcome,
         private val signing: WalletConnectOutcome,
