@@ -19,6 +19,8 @@ import org.levarac.beid.scenario.AndroidScenarioSurface
 import org.levarac.beid.scenario.playback
 import org.levarac.beid.scenario.selectAndroidDataSource
 import org.levarac.beid.sensing.EventJoinCoordinator
+import org.levarac.beid.sensing.MetaMaskWalletConnector
+import org.levarac.beid.sensing.WalletBindingFlow
 import org.levarac.beid.sensing.ProofRecordingBridge
 import org.levarac.beid.ui.screens.EventJoinContent
 import org.levarac.beid.ui.screens.RecordsScreen
@@ -38,6 +40,7 @@ import org.levarac.parallax.registry.RegistryClient
 class MainActivity : ComponentActivity() {
     private var eventJoinCoordinator: EventJoinCoordinator? = null
     private var registryClient: RegistryClient? = null
+    private var walletBindingFlow: WalletBindingFlow? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,6 +60,7 @@ class MainActivity : ComponentActivity() {
         registryClient = RegistryDependencies.createClient()
         val coordinator = EventJoinCoordinator(this)
         eventJoinCoordinator = coordinator
+        walletBindingFlow = WalletBindingFlow(coordinator, MetaMaskWalletConnector(this))
 
         // Sibling store MainActivity owns directly (beid#121) — not something
         // EventJoinCoordinator owns, unlike SelfProofRecordStore/BindingRecordStore.
@@ -66,7 +70,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BeidAppTheme {
-                AppNavHost(coordinator, proofRecordStore, coordinator.sessionAggregateSnapshotStore)
+AppNavHost(coordinator, proofRecordStore, coordinator.sessionAggregateSnapshotStore) { walletBindingFlow?.start() }
             }
         }
     }
@@ -111,6 +115,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        walletBindingFlow?.cancel()
         registryClient?.close()
         eventJoinCoordinator?.dispose()
         super.onDestroy()

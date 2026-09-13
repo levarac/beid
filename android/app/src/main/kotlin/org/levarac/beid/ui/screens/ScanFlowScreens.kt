@@ -68,6 +68,7 @@ fun ScanFlowScreen(
     onCeremonyFinished: () -> Unit,
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
+    onStartWalletBinding: () -> Unit = {},
 ) {
     when (phase) {
         ScanPhase.Idle, ScanPhase.Sensing -> SensingScreen()
@@ -78,6 +79,7 @@ fun ScanFlowScreen(
             showEntranceCeremony = showEntranceCeremony,
             onCeremonyFinished = onCeremonyFinished,
             onSimulateSignalLost = onSimulateSignalLost,
+            onStartWalletBinding = onStartWalletBinding,
         )
         is ScanPhase.SignalLost -> SignalLostScreen(
             session = phase.session,
@@ -164,6 +166,7 @@ fun RecordingScreen(
     showEntranceCeremony: Boolean,
     onCeremonyFinished: () -> Unit,
     onSimulateSignalLost: () -> Unit,
+    onStartWalletBinding: () -> Unit = {},
     ceremonyDwellMillis: Long = 2000,
 ) {
     var showCeremony by remember { mutableStateOf(showEntranceCeremony) }
@@ -202,6 +205,13 @@ fun RecordingScreen(
                 borderColor = BeidTheme.colors.proofSeal,
                 onClick = onSimulateSignalLost,
                 modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
+            )
+            BeidSecondaryButton(
+                text = stringResource(R.string.event_join_bind_wallet),
+                contentColor = BeidTheme.colors.proofSeal,
+                borderColor = BeidTheme.colors.proofSeal,
+                onClick = onStartWalletBinding,
+                modifier = Modifier.testTag(EventJoinScreenTestTags.BIND_WALLET_BUTTON),
             )
         }
     }

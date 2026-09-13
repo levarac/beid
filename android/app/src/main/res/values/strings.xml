@@ -30,6 +30,7 @@
     <string name="event_join_title">Join an event</string>
     <string name="event_join_code_label">Event code</string>
     <string name="event_join_button">Join event</string>
+    <string name="event_join_bind_wallet">Bind MetaMask wallet</string>
     <string name="event_join_status_idle">Enter the event code shared by the organizer.</string>
     <string name="event_join_status_requesting_permission">Requesting Bluetooth permission…</string>
     <string name="event_join_status_verifying_registry">Checking the event registration…</string>

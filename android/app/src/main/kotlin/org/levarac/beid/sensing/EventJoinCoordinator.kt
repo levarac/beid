@@ -277,6 +277,8 @@ class EventJoinCoordinator internal constructor(
 
     /** Fixed once per binding attempt and reused across the wallet signature and the later owner-key wallet-ack — see [beginBinding]. */
     private var pendingBindingMessage: BindingMessage? = null
+    /** Lets the external wallet caller invalidate late SDK callbacks when the session ends. */
+    internal var onBindingAttemptInvalidated: (() -> Unit)? = null
 
     /**
      * Fired exactly once per session, the instant [scanPhase] first confirms
@@ -917,6 +919,7 @@ class EventJoinCoordinator internal constructor(
      */
     override fun leaveEvent() {
         if (disposed) return
+        onBindingAttemptInvalidated?.invoke()
         // A verification still in flight belongs to the session being left.
         // Dropping its owner is what stops its answer from joining an event
         // the user has already walked away from.
@@ -1042,8 +1045,19 @@ class EventJoinCoordinator internal constructor(
         val walletAddressBytes = walletAddress.hexToByteArrayOrNull() ?: return null
         if (!message.walletAddress.contentEquals(walletAddressBytes)) return null
         val walletSignatureBytes = walletSignatureHex.hexToByteArrayOrNull() ?: return null
+        if (walletSignatureBytes.size != 65) return null
+        val persistedAddress = walletAddress.hexToByteArrayOrNull() ?: return null
+        if (!persistedAddress.contentEquals(message.walletAddress)) return null
         val ackSignature = sensingCryptography.signWalletAcknowledgement(message.walletAddress, walletSignatureBytes)
             ?: return null
+        val verification = sensingCryptography.verifyWalletBinding(
+            text = message.canonicalText(sensingCryptography) ?: return null,
+            walletSignature = walletSignatureBytes,
+            walletAddress = message.walletAddress,
+            ownerPublicKey = message.ownerPublicKey,
+            acknowledgement = ackSignature,
+        )
+        if (verification != org.levarac.barnard.WalletBindingVerification.VALID) return null
 
         val record = BindingRecord(
             proofId = proofId,

@@ -59,6 +59,7 @@ object EventJoinScreenTestTags {
 
     /** beid#463: fills the code field from the clipboard, so no one hand-types 64 hex characters. */
     const val PASTE_BUTTON = "event_join_paste_button"
+    const val BIND_WALLET_BUTTON = "event_join_bind_wallet_button"
 
     fun nearbyEventCard(eventCodeHashHex: String): String = "nearby_event_card_$eventCodeHashHex"
 }
@@ -100,6 +101,7 @@ fun EventJoinScreen(
     viewModel: EventJoinViewModel,
     onOpenAccount: () -> Unit,
     onOpenManualEventCode: () -> Unit,
+    onStartWalletBinding: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -111,6 +113,7 @@ fun EventJoinScreen(
         onOpenSettings = viewModel::openAppSettings,
         onSimulateSignalLost = viewModel::simulateSignalLost,
         onResumeSensing = viewModel::resumeSensing,
+        onStartWalletBinding = onStartWalletBinding,
         showEntranceCeremony = !viewModel.recordingCeremonyShown,
         onCeremonyFinished = viewModel::markRecordingCeremonyShown,
     )
@@ -158,6 +161,7 @@ fun EventJoinContent(
     onOpenSettings: () -> Unit,
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
+    onStartWalletBinding: () -> Unit = {},
     showEntranceCeremony: Boolean = false,
     onCeremonyFinished: () -> Unit = {},
 ) {
@@ -197,6 +201,7 @@ fun EventJoinContent(
                     onCeremonyFinished = onCeremonyFinished,
                     onSimulateSignalLost = onSimulateSignalLost,
                     onResumeSensing = onResumeSensing,
+                    onStartWalletBinding = onStartWalletBinding,
                 )
             } else {
                 Text(
@@ -414,10 +419,11 @@ fun EventJoinRoute(
     session: EventJoinSession,
     onOpenAccount: () -> Unit,
     onOpenManualEventCode: () -> Unit,
+    onStartWalletBinding: () -> Unit = {},
 ) {
     LaunchedEffect(session) { session.startNearbyEventDiscovery() }
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
-    EventJoinScreen(viewModel, onOpenAccount, onOpenManualEventCode)
+    EventJoinScreen(viewModel, onOpenAccount, onOpenManualEventCode, onStartWalletBinding)
 }
 
 @Composable
