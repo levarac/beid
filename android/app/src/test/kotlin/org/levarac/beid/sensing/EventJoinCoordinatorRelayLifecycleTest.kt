@@ -35,7 +35,12 @@ class EventJoinCoordinatorRelayLifecycleTest {
 
         joinPromotedVectorEvent(coordinator, engine, registry)
 
-        assertNotNull(engine.configuredRelayVerifier)
+        val verifier = assertNotNull(engine.configuredRelayVerifier)
+        val verification = verifier.verify(VECTOR_ENVELOPE, VECTOR_ENIN)
+            as BarnardRelayVerification.RegistryVerified
+        // The signed conformance vector expires two ENINs after this clock.
+        assertEquals(6_000_002L, verification.relayExpiresAtEnin)
+        assertEquals(BarnardRelayVerification.Rejected, verifier.verify(VECTOR_ENVELOPE, 6_000_002L))
     }
 
     @Test
@@ -142,6 +147,7 @@ class EventJoinCoordinatorRelayLifecycleTest {
             eventId = VECTOR_EVENT_ID_HEX.hexBytes(),
             validFromEnin = VECTOR_VALID_FROM,
             validThroughEnin = VECTOR_VALID_THROUGH,
+            relayExpiresAtEnin = 6_000_002L,
             currentEnin = VECTOR_ENIN,
             agreesWithDefinition = { true },
             reportRefusal = { refusals += it },

@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BeidAppTheme {
-                AppNavHost(coordinator, proofRecordStore)
+                AppNavHost(coordinator, proofRecordStore, coordinator.sessionAggregateSnapshotStore)
             }
         }
     }

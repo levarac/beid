@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.util.Log
+import java.io.IOException
 import org.levarac.beid.persistence.SubmissionRecord
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.shared.report.UnsentWindowSubmission
@@ -153,15 +154,17 @@ internal class WindowObservationSubmissionDrain(
 
                 is SubmissionConfigurationResolution.Resolved -> {
                     val resolved = resolution.configuration
-                    submissionRecordStore.recordResolvedConfiguration(
-                        windowId = windowId,
-                        submissionEndpoint = resolved.submissionEndpoint,
-                        receiptPublicKeyHex = resolved.receiptPublicKey.toByteArray().toLowercaseHex(),
-                        operatorIdHex = resolved.operatorId.toByteArray().toLowercaseHex(),
-                        eventDefinitionDigestHex = resolved.eventDefinitionDigest?.toByteArray()?.toLowercaseHex(),
-                        validFrom = resolved.validFrom,
-                        validUntil = resolved.validUntil,
-                    )
+                    if (!persistSubmissionRecord(submission.submissionKey, windowId, "configuration") {
+                        submissionRecordStore.recordResolvedConfiguration(
+                            windowId = windowId,
+                            submissionEndpoint = resolved.submissionEndpoint,
+                            receiptPublicKeyHex = resolved.receiptPublicKey.toByteArray().toLowercaseHex(),
+                            operatorIdHex = resolved.operatorId.toByteArray().toLowercaseHex(),
+                            eventDefinitionDigestHex = resolved.eventDefinitionDigest?.toByteArray()?.toLowercaseHex(),
+                            validFrom = resolved.validFrom,
+                            validUntil = resolved.validUntil,
+                        )
+                    }) return@resolve
                     proceedWithConfiguration(submission, origin, windowId, digestHex, resolved)
                 }
             }
@@ -242,7 +245,9 @@ internal class WindowObservationSubmissionDrain(
 
     /** Persists the receipt's exact bytes FIRST, then tells the ledger — beid#525's ordering requirement. */
     private fun acceptAndContinue(receipt: AcceptanceReceipt, submission: UnsentWindowSubmission, windowId: String) {
-        submissionRecordStore.recordAcceptance(windowId, receipt.signedBytes.toByteArray().toLowercaseHex())
+        if (!persistSubmissionRecord(submission.submissionKey, windowId, "acceptance") {
+            submissionRecordStore.recordAcceptance(windowId, receipt.signedBytes.toByteArray().toLowercaseHex())
+        }) return
         accumulator.completeSubmissionAcceptance(submission.submissionKey, acceptanceReceiptReference = windowId)
         // Acceptance frees the head-of-line slot; check for the next durable window.
         drain()
@@ -256,8 +261,10 @@ internal class WindowObservationSubmissionDrain(
             )
             logSubmissionOutcome("scheduled retry for window $windowId: ${result.errorCode}")
         } else {
+            if (!persistSubmissionRecord(submission.submissionKey, windowId, "terminal_failure") {
+                submissionRecordStore.recordTerminalFailure(windowId, result.errorCode ?: "submission_failed")
+            }) return
             accumulator.completeSubmissionRetryable(submission.submissionKey, retryNotBeforeEpochMilliseconds = Long.MAX_VALUE)
-            submissionRecordStore.recordTerminalFailure(windowId, result.errorCode ?: "submission_failed")
             logSubmissionOutcome("stopped automatic submission for window $windowId: ${result.errorCode}")
         }
         // Terminal or not-yet-due-retryable: the head-of-line slot stays
@@ -267,9 +274,35 @@ internal class WindowObservationSubmissionDrain(
 
     /** An artifact whose configuration or stored bytes cannot be trusted is held, never guessed at — beid#525 part 2. */
     private fun hold(submissionKey: String, windowId: String, reason: String) {
+        if (!persistSubmissionRecord(submissionKey, windowId, "hold") {
+            submissionRecordStore.recordTerminalFailure(windowId, "invalid_configuration")
+        }) return
         accumulator.completeSubmissionRetryable(submissionKey, retryNotBeforeEpochMilliseconds = Long.MAX_VALUE)
-        submissionRecordStore.recordTerminalFailure(windowId, "invalid_configuration")
         logSubmissionOutcome("held window $windowId: $reason")
+    }
+
+    /** Missing/suspended records and disk failures cannot stand in for a durable write. */
+    private fun persistSubmissionRecord(
+        submissionKey: String,
+        windowId: String,
+        operation: String,
+        write: () -> Boolean,
+    ): Boolean {
+        val persisted = try {
+            write()
+        } catch (_: IOException) {
+            false
+        }
+        if (persisted) return true
+        logSubmissionOutcome("record_persistence_failed operation=$operation window=$windowId")
+        // Keep the report unacknowledged. A later attempt performs receipt
+        // lookup before posting, including when the operator already accepted
+        // the bytes whose receipt could not be saved locally.
+        accumulator.completeSubmissionRetryable(
+            submissionKey,
+            retryNotBeforeEpochMilliseconds = nowEpochMilliseconds() + RETRY_BACKOFF_MILLIS,
+        )
+        return false
     }
 
     private fun restoreConfiguration(record: SubmissionRecord): SubmissionOperatorConfiguration? {

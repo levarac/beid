@@ -537,6 +537,100 @@ class WindowObservationSubmissionDrainTest {
         }
     }
 
+    @Test
+    fun missingSubmissionRecordDoesNotSilentlyBecomeAPermanentHold() {
+        val directory = Files.createTempDirectory("drain-missing-record").toFile()
+        val (accumulator, _) = buildSystem(directory, vectorCryptography(), null)
+        closeOneWindow(accumulator)
+        val emptyStore = SubmissionRecordStore(directory.resolve("missing-records.json"))
+        val drain = WindowObservationSubmissionDrain(
+            accumulator = accumulator,
+            submissionRecordStore = emptyStore,
+            client = createSubmissionClient(),
+            nowEpochMilliseconds = { NOW_EPOCH_MILLIS },
+        )
+
+        drain.drain()
+
+        assertTrue(
+            ledgerFile(directory).readText().contains("\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t"),
+            "a missing diagnostic record must surface as a finite persistence retry, not a successful permanent hold",
+        )
+        assertNull(emptyStore.recordFor(WINDOW_ID))
+    }
+
+    @Test
+    fun receiptWriteFailureDoesNotAcknowledgeAndRetryLooksUpWithoutReposting() {
+        val directory = Files.createTempDirectory("drain-receipt-write-failure").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        val recordFile = directory.resolve("submission-records.json")
+        var originalRecords = byteArrayOf()
+        var now = NOW_EPOCH_MILLIS
+        try {
+            val (accumulator, drain) = buildSystem(
+                directory, vectorCryptography(), resolvedConfiguration(endpoint),
+                nowEpochMilliseconds = { now },
+                receiptPersistenceGate = {
+                    originalRecords = recordFile.readBytes()
+                    check(recordFile.delete())
+                    check(recordFile.mkdir())
+                    recordFile.resolve("keep").writeText("block atomic replacement")
+                    true
+                },
+            )
+            closeOneWindow(accumulator)
+            drain.drain()
+            waitUntil { server.postCount == 1 }
+            waitUntil {
+                ledgerFile(directory).readText().contains("\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t")
+            }
+            assertTrue(recordFile.isDirectory, "failed receipt storage must remain untouched")
+
+            check(recordFile.resolve("keep").delete())
+            check(recordFile.delete())
+            recordFile.writeBytes(originalRecords)
+            now += RETRY_BACKOFF_MILLIS
+            drain.drain()
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            assertEquals(1, server.postCount, "storage recovery must look up the accepted receipt, never repost it")
+            assertEquals(1, server.getCount)
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun resolvedConfigurationWriteFailureStopsBeforeNetworkAndRemainsRetryable() {
+        val directory = Files.createTempDirectory("drain-configuration-write-failure").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        val recordFile = directory.resolve("submission-records.json")
+        try {
+            val resolver = WindowObservationSubmissionDrain.SubmissionConfigurationResolver { _, completion ->
+                check(recordFile.delete())
+                check(recordFile.mkdir())
+                recordFile.resolve("keep").writeText("block atomic replacement")
+                completion(SubmissionConfigurationResolution.Resolved(resolvedConfiguration(endpoint)))
+            }
+            val (accumulator, drain) = buildSystem(
+                directory, vectorCryptography(), null, configurationResolver = resolver,
+            )
+            closeOneWindow(accumulator)
+
+            drain.drain()
+
+            assertEquals(0, server.postCount)
+            assertEquals(0, server.getCount)
+            assertTrue(
+                ledgerFile(directory).readText().contains("\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t"),
+                "a failed configuration write must not strand an in-flight submission",
+            )
+        } finally {
+            server.stop()
+        }
+    }
+
     private class FakeConfigurationResolver(
         private val resolutions: List<SubmissionConfigurationResolution>,
     ) : WindowObservationSubmissionDrain.SubmissionConfigurationResolver {
