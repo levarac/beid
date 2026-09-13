@@ -29,13 +29,13 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
   }
 
-  private func makeViewModel() -> VenueSignedServingViewModel {
+  private func makeViewModel(clock: (() -> VenueClockReading)? = nil) -> VenueSignedServingViewModel {
     VenueSignedServingViewModel(
       verifier: ports,
       broadcasting: ports,
       acquisition: acquisition,
       store: store,
-      clock: { [unowned self] in self.clockReading },
+      clock: clock ?? { [unowned self] in self.clockReading },
       expiry: expiry
     )
   }
@@ -224,6 +224,46 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     // install() re-ran evaluate with the fresh clock reading rather than
     // installing, and the second scripted reply is what that re-run consumed.
     XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+  }
+
+  func testPermitThatExpiresDuringInstallIsClearedBeforeServing() async throws {
+    var clockReads = 0
+    let viewModel = makeViewModel(clock: {
+      clockReads += 1
+      return .available(unixSeconds: clockReads <= 2
+        ? VenueServingContractFixture.exclusiveStopUnixSeconds - 1
+        : VenueServingContractFixture.exclusiveStopUnixSeconds)
+    })
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await supply(viewModel)
+
+    XCTAssertGreaterThanOrEqual(clockReads, 3)
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+    XCTAssertEqual(viewModel.status, .blocked(try rejection(.expired)))
+  }
+
+  func testExpiryTimerUsesThePostInstallClockReading() async throws {
+    var clockReads = 0
+    let postInstallNow = VenueServingContractFixture.exclusiveStopUnixSeconds - 1
+    let viewModel = makeViewModel(clock: {
+      clockReads += 1
+      return .available(unixSeconds: clockReads <= 2
+        ? postInstallNow - 1
+        : postInstallNow)
+    })
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await supply(viewModel)
+
+    XCTAssertEqual(viewModel.status, .serving(
+      displayName: VenueServingContractFixture.displayName,
+      stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+    ))
+    XCTAssertEqual(expiry.scheduledNow, postInstallNow)
   }
 
   // MARK: - An asynchronous radio failure after a successful install
@@ -1748,6 +1788,27 @@ extension VenueSignedServingViewModelTests {
     failingStore.store(record)
     XCTAssertNil(failingStore.persistenceWriteFailure, "W22 an explicit successful retry clears failure")
     XCTAssertEqual(VenuePublicArtifactStore(fileURL: url).record, record)
+  }
+
+  func testAsynchronousRadioStopAfterInstallClearsServingLease() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await supply(viewModel)
+    XCTAssertEqual(viewModel.status, .serving(
+      displayName: VenueServingContractFixture.displayName,
+      stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+    ))
+    XCTAssertNotNil(ports.installedPermit)
+    XCTAssertTrue(expiry.isScheduled)
+
+    ports.emit(try XCTUnwrap(VenueRadioUpdate(state: .stopped)))
+
+    XCTAssertEqual(viewModel.status, .idle)
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+    XCTAssertEqual(viewModel.radio.state, .stopped)
   }
 }
 

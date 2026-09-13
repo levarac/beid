@@ -188,6 +188,10 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// being cleared would drive this handler into unbounded recursion.
   private var isHandlingRadioFailure = false
 
+  /// Suppresses callbacks caused by our own clear. A `.stopped` update from
+  /// the SDK while serving is otherwise an external loss of the radio.
+  private var isClearingRadio = false
+
   /// True only for the duration of `installAndStart`.
   ///
   /// The radio can fail SYNCHRONOUSLY inside that call — barnard reports
@@ -221,6 +225,13 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// attendees cannot join, and nothing on screen disagrees.
   private func handleRadioUpdate(_ update: VenueRadioUpdate) {
     radio = update
+    guard !isClearingRadio else { return }
+    if update.state == .stopped {
+      guard case .serving = status else { return }
+      invalidate()
+      status = .idle
+      return
+    }
     guard update.state == .failed, let failure = update.failure else { return }
     if isInstalling {
       // Arrived from inside `installAndStart`, which has not returned. Hand it
@@ -547,7 +558,7 @@ final class VenueSignedServingViewModel: ObservableObject {
       // implementation: the scripted fake deliberately keeps the earlier
       // bytes until the consumer clears them, and the production adapter's
       // own clear does not discharge this obligation.
-      broadcasting.clearAndStop()
+      clearRadio()
       let failure = (error as? VenueRadioFailure) ?? .containerInstallRejected
       // Report the effect failure as itself, never as a verification verdict.
       radio = VenueRadioUpdate(state: .failed, failure: failure)!
@@ -565,16 +576,31 @@ final class VenueSignedServingViewModel: ObservableObject {
       // Same three steps, in the same order, as the thrown-install path
       // above: clear the container first, then report the radio, then the
       // status. No deadline has been armed yet, so there is none to cancel.
-      broadcasting.clearAndStop()
+      clearRadio()
       radio = VenueRadioUpdate(state: .failed, failure: failure)!
       status = .radioRefused(failure)
+      return
+    }
+
+    // The synchronous install effect can cross the exclusive deadline. The
+    // permit was checked before entering the effect, so check again before
+    // publishing `.serving` or arming a timer against an expired permit.
+    guard case .available(let installedAt) = clock() else {
+      clearRadio()
+      status = .blocked(VenueServingRejection(reason: .clockUnavailable)!)
+      return
+    }
+    guard installedAt >= permit.startAtUnixSeconds,
+      installedAt < permit.stopAtUnixSeconds else {
+      clearRadio()
+      status = .blocked(VenueServingRejection(reason: .expired)!)
       return
     }
 
     status = .serving(displayName: permit.displayName, stopAtUnixSeconds: permit.stopAtUnixSeconds)
 
     // Run a timer against the exclusive instant the permit fixed.
-    expiry.schedule(stopAtUnixSeconds: permit.stopAtUnixSeconds, now: now) { [weak self] in
+    expiry.schedule(stopAtUnixSeconds: permit.stopAtUnixSeconds, now: installedAt) { [weak self] in
       await self?.handleExpiry(generation: generation)
     }
   }
@@ -594,9 +620,15 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// nothing owned them any more.
   @discardableResult
   private func invalidate() -> UUID {
-    broadcasting.clearAndStop()
+    clearRadio()
     expiry.cancel()
     generation = UUID()
     return generation
+  }
+
+  private func clearRadio() {
+    isClearingRadio = true
+    broadcasting.clearAndStop()
+    isClearingRadio = false
   }
 }
