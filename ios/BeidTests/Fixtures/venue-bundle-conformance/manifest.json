@@ -63,5 +63,17 @@
       "expectedFailure": "duplicate_or_overlapping_envelope"
     }
   ],
+  "mixedVariant": {
+    "name": "mixed-valid-tampered",
+    "bundleFile": "mixed-valid-tampered.venue-bundle.cbor",
+    "handoffFile": "mixed-valid-tampered.venue-handoff.cbor",
+    "bundleBytes": 1339,
+    "bundleSha256": "4a4e96126d6440c1519b309c58c9dd731694f6c95844854d5eb1faaf63fa4066",
+    "handoffBytes": 123,
+    "handoffSha256": "1393cb35864becf3693f80f596cbff81a2e99260721c3e2a16ef07cf0a4bf564",
+    "bundleDigest": "ad8ef1521cc963f380578ec134f8a91a576b3b3a2b73693c57af3b7c46e1930a",
+    "expectedFailure": "envelope_signature_invalid",
+    "generatedFrom": "thegreeting/beid:shared/src/commonTest/fixtures/vectors/positive/venue-current-lease-v1.json@f4bf454f50473ce058f7a36dc5166e412a596d21"
+  },
   "note": "Variants are outer-container outputs. Semantic acceptance/rejection requires the beid/Barnard verifier harness; overlap uses the public Barnard signed envelope vector as a second valid envelope."
 }

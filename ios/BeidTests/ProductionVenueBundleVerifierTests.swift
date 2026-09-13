@@ -669,6 +669,35 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     }
   }
 
+  func testNativeVerifierRejectsMixedValidAndTamperedBundleAtImport() async throws {
+    let bundle = Bundle(for: Self.self)
+    let bundleURL = try XCTUnwrap(bundle.url(
+      forResource: "mixed-valid-tampered.venue-bundle", withExtension: "cbor",
+      subdirectory: "venue-bundle-conformance"))
+    let handoffURL = try XCTUnwrap(bundle.url(
+      forResource: "mixed-valid-tampered.venue-handoff", withExtension: "cbor",
+      subdirectory: "venue-bundle-conformance"))
+    let bundleBytes = try Data(contentsOf: bundleURL)
+    let handoffBytes = try Data(contentsOf: handoffURL)
+    XCTAssertEqual(bundleBytes.count, 1339)
+    XCTAssertEqual(handoffBytes.count, 123)
+    XCTAssertEqual(SHA256.hash(data: bundleBytes).map { String(format: "%02x", $0) }.joined(),
+                   "4a4e96126d6440c1519b309c58c9dd731694f6c95844854d5eb1faaf63fa4066")
+    XCTAssertEqual(SHA256.hash(data: handoffBytes).map { String(format: "%02x", $0) }.joined(),
+                   "1393cb35864becf3693f80f596cbff81a2e99260721c3e2a16ef07cf0a4bf564")
+    let server = try LoopbackJSONRPCServer { body in RecordedVenueRegistryURLProtocol.responseData(for: body) }
+    let endpoint = try await server.start()
+    defer { server.stop() }
+    let client = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+      readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+      primaryEndpointUrl: endpoint.absoluteString, secondaryEndpointUrl: endpoint.absoluteString))
+    defer { client.close() }
+    let result = await ProductionVenueBundleVerifier(registryClient: client).importBundle(
+      bundleBytes: bundleBytes, handoffBytes: handoffBytes)
+    guard case .rejected(let failure) = result else { return XCTFail("mixed bundle must reject at import: \(result)") }
+    XCTAssertEqual(failure, .definitionRejected)
+  }
+
 }
 
 private final class LockedVenueTestClock: @unchecked Sendable {
