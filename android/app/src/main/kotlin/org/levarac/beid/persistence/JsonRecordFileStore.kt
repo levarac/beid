@@ -62,8 +62,9 @@ internal class JsonRecordFileStore<T>(
     fun addRecord(record: T) {
         synchronized(lock) {
             if (isPersistenceSuspended) return
-            records = records + record
-            save()
+            val updated = records + record
+            save(updated)
+            records = updated
         }
     }
 
@@ -80,8 +81,9 @@ internal class JsonRecordFileStore<T>(
             if (isPersistenceSuspended) return false
             val index = records.indexOfFirst(predicate)
             if (index == -1) return false
-            records = records.toMutableList().also { it[index] = transform(it[index]) }
-            save()
+            val updated = records.toMutableList().also { it[index] = transform(it[index]) }
+            save(updated)
+            records = updated
             return true
         }
     }
@@ -116,10 +118,12 @@ internal class JsonRecordFileStore<T>(
         }
     }
 
-    private fun save() {
+    // Publish memory only after the atomic durable write succeeds. A failed
+    // write must leave retries reading the last persisted state.
+    private fun save(updated: List<T>) {
         val root = buildJsonObject {
             put("schemaVersion", schemaVersion)
-            putJsonArray("records") { records.forEach { record -> add(toJson(record)) } }
+            putJsonArray("records") { updated.forEach { record -> add(toJson(record)) } }
         }
         val text = root.toString()
 
