@@ -26,6 +26,46 @@ import XCTest
 @MainActor
 final class ProductionVenueBundleVerifierTests: XCTestCase {
 
+  func testEnvelopeOverlapNormalizesEachVerifiedCadenceToWallClockSeconds() {
+    XCTAssertFalse(
+      VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals([
+        (start: 10, end: 20, eninSeconds: 2), // [20, 40)
+        (start: 15, end: 16, eninSeconds: 1)  // [15, 16), adjacent in time
+      ])
+    )
+    XCTAssertFalse(
+      VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals([
+        (start: 10, end: 20, eninSeconds: 2), // [20, 40)
+        (start: 40, end: 50, eninSeconds: 1)  // [40, 50), half-open adjacent
+      ])
+    )
+    XCTAssertTrue(
+      VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals([
+        (start: 10, end: 20, eninSeconds: 2), // [20, 40)
+        (start: 19, end: 21, eninSeconds: 1)  // [19, 21), overlaps in time
+      ])
+    )
+    XCTAssertTrue(
+      VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals([
+        (start: 10, end: 20, eninSeconds: 0)
+      ]),
+      "a non-positive cadence must fail closed"
+    )
+    XCTAssertTrue(
+      VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals([
+        (start: 10, end: 10, eninSeconds: 1)
+      ]),
+      "an empty interval must fail closed"
+    )
+    XCTAssertTrue(
+      VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals([
+        (start: Int64.max - 2, end: Int64.max - 1, eninSeconds: 1),
+        (start: Int64.max - 1, end: Int64.max, eninSeconds: 2)
+      ]),
+      "wall clock normalization overflow must fail closed"
+    )
+  }
+
   // MARK: - Real signed envelope fixture
 
   /// `container_hex`/`current_enin` from barnard's
