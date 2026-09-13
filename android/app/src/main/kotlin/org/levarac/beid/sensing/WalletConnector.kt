@@ -61,20 +61,22 @@ class WalletBindingFlow(
     private val coordinator: EventJoinCoordinator,
     private val connector: WalletConnector,
 ) {
-    private var active = false
+    private var nextAttemptId = 0L
+    private var currentAttemptId: Long? = null
 
-    init { coordinator.onBindingAttemptInvalidated = { active = false } }
+    init { coordinator.onBindingAttemptInvalidated = { currentAttemptId = null } }
 
     fun cancel() {
-        active = false
+        currentAttemptId = null
         coordinator.declineBinding()
     }
 
     fun start(onResult: (WalletConnectOutcome) -> Unit = {}) {
-        if (active) return
-        active = true
+        if (currentAttemptId != null) return
+        val attemptId = ++nextAttemptId
+        currentAttemptId = attemptId
         connector.connect { connected ->
-            if (!active) return@connect
+            if (currentAttemptId != attemptId) return@connect
             when (connected) {
                 is WalletConnectOutcome.Connected -> {
                     val message = coordinator.beginBinding(connected.address, connected.chainId)
@@ -85,7 +87,7 @@ class WalletBindingFlow(
                     }
                     coordinator.markBindingAwaitingApproval()
                     connector.personalSign(connected.address, message) { signed ->
-                        if (!active) return@personalSign
+                        if (currentAttemptId != attemptId) return@personalSign
                         when (signed) {
                             is WalletConnectOutcome.Signed -> {
                                 if (coordinator.completeBinding(connected.address, signed.signatureHex) == null) {
@@ -113,7 +115,7 @@ class WalletBindingFlow(
     }
 
     private fun finish(onResult: (WalletConnectOutcome) -> Unit, result: WalletConnectOutcome) {
-        active = false
+        currentAttemptId = null
         onResult(result)
     }
 }

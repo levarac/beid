@@ -269,6 +269,22 @@ class EventJoinCoordinatorBindingTest {
         assertTrue(store.records.isEmpty())
     }
 
+    @Test
+    fun oldAttemptCallbacksCannotCompleteAReusedFlow() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val wallet = MultiDeferredWalletConnector(); val flow = WalletBindingFlow(coordinator, wallet)
+        flow.start()
+        wallet.connectCallbacks[0](WalletConnectOutcome.Connected(walletAddress, 1))
+        flow.cancel(); flow.start()
+        wallet.connectCallbacks[1](WalletConnectOutcome.Connected(walletAddress, 1))
+        wallet.signCallbacks[0](WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
+        assertTrue(coordinator.bindingState is EventBindingState.AwaitingApproval)
+        wallet.signCallbacks[1](WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
+        assertTrue(coordinator.bindingState is EventBindingState.Bound)
+    }
+
     private class FakeWalletConnector(
         private val connection: WalletConnectOutcome,
         private val signing: WalletConnectOutcome,
@@ -284,6 +300,13 @@ class EventJoinCoordinatorBindingTest {
         var connectCallback: ((WalletConnectOutcome) -> Unit)? = null
         override fun connect(callback: (WalletConnectOutcome) -> Unit) { connectCallback = callback }
         override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) = Unit
+    }
+
+    private class MultiDeferredWalletConnector : WalletConnector {
+        val connectCallbacks = mutableListOf<(WalletConnectOutcome) -> Unit>()
+        val signCallbacks = mutableListOf<(WalletConnectOutcome) -> Unit>()
+        override fun connect(callback: (WalletConnectOutcome) -> Unit) { connectCallbacks += callback }
+        override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) { signCallbacks += callback }
     }
 
     private fun confirmRecording(engine: FakeEventJoinEngine) {
