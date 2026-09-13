@@ -1012,6 +1012,14 @@ class EventJoinCoordinator internal constructor(
         val walletSignatureBytes = walletSignatureHex.hexToByteArrayOrNull() ?: return null
         val ackSignature = sensingCryptography.signWalletAcknowledgement(message.walletAddress, walletSignatureBytes)
             ?: return null
+        val verification = sensingCryptography.verifyWalletBinding(
+            text = message.canonicalText(sensingCryptography) ?: return null,
+            walletSignature = walletSignatureBytes,
+            walletAddress = message.walletAddress,
+            ownerPublicKey = message.ownerPublicKey,
+            acknowledgement = ackSignature,
+        )
+        if (verification != org.levarac.barnard.WalletBindingVerification.VALID) return null
 
         val record = BindingRecord(
             proofId = proofId,
