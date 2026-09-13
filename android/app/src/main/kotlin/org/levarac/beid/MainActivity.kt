@@ -19,6 +19,8 @@ import org.levarac.beid.scenario.AndroidScenarioSurface
 import org.levarac.beid.scenario.playback
 import org.levarac.beid.scenario.selectAndroidDataSource
 import org.levarac.beid.sensing.EventJoinCoordinator
+import org.levarac.beid.sensing.MetaMaskWalletConnector
+import org.levarac.beid.sensing.WalletBindingFlow
 import org.levarac.beid.sensing.ProofRecordingBridge
 import org.levarac.beid.ui.screens.EventJoinContent
 import org.levarac.beid.ui.screens.RecordsScreen
@@ -66,7 +68,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BeidAppTheme {
-                AppNavHost(coordinator, proofRecordStore)
+                AppNavHost(coordinator, proofRecordStore) {
+                    WalletBindingFlow(coordinator, MetaMaskWalletConnector(this@MainActivity)).start()
+                }
             }
         }
     }
