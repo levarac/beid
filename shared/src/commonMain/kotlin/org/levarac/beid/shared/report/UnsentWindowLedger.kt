@@ -533,6 +533,11 @@ public fun resumeUnsentWindowSubmissionAfterRestore(
     ledger: UnsentWindowLedger,
 ): UnsentWindowLedgerTransition = ledger.state.emitDurableSubmissionIfNeeded()
 
+/** Returns the durable head retry deadline, if the head is waiting to retry. */
+public fun retryNotBeforeEpochMilliseconds(ledger: UnsentWindowLedger): Long? =
+    ledger.state.reports.firstOrNull { it.status != LedgerReportStatus.ACKNOWLEDGED }
+        ?.retryNotBeforeEpochMilliseconds
+
 private fun LedgerState.emitDurableSubmissionIfNeeded(): UnsentWindowLedgerTransition {
     val report = reports.firstOrNull {
         it.status == LedgerReportStatus.IN_FLIGHT &&

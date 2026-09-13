@@ -118,11 +118,20 @@ internal class WindowObservationSubmissionDrain(
      */
     fun resumeAfterRestore() {
         accumulator.resumeSubmissionAfterRestore()?.let { handle(it, SubmissionEmissionOrigin.UNCONFIRMED) }
+        scheduleRestoredRetryIfNeeded()
         // Independent of whatever the line above found: relaunch
         // reconciliation may have made windows durable that were never
         // selected into a report at all before the crash, and those are
         // ordinary fresh work, not a resume.
         drain()
+    }
+
+    private fun scheduleRestoredRetryIfNeeded() {
+        val deadline = accumulator.retryNotBeforeEpochMilliseconds() ?: return
+        if (deadline == Long.MAX_VALUE || closed) return
+        val delay = (deadline - nowEpochMilliseconds()).coerceAtLeast(0L)
+        scheduledRetry?.cancel()
+        scheduledRetry = retryScheduler?.schedule(delay) { drain() }
     }
 
     /** [WindowObservationAccumulator]'s sink for a submission its own writer-side ledger writes coincidentally surfaced. */
@@ -338,11 +347,11 @@ internal class WindowObservationSubmissionDrain(
         return false
     }
 
-    private fun scheduleRetry() {
+    private fun scheduleRetry(delayMillis: Long = RETRY_BACKOFF_MILLIS) {
         if (closed) return
         val scheduler = retryScheduler ?: return
         scheduledRetry?.cancel()
-        scheduledRetry = scheduler.schedule(RETRY_BACKOFF_MILLIS) { drain() }
+        scheduledRetry = scheduler.schedule(delayMillis) { drain() }
     }
 
     private fun restoreConfiguration(record: SubmissionRecord): SubmissionOperatorConfiguration? {
