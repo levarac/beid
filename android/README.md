@@ -92,21 +92,21 @@ submission path, so fixture data has no writable production input.
 
 beid consumes [levarac/barnard](https://github.com/levarac/barnard) from
 Maven Central with the exact coordinate
-`implementation("org.levarac:barnard:0.9.1")`. Both the Android application
+`implementation("org.levarac:barnard:0.9.2")`. Both the Android application
 and the SDK therefore resolve from published, reproducible artifacts; no
 submodule or Gradle composite build is required. Verified 2026-09-11 against
 `app/build.gradle.kts`. The build file is the authority for the pinned
 version; this README explains that dependency.
 
 The SDK includes the signing backend work introduced in the 0.6.0 series:
-Android uses Bouncy Castle `bcprov-jdk15to18` (1.81 in the 0.9.1 artifact),
+Android uses Bouncy Castle `bcprov-jdk15to18` (1.81 in the 0.9.2 artifact),
 while the Apple SDK uses the vendored libsecp256k1 backend. Both follow the
-[Barnard secp256k1 ECDSA profile](https://github.com/levarac/barnard/blob/v0.9.1/specs/158-secp256k1-ecdsa-profile/spec.md),
+[Barnard secp256k1 ECDSA profile](https://github.com/levarac/barnard/blob/v0.9.2/specs/158-secp256k1-ecdsa-profile/spec.md),
 including canonical low-S signatures and the specified recovery-id rules.
 Do not duplicate that cryptographic policy in the host app.
 
-Version 0.9.1 also exposes the public
-[B005 v2 envelope encoder](https://github.com/levarac/barnard/blob/v0.9.1/packages/android/barnard/src/main/kotlin/org/levarac/barnard/BarnardB005EnvelopeV2.kt):
+Version 0.9.2 also exposes the public
+[B005 v2 envelope encoder](https://github.com/levarac/barnard/blob/v0.9.2/packages/android/barnard/src/main/kotlin/org/levarac/barnard/BarnardB005EnvelopeV2.kt):
 `BarnardB005EnvelopeV2.encodeUnsignedEnvelope` assembles and checks the supplied
 signed fields, and `encodeContainer` wraps an envelope for transmission. These
 SDK APIs do not by themselves establish that an Android venue-device UI is

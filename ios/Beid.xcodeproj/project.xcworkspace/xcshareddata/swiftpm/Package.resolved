@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/levarac/barnard.git",
       "state" : {
-        "revision" : "a769299339498e8e650a91f57c05610829f42d73",
-        "version" : "0.9.1"
+        "revision" : "61e2f0bacde14d78b18278bf743f587380f76cba",
+        "version" : "0.9.2"
       }
     },
     {
