@@ -256,6 +256,19 @@ class EventJoinCoordinatorBindingTest {
         assertTrue(store.records.isEmpty())
     }
 
+    @Test
+    fun leavingEventInvalidatesLateWalletCallback() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val store = BindingRecordStore(newTempRecordFile("binding-records"))
+        val coordinator = coordinator(engine, FakeSensingCryptography(), bindingRecordStore = store, nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val wallet = DeferredWalletConnector()
+        WalletBindingFlow(coordinator, wallet).start()
+        coordinator.leaveEvent()
+        wallet.connectCallback?.invoke(WalletConnectOutcome.Connected(walletAddress, 1))
+        assertTrue(store.records.isEmpty())
+    }
+
     private class FakeWalletConnector(
         private val connection: WalletConnectOutcome,
         private val signing: WalletConnectOutcome,
@@ -265,6 +278,12 @@ class EventJoinCoordinatorBindingTest {
         override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
             signCalls += 1; callback(signing)
         }
+    }
+
+    private class DeferredWalletConnector : WalletConnector {
+        var connectCallback: ((WalletConnectOutcome) -> Unit)? = null
+        override fun connect(callback: (WalletConnectOutcome) -> Unit) { connectCallback = callback }
+        override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) = Unit
     }
 
     private fun confirmRecording(engine: FakeEventJoinEngine) {

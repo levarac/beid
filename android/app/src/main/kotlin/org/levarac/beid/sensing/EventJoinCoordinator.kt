@@ -269,6 +269,8 @@ class EventJoinCoordinator internal constructor(
 
     /** Fixed once per binding attempt and reused across the wallet signature and the later owner-key wallet-ack — see [beginBinding]. */
     private var pendingBindingMessage: BindingMessage? = null
+    /** Lets the external wallet caller invalidate late SDK callbacks when the session ends. */
+    internal var onBindingAttemptInvalidated: (() -> Unit)? = null
 
     /**
      * Fired exactly once per session, the instant [scanPhase] first confirms
@@ -898,6 +900,7 @@ class EventJoinCoordinator internal constructor(
      */
     override fun leaveEvent() {
         if (disposed) return
+        onBindingAttemptInvalidated?.invoke()
         // A verification still in flight belongs to the session being left.
         // Dropping its owner is what stops its answer from joining an event
         // the user has already walked away from.

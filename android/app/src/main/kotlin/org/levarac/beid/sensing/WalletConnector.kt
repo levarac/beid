@@ -63,6 +63,13 @@ class WalletBindingFlow(
 ) {
     private var active = false
 
+    init { coordinator.onBindingAttemptInvalidated = { active = false } }
+
+    fun cancel() {
+        active = false
+        coordinator.declineBinding()
+    }
+
     fun start(onResult: (WalletConnectOutcome) -> Unit = {}) {
         if (active) return
         active = true

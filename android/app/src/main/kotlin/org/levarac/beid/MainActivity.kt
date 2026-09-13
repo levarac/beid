@@ -40,6 +40,7 @@ import org.levarac.parallax.registry.RegistryClient
 class MainActivity : ComponentActivity() {
     private var eventJoinCoordinator: EventJoinCoordinator? = null
     private var registryClient: RegistryClient? = null
+    private var walletBindingFlow: WalletBindingFlow? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
         registryClient = RegistryDependencies.createClient()
         val coordinator = EventJoinCoordinator(this)
         eventJoinCoordinator = coordinator
+        walletBindingFlow = WalletBindingFlow(coordinator, MetaMaskWalletConnector(this))
 
         // Sibling store MainActivity owns directly (beid#121) — not something
         // EventJoinCoordinator owns, unlike SelfProofRecordStore/BindingRecordStore.
@@ -69,7 +71,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             BeidAppTheme {
                 AppNavHost(coordinator, proofRecordStore) {
-                    WalletBindingFlow(coordinator, MetaMaskWalletConnector(this@MainActivity)).start()
+                    walletBindingFlow?.start()
                 }
             }
         }
@@ -115,6 +117,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        walletBindingFlow?.cancel()
         registryClient?.close()
         eventJoinCoordinator?.dispose()
         super.onDestroy()
