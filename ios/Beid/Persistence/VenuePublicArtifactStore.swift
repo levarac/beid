@@ -87,8 +87,17 @@ final class VenuePublicArtifactStore: ObservableObject {
   }
 
   private func save() {
-    guard !isPersistenceSuspended else { return }
-    guard let data = try? RecordSchemaEnvelope.encodeRecords(record.map { [$0] } ?? []) else { return }
-    try? data.write(to: fileURL, options: .atomic)
+    if let reason = persistenceSuspensionReason {
+      persistenceWriteFailure = reason
+      return
+    }
+    do {
+      let data = try RecordSchemaEnvelope.encodeRecords(record.map { [$0] } ?? [])
+      try data.write(to: fileURL, options: .atomic)
+      persistenceWriteFailure = nil
+    } catch {
+      // Keep the selected public bytes in memory, but expose failed durability.
+      persistenceWriteFailure = error
+    }
   }
 }

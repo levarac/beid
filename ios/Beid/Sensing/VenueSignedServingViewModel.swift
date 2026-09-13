@@ -20,7 +20,8 @@ final class VenueExpiryTimer: VenueExpiryScheduling {
 
   func schedule(stopAtUnixSeconds: Int64, now: Int64, fire: @escaping @MainActor () async -> Void) {
     cancel()
-    let seconds = stopAtUnixSeconds - now
+    let (difference, overflow) = stopAtUnixSeconds.subtractingReportingOverflow(now)
+    let seconds = stopAtUnixSeconds <= now ? 0 : (overflow ? Int64.max : difference)
     // The instant is exclusive, so an already-reached deadline fires at once
     // rather than being nudged forward to make it schedulable.
     guard seconds > 0 else {
@@ -28,7 +29,8 @@ final class VenueExpiryTimer: VenueExpiryScheduling {
       return
     }
     task = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
+      let nanos = UInt64(seconds).multipliedReportingOverflow(by: 1_000_000_000)
+      try? await Task.sleep(nanoseconds: nanos.overflow ? UInt64.max : nanos.partialValue)
       guard !Task.isCancelled else { return }
       self?.task = nil
       await fire()
@@ -94,68 +96,31 @@ final class VenueSignedServingViewModel: ObservableObject {
   private let clock: () -> VenueClockReading
   private let expiry: any VenueExpiryScheduling
 
-  /// Incremented by every invalidating transition. A completion whose captured
-  /// generation no longer matches is discarded rather than installed.
-  private var generation = 0
+  /// The effect lease and selected workflow have different lifetimes.
+  /// Background revokes a lease but retains the selected public artifact.
+  private var generation = UUID()
 
-  /// The receipt for the artifact currently in play, kept so a refresh can
-  /// re-evaluate without re-importing. Identity verification is clock-free and
-  /// does not expire — only the serving DECISION does — so clearing the radio
-  /// deliberately does not drop it. It is never persisted and is never
-  /// authority to serve; only a fresh `evaluate` can permit anything.
-  private var receipt: VenueImportedBundle?
-
-  /// Whether the operator currently wants this device to serve.
-  ///
-  /// Without this, an explicit stop would be undone by the next foreground or
-  /// clock change, because those refresh and a refresh that is permitted
-  /// installs. A stop must outlast the app going to the background.
-  private var wantsServing = false
-
-  /// Ownership token for `wantsServing`, bumped by every writer of it.
-  ///
-  /// `generation` cannot answer this question, and using it was the defect.
-  /// The two are asking different things:
-  ///
-  /// - `generation` asks "has this request been superseded, so must it stop
-  ///   touching the screen." A lifecycle invalidation bumps it —
-  ///   `sceneDidEnterBackground()` calls `invalidate()` — WITHOUT establishing
-  ///   any new intent.
-  /// - this asks "is the intent currently in force still the one this request
-  ///   established, so may this request retract it."
-  ///
-  /// Gating the retraction on `generation` conflated them: a replacement fetch
-  /// that failed after a background return looked superseded, skipped
-  /// abandoning its own intent, and left the device free to restore and
-  /// broadcast the event the operator was replacing.
-  private var servingIntentEpoch = 0
-
-  /// True for the whole of a `supply` call, from asking for a source until
-  /// that request has resolved one way or the other.
-  ///
-  /// `refresh()` consults it BEFORE doing anything, because `receipt == nil`
-  /// has three causes and only one of them warrants restoring the stored
-  /// artifact:
-  ///
-  /// - nothing was ever supplied — restore, which is what the fallback exists
-  ///   for
-  /// - a supply is IN FLIGHT — the operator has asked for something else and
-  ///   is waiting for it
-  /// - a supply just FAILED — they asked for something else and did not get it
-  ///
-  /// Reading all three as the first one put the event being REPLACED on the
-  /// air while its replacement was still downloading. This flag separates the
-  /// second cause; the third is handled by retracting the intent, so the
-  /// lifecycle entry points never reach `refresh()` at all.
-  private var isSupplyInFlight = false
-
-  /// Takes ownership of `wantsServing` for the caller. Every writer of that
-  /// flag calls this, so "am I still the owner" is answerable by comparison.
-  @discardableResult
-  private func takeServingIntent() -> Int {
-    servingIntentEpoch += 1
-    return servingIntentEpoch
+  private enum Stage { case acquiring, importing, evaluating, parked, settled }
+  private struct Workflow {
+    let id = UUID()
+    var artifact: VenuePublicArtifact?
+    var receipt: VenueImportedBundle?
+    var stage: Stage
   }
+  private var workflow: Workflow?
+  private var activeOperation: UUID?
+  private var operationTask: Task<Void, Never>?
+  private var isBackgrounded = false
+  private var sessionActive = true
+
+  @Published private(set) var hasUnsavedArtifact = false
+
+  var servingEventIdHex: String? {
+    guard case .serving = status else { return nil }
+    return workflow?.receipt?.identity.eventIdHex
+  }
+
+  private var eligible: Bool { sessionActive && !isBackgrounded }
 
   init(
     verifier: any VenueBundleVerifying,
@@ -260,7 +225,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     // Report the effect failure as itself, never as a verification verdict --
     // the same separation the synchronous install-failure path keeps.
     status = .radioRefused(failure)
-    // `wantsServing` is deliberately NOT cleared. A radio failure is not an
+    // The current selected workflow is deliberately NOT cleared. A radio failure is not an
     // operator stop, so a later foreground return or clock change may retry.
     //
     // What makes that retry safe is the `pendingInstallFailure` check in
@@ -274,201 +239,221 @@ final class VenueSignedServingViewModel: ObservableObject {
     // dead radio on every retry after the first.
   }
 
+  // MARK: - Workflow ownership
+
+  /// Superseding an operation revokes its local authority without waiting for
+  /// its network callback. Cancellation of cooperative ports releases resources.
+  private func select(_ artifact: VenuePublicArtifact?, stage: Stage) -> UUID {
+    invalidate()
+    operationTask?.cancel()
+    operationTask = nil
+    activeOperation = nil
+    workflow = Workflow(artifact: artifact, stage: stage)
+    return workflow!.id
+  }
+
+  private func owns(_ owner: UUID, operation: UUID) -> Bool {
+    sessionActive && workflow?.id == owner && activeOperation == operation
+  }
+
+  private func mayCommit(_ owner: UUID, operation: UUID) -> Bool {
+    guard owns(owner, operation: operation) else { return false }
+    guard !Task.isCancelled else {
+      retire(owner: owner, operation: operation)
+      return false
+    }
+    return true
+  }
+
+  private func retire(owner: UUID, operation: UUID) {
+    guard owns(owner, operation: operation) else { return }
+    stop()
+  }
+
+  private func runOperation(
+    owner: UUID,
+    body: @escaping @MainActor (UUID) async -> Void
+  ) async {
+    let operation = UUID()
+    activeOperation = operation
+    let task = Task { await body(operation) }
+    operationTask = task
+    await withTaskCancellationHandler {
+      if Task.isCancelled { task.cancel() }
+      await task.value
+    } onCancel: { [weak self] in
+      task.cancel()
+      Task { @MainActor in self?.retire(owner: owner, operation: operation) }
+    }
+    // An obsolete completion cannot release a newer operation's barrier.
+    if activeOperation == operation {
+      activeOperation = nil
+      operationTask = nil
+    }
+  }
+
   // MARK: - Requests
 
-  /// Acquires from a file or HTTPS source, persists the public bytes, then
-  /// imports and evaluates them.
   func supply(bundleSource: URL, handoffSource: URL, sourceDescription: String) async {
-    let generation = invalidate()
-    let intent = takeServingIntent()
-    // Covers the whole call, not just the fetch: a refresh landing during the
-    // import or the evaluation would bump the generation just the same and
-    // discard the request the operator is waiting for.
-    isSupplyInFlight = true
-    defer { isSupplyInFlight = false }
-    wantsServing = true
-    // Replaced input: the previous receipt describes a different artifact and
-    // must not survive into this request.
-    receipt = nil
-    status = .acquiring
-
-    let artifact: VenuePublicArtifact
-    do {
-      artifact = try await acquisition.acquire(bundleSource: bundleSource, handoffSource: handoffSource)
-    } catch let failure as VenueAcquisitionFailure {
-      abandonReplacement(ifStillOwnedBy: intent)
-      guard generation == self.generation else { return }
-      status = .acquisitionFailed(failure)
-      return
-    } catch {
-      abandonReplacement(ifStillOwnedBy: intent)
-      guard generation == self.generation else { return }
-      status = .acquisitionFailed(.transportFailure)
-      return
+    guard sessionActive else { return }
+    let owner = select(nil, stage: .acquiring)
+    status = eligible ? .acquiring : .idle
+    await runOperation(owner: owner) { [self] operation in
+      let artifact: VenuePublicArtifact
+      do {
+        artifact = try await acquisition.acquire(bundleSource: bundleSource, handoffSource: handoffSource)
+      } catch {
+        guard mayCommit(owner, operation: operation) else { return }
+        // Failed selection retires intent. Stored older bytes remain available
+        // only to the explicit reload action.
+        workflow = nil
+        status = eligible ? .acquisitionFailed((error as? VenueAcquisitionFailure) ?? .transportFailure) : .idle
+        return
+      }
+      guard mayCommit(owner, operation: operation) else { return }
+      workflow?.artifact = artifact
+      store.store(VenuePublicArtifactRecord(
+        bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes,
+        sourceDescription: sourceDescription, storedAt: Date()))
+      hasUnsavedArtifact = store.persistenceWriteFailure != nil || store.isPersistenceSuspended
+      storedSourceDescription = sourceDescription
+      await resumeSelected(owner: owner, operation: operation)
     }
-    guard generation == self.generation else { return }
-
-    store.store(
-      VenuePublicArtifactRecord(
-        bundleBytes: artifact.bundleBytes,
-        handoffBytes: artifact.handoffBytes,
-        sourceDescription: sourceDescription,
-        storedAt: Date()
-      )
-    )
-    storedSourceDescription = sourceDescription
-    await importAndEvaluate(artifact, generation: generation)
   }
 
-  /// Drops the standing intent to serve after a replacement could not be
-  /// fetched, WITHOUT touching the stored record.
-  ///
-  /// `supply` sets `wantsServing` and clears `receipt` before acquiring, so a
-  /// failed fetch leaves a device that intends to serve, holds no receipt, and
-  /// still has the PREVIOUS event's bundle in the store. The next foreground
-  /// return or clock change would then pass its `wantsServing` guard, find no
-  /// receipt in `refresh`, fall through to `restoreFromStorage`, and put the
-  /// event the operator was replacing back on the air. Their last visible
-  /// signal would be an error and the device's next autonomous act would be to
-  /// broadcast what the error was about.
-  ///
-  /// The intent is cleared; the data is not. The stored bundle is still there
-  /// and still loadable, deliberately: the operator may well want it back, and
-  /// the screen's reload button calls `restoreFromStorage()` directly, which
-  /// sets `wantsServing` itself. What this removes is only the AUTOMATIC
-  /// resumption. `supply` already ran `invalidate()`, so nothing is on the air
-  /// and no deadline is armed — the device lands idle with an error on screen
-  /// and stays there until the operator chooses one of the two buttons.
-  /// Runs BEFORE the generation guard in both catch branches, deliberately.
-  /// Whether this request may still paint the screen and whether it must
-  /// retract its own intent are separate questions, and a backgrounded app
-  /// answers them differently: it may not paint, and it must still retract.
-  ///
-  /// `ifStillOwnedBy` is what keeps that from reopening the case it replaced.
-  /// A request only retracts the intent it established itself; once a newer
-  /// `supply`, a `restoreFromStorage` or an explicit `stop` has taken
-  /// ownership, this is a no-op and their intent stands.
-  private func abandonReplacement(ifStillOwnedBy intent: Int) {
-    guard intent == servingIntentEpoch else { return }
-    wantsServing = false
-  }
-
-  /// Re-imports the stored public bytes. This is the ONLY restore path: the
-  /// bytes go back through the verifier exactly as if they had just arrived.
+  /// Reload is a new explicit selection and supersedes every older operation.
   func restoreFromStorage() async {
-    let generation = invalidate()
-    // Takes ownership of the intent, so an older in-flight `supply` that fails
-    // afterwards cannot retract the intent this restore just established.
-    takeServingIntent()
-    wantsServing = true
-    receipt = nil
+    guard sessionActive else { return }
+    let owner = select(store.record?.artifact, stage: .parked)
     guard let record = store.record else {
+      workflow = nil
       status = .idle
       return
     }
     storedSourceDescription = record.sourceDescription
-    await importAndEvaluate(record.artifact, generation: generation)
-  }
-
-  /// Re-evaluates the current receipt against a freshly read clock. Used by
-  /// expiry, foreground return and clock changes. It asks the verifier for a
-  /// new decision; it never extends the deadline it was previously given.
-  func refresh() async {
-    // BEFORE `invalidate()`, deliberately, and this ordering is the fix rather
-    // than an optimisation. `invalidate()` bumps the generation, and a supply
-    // in flight is guarded on that generation — so refreshing underneath one
-    // does not merely restore the wrong artifact, it also makes the
-    // replacement the operator is waiting for fail its own guard when it
-    // arrives and be discarded with nothing shown. A guard placed at the
-    // `receipt == nil` fallback below would be too late to prevent that: the
-    // generation has already moved by the time the fallback is reached.
-    //
-    // A supply owns the device until it resolves. Nothing here has anything to
-    // re-decide meanwhile.
-    guard !isSupplyInFlight else { return }
-    let generation = invalidate()
-    guard let receipt else {
-      // Nothing has been imported this run and nothing is being supplied, so
-      // the stored artifact is the only thing this could be about.
-      await restoreFromStorage()
-      return
+    await runOperation(owner: owner) { [self] operation in
+      await resumeSelected(owner: owner, operation: operation)
     }
-    await evaluate(receipt, generation: generation)
   }
 
-  /// An explicit stop by the operator. Sticky: it survives backgrounding and
-  /// clock changes, which is what stops a later refresh from silently putting
-  /// this device back on the air.
+  func refresh() async {
+    guard eligible, let owner = workflow?.id, activeOperation == nil else { return }
+    invalidate()
+    await runOperation(owner: owner) { [self] operation in
+      await resumeSelected(owner: owner, operation: operation)
+    }
+  }
+
   func stop() {
     invalidate()
-    // An explicit stop owns the intent too: a `supply` still in flight must
-    // not be the one that decides what the flag means after the operator has
-    // deliberately stopped.
-    takeServingIntent()
-    wantsServing = false
-    receipt = nil
+    operationTask?.cancel()
+    operationTask = nil
+    activeOperation = nil
+    workflow = nil
     status = .idle
   }
 
   // MARK: - Lifecycle
 
-  // Session boundary API. The RED witness precedes its implementation.
-  func beginSession(isForeground: Bool) {}
-  func endSession() {}
+  func beginSession(isForeground: Bool) {
+    sessionActive = true
+    isBackgrounded = !isForeground
+  }
 
-  /// Scene departure requires clearing: the app is no longer in a position to
-  /// observe expiry or a radio failure, so it must not leave bytes on the air.
+  func endSession() {
+    stop()
+    sessionActive = false
+  }
+
   func sceneDidEnterBackground() {
+    isBackgrounded = true
     invalidate()
     status = .idle
   }
 
   func sceneWillEnterForeground() async {
-    guard wantsServing else { return }
+    isBackgrounded = false
+    guard sessionActive else { return }
     await refresh()
   }
 
-  /// A wall-clock discontinuity invalidates the comparison the permit was
-  /// granted under, in either direction, so the answer is re-asked rather
-  /// than recomputed from the deadline already held.
   func systemClockDidChange() async {
-    guard wantsServing else { return }
+    guard eligible else { return }
+    // No effect is installed while this operation is pending. Retain the
+    // selection, but require a pending decision to use the new clock epoch.
+    if activeOperation != nil {
+      if workflow?.stage == .evaluating { generation = UUID() }
+      return
+    }
     await refresh()
   }
 
   // MARK: - Pipeline
 
-  private func importAndEvaluate(_ artifact: VenuePublicArtifact, generation: Int) async {
-    status = .importing
-    let result = await verifier.importBundle(
-      bundleBytes: artifact.bundleBytes,
-      handoffBytes: artifact.handoffBytes
-    )
-    guard generation == self.generation else { return }
-
-    switch result {
-    case .rejected(let failure):
-      status = .importRejected(failure)
-    case .imported(let imported):
-      receipt = imported
-      // Identity only. Deliberately no install and no readiness claim here.
-      status = .imported(imported.identity)
-      await evaluate(imported, generation: generation)
+  private func resumeSelected(owner: UUID, operation: UUID) async {
+    guard mayCommit(owner, operation: operation) else { return }
+    guard eligible else { workflow?.stage = .parked; status = .idle; return }
+    if workflow?.receipt == nil {
+      guard let artifact = workflow?.artifact else { return }
+      workflow?.stage = .importing
+      status = .importing
+      let result = await verifier.importBundle(bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes)
+      guard mayCommit(owner, operation: operation) else { return }
+      switch result {
+      case .rejected(let failure):
+        workflow?.stage = .settled
+        status = eligible ? .importRejected(failure) : .idle
+        return
+      case .imported(let imported):
+        workflow?.receipt = imported
+      }
     }
+    guard eligible else { workflow?.stage = .parked; status = .idle; return }
+    guard let imported = workflow?.receipt else { return }
+    await evaluate(imported, owner: owner, operation: operation)
   }
 
-  private func evaluate(_ imported: VenueImportedBundle, generation: Int) async {
-    status = .evaluating(imported.identity)
-    let decision = await verifier.evaluate(imported, clock: clock())
-    guard generation == self.generation else { return }
-
-    switch decision {
-    case .blocked(let rejection):
-      status = .blocked(rejection)
-      scheduleRecheckIfNeeded(for: rejection, generation: generation)
-    case .permitted(let permit):
-      await install(permit, imported: imported, generation: generation)
+  /// At most an initial decision plus one fresh decision. A stale result after
+  /// background or a changed permit interval never becomes install authority.
+  private func evaluate(_ imported: VenueImportedBundle, owner: UUID, operation: UUID) async {
+    for attempt in 0...1 {
+      guard mayCommit(owner, operation: operation) else { return }
+      guard eligible else { workflow?.stage = .parked; status = .idle; return }
+      workflow?.stage = .evaluating
+      status = .evaluating(imported.identity)
+      let lease = generation
+      let decision = await verifier.evaluate(imported, clock: clock())
+      guard mayCommit(owner, operation: operation) else { return }
+      guard eligible else { workflow?.stage = .parked; status = .idle; return }
+      // Even if foreground returned first, an old background-era decision is
+      // revalidated. No recursive evaluation or immediate timer loop.
+      if lease != generation {
+        if attempt == 0 { continue }
+        break
+      }
+      switch decision {
+      case .blocked(let rejection):
+        workflow?.stage = .settled
+        status = .blocked(rejection)
+        scheduleRecheckIfNeeded(for: rejection, generation: lease)
+        return
+      case .permitted(let permit):
+        guard case .available(let now) = clock() else {
+          workflow?.stage = .settled
+          status = .blocked(VenueServingRejection(reason: .clockUnavailable)!)
+          return
+        }
+        guard now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
+          if attempt == 0 { continue }
+          break
+        }
+        install(permit, generation: lease, now: now)
+        workflow?.stage = .settled
+        return
+      }
     }
+    workflow?.stage = .parked
+    status = .blocked(VenueServingRejection(reason: .expired)!)
   }
 
   /// `.notStarted` is the one rejection that names its own wake-up instant
@@ -476,48 +461,15 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// holding a not-yet-started pack never re-evaluates on its own and stays
   /// blocked until some unrelated event (foreground, clock change) happens
   /// to trigger a refresh (beid#530).
-  private func scheduleRecheckIfNeeded(for rejection: VenueServingRejection, generation: Int) {
+  private func scheduleRecheckIfNeeded(for rejection: VenueServingRejection, generation: UUID) {
     guard rejection.reason == .notStarted, let recheckAt = rejection.recheckAtUnixSeconds else { return }
-    guard case .available(let now) = clock() else { return }
+    guard case .available(let now) = clock(), recheckAt > now else { return }
     expiry.schedule(stopAtUnixSeconds: recheckAt, now: now) { [weak self] in
       await self?.handleExpiry(generation: generation)
     }
   }
 
-  private func install(_ permit: VenueServePermit, imported: VenueImportedBundle, generation: Int) async {
-    // The deadline must be schedulable before the bytes go on the air. Read
-    // the clock first: serving with no stop instant is the one outcome worse
-    // than not serving at all.
-    let reading = clock()
-    guard case .available(let now) = reading else {
-      status = .blocked(VenueServingRejection(reason: .clockUnavailable)!)
-      return
-    }
-    // BOTH ends, deliberately. The permit was verified for one ENIN, whose
-    // wall-clock span is `[startAtUnixSeconds, stopAtUnixSeconds)`, and a
-    // reading outside EITHER end is a reading the envelope was never checked
-    // against.
-    //
-    // The upper end is beid#530: the permit expired between the moment
-    // `evaluate` issued it and this clock read, and installing anyway for a
-    // narrower window would still be the vulnerability the deadline exists to
-    // prevent, only smaller.
-    //
-    // The lower end is its mirror, and was open while the upper end was fixed
-    // twice. A clock moving BACKWARD across an ENIN boundary during
-    // `evaluate` still satisfies `now < stopAtUnixSeconds` while falling
-    // before the slice the envelope was verified for, so an upper-bound-only
-    // guard installed it for a slice nothing had checked. The clock-change
-    // notification is asynchronous and cannot win that race, so this guard is
-    // the only thing standing in it.
-    //
-    // Either way the answer is re-asked with the fresh reading rather than
-    // recomputed from the permit already in hand.
-    guard now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
-      await evaluate(imported, generation: generation)
-      return
-    }
-
+  private func install(_ permit: VenueServePermit, generation: UUID, now: Int64) {
     pendingInstallFailure = nil
     isInstalling = true
     defer { isInstalling = false }
@@ -562,8 +514,11 @@ final class VenueSignedServingViewModel: ObservableObject {
     }
   }
 
-  private func handleExpiry(generation: Int) async {
+  private func handleExpiry(generation: UUID) async {
     guard generation == self.generation else { return }
+    // Expiry clears first, irrespective of outstanding obsolete work.
+    invalidate()
+    status = .blocked(VenueServingRejection(reason: .expired)!)
     await refresh()
   }
 
@@ -573,10 +528,10 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// have a window in which the previous permit's bytes were still live while
   /// nothing owned them any more.
   @discardableResult
-  private func invalidate() -> Int {
+  private func invalidate() -> UUID {
     broadcasting.clearAndStop()
     expiry.cancel()
-    generation += 1
+    generation = UUID()
     return generation
   }
 }

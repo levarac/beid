@@ -204,6 +204,27 @@ protocol VenueSignedContainerBroadcasting {
 
 // MARK: - Production verifier (beid#432)
 
+@MainActor
+protocol VenueRegistryRequestCancellable: AnyObject {
+  func cancel()
+}
+
+@MainActor
+private final class BarnardVenueRegistryRequest: VenueRegistryRequestCancellable {
+  private var request: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryRequest?
+
+  init(_ request: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryRequest) {
+    self.request = request
+  }
+
+  func cancel() {
+    request?.cancel()
+    request = nil
+  }
+
+  deinit { request?.cancel() }
+}
+
 /// Pure, dependency-free helpers factored out of `ProductionVenueBundleVerifier`
 /// so the security-critical mappings and arithmetic can be unit-tested
 /// directly, without a registry client, a network, or a chain-anchored bundle.
@@ -490,6 +511,82 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
   private let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   private let nameValidator: any BarnardB005DisplayNameNormalizing
 
+  /// Owns one registry read's continuation and request handle. Cancellation
+  /// is allowed to race the SDK callback, so completion is guarded here
+  /// rather than relying on the SDK to suppress a late callback.
+  /// Internal for deterministic native tests of the exactly-once boundary.
+  /// It remains scoped to the production verifier and is not a public API.
+  @MainActor
+  final class RegistryResolutionOperation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<
+      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryResolution?, Never
+    >?
+    private var request: (any VenueRegistryRequestCancellable)?
+    private var finished = false
+
+    var hasContinuation: Bool {
+      lock.lock(); defer { lock.unlock() }
+      return continuation != nil
+    }
+
+    func setContinuation(
+      _ continuation: CheckedContinuation<
+        ExportedKotlinPackages.org.levarac.parallax.registry.RegistryResolution?, Never
+      >
+    ) {
+      lock.lock()
+      self.continuation = continuation
+      let shouldCancel = finished
+      if shouldCancel { self.continuation = nil }
+      lock.unlock()
+      if shouldCancel {
+        continuation.resume(returning: nil)
+        cancelRequest()
+      }
+    }
+
+    func setRequest(_ request: any VenueRegistryRequestCancellable) {
+      lock.lock()
+      self.request = request
+      let shouldCancel = finished
+      lock.unlock()
+      if shouldCancel { request.cancel() }
+    }
+
+    func finish(
+      _ resolution: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryResolution?
+    ) {
+      lock.lock()
+      guard !finished else { lock.unlock(); return }
+      finished = true
+      let continuation = self.continuation
+      self.continuation = nil
+      self.request = nil
+      lock.unlock()
+      continuation?.resume(returning: resolution)
+    }
+
+    func cancel() {
+      lock.lock()
+      guard !finished else { lock.unlock(); return }
+      finished = true
+      let continuation = self.continuation
+      self.continuation = nil
+      lock.unlock()
+      cancelRequest()
+      continuation?.resume(returning: nil)
+    }
+
+    private func cancelRequest() {
+      lock.lock()
+      let request = self.request
+      self.request = nil
+      lock.unlock()
+      request?.cancel()
+    }
+  }
+
   init(
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?,
     nameValidator: any BarnardB005DisplayNameNormalizing = BarnardB005NativeDisplayNameNormalizer()
@@ -602,14 +699,25 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     eventIdHex: String
   ) async -> ExportedKotlinPackages.org.levarac.parallax.registry.RegistryResolution? {
     guard let registryClient else { return nil }
-    return await withCheckedContinuation { continuation in
-      _ = registryClient.resolve(
-        eventIdHex: eventIdHex,
-        pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin()
-      ) { resolution in
-        continuation.resume(returning: resolution)
-      }
-    }
+    let operation = RegistryResolutionOperation()
+    return await withTaskCancellationHandler(operation: {
+      await withCheckedContinuation {
+        (continuation: CheckedContinuation<
+          ExportedKotlinPackages.org.levarac.parallax.registry.RegistryResolution?, Never
+        >) in
+          operation.setContinuation(continuation)
+          let request = registryClient.resolve(
+            eventIdHex: eventIdHex,
+            pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin()
+          ) { resolution in
+            operation.finish(resolution)
+          }
+          operation.setRequest(BarnardVenueRegistryRequest(request))
+          if Task.isCancelled { operation.cancel() }
+        }
+    }, onCancel: {
+      Task { @MainActor in operation.cancel() }
+    })
   }
 
   /// Maps a re-verification failure (identity re-checked inside `evaluate`,

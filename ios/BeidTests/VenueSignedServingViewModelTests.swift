@@ -1687,3 +1687,42 @@ extension VenueSignedServingViewModelTests {
     XCTAssertEqual(VenuePublicArtifactStore(fileURL: url).record, record)
   }
 }
+
+
+extension VenueSignedServingViewModelTests {
+  func testW14CancellationRetiresAuthorityBeforeNoncooperativeOperationReturns() async throws {
+    for stage in PendingStage.allCases {
+      resetOwnershipHarness()
+      seedStoredArtifact()
+      let model = makeViewModel()
+      let pending = await startPending(stage, model: model)
+      pending.cancel()
+      // Cancellation retirement runs on MainActor. No external result is
+      // delivered until this local-authority assertion has completed.
+      for _ in 0..<100 where model.status != .idle { await Task.yield() }
+      XCTAssertEqual(model.status, .idle)
+      XCTAssertNil(ports.installedPermit)
+      let calls = ports.calls.count
+      await model.sceneWillEnterForeground()
+      XCTAssertEqual(ports.calls.count, calls)
+      finishPending(stage, success: true)
+      await pending.value
+      XCTAssertEqual(model.status, .idle)
+      XCTAssertNil(ports.installedPermit)
+    }
+  }
+
+  func testClockDiscontinuityDuringEvaluationRequiresFreshDecision() async throws {
+    resetOwnershipHarness()
+    let model = makeViewModel()
+    let pending = await startPending(.evaluation, model: model)
+    ports.evaluationReplies = [.immediate(.blocked(VenueServingRejection(reason: .expired)!))]
+    await model.systemClockDidChange()
+    finishPending(.evaluation, success: true)
+    await pending.value
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(model.status, .blocked(VenueServingRejection(reason: .expired)!))
+    let decisions = ports.calls.filter { if case .evaluating = $0 { return true }; return false }
+    XCTAssertEqual(decisions.count, 2)
+  }
+}
