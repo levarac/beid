@@ -13,6 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.levarac.barnard.WalletBindingVerification
 
 /**
  * `EventJoinCoordinator`'s owner-key wallet-binding coordinator API —
@@ -209,6 +210,49 @@ class EventJoinCoordinatorBindingTest {
         coordinator.leaveEvent()
 
         assertEquals(EventBindingState.None, coordinator.bindingState)
+    }
+
+    @Test
+    fun walletBindingFlowConnectsSignsAndPersistsExactlyOnce() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val wallet = FakeWalletConnector(WalletConnectOutcome.Connected(walletAddress, 1), WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
+        WalletBindingFlow(coordinator, wallet).start()
+        assertTrue(coordinator.bindingState is EventBindingState.Bound)
+        assertEquals(1, wallet.signCalls)
+    }
+
+    @Test
+    fun walletCancellationReturnsToPendingConnectWithoutPersistenceAndCanRetry() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val wallet = FakeWalletConnector(WalletConnectOutcome.Cancelled, WalletConnectOutcome.Cancelled)
+        WalletBindingFlow(coordinator, wallet).start()
+        assertTrue(coordinator.bindingState is EventBindingState.PendingConnect)
+        assertEquals(0, wallet.signCalls)
+    }
+
+    @Test
+    fun walletMalformedSignatureFailsWithoutBinding() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val wallet = FakeWalletConnector(WalletConnectOutcome.Connected(walletAddress, 1), WalletConnectOutcome.Signed("0x00"))
+        WalletBindingFlow(coordinator, wallet).start()
+        assertTrue(coordinator.bindingState is EventBindingState.Failed)
+    }
+
+    private class FakeWalletConnector(
+        private val connection: WalletConnectOutcome,
+        private val signing: WalletConnectOutcome,
+    ) : WalletConnector {
+        var signCalls = 0
+        override fun connect(callback: (WalletConnectOutcome) -> Unit) = callback(connection)
+        override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
+            signCalls += 1; callback(signing)
+        }
     }
 
     private fun confirmRecording(engine: FakeEventJoinEngine) {

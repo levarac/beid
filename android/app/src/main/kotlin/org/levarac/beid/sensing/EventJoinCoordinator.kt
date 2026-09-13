@@ -1010,6 +1010,7 @@ class EventJoinCoordinator internal constructor(
         val proofId = activeProofId ?: return null
         val event = currentRecordingSession() ?: return null
         val walletSignatureBytes = walletSignatureHex.hexToByteArrayOrNull() ?: return null
+        if (walletSignatureBytes.size != 65) return null
         val ackSignature = sensingCryptography.signWalletAcknowledgement(message.walletAddress, walletSignatureBytes)
             ?: return null
         val verification = sensingCryptography.verifyWalletBinding(
