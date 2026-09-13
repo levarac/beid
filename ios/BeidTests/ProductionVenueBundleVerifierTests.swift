@@ -1,3 +1,4 @@
+#if DEBUG
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
@@ -560,3 +561,4 @@ private final class RecordedVenueRegistryURLProtocol: URLProtocol {
     return Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":\"0x\(Self.contextABIHex)\"}".utf8)
   }
 }
+#endif
