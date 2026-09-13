@@ -395,6 +395,26 @@ enum VenueBundleVerificationLogic {
     return (r != 0 && (r < 0) != (b < 0)) ? r + b : r
   }
 
+  /// Compares verified ENIN intervals only after converting each interval to
+  /// its own half-open Unix-second range. ENIN indices from different cadences
+  /// are not interchangeable.
+  static func hasOverlappingEnvelopeIntervals(
+    _ intervals: [(start: Int64, end: Int64, eninSeconds: Int64)]
+  ) -> Bool {
+    var normalized: [(start: Int64, end: Int64)] = []
+    for interval in intervals {
+      guard interval.eninSeconds > 0, interval.start < interval.end else { return true }
+      let startProduct = interval.start.multipliedReportingOverflow(by: interval.eninSeconds)
+      let endProduct = interval.end.multipliedReportingOverflow(by: interval.eninSeconds)
+      guard !startProduct.overflow, !endProduct.overflow else { return true }
+      let start = startProduct.partialValue
+      let end = endProduct.partialValue
+      if normalized.contains(where: { start < $0.end && $0.start < end }) { return true }
+      normalized.append((start: start, end: end))
+    }
+    return false
+  }
+
   /// The definition's Unix-second validity window, converted to the same
   /// inclusive ENIN convention `BarnardB005EnvelopeV2.registryAgreement`
   /// uses for its `registryStartEnin`/`registryEndEnin` (start rounded up,
@@ -646,7 +666,7 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     bundle: ExportedKotlinPackages.org.levarac.parallax.venue.VenueBundle,
     nameValidator: any BarnardB005DisplayNameNormalizing
   ) -> Bool {
-    var intervals: [(start: Int64, end: Int64)] = []
+    var intervals: [(start: Int64, end: Int64, eninSeconds: Int64)] = []
     for index in 0..<Int(bundle.envelopeCount) {
       guard let bytes = bundle.envelopeAt(index: Int32(index)) else { return true }
       let signed = Self.swiftBytes(fromKotlin: bytes)
@@ -656,10 +676,10 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         let verified = BarnardB005EnvelopeV2.verify(
           container: container, currentEnin: hint.validFromEnin, nameValidator: nameValidator
         ) else { return true }
-      for interval in intervals where verified.validFromEnin < interval.end && interval.start < verified.relayExpiresAtEnin {
-        return true
-      }
-      intervals.append((verified.validFromEnin, verified.relayExpiresAtEnin))
+      if VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals(
+        intervals + [(start: verified.validFromEnin, end: verified.relayExpiresAtEnin, eninSeconds: Int64(verified.eninSeconds))]
+      ) { return true }
+      intervals.append((start: verified.validFromEnin, end: verified.relayExpiresAtEnin, eninSeconds: Int64(verified.eninSeconds)))
     }
     return false
   }
