@@ -24,6 +24,7 @@ import org.levarac.beid.shared.report.openUnsentWindow
 import org.levarac.beid.shared.report.prepareNextUnsentWindowSubmission
 import org.levarac.beid.shared.report.reconcileUnsentWindowLedgerAfterRelaunch
 import org.levarac.beid.shared.report.recordUnsentWindowSubmissionAcceptance
+import org.levarac.beid.shared.report.retryNotBeforeEpochMilliseconds as sharedRetryNotBeforeEpochMilliseconds
 import org.levarac.beid.shared.report.resumeUnsentWindowSubmissionAfterRestore
 import org.levarac.parallax.observation.ObservationPreparationResult
 import org.levarac.parallax.observation.PreparedObservationV1
@@ -555,6 +556,11 @@ internal class WindowObservationAccumulator(
         ledger = resumed.ledger
         return resumed.submission
     }
+
+    /** Returns the durable head retry deadline so the process owner can restore its timer. */
+    @Synchronized
+    internal fun retryNotBeforeEpochMilliseconds(): Long? =
+        sharedRetryNotBeforeEpochMilliseconds(ledger)
 
     /**
      * Records a verified acceptance for [submissionKey], keyed by
