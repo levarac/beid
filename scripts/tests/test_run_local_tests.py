@@ -151,6 +151,7 @@ class CommandPathTests(ModuleTest):
             udid="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
             erase_simulator=erase,
             action="test",
+            configuration="Debug",
             only_testing=[],
         )
 

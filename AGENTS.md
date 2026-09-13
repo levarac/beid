@@ -302,6 +302,25 @@ See [docs/localization-process.md](docs/localization-process.md) for the localiz
 
 See [docs/delivery-ci.md](docs/delivery-ci.md) for the detailed PR CI and delivery-lane procedures.
 
+### PR CI
+
+The PR workflow is `.github/workflows/pr-ci.yml`. Its three jobs and local
+gate commands are:
+
+**Android build**: `:shared:testAndroidHostTest`, `:app:testDebugUnitTest`,
+  `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
+  `:app:dependencyInsight` for Barnard dependency provenance. The job also
+  runs `scripts/clone_parallax_pinned.sh` and
+  `scripts/check_parallax_comparison_ran.py` when its comparison source is
+  available.
+**SwiftLint**: `scripts/lint.sh`.
+**Repository sanity**: YAML and TestFlight note validation,
+  `scripts/check_pr_ci_doc_drift.py`, and
+  `python3 -m unittest discover -s scripts/tests -t .`.
+
+The workflow remains the execution source of truth; this subsection records
+the jobs and command tokens checked for documentation drift.
+
 ## PR と issue の紐付け (Development 欄)
 
 1. issue を閉じる PR は本文に `Closes #N` (複数可) を書く。base が main なら link は自動で付く。merge 後に本文を編集しても付く。
