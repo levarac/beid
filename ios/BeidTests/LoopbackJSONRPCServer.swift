@@ -6,16 +6,22 @@ final class LoopbackJSONRPCServer {
   private let listener: NWListener
   private let queue = DispatchQueue(label: "beid.tests.loopback-rpc")
   private let response: (Data) -> Data
+  private let responseDelayNanoseconds: UInt64
+  private let onRequest: (() -> Void)?
   private let lock = NSLock()
   private var bodies: [Data] = []
   private var methods: [String] = []
+  private var rpcMethods: [String] = []
+  private var rpcCallSelectors: [String] = []
   private var requestBytes = 0
   private var responseBytes = 0
   private var active: [ObjectIdentifier: NWConnection] = [:]
   private var failed: Swift.Error?
 
-  init(response: @escaping (Data) -> Data) throws {
+  init(responseDelayNanoseconds: UInt64 = 0, onRequest: (() -> Void)? = nil, response: @escaping (Data) -> Data) throws {
     self.response = response
+    self.responseDelayNanoseconds = responseDelayNanoseconds
+    self.onRequest = onRequest
     let parameters = NWParameters.tcp
     parameters.requiredLocalEndpoint = .hostPort(
       host: NWEndpoint.Host("127.0.0.1"), port: .any
@@ -26,7 +32,7 @@ final class LoopbackJSONRPCServer {
   var summary: String {
     lock.lock(); defer { lock.unlock() }
     let lengths = bodies.map(\.count).map(String.init).joined(separator: ",")
-    return "requests=\(bodies.count),methods=\(methods.joined(separator: ",")),bodyBytes=[\(lengths)],requestBytes=\(requestBytes),responseBytes=\(responseBytes)"
+    return "requests=\(bodies.count),methods=\(methods.joined(separator: ",")),rpcMethods=\(rpcMethods.joined(separator: ",")),rpcCallSelectors=\(rpcCallSelectors.joined(separator: ",")),bodyBytes=[\(lengths)],requestBytes=\(requestBytes),responseBytes=\(responseBytes)"
   }
 
   func start() async throws -> URL {
@@ -37,10 +43,14 @@ final class LoopbackJSONRPCServer {
     listener.start(queue: queue)
     for _ in 0..<100 {
       lock.lock(); let error = failed; lock.unlock()
-      if let error { throw error }
+      if let error {
+        listener.cancel()
+        throw error
+      }
       if let port = listener.port, port.rawValue != 0 { return URL(string: "http://127.0.0.1:\(port.rawValue)")! }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
+    listener.cancel()
     throw Error.timedOut
   }
 
@@ -48,6 +58,11 @@ final class LoopbackJSONRPCServer {
     listener.cancel()
     lock.lock(); let connections = Array(active.values); active.removeAll(); lock.unlock()
     connections.forEach { $0.cancel() }
+  }
+
+  private func retire(_ connection: NWConnection) {
+    lock.lock(); active.removeValue(forKey: ObjectIdentifier(connection)); lock.unlock()
+    connection.cancel()
   }
 
   private func accept(_ connection: NWConnection) {
@@ -58,10 +73,11 @@ final class LoopbackJSONRPCServer {
 
   private func receive(_ connection: NWConnection, buffer: Data) {
     connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, complete, error in
-      guard let self, error == nil else { connection.cancel(); return }
+      guard let self, error == nil else { self?.retire(connection); return }
       var bytes = buffer; if let data { bytes.append(data) }
       guard let separator = bytes.range(of: Data("\r\n\r\n".utf8)) else {
-        return complete ? connection.cancel() : self.receive(connection, buffer: bytes)
+        if complete { self.retire(connection) } else { self.receive(connection, buffer: bytes) }
+        return
       }
       let header = bytes[..<separator.lowerBound]
       let headerText = String(decoding: header, as: UTF8.self)
@@ -75,26 +91,50 @@ final class LoopbackJSONRPCServer {
       let body: Data
       if isChunked {
         guard let decoded = Self.decodeChunked(Data(bytes[start...] )) else {
-          return complete ? connection.cancel() : self.receive(connection, buffer: bytes)
+          if complete { self.retire(connection) } else { self.receive(connection, buffer: bytes) }
+          return
         }
         body = decoded
       } else {
         guard headerText.lowercased().contains("content-length:") else {
-          return complete ? connection.cancel() : self.receive(connection, buffer: bytes)
+          if complete { self.retire(connection) } else { self.receive(connection, buffer: bytes) }
+          return
         }
         guard bytes.count >= start + declaredLength else { return self.receive(connection, buffer: bytes) }
         body = Data(bytes[start..<(start + declaredLength)])
       }
       let method = headerText.split(separator: " ").first.map(String.init) ?? "?"
       self.lock.lock()
-      self.bodies.append(body); self.methods.append(method); self.requestBytes += bytes.count
+      self.bodies.append(body); self.methods.append(method)
+      if let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+        let rpcMethod = object["method"] as? String {
+        self.rpcMethods.append(rpcMethod)
+        if rpcMethod == "eth_call",
+          let params = object["params"] as? [Any],
+          let call = params.first as? [String: Any],
+          let data = (call["data"] as? String) ?? (call["input"] as? String) {
+          self.rpcCallSelectors.append(String(data.prefix(10)))
+        } else if rpcMethod == "eth_call" {
+          let text = String(decoding: body, as: UTF8.self)
+          if let marker = text.range(of: "\"input\":\"") ?? text.range(of: "\"data\":\"") {
+            let remainder = text[marker.upperBound...]
+            let value = remainder.prefix { $0 != "\"" }
+            self.rpcCallSelectors.append(String(value.prefix(10)))
+          }
+        }
+      }
+      self.requestBytes += bytes.count
       self.lock.unlock()
+      self.onRequest?()
+      if self.responseDelayNanoseconds > 0 {
+        usleep(useconds_t(min(self.responseDelayNanoseconds / 1_000, UInt64(UInt32.max))))
+      }
       let payload = self.response(body)
       var output = Data("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n".utf8)
       output.append(payload)
       connection.send(content: output, completion: .contentProcessed { [weak self] _ in
-        self?.lock.lock(); self?.responseBytes += output.count; self?.active.removeValue(forKey: ObjectIdentifier(connection)); self?.lock.unlock()
-        connection.cancel()
+        self?.lock.lock(); self?.responseBytes += output.count; self?.lock.unlock()
+        self?.retire(connection)
       })
     }
   }

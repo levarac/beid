@@ -620,6 +620,9 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     case .rejected(let code):
       return .rejected(VenueBundleVerificationLogic.importFailure(forIdentityCode: code) ?? .definitionRejected)
     case .ok(let identity):
+      if Self.hasInvalidOrOverlappingEnvelope(bundle: bundle, nameValidator: nameValidator) {
+        return .rejected(.definitionRejected)
+      }
       // Identity is sound, but this host serves open events only. Refusing
       // here rather than at serving time is what makes the outcome legible:
       // the operator is told when they load the pack.
@@ -637,6 +640,28 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         publicArtifact: VenuePublicArtifact(bundleBytes: bundleBytes, handoffBytes: handoffBytes)
       ))
     }
+  }
+
+  private static func hasInvalidOrOverlappingEnvelope(
+    bundle: ExportedKotlinPackages.org.levarac.parallax.venue.VenueBundle,
+    nameValidator: any BarnardB005DisplayNameNormalizing
+  ) -> Bool {
+    var intervals: [(start: Int64, end: Int64)] = []
+    for index in 0..<Int(bundle.envelopeCount) {
+      guard let bytes = bundle.envelopeAt(index: Int32(index)) else { return true }
+      let signed = Self.swiftBytes(fromKotlin: bytes)
+      guard let container = BarnardB005EnvelopeV2.encodeContainer(relayHopCount: 0, signedEnvelope: signed),
+        let hint = BarnardB005EnvelopeV2.schedulingFields(container: container),
+        hint.eninSeconds > 0,
+        let verified = BarnardB005EnvelopeV2.verify(
+          container: container, currentEnin: hint.validFromEnin, nameValidator: nameValidator
+        ) else { return true }
+      for interval in intervals where verified.validFromEnin < interval.end && interval.start < verified.relayExpiresAtEnin {
+        return true
+      }
+      intervals.append((verified.validFromEnin, verified.relayExpiresAtEnin))
+    }
+    return false
   }
 
   func evaluate(_ imported: VenueImportedBundle, clock: VenueClockReading) async -> VenueServingDecision {

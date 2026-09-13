@@ -1,0 +1,67 @@
+{
+  "sourceFixture": "thegreeting/beid:shared/src/commonTest/fixtures/vectors/positive/venue-current-lease-v1.json@f4bf454f50473ce058f7a36dc5166e412a596d21",
+  "sourceBundleSha256": "cf0ed18d0ce56c18ec6128c7cd3a6758175da493f6f6a01f924332bb5e673ecf",
+  "sourceBundleBytes": 898,
+  "envelopeCount": 1,
+  "envelopeBytes": [
+    256
+  ],
+  "signedEnvelopeVector": "levarac/barnard:test-vectors/b005-envelope-v2.txt@1ea2b331179fe4bf868cf4613a41e315e6000ae0",
+  "secondValidEnvelopeBytes": 438,
+  "secondValidEnvelopeSha256": "5695769447c8b5ba0a7b2ffbf44fc964136131e7da0bd9e03ae926fa1bc7633e",
+  "variants": [
+    {
+      "name": "valid",
+      "bundleFile": "valid.venue-bundle.cbor",
+      "handoffFile": "valid.venue-handoff.cbor",
+      "eventId": "5d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab3195",
+      "definitionSequence": 1,
+      "bytes": 898,
+      "sha256": "cf0ed18d0ce56c18ec6128c7cd3a6758175da493f6f6a01f924332bb5e673ecf",
+      "handoffBytes": 123,
+      "handoffSha256": "bd5f0368d869f7efd7f4869ed97ee3b9aedbcd1c5dff864694b72cbe32efedda",
+      "bundleDigest": "e31c1bf3777936e004b5f501fbbb1aa73ac01c42bf83a6256d98bd13242c7f21",
+      "expectedFailure": null
+    },
+    {
+      "name": "foreign-event-id",
+      "bundleFile": "foreign-event-id.venue-bundle.cbor",
+      "handoffFile": "foreign-event-id.venue-handoff.cbor",
+      "eventId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "definitionSequence": 1,
+      "bytes": 898,
+      "sha256": "dbde878c386a3687848efcc7c5094caabf3c4ba3af57bc68741ce86ca48f6592",
+      "handoffBytes": 123,
+      "handoffSha256": "d1503fecacbad7efb1281d4756fa763403432c21d60570ccb3f10b48ca4b9159",
+      "bundleDigest": "8530ef4ff89fcfffda55b44b5ac11a68815596ed6efb511f01f164c6abbf1674",
+      "expectedFailure": "eventId_mismatch"
+    },
+    {
+      "name": "tampered-envelope",
+      "bundleFile": "tampered-envelope.venue-bundle.cbor",
+      "handoffFile": "tampered-envelope.venue-handoff.cbor",
+      "eventId": "5d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab3195",
+      "definitionSequence": 1,
+      "bytes": 898,
+      "sha256": "3bc17b2c97152b895e099d97d83b6aa6a4dc63e34d6110d07a269ff8a163e800",
+      "handoffBytes": 123,
+      "handoffSha256": "bb2accd3d9f2fa55cd207b1e4ddfcc7316a6f71bfaa9b079b4d3e936a156fe8f",
+      "bundleDigest": "9d6630d660d9a7b405da967dee7405b9488717c582031c9c4c795c56a6b61611",
+      "expectedFailure": "envelope_signature_invalid"
+    },
+    {
+      "name": "overlapping-envelope",
+      "bundleFile": "overlapping-envelope.venue-bundle.cbor",
+      "handoffFile": "overlapping-envelope.venue-handoff.cbor",
+      "eventId": "5d5891b92a9a6597aa2c58586fd2fdf3974f40f732b9a319ec9f3fc4d7ab3195",
+      "definitionSequence": 1,
+      "bytes": 1339,
+      "sha256": "ddc6690aa06fcfa991620ef440348587a0c6b3ca00a0c39cbf185c495cbab59e",
+      "handoffBytes": 123,
+      "handoffSha256": "12cb6643808d66e774249b6bc883f3d4efce0ce8cbe8f35454e48bf9323899dd",
+      "bundleDigest": "b2d359ecafbc4a4388cb11f2ba595ee46d7a4736670c1cb09363cd2a70d62392",
+      "expectedFailure": "duplicate_or_overlapping_envelope"
+    }
+  ],
+  "note": "Variants are outer-container outputs. Semantic acceptance/rejection requires the beid/Barnard verifier harness; overlap uses the public Barnard signed envelope vector as a second valid envelope."
+}

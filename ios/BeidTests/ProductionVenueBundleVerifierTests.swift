@@ -5,6 +5,7 @@
 import Barnard
 import BarnardCore
 import BeidSharedKit
+import CryptoKit
 import XCTest
 @testable import Beid
 
@@ -521,6 +522,213 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     }
     XCTAssertEqual(permit.identity.eventIdHex, VenueServingContractFixture.eventIdHex)
     XCTAssertGreaterThan(permit.stopAtUnixSeconds, VenueServingContractFixture.currentUnixSeconds)
+  }
+
+  func testProductionClientAndVerifierReachPermittedAfterDelayedRegistryResponse() async throws {
+    let fixture = try VenueServingContractFixture.load()
+    let delay: UInt64 = 50_000_000
+    let server = try LoopbackJSONRPCServer(responseDelayNanoseconds: delay) { body in
+      RecordedVenueRegistryURLProtocol.responseData(for: body)
+    }
+    let endpoint = try await server.start()
+    defer { server.stop() }
+
+    let client = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+        readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+        primaryEndpointUrl: endpoint.absoluteString,
+        secondaryEndpointUrl: endpoint.absoluteString
+      )
+    )
+    defer { client.close() }
+    let verifier = ProductionVenueBundleVerifier(registryClient: client)
+    let started = ContinuousClock.now
+    let importedResult = await verifier.importBundle(
+      bundleBytes: fixture.artifact.bundleBytes,
+      handoffBytes: fixture.artifact.handoffBytes
+    )
+    let elapsed = started.duration(to: .now)
+    guard case .imported(let imported) = importedResult else {
+      return XCTFail("delayed production registry response must still import: \(importedResult); server=\(server.summary)")
+    }
+    let decision = await verifier.evaluate(
+      imported,
+      clock: .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
+    )
+    guard case .permitted = decision else {
+      return XCTFail("delayed production registry response must still permit: \(decision); server=\(server.summary)")
+    }
+    XCTAssertGreaterThanOrEqual(elapsed, .milliseconds(90), "both production registry RPC responses must be delayed")
+  }
+
+  func testDelayedProductionRegistryThroughViewModelStopsAtDeadlineAndCanResume() async throws {
+    let fixture = try VenueServingContractFixture.load()
+    let clock = LockedVenueTestClock(.available(unixSeconds: VenueServingContractFixture.currentUnixSeconds))
+    // The production registry fixture's permit is two 300-second ENINs ahead
+    // of the fixture clock; use the actual exclusive permit boundary rather
+    // than the smaller unit-test contract fixture boundary.
+    let deadline = VenueServingContractFixture.currentUnixSeconds + 600
+    var requests = 0
+    let requestLock = NSLock()
+    let server = try LoopbackJSONRPCServer(
+      responseDelayNanoseconds: 50_000_000,
+      onRequest: {
+        requestLock.lock(); requests += 1; let count = requests; requestLock.unlock()
+        // The first two calls import the registry context. Move the clock
+        // when evaluation begins so the VM's post-verification guard sees the
+        // permit at its exclusive deadline and performs only one fresh retry.
+        if count == 3 { clock.set(.available(unixSeconds: deadline)) }
+      }
+    ) { body in
+      RecordedVenueRegistryURLProtocol.responseData(for: body)
+    }
+    let endpoint = try await server.start()
+    defer { server.stop() }
+    let client = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+        readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+        primaryEndpointUrl: endpoint.absoluteString,
+        secondaryEndpointUrl: endpoint.absoluteString
+      )
+    )
+    defer { client.close() }
+
+    let verifier = ProductionVenueBundleVerifier(registryClient: client)
+    let ports = ScriptedVenuePorts()
+    let acquisition = StubVenueArtifactAcquisition()
+    acquisition.replies = [.artifact(fixture.artifact)]
+    let expiry = FakeVenueExpiryScheduler()
+    let model = VenueSignedServingViewModel(
+      verifier: verifier,
+      broadcasting: ports,
+      acquisition: acquisition,
+      store: VenuePublicArtifactStore(),
+      clock: { clock.get() },
+      expiry: expiry
+    )
+
+    await model.supply(
+      bundleSource: URL(string: "https://venue.example/bundle")!,
+      handoffSource: URL(string: "https://venue.example/handoff")!,
+      sourceDescription: "venue.example"
+    )
+    guard case .blocked(let rejection) = model.status,
+      rejection.reason == .expired || rejection.reason == .envelopeRejected else {
+      return XCTFail("deadline crossing must remain visibly blocked: \(model.status); server=\(server.summary), requests=\(requests)")
+    }
+    XCTAssertNil(ports.installedPermit, "server=\(server.summary), requests=\(requests)")
+    XCTAssertEqual(requests, 4, "import plus exactly one fresh production registry evaluation retry: \(server.summary)")
+    XCTAssertTrue(server.summary.contains("bodyBytes=[80,299,299,80]"), server.summary)
+    XCTAssertTrue(server.summary.contains("rpcMethods=eth_getBlockByNumber,eth_call,eth_call,eth_getBlockByNumber"), server.summary)
+    XCTAssertTrue(server.summary.contains("rpcCallSelectors=0xf8cd791d,0xf8cd791d"), server.summary)
+    XCTAssertFalse(expiry.isScheduled)
+
+    clock.set(.available(unixSeconds: VenueServingContractFixture.currentUnixSeconds))
+    let installsBeforeRefresh = ports.calls.filter { if case .installing = $0 { return true }; return false }.count
+    await model.refresh()
+    XCTAssertNotNil(ports.installedPermit, "an operator refresh after the deadline must be able to resume")
+    XCTAssertEqual(model.status, .serving(
+      displayName: VenueServingContractFixture.displayName,
+      stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+    ))
+    XCTAssertEqual(ports.calls.filter { if case .installing = $0 { return true }; return false }.count, installsBeforeRefresh + 1)
+    XCTAssertTrue(expiry.isScheduled)
+    XCTAssertGreaterThanOrEqual(requests, 4)
+  }
+
+  func testNativeVerifierAcceptsValidAndRejectsEveryConformanceVariant() async throws {
+    let variants = try VenueBundleConformanceFixture.loadAll()
+    XCTAssertEqual(Set(variants.map(\.name)), ["valid", "foreign-event-id", "tampered-envelope", "overlapping-envelope"])
+    for variant in variants {
+      let server = try LoopbackJSONRPCServer { body in RecordedVenueRegistryURLProtocol.responseData(for: body) }
+      let endpoint = try await server.start()
+      defer { server.stop() }
+      let client = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+        readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+        primaryEndpointUrl: endpoint.absoluteString, secondaryEndpointUrl: endpoint.absoluteString))
+      defer { client.close() }
+      let verifier = ProductionVenueBundleVerifier(registryClient: client)
+      let importedResult = await verifier.importBundle(bundleBytes: variant.bundle, handoffBytes: variant.handoff)
+      switch variant.name {
+      case "valid":
+        guard case .imported(let imported) = importedResult else { return XCTFail("valid must import: \(importedResult); \(server.summary)") }
+        let decision = await verifier.evaluate(imported, clock: .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds))
+        guard case .permitted(let permit) = decision else { return XCTFail("valid must permit: \(decision); \(server.summary)") }
+        XCTAssertEqual(permit.identity.eventIdHex, variant.eventId)
+      case "foreign-event-id":
+        guard case .rejected(let failure) = importedResult else { return XCTFail("foreign must reject: \(importedResult); \(server.summary)") }
+        XCTAssertEqual(failure, .definitionRejected)
+      case "tampered-envelope":
+        guard case .rejected(let failure) = importedResult else { return XCTFail("tampered must reject at import: \(importedResult); \(server.summary)") }
+        XCTAssertEqual(failure, .definitionRejected)
+      case "overlapping-envelope":
+        guard case .rejected(let failure) = importedResult else { return XCTFail("overlap must reject: \(importedResult); \(server.summary)") }
+        XCTAssertEqual(failure, .definitionRejected)
+      default: XCTFail("unlisted variant \(variant.name)")
+      }
+    }
+  }
+
+}
+
+private final class LockedVenueTestClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var reading: VenueClockReading
+
+  init(_ reading: VenueClockReading) { self.reading = reading }
+
+  func set(_ reading: VenueClockReading) {
+    lock.lock(); self.reading = reading; lock.unlock()
+  }
+
+  func get() -> VenueClockReading {
+    lock.lock(); defer { lock.unlock() }
+    return reading
+  }
+}
+
+private struct VenueBundleConformanceFixture {
+  let name: String
+  let bundle: Data
+  let handoff: Data
+  let eventId: String
+
+  static func loadAll() throws -> [Self] {
+    let bundle = Bundle(for: ProductionVenueBundleVerifierTests.self)
+    let manifestURL = try XCTUnwrap(bundle.url(
+      forResource: "manifest", withExtension: "json", subdirectory: "venue-bundle-conformance"))
+    let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: manifestURL))
+    return try manifest.variants.map { item in
+      let bundleURL = try XCTUnwrap(bundle.url(
+        forResource: item.bundleFile.replacingOccurrences(of: ".cbor", with: ""),
+        withExtension: "cbor", subdirectory: "venue-bundle-conformance"))
+      let handoffURL = try XCTUnwrap(bundle.url(
+        forResource: item.handoffFile.replacingOccurrences(of: ".cbor", with: ""),
+        withExtension: "cbor", subdirectory: "venue-bundle-conformance"))
+      let bundleBytes = try Data(contentsOf: bundleURL)
+      let handoffBytes = try Data(contentsOf: handoffURL)
+      XCTAssertEqual(bundleBytes.count, item.bytes, item.name)
+      XCTAssertEqual(handoffBytes.count, item.handoffBytes, item.name)
+      XCTAssertEqual(Self.sha256(bundleBytes), item.sha256, item.name)
+      XCTAssertEqual(Self.sha256(handoffBytes), item.handoffSha256, item.name)
+      return Self(name: item.name, bundle: bundleBytes, handoff: handoffBytes, eventId: item.eventId)
+    }
+  }
+
+  private static func sha256(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+  }
+
+  private struct Manifest: Decodable { let variants: [Variant] }
+  private struct Variant: Decodable {
+    let name: String
+    let bundleFile: String
+    let handoffFile: String
+    let eventId: String
+    let bytes: Int
+    let sha256: String
+    let handoffBytes: Int
+    let handoffSha256: String
   }
 }
 
