@@ -31,28 +31,16 @@ class ParticipantRelayVerifierTest {
         assertEquals(VALID_THROUGH, verified.validThroughEnin)
     }
 
-    /**
-     * The signed relay expiry is not readable from a verified envelope, so the
-     * answer is the smallest value that cannot overstate it. It must always be
-     * the very next ENIN, never anything further out.
-     */
     @Test
-    fun `the relay window never reaches past the next ENIN`() {
+    fun `the relay window uses the signed envelope expiry`() {
         val verified = verification(gateState(joinedEventIdHex = EVENT_ID))
             as BarnardRelayVerification.RegistryVerified
-
-        assertEquals(NOW + 1, verified.relayExpiresAtEnin)
+        assertEquals(1_080L, verified.relayExpiresAtEnin)
     }
 
-    /**
-     * The bound, not just the current value. Whatever ENIN the relay asks
-     * about, the answer must never reach past the next one -- that is the only
-     * thing standing in for the signed expiry until levarac/barnard#197
-     * exposes it.
-     */
     @Test
-    fun `the answer never exceeds the next ENIN at any current ENIN`() {
-        for (now in listOf(996L, 1_000L, 1_050L, 1_099L)) {
+    fun `the signed expiry is unchanged at different verification times`() {
+        for (now in listOf(996L, 1_000L, 1_050L, 1_079L)) {
             val result = participantRelayVerification(
                 state = gateState(joinedEventIdHex = EVENT_ID),
                 signedEnvelopeHex = ENVELOPE_HEX,
@@ -60,14 +48,11 @@ class ParticipantRelayVerifierTest {
                 eventId = EVENT_ID.hexBytes(),
                 validFromEnin = VALID_FROM,
                 validThroughEnin = VALID_THROUGH,
+                relayExpiresAtEnin = 1_080L,
                 currentEnin = now,
                 agreesWithDefinition = { true },
             ) as BarnardRelayVerification.RegistryVerified
-
-            assertTrue(
-                "relay expiry ${result.relayExpiresAtEnin} reached past the next ENIN at $now",
-                result.relayExpiresAtEnin <= now + 1,
-            )
+            assertEquals("signed expiry must be preserved at $now", 1_080L, result.relayExpiresAtEnin)
         }
     }
 
@@ -144,6 +129,7 @@ class ParticipantRelayVerifierTest {
             eventId = EVENT_ID.hexBytes(),
             validFromEnin = VALID_FROM,
             validThroughEnin = VALID_THROUGH,
+            relayExpiresAtEnin = SIGNED_RELAY_EXPIRY,
             currentEnin = NOW,
             agreesWithDefinition = { true },
             reportRefusal = { reasons += it },
@@ -155,6 +141,7 @@ class ParticipantRelayVerifierTest {
             eventId = EVENT_ID.hexBytes(),
             validFromEnin = VALID_FROM,
             validThroughEnin = VALID_THROUGH,
+            relayExpiresAtEnin = SIGNED_RELAY_EXPIRY,
             currentEnin = NOW,
             agreesWithDefinition = { true },
             reportRefusal = { reasons += it },
@@ -173,6 +160,7 @@ class ParticipantRelayVerifierTest {
         eventId = EVENT_ID.hexBytes(),
         validFromEnin = VALID_FROM,
         validThroughEnin = VALID_THROUGH,
+        relayExpiresAtEnin = SIGNED_RELAY_EXPIRY,
         currentEnin = NOW,
         agreesWithDefinition = { agrees },
     )
@@ -222,6 +210,7 @@ class ParticipantRelayVerifierTest {
         const val NOW = 1_000L
         const val VALID_FROM = 995L
         const val VALID_THROUGH = 1_100L
+        const val SIGNED_RELAY_EXPIRY = 1_080L
         val CONTAINER = byteArrayOf(3, 0, 0, 4, 0x11, 0x22, 0x33, 0x44)
         val DEFINITION = BarnardEventDefinitionV1(
             eventId = EVENT_ID.hexBytes(),

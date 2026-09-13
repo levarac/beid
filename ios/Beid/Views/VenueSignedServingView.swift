@@ -7,10 +7,13 @@ import SwiftUI
 /// and handoff from a file or an https URL, shows what verification decided,
 /// and serves the permitted container until the instant the permit fixed.
 ///
-/// NOT reachable from production navigation in this PR. The production
-/// verifier is a separate follow-up and does not exist yet, so wiring this in
-/// would put a screen in front of a venue operator with nothing behind it.
-/// The v1 `VenueDeviceOrganizerView` remains the reachable venue surface.
+/// Reachable from `AccountSheetView`'s "Venue Device (Signed)" row as of this
+/// PR, alongside (not replacing) the v1 `VenueDeviceOrganizerView` entry.
+///
+/// The screen deliberately uses passive visibility: once a permit is accepted,
+/// the verified event name and exclusive deadline are shown while serving.
+/// There is no blocking confirmation dialog; the owner direction for this
+/// surface is that the operator can see what the venue device is serving.
 ///
 /// The four `switch` statements below have NO `default` case, deliberately.
 /// Adding a case to any of the four venue enums must break this build: a
@@ -19,6 +22,9 @@ import SwiftUI
 struct VenueSignedServingView: View {
   @StateObject private var viewModel: VenueSignedServingViewModel
   @Environment(\.scenePhase) private var scenePhase
+
+  @State private var requestTask: Task<Void, Never>?
+  @StateObject private var lifecycleTasks = VenueLifecycleTaskOwner()
 
   @State private var bundleURLText = ""
   @State private var handoffURLText = ""
@@ -34,6 +40,14 @@ struct VenueSignedServingView: View {
       radioSection
     }
     .navigationTitle("Venue serving")
+    .onAppear {
+      viewModel.beginSession(isForeground: scenePhase != .background)
+    }
+    .onDisappear {
+      viewModel.endSession()
+      requestTask?.cancel()
+      lifecycleTasks.cancelAll()
+    }
     .onChange(of: scenePhase) { _, phase in
       switch phase {
       case .background:
@@ -46,7 +60,7 @@ struct VenueSignedServingView: View {
         // every time a notification banner appeared.
         viewModel.sceneDidEnterBackground()
       case .active:
-        Task { await viewModel.sceneWillEnterForeground() }
+        lifecycleTasks.start { await viewModel.sceneWillEnterForeground() }
       case .inactive:
         break
       @unknown default:
@@ -54,7 +68,7 @@ struct VenueSignedServingView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .NSSystemClockDidChange)) { _ in
-      Task { await viewModel.systemClockDidChange() }
+      lifecycleTasks.start { await viewModel.systemClockDidChange() }
     }
   }
 
@@ -73,21 +87,29 @@ struct VenueSignedServingView: View {
         .accessibilityIdentifier("Venue handoff URL")
 
       Button("Supply bundle") {
-        guard let bundle = URL(string: bundleURLText), let handoff = URL(string: handoffURLText) else { return }
-        Task {
-          await viewModel.supply(
-            bundleSource: bundle,
-            handoffSource: handoff,
-            sourceDescription: bundle.host ?? bundleURLText
-          )
+        guard let handoff = URL(string: handoffURLText) else { return }
+        requestTask?.cancel()
+        requestTask = Task {
+          if let template = RegistryDependencies.venueBundleURLTemplate(),
+             let eventId = viewModel.canonicalEventIdHexForAcquisition {
+            await viewModel.supplyConfigured(
+              canonicalEventIdHex: eventId,
+              bundleURLTemplate: template,
+              handoffSource: handoff,
+              sourceDescription: "configured venue endpoint"
+            )
+          } else if let bundle = URL(string: bundleURLText) {
+            await viewModel.supply(bundleSource: bundle, handoffSource: handoff, sourceDescription: bundle.host ?? bundleURLText)
+          }
         }
       }
       .font(DS.Font.cta)
-      .disabled(bundleURLText.isEmpty || handoffURLText.isEmpty)
+      .disabled((bundleURLText.isEmpty && RegistryDependencies.venueBundleURLTemplate() == nil) || handoffURLText.isEmpty)
 
       if let stored = viewModel.storedSourceDescription {
         Button("Reload stored bundle") {
-          Task { await viewModel.restoreFromStorage() }
+          requestTask?.cancel()
+          requestTask = Task { await viewModel.restoreFromStorage() }
         }
         .font(DS.Font.body)
         Text(
@@ -103,6 +125,10 @@ struct VenueSignedServingView: View {
     } header: {
       Text("Source")
     } footer: {
+      if viewModel.hasUnsavedArtifact {
+        Text("This bundle could not be saved. It remains available only until the app closes.")
+          .foregroundStyle(DS.Color.statusCaution)
+      }
       // Says plainly that storage is not a shortcut past verification.
       Text("Stored bundles are verified again each time they are loaded.")
         .font(DS.Font.meta)
@@ -138,6 +164,10 @@ struct VenueSignedServingView: View {
           // The permit's SDK-verified name is runtime data, not app copy.
           Text(verbatim: displayName)
             .font(DS.Font.cardTitle)
+          if let eventId = viewModel.servingEventIdHex {
+            Text(verbatim: eventId)
+              .font(DS.Font.ledgerMono)
+          }
           Text(
             String(
               localized: "venue.serving.servingUntil",
@@ -170,7 +200,11 @@ struct VenueSignedServingView: View {
           .font(DS.Font.supporting)
           .foregroundStyle(DS.Color.textSecondary)
       }
-      Button("Stop serving") { viewModel.stop() }
+      Button("Stop serving") {
+        viewModel.stop()
+        requestTask?.cancel()
+        lifecycleTasks.cancelAll()
+      }
         .font(DS.Font.body)
     } header: {
       Text("Radio")
@@ -212,6 +246,8 @@ struct VenueSignedServingView: View {
       return "This event has no anchored record in the registry."
     case .definitionRejected:
       return "The event definition in this bundle was rejected."
+    case .gatedEventUnsupported:
+      return "This event needs an entry code. Serving those is not supported yet."
     }
   }
 
@@ -275,6 +311,8 @@ struct VenueSignedServingView: View {
       return "That file could not be read."
     case .transportFailure:
       return "The bundle could not be fetched."
+    case .eventIdentityMismatch:
+      return "The bundle does not match the selected event."
     }
   }
 

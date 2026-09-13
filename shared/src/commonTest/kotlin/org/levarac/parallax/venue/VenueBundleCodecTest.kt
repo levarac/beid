@@ -179,6 +179,48 @@ class VenueBundleCodecTest {
         assertNull(decodeVenueHandoff(ByteArray(4097)))
     }
 
+    @Test
+    fun hexOverloadsDelegateToTheByteFunctionsRatherThanReimplementingDecode() {
+        val bundleHex = bundleBytes().toHex()
+        val bundle = assertNotNull(decodeVenueBundleHex(bundleHex))
+        assertEquals(assertNotNull(decodeVenueBundle(bundleBytes())).bundleDigest, bundle.bundleDigest)
+        assertEquals(1L, bundle.definitionSequence)
+
+        val handoffHex = handoffBytes().toHex()
+        val handoff = assertNotNull(decodeVenueHandoffHex(handoffHex))
+        assertContentEquals(ByteArray(32) { 3 }, handoff.eventId.toByteArray())
+    }
+
+    @Test
+    fun hexOverloadsFailClosedOnMalformedInputRatherThanThrowing() {
+        // Odd length.
+        assertNull(decodeVenueBundleHex(bundleBytes().toHex() + "0"))
+        assertNull(decodeVenueHandoffHex(handoffBytes().toHex() + "0"))
+        // Non-hex characters.
+        assertNull(decodeVenueBundleHex("zz" + bundleBytes().toHex().drop(2)))
+        assertNull(decodeVenueHandoffHex("zz" + handoffBytes().toHex().drop(2)))
+        // Structurally invalid once decoded (same vector the byte-path test already rejects).
+        assertNull(decodeVenueBundleHex(bundleBytes(version = 2).toHex()))
+    }
+
+    @Test
+    fun hexOverloadRejectsAnOversizeHexInputBeforeAllocatingBytes() {
+        // One byte over MAX_VENUE_BUNDLE_BYTES, expressed as hex (2 chars/byte) so the
+        // overload's own bound -- not decodeVenueBundle's post-decode bound -- is what catches
+        // it. An all-'a' string of this length is not valid CBOR either way, so a null result
+        // only proves something rejected it; the point of this test is that the hex-length
+        // guard is reached at all, which hexOverloadsFailClosedOnMalformedInputRatherThanThrowing
+        // above cannot distinguish on its own.
+        val oversizeHex = "aa".repeat(MAX_VENUE_BUNDLE_BYTES + 1)
+        assertEquals((MAX_VENUE_BUNDLE_BYTES + 1) * 2, oversizeHex.length)
+        assertNull(decodeVenueBundleHex(oversizeHex))
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { byte ->
+        val value = byte.toInt() and 0xff
+        value.toString(16).padStart(2, '0')
+    }
+
     private fun envelopeArrayBytes(count: Int, size: Int): ByteArray =
         CanonicalCbor.encode(CanonicalCbor.array(List(count) { bytes(ByteArray(size) { 6 }) }))
 

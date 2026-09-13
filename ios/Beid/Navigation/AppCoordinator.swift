@@ -456,6 +456,16 @@ final class AppCoordinator: ObservableObject {
 
   func startScan() {
     scanPresented = true
+#if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-join-refusal-fixture") {
+      sensingCoordinator.injectJoinRefusalForUITesting()
+      return
+    }
+    if ProcessInfo.processInfo.arguments.contains("-beid-continuous-sensing-fixture") {
+      sensingCoordinator.injectContinuousSensingForUITesting()
+      return
+    }
+#endif
     // Since beid#410, `startSensing()` correctly starts nothing when no event
     // has been selected. Calling it here had therefore turned Collection's
     // "Sense Event" button into a real-device no-op. This entry point means

@@ -6,6 +6,12 @@ import Foundation
 
 /// App-owned composition only; the registry package itself has no beid dependency.
 enum RegistryDependencies {
+  static func venueBundleURLTemplate(bundle: Bundle = .main) -> String? {
+    guard let value = bundle.object(forInfoDictionaryKey: "BeidVenueBundleURLTemplate") as? String,
+      !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+    return value
+  }
+
   static func createClient(
     bundle: Bundle = .main
   ) -> ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? {

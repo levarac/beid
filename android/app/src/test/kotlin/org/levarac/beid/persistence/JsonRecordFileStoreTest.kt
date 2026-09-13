@@ -1,9 +1,11 @@
 package org.levarac.beid.persistence
 
 import java.io.File
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -41,6 +43,44 @@ class JsonRecordFileStoreTest {
             )
         },
     )
+
+    @Test
+    fun failedUpdateDoesNotPublishAnUnpersistedReceiptOrValue() {
+        val file = File(tempFolder.root, "test-records.json")
+        val store = store(file)
+        store.addRecord(TestRecord("a", 1))
+        val saved = file.readBytes()
+        assertTrue(file.delete())
+        assertTrue(file.mkdir())
+        File(file, "occupied").writeText("force atomic replacement failure")
+
+        assertFailsWith<IOException> {
+            store.updateRecord({ it.id == "a" }, { it.copy(value = 99) })
+        }
+        assertEquals(listOf(TestRecord("a", 1)), store.records,
+            "a failed durable write must not expose a receipt/value as saved")
+
+        assertTrue(File(file, "occupied").delete())
+        assertTrue(file.delete())
+        file.writeBytes(saved)
+        assertEquals(store(file).records, store.records)
+        assertTrue(store.updateRecord({ it.id == "a" }, { it.copy(value = 99) }))
+        assertEquals(listOf(TestRecord("a", 99)), store(file).records)
+    }
+
+    @Test
+    fun failedAddDoesNotPublishOrDuplicateAnUnpersistedRecord() {
+        val file = File(tempFolder.root, "test-records.json")
+        val store = store(file)
+        assertTrue(file.mkdir())
+        File(file, "occupied").writeText("force atomic replacement failure")
+        assertFailsWith<IOException> { store.addRecord(TestRecord("a", 1)) }
+        assertEquals(emptyList(), store.records)
+        assertTrue(File(file, "occupied").delete())
+        assertTrue(file.delete())
+        store.addRecord(TestRecord("a", 1))
+        assertEquals(listOf(TestRecord("a", 1)), store(file).records)
+    }
 
     @Test
     fun updateRecordReplacesTheFirstMatchAndPersistsIt() {

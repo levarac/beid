@@ -8,6 +8,7 @@ import org.levarac.barnard.BarnardIdentity
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -118,9 +119,10 @@ class OwnerKeyProviderTest {
             identity = identity,
             keyStorage = object : OwnerKeyStorage {
                 private val seed = sequentialSeed()
-                override fun bytes(key: String): ByteArray? {
+                override fun readBytes(key: String): OwnerKeyReadResult {
                     callCount += 1
-                    return seed
+                    check(callCount == 1) { "storage unavailable after preflight" }
+                    return OwnerKeyReadResult.Present(seed)
                 }
 
                 override fun putBytes(key: String, bytes: ByteArray) = Unit
@@ -130,6 +132,8 @@ class OwnerKeyProviderTest {
 
         provider.publicKeyCompressed()
         provider.publicKeyCompressed()
+        assertNotNull(provider.signSelfProof(sequentialBytes(0x10, 32), "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5".hexToByteArray(), 10, 11))
+        assertNotNull(provider.signWalletAcknowledgement(sequentialBytes(0x20, 20), sequentialBytes(0x40, 65)))
 
         assertEquals(1, callCount, "the stored seed must be read at most once, then cached")
     }
@@ -140,7 +144,8 @@ class OwnerKeyProviderTest {
         val provider = OwnerKeyProvider(
             identity = identity,
             keyStorage = object : OwnerKeyStorage {
-                override fun bytes(key: String): ByteArray? = stored
+                override fun readBytes(key: String): OwnerKeyReadResult =
+                    stored?.let(OwnerKeyReadResult::Present) ?: OwnerKeyReadResult.Missing
                 override fun putBytes(key: String, bytes: ByteArray) {
                     stored = bytes
                 }
@@ -157,27 +162,140 @@ class OwnerKeyProviderTest {
         assertEquals(33, publicKey.size)
     }
 
-    /**
-     * A stored value of the wrong length must never reach
-     * `BarnardIdentity.deriveOwnerKeyPair`, which throws
-     * (`require(accountSecret.size == 32)`) rather than returning `null` —
-     * unlike Barnard's other owner-key primitives. A first Android pass
-     * regenerates silently rather than quarantining the bad value (gh#156's
-     * quarantine/Signal-A mechanism is iOS-only for now; see handoff).
-     */
+    /** A stored value of the wrong length must neither reach Barnard nor be replaced. */
     @Test
-    fun aWrongLengthStoredSeedIsRegeneratedWithoutCrashing() {
+    fun aWrongLengthStoredSeedFailsWithoutRegeneratingOrOverwriting() {
+        var putCalls = 0
+        var randomCalls = 0
+        val storage = object : OwnerKeyStorage {
+            override fun readBytes(key: String): OwnerKeyReadResult =
+                OwnerKeyReadResult.Present(ByteArray(16))
+
+            override fun putBytes(key: String, bytes: ByteArray) {
+                putCalls += 1
+            }
+        }
         val provider = OwnerKeyProvider(
             identity = identity,
-            keyStorage = FixedSeedOwnerKeyStorage(ByteArray(16)),
+            keyStorage = storage,
+            randomSource = object : OwnerKeyRandomSource {
+                override fun randomBytes(count: Int): ByteArray {
+                    randomCalls += 1
+                    return sequentialBytes(0x02, count)
+                }
+            },
+        )
+
+        val error = assertFailsWith<OwnerKeyUnavailableException> {
+            provider.publicKeyCompressed()
+        }
+
+        assertEquals(OwnerKeyStorageFailure.CORRUPT, error.failure)
+        assertEquals(0, randomCalls)
+        assertEquals(0, putCalls)
+    }
+
+    @Test
+    fun aCorruptStoredSeedFailsWithoutRegeneratingOrOverwriting() {
+        assertReadFailureIsPreserved(OwnerKeyStorageFailure.CORRUPT)
+    }
+
+    @Test
+    fun aTemporarilyUnavailableStoredSeedFailsWithoutRegeneratingOrOverwriting() {
+        assertReadFailureIsPreserved(OwnerKeyStorageFailure.TEMPORARILY_UNAVAILABLE)
+    }
+
+    @Test
+    fun aRestoreMismatchFailsWithoutRegeneratingOrOverwriting() {
+        assertReadFailureIsPreserved(OwnerKeyStorageFailure.RESTORE_MISMATCH)
+    }
+
+    @Test
+    fun aLegacyPlaintextSeedFailsWithoutMigrationDeletionOrRegeneration() {
+        assertReadFailureIsPreserved(OwnerKeyStorageFailure.LEGACY_PLAINTEXT)
+    }
+
+    @Test
+    fun firstGenerationMustReadBackTheExactPersistedSeedBeforeDeriving() {
+        val storage = object : OwnerKeyStorage {
+            var saved: ByteArray? = null
+            override fun readBytes(key: String): OwnerKeyReadResult =
+                saved?.let { OwnerKeyReadResult.Present(it.reversedArray()) } ?: OwnerKeyReadResult.Missing
+
+            override fun putBytes(key: String, bytes: ByteArray) {
+                saved = bytes.copyOf()
+            }
+        }
+        val provider = OwnerKeyProvider(
+            identity = identity,
+            keyStorage = storage,
             randomSource = object : OwnerKeyRandomSource {
                 override fun randomBytes(count: Int): ByteArray = sequentialBytes(0x02, count)
             },
         )
 
-        val publicKey = provider.publicKeyCompressed()
+        val error = assertFailsWith<OwnerKeyUnavailableException> {
+            provider.publicKeyCompressed()
+        }
 
-        assertEquals(33, publicKey.size, "must not crash and must still produce a valid key")
+        assertEquals(OwnerKeyStorageFailure.WRITE_VERIFICATION_FAILED, error.failure)
+    }
+
+    @Test
+    fun temporaryFailureCanBeRetriedWithoutGeneratingAReplacementIdentity() {
+        var reads = 0
+        var randomCalls = 0
+        val provider = OwnerKeyProvider(
+            identity = identity,
+            keyStorage = object : OwnerKeyStorage {
+                override fun readBytes(key: String): OwnerKeyReadResult {
+                    reads += 1
+                    return if (reads == 1) {
+                        OwnerKeyReadResult.Failure(OwnerKeyStorageFailure.TEMPORARILY_UNAVAILABLE)
+                    } else {
+                        OwnerKeyReadResult.Present(sequentialSeed())
+                    }
+                }
+
+                override fun putBytes(key: String, bytes: ByteArray) = error("must not overwrite")
+            },
+            randomSource = object : OwnerKeyRandomSource {
+                override fun randomBytes(count: Int): ByteArray {
+                    randomCalls += 1
+                    return ByteArray(count)
+                }
+            },
+        )
+
+        val first = assertFailsWith<OwnerKeyUnavailableException> { provider.publicKeyCompressed() }
+        val recovered = provider.publicKeyCompressed()
+
+        assertEquals(OwnerKeyStorageFailure.TEMPORARILY_UNAVAILABLE, first.failure)
+        assertEquals(33, recovered.size)
+        assertEquals(0, randomCalls)
+    }
+
+    private fun assertReadFailureIsPreserved(failure: OwnerKeyStorageFailure) {
+        val storage = RecordingOwnerKeyStorage(OwnerKeyReadResult.Failure(failure))
+        var randomCalls = 0
+        val provider = OwnerKeyProvider(
+            identity = identity,
+            keyStorage = storage,
+            randomSource = object : OwnerKeyRandomSource {
+                override fun randomBytes(count: Int): ByteArray {
+                    randomCalls += 1
+                    return ByteArray(count)
+                }
+            },
+        )
+
+        val error = assertFailsWith<OwnerKeyUnavailableException> {
+            provider.publicKeyCompressed()
+        }
+
+        assertEquals(failure, error.failure)
+        assertEquals(0, randomCalls)
+        assertEquals(0, storage.putCalls)
     }
 }
 
@@ -187,8 +305,21 @@ internal fun sequentialBytes(start: Int, count: Int): ByteArray =
 internal fun sequentialSeed(): ByteArray = sequentialBytes(0x00, 32)
 
 private class FixedSeedOwnerKeyStorage(private val seed: ByteArray) : OwnerKeyStorage {
-    override fun bytes(key: String): ByteArray? = seed
+    override fun readBytes(key: String): OwnerKeyReadResult = OwnerKeyReadResult.Present(seed)
     override fun putBytes(key: String, bytes: ByteArray) = Unit
+}
+
+private class RecordingOwnerKeyStorage(
+    private val result: OwnerKeyReadResult,
+) : OwnerKeyStorage {
+    var putCalls = 0
+        private set
+
+    override fun readBytes(key: String): OwnerKeyReadResult = result
+
+    override fun putBytes(key: String, bytes: ByteArray) {
+        putCalls += 1
+    }
 }
 
 private class NeverCalledOwnerKeyRandomSource : OwnerKeyRandomSource {

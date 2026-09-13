@@ -64,6 +64,7 @@ targets:
         BeidEtherscanAPIKey: "$(BEID_ETHERSCAN_API_KEY)"
         BeidEventDefinitionURLTemplate: "$(BEID_EVENT_DEFINITION_URL_TEMPLATE)"
         BeidEventKeySetURLTemplate: "$(BEID_EVENT_KEY_SET_URL_TEMPLATE)"
+        BeidVenueBundleURLTemplate: "$(BEID_VENUE_BUNDLE_URL_TEMPLATE)"
         BeidEventCodeLookupURLTemplate: "$(BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE)"
         BeidEventCodeHashLookupURLTemplate: "$(BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE)"
         BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
@@ -126,6 +127,7 @@ targets:
         # registered eventId.
         BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE: "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}"
         BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE: "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code-hash/{hash}"
+        BEID_VENUE_BUNDLE_URL_TEMPLATE: ""
         # XcodeGen 2.45.3 has no configuration filter for package
         # dependencies. BeidMetaMaskSupport keeps the package build-order
         # dependency stable, while this OTHER_LDFLAGS entry links the pinned
@@ -161,6 +163,9 @@ targets:
       - BeidTests
       # One frozen public artifact for the venue provider/consumer contract.
       - path: ../shared/src/commonTest/fixtures/vectors/positive/venue-current-lease-v1.json
+        buildPhase: resources
+      - path: BeidTests/Fixtures/venue-bundle-conformance
+        type: folder
         buildPhase: resources
       # The app's source tree, copied into the test bundle as a folder
       # reference. `ParticipantRelayIsolationTests` reads app source to assert

@@ -36,6 +36,7 @@ struct VenuePublicArtifactRecord: Codable, Equatable {
 @MainActor
 final class VenuePublicArtifactStore: ObservableObject {
   @Published private(set) var record: VenuePublicArtifactRecord?
+  @Published private(set) var persistenceWriteFailure: Error?
 
   /// Set when `load()` preserved a file that failed to decode, so the event
   /// is not invisible. Same contract as `VenueDeviceAssignmentStore`'s.
@@ -86,8 +87,17 @@ final class VenuePublicArtifactStore: ObservableObject {
   }
 
   private func save() {
-    guard !isPersistenceSuspended else { return }
-    guard let data = try? RecordSchemaEnvelope.encodeRecords(record.map { [$0] } ?? []) else { return }
-    try? data.write(to: fileURL, options: .atomic)
+    if let reason = persistenceSuspensionReason {
+      persistenceWriteFailure = reason
+      return
+    }
+    do {
+      let data = try RecordSchemaEnvelope.encodeRecords(record.map { [$0] } ?? [])
+      try data.write(to: fileURL, options: .atomic)
+      persistenceWriteFailure = nil
+    } catch {
+      // Keep the selected public bytes in memory, but expose failed durability.
+      persistenceWriteFailure = error
+    }
   }
 }

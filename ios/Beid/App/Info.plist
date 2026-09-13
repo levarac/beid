@@ -16,6 +16,8 @@
 	<string>$(BEID_EVENT_REGISTRY_READER_ADDRESS)</string>
 	<key>BeidReportSubmissionEnabled</key>
 	<string>$(BEID_REPORT_SUBMISSION_ENABLED)</string>
+	<key>BeidVenueBundleURLTemplate</key>
+	<string>$(BEID_VENUE_BUNDLE_URL_TEMPLATE)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

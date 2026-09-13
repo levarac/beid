@@ -39,6 +39,10 @@ struct VenueServingContractFixture {
       displayName: Self.displayName,
       payloadDigestHex: Self.payloadDigestHex,
       currentEnin: Self.currentEnin,
+      // The fixture's own ENIN span: currentEnin 6,000,000 at 300s is
+      // [1,800,000,000, 1,800,000,300), so the start is the vector's
+      // `currentEpochSeconds` and the stop is one ENIN later.
+      startAtUnixSeconds: Self.currentUnixSeconds,
       stopAtUnixSeconds: Self.exclusiveStopUnixSeconds
     )
   }

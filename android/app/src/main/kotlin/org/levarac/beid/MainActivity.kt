@@ -70,9 +70,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BeidAppTheme {
-                AppNavHost(coordinator, proofRecordStore) {
-                    walletBindingFlow?.start()
-                }
+AppNavHost(coordinator, proofRecordStore, coordinator.sessionAggregateSnapshotStore) { walletBindingFlow?.start() }
             }
         }
     }

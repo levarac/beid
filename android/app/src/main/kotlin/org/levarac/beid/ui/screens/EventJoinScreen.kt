@@ -212,7 +212,7 @@ fun EventJoinContent(
                 NearbyEventCards(
                     cards = state.nearbyEventCards,
                     selectedEventHashHex = state.selectedNearbyEventHashHex,
-                    enabled = sessionState is EventJoinUiState.Idle,
+                    enabled = sessionState is EventJoinUiState.Idle || sessionState is EventJoinUiState.OwnerKeyUnavailable,
                     onJoin = onJoinNearbyEvent,
                 )
                 // beid#463. Offered on the shared outcome, never on "the card
@@ -309,6 +309,9 @@ fun ManualEventCodeContent(
                     Text("⚠", color = BeidTheme.colors.textPrimary)
                     Text(error.message(), color = BeidTheme.colors.textPrimary)
                 }
+            }
+            if (state.sessionState is EventJoinUiState.OwnerKeyUnavailable) {
+                Text(statusText(state.sessionState), color = BeidTheme.colors.textPrimary)
             }
             // beid#463. A canonical open code is 64 hex characters, which the
             // issue rules out hand-entering as a route that does not exist in
@@ -429,6 +432,7 @@ private fun statusText(state: EventJoinUiState): String = when (state) {
     is EventJoinUiState.RequestingPermission -> stringResource(R.string.event_join_status_requesting_permission)
     is EventJoinUiState.VerifyingRegistry -> stringResource(R.string.event_join_status_verifying_registry)
     is EventJoinUiState.Sensing -> phaseStatusText(state.phase)
+    is EventJoinUiState.OwnerKeyUnavailable -> stringResource(R.string.event_join_owner_key_unavailable)
     is EventJoinUiState.PermissionDenied -> stringResource(R.string.event_join_status_permission_denied)
     // Same copy as the field-level message, reached through the same shared
     // reason, so the status line and the inline error cannot say two different

@@ -33,6 +33,9 @@ final class DeterministicSensingCryptography: SensingCryptography {
   /// through `init` like every other result here. The default value and
   /// every other test's usage are unaffected.
   var walletAcknowledgementSignatureResult: SensingRecoverableSignature?
+  var walletAcknowledgementError: Error?
+  var ownerPublicKeyError: Error?
+  var selfProofError: Error?
   private(set) var calls: [Call] = []
 
   init(
@@ -59,6 +62,9 @@ final class DeterministicSensingCryptography: SensingCryptography {
     windowReportSignatureResult = windowReportSignature
     selfProofSignatureResult = selfProofSignature
     walletAcknowledgementSignatureResult = walletAcknowledgementSignature
+    walletAcknowledgementError = nil
+    ownerPublicKeyError = nil
+    selfProofError = nil
   }
 
   func eventSigningPublicKey(eventCode: String) -> Data {
@@ -66,8 +72,9 @@ final class DeterministicSensingCryptography: SensingCryptography {
     return eventSigningPublicKeyResult
   }
 
-  func ownerPublicKey() -> Data {
+  func ownerPublicKey() throws -> Data {
     calls.append(.ownerPublicKey)
+    if let ownerPublicKeyError { throw ownerPublicKeyError }
     return ownerPublicKeyResult
   }
 
@@ -81,24 +88,26 @@ final class DeterministicSensingCryptography: SensingCryptography {
     eventSigningPublicKey: Data,
     eninStart: UInt64,
     eninEnd: UInt64
-  ) -> SensingRecoverableSignature? {
+  ) throws -> SensingRecoverableSignature? {
     calls.append(.signSelfProof(
       eventIdHash: eventIdHash,
       eventSigningPublicKey: eventSigningPublicKey,
       eninStart: eninStart,
       eninEnd: eninEnd
     ))
+    if let selfProofError { throw selfProofError }
     return selfProofSignatureResult
   }
 
   func signWalletAcknowledgement(
     walletAddress: Data,
     walletSignature: Data
-  ) -> SensingRecoverableSignature? {
+  ) throws -> SensingRecoverableSignature? {
     calls.append(.signWalletAcknowledgement(
       walletAddress: walletAddress,
       walletSignature: walletSignature
     ))
+    if let walletAcknowledgementError { throw walletAcknowledgementError }
     return walletAcknowledgementSignatureResult
   }
 }

@@ -31,6 +31,7 @@ import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
+import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.registry.RegistryDependencies
 import org.levarac.beid.shared.event.EventJoinFailureReason
@@ -62,6 +63,7 @@ sealed class EventJoinUiState {
     data object VerifyingRegistry : EventJoinUiState()
     data class Sensing(val phase: ScanPhase) : EventJoinUiState()
     data object PermissionDenied : EventJoinUiState()
+    data class OwnerKeyUnavailable(val reason: OwnerKeyStorageFailure) : EventJoinUiState()
     /**
      * Nothing was joined, and [reason] says what a participant can do about it
      * (beid#463). Carried on the state rather than looked up separately so the
@@ -113,6 +115,9 @@ class EventJoinCoordinator internal constructor(
     private val bindingRecordStore: BindingRecordStore,
     private val randomSource: OwnerKeyRandomSource = SecureRandomOwnerKeySource(),
     ledgerFilesDir: File? = null,
+    internal val sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = ledgerFilesDir?.let {
+        SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(it))
+    },
     injectedWindowAccumulator: WindowObservationAccumulator? = null,
     windowObservationRuntimeOwner: WindowObservationRuntimeOwner? = null,
     /**
@@ -142,6 +147,9 @@ class EventJoinCoordinator internal constructor(
     )
 
     private val accounting = ScanDeviceAccounting()
+    private var aggregationRuntime = AggregationRuntime()
+
+    internal fun sessionAggregateSnapshot(proofId: UUID) = sessionAggregateSnapshotStore?.snapshot(proofId)
 
     /**
      * The registry this join gate reads. `null` means the deployment has no
@@ -652,6 +660,16 @@ class EventJoinCoordinator internal constructor(
      * it, so the window where the session was joined but unnameable is gone.
      */
     private fun beginVerifiedJoin(context: RegistryVerifiedJoinContext) {
+        // Verify and cache the owner key before collecting anything that needs
+        // a self-proof. The production provider uses this verified keypair for
+        // all subsequent signatures, without another storage read.
+        try {
+            sensingCryptography.ownerPublicKey()
+        } catch (error: OwnerKeyUnavailableException) {
+            stopParticipantRelay()
+            _state.value = EventJoinUiState.OwnerKeyUnavailable(error.failure)
+            return
+        }
         windowObservationRuntime?.beginEvent(context.joinCode)
         engine.joinAndStart(context)
         windowObservationRuntime?.updateContext(
@@ -788,6 +806,7 @@ class EventJoinCoordinator internal constructor(
         if (_state.value !is EventJoinUiState.Sensing) return
 
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
+        aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
 
         val session = when (val phase = scanPhase) {
             is ScanPhase.EventFound -> phase.session
@@ -907,6 +926,7 @@ class EventJoinCoordinator internal constructor(
         joinVerificationOwner = null
         windowAccumulator?.close()
         finalizeSelfProofIfNeeded()
+        persistSessionAggregateSnapshotIfNeeded()
         engine.leaveEvent()
         stopParticipantRelay()
         discoveryOnlyScanOwned = false
@@ -954,10 +974,20 @@ class EventJoinCoordinator internal constructor(
 
     private fun resetSessionState() {
         accounting.reset()
+        aggregationRuntime = AggregationRuntime()
         activeProofId = null
         bindingState = EventBindingState.None
         pendingBindingMessage = null
         recordingCeremonyShown = false
+    }
+
+    private fun persistSessionAggregateSnapshotIfNeeded() {
+        val proofId = activeProofId ?: return
+        try {
+            sessionAggregateSnapshotStore?.persist(proofId, aggregationRuntime.sessionAggregate)
+        } catch (_: Exception) {
+            // This is display convenience data; teardown must remain authoritative.
+        }
     }
 
     // MARK: - Wallet connect+binding (mirrors iOS's `SensingCoordinator`
@@ -1012,6 +1042,8 @@ class EventJoinCoordinator internal constructor(
         val message = pendingBindingMessage ?: return null
         val proofId = activeProofId ?: return null
         val event = currentRecordingSession() ?: return null
+        val walletAddressBytes = walletAddress.hexToByteArrayOrNull() ?: return null
+        if (!message.walletAddress.contentEquals(walletAddressBytes)) return null
         val walletSignatureBytes = walletSignatureHex.hexToByteArrayOrNull() ?: return null
         if (walletSignatureBytes.size != 65) return null
         val persistedAddress = walletAddress.hexToByteArrayOrNull() ?: return null
@@ -1176,6 +1208,7 @@ class EventJoinCoordinator internal constructor(
         disposed = true
         joinVerificationOwner = null
         finalizeSelfProofIfNeeded()
+        persistSessionAggregateSnapshotIfNeeded()
         stopParticipantRelay()
         discoveryOnlyScanOwned = false
         endRescueEntryCountdown()

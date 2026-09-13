@@ -133,6 +133,7 @@ final class ParticipantRelayVerifier: BarnardRelayVerifier {
         nameValidator: BarnardB005NativeDisplayNameNormalizer()
       )
     else { return .rejected }
+    guard let relayExpiresAtEnin = UInt32(exactly: verified.relayExpiresAtEnin) else { return .rejected }
 
     return participantRelayVerification(
       state: currentState,
@@ -142,6 +143,7 @@ final class ParticipantRelayVerifier: BarnardRelayVerifier {
       validFromEnin: verified.validFromEnin,
       validThroughEnin: verified.validThroughEnin,
       currentEnin: currentEnin,
+      relayExpiresAtEnin: relayExpiresAtEnin,
       agreesWithDefinition: { definition in
         BarnardB005EnvelopeV2.registryAgreement(verified, definition: definition) == .agrees
       }
@@ -163,6 +165,7 @@ func participantRelayVerification(
   validFromEnin: Int64,
   validThroughEnin: Int64,
   currentEnin: UInt32,
+  relayExpiresAtEnin: UInt32,
   agreesWithDefinition: (BarnardEventDefinitionV1) -> Bool
 ) -> BarnardRelayVerification {
   let eventIdHex = eventId.relayHexString
@@ -200,26 +203,16 @@ func participantRelayVerification(
 
   guard
     let validFrom = UInt32(exactly: max(0, validFromEnin)),
-    let validThrough = UInt32(exactly: min(Int64(UInt32.max), max(0, validThroughEnin))),
-    currentEnin < UInt32.max
+    let validThrough = UInt32(exactly: min(Int64(UInt32.max), max(0, validThroughEnin)))
   else { return .rejected }
 
   return .registryVerified(
     eventId: eventId,
     validFromEnin: validFrom,
     validThroughEnin: validThrough,
-    // The envelope's signed `relayExpiresAtEnin` is not exposed on
-    // `BarnardB005VerifiedEnvelope`, although Barnard enforced it a moment
-    // ago — so the honest answer is the smallest one that can never overstate
-    // it. Verification succeeded, so the current ENIN is strictly inside the
-    // signed relay window, which makes the next ENIN no later than the signed
-    // expiry. The cost is that a candidate lapses after one ENIN and needs a
-    // fresh observation, which re-verifies and so re-checks the true expiry.
-    // Nothing here can outlive what the authority signed. Tracked upstream as
-    // levarac/barnard#197: once the verified envelope exposes
-    // `relayExpiresAtEnin`, this becomes a plain echo of the signed field and
-    // the per-ENIN re-admission goes away.
-    relayExpiresAtEnin: currentEnin + 1
+    // Barnard has already verified the signed expiry; pass it through
+    // unchanged so relay admission lasts exactly as long as authorized.
+    relayExpiresAtEnin: relayExpiresAtEnin
   )
 }
 

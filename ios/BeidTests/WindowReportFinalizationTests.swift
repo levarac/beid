@@ -1,3 +1,4 @@
+#if DEBUG
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
@@ -384,3 +385,4 @@ final class WindowReportFinalizationTests: XCTestCase {
     XCTAssertEqual(store.reports.first?.peerCount, 1)
   }
 }
+#endif

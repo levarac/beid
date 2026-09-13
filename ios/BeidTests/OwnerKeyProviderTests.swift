@@ -14,26 +14,26 @@ import XCTest
 /// here would prove nothing; these assert against Barnard's independently
 /// pinned output.
 final class OwnerKeyProviderTests: XCTestCase {
-  func testPublicKeyCompressedMatchesBarnardPinnedZeroSeedVector() {
+  func testPublicKeyCompressedMatchesBarnardPinnedZeroSeedVector() throws {
     let provider = OwnerKeyProvider(
       keyStorage: FixedSeedKeyStorage(seed: Data(repeating: 0, count: 32)),
       randomSource: NeverCalledRandomSource()
     )
 
     XCTAssertEqual(
-      provider.publicKeyCompressed().hexString,
+      try provider.publicKeyCompressed().hexString,
       "03351e5165d083f53425fc4a51e7228d53e88eb2899bcb6a83368a8aafaa1de5f4"
     )
   }
 
-  func testPublicKeyCompressedMatchesBarnardPinnedSequentialSeedVector() {
+  func testPublicKeyCompressedMatchesBarnardPinnedSequentialSeedVector() throws {
     let provider = OwnerKeyProvider(
       keyStorage: FixedSeedKeyStorage(seed: Data((0..<32).map(UInt8.init))),
       randomSource: NeverCalledRandomSource()
     )
 
     XCTAssertEqual(
-      provider.publicKeyCompressed().hexString,
+      try provider.publicKeyCompressed().hexString,
       "03879beac8b548009124867a99a358aeb34ff42f957f868bbc83339568b16d9c67"
     )
   }
@@ -42,7 +42,7 @@ final class OwnerKeyProviderTests: XCTestCase {
 /// Pre-seeds `OwnerKeyProvider`'s stored `accountSecret` so
 /// `BarnardCoreKeyManager.loadOrCreate` returns a fixed 32-byte value
 /// instead of generating a random one, making derivation deterministic.
-private struct FixedSeedKeyStorage: BarnardCoreKeyStorage {
+private struct FixedSeedKeyStorage: OwnerKeySeedResolving {
   let seed: Data
 
   func bytes(forKey key: String) -> [UInt8]? {
@@ -50,9 +50,10 @@ private struct FixedSeedKeyStorage: BarnardCoreKeyStorage {
   }
 
   func setBytes(_ bytes: [UInt8], forKey key: String) {}
+  func resolveSeed(forKey key: String, randomSource: any OwnerKeyRandomBytesGenerating) throws -> [UInt8] { Array(seed) }
 }
 
-private struct NeverCalledRandomSource: BarnardCoreRandomSource {
+private struct NeverCalledRandomSource: BarnardCoreRandomSource, OwnerKeyRandomBytesGenerating {
   func randomBytes(count: Int) -> [UInt8] {
     XCTFail("randomSource must not be used when a seed is already stored")
     return [UInt8](repeating: 0, count: count)
@@ -197,23 +198,23 @@ final class OwnerKeyProviderRegenerationTests: XCTestCase {
   /// tests.
   private let seedKey = "beid.ownerKeySeed"
 
-  func testPublicKeyCompressedRegeneratesAndPreservesWhenStoredSeedIsWrongType() {
+  func testPublicKeyCompressedRegeneratesAndPreservesWhenStoredSeedIsWrongType() throws {
     let defaults = makeIsolatedDefaults()
     defaults.set("not-a-seed", forKey: seedKey)
     let provider = OwnerKeyProvider(keyStorage: BeidUserDefaultsKeyStorage(defaults: defaults))
 
-    _ = provider.publicKeyCompressed() // must not crash
+    _ = try provider.publicKeyCompressed() // must not crash
 
     assertRegeneratedAndPreserved(defaults: defaults, provider: provider, original: "not-a-seed" as NSString)
   }
 
-  func testPublicKeyCompressedRegeneratesAndPreservesWhenStoredSeedIsTooShort() {
+  func testPublicKeyCompressedRegeneratesAndPreservesWhenStoredSeedIsTooShort() throws {
     let defaults = makeIsolatedDefaults()
     let tooShort = Data(repeating: 0xAB, count: 16)
     defaults.set(tooShort, forKey: seedKey)
     let provider = OwnerKeyProvider(keyStorage: BeidUserDefaultsKeyStorage(defaults: defaults))
 
-    _ = provider.publicKeyCompressed() // must not crash
+    _ = try provider.publicKeyCompressed() // must not crash
 
     assertRegeneratedAndPreserved(defaults: defaults, provider: provider, original: tooShort as NSData)
   }
@@ -222,13 +223,13 @@ final class OwnerKeyProviderRegenerationTests: XCTestCase {
   /// seed longer than 32 bytes passed `loadOrCreate`'s own
   /// `>= minimumByteCount` check and reached `deriveOwnerKeyPair`'s
   /// `precondition(accountSecret.count == 32)` unmodified, which traps.
-  func testPublicKeyCompressedRegeneratesWithoutCrashingWhenStoredSeedIsTooLong() {
+  func testPublicKeyCompressedRegeneratesWithoutCrashingWhenStoredSeedIsTooLong() throws {
     let defaults = makeIsolatedDefaults()
     let tooLong = Data(repeating: 0xCD, count: 40)
     defaults.set(tooLong, forKey: seedKey)
     let provider = OwnerKeyProvider(keyStorage: BeidUserDefaultsKeyStorage(defaults: defaults))
 
-    _ = provider.publicKeyCompressed() // must not crash — this is the regression this spec fixes
+    _ = try provider.publicKeyCompressed() // must not crash — this is the regression this spec fixes
 
     assertRegeneratedAndPreserved(defaults: defaults, provider: provider, original: tooLong as NSData)
   }

@@ -2,47 +2,12 @@ package org.levarac.beid.sensing
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Base64
 import java.security.SecureRandom
 import org.levarac.barnard.BarnardIdentity
-
-/** Loads/stores [OwnerKeyProvider]'s 32-byte `accountSecret` seed — a test seam mirroring `BarnardCoreKeyStorage` on iOS. */
-interface OwnerKeyStorage {
-    fun bytes(key: String): ByteArray?
-    fun putBytes(key: String, bytes: ByteArray)
-}
 
 /** Supplies fresh entropy for a first-time seed — a test seam mirroring `BarnardCoreRandomSource` on iOS. */
 interface OwnerKeyRandomSource {
     fun randomBytes(count: Int): ByteArray
-}
-
-/**
- * App-layer `SharedPreferences`-backed [OwnerKeyStorage] — a separate prefs
- * file from Barnard's own `"barnard"` prefs (which hold `DeviceSecret`), so
- * the owner key's storage is independent of, and outlives independently
- * from, the per-event signing identity's. Mirrors iOS's
- * `BeidUserDefaultsKeyStorage` at reduced scope: unlike iOS, this first
- * Android pass does not quarantine a wrong-shaped stored value (gh#156's
- * Signal-A mechanism) — a bad stored value is silently discarded and
- * regenerated. See handoff for why this was judged out of scope for a first
- * pass.
- */
-class SharedPreferencesOwnerKeyStorage(
-    private val prefs: SharedPreferences,
-) : OwnerKeyStorage {
-    override fun bytes(key: String): ByteArray? {
-        val encoded = prefs.getString(key, null) ?: return null
-        return try {
-            Base64.decode(encoded, Base64.NO_WRAP)
-        } catch (_: IllegalArgumentException) {
-            null
-        }
-    }
-
-    override fun putBytes(key: String, bytes: ByteArray) {
-        prefs.edit().putString(key, Base64.encodeToString(bytes, Base64.NO_WRAP)).apply()
-    }
 }
 
 /** [OwnerKeyRandomSource] backed by the platform's cryptographically secure RNG — Android's equivalent of iOS's `SecRandomCopyBytes`-backed `BeidSystemRandomSource`. */
@@ -56,11 +21,11 @@ class SecureRandomOwnerKeySource : OwnerKeyRandomSource {
  * App-generated secp256k1 owner key — the cross-event identity anchor in
  * `commit = H(event signing key ‖ owner key ‖ salt)`. Mirrors
  * `ios/Beid/Sensing/OwnerKeyProvider.swift`'s D1 (2026-07-30): no continuity
- * for v1, the key regenerates per device/reinstall, stored at the same
- * level Barnard's own `DeviceSecret` uses today (plain `SharedPreferences`,
- * not Keystore). Reuses `BarnardIdentity`'s already-tested secp256k1
+ * for v1, the key regenerates per device/reinstall. Reuses
+ * `BarnardIdentity`'s already-tested secp256k1
  * derivation (barnard#133/barnard#92) rather than hand-rolling elliptic-curve
- * math in the app layer — see AGENTS.md's KMP-002.
+ * math in the app layer — see AGENTS.md's KMP-002. The seed is encrypted by
+ * an AndroidKeyStore-backed AES-GCM key before it reaches SharedPreferences.
  *
  * The owner private key never leaves this type — only the public key
  * (`publicKeyCompressed()`) and signatures (`signSelfProof`,
@@ -71,8 +36,10 @@ class OwnerKeyProvider(
     private val keyStorage: OwnerKeyStorage,
     private val randomSource: OwnerKeyRandomSource,
 ) {
-    /** The owner key is stable for the device's lifetime (until reinstall) — cached after first derivation. */
+    /** The owner key is stable for the device's lifetime (until reinstall) — cached after a verified read or write. */
     private var cachedKeyPair: BarnardOwnerKeyPairHex? = null
+    /** Retains first-install entropy across an in-process failed durable commit. */
+    private var pendingGeneratedSeed: ByteArray? = null
 
     /** Compressed secp256k1 public key — the only owner-key component that ever leaves the device. */
     fun publicKeyCompressed(): ByteArray = keyPair().publicKeyCompressedHex.hexToByteArray()
@@ -121,11 +88,10 @@ class OwnerKeyProvider(
     private fun keyPair(): BarnardOwnerKeyPairHex {
         cachedKeyPair?.let { return it }
 
-        val existing = keyStorage.bytes(SEED_KEY)
-        val seed = if (existing != null && existing.size == SEED_LENGTH_BYTES) {
-            existing
-        } else {
-            randomSource.randomBytes(SEED_LENGTH_BYTES).also { keyStorage.putBytes(SEED_KEY, it) }
+        val seed = when (val stored = keyStorage.readBytes(SEED_KEY)) {
+            OwnerKeyReadResult.Missing -> generateAndPersistSeed()
+            is OwnerKeyReadResult.Present -> stored.bytes.requireSeedLength().also { pendingGeneratedSeed = null }
+            is OwnerKeyReadResult.Failure -> throw OwnerKeyUnavailableException(stored.reason)
         }
 
         val derived = identity.deriveOwnerKeyPair(seed)
@@ -133,6 +99,33 @@ class OwnerKeyProvider(
             privateKeyHex = derived.privateKey,
             publicKeyCompressedHex = derived.publicKeyCompressed,
         ).also { cachedKeyPair = it }
+    }
+
+    private fun generateAndPersistSeed(): ByteArray {
+        val generated = (pendingGeneratedSeed ?: randomSource.randomBytes(SEED_LENGTH_BYTES).requireSeedLength())
+        try {
+            keyStorage.putBytes(SEED_KEY, generated)
+        } catch (error: OwnerKeyUnavailableException) {
+            pendingGeneratedSeed = generated
+            throw error
+        } catch (error: Exception) {
+            pendingGeneratedSeed = generated
+            throw OwnerKeyUnavailableException(OwnerKeyStorageFailure.WRITE_FAILED, error)
+        }
+
+        val readBack = keyStorage.readBytes(SEED_KEY)
+        if (readBack !is OwnerKeyReadResult.Present || !readBack.bytes.contentEquals(generated)) {
+            pendingGeneratedSeed = generated
+            throw OwnerKeyUnavailableException(OwnerKeyStorageFailure.WRITE_VERIFICATION_FAILED)
+        }
+        return readBack.bytes.requireSeedLength().also { pendingGeneratedSeed = null }
+    }
+
+    private fun ByteArray.requireSeedLength(): ByteArray {
+        if (size != SEED_LENGTH_BYTES) {
+            throw OwnerKeyUnavailableException(OwnerKeyStorageFailure.CORRUPT)
+        }
+        return this
     }
 
     /** Local mirror of `BarnardOwnerKeyPair`'s two hex fields — avoids re-exposing Barnard's own type as this class's cache shape. */
@@ -147,6 +140,9 @@ class OwnerKeyProvider(
 /** Production `SharedPreferences` file for [OwnerKeyProvider]'s seed — separate from Barnard's own `"barnard"` prefs file. */
 internal fun ownerKeyPreferences(context: Context): SharedPreferences =
     context.getSharedPreferences("beid_owner_key", Context.MODE_PRIVATE)
+
+internal fun ownerKeyPreferencesFile(context: Context): java.io.File =
+    java.io.File(context.applicationInfo.dataDir, "shared_prefs/beid_owner_key.xml")
 
 internal fun ByteArray.toLowercaseHex(): String = joinToString("") { "%02x".format(it) }
 

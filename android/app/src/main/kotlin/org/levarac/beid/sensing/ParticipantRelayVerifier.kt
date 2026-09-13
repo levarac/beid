@@ -61,6 +61,7 @@ internal class ParticipantRelayVerifier(
             validFromEnin = verified.validFromEnin,
             validThroughEnin = verified.validThroughEnin,
             currentEnin = currentEnin,
+            relayExpiresAtEnin = verified.relayExpiresAtEnin,
             agreesWithDefinition = { definition ->
                 BarnardB005EnvelopeV2.registryAgreement(verified, definition) is BarnardRegistryAgreement.Agrees
             },
@@ -86,6 +87,7 @@ internal fun participantRelayVerification(
     validFromEnin: Long,
     validThroughEnin: Long,
     currentEnin: Long,
+    relayExpiresAtEnin: Long,
     agreesWithDefinition: (BarnardEventDefinitionV1) -> Boolean,
     /**
      * Where a refusal reason goes. Defaults to discarding it: the production
@@ -131,18 +133,9 @@ internal fun participantRelayVerification(
         eventId = eventId,
         validFromEnin = validFromEnin,
         validThroughEnin = validThroughEnin,
-        // The envelope's signed `relayExpiresAtEnin` is not exposed on
-        // `BarnardB005VerifiedEnvelope`, although barnard enforced it a moment
-        // ago -- so the honest answer is the smallest one that can never
-        // overstate it. Verification succeeded, so the current ENIN is
-        // strictly inside the signed relay window, which makes the next ENIN
-        // no later than the signed expiry. The cost is that a candidate lapses
-        // after one ENIN and needs a fresh observation, which re-verifies and
-        // so re-checks the true expiry. Nothing here can outlive what the
-        // authority signed. Tracked upstream as levarac/barnard#197: once the
-        // verified envelope exposes `relayExpiresAtEnin`, this becomes a plain
-        // echo of the signed field and the per-ENIN re-admission goes away.
-        relayExpiresAtEnin = currentEnin + 1,
+        // Barnard has already verified the signed expiry; pass it through
+        // unchanged so relay admission lasts exactly as long as authorized.
+        relayExpiresAtEnin = relayExpiresAtEnin,
     )
 }
 

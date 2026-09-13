@@ -179,6 +179,20 @@ struct SensingView: View {
         .font(DS.Font.sectionTitle)
         .foregroundStyle(DS.Color.textPrimary)
 
+      if sensing.joinRefusal != nil {
+        BeidPanel {
+          VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text("This event cannot be joined yet.")
+              .font(DS.Font.cardTitle)
+              .foregroundStyle(DS.Color.textPrimary)
+            Text("Check the event details and try again.")
+              .font(DS.Font.supporting)
+              .foregroundStyle(DS.Color.textSecondary)
+          }
+        }
+        .accessibilityIdentifier("scan.join-refusal")
+      }
+
       if presentation.isSearching {
         BeidPanel {
           VStack(alignment: .leading, spacing: DS.Space.s) {
