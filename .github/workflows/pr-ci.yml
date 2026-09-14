@@ -160,7 +160,7 @@ jobs:
         run: echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
       - name: Install SwiftLint 0.65.0
         env:
-          SWIFTLINT_SHA256: eb333bd76b5f46d21fdf3615fe39bb938956ca0b8e94c241c4b2db6e696b90
+          SWIFTLINT_SHA256: eb333bd76dfb5f46d21fdf3615fe39bb938956ca0b8e94c241c4b2db6e696b90
         run: |
           archive="$RUNNER_TEMP/SwiftLintBinary.artifactbundle.zip"
           install_dir="$RUNNER_TEMP/swiftlint"
@@ -198,6 +198,7 @@ jobs:
         uses: actions/setup-python@v5
         env:
           AGENT_TOOLSDIRECTORY: ${{ runner.temp }}/toolcache
+          RUNNER_TOOL_CACHE: ${{ runner.temp }}/toolcache
         with:
           python-version: '3.12'
       - name: Validate XcodeGen project definition
