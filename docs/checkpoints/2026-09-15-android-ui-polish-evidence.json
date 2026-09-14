@@ -1,10 +1,10 @@
 {
-  "commit": "4cda9cc855250cd7d949b7f468141915c71974cb",
-  "tree": "ead597e54165b78147037a67ad13fb4737f46adf",
-  "verifiedAt": "2026-09-15T00:12:05+09:00",
+  "commit": "e84c993c3f3f6558774ede549cbaafa66e6bb20a",
+  "tree": "2d5c9f6900aa23e00407273a5cbdc8b33b4b7c62",
+  "verifiedAt": "2026-09-15T00:22:33+09:00",
   "artifact": {
     "path": "android/app/build/outputs/apk/debug/app-debug.apk",
-    "sha256": "6fa74ddd69e88c397a41b70ec5fe768871d9649c2d449447c5b770a50d63af91",
+    "sha256": "e1a546dddfd077945beafad568633ccea7fe7c6a78fb8851de8d38f91b295723",
     "config": {
       "registryReaderAddress": "0xd4852f8526A1555A1b2C34145f0eCDA412a53c51",
       "definitionUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}",
@@ -21,12 +21,17 @@
       "RecordsScreenTest",
       "TodaySummaryScreenTest"
     ],
-    "count": 41,
+    "count": 43,
     "skipped": 0,
     "failures": 0,
     "errors": 0,
     "trueExit": 0,
     "resultDirectory": "android/app/build/test-results/testDebugUnitTest"
   },
-  "source": "BuildConfig.java, APK shasum, and JUnit XML readback from the candidate worktree"
+  "deviceReviewImages": [
+    "evidence/beid-pixel-46111JEKB11173/20260915-041-discovery.png",
+    "evidence/beid-pixel-46111JEKB11173/20260915-041-event-code.png",
+    "evidence/beid-pixel-46111JEKB11173/20260915-041-records.png"
+  ],
+  "source": "BuildConfig.java, APK shasum, JUnit XML readback, and device review images"
 }
