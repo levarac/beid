@@ -52,6 +52,19 @@ class RegistryVerifiedJoinContextTest {
     }
 
     @Test
+    fun aPrefixedDefinitionDigestIsCanonicalizedForTheWireContext() {
+        val context = assertNotNull(
+            RegistryVerifiedJoinContext.fromOperatorLookup(
+                joinCode = JOIN_CODE,
+                resolution = resolution(definitionHashHex = "0x${DEFINITION_HASH_HEX.uppercase()}"),
+                nowEpochSeconds = vectorValidFrom(),
+            ),
+        )
+
+        assertEquals(DEFINITION_HASH_HEX, context.definitionHashHex)
+    }
+
+    @Test
     fun aFailedReadIssuesNothing() {
         val resolution = resolution(isSuccess = false)
 
@@ -301,6 +314,19 @@ class RegistryVerifiedJoinContextTest {
         )
     }
 
+    @Test
+    fun aNearbyCandidateCanonicalizesAPrefixedDefinitionDigestForTheWireContext() {
+        val candidates = promotedCandidates(
+            definitionHashHex = "0x${DEFINITION_HASH_HEX.uppercase()}",
+        )
+
+        val issued = assertNotNull(
+            RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, VALID_FROM),
+        )
+
+        assertEquals(DEFINITION_HASH_HEX, issued.definitionHashHex)
+    }
+
     /**
      * The tier is the whole point. A candidate barnard verified on the radio
      * but that this host's own registry read never confirmed must not join,
@@ -385,7 +411,10 @@ class RegistryVerifiedJoinContextTest {
     }
 
     /** A promoted candidate whose registration was established with the digest and block retained. */
-    private fun promotedCandidates(retainEvidence: Boolean = true): NearbyEventCandidates {
+    private fun promotedCandidates(
+        retainEvidence: Boolean = true,
+        definitionHashHex: String = DEFINITION_HASH_HEX,
+    ): NearbyEventCandidates {
         val store = createNearbyEventDiscoveryStore()
         recordEnvelope(store)
         val attempt = assertNotNull(beginNearbyEventRegistryResolutionFromHex(store, HASH))
@@ -398,7 +427,7 @@ class RegistryVerifiedJoinContextTest {
             verifiedDefinitionEventIdHex = EVENT_ID,
             verifiedDefinitionEventCodeHashHex = HASH,
             envelopeAgreesWithRegistry = true,
-            verifiedDefinitionHashHex = if (retainEvidence) DEFINITION_HASH_HEX else null,
+            verifiedDefinitionHashHex = if (retainEvidence) definitionHashHex else null,
             registryBlockHashHex = if (retainEvidence) BLOCK_HASH_HEX else null,
             verifiedDefinitionValidFromEpochSeconds = if (retainEvidence) VALID_FROM else null,
             verifiedDefinitionValidUntilEpochSeconds = if (retainEvidence) VALID_UNTIL else null,
