@@ -193,12 +193,18 @@ jobs:
           exit 1
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v5
         env:
-          AGENT_TOOLSDIRECTORY: ${{ runner.temp }}/toolcache
-          RUNNER_TOOL_CACHE: ${{ runner.temp }}/toolcache
-        with:
-          python-version: '3.12'
+          PYTHON_SHA256: 3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76
+        run: |
+          archive="$RUNNER_TEMP/python-3.12.tar.gz"
+          install_dir="$RUNNER_TEMP/python"
+          curl --fail --location --retry 3 --output "$archive" "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only.tar.gz"
+          printf '%s  %s\n' "$PYTHON_SHA256" "$archive" | shasum --algorithm 256 --check --strict
+          rm -rf "$install_dir"
+          mkdir -p "$install_dir"
+          tar -xzf "$archive" -C "$install_dir"
+          test "$("$install_dir/python/bin/python3.12" -c 'import sys; print(sys.version_info[:2])')" = "(3, 12)"
+          printf '%s\n' "$install_dir/python/bin" >> "$GITHUB_PATH"
       - name: Validate XcodeGen project definition
         run: |
           ruby -e 'require "yaml"; YAML.safe_load(File.read("ios/project.yml"), aliases: true); puts "ios/project.yml is valid YAML"'
