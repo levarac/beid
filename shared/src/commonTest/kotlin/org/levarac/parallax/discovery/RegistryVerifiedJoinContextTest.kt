@@ -45,7 +45,7 @@ class RegistryVerifiedJoinContextTest {
         )
 
         val issued = assertNotNull(context)
-        assertEquals(JOIN_CODE, issued.joinCode)
+        assertEquals(assertNotNull(issued.definition).eventIdHex, issued.joinCode)
         assertEquals(DEFINITION_HASH_HEX, issued.definitionHashHex)
         assertEquals(BLOCK_HASH_HEX, issued.registryBlockHashHex)
     }
@@ -257,7 +257,7 @@ class RegistryVerifiedJoinContextTest {
             RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution(), vectorValidFrom()),
         )
 
-        assertEquals(JOIN_CODE, issued.joinCode)
+        assertEquals(assertNotNull(issued.definition).eventIdHex, issued.joinCode)
         assertEquals(assertNotNull(issued.definition).eventIdHex, issued.eventIdHex)
     }
 

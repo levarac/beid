@@ -147,10 +147,9 @@ public class RegistryVerifiedJoinContext private constructor(
      *
      * Fixed at issue time and carried inside the capability so no caller can
      * pair a verified event with some other string — an API shaped like
-     * `join(context, someCode)` would put that hole straight back. On the
-     * nearby path this is the canonical Event ID, which that path has always
-     * passed. On the operator-lookup path it is the normalized code the user
-     * typed.
+     * `join(context, someCode)` would put that hole straight back. Both
+     * evidence paths carry the canonical Event ID here; the operator's human
+     * code remains a lookup/UI input only.
      */
     public val joinCode: String,
     /** The canonical Event ID this join was granted for. */
@@ -224,7 +223,9 @@ public class RegistryVerifiedJoinContext private constructor(
             }
             val definition = resolution.context ?: return null
             return RegistryVerifiedJoinContext(
-                joinCode = joinCode,
+                // The operator code is only a lookup/UI hint. The engine wire
+                // contract is the verified definition's canonical Event ID.
+                joinCode = definition.eventIdHex,
                 eventIdHex = definition.eventIdHex,
                 definitionHashHex = resolution.definitionHashHex ?: return null,
                 registryBlockHashHex = resolution.blockHashHex ?: return null,
