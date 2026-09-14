@@ -327,6 +327,17 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 The workflow remains the execution source of truth; this subsection records
 the jobs and command tokens checked for documentation drift.
 
+Determine changed paths and Repository sanity run on the existing Linux ARM64
+self-hosted labels `self-hosted, Linux, ARM64, default`. Repository sanity
+installs the pinned Python 3.12 standalone build into the runner's temporary
+directory. SwiftLint remains on the existing private `emi` macOS ARM64 runner
+because this repository's lint requires Xcode SourceKit; the official Linux
+ARM64 binary starts but fails while loading `libsourcekitdInProc.so`. Android
+also remains on `emi` and installs JDK 17 and Android 36 SDK job-locally.
+The macOS runner is shared with the iOS delivery lane, so its queue is
+intentionally serialized. Fork pull requests fail each named check before
+checkout on these persistent self-hosted runners.
+
 ## PR と issue の紐付け (Development 欄)
 
 1. issue を閉じる PR は本文に `Closes #N` (複数可) を書く。base が main なら link は自動で付く。merge 後に本文を編集しても付く。
