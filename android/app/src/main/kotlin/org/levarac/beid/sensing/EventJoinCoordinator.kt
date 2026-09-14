@@ -2,6 +2,7 @@ package org.levarac.beid.sensing
 
 import android.app.Activity
 import android.util.Log
+import java.security.MessageDigest
 import java.io.File
 import java.time.Instant
 import java.util.UUID
@@ -33,6 +34,7 @@ import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
+import org.levarac.beid.BuildConfig
 import org.levarac.beid.registry.RegistryDependencies
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
@@ -670,6 +672,9 @@ class EventJoinCoordinator internal constructor(
             _state.value = EventJoinUiState.OwnerKeyUnavailable(error.failure)
             return
         }
+        if (BuildConfig.DEBUG) {
+            Log.d("BeidRuntimeDiagnostics", "join_admitted event_id_length=${context.eventIdHex.length} canonical=${isCanonicalDiagnosticEventId(context.eventIdHex)} domain_hash=${diagnosticDomainHash(context.eventIdHex)}")
+        }
         windowObservationRuntime?.beginEvent(context.joinCode)
         engine.joinAndStart(context)
         windowObservationRuntime?.updateContext(
@@ -807,6 +812,9 @@ class EventJoinCoordinator internal constructor(
         if (_state.value !is EventJoinUiState.Sensing) return
 
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
+        if (BuildConfig.DEBUG) {
+            Log.d("BeidRuntimeDiagnostics", "peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
+        }
         aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
 
         val session = when (val phase = scanPhase) {
@@ -1290,3 +1298,9 @@ internal fun logWindowRecoveryFailure(error: Exception) {
         // The logger is unavailable. There is nothing to report it to.
     }
 }
+
+private fun isCanonicalDiagnosticEventId(value: String): Boolean =
+    value.length == 64 && value == value.lowercase() && !value.startsWith("0x") && value.all { it in '0'..'9' || it in 'a'..'f' }
+
+private fun diagnosticDomainHash(value: String): String =
+    MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(8).joinToString("") { "%02x".format(it) }

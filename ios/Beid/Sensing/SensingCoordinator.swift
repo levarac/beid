@@ -4,6 +4,7 @@
 import Barnard
 import BarnardCore
 import BeidSharedKit
+import CryptoKit
 import Foundation
 import os
 
@@ -33,6 +34,16 @@ struct WindowReportRedeliveryBuffer {
     reports.removeFirst()
   }
 }
+
+#if DEBUG
+private func diagnosticIsCanonicalEventId(_ value: String) -> Bool {
+  value.count == 64 && value == value.lowercased() && !value.hasPrefix("0x") && value.allSatisfy { $0.isHexDigit }
+}
+
+private func diagnosticDomainHash(_ value: String) -> String {
+  SHA256.hash(data: Data(value.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+}
+#endif
 
 /// The shared unsent-window ledger's operating state: whether
 /// `unsentWindowLedgerRuntime` and the window-report/redelivery pipeline
@@ -1411,6 +1422,17 @@ final class SensingCoordinator: ObservableObject {
       )
       return
     }
+    #if DEBUG
+    let phaseTag: String
+    switch phase {
+    case .sensing: phaseTag = "sensing"
+    case .eventFound: phaseTag = "event_found"
+    case .recording: phaseTag = "recording"
+    case .signalLost: phaseTag = "signal_lost"
+    case .idle: phaseTag = "idle"
+    }
+    Self.log.debug("peer_detection phase=\(phaseTag, privacy: .public)")
+    #endif
     switch phase {
     case .sensing:
       let eventCode = pendingEventCode ?? engine.currentJoinedEventCode() ?? "Unknown Event"
@@ -2162,6 +2184,9 @@ final class SensingCoordinator: ObservableObject {
       // not a discovery-only scan this pre-join flow may later stop.
       discoveryOnlyScanOwned = false
       engine.joinAndStart(context)
+      #if DEBUG
+      Self.log.debug("join_input event_id_length=\(context.eventIdHex.count, privacy: .public) canonical=\(diagnosticIsCanonicalEventId(context.eventIdHex), privacy: .public) domain_hash=\(diagnosticDomainHash(context.eventIdHex), privacy: .public) sdk_join_code_present=\(self.engine.currentJoinedEventCode() != nil, privacy: .public)")
+      #endif
       // The relay gate opens here, from the capability the gate just admitted,
       // in the same shape as Android's `EventJoinCoordinator.beginVerifiedJoin`
       // (beid#437). The id is the definition's own `eventIdHex`, not the
@@ -3586,6 +3611,9 @@ final class SensingCoordinator: ObservableObject {
         observationReference = try windowReportStore.add(report)
         currentWindowObservationReference = observationReference
       } catch {
+        #if DEBUG
+        Self.ledgerLog.debug("window_close outcome=failure_report_persist")
+        #endif
         if let dropped = windowReportRedeliveryBuffer.enqueue(report) {
           Self.ledgerLog.error("Dropped the newest pending window report after reaching redelivery capacity: \(dropped.id, privacy: .public)")
         } else {
@@ -3604,10 +3632,16 @@ final class SensingCoordinator: ObservableObject {
           persistedObservationReference: observationReference
         )
       } catch {
+        #if DEBUG
+        Self.ledgerLog.debug("window_close outcome=failure_ledger_persist")
+        #endif
         Self.ledgerLog.error("Unable to persist a closed shared-ledger window: \(error, privacy: .public)")
         recordLedgerDegradation(error)
       }
     }
+    #if DEBUG
+    Self.ledgerLog.debug("window_close outcome=report_saved peer_count=\(closingPeerRpids.count, privacy: .public)")
+    #endif
     clearCurrentWindowState()
   }
 
@@ -3683,8 +3717,11 @@ final class SensingCoordinator: ObservableObject {
         eventSigningPublicKey: eventSigningPublicKey,
         eninStart: eninStart,
         eninEnd: eninEnd
-      )
-    } catch {
+        )
+        #if DEBUG
+        Self.ledgerLog.debug("window_close outcome=ledger_saved")
+        #endif
+      } catch {
       ownerKeyOperationFailure = .unavailable
       return nil
     }

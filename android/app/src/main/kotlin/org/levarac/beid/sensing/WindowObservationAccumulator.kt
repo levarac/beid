@@ -1,5 +1,6 @@
 package org.levarac.beid.sensing
 
+import android.util.Log
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -33,6 +34,7 @@ import org.levarac.parallax.observation.prepareMutualSensingObservation
 import org.levarac.parallax.submission.SubmissionOperatorConfiguration
 import org.levarac.parallax.submission.restoreStoredObservation
 import org.levarac.parallax.submission.storeSignedObservation
+import org.levarac.beid.BuildConfig
 
 /** Maps the registry's shared error classification into the drain's native effect result. */
 internal fun submissionConfigurationResolutionForRegistryResult(
@@ -413,12 +415,22 @@ internal class WindowObservationAccumulator(
         val id = openedWindowId
         val closingEnin = enin
         if (id == null || closingEnin == null) {
+            if (BuildConfig.DEBUG) Log.d("BeidRuntimeDiagnostics", "window_close outcome=no_open_window")
             clearCurrentWindow()
             return true
         }
-        val closingContext = openedContext ?: return false
-        val closingReporter = openedReporterRpid ?: return false
-        val prepared = preparedObservation(id, closingContext, closingReporter, rpids) ?: return false
+        val closingContext = openedContext ?: run {
+            if (BuildConfig.DEBUG) Log.d("BeidRuntimeDiagnostics", "window_close outcome=failure_missing_context")
+            return false
+        }
+        val closingReporter = openedReporterRpid ?: run {
+            if (BuildConfig.DEBUG) Log.d("BeidRuntimeDiagnostics", "window_close outcome=failure_missing_reporter")
+            return false
+        }
+        val prepared = preparedObservation(id, closingContext, closingReporter, rpids) ?: run {
+            if (BuildConfig.DEBUG) Log.d("BeidRuntimeDiagnostics", "window_close outcome=failure_not_preparable")
+            return false
+        }
         val signature = cryptography.signWindowReport(
             closingContext.eventCode,
             prepared.signatureStructure.toByteArray(),
@@ -446,6 +458,7 @@ internal class WindowObservationAccumulator(
         // ledger-touching part runs on this thread; `SubmissionClient`
         // dispatches the actual HTTP call onto its own coroutine scope.
         onWindowClosed()
+        if (BuildConfig.DEBUG) Log.d("BeidRuntimeDiagnostics", "window_close outcome=signed_saved")
         return true
     }
 
