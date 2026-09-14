@@ -14,11 +14,78 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Determine changed paths
+    runs-on: [self-hosted, Linux, ARM64, default]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      android: ${{ steps.classify.outputs.android }}
+      lint: ${{ steps.classify.outputs.lint }}
+      sanity: ${{ steps.classify.outputs.sanity }}
+    steps:
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Collect changed paths
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const outputPath = `${process.env.RUNNER_TEMP}/beid-changed-files.json`;
+            try {
+              let files;
+              if (context.eventName === 'pull_request') {
+                files = await github.paginate(
+                  github.rest.pulls.listFiles,
+                  { owner: context.repo.owner, repo: context.repo.repo, pull_number: context.issue.number, per_page: 100 },
+                  response => response.data.flatMap(file => [file.filename, file.previous_filename].filter(Boolean)),
+                );
+              } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
+                files = await github.paginate(
+                  github.rest.repos.compareCommitsWithBasehead,
+                  {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    basehead: `${context.payload.before}...${context.payload.after}`,
+                    per_page: 100,
+                  },
+                  response => response.data.files.flatMap(file => [file.filename, file.previous_filename].filter(Boolean)),
+                );
+              } else {
+                throw new Error(`unsupported or unbounded event: ${context.eventName}`);
+              }
+              fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
+            } catch (error) {
+              core.warning(`changed-path collection failed; all checks will run: ${error.message}`);
+              fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
+            }
+
+      - name: Classify changed paths (fail closed)
+        id: classify
+        if: always()
+        run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
+
   android:
     name: Android build
-    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.android == 'true') }}
+    runs-on: [self-hosted, macOS, ARM64, emi]
     timeout-minutes: 20
     steps:
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
       - uses: actions/checkout@v4
       - name: Clone Parallax at the pinned commit
         env:
@@ -29,6 +96,22 @@ jobs:
         with:
           distribution: temurin
           java-version: "17.0.20+8"
+      - name: Configure job-local Android SDK path
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-sdk"
+          {
+            echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk"
+            echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk"
+          } >> "$GITHUB_ENV"
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/android-sdk
+          key: beid-android-sdk-${{ runner.os }}-${{ runner.arch }}-android36-v1
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platforms;android-36 build-tools;36.0.0
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Build and test Android app
@@ -59,17 +142,35 @@ jobs:
 
   lint:
     name: SwiftLint
-    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.lint == 'true') }}
+    runs-on: [self-hosted, macOS, ARM64, emi]
     timeout-minutes: 10
-    container: ghcr.io/realm/swiftlint:0.65.0
     steps:
-      - name: Install container prerequisites (git, python3)
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          apt-get update -qq
-          apt-get install -y -qq git python3 > /dev/null
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
       - uses: actions/checkout@v4
-      - name: Mark workspace as safe for git in container
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Select Xcode for SourceKit
+        run: echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Install SwiftLint 0.65.0
+        env:
+          SWIFTLINT_SHA256: eb333bd76dfb5f46d21fdf3615fe39bb938956ca0b8e94c241c4b2db6e696b90
+        run: |
+          archive="$RUNNER_TEMP/SwiftLintBinary.artifactbundle.zip"
+          install_dir="$RUNNER_TEMP/swiftlint"
+          curl --fail --location --retry 3 --output "$archive" "https://github.com/realm/SwiftLint/releases/download/0.65.0/SwiftLintBinary.artifactbundle.zip"
+          printf '%s  %s\n' "$SWIFTLINT_SHA256" "$archive" | shasum --algorithm 256 --check --strict
+          rm -rf "$install_dir"
+          mkdir -p "$install_dir"
+          ditto -x -k "$archive" "$install_dir"
+          swiftlint_bin="$(find "$install_dir" -type f -path '*/macos/swiftlint' -print -quit)"
+          test -n "$swiftlint_bin"
+          chmod +x "$swiftlint_bin"
+          file "$swiftlint_bin" | grep -E 'arm64|arm64e'
+          printf '%s\n' "$(dirname "$swiftlint_bin")" >> "$GITHUB_PATH"
       - name: Check lint prerequisites
         run: |
           git --version
@@ -80,13 +181,35 @@ jobs:
 
   sanity:
     name: Repository sanity
-    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.sanity == 'true') }}
+    runs-on: [self-hosted, Linux, ARM64, default]
     timeout-minutes: 10
     steps:
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
       - uses: actions/checkout@v4
+      - name: Set up Python
+        env:
+          PYTHON_SHA256: b61b856c3e1a4fc65b8f6e6b0495ef975dd0924f90c59f3ea61b38a079173b84
+        run: |
+          archive="$RUNNER_TEMP/python-3.12.tar.gz"
+          install_dir="$RUNNER_TEMP/python"
+          curl --fail --location --retry 3 --output "$archive" "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-unknown-linux-gnu-install_only.tar.gz"
+          printf '%s  %s\n' "$PYTHON_SHA256" "$archive" | sha256sum --check --strict
+          rm -rf "$install_dir"
+          mkdir -p "$install_dir"
+          tar -xzf "$archive" -C "$install_dir"
+          test "$("$install_dir/python/bin/python3.12" -c 'import sys; print(sys.version_info[:2])')" = "(3, 12)"
+          printf '%s\n' "$install_dir/python/bin" >> "$GITHUB_PATH"
+      - name: Install YAML parser into the job temp directory
+        run: python3 -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/python-packages" PyYAML==6.0.2
       - name: Validate XcodeGen project definition
         run: |
-          ruby -e 'require "yaml"; YAML.safe_load(File.read("ios/project.yml"), aliases: true); puts "ios/project.yml is valid YAML"'
+          PYTHONPATH="$RUNNER_TEMP/python-packages" python3 -c 'import pathlib, yaml; yaml.safe_load(pathlib.Path("ios/project.yml").read_text()); print("ios/project.yml is valid YAML")'
       - name: Validate TestFlight note JSON
         run: |
           python3 -c 'import json, pathlib; paths = [pathlib.Path("what_to_test.json"), pathlib.Path("release_notes.json")]; [json.load(path.open(encoding="utf-8")) for path in paths if path.is_file()]; print("TestFlight note JSON is valid")'

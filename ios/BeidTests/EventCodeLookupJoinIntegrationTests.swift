@@ -139,7 +139,9 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
     let coordinator = AppCoordinator(registryClient: nil)
     let relay = ContinuationRelay()
     coordinator.resolveCanonicalEventIdHexOverride = { code in
-      code == "first" ? await relay.suspend() : nil
+      code == "first"
+        ? .init(eventIdHex: await relay.suspend(), errorCode: nil)
+        : .noAnswer
     }
 
     async let firstOutcome = coordinator.joinEventResolvingCanonicalId(code: "first")
@@ -161,7 +163,9 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
   func testReturnToWalletConnectWhileSuspendedSupersedesTheInFlightOnboardingAttempt() async throws {
     let coordinator = AppCoordinator(registryClient: nil)
     let relay = ContinuationRelay()
-    coordinator.resolveCanonicalEventIdHexOverride = { _ in await relay.suspend() }
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
 
     async let outcome = coordinator.joinEventResolvingCanonicalId(code: "abandoned")
     await relay.waitUntilSuspended()
@@ -186,7 +190,9 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
   func testCancelPendingAccountSheetJoinAttemptWhileSuspendedSupersedesTheInFlightAttempt() async throws {
     let coordinator = AppCoordinator(registryClient: nil)
     let relay = ContinuationRelay()
-    coordinator.resolveCanonicalEventIdHexOverride = { _ in await relay.suspend() }
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
 
     async let outcome = coordinator.joinEventFromAccountSheetResolvingCanonicalId(code: "abandoned")
     await relay.waitUntilSuspended()
@@ -240,5 +246,149 @@ private actor ContinuationRelay {
   func resume(returning value: String?) {
     pending?.resume(returning: value)
     pending = nil
+  }
+}
+
+/// beid#472 — what a participant is told when the join gate refuses.
+///
+/// Before this, `SensingCoordinator` held the refusal in `joinRefusal` and no
+/// view read it. "Nothing is happening" looked identical whether the radio had
+/// never started or was simply alone in the room — the state the owner spent a
+/// field session in on 2026-09-10.
+///
+/// These assert the reason key the coordinator publishes, not the copy: the
+/// classification is `shared/`'s decision and is worth pinning, while the
+/// sentences are this host's and belong to the view.
+///
+/// The refusal is deliberately **not** raised when the code is merely
+/// selected. Selecting is not joining (`SensingCoordinator.joinEvent`, and the
+/// two `testSelectingAnEventCodeIsNotAnError...` tests above), and an earlier
+/// attempt at this feature that refused at selection broke both of them — the
+/// gate is where the answer exists.
+@MainActor
+final class JoinGateRefusalReasonTests: XCTestCase {
+  private let canonicalEventIdHex = "0x" + String(repeating: "a", count: 64)
+
+  private func refusalReasonKey(
+    lookupErrorCode: String?,
+    canonicalEventIdHex: String?
+  ) async -> String? {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
+    )
+    coordinator.useDemoEventMode = false
+    XCTAssertTrue(
+      coordinator.joinEvent(
+        "ethtokyo2026",
+        canonicalEventIdHex: canonicalEventIdHex,
+        lookupErrorCode: lookupErrorCode
+      )
+    )
+    coordinator.startSensing()
+    for _ in 0..<8 { await Task.yield() }
+    return coordinator.joinRefusalReasonKey
+  }
+
+  func testATransportFailureDuringLookupIsReportedAsNeedingANetwork() async {
+    let key = await refusalReasonKey(lookupErrorCode: "timeout", canonicalEventIdHex: nil)
+    XCTAssertEqual(
+      key,
+      "network_required",
+      "a lookup that never arrived must not be reported as a bad code"
+    )
+  }
+
+  func testAnUnregisteredCodeIsReportedAsNoSuchEvent() async {
+    let key = await refusalReasonKey(
+      lookupErrorCode: "event_code_lookup_not_found",
+      canonicalEventIdHex: nil
+    )
+    XCTAssertEqual(
+      key,
+      "event_not_found",
+      "the endpoint answered and no event is registered — that is the participant's answer"
+    )
+  }
+
+  func testAMisconfiguredDeploymentIsNotBlamedOnTheNetwork() async {
+    let key = await refusalReasonKey(
+      lookupErrorCode: "event_code_lookup_not_configured",
+      canonicalEventIdHex: nil
+    )
+    XCTAssertEqual(
+      key,
+      "verification_failed",
+      "a deployment with no lookup endpoint is broken for everyone and is not fixed by finding Wi-Fi"
+    )
+  }
+
+  /// No canonical id and no error code either: nothing was asked.
+  func testNoLookupAnswerAtAllIsStillExplained() async {
+    let key = await refusalReasonKey(lookupErrorCode: nil, canonicalEventIdHex: nil)
+    XCTAssertEqual(key, "verification_failed")
+  }
+
+  /// The gate's own verdict, for a read that succeeded. A definition outside
+  /// its validity window is `EVENT_NOT_ACTIVE`, not a verification failure —
+  /// the distinction a participant can act on, and the reason the gate's
+  /// verdict is carried rather than flattened.
+  func testAnExpiredDefinitionIsReportedAsNotOpenRightNow() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    let expiredWindowNow = Int64(Date().timeIntervalSince1970) - 10 * 86_400
+    registry.answer = .resolves(
+      FakeEventJoinRegistry.admittingResolution(
+        eventIdHex: canonicalEventIdHex,
+        nowEpochSeconds: expiredWindowNow
+      )
+    )
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
+    )
+    coordinator.useDemoEventMode = false
+    XCTAssertTrue(
+      coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+    )
+    coordinator.startSensing()
+    for _ in 0..<8 { await Task.yield() }
+
+    XCTAssertFalse(engine.didJoin, "an expired definition must not start a radio")
+    XCTAssertEqual(
+      coordinator.joinRefusalReasonKey,
+      "event_not_active",
+      "an expired event is not the same situation as one beid could not verify"
+    )
+  }
+
+  /// An admitted join leaves nothing to explain.
+  func testAnAdmittedJoinPublishesNoRefusal() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      FakeEventJoinRegistry.admittingResolution(eventIdHex: canonicalEventIdHex)
+    )
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
+    )
+    coordinator.useDemoEventMode = false
+    XCTAssertTrue(
+      coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+    )
+    coordinator.startSensing()
+    for _ in 0..<8 { await Task.yield() }
+
+    XCTAssertTrue(engine.didJoin)
+    XCTAssertNil(coordinator.joinRefusalReasonKey)
   }
 }

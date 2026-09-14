@@ -304,8 +304,14 @@ See [docs/delivery-ci.md](docs/delivery-ci.md) for the detailed PR CI and delive
 
 ### PR CI
 
-The PR workflow is `.github/workflows/pr-ci.yml`. Its three jobs and local
-gate commands are:
+The PR workflow is `.github/workflows/pr-ci.yml`. Its changed-path classifier
+job and three named gates are:
+
+**Determine changed paths**: `actions/github-script` collects pull-request
+files or the `main` push comparison, and `scripts/ci_change_filter.py`
+classifies them. Documentation-only changes skip Android build and SwiftLint;
+Repository sanity always runs. Unknown paths, dependency/workflow/build-script
+changes, and classifier failures run the relevant or all gates fail-closed.
 
 **Android build**: `:shared:testAndroidHostTest`, `:app:testDebugUnitTest`,
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
@@ -320,6 +326,17 @@ gate commands are:
 
 The workflow remains the execution source of truth; this subsection records
 the jobs and command tokens checked for documentation drift.
+
+Determine changed paths and Repository sanity run on the existing Linux ARM64
+self-hosted labels `self-hosted, Linux, ARM64, default`. Repository sanity
+installs the pinned Python 3.12 standalone build into the runner's temporary
+directory. SwiftLint remains on the existing private `emi` macOS ARM64 runner
+because this repository's lint requires Xcode SourceKit; the official Linux
+ARM64 binary starts but fails while loading `libsourcekitdInProc.so`. Android
+also remains on `emi` and installs JDK 17 and Android 36 SDK job-locally.
+The macOS runner is shared with the iOS delivery lane, so its queue is
+intentionally serialized. Fork pull requests fail each named check before
+checkout on these persistent self-hosted runners.
 
 ## PR と issue の紐付け (Development 欄)
 

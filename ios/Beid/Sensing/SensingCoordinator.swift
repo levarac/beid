@@ -818,6 +818,24 @@ final class SensingCoordinator: ObservableObject {
   /// two steps).
   private var pendingBindingMessage: BindingMessage?
 
+  /// The registry error code from the code-to-id lookup that produced (or
+  /// failed to produce) `joinedCanonicalEventIdHex`.
+  private var joinedLookupErrorCode: String?
+
+  /// Why the last join attempt was refused, as
+  /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value, or nil when
+  /// nothing has been refused.
+  ///
+  /// `joinRefusal` already existed and no view ever read it, so a refusal was
+  /// visible only in the log: "nothing is happening" looked identical whether
+  /// the radio had never started or was simply alone in the room. That is the
+  /// state the owner spent a field session in on 2026-09-10 (beid#472).
+  ///
+  /// A key rather than the shared enum, because Swift Export gives a Kotlin
+  /// enum no name, no description and no equality — see
+  /// `eventJoinFailureReasonKey`'s own doc for the other half of that.
+  @Published private(set) var joinRefusalReasonKey: String?
+
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
     if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
@@ -1823,10 +1841,20 @@ final class SensingCoordinator: ObservableObject {
   /// means the selection was recorded and a join will be *attempted*, under
   /// the gate, when sensing starts.
   @discardableResult
-  func joinEvent(_ code: String, canonicalEventIdHex: String? = nil) -> Bool {
+  func joinEvent(
+    _ code: String,
+    canonicalEventIdHex: String? = nil,
+    lookupErrorCode: String? = nil
+  ) -> Bool {
     guard !code.isEmpty else { return false }
     joinedEventCode = code
     joinedCanonicalEventIdHex = canonicalEventIdHex
+    // Kept so a later refusal can say *why* there is no canonical id. The
+    // registry's own error code is the only thing that separates "you are
+    // offline" from "no event is registered for that code", and selecting a
+    // code is where that answer arrived — the gate refuses much later, with
+    // no access to it (beid#472).
+    joinedLookupErrorCode = lookupErrorCode
     // Selecting deliberately does not open the relay gate, and does not join:
     // it records the choice and nothing else. The id above came from a
     // code-to-id lookup, whereas both joining and relaying require the
@@ -2037,7 +2065,16 @@ final class SensingCoordinator: ObservableObject {
   /// admit branch at all therefore requires handing the decision in.
   enum JoinGateDecision {
     case admit(ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext)
-    case refuse(EventJoinRefusal, String)
+    /// The third value is `shared/`'s reason key when the decision site knew
+    /// more than the refusal case alone can carry, and nil when it did not.
+    ///
+    /// `definitionNotEligible` is the case that needs it: the gate already
+    /// asked `operatorLookupJoinEligibility` *why*, and that verdict
+    /// separates "that event isn't open to join right now" from "beid
+    /// couldn't verify that event" — a distinction a participant can act on.
+    /// Carrying the verdict itself is not an option, because Swift Export
+    /// gives it no equality and `EventJoinRefusal` is `Equatable`.
+    case refuse(EventJoinRefusal, String, String? = nil)
   }
 
   /// What the gate can settle before spending a registry read.
@@ -2095,7 +2132,12 @@ final class SensingCoordinator: ObservableObject {
         )
       return .refuse(
         .definitionNotEligible,
-        "Registry did not verify the selected event (\(String(describing: verdict))); starting nothing."
+        "Registry did not verify the selected event (\(String(describing: verdict))); starting nothing.",
+        BeidSharedKit.event.eventJoinFailureReasonKey(
+          reason: BeidSharedKit.event.eventJoinFailureReasonForJoinEligibility(
+            eligibility: verdict
+          )
+        )
       )
     }
     return .admit(context)
@@ -2123,8 +2165,8 @@ final class SensingCoordinator: ObservableObject {
       // would otherwise close the gate that was just opened.
       relayGateEventIdHex = context.eventIdHex
       startParticipantRelay()
-    case .refuse(let refusal, let message):
-      refuseJoin(refusal, message)
+    case .refuse(let refusal, let message, let reasonKey):
+      refuseJoin(refusal, message, reasonKey: reasonKey)
     }
   }
 
@@ -2145,9 +2187,59 @@ final class SensingCoordinator: ObservableObject {
   /// Returning to `.idle` is the point: `phase` was set to `.sensing` before
   /// the permission request and, before this, was never moved back — so every
   /// refusal left the user on a sensing screen with the radio off, forever.
-  private func refuseJoin(_ refusal: EventJoinRefusal, _ message: String) {
+  /// Maps a native refusal onto the reason vocabulary `shared/` already owns
+  /// and Android already renders, so one situation does not get two
+  /// explanations across the two apps.
+  ///
+  /// Only `definitionNotEligible` has a verdict of its own; the rest are
+  /// classified from what was available when the read was attempted.
+  ///
+  /// `registryReadFailed` is `UNKNOWN` rather than `NETWORK_REQUIRED`, which
+  /// is the tempting answer: the definition read only runs once the
+  /// code-to-id lookup already succeeded, so a device that cannot reach the
+  /// network fails earlier and arrives here as `noCanonicalEventId` carrying
+  /// the lookup's own error code. Reaching this branch means an answer came
+  /// back carrying no definition. Carrying the *definition* read's error code
+  /// through as well would let it say more; the adapter currently collapses a
+  /// failed read to nil, and changing that is its own change.
+  private static func sharedReason(
+    for refusal: EventJoinRefusal,
+    lookupErrorCode: String?
+  ) -> ExportedKotlinPackages.org.levarac.beid.shared.event.EventJoinFailureReason {
+    switch refusal {
+    case .noRegistryConfigured:
+      // Broken for everyone on this build, and not fixed by finding Wi-Fi.
+      return ExportedKotlinPackages.org.levarac.beid.shared.event
+        .EventJoinFailureReason.VERIFICATION_FAILED
+    case .noCanonicalEventId:
+      guard let lookupErrorCode else {
+        return ExportedKotlinPackages.org.levarac.beid.shared.event
+          .EventJoinFailureReason.VERIFICATION_FAILED
+      }
+      return BeidSharedKit.event.eventJoinFailureReasonForRegistryErrorCode(
+        errorCode: lookupErrorCode
+      )
+    case .registryReadFailed:
+      return ExportedKotlinPackages.org.levarac.beid.shared.event
+        .EventJoinFailureReason.UNKNOWN
+    case .definitionNotEligible:
+      // Reached only if a caller refused for ineligibility without passing
+      // the verdict's own key, which the gate always does.
+      return ExportedKotlinPackages.org.levarac.beid.shared.event
+        .EventJoinFailureReason.VERIFICATION_FAILED
+    }
+  }
+
+  private func refuseJoin(
+    _ refusal: EventJoinRefusal,
+    _ message: String,
+    reasonKey: String? = nil
+  ) {
     Self.log.error("\(message, privacy: .public)")
     joinRefusal = refusal
+    joinRefusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
+      reason: Self.sharedReason(for: refusal, lookupErrorCode: joinedLookupErrorCode)
+    )
     joinRegistryRequest = nil
     stopParticipantRelay()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
@@ -2273,6 +2365,7 @@ final class SensingCoordinator: ObservableObject {
     joinRegistryRequest?.cancel()
     joinRegistryRequest = nil
     joinRefusal = nil
+    joinRefusalReasonKey = nil
     activeCommit = nil
     activeProofId = nil
     pendingBindingMessage = nil
