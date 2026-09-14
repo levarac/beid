@@ -16,7 +16,7 @@ concurrency:
 jobs:
   changes:
     name: Determine changed paths
-    runs-on: [self-hosted, macOS, ARM64, emi]
+    runs-on: [self-hosted, Linux, ARM64, default]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -183,7 +183,7 @@ jobs:
     name: Repository sanity
     needs: changes
     if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.sanity == 'true') }}
-    runs-on: [self-hosted, macOS, ARM64, emi]
+    runs-on: [self-hosted, Linux, ARM64, default]
     timeout-minutes: 10
     steps:
       - name: Reject fork pull request code on the private runner
@@ -194,12 +194,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Python
         env:
-          PYTHON_SHA256: 3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76
+          PYTHON_SHA256: b61b856c3e1a4fc65b8f6e6b0495ef975dd0924f90c59f3ea61b38a079173b84
         run: |
           archive="$RUNNER_TEMP/python-3.12.tar.gz"
           install_dir="$RUNNER_TEMP/python"
-          curl --fail --location --retry 3 --output "$archive" "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only.tar.gz"
-          printf '%s  %s\n' "$PYTHON_SHA256" "$archive" | shasum --algorithm 256 --check --strict
+          curl --fail --location --retry 3 --output "$archive" "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-unknown-linux-gnu-install_only.tar.gz"
+          printf '%s  %s\n' "$PYTHON_SHA256" "$archive" | sha256sum --check --strict
           rm -rf "$install_dir"
           mkdir -p "$install_dir"
           tar -xzf "$archive" -C "$install_dir"
