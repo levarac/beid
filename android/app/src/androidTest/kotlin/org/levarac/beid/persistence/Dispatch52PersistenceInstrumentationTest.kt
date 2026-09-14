@@ -23,6 +23,7 @@ import org.levarac.beid.sensing.ownerKeyPreferencesFile
 import org.levarac.beid.sensing.sharedPreferencesDurableSnapshot
 import org.levarac.barnard.BarnardIdentity
 import org.levarac.parallax.submission.createSubmissionOperatorConfiguration
+import org.levarac.beid.shared.report.encodeUnsentWindowLedgerSnapshot
 
 /** Device proof for dispatch#52 using the production stores and key custody. */
 @RunWith(AndroidJUnit4::class)
@@ -84,6 +85,8 @@ class Dispatch52PersistenceInstrumentationTest {
         val artifact = context.filesDir.resolve("canonical-observations-v1").listFiles().orEmpty()
             .singleOrNull { it.extension == "cose" } ?: error("signed artifact missing")
         val windowId = artifact.name.substringBefore("--")
+        val observationReference = artifact.name.substringAfter("--").removeSuffix(".cose")
+        assertLedgerLinks(file, windowId, observationReference)
         val submissionRecord = SubmissionRecordStore(SubmissionRecordStore.defaultFile(context.filesDir))
             .recordFor(windowId) ?: error("submission record missing")
         assertEquals(windowId, submissionRecord.windowId)
@@ -100,6 +103,7 @@ class Dispatch52PersistenceInstrumentationTest {
             .putString("seed_sha256", seedFingerprint)
             .putString("artifact_name", artifact.name)
             .putString("artifact_sha256", artifact.readBytes().sha256())
+            .putString("observation_reference", observationReference)
             .putString("window_id", windowId)
             .putString("submission_endpoint", submissionRecord.submissionEndpoint)
             .putString("receipt_public_key_hex", submissionRecord.receiptPublicKeyHex)
@@ -132,6 +136,11 @@ class Dispatch52PersistenceInstrumentationTest {
         val windowId = testPrefs.getString("window_id", null) ?: error("window baseline missing")
         val artifact = context.filesDir.resolve("canonical-observations-v1").resolve(artifactName)
         assertEquals(testPrefs.getString("artifact_sha256", null), artifact.readBytes().sha256())
+        assertLedgerLinks(
+            UnsentWindowLedgerStore.defaultFile(context.filesDir),
+            windowId,
+            testPrefs.getString("observation_reference", null) ?: error("observation reference missing"),
+        )
         val record = SubmissionRecordStore(SubmissionRecordStore.defaultFile(context.filesDir))
             .recordFor(windowId) ?: error("submission record missing after cold start")
         assertEquals(testPrefs.getString("submission_endpoint", null), record.submissionEndpoint)
@@ -145,4 +154,16 @@ class Dispatch52PersistenceInstrumentationTest {
         .digest(this).joinToString("") { "%02x".format(it) }
 
     private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it) }
+
+    private fun assertLedgerLinks(file: java.io.File, windowId: String, observationReference: String) {
+        val ledger = requireNotNull(UnsentWindowLedgerStore(file).load()?.ledger)
+        val windowIdHex = windowId.toByteArray().hex()
+        val referenceHex = observationReference.toByteArray().hex()
+        val row = encodeUnsentWindowLedgerSnapshot(ledger).lineSequence()
+            .single { it.startsWith("window\t$windowIdHex\t") }
+            .split('\t')
+        assertEquals(5, row.size)
+        assertTrue(row[3] != "-")
+        assertEquals(referenceHex, row[4])
+    }
 }
