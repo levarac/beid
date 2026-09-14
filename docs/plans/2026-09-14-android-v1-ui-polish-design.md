@@ -47,4 +47,3 @@ the `Scaffold` structure, progress indicators, and Compose semantics:
 - https://developer.android.com/develop/ui/compose/components/app-bars
 - https://developer.android.com/develop/ui/compose/components/progress
 - https://developer.android.com/develop/ui/compose/accessibility/semantics
-

@@ -1,0 +1,32 @@
+{
+  "commit": "4cda9cc855250cd7d949b7f468141915c71974cb",
+  "tree": "ead597e54165b78147037a67ad13fb4737f46adf",
+  "verifiedAt": "2026-09-15T00:12:05+09:00",
+  "artifact": {
+    "path": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "sha256": "6fa74ddd69e88c397a41b70ec5fe768871d9649c2d449447c5b770a50d63af91",
+    "config": {
+      "registryReaderAddress": "0xd4852f8526A1555A1b2C34145f0eCDA412a53c51",
+      "definitionUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}",
+      "eventKeySetUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}",
+      "eventCodeLookupUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}",
+      "eventCodeHashLookupUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code-hash/{hash}"
+    }
+  },
+  "tests": {
+    "task": ":app:testDebugUnitTest",
+    "selectedSuites": [
+      "EventJoinScreenTest",
+      "ScanFlowScreensTest",
+      "RecordsScreenTest",
+      "TodaySummaryScreenTest"
+    ],
+    "count": 41,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "trueExit": 0,
+    "resultDirectory": "android/app/build/test-results/testDebugUnitTest"
+  },
+  "source": "BuildConfig.java, APK shasum, and JUnit XML readback from the candidate worktree"
+}
