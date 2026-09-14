@@ -48,6 +48,7 @@ import org.levarac.parallax.registry.RegistryDefinitionRecord
  * @param eventIdHex 32-byte event id, with or without the `0x` prefix.
  * @param definitionHashHex 32-byte definition digest the resolution reports.
  * @param blockHashHex 32-byte registry block hash the resolution reports.
+ * @param eventCodeHashHex optional 8-byte B005 code hash covered by the definition.
  * @param validFromEpochSeconds inclusive start of the definition's validity.
  * @param validUntilEpochSeconds inclusive end of the definition's validity.
  * @param joinMode [EventJoinMode.OPEN] admits; [EventJoinMode.GATED] is
@@ -57,6 +58,7 @@ public fun createEventDefinitionResolutionForTesting(
     eventIdHex: String,
     definitionHashHex: String,
     blockHashHex: String,
+    eventCodeHashHex: String? = null,
     validFromEpochSeconds: Long,
     validUntilEpochSeconds: Long,
     joinMode: EventJoinMode = EventJoinMode.OPEN,
@@ -71,6 +73,7 @@ public fun createEventDefinitionResolutionForTesting(
         keySetDigest = ByteString32(ByteArray(32)),
         sequence = ProtocolUInt(1L),
         previousDefinitionDigest = ByteString32(ByteArray(32)),
+        eventCodeHash = eventCodeHashHex?.let { it.testSupportHexBytes(expectedBytes = 8) },
         receiptPublicKey = CompressedSecp256k1PublicKey(filler33Bytes()),
         operatorId = ByteString32(ByteArray(32)),
         submissionEndpoint = "https://example.invalid/submit",
