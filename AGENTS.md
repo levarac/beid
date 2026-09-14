@@ -330,9 +330,10 @@ the jobs and command tokens checked for documentation drift.
 Determine changed paths and Repository sanity run on the existing Linux ARM64
 self-hosted labels `self-hosted, Linux, ARM64, default`. Repository sanity
 installs the pinned Python 3.12 standalone build into the runner's temporary
-directory. SwiftLint also runs on Linux using SwiftLint 0.65.0's pinned
-Linux ARM64 release and checksum. Android remains on the existing private
-`emi` macOS ARM64 runner and installs JDK 17 and Android 36 SDK job-locally.
+directory. SwiftLint remains on the existing private `emi` macOS ARM64 runner
+because this repository's lint requires Xcode SourceKit; the official Linux
+ARM64 binary starts but fails while loading `libsourcekitdInProc.so`. Android
+also remains on `emi` and installs JDK 17 and Android 36 SDK job-locally.
 The macOS runner is shared with the iOS delivery lane, so its queue is
 intentionally serialized. Fork pull requests fail each named check before
 checkout on these persistent self-hosted runners.
