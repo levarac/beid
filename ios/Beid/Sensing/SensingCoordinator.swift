@@ -3722,9 +3722,6 @@ final class SensingCoordinator: ObservableObject {
         eninStart: eninStart,
         eninEnd: eninEnd
         )
-        #if DEBUG
-        Self.ledgerLog.debug("self_proof outcome=signature_created")
-        #endif
       } catch {
       ownerKeyOperationFailure = .unavailable
       return nil
@@ -3732,6 +3729,9 @@ final class SensingCoordinator: ObservableObject {
     guard let signature else {
       return nil
     }
+    #if DEBUG
+    Self.ledgerLog.debug("self_proof outcome=signature_created")
+    #endif
 
     return SelfProofRecord(
       proofId: proofId,

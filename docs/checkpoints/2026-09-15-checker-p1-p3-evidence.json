@@ -3,7 +3,7 @@
   "changes": [
     "RegistryVerifiedJoinContext.fromNearbyCandidate now emits normalized bare lowercase eventIdHex for both joinCode and eventIdHex.",
     "RegistryVerifiedJoinContextTest covers a 0x-prefixed mixed-case nearby candidate and asserts both context fields.",
-    "SensingCoordinator self-proof signing diagnostic is labeled self_proof outcome=signature_created; window_close ledger_saved remains reserved for persisted ledger outcomes."
+    "SensingCoordinator self-proof signing diagnostic is emitted only after the optional signature succeeds; window_close ledger_saved remains reserved for persisted ledger outcomes."
   ],
   "sharedTest": {
     "task": ":shared:testAndroidHostTest",
