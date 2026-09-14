@@ -289,6 +289,7 @@ class EventJoinScreenTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         composeTestRule.onNodeWithText(context.getString(R.string.scan_event_found_title)).assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.scan_event_found_message)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.scan_event_found_status)).assertIsDisplayed()
     }
 
     @Test

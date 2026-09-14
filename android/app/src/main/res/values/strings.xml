@@ -92,8 +92,8 @@
     <string name="scan_sensing_message">Walk into an event — it will show up here automatically.</string>
     <string name="scan_sensing_heading">Looking for a nearby event</string>
     <string name="scan_event_found_title">Event Found</string>
-    <string name="scan_event_found_message">Verification starts automatically — stay nearby</string>
-    <string name="scan_event_found_status">Checking event details</string>
+    <string name="scan_event_found_message">Waiting for more nearby participants — stay nearby</string>
+    <string name="scan_event_found_status">Waiting for more participants</string>
     <!-- One-time entrance-ceremony header shown the instant Recording begins, mirrors iOS's retired ProofCollectedView copy. -->
     <string name="scan_recording_ceremony_title">Proof Collected</string>
     <string name="scan_recording_ceremony_subtitle">Added to your collection.</string>
