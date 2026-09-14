@@ -1,0 +1,29 @@
+{
+  "scope": "checker P1 shared nearby event ID canonicalization and P3 iOS self-proof diagnostic label",
+  "changes": [
+    "RegistryVerifiedJoinContext.fromNearbyCandidate now emits normalized bare lowercase eventIdHex for both joinCode and eventIdHex.",
+    "RegistryVerifiedJoinContextTest covers a 0x-prefixed mixed-case nearby candidate and asserts both context fields.",
+    "SensingCoordinator self-proof signing diagnostic is labeled self_proof outcome=signature_created; window_close ledger_saved remains reserved for persisted ledger outcomes."
+  ],
+  "sharedTest": {
+    "task": ":shared:testAndroidHostTest",
+    "suite": "org.levarac.parallax.discovery.RegistryVerifiedJoinContextTest",
+    "tests": 24,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "trueExit": 0,
+    "resultXml": "shared/build/test-results/testAndroidHostTest/TEST-org.levarac.parallax.discovery.RegistryVerifiedJoinContextTest.xml"
+  },
+  "androidCompile": {
+    "task": ":app:compileDebugKotlin",
+    "trueExit": 0
+  },
+  "iosFocusedTest": {
+    "target": "BeidTests/SensingCoordinatorTests",
+    "destination": "8D1ED184-D7DB-49C6-942C-BABE53708F73",
+    "result": "compile/link reached, but no TEST EXECUTE summary or true exit was obtained; not counted as passed",
+    "log": "/tmp/beid-checker-ios-coordinator.log"
+  },
+  "reviewLimit": "No product behavior, protocol validation, operator, funding, aggregate anchoring, or PR metadata changes are included."
+}

@@ -315,6 +315,18 @@ class RegistryVerifiedJoinContextTest {
     }
 
     @Test
+    fun aPromotedCandidateCanonicalizesTheResolvedEventIdForTheWireContext() {
+        val candidates = promotedCandidates(resolvedEventIdHex = "0x${EVENT_ID.uppercase()}")
+
+        val issued = assertNotNull(
+            RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, VALID_FROM),
+        )
+
+        assertEquals(EVENT_ID, issued.joinCode)
+        assertEquals(EVENT_ID, issued.eventIdHex)
+    }
+
+    @Test
     fun aNearbyCandidateCanonicalizesAPrefixedDefinitionDigestForTheWireContext() {
         val candidates = promotedCandidates(
             definitionHashHex = "0x${DEFINITION_HASH_HEX.uppercase()}",
@@ -414,6 +426,7 @@ class RegistryVerifiedJoinContextTest {
     private fun promotedCandidates(
         retainEvidence: Boolean = true,
         definitionHashHex: String = DEFINITION_HASH_HEX,
+        resolvedEventIdHex: String = EVENT_ID,
     ): NearbyEventCandidates {
         val store = createNearbyEventDiscoveryStore()
         recordEnvelope(store)
@@ -422,7 +435,7 @@ class RegistryVerifiedJoinContextTest {
             store = store,
             attempt = attempt,
             result = NearbyEventRegistryResolutionResult.VERIFIED,
-            resolvedEventIdHex = EVENT_ID,
+            resolvedEventIdHex = resolvedEventIdHex,
             verifiedDefinitionJoinMode = EventJoinMode.OPEN,
             verifiedDefinitionEventIdHex = EVENT_ID,
             verifiedDefinitionEventCodeHashHex = HASH,

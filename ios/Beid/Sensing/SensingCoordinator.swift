@@ -3723,7 +3723,7 @@ final class SensingCoordinator: ObservableObject {
         eninEnd: eninEnd
         )
         #if DEBUG
-        Self.ledgerLog.debug("window_close outcome=ledger_saved")
+        Self.ledgerLog.debug("self_proof outcome=signature_created")
         #endif
       } catch {
       ownerKeyOperationFailure = .unavailable

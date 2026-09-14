@@ -188,11 +188,11 @@ public class RegistryVerifiedJoinContext private constructor(
             ) {
                 return null
             }
-            val eventIdHex = candidate.resolvedEventIdHex ?: return null
+            val canonicalEventIdHex = candidate.resolvedEventIdHex.normalizedHexOrNull() ?: return null
             val canonicalDefinitionHashHex = candidate.verifiedDefinitionHashHex.normalizedHexOrNull() ?: return null
             return RegistryVerifiedJoinContext(
-                joinCode = eventIdHex,
-                eventIdHex = eventIdHex,
+                joinCode = canonicalEventIdHex,
+                eventIdHex = canonicalEventIdHex,
                 definitionHashHex = canonicalDefinitionHashHex,
                 registryBlockHashHex = candidate.registryBlockHashHex ?: return null,
                 definition = null,
