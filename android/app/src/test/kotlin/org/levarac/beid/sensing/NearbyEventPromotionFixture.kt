@@ -176,7 +176,9 @@ internal class FakeNearbyEventRegistry : NearbyEventRegistry {
     }
 
     fun completeLookup(result: NearbyEventIdLookup) {
-        requireNotNull(lookupCompletion) { "no event-id lookup was started" }(result)
+        // Verified v2 candidates carry the already-checked event ID directly;
+        // that production path intentionally skips the legacy hash lookup.
+        lookupCompletion?.invoke(result)
     }
 
     fun completeDefinition(result: NearbyEventDefinitionVerification) {

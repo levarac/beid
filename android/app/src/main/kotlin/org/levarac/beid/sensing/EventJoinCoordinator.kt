@@ -673,7 +673,7 @@ class EventJoinCoordinator internal constructor(
             return
         }
         if (BuildConfig.DEBUG) {
-            Log.d("BeidRuntimeDiagnostics", "join_admitted event_id_length=${context.eventIdHex.length} canonical=${isCanonicalDiagnosticEventId(context.eventIdHex)} domain_hash=${diagnosticDomainHash(context.eventIdHex)}")
+            logRuntimeDiagnostic("join_admitted event_id_length=${context.eventIdHex.length} canonical=${isCanonicalDiagnosticEventId(context.eventIdHex)} domain_hash=${diagnosticDomainHash(context.eventIdHex)}")
         }
         windowObservationRuntime?.beginEvent(context.joinCode)
         engine.joinAndStart(context)
@@ -787,7 +787,7 @@ class EventJoinCoordinator internal constructor(
             eventDisplayName = envelope.eventDisplayName,
             eventCodeHash = envelope.eventCodeHash,
             rawContainer = event.rawContainer,
-            verifiedEventIdHex = "0x" + envelope.eventId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+            verifiedEventIdHex = envelope.eventId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
         ) { definition -> BarnardB005EnvelopeV2.registryAgreement(envelope, definition) is BarnardRegistryAgreement.Agrees }
     }
 
@@ -813,7 +813,7 @@ class EventJoinCoordinator internal constructor(
 
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
         if (BuildConfig.DEBUG) {
-            Log.d("BeidRuntimeDiagnostics", "peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
+            logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
         }
         aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
 
@@ -1304,3 +1304,12 @@ private fun isCanonicalDiagnosticEventId(value: String): Boolean =
 
 private fun diagnosticDomainHash(value: String): String =
     MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
+
+/** Runtime diagnostics must never turn an unavailable Android logger into a product failure. */
+internal fun logRuntimeDiagnostic(message: String) {
+    try {
+        Log.d("BeidRuntimeDiagnostics", message)
+    } catch (_: RuntimeException) {
+        // android.util.Log is unavailable in plain JVM tests.
+    }
+}
