@@ -327,17 +327,14 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 The workflow remains the execution source of truth; this subsection records
 the jobs and command tokens checked for documentation drift.
 
-All four named jobs run on the existing private `emi` macOS ARM64 runner. The
-Android job installs the current JDK 17 and Android 36 SDK into the job's
-temporary runner directory; SwiftLint 0.65.0 is downloaded as the pinned
-macOS arm64 artifactbundle and checksum-verified; Repository sanity installs
-Python 3.12 into the runner's temporary toolcache.
-These are job-local setup steps and do not modify the runner permanently. The
-runner is shared with the iOS delivery lane, so its queue is intentionally
-serialized. Because this is a persistent private runner, fork pull requests
-fail each named check before checkout rather than executing fork code or being
-reported as a successful skipped check. The repository therefore accepts only
-same-repository pull request execution for these self-hosted checks.
+Android build runs on the existing private `emi` macOS ARM64 runner and
+installs the current JDK 17 and Android 36 SDK into the job's temporary runner
+directory. Determine changed paths, SwiftLint, and Repository sanity run on
+the Linux lane (`ubuntu-latest`); SwiftLint keeps its existing pinned
+container. The macOS runner is shared with the iOS delivery lane, so its queue
+is intentionally serialized. The Android job fails fork pull requests before
+checkout because it executes on the persistent private runner; the Linux jobs
+retain normal pull-request coverage.
 
 ## PR と issue の紐付け (Development 欄)
 
