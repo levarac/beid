@@ -2185,7 +2185,11 @@ final class SensingCoordinator: ObservableObject {
       discoveryOnlyScanOwned = false
       engine.joinAndStart(context)
       #if DEBUG
-      Self.log.debug("join_input event_id_length=\(context.eventIdHex.count, privacy: .public) canonical=\(diagnosticIsCanonicalEventId(context.eventIdHex), privacy: .public) domain_hash=\(diagnosticDomainHash(context.eventIdHex), privacy: .public) sdk_join_code_present=\(self.engine.currentJoinedEventCode() != nil, privacy: .public)")
+      if let actualCode = engine.currentJoinedEventCode() {
+        Self.log.debug("join_input event_id_length=\(actualCode.count, privacy: .public) canonical=\(diagnosticIsCanonicalEventId(actualCode), privacy: .public) domain_hash=\(diagnosticDomainHash(actualCode), privacy: .public) sdk_join_code_present=true")
+      } else {
+        Self.log.debug("join_input sdk_join_code_present=false")
+      }
       #endif
       // The relay gate opens here, from the capability the gate just admitted,
       // in the same shape as Android's `EventJoinCoordinator.beginVerifiedJoin`
