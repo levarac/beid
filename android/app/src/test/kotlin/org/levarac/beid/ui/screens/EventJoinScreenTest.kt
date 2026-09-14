@@ -193,6 +193,24 @@ class EventJoinScreenTest {
         assertNull(session.joinedCode)
     }
 
+    @Test
+    fun manualEntryBackActionInvokesTheProvidedCallback() {
+        var backCount = 0
+        composeTestRule.setContent {
+            BeidAppTheme {
+                ManualEventCodeContent(
+                    state = EventJoinScreenState(),
+                    onEventCodeChanged = {},
+                    onSubmit = {},
+                    onBack = { backCount++ },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.MANUAL_BACK_BUTTON).performClick()
+        assertEquals(1, backCount)
+    }
+
     /**
      * Both strings are read from the catalog rather than written here as
      * literals (changed in beid#463). The assertion is the same one this test

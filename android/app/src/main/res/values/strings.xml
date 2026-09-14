@@ -32,7 +32,8 @@
     <string name="event_join_discovery_heading">Find an event nearby</string>
     <string name="event_join_discovery_supporting">beid looks for a verified event automatically while you are nearby.</string>
     <string name="event_join_code_label">Event code</string>
-    <string name="event_join_code_helper">Use the code from the event organizer when automatic discovery is unavailable.</string>
+    <string name="event_join_code_helper">Paste the code from the organizer if discovery is unavailable.</string>
+    <string name="event_join_back_action">Back</string>
     <string name="event_join_button">Join event</string>
     <string name="event_join_bind_wallet">Bind MetaMask wallet</string>
     <string name="event_join_status_idle">Enter the event code shared by the organizer.</string>

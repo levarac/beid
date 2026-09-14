@@ -1,10 +1,15 @@
 package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -29,7 +35,6 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.ui.designsystem.BeidMetricRow
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
-import org.levarac.beid.ui.designsystem.BeidScreen
 import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidSpacing
@@ -55,6 +60,14 @@ data class RecordListItem(
 )
 
 enum class RecordSignatureStatus { NotSigned, SelfProof, Bound }
+
+private val EventCodeHexPattern = Regex("^[0-9a-fA-F]{64}$")
+
+private fun String.toRecordDisplayLabel(): String = if (matches(EventCodeHexPattern)) {
+    "Event ${take(8)}…${takeLast(6)}"
+} else {
+    this
+}
 
 fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
     id = id,
@@ -120,7 +133,14 @@ fun RecordsScreen(
     onOpenToday: () -> Unit = {},
     onOpenDetail: (UUID) -> Unit = {},
 ) {
-    BeidScreen {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BeidTheme.colors.surfaceCanvas)
+            .padding(horizontal = BeidSpacing.pageMargin)
+            .padding(vertical = BeidSpacing.l),
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
+    ) {
         Text(
             text = stringResource(R.string.records_title),
             style = MaterialTheme.typography.headlineLarge,
@@ -154,8 +174,11 @@ fun RecordsScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
+                contentPadding = PaddingValues(bottom = BeidSpacing.l),
             ) {
                 items(records, key = { it.id.toString() }) { record ->
                     RecordRow(record, onClick = { onOpenDetail(record.id) })
@@ -171,15 +194,23 @@ internal val recordDateFormatter: DateTimeFormatter =
 
 @Composable
 private fun RecordRow(record: RecordListItem, onClick: () -> Unit) {
+    val displayLabel = record.eventLabel.toRecordDisplayLabel()
     BeidPanel(
         modifier = Modifier
             .clickable(onClick = onClick)
             .testTag(RecordsScreenTestTags.recordRow(record.id)),
     ) {
         Text(
-            text = record.eventLabel,
+            text = displayLabel,
             style = MaterialTheme.typography.titleMedium,
             color = BeidTheme.colors.textPrimary,
+            modifier = Modifier.semantics {
+                contentDescription = if (displayLabel == record.eventLabel) {
+                    displayLabel
+                } else {
+                    "$displayLabel. ${record.eventLabel}"
+                }
+            },
         )
         Text(
             text = recordDateFormatter.format(record.createdAt),

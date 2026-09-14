@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -66,6 +71,7 @@ object EventJoinScreenTestTags {
     const val RESUME_BUTTON = "event_join_resume_button"
     const val SIMULATE_SIGNAL_LOST_BUTTON = "event_join_simulate_signal_lost_button"
     const val ACCOUNT_ENTRY = "event_join_account_entry"
+    const val MANUAL_BACK_BUTTON = "event_join_manual_back_button"
     const val NEARBY_EVENT_LIST = "nearby_event_list"
 
     /** beid#463: the rescue route out of a search that found nothing joinable. */
@@ -203,9 +209,10 @@ fun EventJoinContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(BeidSpacing.pageMargin)
+                .padding(horizontal = BeidSpacing.pageMargin)
+                .padding(top = BeidSpacing.l, bottom = BeidSpacing.l)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
         ) {
             val sessionState = state.sessionState
             if (sessionState is EventJoinUiState.Sensing) {
@@ -235,26 +242,8 @@ fun EventJoinContent(
                     searchOutcome = state.searchOutcome,
                     enabled = sessionState is EventJoinUiState.Idle || sessionState is EventJoinUiState.OwnerKeyUnavailable,
                     onJoin = onJoinNearbyEvent,
+                    onOpenManualEventCode = onOpenManualEventCode,
                 )
-                // beid#463. Offered on the shared outcome, never on "the card
-                // list looks empty": a screen full of candidates that cannot be
-                // joined is the same dead end as an empty one, and the rule
-                // that knows the difference lives in `shared/` so iOS offers
-                // the route at the same moment.
-                if (state.searchOutcome == NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED) {
-                    Text(
-                        text = stringResource(R.string.event_join_rescue_prompt),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = BeidTheme.colors.textSecondary,
-                    )
-                    BeidSecondaryButton(
-                        text = stringResource(R.string.event_join_rescue_enter_code),
-                        contentColor = BeidTheme.colors.textPrimary,
-                        borderColor = BeidTheme.colors.textSecondary,
-                        onClick = onOpenManualEventCode,
-                        modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
-                    )
-                }
                 if (sessionState !is EventJoinUiState.Idle) {
                     val currentStatus = statusText(sessionState)
                     Text(
@@ -282,7 +271,7 @@ fun EventJoinContent(
 }
 
 @Composable
-fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
+fun ManualEventCodeScreen(viewModel: EventJoinViewModel, onBack: () -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsState()
     // The clipboard is read here and nowhere below: `ManualEventCodeContent`
     // stays a function of its state, and the ViewModel receives a plain
@@ -293,6 +282,7 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
         onEventCodeChanged = viewModel::onEventCodeChanged,
         onPasteEventCode = { viewModel.onEventCodePasted(clipboard.getText()?.text) },
         onSubmit = viewModel::submit,
+        onBack = onBack,
     )
 }
 
@@ -308,17 +298,42 @@ fun ManualEventCodeScreen(viewModel: EventJoinViewModel) {
  * and beid#363 removed the second copy of that field the scenario path used
  * to draw.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualEventCodeContent(
     state: EventJoinScreenState,
     onEventCodeChanged: (String) -> Unit,
     onPasteEventCode: () -> Unit = {},
     onSubmit: () -> Unit,
+    onBack: () -> Unit = {},
 ) {
-    Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
+    Scaffold(
+        containerColor = BeidTheme.colors.surfaceCanvas,
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.event_join_code_label)) },
+                navigationIcon = {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.MANUAL_BACK_BUTTON),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.event_join_back_action),
+                        )
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(BeidSpacing.pageMargin),
-            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = BeidSpacing.pageMargin)
+                .padding(top = BeidSpacing.l, bottom = BeidSpacing.l)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
         ) {
             Text(
                 stringResource(R.string.event_join_code_label),
@@ -335,6 +350,12 @@ fun ManualEventCodeContent(
                 onValueChange = onEventCodeChanged,
                 placeholder = stringResource(R.string.event_join_code_label),
                 isError = state.fieldError != null,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
             )
             state.fieldError?.let { error ->
                 Row(
@@ -372,9 +393,10 @@ fun ManualEventCodeContent(
 }
 
 @Composable
-fun ManualEventCodeRoute(session: EventJoinSession) {
+@OptIn(ExperimentalMaterial3Api::class)
+fun ManualEventCodeRoute(session: EventJoinSession, onBack: () -> Unit = {}) {
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
-    ManualEventCodeScreen(viewModel)
+    ManualEventCodeScreen(viewModel, onBack)
 }
 
 @Composable
@@ -384,32 +406,49 @@ private fun NearbyEventCards(
     searchOutcome: NearbyEventSearchOutcome,
     enabled: Boolean,
     onJoin: (String) -> Unit,
+    onOpenManualEventCode: () -> Unit,
 ) {
     if (cards.isEmpty()) {
         val isSearching = searchOutcome == NearbyEventSearchOutcome.SEARCHING
         val searchingLabel = stringResource(
             if (isSearching) R.string.event_join_searching_nearby else R.string.event_join_no_nearby_title,
         )
-        Column(
+        BeidPanel(
             modifier = Modifier
-                .fillMaxWidth()
                 .testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
-            verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
-            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (isSearching) {
-                CircularProgressIndicator(
-                    modifier = Modifier.semantics { stateDescription = searchingLabel },
-                    color = BeidTheme.colors.signalActive,
+            Column(
+                verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (isSearching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.semantics { stateDescription = searchingLabel },
+                        color = BeidTheme.colors.signalActive,
+                    )
+                }
+                Text(
+                    text = searchingLabel,
+                    color = BeidTheme.colors.textPrimary,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
+                if (isSearching) {
+                    Text(stringResource(R.string.event_join_rescue_guidance), color = BeidTheme.colors.textSecondary)
+                } else {
+                    Text(
+                        stringResource(R.string.event_join_rescue_prompt),
+                        color = BeidTheme.colors.textSecondary,
+                    )
+                    BeidSecondaryButton(
+                        text = stringResource(R.string.event_join_rescue_enter_code),
+                        contentColor = BeidTheme.colors.textPrimary,
+                        borderColor = BeidTheme.colors.textSecondary,
+                        onClick = onOpenManualEventCode,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
+                    )
+                }
             }
-            Text(
-                text = searchingLabel,
-                color = BeidTheme.colors.textPrimary,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-            Text(stringResource(R.string.event_join_rescue_guidance), color = BeidTheme.colors.textSecondary)
         }
         return
     }
@@ -481,6 +520,22 @@ private fun NearbyEventCards(
                         color = BeidTheme.colors.actionPrimary,
                     )
                 }
+            }
+        }
+        if (searchOutcome == NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED) {
+            BeidPanel {
+                Text(
+                    stringResource(R.string.event_join_rescue_prompt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BeidTheme.colors.textSecondary,
+                )
+                BeidSecondaryButton(
+                    text = stringResource(R.string.event_join_rescue_enter_code),
+                    contentColor = BeidTheme.colors.textPrimary,
+                    borderColor = BeidTheme.colors.textSecondary,
+                    onClick = onOpenManualEventCode,
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
+                )
             }
         }
     }

@@ -47,3 +47,23 @@ the `Scaffold` structure, progress indicators, and Compose semantics:
 - https://developer.android.com/develop/ui/compose/components/app-bars
 - https://developer.android.com/develop/ui/compose/components/progress
 - https://developer.android.com/develop/ui/compose/accessibility/semantics
+
+## Device review follow-up
+
+The first device pass exposed three presentation problems in the actual Pixel
+screens (`evidence/beid-pixel-46111JEKB11173/20260915-041-discovery.png`,
+`20260915-041-event-code.png`, and `20260915-041-records.png`). The discovery
+and code bodies were vertically centered below their app bars, leaving a large
+empty gap before the primary content. Both now use local top-aligned scroll
+layouts with roughly one spacing token of top padding; the shared `BeidScreen`
+contract is unchanged. The discovery empty state is one panel containing the
+current search/empty explanation and the manual rescue action, so the same
+problem is not described twice. The code route has a back app-bar action,
+shorter helper copy, and ASCII/no-autocorrect input hints while paste remains
+the normal path for the long code.
+
+The Records screenshot showed a 64-character raw event identifier dominating
+each card. Since the Android record model has no event display name, list rows
+now show `Event` plus a middle-ellipsized identifier and retain the full value
+in accessibility semantics and the detail navigation payload. No record or
+submission status fact changed.

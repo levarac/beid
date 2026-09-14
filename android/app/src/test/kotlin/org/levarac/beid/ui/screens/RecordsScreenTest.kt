@@ -110,6 +110,18 @@ class RecordsScreenTest {
     }
 
     @Test
+    fun longEventCodeUsesAReadableFallbackLabelWhileTheFullIdRemainsAccessible() {
+        val fullId = "4c3673b07fae06ff6adaece43e13902a4b57165e93f6aa492c60e8327585ff4f"
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordsScreen(records = listOf(record(eventCode = fullId)), onOpenDetail = {})
+            }
+        }
+
+        composeTestRule.onNodeWithText("Event 4c3673b0…85ff4f").assertIsDisplayed()
+    }
+
+    @Test
     fun signatureStatusDefaultsToNotYetSigned() {
         val record = record(hasSelfProof = false, hasBinding = false)
 
