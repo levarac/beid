@@ -222,11 +222,12 @@ public class RegistryVerifiedJoinContext private constructor(
                 return null
             }
             val definition = resolution.context ?: return null
+            val canonicalEventIdHex = definition.eventIdHex.normalizedHexOrNull() ?: return null
             return RegistryVerifiedJoinContext(
                 // The operator code is only a lookup/UI hint. The engine wire
                 // contract is the verified definition's canonical Event ID.
-                joinCode = definition.eventIdHex,
-                eventIdHex = definition.eventIdHex,
+                joinCode = canonicalEventIdHex,
+                eventIdHex = canonicalEventIdHex,
                 definitionHashHex = resolution.definitionHashHex ?: return null,
                 registryBlockHashHex = resolution.blockHashHex ?: return null,
                 definition = definition,

@@ -45,7 +45,8 @@ class RegistryVerifiedJoinContextTest {
         )
 
         val issued = assertNotNull(context)
-        assertEquals(assertNotNull(issued.definition).eventIdHex, issued.joinCode)
+        assertEquals(CANONICAL_OPEN_CODE, issued.joinCode)
+        assertEquals(CANONICAL_OPEN_CODE, issued.eventIdHex)
         assertEquals(DEFINITION_HASH_HEX, issued.definitionHashHex)
         assertEquals(BLOCK_HASH_HEX, issued.registryBlockHashHex)
     }
@@ -159,7 +160,7 @@ class RegistryVerifiedJoinContextTest {
     @Test
     fun theCanonicalOpenCodeFixtureIsTheVectorsOwnEventId() {
         assertEquals(
-            CANONICAL_OPEN_CODE,
+            "0x$CANONICAL_OPEN_CODE",
             definitionContext(EventJoinMode.OPEN).eventIdHex,
             "the canonical open code fixture has drifted from the event-definition vector",
         )
@@ -257,8 +258,8 @@ class RegistryVerifiedJoinContextTest {
             RegistryVerifiedJoinContext.fromOperatorLookup(JOIN_CODE, resolution(), vectorValidFrom()),
         )
 
-        assertEquals(assertNotNull(issued.definition).eventIdHex, issued.joinCode)
-        assertEquals(assertNotNull(issued.definition).eventIdHex, issued.eventIdHex)
+        assertEquals(CANONICAL_OPEN_CODE, issued.joinCode)
+        assertEquals(CANONICAL_OPEN_CODE, issued.eventIdHex)
     }
 
     private fun verifiedDefinition(): EventDefinition {
@@ -439,7 +440,9 @@ class RegistryVerifiedJoinContextTest {
             joinMode = joinMode,
         )
         return EventDefinitionContext(
-            eventIdHex = vector.vectorEventId().toLowercaseHex(),
+            // Match EventDefinitionFetcher, which exposes the verified ID with
+            // an optional 0x prefix; the issuer must normalize it for the wire.
+            eventIdHex = "0x" + vector.vectorEventId().toLowercaseHex(),
             definitionHashHex = DEFINITION_HASH_HEX,
             selectedAt = vector.definitionRecord().validFrom,
             record = vector.definitionRecord(),
