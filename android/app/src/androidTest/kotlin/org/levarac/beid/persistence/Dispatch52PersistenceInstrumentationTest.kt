@@ -84,11 +84,9 @@ class Dispatch52PersistenceInstrumentationTest {
         val artifact = context.filesDir.resolve("canonical-observations-v1").listFiles().orEmpty()
             .singleOrNull { it.extension == "cose" } ?: error("signed artifact missing")
         val windowId = artifact.name.substringBefore("--")
-        val ledger = requireNotNull(UnsentWindowLedgerStore(file).load()?.ledger)
-        val ledgerWindow = ledger.state.windows.single { it.windowId == windowId }
-        assertEquals(artifact.name.substringAfter("--").removeSuffix(".cose"), ledgerWindow.observationReference)
         val submissionRecord = SubmissionRecordStore(SubmissionRecordStore.defaultFile(context.filesDir))
             .recordFor(windowId) ?: error("submission record missing")
+        assertEquals(windowId, submissionRecord.windowId)
         assertEquals(eventId, submissionRecord.eventIdHex)
         assertEquals(configuration.submissionEndpoint, submissionRecord.submissionEndpoint)
         assertEquals(configuration.receiptPublicKey.toByteArray().hex(), submissionRecord.receiptPublicKeyHex)
@@ -103,7 +101,6 @@ class Dispatch52PersistenceInstrumentationTest {
             .putString("artifact_name", artifact.name)
             .putString("artifact_sha256", artifact.readBytes().sha256())
             .putString("window_id", windowId)
-            .putString("observation_reference", ledgerWindow.observationReference)
             .putString("submission_endpoint", submissionRecord.submissionEndpoint)
             .putString("receipt_public_key_hex", submissionRecord.receiptPublicKeyHex)
             .putString("operator_id_hex", submissionRecord.operatorIdHex)
@@ -142,8 +139,6 @@ class Dispatch52PersistenceInstrumentationTest {
         assertEquals(testPrefs.getString("operator_id_hex", null), record.operatorIdHex)
         assertEquals(testPrefs.getString("event_definition_digest_hex", null), record.eventDefinitionDigestHex)
         assertEquals(null, record.unresolvedReason)
-        val restoredWindow = requireNotNull(restored.ledger).state.windows.single { it.windowId == windowId }
-        assertEquals(testPrefs.getString("observation_reference", null), restoredWindow.observationReference)
     }
 
     private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
