@@ -1109,6 +1109,48 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(try XCTUnwrap(candidate.sourceAt(index: 0)).peripheralId, "peripheral-a")
   }
 
+  /// A verified B005 v2 envelope carries the canonical Event ID that must be
+  /// used for the registry read. The human-code hash is intentionally a
+  /// different value in this regression: the v2 path must retain Barnard's
+  /// verified identity instead of routing through the legacy hash lookup.
+  func testRadioSelfVerifiedEnvelopeResolvesItsVerifiedEventIdWithoutLegacyHashLookup() async throws {
+    let eventIdHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    let canonicalHash = "6c86c6aac5fb24bc"
+    let legacyHumanCodeHash = "0001020304050607"
+    let canonicalHashBytes = Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc])
+    XCTAssertNotEqual(canonicalHash, legacyHumanCodeHash)
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      FakeEventJoinRegistry.admittingResolution(
+        eventIdHex: eventIdHex,
+        nowEpochSeconds: 1_800_000_000,
+        eventCodeHashHex: canonicalHash
+      )
+    )
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinRegistry: registry,
+      nearbyDiscoveryClock: { 1_800_000_000_000 }
+    )
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: canonicalHashBytes,
+      rawContainer: Self.envelopeContainer,
+      verifiedEventIdHex: "0x\(eventIdHex)",
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: 1_800_000_000_000
+    )
+    await Task.yield()
+
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(registry.requestedEventIdHexes, ["0x\(eventIdHex)"])
+    XCTAssertEqual(candidate.registryStatus, .REGISTERED_VIA_OPERATOR_LOOKUP)
+    XCTAssertEqual(candidate.resolvedEventIdHex, "0x\(eventIdHex)")
+    XCTAssertEqual(Data(bytesFromKotlinByteArray: candidate.eventCodeHash), canonicalHashBytes)
+  }
+
   /// A v2 envelope carries no census, so recording one must not erase the
   /// census a v1 hint already published for the same source.
   func testRadioSelfVerifiedEnvelopeKeepsTheCensusAV1HintRecorded() throws {

@@ -673,6 +673,7 @@ final class SensingCoordinator: ObservableObject {
   private let eventJoinRegistry: (any EventJoinRegistry)?
   private var nearbyRegistryRequests:
     [ExportedKotlinPackages.org.levarac.parallax.registry.RegistryRequest] = []
+  private var nearbyEventDefinitionRequests: [any EventIdentityVerificationRequest] = []
   /// Invalidates registry callbacks already queued on MainActor when a
   /// discovery session ends; cancelling the underlying request cannot recall
   /// a completion that was delivered before cancellation.
@@ -690,6 +691,10 @@ final class SensingCoordinator: ObservableObject {
   /// kept so an envelope arriving *after* a hash's single registry resolution
   /// completed still has something to be compared against.
   private var nearbyVerifiedDefinitions: [String: BarnardEventDefinitionV1] = [:]
+
+  /// Canonical Event IDs carried by Barnard's radio-self-verified B005 v2
+  /// envelopes, keyed by the same hash as the discovery reducer.
+  private var nearbyVerifiedEventIds: [String: String] = [:]
 
   // MARK: - Per-session protocol state
   //
@@ -1344,6 +1349,7 @@ final class SensingCoordinator: ObservableObject {
         eventDisplayName: envelope.eventDisplayName,
         eventCodeHash: Data(envelope.eventCodeHash),
         rawContainer: envelopeEvent.rawContainer,
+        verifiedEventIdHex: "0x" + Data(envelope.eventId).lowercaseHexString,
         registryAgreement: { definition in
           BarnardB005EnvelopeV2.registryAgreement(envelope, definition: definition) == .agrees
         }
@@ -2567,6 +2573,7 @@ final class SensingCoordinator: ObservableObject {
     eventDisplayName: String,
     eventCodeHash: Data,
     rawContainer: Data,
+    verifiedEventIdHex: String? = nil,
     registryAgreement: @escaping (BarnardEventDefinitionV1) -> Bool,
     observedAtEpochMillis: Int64? = nil
   ) {
@@ -2589,6 +2596,9 @@ final class SensingCoordinator: ObservableObject {
         observedAtEpochMillis: observedAt
       )
     guard update.acceptedHint else { return }
+    if let verifiedEventIdHex {
+      nearbyVerifiedEventIds[hash] = verifiedEventIdHex
+    }
     nearbyEnvelopeAgreements[hash] = registryAgreement
     // No second call for the late-arrival order: the record above already
     // acted on `agrees`, under the same guard the standalone agreement entry
@@ -2634,6 +2644,7 @@ final class SensingCoordinator: ObservableObject {
     }
     nearbyEnvelopeAgreements = nearbyEnvelopeAgreements.filter { liveHashes.contains($0.key) }
     nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter { liveHashes.contains($0.key) }
+    nearbyVerifiedEventIds = nearbyVerifiedEventIds.filter { liveHashes.contains($0.key) }
     republishRelayGateState()
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
@@ -2811,8 +2822,11 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryCallbackGeneration &+= 1
     nearbyRegistryRequests.forEach { $0.cancel() }
     nearbyRegistryRequests.removeAll()
+    nearbyEventDefinitionRequests.forEach { $0.cancel() }
+    nearbyEventDefinitionRequests.removeAll()
     nearbyEnvelopeAgreements.removeAll()
     nearbyVerifiedDefinitions.removeAll()
+    nearbyVerifiedEventIds.removeAll()
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
     nearbyEventCandidates = ExportedKotlinPackages.org.levarac.parallax.discovery
@@ -2824,7 +2838,6 @@ final class SensingCoordinator: ObservableObject {
   private func resolveNearbyCandidates(
     _ snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates
   ) {
-    guard let client = nearbyRegistryClient else { return }
     for index in 0..<snapshot.candidateCount {
       guard let candidate = snapshot.candidateAt(index: index) else { continue }
       let hash = candidate.eventCodeHashHex
@@ -2832,91 +2845,108 @@ final class SensingCoordinator: ObservableObject {
         .beginNearbyEventRegistryResolutionFromHex(store: nearbyDiscoveryStore, eventCodeHashHex: hash)
       else { continue }
       let generation = nearbyDiscoveryCallbackGeneration
-      let lookup = client.resolveEventIdByCodeHash(hashHex: hash) { [weak self] resolution in
-        Task { @MainActor in
-          guard let self else { return }
-          guard generation == self.nearbyDiscoveryCallbackGeneration else { return }
-          guard ExportedKotlinPackages.org.levarac.parallax.discovery
-            .isNearbyEventRegistryResolutionAttemptActive(
-              store: self.nearbyDiscoveryStore,
-              attempt: attempt
-            )
-          else { return }
-          guard resolution.isSuccess, let eventID = resolution.eventIdHex else {
-            let result: ExportedKotlinPackages.org.levarac.parallax.discovery
-              .NearbyEventRegistryResolutionResult = resolution.errorCode == "event_code_lookup_not_found"
-              ? .NOT_REGISTERED : .LOOKUP_UNAVAILABLE
-            let update = ExportedKotlinPackages.org.levarac.parallax.discovery
-              .completeNearbyEventRegistryResolutionFromHex(
-                store: self.nearbyDiscoveryStore, attempt: attempt,
-                result: result, resolvedEventIdHex: nil,
-                verifiedDefinitionJoinMode: nil,
-                verifiedDefinitionEventIdHex: nil,
-                verifiedDefinitionEventCodeHashHex: nil,
-                envelopeAgreesWithRegistry: false,
-                // A lookup that did not route establishes no definition, so
-                // there is no digest and no block to retain (beid#374).
-                verifiedDefinitionHashHex: nil,
-                registryBlockHashHex: nil,
-                verifiedDefinitionValidFromEpochSeconds: nil,
-                verifiedDefinitionValidUntilEpochSeconds: nil
+      if let verifiedEventId = nearbyVerifiedEventIds[hash] {
+        // B005 v2 already carried Barnard's verified canonical Event ID.
+        // Route it directly to the definition read; the legacy operator hash
+        // lookup remains the v1 hint path below.
+        resolveNearbyEventDefinition(
+          eventIdHex: verifiedEventId,
+          hash: hash,
+          attempt: attempt,
+          generation: generation
+        )
+      } else {
+        guard let client = nearbyRegistryClient else { continue }
+        let lookup = client.resolveEventIdByCodeHash(hashHex: hash) { [weak self] resolution in
+          Task { @MainActor in
+            guard let self else { return }
+            guard generation == self.nearbyDiscoveryCallbackGeneration else { return }
+            guard ExportedKotlinPackages.org.levarac.parallax.discovery
+              .isNearbyEventRegistryResolutionAttemptActive(
+                store: self.nearbyDiscoveryStore,
+                attempt: attempt
               )
-            self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
-            return
-          }
-          let verification = client.resolveEventDefinition(
-            eventIdHex: eventID,
-            pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin(),
-            useTimeEpochSeconds: self.nearbyDiscoveryClock() / 1000
-          ) { [weak self] verified in
-            Task { @MainActor in
-              guard let self else { return }
-              guard generation == self.nearbyDiscoveryCallbackGeneration else { return }
-              guard ExportedKotlinPackages.org.levarac.parallax.discovery
-                .isNearbyEventRegistryResolutionAttemptActive(
-                  store: self.nearbyDiscoveryStore,
-                  attempt: attempt
-                )
-              else { return }
+            else { return }
+            guard resolution.isSuccess, let eventID = resolution.eventIdHex else {
               let result: ExportedKotlinPackages.org.levarac.parallax.discovery
-                .NearbyEventRegistryResolutionResult = verified.isSuccess
-                ? .VERIFIED : .VERIFICATION_UNAVAILABLE
-              let definition = verified.context.flatMap(Self.barnardDefinition(from:))
-              if result == .VERIFIED, let definition {
-                self.nearbyVerifiedDefinitions[hash] = definition
-              } else {
-                self.nearbyVerifiedDefinitions.removeValue(forKey: hash)
-              }
-              // Barnard owns the comparison. This decides only that it is
-              // asked with a definition this host read itself.
-              let agrees = definition.map { self.nearbyEnvelopeAgreements[hash]?($0) ?? false } ?? false
+                .NearbyEventRegistryResolutionResult = resolution.errorCode == "event_code_lookup_not_found"
+                ? .NOT_REGISTERED : .LOOKUP_UNAVAILABLE
               let update = ExportedKotlinPackages.org.levarac.parallax.discovery
                 .completeNearbyEventRegistryResolutionFromHex(
                   store: self.nearbyDiscoveryStore, attempt: attempt,
-                  result: result, resolvedEventIdHex: eventID,
-                  verifiedDefinitionJoinMode: verified.context?.joinMode,
-                  verifiedDefinitionEventIdHex: verified.context?.eventIdHex,
-                  verifiedDefinitionEventCodeHashHex: verified.context?.eventCodeHashHex,
-                  envelopeAgreesWithRegistry: agrees,
-                  // Retained so a later join can prove it is joining the
-                  // definition that promoted this candidate, not merely the
-                  // same event id (beid#374). Passed explicitly rather than
-                  // relying on the Kotlin default, because Swift Export's
-                  // handling of Kotlin default arguments is not something to
-                  // depend on unverified.
-                  verifiedDefinitionHashHex: verified.definitionHashHex,
-                  registryBlockHashHex: verified.blockHashHex,
-                  verifiedDefinitionValidFromEpochSeconds: verified.context?.validFrom.value,
-                  verifiedDefinitionValidUntilEpochSeconds: verified.context?.validUntil.value
+                  result: result, resolvedEventIdHex: nil,
+                  verifiedDefinitionJoinMode: nil,
+                  verifiedDefinitionEventIdHex: nil,
+                  verifiedDefinitionEventCodeHashHex: nil,
+                  envelopeAgreesWithRegistry: false,
+                  verifiedDefinitionHashHex: nil,
+                  registryBlockHashHex: nil,
+                  verifiedDefinitionValidFromEpochSeconds: nil,
+                  verifiedDefinitionValidUntilEpochSeconds: nil
                 )
               self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+              return
             }
+            self.resolveNearbyEventDefinition(
+              eventIdHex: eventID,
+              hash: hash,
+              attempt: attempt,
+              generation: generation
+            )
           }
-          self.nearbyRegistryRequests.append(verification)
         }
+        nearbyRegistryRequests.append(lookup)
       }
-      nearbyRegistryRequests.append(lookup)
     }
+  }
+
+  private func resolveNearbyEventDefinition(
+    eventIdHex: String,
+    hash: String,
+    attempt: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventRegistryResolutionAttempt,
+    generation: UInt64
+  ) {
+    guard let eventJoinRegistry else { return }
+    let verification = eventJoinRegistry.resolveEventDefinition(
+      eventIdHex: eventIdHex,
+      nowEpochSeconds: nearbyDiscoveryClock() / 1000
+    ) { [weak self] verified in
+      Task { @MainActor in
+        guard let self else { return }
+        guard generation == self.nearbyDiscoveryCallbackGeneration else { return }
+        guard ExportedKotlinPackages.org.levarac.parallax.discovery
+          .isNearbyEventRegistryResolutionAttemptActive(
+            store: self.nearbyDiscoveryStore,
+            attempt: attempt
+          )
+        else { return }
+        let result: ExportedKotlinPackages.org.levarac.parallax.discovery
+          .NearbyEventRegistryResolutionResult = verified?.isSuccess == true
+          ? .VERIFIED : .VERIFICATION_UNAVAILABLE
+        let definition = verified?.context.flatMap(Self.barnardDefinition(from:))
+        if result == .VERIFIED, let definition {
+          self.nearbyVerifiedDefinitions[hash] = definition
+        } else {
+          self.nearbyVerifiedDefinitions.removeValue(forKey: hash)
+        }
+        let agrees = definition.map { self.nearbyEnvelopeAgreements[hash]?($0) ?? false } ?? false
+        let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+          .completeNearbyEventRegistryResolutionFromHex(
+            store: self.nearbyDiscoveryStore, attempt: attempt,
+            result: result, resolvedEventIdHex: eventIdHex,
+            verifiedDefinitionJoinMode: verified?.context?.joinMode,
+            verifiedDefinitionEventIdHex: verified?.context?.eventIdHex,
+            verifiedDefinitionEventCodeHashHex: verified?.context?.eventCodeHashHex,
+            envelopeAgreesWithRegistry: agrees,
+            verifiedDefinitionHashHex: verified?.definitionHashHex,
+            registryBlockHashHex: verified?.blockHashHex,
+            verifiedDefinitionValidFromEpochSeconds: verified?.context?.validFrom.value,
+            verifiedDefinitionValidUntilEpochSeconds: verified?.context?.validUntil.value
+          )
+        self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+      }
+    }
+    nearbyEventDefinitionRequests.append(verification)
   }
 
   /// Builds barnard's `BarnardEventDefinitionV1` from a verified registry read.
