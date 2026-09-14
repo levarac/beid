@@ -134,3 +134,34 @@ public fun eventJoinFailureReasonForJoinEligibility(
     -> EventJoinFailureReason.EVENT_NOT_ACTIVE
     NearbyEventJoinEligibility.CODE_NOT_BOUND -> EventJoinFailureReason.CODE_MISMATCH
 }
+
+/**
+ * A stable identifier for [reason], for a host that cannot switch on the enum
+ * itself.
+ *
+ * Kotlin enums reach Swift through Swift Export as a final class carrying
+ * static accessors and no `name`, no `description` and no equality — beid's
+ * own `EventJoinRefusal` records this, and `SensingCoordinator` works around
+ * it by logging `String(describing:)`. So iOS can obtain an
+ * [EventJoinFailureReason] from the classifiers above and still have no way to
+ * branch on which one it got. This gives it one.
+ *
+ * **This is not copy and not a presentation decision.** It is the reason's
+ * identity, spelled in something every host can compare. Which reason applies
+ * stays here; what to say about it stays with the host, exactly as Android
+ * already does it (`EventJoinScreen.message()` maps reason to a string
+ * resource, and that mapping is Android's, not `shared/`'s).
+ *
+ * The strings are deliberately not the enum's own `name`: an entry rename
+ * would then silently change a value hosts match on. They are frozen wire
+ * names, and a host's `else`/`default` branch is what catches an entry added
+ * here without the host being updated.
+ */
+public fun eventJoinFailureReasonKey(reason: EventJoinFailureReason): String = when (reason) {
+    EventJoinFailureReason.NETWORK_REQUIRED -> "network_required"
+    EventJoinFailureReason.EVENT_NOT_FOUND -> "event_not_found"
+    EventJoinFailureReason.CODE_MISMATCH -> "code_mismatch"
+    EventJoinFailureReason.EVENT_NOT_ACTIVE -> "event_not_active"
+    EventJoinFailureReason.VERIFICATION_FAILED -> "verification_failed"
+    EventJoinFailureReason.UNKNOWN -> "unknown"
+}
