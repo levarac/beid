@@ -57,6 +57,31 @@ class NearbyEventDiscoverySessionTest {
     }
 
     @Test
+    fun verifiedV2EnvelopeUsesItsEventIdWithoutHumanCodeHashLookup() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry, baseEpochMillis = 150_000L)
+
+        session.recordRadioSelfVerifiedEnvelope(
+            "peripheral",
+            "Beacon announcement",
+            EVENT_HASH,
+            CONTAINER,
+            verifiedEventIdHex = EVENT_ID_HEX,
+        ) { true }
+        runCurrent()
+
+        assertEquals(0, registry.lookupRequests)
+        assertEquals(listOf(EVENT_ID_HEX), registry.definitionEventIds)
+        registry.completeDefinition(eligibleDefinition())
+        runCurrent()
+
+        val card = session.cards.value.single()
+        assertEquals(EVENT_ID_HEX, card.eventIdHex)
+        assertEquals(100L, card.displayValidFromEpochSeconds)
+        assertEquals(200L, card.displayValidUntilEpochSeconds)
+    }
+
+    @Test
     fun gatedDefinitionRemainsNonJoinable() = runTest {
         val registry = FakeNearbyEventRegistry()
         val session = session(registry)
@@ -148,11 +173,14 @@ class NearbyEventDiscoverySessionTest {
     private class FakeNearbyEventRegistry : NearbyEventRegistry {
         private lateinit var lookupCompletion: (NearbyEventIdLookup) -> Unit
         private lateinit var definitionCompletion: (NearbyEventDefinitionVerification) -> Unit
+        var lookupRequests = 0
+        val definitionEventIds = mutableListOf<String>()
 
         override fun resolveEventIdByCodeHash(
             hashHex: String,
             completion: (NearbyEventIdLookup) -> Unit,
         ): NearbyEventRegistryRequest {
+            lookupRequests += 1
             lookupCompletion = completion
             return NearbyEventRegistryRequest {}
         }
@@ -162,6 +190,7 @@ class NearbyEventDiscoverySessionTest {
             useTimeEpochSeconds: Long,
             completion: (NearbyEventDefinitionVerification) -> Unit,
         ): NearbyEventRegistryRequest {
+            definitionEventIds += eventIdHex
             definitionCompletion = completion
             return NearbyEventRegistryRequest {}
         }

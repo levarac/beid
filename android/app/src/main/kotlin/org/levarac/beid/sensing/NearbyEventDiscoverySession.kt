@@ -152,6 +152,7 @@ internal class NearbyEventDiscoverySession(
      * completed still has something to be compared against.
      */
     private val verifiedDefinitionByHash = mutableMapOf<String, BarnardEventDefinitionV1>()
+    private val verifiedEventIdByHash = mutableMapOf<String, String>()
     private var expiryJob: Job? = null
     private var disposed = false
     private var callbackGeneration = 0L
@@ -209,6 +210,7 @@ internal class NearbyEventDiscoverySession(
         eventDisplayName: String,
         eventCodeHash: ByteArray,
         rawContainer: ByteArray,
+        verifiedEventIdHex: String? = null,
         registryAgreement: (BarnardEventDefinitionV1) -> Boolean,
     ) {
         if (disposed) return
@@ -229,6 +231,9 @@ internal class NearbyEventDiscoverySession(
             observedAtEpochMillis = nowEpochMillis(),
         )
         if (!update.acceptedHint) return
+        if (verifiedEventIdHex != null) {
+            verifiedEventIdByHash[hash] = verifiedEventIdHex
+        }
         envelopeAgreementByHash[hash] = registryAgreement
         // No second call for the late-arrival order: the record above already
         // acted on `agrees`, under the same guard the standalone agreement
@@ -264,6 +269,7 @@ internal class NearbyEventDiscoverySession(
         verifiedMetadataByHash.clear()
         envelopeAgreementByHash.clear()
         verifiedDefinitionByHash.clear()
+        verifiedEventIdByHash.clear()
         _cards.value = emptyList()
     }
 
@@ -284,7 +290,8 @@ internal class NearbyEventDiscoverySession(
             // on a completion path that calls back before the outer function
             // returns.
             lateinit var lookup: NearbyEventRegistryRequest
-            lookup = client.resolveEventIdByCodeHash(hash) { resolution ->
+            val directEventId = verifiedEventIdByHash[hash]
+            val handleLookup: (NearbyEventIdLookup) -> Unit = { resolution ->
                 coroutineScope.launch {
                     registryRequests.remove(lookup)
                     if (disposed || generation != callbackGeneration ||
@@ -356,7 +363,18 @@ internal class NearbyEventDiscoverySession(
                     registryRequests += verification
                 }
             }
-            registryRequests += lookup
+            if (directEventId != null) {
+                // Install the placeholder before launching the completion. Main.immediate
+                // can otherwise run the nested launch before `lookup` is assigned.
+                lookup = NearbyEventRegistryRequest {}
+                registryRequests += lookup
+                coroutineScope.launch {
+                    handleLookup(NearbyEventIdLookup(true, directEventId, null))
+                }
+            } else {
+                lookup = client.resolveEventIdByCodeHash(hash, handleLookup)
+                registryRequests += lookup
+            }
         }
     }
 
@@ -377,6 +395,7 @@ internal class NearbyEventDiscoverySession(
         verifiedMetadataByHash.keys.retainAll(liveHashes)
         envelopeAgreementByHash.keys.retainAll(liveHashes)
         verifiedDefinitionByHash.keys.retainAll(liveHashes)
+        verifiedEventIdByHash.keys.retainAll(liveHashes)
         _cards.value = buildList {
             repeat(snapshot.candidateCount) { index ->
                 snapshot.candidateAt(index)?.let { candidate ->

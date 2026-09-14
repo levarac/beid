@@ -782,6 +782,7 @@ class EventJoinCoordinator internal constructor(
             eventDisplayName = envelope.eventDisplayName,
             eventCodeHash = envelope.eventCodeHash,
             rawContainer = event.rawContainer,
+            verifiedEventIdHex = "0x" + envelope.eventId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
         ) { definition -> BarnardB005EnvelopeV2.registryAgreement(envelope, definition) is BarnardRegistryAgreement.Agrees }
     }
 
