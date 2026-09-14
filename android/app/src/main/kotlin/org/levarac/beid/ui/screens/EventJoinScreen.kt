@@ -8,9 +8,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +30,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.levarac.beid.R
@@ -34,6 +47,7 @@ import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 import org.levarac.beid.ui.designsystem.BeidPanel
 import org.levarac.beid.ui.designsystem.BeidPrimaryButton
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
+import org.levarac.beid.ui.designsystem.BeidStatusPill
 import org.levarac.beid.ui.designsystem.BeidTextField
 import org.levarac.beid.ui.theme.BeidAppTheme
 import org.levarac.beid.ui.theme.BeidSpacing
@@ -147,6 +161,7 @@ fun EventJoinScreen(
  * scenario's own frame-advance timing, so demo playback always renders
  * [RecordingScreen]'s steady state directly.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventJoinContent(
     state: EventJoinScreenState,
@@ -165,7 +180,25 @@ fun EventJoinContent(
     showEntranceCeremony: Boolean = false,
     onCeremonyFinished: () -> Unit = {},
 ) {
-    Scaffold(containerColor = BeidTheme.colors.surfaceCanvas) { innerPadding ->
+    Scaffold(
+        containerColor = BeidTheme.colors.surfaceCanvas,
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.event_join_title)) },
+                actions = {
+                    IconButton(
+                        onClick = onOpenAccount,
+                        modifier = Modifier.testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AccountCircle,
+                            contentDescription = stringResource(R.string.event_join_account_action),
+                        )
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -174,25 +207,6 @@ fun EventJoinContent(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
         ) {
-            // Plain clickable text — this screen's only entry point into the new Account
-            // screen (beid#126). The two platforms reach Account from different surfaces:
-            // on iOS from a toolbar button in `CollectionHomeView`
-            // (`CollectionHomeView.swift` sets `accountSheetPresented`, which presents
-            // `AccountSheetView`); on Android from this text, on the Join screen. Which
-            // surface should host it on Android is the collection-home/navigation
-            // decision tracked by beid#141, so this is kept minimal and undesigned:
-            // existing typography/color tokens only, no new icon or reusable component.
-            // Stays visible in every state, including Sensing (beid#336) — Android's only
-            // door to Account.
-            Text(
-                text = stringResource(R.string.account_title),
-                style = MaterialTheme.typography.bodyMedium,
-                color = BeidTheme.colors.textPrimary,
-                modifier = Modifier
-                    .clickable(onClick = onOpenAccount)
-                    .testTag(EventJoinScreenTestTags.ACCOUNT_ENTRY),
-            )
-
             val sessionState = state.sessionState
             if (sessionState is EventJoinUiState.Sensing) {
                 ScanFlowScreen(
@@ -205,13 +219,20 @@ fun EventJoinContent(
                 )
             } else {
                 Text(
-                    text = stringResource(R.string.event_join_title),
-                    style = MaterialTheme.typography.headlineLarge,
+                    text = stringResource(R.string.event_join_discovery_heading),
+                    style = MaterialTheme.typography.headlineSmall,
                     color = BeidTheme.colors.textPrimary,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    text = stringResource(R.string.event_join_discovery_supporting),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = BeidTheme.colors.textSecondary,
                 )
                 NearbyEventCards(
                     cards = state.nearbyEventCards,
                     selectedEventHashHex = state.selectedNearbyEventHashHex,
+                    searchOutcome = state.searchOutcome,
                     enabled = sessionState is EventJoinUiState.Idle || sessionState is EventJoinUiState.OwnerKeyUnavailable,
                     onJoin = onJoinNearbyEvent,
                 )
@@ -235,10 +256,15 @@ fun EventJoinContent(
                     )
                 }
                 if (sessionState !is EventJoinUiState.Idle) {
+                    val currentStatus = statusText(sessionState)
                     Text(
-                        text = statusText(sessionState),
+                        text = currentStatus,
                         style = MaterialTheme.typography.bodyMedium,
                         color = BeidTheme.colors.textSecondary,
+                        modifier = Modifier.semantics {
+                            stateDescription = currentStatus
+                            liveRegion = LiveRegionMode.Polite
+                        },
                     )
                 }
                 if (sessionState is EventJoinUiState.PermissionDenied) {
@@ -294,7 +320,16 @@ fun ManualEventCodeContent(
             modifier = Modifier.fillMaxSize().padding(innerPadding).padding(BeidSpacing.pageMargin),
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l, Alignment.CenterVertically),
         ) {
-            Text(stringResource(R.string.event_join_code_label), style = MaterialTheme.typography.headlineLarge)
+            Text(
+                stringResource(R.string.event_join_code_label),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                stringResource(R.string.event_join_code_helper),
+                style = MaterialTheme.typography.bodyLarge,
+                color = BeidTheme.colors.textSecondary,
+            )
             BeidTextField(
                 value = state.eventCode,
                 onValueChange = onEventCodeChanged,
@@ -346,12 +381,34 @@ fun ManualEventCodeRoute(session: EventJoinSession) {
 private fun NearbyEventCards(
     cards: List<NearbyEventCard>,
     selectedEventHashHex: String?,
+    searchOutcome: NearbyEventSearchOutcome,
     enabled: Boolean,
     onJoin: (String) -> Unit,
 ) {
     if (cards.isEmpty()) {
-        Column(modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST)) {
-            Text(stringResource(R.string.event_join_searching_nearby), color = BeidTheme.colors.textSecondary)
+        val isSearching = searchOutcome == NearbyEventSearchOutcome.SEARCHING
+        val searchingLabel = stringResource(
+            if (isSearching) R.string.event_join_searching_nearby else R.string.event_join_no_nearby_title,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST),
+            verticalArrangement = Arrangement.spacedBy(BeidSpacing.s),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (isSearching) {
+                CircularProgressIndicator(
+                    modifier = Modifier.semantics { stateDescription = searchingLabel },
+                    color = BeidTheme.colors.signalActive,
+                )
+            }
+            Text(
+                text = searchingLabel,
+                color = BeidTheme.colors.textPrimary,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
             Text(stringResource(R.string.event_join_rescue_guidance), color = BeidTheme.colors.textSecondary)
         }
         return
@@ -373,16 +430,31 @@ private fun NearbyEventCards(
                     )
                     .testTag(EventJoinScreenTestTags.nearbyEventCard(card.eventCodeHashHex)),
             ) {
-                Text(
-                    text = stringResource(R.string.event_join_beacon_name_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = BeidTheme.colors.textSecondary,
-                )
-                Text(
-                    text = card.beaconDisplayName ?: stringResource(R.string.event_join_beacon_name_missing),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = BeidTheme.colors.textPrimary,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
+                        Text(
+                            text = stringResource(R.string.event_join_beacon_name_label),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = BeidTheme.colors.textSecondary,
+                        )
+                        Text(
+                            text = card.beaconDisplayName ?: stringResource(R.string.event_join_beacon_name_missing),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = BeidTheme.colors.textPrimary,
+                        )
+                    }
+                    BeidStatusPill(
+                        label = stringResource(
+                            if (card.eventIdHex != null) R.string.event_join_candidate_verified
+                            else R.string.event_join_candidate_unverified,
+                        ),
+                        tone = if (card.eventIdHex != null) BeidStatusPill.Tone.Active else BeidStatusPill.Tone.Neutral,
+                    )
+                }
                 if (card.displayValidFromEpochSeconds != null && card.displayValidUntilEpochSeconds != null) Text(
                     text = stringResource(
                         R.string.event_join_validity_period,
@@ -402,6 +474,13 @@ private fun NearbyEventCards(
                     style = MaterialTheme.typography.labelSmall,
                     color = BeidTheme.colors.textSecondary,
                 )
+                if (cardEnabled) {
+                    Text(
+                        text = stringResource(R.string.event_join_join_affordance),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = BeidTheme.colors.actionPrimary,
+                    )
+                }
             }
         }
     }

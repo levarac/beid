@@ -28,7 +28,11 @@
     <string name="bluetooth_off_turned_on_button">I\'ve turned it on</string>
 
     <string name="event_join_title">Join an event</string>
+    <string name="event_join_account_action">Open account</string>
+    <string name="event_join_discovery_heading">Find an event nearby</string>
+    <string name="event_join_discovery_supporting">beid looks for a verified event automatically while you are nearby.</string>
     <string name="event_join_code_label">Event code</string>
+    <string name="event_join_code_helper">Use the code from the event organizer when automatic discovery is unavailable.</string>
     <string name="event_join_button">Join event</string>
     <string name="event_join_bind_wallet">Bind MetaMask wallet</string>
     <string name="event_join_status_idle">Enter the event code shared by the organizer.</string>
@@ -40,6 +44,7 @@
     <string name="event_join_error_empty_code">Enter an event code to continue. Ask the event organizer for it.</string>
     <string name="event_join_error_join_failed">beid couldn\'t join that event. Check the code and try again.</string>
     <string name="event_join_searching_nearby">Searching for nearby events…</string>
+    <string name="event_join_no_nearby_title">No joinable event found nearby</string>
     <!-- Shown under "Searching…" from the start. Reworded in beid#463: it used to send the participant to Account, which was the only place the code field lived. It is no longer the best route once the search gives up — a button appears here — so this no longer names a destination. -->
     <string name="event_join_rescue_guidance">If no event appears, you can enter its code instead.</string>
     <!-- beid#463 rescue route. Shown once the radio search has run its course without finding an event this device can join. Address the participant, not the device: they have been staring at a spinner and do not know whether the problem is the venue, their phone, or them. -->
@@ -63,6 +68,9 @@
     <string name="event_join_validity_period">Valid from %1$d to %2$d</string>
     <string name="event_join_not_joinable_yet">Waiting for event verification</string>
     <string name="event_join_selected">Selected</string>
+    <string name="event_join_candidate_verified">Ready to join</string>
+    <string name="event_join_candidate_unverified">Checking</string>
+    <string name="event_join_join_affordance">Join this event</string>
 
     <!-- Peer first detected but not yet confirmed as a real event (below the confirm threshold). -->
     <string name="event_join_status_event_found">Event found — waiting to confirm…</string>
@@ -81,14 +89,19 @@
 
     <!-- Scan flow (beid#336): Sensing/Event Found/Recording/Signal Lost full-screen bodies shown inside EventJoinScreen once a session reaches EventJoinUiState.Sensing — mirrors iOS's ScanFlowView (screens 05-07/06d). -->
     <string name="scan_sensing_message">Walk into an event — it will show up here automatically.</string>
+    <string name="scan_sensing_heading">Looking for a nearby event</string>
     <string name="scan_event_found_title">Event Found</string>
     <string name="scan_event_found_message">Verification starts automatically — stay nearby</string>
+    <string name="scan_event_found_status">Checking event details</string>
     <!-- One-time entrance-ceremony header shown the instant Recording begins, mirrors iOS's retired ProofCollectedView copy. -->
     <string name="scan_recording_ceremony_title">Proof Collected</string>
     <string name="scan_recording_ceremony_subtitle">Added to your collection.</string>
+    <string name="scan_recording_heading">Recording your participation</string>
+    <string name="scan_recording_supporting">Keep beid open nearby while it collects proof from other devices.</string>
     <string name="scan_signal_lost_title">Signal Lost</string>
     <!-- %1$s is the event code — Android's ScanEventSession has no event display name yet (see beid#336's data-gap note), unlike iOS's richer EventSession.name. -->
     <string name="scan_signal_lost_message">beid lost the connection to %1$s. Move closer and we\'ll pick it back up automatically.</string>
+    <string name="scan_signal_lost_supporting">Your progress is saved. Move closer, then resume this session.</string>
 
     <!-- Reused for both the nav entry-point label on EventJoinScreen (tap target that opens the Account screen) and the Account screen's own title, so both say the same word. -->
     <string name="account_title">Account</string>
@@ -112,6 +125,7 @@
     <!-- Records screen (beid#121): flat, reverse-chronological list of collected proofs, reached from Account. Reduced scope — no event grouping, no tap-to-detail; see RecordsScreen.kt's kdoc. -->
     <string name="records_title">Records</string>
     <!-- Empty state, shown when this device has never recorded a proof. -->
+    <string name="records_empty_title">Nothing collected yet</string>
     <string name="records_empty_message">Proofs you collect will appear here.</string>
     <!-- Signature status pill — no self-proof or binding evidence recorded yet for this proof. -->
     <string name="records_signature_status_not_signed">Not yet signed</string>
@@ -132,12 +146,19 @@
     <string name="today_summary_submission_title">Sending status · All saved observations</string>
     <string name="today_summary_submission_unavailable">Sending status is unavailable.</string>
     <string name="today_summary_submission_empty">No reports waiting to be sent.</string>
+    <string name="today_summary_submission_empty_label">Up to date</string>
     <string name="today_summary_submission_queued">Waiting to send: %1$d</string>
+    <string name="today_summary_submission_queued_label">Queued</string>
     <string name="today_summary_submission_sending">Awaiting confirmation: %1$d</string>
+    <string name="today_summary_submission_sending_label">Sending</string>
     <string name="today_summary_submission_retrying">Waiting to retry: %1$d</string>
+    <string name="today_summary_submission_retrying_label">Retrying</string>
     <string name="today_summary_submission_stopped">Sending stopped: %1$d</string>
+    <string name="today_summary_submission_stopped_label">Stopped</string>
     <string name="today_summary_submission_recovery">Saved observations are kept on this device. Check with the event organizer before trying again.</string>
+    <string name="today_summary_submission_recovery_label">Saved on device</string>
     <string name="today_summary_submission_accepted">Received by the operator: %1$d</string>
+    <string name="today_summary_submission_accepted_label">Accepted</string>
 
     <!-- Record detail screen (beid#122), reached by tapping a Records row. Own per-row vocabulary — never reuses records_signature_status_* (the list's derived-pill vocabulary) and never claims "Verified" (beid#144 is unowned; beid#240). -->
     <!-- Metric row label paired with a device count. "Devices", not people: distinct nearby devices sensed during the event, each counted once however long it stayed. Does not imply mutual/reciprocal confirmation. Matches iOS's "detail.devicesSensed.label" wording on its own Proof Detail screen. -->

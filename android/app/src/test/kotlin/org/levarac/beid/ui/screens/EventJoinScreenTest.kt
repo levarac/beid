@@ -213,6 +213,34 @@ class EventJoinScreenTest {
     }
 
     @Test
+    fun accountActionUsesTheTopBarAndNearbyJoinableCandidateShowsActionCopy() {
+        var accountOpened = 0
+        val hash = "3333333333333333"
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = EventJoinScreenState(
+                        nearbyEventCards = listOf(
+                            NearbyEventCard("Verified beacon", "0x0123456789abcdef", 100L, 200L, hash),
+                        ),
+                    ),
+                    onOpenAccount = { accountOpened++ },
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        assertEquals(1, accountOpened)
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_candidate_verified)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_join_affordance)).assertIsDisplayed()
+    }
+
+    @Test
     fun sensingPhaseRendersItsOwnStatusTextAndNoPhaseDetailControls() {
         val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Sensing))
         val viewModel = EventJoinViewModel(session)

@@ -79,6 +79,7 @@ class RecordsScreenTest {
             BeidAppTheme { RecordsScreen(records = emptyList(), onOpenDetail = {}) }
         }
 
+        composeTestRule.onNodeWithText(context.getString(R.string.records_empty_title)).assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.records_empty_message)).assertIsDisplayed()
     }
 

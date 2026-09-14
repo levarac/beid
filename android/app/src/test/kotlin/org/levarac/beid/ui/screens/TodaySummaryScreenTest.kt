@@ -57,4 +57,25 @@ class TodaySummaryScreenTest {
         composeTestRule.onNodeWithText("Verified").assertDoesNotExist()
         composeTestRule.onNodeWithText("Public").assertDoesNotExist()
     }
+
+    @Test
+    fun acceptedSubmissionKeepsAcceptedVocabulary() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                TodaySummaryScreen(
+                    recordCount = 1,
+                    submissionStatus = org.levarac.beid.shared.report.UnsentWindowSubmissionSummary(
+                        queued = 0,
+                        sending = 0,
+                        retrying = 0,
+                        stopped = 0,
+                        accepted = 1,
+                    ),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText(context.getString(R.string.today_summary_submission_accepted_label)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(context.getString(R.string.today_summary_submission_accepted, 1)).assertIsDisplayed()
+    }
 }

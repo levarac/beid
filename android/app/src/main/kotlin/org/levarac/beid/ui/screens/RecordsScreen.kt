@@ -13,6 +13,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -123,6 +125,7 @@ fun RecordsScreen(
             text = stringResource(R.string.records_title),
             style = MaterialTheme.typography.headlineLarge,
             color = BeidTheme.colors.textPrimary,
+            modifier = Modifier.semantics { heading() },
         )
 
         BeidSecondaryButton(
@@ -134,15 +137,21 @@ fun RecordsScreen(
         )
 
         if (records.isEmpty()) {
-            Text(
-                text = stringResource(R.string.records_empty_message),
-                style = MaterialTheme.typography.bodyLarge,
-                color = BeidTheme.colors.textSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(RecordsScreenTestTags.EMPTY_STATE),
-            )
+            BeidPanel(modifier = Modifier.testTag(RecordsScreenTestTags.EMPTY_STATE)) {
+                Text(
+                    text = stringResource(R.string.records_empty_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = BeidTheme.colors.textPrimary,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    text = stringResource(R.string.records_empty_message),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = BeidTheme.colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),

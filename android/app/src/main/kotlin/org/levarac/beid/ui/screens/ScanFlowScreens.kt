@@ -2,10 +2,12 @@ package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,6 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.delay
 import org.levarac.beid.R
@@ -99,7 +106,9 @@ fun ScanFlowScreen(
  */
 @Composable
 fun SensingScreen() {
+    val sensingStatus = stringResource(R.string.event_join_status_sensing)
     Column(
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
     ) {
@@ -107,6 +116,18 @@ fun SensingScreen() {
             label = stringResource(R.string.event_join_status_pill_active),
             tone = BeidStatusPill.Tone.Active,
             modifier = Modifier.testTag(EventJoinScreenTestTags.PHASE_STATUS_PILL),
+        )
+        Text(
+            text = stringResource(R.string.scan_sensing_heading),
+            style = MaterialTheme.typography.headlineSmall,
+            color = BeidTheme.colors.textPrimary,
+            modifier = Modifier.semantics { heading() },
+        )
+        CircularProgressIndicator(
+            color = BeidTheme.colors.signalActive,
+            modifier = Modifier.semantics {
+                stateDescription = sensingStatus
+            },
         )
         BeidGlyph(
             tint = BeidTheme.colors.signalActive,
@@ -130,12 +151,33 @@ fun SensingScreen() {
  */
 @Composable
 fun EventFoundScreen(session: ScanEventSession) {
-    BeidHeroHeader(
-        icon = Icons.Filled.AutoAwesome,
-        title = stringResource(R.string.scan_event_found_title),
-        subtitle = stringResource(R.string.scan_event_found_message),
-        tint = BeidTheme.colors.signalActive,
-    )
+    val foundMessage = stringResource(R.string.scan_event_found_message)
+    val foundStatus = stringResource(R.string.scan_event_found_status)
+    Column(
+        modifier = Modifier.fillMaxWidth().semantics {
+            stateDescription = foundMessage
+            liveRegion = LiveRegionMode.Polite
+        },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
+    ) {
+        BeidHeroHeader(
+            icon = Icons.Filled.AutoAwesome,
+            title = stringResource(R.string.scan_event_found_title),
+            subtitle = foundMessage,
+            tint = BeidTheme.colors.signalActive,
+        )
+        BeidStatusPill(
+            label = foundStatus,
+            tone = BeidStatusPill.Tone.Active,
+        )
+        CircularProgressIndicator(
+            color = BeidTheme.colors.signalActive,
+            modifier = Modifier.semantics {
+                stateDescription = foundStatus
+            },
+        )
+    }
 }
 
 /**
@@ -169,6 +211,7 @@ fun RecordingScreen(
     onStartWalletBinding: () -> Unit = {},
     ceremonyDwellMillis: Long = 2000,
 ) {
+    val recordingStatus = stringResource(R.string.event_join_status_recording)
     var showCeremony by remember { mutableStateOf(showEntranceCeremony) }
 
     LaunchedEffect(session) {
@@ -180,6 +223,7 @@ fun RecordingScreen(
     }
 
     Column(
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
     ) {
@@ -191,6 +235,25 @@ fun RecordingScreen(
                 contentSlot = { ProofSealMarkGlyph() },
             )
         } else {
+            BeidStatusPill(
+                label = stringResource(R.string.event_join_status_pill_active),
+                tone = BeidStatusPill.Tone.Active,
+                modifier = Modifier.semantics {
+                    stateDescription = recordingStatus
+                    liveRegion = LiveRegionMode.Polite
+                },
+            )
+            Text(
+                text = stringResource(R.string.scan_recording_heading),
+                style = MaterialTheme.typography.headlineSmall,
+                color = BeidTheme.colors.textPrimary,
+                modifier = Modifier.semantics { heading() },
+            )
+            Text(
+                text = stringResource(R.string.scan_recording_supporting),
+                style = MaterialTheme.typography.bodyLarge,
+                color = BeidTheme.colors.textSecondary,
+            )
             BeidMetricRow(
                 label = stringResource(R.string.event_join_peers_verified_label),
                 value = peersVerified.toString(),
@@ -224,7 +287,12 @@ fun RecordingScreen(
  */
 @Composable
 fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSensing: () -> Unit) {
+    val signalLostStatus = stringResource(R.string.event_join_status_signal_lost)
     Column(
+        modifier = Modifier.fillMaxWidth().semantics {
+            stateDescription = signalLostStatus
+            liveRegion = LiveRegionMode.Polite
+        },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
     ) {
@@ -238,6 +306,11 @@ fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSens
             label = stringResource(R.string.event_join_status_pill_paused),
             tone = BeidStatusPill.Tone.Paused,
             modifier = Modifier.testTag(EventJoinScreenTestTags.PHASE_STATUS_PILL),
+        )
+        Text(
+            text = stringResource(R.string.scan_signal_lost_supporting),
+            style = MaterialTheme.typography.bodyLarge,
+            color = BeidTheme.colors.textSecondary,
         )
         BeidMetricRow(
             label = stringResource(R.string.event_join_peers_verified_label),
