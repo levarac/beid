@@ -304,8 +304,14 @@ See [docs/delivery-ci.md](docs/delivery-ci.md) for the detailed PR CI and delive
 
 ### PR CI
 
-The PR workflow is `.github/workflows/pr-ci.yml`. Its three jobs and local
-gate commands are:
+The PR workflow is `.github/workflows/pr-ci.yml`. Its changed-path classifier
+job and three named gates are:
+
+**Determine changed paths**: `actions/github-script` collects pull-request
+files or the `main` push comparison, and `scripts/ci_change_filter.py`
+classifies them. Documentation-only changes skip Android build and SwiftLint;
+Repository sanity always runs. Unknown paths, dependency/workflow/build-script
+changes, and classifier failures run the relevant or all gates fail-closed.
 
 **Android build**: `:shared:testAndroidHostTest`, `:app:testDebugUnitTest`,
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
