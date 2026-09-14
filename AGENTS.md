@@ -327,6 +327,17 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 The workflow remains the execution source of truth; this subsection records
 the jobs and command tokens checked for documentation drift.
 
+All four named jobs run on the existing private `emi` macOS ARM64 runner. The
+Android job installs the current JDK 17 and Android 36 SDK into the job's
+temporary runner directory; SwiftLint 0.65.0 is downloaded as the pinned
+arm64 release and checksum-verified; Repository sanity selects Python 3.9.
+These are job-local setup steps and do not modify the runner permanently. The
+runner is shared with the iOS delivery lane, so its queue is intentionally
+serialized. Because this is a persistent private runner, fork pull requests
+fail each named check before checkout rather than executing fork code or being
+reported as a successful skipped check. The repository therefore accepts only
+same-repository pull request execution for these self-hosted checks.
+
 ## PR と issue の紐付け (Development 欄)
 
 1. issue を閉じる PR は本文に `Closes #N` (複数可) を書く。base が main なら link は自動で付く。merge 後に本文を編集しても付く。

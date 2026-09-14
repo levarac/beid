@@ -16,7 +16,11 @@ concurrency:
 jobs:
   changes:
     name: Determine changed paths
-    runs-on: ubuntu-latest
+    # `emi` is the existing private macOS ARM64 runner. All PR jobs are
+    # serialized there by the host; the workflow concurrency group still
+    # cancels superseded PR runs.
+    runs-on: [self-hosted, macOS, ARM64, emi]
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -25,6 +29,11 @@ jobs:
       lint: ${{ steps.classify.outputs.lint }}
       sanity: ${{ steps.classify.outputs.sanity }}
     steps:
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -71,10 +80,15 @@ jobs:
   android:
     name: Android build
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.android == 'true') }}
-    runs-on: ubuntu-latest
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.android == 'true') }}
+    runs-on: [self-hosted, macOS, ARM64, emi]
     timeout-minutes: 20
     steps:
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
       - uses: actions/checkout@v4
       - name: Clone Parallax at the pinned commit
         env:
@@ -85,6 +99,22 @@ jobs:
         with:
           distribution: temurin
           java-version: "17.0.20+8"
+      - name: Configure job-local Android SDK path
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-sdk"
+          {
+            echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk"
+            echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk"
+          } >> "$GITHUB_ENV"
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/android-sdk
+          key: beid-android-sdk-${{ runner.os }}-${{ runner.arch }}-android36-v1
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platforms;android-36 build-tools;36.0.0
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Build and test Android app
@@ -116,21 +146,35 @@ jobs:
   lint:
     name: SwiftLint
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.lint == 'true') }}
-    runs-on: ubuntu-latest
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.lint == 'true') }}
+    runs-on: [self-hosted, macOS, ARM64, emi]
     timeout-minutes: 10
-    container: ghcr.io/realm/swiftlint:0.65.0
     steps:
-      - name: Install container prerequisites (git, python3)
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          apt-get update -qq
-          apt-get install -y -qq git python3 > /dev/null
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
       - uses: actions/checkout@v4
-      - name: Mark workspace as safe for git in container
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Select Xcode for SourceKit
+        run: echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Install SwiftLint 0.65.0
+        env:
+          SWIFTLINT_SHA256: 1c961705be94cf3012861df2a4f856d0dae0e5fd2e18413f91a0a94ae8c583f0
+        run: |
+          archive="$RUNNER_TEMP/SwiftLint.arm64.zip"
+          install_dir="$RUNNER_TEMP/swiftlint"
+          curl --fail --location --retry 3 --output "$archive" "https://github.com/realm/SwiftLint/releases/download/0.65.0/SwiftLint.arm64.zip"
+          printf '%s  %s\n' "$SWIFTLINT_SHA256" "$archive" | shasum --algorithm 256 --check --strict
+          rm -rf "$install_dir"
+          mkdir -p "$install_dir"
+          ditto -x -k "$archive" "$install_dir"
+          swiftlint_bin="$(find "$install_dir" -type f -name swiftlint -perm -111 -print -quit)"
+          test -n "$swiftlint_bin"
+          file "$swiftlint_bin" | grep -E 'arm64|arm64e'
+          printf '%s\n' "$(dirname "$swiftlint_bin")" >> "$GITHUB_PATH"
       - name: Check lint prerequisites
         run: |
-          git --version
           python3 --version
           swiftlint version
       - name: Run design-contract lint
@@ -139,11 +183,20 @@ jobs:
   sanity:
     name: Repository sanity
     needs: changes
-    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.sanity == 'true') }}
-    runs-on: ubuntu-latest
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.sanity == 'true') }}
+    runs-on: [self-hosted, macOS, ARM64, emi]
     timeout-minutes: 10
     steps:
+      - name: Reject fork pull request code on the private runner
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          echo "Fork pull requests are not executed on the private self-hosted runner."
+          exit 1
       - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
       - name: Validate XcodeGen project definition
         run: |
           ruby -e 'require "yaml"; YAML.safe_load(File.read("ios/project.yml"), aliases: true); puts "ios/project.yml is valid YAML"'
