@@ -167,7 +167,7 @@ jobs:
           swiftlint_bin="$(find "$install_dir" -type f -name swiftlint -print -quit)"
           test -n "$swiftlint_bin"
           chmod +x "$swiftlint_bin"
-          file "$swiftlint_bin" | grep -E 'ARM aarch64|aarch64'
+          "$swiftlint_bin" version
           printf '%s\n' "$(dirname "$swiftlint_bin")" >> "$GITHUB_PATH"
       - name: Check lint prerequisites
         run: |
