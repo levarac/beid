@@ -330,8 +330,8 @@ the jobs and command tokens checked for documentation drift.
 All four named jobs run on the existing private `emi` macOS ARM64 runner. The
 Android job installs the current JDK 17 and Android 36 SDK into the job's
 temporary runner directory; SwiftLint 0.65.0 is downloaded as the pinned
-arm64 release and checksum-verified; Repository sanity verifies the existing
-host Python 3.9 installation.
+macOS arm64 artifactbundle and checksum-verified; Repository sanity installs
+Python 3.12 into the runner's temporary toolcache.
 These are job-local setup steps and do not modify the runner permanently. The
 runner is shared with the iOS delivery lane, so its queue is intentionally
 serialized. Because this is a persistent private runner, fork pull requests
