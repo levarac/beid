@@ -205,9 +205,11 @@ jobs:
           tar -xzf "$archive" -C "$install_dir"
           test "$("$install_dir/python/bin/python3.12" -c 'import sys; print(sys.version_info[:2])')" = "(3, 12)"
           printf '%s\n' "$install_dir/python/bin" >> "$GITHUB_PATH"
+      - name: Install YAML parser into the job temp directory
+        run: python3 -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/python-packages" PyYAML==6.0.2
       - name: Validate XcodeGen project definition
         run: |
-          ruby -e 'require "yaml"; YAML.safe_load(File.read("ios/project.yml"), aliases: true); puts "ios/project.yml is valid YAML"'
+          PYTHONPATH="$RUNNER_TEMP/python-packages" python3 -c 'import pathlib, yaml; yaml.safe_load(pathlib.Path("ios/project.yml").read_text()); print("ios/project.yml is valid YAML")'
       - name: Validate TestFlight note JSON
         run: |
           python3 -c 'import json, pathlib; paths = [pathlib.Path("what_to_test.json"), pathlib.Path("release_notes.json")]; [json.load(path.open(encoding="utf-8")) for path in paths if path.is_file()]; print("TestFlight note JSON is valid")'
