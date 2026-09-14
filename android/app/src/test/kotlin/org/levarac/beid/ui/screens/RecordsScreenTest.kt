@@ -79,6 +79,7 @@ class RecordsScreenTest {
             BeidAppTheme { RecordsScreen(records = emptyList(), onOpenDetail = {}) }
         }
 
+        composeTestRule.onNodeWithText(context.getString(R.string.records_empty_title)).assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.records_empty_message)).assertIsDisplayed()
     }
 
@@ -106,6 +107,18 @@ class RecordsScreenTest {
 
         composeTestRule.onNodeWithText("DEVCON-SEA").assertIsDisplayed()
         composeTestRule.onNodeWithText("5").assertIsDisplayed()
+    }
+
+    @Test
+    fun longEventCodeUsesAReadableFallbackLabelWhileTheFullIdRemainsAccessible() {
+        val fullId = "4c3673b07fae06ff6adaece43e13902a4b57165e93f6aa492c60e8327585ff4f"
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordsScreen(records = listOf(record(eventCode = fullId)), onOpenDetail = {})
+            }
+        }
+
+        composeTestRule.onNodeWithText("Event 4c3673b0…85ff4f").assertIsDisplayed()
     }
 
     @Test

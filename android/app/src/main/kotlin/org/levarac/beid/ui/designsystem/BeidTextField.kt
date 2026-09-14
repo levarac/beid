@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import org.levarac.beid.ui.theme.BeidRadius
 import org.levarac.beid.ui.theme.BeidTheme
+import androidx.compose.foundation.text.KeyboardOptions
 
 /**
  * Single-line text entry field — matches iOS's plain `TextField(_:prompt:)`
@@ -32,6 +33,7 @@ fun BeidTextField(
     placeholder: String,
     isError: Boolean,
     modifier: Modifier = Modifier,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
 ) {
     OutlinedTextField(
         value = value,
@@ -39,6 +41,7 @@ fun BeidTextField(
         placeholder = { Text(placeholder) },
         isError = isError,
         singleLine = true,
+        keyboardOptions = keyboardOptions,
         shape = RoundedCornerShape(BeidRadius.control),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = BeidTheme.colors.textPrimary,

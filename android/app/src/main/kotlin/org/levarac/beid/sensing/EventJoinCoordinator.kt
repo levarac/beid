@@ -2,6 +2,7 @@ package org.levarac.beid.sensing
 
 import android.app.Activity
 import android.util.Log
+import java.security.MessageDigest
 import java.io.File
 import java.time.Instant
 import java.util.UUID
@@ -33,6 +34,7 @@ import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
+import org.levarac.beid.BuildConfig
 import org.levarac.beid.registry.RegistryDependencies
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
@@ -670,6 +672,9 @@ class EventJoinCoordinator internal constructor(
             _state.value = EventJoinUiState.OwnerKeyUnavailable(error.failure)
             return
         }
+        if (BuildConfig.DEBUG) {
+            logRuntimeDiagnostic("join_admitted event_id_length=${context.eventIdHex.length} canonical=${isCanonicalDiagnosticEventId(context.eventIdHex)} domain_hash=${diagnosticDomainHash(context.eventIdHex)}")
+        }
         windowObservationRuntime?.beginEvent(context.joinCode)
         engine.joinAndStart(context)
         windowObservationRuntime?.updateContext(
@@ -782,6 +787,7 @@ class EventJoinCoordinator internal constructor(
             eventDisplayName = envelope.eventDisplayName,
             eventCodeHash = envelope.eventCodeHash,
             rawContainer = event.rawContainer,
+            verifiedEventIdHex = envelope.eventId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
         ) { definition -> BarnardB005EnvelopeV2.registryAgreement(envelope, definition) is BarnardRegistryAgreement.Agrees }
     }
 
@@ -806,6 +812,9 @@ class EventJoinCoordinator internal constructor(
         if (_state.value !is EventJoinUiState.Sensing) return
 
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
+        if (BuildConfig.DEBUG) {
+            logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
+        }
         aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
 
         val session = when (val phase = scanPhase) {
@@ -1287,5 +1296,20 @@ internal fun logWindowRecoveryFailure(error: Exception) {
         Log.w(WINDOW_RECOVERY_LOG_TAG, "relaunch window recovery failed", error)
     } catch (_: RuntimeException) {
         // The logger is unavailable. There is nothing to report it to.
+    }
+}
+
+private fun isCanonicalDiagnosticEventId(value: String): Boolean =
+    value.length == 64 && value == value.lowercase() && !value.startsWith("0x") && value.all { it in '0'..'9' || it in 'a'..'f' }
+
+private fun diagnosticDomainHash(value: String): String =
+    MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
+
+/** Runtime diagnostics must never turn an unavailable Android logger into a product failure. */
+internal fun logRuntimeDiagnostic(message: String) {
+    try {
+        Log.d("BeidRuntimeDiagnostics", message)
+    } catch (_: RuntimeException) {
+        // android.util.Log is unavailable in plain JVM tests.
     }
 }

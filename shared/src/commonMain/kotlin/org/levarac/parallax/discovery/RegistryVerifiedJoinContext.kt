@@ -147,10 +147,9 @@ public class RegistryVerifiedJoinContext private constructor(
      *
      * Fixed at issue time and carried inside the capability so no caller can
      * pair a verified event with some other string — an API shaped like
-     * `join(context, someCode)` would put that hole straight back. On the
-     * nearby path this is the canonical Event ID, which that path has always
-     * passed. On the operator-lookup path it is the normalized code the user
-     * typed.
+     * `join(context, someCode)` would put that hole straight back. Both
+     * evidence paths carry the canonical Event ID here; the operator's human
+     * code remains a lookup/UI input only.
      */
     public val joinCode: String,
     /** The canonical Event ID this join was granted for. */
@@ -189,11 +188,12 @@ public class RegistryVerifiedJoinContext private constructor(
             ) {
                 return null
             }
-            val eventIdHex = candidate.resolvedEventIdHex ?: return null
+            val canonicalEventIdHex = candidate.resolvedEventIdHex.normalizedHexOrNull() ?: return null
+            val canonicalDefinitionHashHex = candidate.verifiedDefinitionHashHex.normalizedHexOrNull() ?: return null
             return RegistryVerifiedJoinContext(
-                joinCode = eventIdHex,
-                eventIdHex = eventIdHex,
-                definitionHashHex = candidate.verifiedDefinitionHashHex ?: return null,
+                joinCode = canonicalEventIdHex,
+                eventIdHex = canonicalEventIdHex,
+                definitionHashHex = canonicalDefinitionHashHex,
                 registryBlockHashHex = candidate.registryBlockHashHex ?: return null,
                 definition = null,
             )
@@ -223,10 +223,14 @@ public class RegistryVerifiedJoinContext private constructor(
                 return null
             }
             val definition = resolution.context ?: return null
+            val canonicalEventIdHex = definition.eventIdHex.normalizedHexOrNull() ?: return null
+            val canonicalDefinitionHashHex = resolution.definitionHashHex.normalizedHexOrNull() ?: return null
             return RegistryVerifiedJoinContext(
-                joinCode = joinCode,
-                eventIdHex = definition.eventIdHex,
-                definitionHashHex = resolution.definitionHashHex ?: return null,
+                // The operator code is only a lookup/UI hint. The engine wire
+                // contract is the verified definition's canonical Event ID.
+                joinCode = canonicalEventIdHex,
+                eventIdHex = canonicalEventIdHex,
+                definitionHashHex = canonicalDefinitionHashHex,
                 registryBlockHashHex = resolution.blockHashHex ?: return null,
                 definition = definition,
             )

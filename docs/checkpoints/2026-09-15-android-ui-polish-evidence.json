@@ -1,0 +1,52 @@
+{
+  "commit": "e84c993c3f3f6558774ede549cbaafa66e6bb20a",
+  "tree": "2d5c9f6900aa23e00407273a5cbdc8b33b4b7c62",
+  "verifiedAt": "2026-09-15T00:22:33+09:00",
+  "artifact": {
+    "path": "android/app/build/outputs/apk/debug/app-debug.apk",
+    "sha256": "e1a546dddfd077945beafad568633ccea7fe7c6a78fb8851de8d38f91b295723",
+    "config": {
+      "registryReaderAddress": "0xd4852f8526A1555A1b2C34145f0eCDA412a53c51",
+      "definitionUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}",
+      "eventKeySetUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}",
+      "eventCodeLookupUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}",
+      "eventCodeHashLookupUrlTemplate": "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code-hash/{hash}"
+    }
+  },
+  "tests": {
+    "task": ":app:testDebugUnitTest",
+    "selectedSuites": [
+      "EventJoinScreenTest",
+      "ScanFlowScreensTest",
+      "RecordsScreenTest",
+      "TodaySummaryScreenTest"
+    ],
+    "count": 43,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "trueExit": 0,
+    "resultDirectory": "android/app/build/test-results/testDebugUnitTest"
+  },
+  "deviceReview": {
+    "device": "Pixel 8a 46111JEKB11173",
+    "apkSha256": "e1a546dddfd077945beafad568633ccea7fe7c6a78fb8851de8d38f91b295723",
+    "result": "Fresh second-pass screenshots matched the intended top-aligned Material 3 hierarchy; no join, leave, or new record action was performed.",
+    "screens": {
+      "discovery": {
+        "image": "evidence/beid-pixel-46111JEKB11173/20260915-secondpass-e84-discovery.png",
+        "hierarchy": "top app bar -> discovery heading and supporting copy -> one search/empty state card -> manual code rescue action"
+      },
+      "eventCode": {
+        "image": "evidence/beid-pixel-46111JEKB11173/20260915-secondpass-e84-event-code.png",
+        "hierarchy": "back top app bar -> short helper -> event code field -> secondary paste action -> primary join action"
+      },
+      "records": {
+        "image": "evidence/beid-pixel-46111JEKB11173/20260915-secondpass-e84-records.png",
+        "hierarchy": "Today heading and action -> compact record cards -> short event identifier -> preserved status facts"
+      }
+    }
+  },
+  "handoffNote": "handoffs/2026-09-14-observed-ui-improvements.md",
+  "source": "BuildConfig.java, APK shasum, JUnit XML readback, fresh second-pass Pixel screenshots, and UI handoff note"
+}

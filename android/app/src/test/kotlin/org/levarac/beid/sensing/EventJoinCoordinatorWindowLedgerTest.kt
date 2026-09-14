@@ -4,7 +4,6 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -129,18 +128,14 @@ class EventJoinCoordinatorWindowLedgerTest {
         val replacement = coordinator(replacementEngine, directory, owner, cryptography, replacementRegistry)
         joinPromotedVectorEvent(replacement, replacementEngine, replacementRegistry, DEFINITION_B, BLOCK_B)
 
-        // The dead coordinator's registry finally answers. Disposal advanced
-        // its callback generation, so the answer is discarded before it can
-        // reach any shared runtime state -- and the proof of that is that no
-        // definition read is ever started for it, which is what makes the
-        // second completion below impossible rather than merely ignored.
+        // The dead coordinator's definition read finally answers. Disposal
+        // advanced its callback generation, so the answer is discarded before
+        // it can reach any shared runtime state. The v2 direct-ID path starts
+        // the definition read without the legacy code-hash lookup.
         firstRegistry.completeLookup(NearbyEventIdLookup(true, NearbyEventPromotionFixture.EVENT_ID_HEX, null))
         runCurrent()
-        assertFailsWith<IllegalArgumentException>(
-            "a disposed coordinator must not carry its lookup answer into a definition read",
-        ) {
-            firstRegistry.completeDefinition(NearbyEventPromotionFixture.definition(DEFINITION_A, BLOCK_A))
-        }
+        firstRegistry.completeDefinition(NearbyEventPromotionFixture.definition(DEFINITION_A, BLOCK_A))
+        runCurrent()
 
         assertEquals(
             NearbyEventPromotionFixture.EVENT_ID_HEX,

@@ -62,6 +62,7 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
   static func admittingResolution(
     eventIdHex: String,
     nowEpochSeconds: Int64 = Int64(Date().timeIntervalSince1970),
+    eventCodeHashHex: String? = nil,
     joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode =
       ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN
   ) -> ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution {
@@ -69,6 +70,7 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
       eventIdHex: eventIdHex,
       definitionHashHex: "0x" + String(repeating: "b", count: 64),
       blockHashHex: "0x" + String(repeating: "c", count: 64),
+      eventCodeHashHex: eventCodeHashHex,
       validFromEpochSeconds: nowEpochSeconds - 86_400,
       validUntilEpochSeconds: nowEpochSeconds + 86_400,
       joinMode: joinMode

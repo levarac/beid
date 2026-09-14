@@ -109,7 +109,9 @@ fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore, se
             )
         }
 
-        composable(Screen.ManualEventCode.route) { ManualEventCodeRoute(session) }
+        composable(Screen.ManualEventCode.route) {
+            ManualEventCodeRoute(session, onBack = { navController.popBackStack() })
+        }
 
         composable(Screen.Records.route) {
             RecordsRoute(
