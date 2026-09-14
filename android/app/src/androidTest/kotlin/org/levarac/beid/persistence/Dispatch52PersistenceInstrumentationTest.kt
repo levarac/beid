@@ -83,6 +83,15 @@ class Dispatch52PersistenceInstrumentationTest {
             .getSharedPreferences("dispatch52_test_baseline", 0)
         val artifact = context.filesDir.resolve("canonical-observations-v1").listFiles().orEmpty()
             .singleOrNull { it.extension == "cose" } ?: error("signed artifact missing")
+        val windowId = artifact.name.substringBefore("--")
+        val submissionRecord = SubmissionRecordStore(SubmissionRecordStore.defaultFile(context.filesDir))
+            .recordFor(windowId) ?: error("submission record missing")
+        assertEquals(eventId, submissionRecord.eventIdHex)
+        assertEquals(configuration.submissionEndpoint, submissionRecord.submissionEndpoint)
+        assertEquals(configuration.receiptPublicKey.toByteArray().hex(), submissionRecord.receiptPublicKeyHex)
+        assertEquals(configuration.operatorId.toByteArray().hex(), submissionRecord.operatorIdHex)
+        assertEquals(configuration.eventDefinitionDigest?.toByteArray()?.hex(), submissionRecord.eventDefinitionDigestHex)
+        assertEquals(null, submissionRecord.unresolvedReason)
         val seedFingerprint = (AndroidKeystoreOwnerKeyStorage(ownerKeyPreferences(context))
             .readBytes("beid.ownerKeySeed") as? OwnerKeyReadResult.Present)?.bytes?.sha256()
         testPrefs.edit()
@@ -90,6 +99,11 @@ class Dispatch52PersistenceInstrumentationTest {
             .putString("seed_sha256", seedFingerprint)
             .putString("artifact_name", artifact.name)
             .putString("artifact_sha256", artifact.readBytes().sha256())
+            .putString("window_id", windowId)
+            .putString("submission_endpoint", submissionRecord.submissionEndpoint)
+            .putString("receipt_public_key_hex", submissionRecord.receiptPublicKeyHex)
+            .putString("operator_id_hex", submissionRecord.operatorIdHex)
+            .putString("event_definition_digest_hex", submissionRecord.eventDefinitionDigestHex)
             .commit()
     }
 
@@ -113,11 +127,21 @@ class Dispatch52PersistenceInstrumentationTest {
         assertTrue(storedSeed is OwnerKeyReadResult.Present)
         assertEquals(testPrefs.getString("seed_sha256", null), (storedSeed as OwnerKeyReadResult.Present).bytes.sha256())
         assertEquals(testPrefs.getString("owner_key_sha256", null), provider.publicKeyCompressed().sha256())
-        val artifact = context.filesDir.resolve("canonical-observations-v1")
-            .resolve(testPrefs.getString("artifact_name", null) ?: error("artifact baseline missing"))
+        val artifactName = testPrefs.getString("artifact_name", null) ?: error("artifact baseline missing")
+        val windowId = testPrefs.getString("window_id", null) ?: error("window baseline missing")
+        val artifact = context.filesDir.resolve("canonical-observations-v1").resolve(artifactName)
         assertEquals(testPrefs.getString("artifact_sha256", null), artifact.readBytes().sha256())
+        val record = SubmissionRecordStore(SubmissionRecordStore.defaultFile(context.filesDir))
+            .recordFor(windowId) ?: error("submission record missing after cold start")
+        assertEquals(testPrefs.getString("submission_endpoint", null), record.submissionEndpoint)
+        assertEquals(testPrefs.getString("receipt_public_key_hex", null), record.receiptPublicKeyHex)
+        assertEquals(testPrefs.getString("operator_id_hex", null), record.operatorIdHex)
+        assertEquals(testPrefs.getString("event_definition_digest_hex", null), record.eventDefinitionDigestHex)
+        assertEquals(null, record.unresolvedReason)
     }
 
     private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
         .digest(this).joinToString("") { "%02x".format(it) }
+
+    private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it) }
 }
