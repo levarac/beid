@@ -115,6 +115,10 @@ class WindowObservationSubmissionDrainTest {
             restoreScheduler.task.invoke()
             waitUntil { server.postCount == 1 }
             waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            assertNotNull(
+                submissionRecordStore(directory).recordFor(WINDOW_ID)?.observationDigestHex,
+                "the exact ledger observation reference must be durably bound before submission",
+            )
             assertEquals(1, server.getCount)
             assertEquals(1, server.postCount)
         } finally {
@@ -681,6 +685,43 @@ class WindowObservationSubmissionDrainTest {
             waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
             assertEquals(1, server.postCount, "storage recovery must look up the accepted receipt, never repost it")
             assertEquals(1, server.getCount)
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun observationDigestWriteFailureStopsBeforeNetworkAndRemainsRetryable() {
+        val directory = Files.createTempDirectory("drain-observation-digest-write-failure").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        val recordFile = directory.resolve("submission-records.json")
+        val scheduler = RecordingRetryScheduler()
+        try {
+            val (accumulator, drain) = buildSystem(
+                directory,
+                vectorCryptography(),
+                resolvedConfiguration(endpoint),
+                retryScheduler = scheduler,
+            )
+            closeOneWindow(accumulator)
+
+            check(recordFile.delete())
+            check(recordFile.mkdir())
+            recordFile.resolve("keep").writeText("block atomic replacement")
+
+            drain.drain()
+
+            assertEquals(0, server.postCount, "a failed observation digest write must not reach the operator")
+            assertEquals(0, server.getCount)
+            assertEquals(1, scheduler.scheduledCount)
+            assertTrue(
+                ledgerFile(directory).readText().contains(
+                    "\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t",
+                ),
+                "a failed observation digest write must leave the submission retryable",
+            )
+            assertTrue(recordFile.isDirectory, "failed digest storage must remain untouched")
         } finally {
             server.stop()
         }

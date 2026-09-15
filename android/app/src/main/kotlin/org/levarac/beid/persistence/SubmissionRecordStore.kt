@@ -47,6 +47,13 @@ internal class SubmissionRecordStore(file: File) {
             transform = { it.copy(acceptanceReceiptHex = acceptanceReceiptHex) },
         )
 
+    /** Binds the exact ledger observation reference to the existing window record. */
+    fun recordObservationDigest(windowId: String, observationDigestHex: String): Boolean =
+        store.updateRecord(
+            predicate = { it.windowId == windowId },
+            transform = { it.copy(observationDigestHex = observationDigestHex) },
+        )
+
     /** Records why automatic submission stopped for [windowId] — diagnosis only, never a merge gate for retry. */
     fun recordTerminalFailure(windowId: String, errorCode: String): Boolean =
         store.updateRecord(
@@ -103,6 +110,7 @@ internal class SubmissionRecordStore(file: File) {
             put("unresolvedReason", record.unresolvedReason)
             put("acceptanceReceiptHex", record.acceptanceReceiptHex)
             put("terminalErrorCode", record.terminalErrorCode)
+            put("observationDigestHex", record.observationDigestHex)
         }
 
         private fun fromJson(json: JsonObject): SubmissionRecord = SubmissionRecord(
@@ -117,6 +125,7 @@ internal class SubmissionRecordStore(file: File) {
             unresolvedReason = json.stringOrNull("unresolvedReason"),
             acceptanceReceiptHex = json.stringOrNull("acceptanceReceiptHex"),
             terminalErrorCode = json.stringOrNull("terminalErrorCode"),
+            observationDigestHex = json.stringOrNull("observationDigestHex"),
         )
 
         private fun JsonObject.stringOrNull(key: String): String? =

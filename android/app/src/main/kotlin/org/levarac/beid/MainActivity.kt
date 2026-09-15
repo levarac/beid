@@ -37,8 +37,28 @@ import org.levarac.parallax.registry.RegistryClient
  * `onRequestPermissionsResult` forwarded back into the same engine instance
  * to resolve — see [EventJoinCoordinator]'s kdoc.
  */
-class MainActivity : ComponentActivity() {
-    private var eventJoinCoordinator: EventJoinCoordinator? = null
+open class MainActivity : ComponentActivity() {
+    // Sole production coordinator owner; Lab reads this seam without replacing it.
+    internal var eventJoinCoordinator: EventJoinCoordinator? = null
+    internal fun labNearbyCandidateSelectors(): List<String> =
+        eventJoinCoordinator?.nearbyEventCards?.value
+            ?.filter { it.eventIdHex != null }
+            ?.map { it.eventCodeHashHex }
+            ?: emptyList()
+
+    internal fun labJoinNearbyEvent(hash: String, completion: (Boolean, String?) -> Unit) {
+        runOnUiThread {
+            val coordinator = eventJoinCoordinator
+            if (coordinator == null) { completion(false, "coordinator_unavailable"); return@runOnUiThread }
+            if (coordinator.nearbyEventCards.value.none { it.eventCodeHashHex == hash && it.eventIdHex != null }) {
+                completion(false, "candidate_not_currently_verified")
+                return@runOnUiThread
+            }
+            coordinator.joinNearbyEvent(hash)
+            completion(true, null)
+        }
+    }
+
     private var registryClient: RegistryClient? = null
     private var walletBindingFlow: WalletBindingFlow? = null
 
@@ -119,6 +139,14 @@ AppNavHost(coordinator, proofRecordStore, coordinator.sessionAggregateSnapshotSt
         registryClient?.close()
         eventJoinCoordinator?.dispose()
         super.onDestroy()
+    }
+
+    /** Read-only production state for the lab snapshot response. */
+    internal fun labReadOnlyState(): String = buildString {
+        append("state=")
+        append(eventJoinCoordinator?.state?.value?.javaClass?.simpleName ?: "unstarted")
+        append(";nearby_candidates=")
+        append(eventJoinCoordinator?.nearbyEventCandidates?.value?.javaClass?.simpleName ?: "unstarted")
     }
 
     companion object {

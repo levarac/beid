@@ -367,6 +367,14 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.excludedWindowCount(forEventCode: eventCode)
   }
 
+  /// Read-only Lab projection of durable submission metadata. No network call or write.
+  func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
+    if let runtime = reportSubmissionRuntime {
+      return runtime.labRecordProjection()
+    }
+    return ReportSubmissionStore().labRecordProjection()
+  }
+
   /// beid#143's Participation summary screen entry point. Forwards to the
   /// privately-owned `sessionAggregateSnapshotStore` that
   /// `persistSessionAggregateSnapshotIfNeeded()` writes at session end
@@ -706,6 +714,17 @@ final class SensingCoordinator: ObservableObject {
   /// Canonical Event IDs carried by Barnard's radio-self-verified B005 v2
   /// envelopes, keyed by the same hash as the discovery reducer.
   private var nearbyVerifiedEventIds: [String: String] = [:]
+
+  /// Opaque selectors for Lab control. The Lab host may choose one of these
+  /// values, but never derives an event ID or registry result itself.
+  func labJoinableEventCodeHashHexes() -> [String] {
+    (0..<nearbyEventCandidates.candidateCount).compactMap { index in
+      guard let candidate = nearbyEventCandidates.candidateAt(index: index) else { return nil }
+      let hash = candidate.eventCodeHashHex
+      guard nearbyVerifiedDefinitions[hash] != nil || nearbyVerifiedEventIds[hash] != nil else { return nil }
+      return hash
+    }
+  }
 
   // MARK: - Per-session protocol state
   //

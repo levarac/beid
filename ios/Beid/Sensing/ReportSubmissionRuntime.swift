@@ -5,6 +5,36 @@ import BeidSharedKit
 import Foundation
 import os
 
+enum LabSocketLifecycle {
+  static func status(
+    afterSnapshotDelivered: Bool,
+    closeCode: URLSessionWebSocketTask.CloseCode = .invalid
+  ) -> String {
+    afterSnapshotDelivered && closeCode == .normalClosure
+      ? "session_ended"
+      : "socket_receive_failed"
+  }
+}
+
+/// Bounded, read-only projection for the authenticated Lab host.
+/// Signed payloads, receipts, keys, and raw errors stay on-device.
+struct LabRecordMetadata: Equatable {
+  let windowId: String
+  let eventId: String
+  let observationDigest: String?
+  let status: String
+  let receiptStored: Bool
+  let terminalError: String?
+}
+
+func boundedLabTerminalError(_ code: String?) -> String? {
+  guard let code else { return nil }
+  return [
+    "invalid_configuration", "timeout", "rate_limited", "server_error", "http_error",
+    "protocol_error", "conflict", "receipt_not_found", "rejected", "cancelled"
+  ].contains(code) ? code : nil
+}
+
 /// The only submission trust material accepted by the runtime. Production
 /// instances are produced from a verified registry EventDefinitionContext;
 /// tests may inject a hermetic equivalent without changing the runtime path.
@@ -97,6 +127,8 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 
   func submitPending()
 
+  func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>
+
   /// beid#292's Transparency screen ("Sent"/"Acceptance receipt" rows): the
   /// most-advanced durable submission state (`.accepted` > `.submitting` >
   /// `.prepared`) among this runtime's records for `eventCode`, or `nil` if
@@ -104,6 +136,12 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   /// persisted state — never triggers a network call or a write.
   func submissionState(forEventCode eventCode: String) -> ReportSubmissionState?
   func excludedWindowCount(forEventCode eventCode: String) -> Int
+}
+
+extension WindowReportSubmissionRuntimeProtocol {
+  func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
+    .failure(.unreadable)
+  }
 }
 
 /// Native composition boundary for the inactive-by-default report pipeline.
@@ -352,6 +390,10 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
 
   func excludedWindowCount(forEventCode eventCode: String) -> Int {
     store.exclusions.filter { $0.eventCode == eventCode }.count
+  }
+
+  func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
+    store.labRecordProjection()
   }
 
   func submitPending() {

@@ -46,6 +46,7 @@ internal data class SubmissionRecord(
     val unresolvedReason: String?,
     val acceptanceReceiptHex: String? = null,
     val terminalErrorCode: String? = null,
+    val observationDigestHex: String? = null,
 ) {
     init {
         require((submissionEndpoint == null) == (unresolvedReason != null)) {

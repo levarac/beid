@@ -252,6 +252,10 @@ final class ReportSubmissionStore: ObservableObject {
   private var pendingCaptureLoadError: Error?
   private var exclusionLoadError: Error?
 
+  enum LabRecordProjectionError: Error, Equatable {
+    case unreadable
+  }
+
   init(fileURL: URL? = nil) {
     let resolvedFileURL = fileURL ?? Self.defaultFileURL()
     self.fileURL = resolvedFileURL
@@ -262,6 +266,23 @@ final class ReportSubmissionStore: ObservableObject {
     load()
     loadPendingCaptures()
     loadExclusions()
+  }
+
+  /// Reads the durable submission file without creating a submission client
+  /// or starting the sender. Lab builds use this when submission is disabled.
+  func labRecordProjection() -> Result<[LabRecordMetadata], LabRecordProjectionError> {
+    guard loadError == nil else { return .failure(.unreadable) }
+    return .success(records.compactMap { record in
+      guard let eventId = record.eventIdHex else { return nil }
+      return LabRecordMetadata(
+        windowId: record.id.uuidString.lowercased(),
+        eventId: eventId,
+        observationDigest: record.observationDigestHex,
+        status: record.submissionState.rawValue,
+        receiptStored: record.acceptanceReceiptHex != nil,
+        terminalError: boundedLabTerminalError(record.terminalErrorCode)
+      )
+    })
   }
 
   private static func defaultFileURL() -> URL {
