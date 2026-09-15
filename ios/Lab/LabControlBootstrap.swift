@@ -54,7 +54,7 @@ struct LabSnapshot: Equatable {
 protocol LabWebSocketClient {
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
                nearbyCandidates: @escaping () -> [String],
-               joinNearbyEvent: @escaping (String) -> (accepted: Bool, reason: String?),
+               joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                onSnapshot: @escaping (LabSnapshot) -> Void,
                onError: @escaping (String) -> Void)
   func stop()
@@ -63,6 +63,7 @@ protocol LabWebSocketClient {
 /// Native client for the loopback host broker. It only answers snapshot requests.
 final class URLSessionLabWebSocketClient: LabWebSocketClient {
   private var task: URLSessionWebSocketTask?
+  private var consumedJoinRequestIds = Set<String>()
 
   func stop() {
     task?.cancel(with: .goingAway, reason: nil)
@@ -71,7 +72,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
 
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
                nearbyCandidates: @escaping () -> [String],
-               joinNearbyEvent: @escaping (String) -> (accepted: Bool, reason: String?),
+               joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                onSnapshot: @escaping (LabSnapshot) -> Void,
                onError: @escaping (String) -> Void) {
     let session = URLSession(configuration: .ephemeral)
@@ -93,7 +94,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
   private func receive(on task: URLSessionWebSocketTask, hello: LabHello,
                        productionState: @escaping () -> String,
                        nearbyCandidates: @escaping () -> [String],
-                       joinNearbyEvent: @escaping (String) -> (accepted: Bool, reason: String?),
+                       joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                        onSnapshot: @escaping (LabSnapshot) -> Void,
                        onError: @escaping (String) -> Void) {
     task.receive { [weak self] result in
@@ -121,11 +122,20 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
           onError("join_nearby_event_rejected")
           return
         }
-        let result = joinNearbyEvent(hash)
-        self.send(["type": "join_nearby_event_result", "request_id": requestId,
-                   "run_id": runId, "role": role, "device_id": deviceId,
-                   "generation": generation, "status": result.accepted ? "accepted" : "rejected",
-                   "reason": result.reason ?? NSNull(), "production_state": productionState()], on: task)
+        guard consumedJoinRequestIds.insert(requestId).inserted else {
+          self.send(["type": "join_nearby_event_result", "request_id": requestId,
+                     "run_id": runId, "role": role, "device_id": deviceId,
+                     "generation": generation, "status": "rejected", "reason": "duplicate_request",
+                     "production_state": productionState()], on: task)
+          return
+        }
+        joinNearbyEvent(hash) { [weak self] accepted, reason in
+          guard let self else { return }
+          self.send(["type": "join_nearby_event_result", "request_id": requestId,
+                     "run_id": runId, "role": role, "device_id": deviceId,
+                     "generation": generation, "status": accepted ? "accepted" : "rejected",
+                     "reason": reason ?? NSNull(), "production_state": productionState()], on: task)
+        }
         self.receive(on: task, hello: hello, productionState: productionState, nearbyCandidates: nearbyCandidates,
                      joinNearbyEvent: joinNearbyEvent, onSnapshot: onSnapshot, onError: onError)
         return
@@ -175,12 +185,15 @@ final class LabControlBootstrap: ObservableObject {
                      guard let phase = self?.sensing?.phase else { return "unknown" }
                      return String(describing: phase)
                    }, nearbyCandidates: { [weak self] in self?.sensing?.labJoinableEventCodeHashHexes() ?? [] },
-                   joinNearbyEvent: { [weak self] hash in
-                     guard let self, self.sensing?.labJoinableEventCodeHashHexes().contains(hash) == true else {
-                       return (false, "candidate_not_currently_verified")
+                   joinNearbyEvent: { [weak self] hash, completion in
+                     Task { @MainActor in
+                       guard let self, self.sensing?.labJoinableEventCodeHashHexes().contains(hash) == true else {
+                         completion(false, "candidate_not_currently_verified")
+                         return
+                       }
+                       self.sensing?.joinNearbyEvent(eventCodeHashHex: hash)
+                       completion(true, nil)
                      }
-                     self.sensing?.joinNearbyEvent(eventCodeHashHex: hash)
-                     return (true, nil)
                    }, onSnapshot: { [weak self] snapshot in
       guard let self else { return }
       status = snapshot.runId == identity.runId && snapshot.role == identity.role &&

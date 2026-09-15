@@ -46,13 +46,17 @@ open class MainActivity : ComponentActivity() {
             ?.map { it.eventCodeHashHex }
             ?: emptyList()
 
-    internal fun labJoinNearbyEvent(hash: String): Pair<Boolean, String?> {
-        val coordinator = eventJoinCoordinator ?: return false to "coordinator_unavailable"
-        if (coordinator.nearbyEventCards.value.none { it.eventCodeHashHex == hash && it.eventIdHex != null }) {
-            return false to "candidate_not_currently_verified"
+    internal fun labJoinNearbyEvent(hash: String, completion: (Boolean, String?) -> Unit) {
+        runOnUiThread {
+            val coordinator = eventJoinCoordinator
+            if (coordinator == null) { completion(false, "coordinator_unavailable"); return@runOnUiThread }
+            if (coordinator.nearbyEventCards.value.none { it.eventCodeHashHex == hash && it.eventIdHex != null }) {
+                completion(false, "candidate_not_currently_verified")
+                return@runOnUiThread
+            }
+            coordinator.joinNearbyEvent(hash)
+            completion(true, null)
         }
-        coordinator.joinNearbyEvent(hash)
-        return true to null
     }
     private var registryClient: RegistryClient? = null
     private var walletBindingFlow: WalletBindingFlow? = null
