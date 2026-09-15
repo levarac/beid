@@ -7,6 +7,25 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
+  func testLabSocketTerminationDistinguishesExpectedSessionEndFromReceiveFailure() {
+    XCTAssertEqual(
+      LabSocketLifecycle.status(afterSnapshotDelivered: true, closeCode: .normalClosure),
+      "session_ended"
+    )
+    XCTAssertEqual(
+      LabSocketLifecycle.status(afterSnapshotDelivered: false, closeCode: .normalClosure),
+      "socket_receive_failed"
+    )
+    XCTAssertEqual(
+      LabSocketLifecycle.status(afterSnapshotDelivered: true, closeCode: .goingAway),
+      "socket_receive_failed"
+    )
+    XCTAssertEqual(
+      LabSocketLifecycle.status(afterSnapshotDelivered: true, closeCode: .abnormalClosure),
+      "socket_receive_failed"
+    )
+  }
+
   func testLabRecordProjectionReadsPersistedRecordsWithoutSubmissionRuntime() throws {
     let directory = try makeIsolatedDirectory(named: "beid-lab-record-projection")
     defer { try? FileManager.default.removeItem(at: directory) }

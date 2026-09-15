@@ -21,13 +21,14 @@ struct LabControlIdentity: Equatable {
 }
 
 enum LabBootstrapError: LocalizedError {
-  case missingIdentity, invalidGeneration, unsupportedProtocol, missingBroker
+  case missingIdentity, invalidGeneration, unsupportedProtocol, missingBroker, invalidMessage
   var errorDescription: String? {
     switch self {
     case .missingIdentity: return "run_id, role, device_id, and token are required"
     case .invalidGeneration: return "generation is required"
     case .unsupportedProtocol: return "unsupported protocol_version"
     case .missingBroker: return "lab broker is not configured"
+    case .invalidMessage: return "lab message could not be encoded"
     }
   }
 }
@@ -66,6 +67,7 @@ protocol LabWebSocketClient {
 final class URLSessionLabWebSocketClient: LabWebSocketClient {
   private var task: URLSessionWebSocketTask?
   private var consumedJoinRequestIds = Set<String>()
+  private var snapshotDelivered = false
 
   func stop() {
     task?.cancel(with: .goingAway, reason: nil)
@@ -78,6 +80,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
                joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                onSnapshot: @escaping (LabSnapshot) -> Void,
                onError: @escaping (String) -> Void) {
+    snapshotDelivered = false
     let session = URLSession(configuration: .ephemeral)
     let task = session.webSocketTask(with: url)
     self.task = task
@@ -88,11 +91,18 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
             joinNearbyEvent: joinNearbyEvent, onSnapshot: onSnapshot, onError: onError)
   }
 
-  private func send(_ object: [String: Any], on task: URLSessionWebSocketTask) {
+  private func send(
+    _ object: [String: Any],
+    on task: URLSessionWebSocketTask,
+    completion: ((Error?) -> Void)? = nil
+  ) {
     guard JSONSerialization.isValidJSONObject(object),
           let data = try? JSONSerialization.data(withJSONObject: object),
-          let text = String(data: data, encoding: .utf8) else { return }
-    task.send(.string(text)) { _ in }
+          let text = String(data: data, encoding: .utf8) else {
+      completion?(LabBootstrapError.invalidMessage)
+      return
+    }
+    task.send(.string(text)) { error in completion?(error) }
   }
 
   private func receive(on task: URLSessionWebSocketTask, hello: LabHello,
@@ -105,7 +115,10 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
     task.receive { [weak self] result in
       guard let self else { return }
       guard case .success(.string(let text)) = result else {
-        onError("socket_receive_failed")
+        onError(LabSocketLifecycle.status(
+          afterSnapshotDelivered: self.snapshotDelivered,
+          closeCode: task.closeCode
+        ))
         return
       }
       guard let data = text.data(using: .utf8),
@@ -170,13 +183,20 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
                     "observation_digest": record.observationDigest ?? NSNull(),
                     "status": record.status, "receipt_stored": record.receiptStored,
                     "terminal_error": record.terminalError ?? NSNull()]
-                 }], on: task)
-      onSnapshot(LabSnapshot(requestId: requestId, runId: runId, role: role,
-                             deviceId: hello.identity.deviceId, generation: generation,
-                             productionState: state, nearbyCandidates: nearbyCandidates(), records: snapshotRecords))
-      self.receive(on: task, hello: hello, productionState: productionState, nearbyCandidates: nearbyCandidates,
-                   records: records,
-                   joinNearbyEvent: joinNearbyEvent, onSnapshot: onSnapshot, onError: onError)
+                 }], on: task) { [weak self] error in
+        guard let self else { return }
+        guard error == nil else {
+          onError("socket_send_failed")
+          return
+        }
+        self.snapshotDelivered = true
+        onSnapshot(LabSnapshot(requestId: requestId, runId: runId, role: role,
+                               deviceId: hello.identity.deviceId, generation: generation,
+                               productionState: state, nearbyCandidates: nearbyCandidates(), records: snapshotRecords))
+        self.receive(on: task, hello: hello, productionState: productionState, nearbyCandidates: nearbyCandidates,
+                     records: records,
+                     joinNearbyEvent: joinNearbyEvent, onSnapshot: onSnapshot, onError: onError)
+      }
     }
   }
 }
@@ -184,10 +204,19 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
 @MainActor
 final class LabControlBootstrap: ObservableObject {
   @Published private(set) var status = "not_started"
+  @Published private(set) var lastCommand = "待機中"
+  @Published private(set) var lastSnapshotSummary = "未取得"
   private let identity: LabControlIdentity?
   private weak var sensing: SensingCoordinator?
   private let brokerURL: URL?
   private let broker: LabWebSocketClient?
+
+  var roleDescription: String { identity?.role ?? "未設定" }
+  var deviceDescription: String { identity?.deviceId ?? "未設定" }
+  var submissionDescription: String {
+    let enabled = Bundle.main.object(forInfoDictionaryKey: "BeidReportSubmissionEnabled") as? String
+    return enabled == "YES" || enabled == "1" ? "有効" : "無効（metadata-only）"
+  }
 
   init(identity: LabControlIdentity?, sensing: SensingCoordinator, brokerURL: URL?, broker: LabWebSocketClient?) {
     self.identity = identity; self.sensing = sensing; self.brokerURL = brokerURL; self.broker = broker
@@ -197,6 +226,7 @@ final class LabControlBootstrap: ObservableObject {
     guard let identity else { status = LabBootstrapError.missingIdentity.localizedDescription; return }
     guard let brokerURL, let broker else { status = LabBootstrapError.missingBroker.localizedDescription; return }
     status = "connecting"
+    lastCommand = "検証ホストへ接続中"
     broker.connect(url: brokerURL, hello: LabHello(identity: identity),
                    productionState: { [weak self] in
                      guard let phase = self?.sensing?.phase else { return "unknown" }
@@ -215,10 +245,31 @@ final class LabControlBootstrap: ObservableObject {
                        completion(true, nil)
                      }
                    }, onSnapshot: { [weak self] snapshot in
-      guard let self else { return }
-      status = snapshot.runId == identity.runId && snapshot.role == identity.role &&
-        snapshot.deviceId == identity.deviceId && snapshot.generation == identity.generation ? "connected" : "snapshot_identity_mismatch"
-    }, onError: { [weak self] message in self?.status = "error:\(message)" })
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        let identityMatches = snapshot.runId == identity.runId && snapshot.role == identity.role &&
+          snapshot.deviceId == identity.deviceId && snapshot.generation == identity.generation
+        if identityMatches {
+          status = "connected"
+          lastCommand = "snapshot_response を受信"
+          lastSnapshotSummary = "production_state=\(snapshot.productionState), records=\(snapshot.records.count)"
+        } else {
+          status = "snapshot_identity_mismatch"
+          lastCommand = "snapshot identity mismatch"
+        }
+      }
+    }, onError: { [weak self] message in
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        if message == "session_ended" {
+          status = message
+          lastCommand = "検証ホストとの接続が終了しました"
+        } else {
+          status = "error:\(message)"
+          lastCommand = "エラー: \(message)"
+        }
+      }
+    })
   }
 
   func stop() {

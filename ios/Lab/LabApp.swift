@@ -25,7 +25,22 @@ struct BeidLabApp: App {
 
   var body: some Scene {
     WindowGroup {
-      VStack(spacing: 12) { Text("beid Lab"); Text(bootstrap.status).font(.caption) }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          Text("beid Lab").font(.title2.weight(.semibold))
+          LabeledContent("接続状態", value: bootstrap.status)
+          LabeledContent("role", value: bootstrap.roleDescription)
+          LabeledContent("device", value: bootstrap.deviceDescription)
+          LabeledContent("最後の処理", value: bootstrap.lastCommand)
+          LabeledContent("最後のsnapshot", value: bootstrap.lastSnapshotSummary)
+          LabeledContent("submission", value: bootstrap.submissionDescription)
+          Text("この画面は認証済み検証ホストとの読み取り専用接続を表示します。join、RF成功、署名record保存の証明ではありません。")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 720, alignment: .leading)
+        .padding()
+      }
         .task { bootstrap.start() }
         .onDisappear { bootstrap.stop() }
     }

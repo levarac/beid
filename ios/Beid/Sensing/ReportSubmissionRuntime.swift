@@ -5,6 +5,17 @@ import BeidSharedKit
 import Foundation
 import os
 
+enum LabSocketLifecycle {
+  static func status(
+    afterSnapshotDelivered: Bool,
+    closeCode: URLSessionWebSocketTask.CloseCode = .invalid
+  ) -> String {
+    afterSnapshotDelivered && closeCode == .normalClosure
+      ? "session_ended"
+      : "socket_receive_failed"
+  }
+}
+
 /// Bounded, read-only projection for the authenticated Lab host.
 /// Signed payloads, receipts, keys, and raw errors stay on-device.
 struct LabRecordMetadata: Equatable {
