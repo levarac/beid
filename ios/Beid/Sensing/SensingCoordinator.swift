@@ -2050,7 +2050,7 @@ final class SensingCoordinator: ObservableObject {
       joinRegistryRequest = registry.resolveEventDefinition(
         eventIdHex: eventIdHex,
         nowEpochSeconds: nearbyDiscoveryClock() / 1000
-      ) { [weak self] resolution in
+      ) { [weak self] resolution, failureErrorCode in
         // Hopped to the main actor the same way `EventIdentityVerificationSource`
         // does for the identical read, rather than annotating the completion.
         Task { @MainActor in
@@ -2064,6 +2064,7 @@ final class SensingCoordinator: ObservableObject {
             self.joinGateDecision(
               joinCode: joinCode,
               resolution: resolution,
+              readFailureErrorCode: failureErrorCode,
               nowEpochSeconds: self.nearbyDiscoveryClock() / 1000
             )
           )
@@ -2129,10 +2130,25 @@ final class SensingCoordinator: ObservableObject {
   private func joinGateDecision(
     joinCode: String,
     resolution: ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?,
+    readFailureErrorCode: String? = nil,
     nowEpochSeconds: Int64
   ) -> JoinGateDecision {
     guard let resolution else {
-      return .refuse(.registryReadFailed, "Registry read produced no definition; starting nothing.")
+      // The read's own error code, classified by the same `shared/` function
+      // the code-to-id lookup uses. Without it this branch could only say
+      // `UNKNOWN`, which tells a participant nothing they can act on
+      // (beid#472).
+      let reason = readFailureErrorCode == nil
+        ? ExportedKotlinPackages.org.levarac.beid.shared.event
+          .EventJoinFailureReason.UNKNOWN
+        : BeidSharedKit.event.eventJoinFailureReasonForRegistryErrorCode(
+          errorCode: readFailureErrorCode
+        )
+      return .refuse(
+        .registryReadFailed,
+        "Registry read produced no definition (\(readFailureErrorCode ?? "no error code")); starting nothing.",
+        BeidSharedKit.event.eventJoinFailureReasonKey(reason: reason)
+      )
     }
     // Issued from the live resolution, and re-checked against the clock now
     // rather than when the read was requested.
@@ -2939,7 +2955,7 @@ final class SensingCoordinator: ObservableObject {
     let verification = eventJoinRegistry.resolveEventDefinition(
       eventIdHex: eventIdHex,
       nowEpochSeconds: nearbyDiscoveryClock() / 1000
-    ) { [weak self] verified in
+    ) { [weak self] verified, _ in
       Task { @MainActor in
         guard let self else { return }
         guard generation == self.nearbyDiscoveryCallbackGeneration else { return }
