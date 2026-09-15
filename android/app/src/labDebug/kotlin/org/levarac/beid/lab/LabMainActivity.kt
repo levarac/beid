@@ -9,6 +9,7 @@ class LabMainActivity : MainActivity() {
     private var labBootstrap: LabControlBootstrap? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         val identity = runCatching {
             LabControlIdentity(
                 runId = intent.getStringExtra("run_id").orEmpty(),
@@ -27,7 +28,6 @@ class LabMainActivity : MainActivity() {
             setContentView(TextView(this).apply { text = "Lab bootstrap refused: lab broker is not configured" })
             return
         }
-        super.onCreate(savedInstanceState)
         val bootstrap = LabControlBootstrap(
             identity = identity,
             brokerUrl = brokerUrl,
