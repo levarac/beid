@@ -369,7 +369,10 @@ final class SensingCoordinator: ObservableObject {
 
   /// Read-only Lab projection of durable submission metadata. No network call or write.
   func labRecordMetadata() -> [LabRecordMetadata] {
-    (reportSubmissionRuntime as? ReportSubmissionRuntime)?.labRecordMetadata() ?? []
+    guard let runtime = reportSubmissionRuntime as? ReportSubmissionRuntime else {
+      preconditionFailure("Lab submission runtime is unavailable; refusing an ungrounded metadata snapshot")
+    }
+    return runtime.labRecordMetadata()
   }
 
   /// beid#143's Participation summary screen entry point. Forwards to the

@@ -16,6 +16,14 @@ struct LabRecordMetadata: Equatable {
   let terminalError: String?
 }
 
+func boundedLabTerminalError(_ code: String?) -> String? {
+  guard let code else { return nil }
+  return [
+    "invalid_configuration", "timeout", "rate_limited", "server_error", "http_error",
+    "protocol_error", "conflict", "receipt_not_found", "rejected", "cancelled"
+  ].contains(code) ? code : nil
+}
+
 /// The only submission trust material accepted by the runtime. Production
 /// instances are produced from a verified registry EventDefinitionContext;
 /// tests may inject a hermetic equivalent without changing the runtime path.
@@ -374,7 +382,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         observationDigest: record.observationDigestHex,
         status: record.submissionState.rawValue,
         receiptStored: record.acceptanceReceiptHex != nil,
-        terminalError: record.terminalErrorCode
+        terminalError: boundedLabTerminalError(record.terminalErrorCode)
       )
     }
   }

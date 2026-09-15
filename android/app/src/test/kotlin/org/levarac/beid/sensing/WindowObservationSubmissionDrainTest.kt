@@ -115,6 +115,10 @@ class WindowObservationSubmissionDrainTest {
             restoreScheduler.task.invoke()
             waitUntil { server.postCount == 1 }
             waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            assertNotNull(
+                submissionRecordStore(directory).recordFor(WINDOW_ID)?.observationDigestHex,
+                "the exact ledger observation reference must be durably bound before submission",
+            )
             assertEquals(1, server.getCount)
             assertEquals(1, server.postCount)
         } finally {
