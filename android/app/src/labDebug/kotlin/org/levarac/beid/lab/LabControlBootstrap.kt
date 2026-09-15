@@ -55,6 +55,18 @@ data class LabSnapshot(
     val nearbyCandidates: List<String>,
 )
 
+internal class LabJoinRequestGate {
+    private val consumed = mutableSetOf<String>()
+
+    @Synchronized
+    fun rejectReason(requestId: String, generation: Int, expectedGeneration: Int, candidates: List<String>, hash: String): String? {
+        if (generation != expectedGeneration) return "generation_mismatch"
+        if (!candidates.contains(hash)) return "candidate_not_currently_verified"
+        if (!consumed.add(requestId)) return "duplicate_request"
+        return null
+    }
+}
+
 interface LabWebSocketClient {
     fun connect(url: String, hello: LabHello, productionState: () -> String,
         nearbyCandidates: () -> List<String>, joinNearbyEvent: (String, (Boolean, String?) -> Unit) -> Unit,
@@ -67,6 +79,7 @@ class OkHttpLabWebSocketClient(
     private val client: OkHttpClient = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build(),
 ) : LabWebSocketClient {
     private var socket: WebSocket? = null
+    private val joinGate = LabJoinRequestGate()
 
     override fun stop() {
         socket?.close(1000, "lab activity stopped")
@@ -94,13 +107,10 @@ class OkHttpLabWebSocketClient(
                         require(value["generation"]?.jsonPrimitive?.intOrNull == hello.identity.generation)
                         val requestId = value["request_id"]!!.jsonPrimitive.content
                         val hash = value["event_code_hash_hex"]!!.jsonPrimitive.content
-                        if (seenJoinRequestIds.contains(requestId)) {
-                            webSocket.send(Json.encodeToString(JsonObject.serializer(), joinResult(requestId, false, "duplicate_request", productionState(), hello)))
-                            return@runCatching
-                        }
-                        seenJoinRequestIds.add(requestId)
-                        if (!nearbyCandidates().contains(hash)) {
-                            webSocket.send(Json.encodeToString(JsonObject.serializer(), joinResult(requestId, false, "candidate_not_currently_verified", productionState(), hello)))
+                        val requestGeneration = value["generation"]!!.jsonPrimitive.intOrNull ?: throw IllegalArgumentException("generation is invalid")
+                        val rejection = joinGate.rejectReason(requestId, requestGeneration, hello.identity.generation, nearbyCandidates(), hash)
+                        if (rejection != null) {
+                            webSocket.send(Json.encodeToString(JsonObject.serializer(), joinResult(requestId, false, rejection, productionState(), hello)))
                             return@runCatching
                         }
                         joinNearbyEvent(hash) { accepted, reason ->
@@ -144,8 +154,6 @@ class OkHttpLabWebSocketClient(
             }
         })
     }
-
-    private val seenJoinRequestIds = mutableSetOf<String>()
 
     private fun joinResult(requestId: String, accepted: Boolean, reason: String, state: String, hello: LabHello) = buildJsonObject {
         put("type", JsonPrimitive("join_nearby_event_result")); put("request_id", JsonPrimitive(requestId))

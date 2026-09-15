@@ -25,4 +25,13 @@ class LabControlBootstrapTest {
         val result = LabControlBootstrap(identity, "", broker, { "state=idle" }, { emptyList() }, { _, completion -> completion(false, "not_connected") }).start()
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun joinGateRejectsStaleCandidateGenerationAndDuplicateWithoutReentry() {
+        val gate = LabJoinRequestGate()
+        assertTrue(gate.rejectReason("r1", 1, 1, listOf("candidate"), "candidate") == null)
+        assertTrue(gate.rejectReason("r1", 1, 1, listOf("candidate"), "candidate") == "duplicate_request")
+        assertTrue(gate.rejectReason("r2", 1, 1, emptyList(), "candidate") == "candidate_not_currently_verified")
+        assertTrue(gate.rejectReason("r3", 2, 1, listOf("candidate"), "candidate") == "generation_mismatch")
+    }
 }
