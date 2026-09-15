@@ -368,6 +368,58 @@ final class JoinGateRefusalReasonTests: XCTestCase {
     )
   }
 
+  /// A definition read that answered with nothing, carrying a transport error
+  /// code. Before beid#472's follow-up this branch could only say `UNKNOWN`,
+  /// because the adapter collapsed a failed read to nil and dropped the code
+  /// with it.
+  func testADefinitionReadThatFailedOnTransportSaysSo() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .readFails(errorCode: "timeout")
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
+    )
+    coordinator.useDemoEventMode = false
+    XCTAssertTrue(
+      coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+    )
+    coordinator.startSensing()
+    for _ in 0..<8 { await Task.yield() }
+
+    XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex], "the read happened")
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(
+      coordinator.joinRefusalReasonKey,
+      "network_required",
+      "a read that never arrived is a connection problem, not an unverifiable event"
+    )
+  }
+
+  /// The same read failing with no error code at all. Nothing to classify, so
+  /// it must not pretend to know.
+  func testADefinitionReadFailureWithNoCodeStaysUnknown() async {
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .readFails(errorCode: nil)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: engine,
+      eventJoinRegistry: registry
+    )
+    coordinator.useDemoEventMode = false
+    XCTAssertTrue(
+      coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
+    )
+    coordinator.startSensing()
+    for _ in 0..<8 { await Task.yield() }
+
+    XCTAssertEqual(coordinator.joinRefusalReasonKey, "unknown")
+  }
+
   /// An admitted join leaves nothing to explain.
   func testAnAdmittedJoinPublishesNoRefusal() async {
     let engine = RecordingEventJoinControl()

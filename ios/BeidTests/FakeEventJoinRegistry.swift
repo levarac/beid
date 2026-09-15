@@ -29,7 +29,10 @@ import Foundation
 final class FakeEventJoinRegistry: EventJoinRegistry {
   enum Answer {
     /// Answers nil immediately: the read produced no definition.
-    case readFails
+    ///
+    /// `errorCode` is what the registry reported, which is what a refusal is
+    /// classified from. `nil` models a failure that carried no code.
+    case readFails(errorCode: String?)
     /// Does not answer on its own. The read stays outstanding, so it can be
     /// observed through `isHoldingRead`, cancelled, or answered after the fact
     /// with `answerHeldReadAsFailure()`.
@@ -77,7 +80,7 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
     )
   }
 
-  var answer: Answer = .readFails
+  var answer: Answer = .readFails(errorCode: nil)
 
   /// The event ids the gate actually asked about, in order.
   ///
@@ -91,7 +94,10 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
   private(set) var cancelCount = 0
 
   private var heldCompletion: (
-    (ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?) -> Void
+    (
+      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?,
+      String?
+    ) -> Void
   )?
 
   /// Whether a read is still outstanding.
@@ -108,17 +114,18 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
     eventIdHex: String,
     nowEpochSeconds: Int64,
     completion: @escaping (
-      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?
+      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?,
+      String?
     ) -> Void
   ) -> any EventIdentityVerificationRequest {
     requestedEventIdHexes.append(eventIdHex)
     switch answer {
-    case .readFails:
-      completion(nil)
+    case let .readFails(errorCode):
+      completion(nil, errorCode)
     case .holds:
       heldCompletion = completion
     case let .resolves(resolution):
-      completion(resolution)
+      completion(resolution, nil)
     }
     return FakeEventJoinRequest { [weak self] in
       self?.cancelCount += 1
@@ -126,10 +133,10 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
   }
 
   /// Answers a held read as a failure.
-  func answerHeldReadAsFailure() {
+  func answerHeldReadAsFailure(errorCode: String? = nil) {
     let completion = heldCompletion
     heldCompletion = nil
-    completion?(nil)
+    completion?(nil, errorCode)
   }
 
   /// Answers a held read with a resolution.
@@ -142,7 +149,7 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
   ) {
     let completion = heldCompletion
     heldCompletion = nil
-    completion?(resolution)
+    completion?(resolution, nil)
   }
 }
 

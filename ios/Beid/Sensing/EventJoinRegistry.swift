@@ -71,6 +71,18 @@ protocol EventJoinRegistry: AnyObject {
   /// Reads the definition for `eventIdHex` and answers with it, or with nil
   /// when the read did not produce one.
   ///
+  /// The second value is the registry's own `errorCode` for a read that
+  /// produced nothing, and nil for one that did. It is separate from the
+  /// resolution rather than replacing the nil filter, because "nil means no
+  /// definition" is a contract both platforms rely on — Android's
+  /// `EventJoinRegistry.kt` does `completion(resolution.takeIf { it.isSuccess })`
+  /// — and collapsing that would make `.registryReadFailed` unreachable
+  /// again, the exact regression the filter was added to fix.
+  ///
+  /// Without it a failed read can only say `UNKNOWN`. With it the same
+  /// `shared/` classifier the code-to-id lookup already uses can name the
+  /// situation (beid#472).
+  ///
   /// Returns a handle so an abandoned attempt can be cancelled rather than
   /// left to answer into a session that has moved on.
   @discardableResult
@@ -78,7 +90,8 @@ protocol EventJoinRegistry: AnyObject {
     eventIdHex: String,
     nowEpochSeconds: Int64,
     completion: @escaping (
-      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?
+      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?,
+      _ failureErrorCode: String?
     ) -> Void
   ) -> any EventIdentityVerificationRequest
 }
@@ -101,7 +114,8 @@ final class RegistryEventJoinRegistry: EventJoinRegistry {
     eventIdHex: String,
     nowEpochSeconds: Int64,
     completion: @escaping (
-      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?
+      ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution?,
+      _ failureErrorCode: String?
     ) -> Void
   ) -> any EventIdentityVerificationRequest {
     let request = client.resolveEventDefinition(
@@ -123,7 +137,10 @@ final class RegistryEventJoinRegistry: EventJoinRegistry {
         // reachable only from a fake. The two branches now mean on iOS what
         // they mean on Android, and the fake's nil is the shape production
         // actually produces.
-        completion(resolution.isSuccess ? resolution : nil)
+        completion(
+          resolution.isSuccess ? resolution : nil,
+          resolution.isSuccess ? nil : resolution.errorCode
+        )
       }
     }
     return RegistryEventJoinRequest(request: request)

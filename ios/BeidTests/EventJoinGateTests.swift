@@ -136,7 +136,7 @@ final class EventJoinGateTests: XCTestCase {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
     let registry = FakeEventJoinRegistry()
-    registry.answer = .readFails
+    registry.answer = .readFails(errorCode: nil)
     let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
     coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
 
@@ -255,7 +255,21 @@ final class EventJoinGateTests: XCTestCase {
       "the gate must ask the registry about the canonical id, not the typed code"
     )
     XCTAssertTrue(engine.didJoin, "a verified open event is what the gate exists to allow")
-    XCTAssertEqual(engine.joinedCodes, ["ethtokyo2026"])
+    // The **canonical Event ID**, not the typed code. `1d4bc0f` made that the
+    // engine's wire contract on purpose ("The operator code is only a
+    // lookup/UI hint"), and this assertion is what noticed: it asserted the
+    // typed code and went red on `main`, where it stayed red because every
+    // lane that runs iOS tests was down — the GitHub-hosted jobs on billing,
+    // Xcode Cloud since 2026-09-10, and the self-hosted lane only fires on
+    // `opened`/`ready_for_review` (gh#479), which a push never sends.
+    //
+    // Normalized: `fromOperatorLookup` runs `normalizedHexOrNull`, which
+    // drops the `0x`.
+    XCTAssertEqual(
+      engine.joinedCodes,
+      [String(repeating: "a", count: 64)],
+      "the engine is handed the verified definition's canonical Event ID"
+    )
     guard case .sensing = coordinator.phase else {
       return XCTFail("an admitted join must leave the session sensing, not \(coordinator.phase)")
     }
@@ -446,7 +460,7 @@ final class EventJoinGateTests: XCTestCase {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
     let registry = FakeEventJoinRegistry()
-    registry.answer = .readFails
+    registry.answer = .readFails(errorCode: nil)
     let relay = RecordingParticipantRelayControl()
     let coordinator = makeGatedCoordinator(engine: engine, registry: registry, relay: relay)
     coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
