@@ -63,6 +63,18 @@ interface EventJoinSession {
      */
     val nearbyEventSearchOutcome: StateFlow<NearbyEventSearchOutcome>
 
+    /**
+     * Whether Barnard dropped nearby events it could not keep
+     * (`additionalEventsOmitted`; the SDK holds 32 hashes).
+     *
+     * Surfaced because **a silent absence reads as a legitimate empty case**:
+     * a participant looking at the card list concludes "that is what is
+     * nearby", and it is not. Never a count — the SDK reports that it dropped
+     * events, never how many, and an invented denominator would be the same
+     * defect one step along (beid#450).
+     */
+    val nearbyEventsOmitted: StateFlow<Boolean>
+
     /** Starts passive nearby-event discovery when the EventJoin surface becomes active. */
     fun startNearbyEventDiscovery()
 

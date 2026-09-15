@@ -13,7 +13,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.levarac.barnard.BarnardB005EnvelopeV2
 import org.levarac.barnard.BarnardEngine
@@ -174,6 +177,17 @@ class EventJoinCoordinator internal constructor(
         MutableStateFlow(NearbyEventSearchOutcome.SEARCHING)
     override val nearbyEventSearchOutcome: StateFlow<NearbyEventSearchOutcome> =
         _nearbyEventSearchOutcome.asStateFlow()
+
+    /**
+     * Derived from the discovery snapshot rather than tracked separately, so
+     * there is one source of truth for it: `NearbyEventCandidates` already
+     * carries the flag, and a second copy updated by hand is how it would
+     * drift out of step with the cards it belongs to.
+     */
+    override val nearbyEventsOmitted: StateFlow<Boolean> =
+        nearbyDiscovery.candidates
+            .map { it.additionalEventsOmitted }
+            .stateIn(coroutineScope, SharingStarted.Eagerly, false)
 
     /**
      * When the current radio search began, by this session's own clock, or

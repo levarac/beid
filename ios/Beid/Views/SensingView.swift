@@ -50,8 +50,18 @@ struct NearbyEventCardListPresentation {
   let cards: [NearbyEventCard]
   let selectedEventCodeHashHex: String?
 
-  init(cards: [NearbyEventCard]) {
+  /// Barnard kept 32 hashes and dropped the rest, and said so
+  /// (`additionalEventsOmitted`). Carried to the view because **a silent
+  /// absence reads as a legitimate empty case** — a participant looking at
+  /// this list concludes "that is what is nearby", and it is not (beid#450).
+  ///
+  /// Never a count: the SDK does not say how many it dropped, and inventing a
+  /// denominator would be the same class of defect one step along.
+  let hasOmittedEvents: Bool
+
+  init(cards: [NearbyEventCard], hasOmittedEvents: Bool = false) {
     self.cards = cards
+    self.hasOmittedEvents = hasOmittedEvents
     let joinableCards = cards.filter { $0.eventIdHex != nil }
     selectedEventCodeHashHex = joinableCards.count == 1
       ? joinableCards[0].eventCodeHashHex
@@ -86,7 +96,10 @@ struct NearbyEventCardListPresentation {
         )
       )
     }
-    self.init(cards: projectedCards)
+    self.init(
+      cards: projectedCards,
+      hasOmittedEvents: candidates.additionalEventsOmitted
+    )
   }
 
   var isSearching: Bool { cards.isEmpty }
@@ -209,17 +222,29 @@ struct SensingView: View {
   /// DESIGN.md §15's error formula — what happened and one action — rendered
   /// in the non-signal caution register (§5: `statusCaution` is for errors
   /// that are not about BLE signal, which a refused join is not).
+  /// One surface for one refusal.
+  ///
+  /// There were briefly two: this one, and a `BeidPanel` inside
+  /// `nearbyEvents` reading "This event cannot be joined yet. / Check the
+  /// event details and try again." They landed from different changes and
+  /// both rendered, so a single refusal said two things — and the generic
+  /// one told an offline participant to check a code that was correct, the
+  /// exact false advice beid#472 set out to remove. The panel's container and
+  /// its accessibility identifier are kept here; its copy is not.
   private func joinRefusalNotice(_ message: LocalizedStringKey) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .foregroundStyle(DS.Color.statusCaution)
-      Text(message)
-        .font(DS.Font.supporting)
-        .foregroundStyle(DS.Color.textPrimary)
-        .fixedSize(horizontal: false, vertical: true)
+    BeidPanel {
+      HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(DS.Color.statusCaution)
+        Text(message)
+          .font(DS.Font.supporting)
+          .foregroundStyle(DS.Color.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
     .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("scan.join-refusal")
   }
 
   @ViewBuilder
@@ -229,20 +254,6 @@ struct SensingView: View {
       Text("Nearby events")
         .font(DS.Font.sectionTitle)
         .foregroundStyle(DS.Color.textPrimary)
-
-      if sensing.joinRefusal != nil {
-        BeidPanel {
-          VStack(alignment: .leading, spacing: DS.Space.xs) {
-            Text("This event cannot be joined yet.")
-              .font(DS.Font.cardTitle)
-              .foregroundStyle(DS.Color.textPrimary)
-            Text("Check the event details and try again.")
-              .font(DS.Font.supporting)
-              .foregroundStyle(DS.Color.textSecondary)
-          }
-        }
-        .accessibilityIdentifier("scan.join-refusal")
-      }
 
       if presentation.isSearching {
         BeidPanel {
@@ -264,9 +275,30 @@ struct SensingView: View {
           )
         }
       }
+
+      if presentation.hasOmittedEvents {
+        omittedEventsRow
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .accessibilityIdentifier("scan.nearby-events")
+  }
+
+  /// Barnard kept 32 hashes and dropped the rest. Saying nothing would leave
+  /// the list above reading as "this is what is nearby", which it is not.
+  ///
+  /// **Static, and deliberately without a number.** The SDK reports *that* it
+  /// dropped events, never how many, so a count here would be invented —
+  /// `docs/specs/event-discovery.md` §5.3 says append one static row rather
+  /// than trying to read the omitted event's own payload, which by then
+  /// carries an empty marker rather than a real hint (beid#450).
+  private var omittedEventsRow: some View {
+    Text("Some nearby events are not shown.")
+      .font(DS.Font.meta)
+      .foregroundStyle(DS.Color.textSecondary)
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityIdentifier("scan.nearby-events.omitted")
   }
 
   private func nearbyEventCard(_ card: NearbyEventCard, selected: Bool) -> some View {

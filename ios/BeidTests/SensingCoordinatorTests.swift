@@ -770,6 +770,34 @@ final class SensingCoordinatorTests: XCTestCase {
     )
   }
 
+  /// beid#450 — Barnard kept 32 hashes and dropped the rest, and the list
+  /// must not read as "this is what is nearby".
+  func testNearbyCardProjectionCarriesTheOmittedEventsFlag() throws {
+    let store = makeNearbyDiscoveryStore(additionalEventsOmitted: true)
+
+    let presentation = NearbyEventCardListPresentation(
+      candidates: store.snapshot,
+      nowEpochSeconds: 1_800_000_000
+    )
+
+    XCTAssertTrue(
+      presentation.hasOmittedEvents,
+      "the SDK said it dropped events; the surface has to be able to say so"
+    )
+  }
+
+  /// And stays false when nothing was dropped, so the row means something.
+  func testNearbyCardProjectionReportsNoOmissionWhenNothingWasDropped() throws {
+    let store = makeNearbyDiscoveryStore()
+
+    let presentation = NearbyEventCardListPresentation(
+      candidates: store.snapshot,
+      nowEpochSeconds: 1_800_000_000
+    )
+
+    XCTAssertFalse(presentation.hasOmittedEvents)
+  }
+
   func testNearbyCardProjectionKeepsUnresolvedCandidatesVisibleButNonInteractive() throws {
     let store = makeNearbyDiscoveryStore(includeUnresolvedCandidate: true)
     let snapshot = store.snapshot
@@ -1010,7 +1038,8 @@ final class SensingCoordinatorTests: XCTestCase {
     includeUnresolvedCandidate: Bool = false,
     observedAtEpochMillis: Int64 = 1_800_000_000_000,
     validFromEpochSeconds: Int64? = nil,
-    validUntilEpochSeconds: Int64? = nil
+    validUntilEpochSeconds: Int64? = nil,
+    additionalEventsOmitted: Bool = false
   ) -> ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore {
     let store = ExportedKotlinPackages.org.levarac.parallax.discovery
       .createNearbyEventDiscoveryStore()
@@ -1023,7 +1052,7 @@ final class SensingCoordinatorTests: XCTestCase {
         rawContainerHex: "03000004",
         agreesWithRegistry: false,
         additionalNamesOmitted: false,
-        additionalEventsOmitted: false,
+        additionalEventsOmitted: additionalEventsOmitted,
         observedAtEpochMillis: observedAtEpochMillis
       )
     guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
