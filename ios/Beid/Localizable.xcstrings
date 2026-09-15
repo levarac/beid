@@ -35,6 +35,7 @@
     },
     "Detected event": {},
     "No event is registered for that code. Check it with the event organizer.": {},
+    "Some nearby events are not shown.": {},
     "That code didn't match the event beid found. Check that you have the whole code.": {},
     "That event isn't open to join right now.": {},
     "beid couldn't verify that event. Check the code with the event organizer.": {},
