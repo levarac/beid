@@ -707,6 +707,17 @@ final class SensingCoordinator: ObservableObject {
   /// envelopes, keyed by the same hash as the discovery reducer.
   private var nearbyVerifiedEventIds: [String: String] = [:]
 
+  /// Opaque selectors for Lab control. The Lab host may choose one of these
+  /// values, but never derives an event ID or registry result itself.
+  func labJoinableEventCodeHashHexes() -> [String] {
+    (0..<nearbyEventCandidates.candidateCount).compactMap { index in
+      guard let candidate = nearbyEventCandidates.candidateAt(index: index) else { return nil }
+      let hash = candidate.eventCodeHashHex
+      guard nearbyVerifiedDefinitions[hash] != nil || nearbyVerifiedEventIds[hash] != nil else { return nil }
+      return hash
+    }
+  }
+
   // MARK: - Per-session protocol state
   //
   // Reset at the start of every new event (`beginEventFound`) and on

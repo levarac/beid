@@ -52,10 +52,13 @@ data class LabSnapshot(
     val deviceId: String,
     val generation: Int,
     val productionState: String,
+    val nearbyCandidates: List<String>,
 )
 
 interface LabWebSocketClient {
-    fun connect(url: String, hello: LabHello, productionState: () -> String, onSnapshot: (LabSnapshot) -> Unit)
+    fun connect(url: String, hello: LabHello, productionState: () -> String,
+        nearbyCandidates: () -> List<String>, joinNearbyEvent: (String) -> Pair<Boolean, String?>,
+        onSnapshot: (LabSnapshot) -> Unit)
     fun stop()
 }
 
@@ -70,7 +73,9 @@ class OkHttpLabWebSocketClient(
         socket = null
     }
 
-    override fun connect(url: String, hello: LabHello, productionState: () -> String, onSnapshot: (LabSnapshot) -> Unit) {
+    override fun connect(url: String, hello: LabHello, productionState: () -> String,
+        nearbyCandidates: () -> List<String>, joinNearbyEvent: (String) -> Pair<Boolean, String?>,
+        onSnapshot: (LabSnapshot) -> Unit) {
         require(url.startsWith("ws://") || url.startsWith("wss://")) { "broker_url must be a WebSocket URL" }
         val request = Request.Builder().url(url).build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
@@ -81,6 +86,34 @@ class OkHttpLabWebSocketClient(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 runCatching {
                     val value = Json.parseToJsonElement(text).jsonObject
+                    if (value["type"]?.jsonPrimitive?.content == "join_nearby_event") {
+                        require(value.keys == setOf("type", "request_id", "run_id", "role", "device_id", "generation", "event_code_hash_hex")) { "invalid join_nearby_event fields" }
+                        require(value["run_id"]?.jsonPrimitive?.content == hello.identity.runId)
+                        require(value["role"]?.jsonPrimitive?.content == hello.identity.role)
+                        require(value["device_id"]?.jsonPrimitive?.content == hello.identity.deviceId)
+                        require(value["generation"]?.jsonPrimitive?.intOrNull == hello.identity.generation)
+                        val requestId = value["request_id"]!!.jsonPrimitive.content
+                        val hash = value["event_code_hash_hex"]!!.jsonPrimitive.content
+                        val (accepted, reason) = if (!nearbyCandidates().contains(hash)) {
+                            false to "candidate_not_currently_verified"
+                        } else {
+                            joinNearbyEvent(hash)
+                        }
+                        val result = buildJsonObject {
+                            put("type", JsonPrimitive("join_nearby_event_result"))
+                            put("request_id", JsonPrimitive(requestId))
+                            put("run_id", JsonPrimitive(hello.identity.runId))
+                            put("role", JsonPrimitive(hello.identity.role))
+                            put("device_id", JsonPrimitive(hello.identity.deviceId))
+                            put("generation", JsonPrimitive(hello.identity.generation))
+                            put("status", JsonPrimitive(if (accepted) "accepted" else "rejected"))
+                            if (reason == null) put("reason", kotlinx.serialization.json.JsonNull)
+                            else put("reason", JsonPrimitive(reason))
+                            put("production_state", JsonPrimitive(productionState()))
+                        }
+                        webSocket.send(Json.encodeToString(JsonObject.serializer(), result))
+                        return@runCatching
+                    }
                     require(value.keys == setOf("type", "request_id", "run_id", "role", "generation")) { "invalid snapshot_request fields" }
                     require(value["type"]?.jsonPrimitive?.content == "snapshot_request") { "unexpected broker message" }
                     require(value["run_id"]?.jsonPrimitive?.content == hello.identity.runId)
@@ -95,9 +128,12 @@ class OkHttpLabWebSocketClient(
                         put("device_id", JsonPrimitive(hello.identity.deviceId))
                         put("generation", JsonPrimitive(hello.identity.generation))
                         put("production_state", JsonPrimitive(productionState()))
+                        put("nearby_candidates", kotlinx.serialization.json.buildJsonArray {
+                            nearbyCandidates().forEach { add(JsonPrimitive(it)) }
+                        })
                     }
                     webSocket.send(Json.encodeToString(JsonObject.serializer(), snapshot))
-                    onSnapshot(LabSnapshot(requestId, hello.identity.runId, hello.identity.role, hello.identity.deviceId, hello.identity.generation, productionState()))
+                    onSnapshot(LabSnapshot(requestId, hello.identity.runId, hello.identity.role, hello.identity.deviceId, hello.identity.generation, productionState(), nearbyCandidates()))
                 }
             }
         })
@@ -110,10 +146,12 @@ class LabControlBootstrap(
     private val brokerUrl: String,
     private val broker: LabWebSocketClient,
     private val productionState: () -> String,
+    private val nearbyCandidates: () -> List<String>,
+    private val joinNearbyEvent: (String) -> Pair<Boolean, String?>,
 ) {
     fun start(onSnapshot: (LabSnapshot) -> Unit = {}): Result<Unit> {
         if (brokerUrl.isBlank()) return Result.failure(IllegalStateException("lab broker is not configured"))
-        broker.connect(brokerUrl, LabHello(identity), productionState, onSnapshot)
+        broker.connect(brokerUrl, LabHello(identity), productionState, nearbyCandidates, joinNearbyEvent, onSnapshot)
         return Result.success(Unit)
     }
 

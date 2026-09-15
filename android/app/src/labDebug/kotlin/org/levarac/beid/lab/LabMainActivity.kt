@@ -33,6 +33,8 @@ class LabMainActivity : MainActivity() {
             brokerUrl = brokerUrl,
             broker = OkHttpLabWebSocketClient(),
             productionState = ::labReadOnlyState,
+            nearbyCandidates = ::labNearbyCandidateSelectors,
+            joinNearbyEvent = ::labJoinNearbyEvent,
         )
         labBootstrap = bootstrap
         val result = bootstrap.start()

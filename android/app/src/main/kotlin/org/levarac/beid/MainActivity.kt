@@ -40,6 +40,20 @@ import org.levarac.parallax.registry.RegistryClient
 open class MainActivity : ComponentActivity() {
     // Sole production coordinator owner; Lab reads this seam without replacing it.
     internal var eventJoinCoordinator: EventJoinCoordinator? = null
+    internal fun labNearbyCandidateSelectors(): List<String> =
+        eventJoinCoordinator?.nearbyEventCards?.value
+            ?.filter { it.eventIdHex != null }
+            ?.map { it.eventCodeHashHex }
+            ?: emptyList()
+
+    internal fun labJoinNearbyEvent(hash: String): Pair<Boolean, String?> {
+        val coordinator = eventJoinCoordinator ?: return false to "coordinator_unavailable"
+        if (coordinator.nearbyEventCards.value.none { it.eventCodeHashHex == hash && it.eventIdHex != null }) {
+            return false to "candidate_not_currently_verified"
+        }
+        coordinator.joinNearbyEvent(hash)
+        return true to null
+    }
     private var registryClient: RegistryClient? = null
     private var walletBindingFlow: WalletBindingFlow? = null
 
