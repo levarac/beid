@@ -7,6 +7,12 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
+  func testLabTerminalErrorProjectionAllowsOnlyExistingCodes() {
+    XCTAssertEqual(boundedLabTerminalError("timeout"), "timeout")
+    XCTAssertNil(boundedLabTerminalError("raw_private_error_detail"))
+    XCTAssertNil(boundedLabTerminalError(nil))
+  }
+
   func testExclusionIsIdempotentRejectsConflictsAndSurvivesReload() throws {
     let directory = try makeIsolatedDirectory(named: "beid-report-submission-exclusion")
     defer { try? FileManager.default.removeItem(at: directory) }
