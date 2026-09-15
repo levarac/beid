@@ -109,9 +109,6 @@ android {
         }
     }
 
-    // Compile the pure Lab contract tests against the lab-only source set.
-    sourceSets["test"].java.srcDir("src/labDebug/kotlin")
-    sourceSets["test"].java.srcDir("src/labDebugTest/kotlin")
 }
 
 dependencies {
