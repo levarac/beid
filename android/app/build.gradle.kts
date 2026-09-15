@@ -78,6 +78,13 @@ android {
     }
 
     buildTypes {
+        // Explicit Lab boundary; shipping debug/release variants remain unchanged.
+        create("labDebug") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".lab"
+            matchingFallbacks += listOf("debug")
+            buildConfigField("String", "LAB_PROTOCOL_VERSION", "\"1\"")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(
@@ -101,6 +108,10 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    // Compile the pure Lab contract tests against the lab-only source set.
+    sourceSets["test"].java.srcDir("src/labDebug/kotlin")
+    sourceSets["test"].java.srcDir("src/labDebugTest/kotlin")
 }
 
 dependencies {
@@ -113,6 +124,7 @@ dependencies {
 
     // Native (Flutter-free) BLE mutual-observation SDK published to Maven Central.
     implementation("org.levarac:barnard:0.9.2")
+    add("labDebugImplementation", "com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")
