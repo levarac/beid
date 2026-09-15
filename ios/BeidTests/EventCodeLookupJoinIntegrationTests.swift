@@ -269,6 +269,29 @@ private actor ContinuationRelay {
 final class JoinGateRefusalReasonTests: XCTestCase {
   private let canonicalEventIdHex = "0x" + String(repeating: "a", count: 64)
 
+  /// Waits until `condition` holds, or fails with `description`.
+  ///
+  /// **Not a fixed number of `Task.yield()` calls, and not a fixed sleep.** A
+  /// refusal travels through the registry completion and a
+  /// `Task { @MainActor }` hop, so how many turns it needs is a property of
+  /// the machine, not of the code. The first version of these tests yielded
+  /// eight times: it passed on the development machine and failed on the
+  /// self-hosted runner, where four of them reported a nil reason key because
+  /// the work simply had not happened yet. That is the lane earning its
+  /// keep — and a reason not to take a local pass as the whole answer.
+  private func waitUntil(
+    _ description: String,
+    timeout: TimeInterval = 5,
+    _ condition: @MainActor () -> Bool
+  ) async {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if condition() { return }
+      try? await Task.sleep(nanoseconds: 5_000_000)
+    }
+    XCTFail("timed out waiting for \(description)")
+  }
+
   private func refusalReasonKey(
     lookupErrorCode: String?,
     canonicalEventIdHex: String?
@@ -290,7 +313,7 @@ final class JoinGateRefusalReasonTests: XCTestCase {
       )
     )
     coordinator.startSensing()
-    for _ in 0..<8 { await Task.yield() }
+    await waitUntil("a refusal to be published") { coordinator.joinRefusalReasonKey != nil }
     return coordinator.joinRefusalReasonKey
   }
 
@@ -358,7 +381,7 @@ final class JoinGateRefusalReasonTests: XCTestCase {
       coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
     )
     coordinator.startSensing()
-    for _ in 0..<8 { await Task.yield() }
+    await waitUntil("a refusal to be published") { coordinator.joinRefusalReasonKey != nil }
 
     XCTAssertFalse(engine.didJoin, "an expired definition must not start a radio")
     XCTAssertEqual(
@@ -387,7 +410,7 @@ final class JoinGateRefusalReasonTests: XCTestCase {
       coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
     )
     coordinator.startSensing()
-    for _ in 0..<8 { await Task.yield() }
+    await waitUntil("a refusal to be published") { coordinator.joinRefusalReasonKey != nil }
 
     XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex], "the read happened")
     XCTAssertFalse(engine.didJoin)
@@ -415,7 +438,7 @@ final class JoinGateRefusalReasonTests: XCTestCase {
       coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
     )
     coordinator.startSensing()
-    for _ in 0..<8 { await Task.yield() }
+    await waitUntil("a refusal to be published") { coordinator.joinRefusalReasonKey != nil }
 
     XCTAssertEqual(coordinator.joinRefusalReasonKey, "unknown")
   }
@@ -438,9 +461,11 @@ final class JoinGateRefusalReasonTests: XCTestCase {
       coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
     )
     coordinator.startSensing()
-    for _ in 0..<8 { await Task.yield() }
+    await waitUntil("the gate to admit and start the radio") { engine.didJoin }
 
-    XCTAssertTrue(engine.didJoin)
-    XCTAssertNil(coordinator.joinRefusalReasonKey)
+    XCTAssertNil(
+      coordinator.joinRefusalReasonKey,
+      "an admitted join leaves nothing to explain"
+    )
   }
 }
