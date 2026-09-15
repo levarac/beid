@@ -367,6 +367,11 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.excludedWindowCount(forEventCode: eventCode)
   }
 
+  /// Read-only Lab projection of durable submission metadata. No network call or write.
+  func labRecordMetadata() -> [LabRecordMetadata] {
+    (reportSubmissionRuntime as? ReportSubmissionRuntime)?.labRecordMetadata() ?? []
+  }
+
   /// beid#143's Participation summary screen entry point. Forwards to the
   /// privately-owned `sessionAggregateSnapshotStore` that
   /// `persistSessionAggregateSnapshotIfNeeded()` writes at session end

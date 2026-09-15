@@ -54,7 +54,34 @@ data class LabSnapshot(
     val generation: Int,
     val productionState: String,
     val nearbyCandidates: List<String>,
+    val records: List<LabRecordMetadata>,
 )
+
+/** Read-only projection of durable native submission metadata. Payload bytes and keys never cross this seam. */
+data class LabRecordMetadata(
+    val windowId: String,
+    val eventId: String,
+    val observationDigest: String?,
+    val status: String,
+    val receiptStored: Boolean,
+    val terminalError: String?,
+)
+
+internal fun labRecordsJson(records: List<LabRecordMetadata>) =
+    kotlinx.serialization.json.buildJsonArray {
+        records.forEach { record ->
+            add(buildJsonObject {
+                put("window_id", JsonPrimitive(record.windowId))
+                put("event_id", JsonPrimitive(record.eventId))
+                if (record.observationDigest == null) put("observation_digest", kotlinx.serialization.json.JsonNull)
+                else put("observation_digest", JsonPrimitive(record.observationDigest))
+                put("status", JsonPrimitive(record.status))
+                put("receipt_stored", JsonPrimitive(record.receiptStored))
+                if (record.terminalError == null) put("terminal_error", kotlinx.serialization.json.JsonNull)
+                else put("terminal_error", JsonPrimitive(record.terminalError))
+            })
+        }
+    }
 
 internal class LabJoinRequestGate {
     private val consumed = mutableSetOf<String>()
@@ -70,7 +97,8 @@ internal class LabJoinRequestGate {
 
 interface LabWebSocketClient {
     fun connect(url: String, hello: LabHello, productionState: () -> String,
-        nearbyCandidates: () -> List<String>, joinNearbyEvent: (String, (Boolean, String?) -> Unit) -> Unit,
+        nearbyCandidates: () -> List<String>, records: () -> List<LabRecordMetadata>,
+        joinNearbyEvent: (String, (Boolean, String?) -> Unit) -> Unit,
         onSnapshot: (LabSnapshot) -> Unit)
     fun stop()
 }
@@ -88,7 +116,8 @@ class OkHttpLabWebSocketClient(
     }
 
     override fun connect(url: String, hello: LabHello, productionState: () -> String,
-        nearbyCandidates: () -> List<String>, joinNearbyEvent: (String, (Boolean, String?) -> Unit) -> Unit,
+        nearbyCandidates: () -> List<String>, records: () -> List<LabRecordMetadata>,
+        joinNearbyEvent: (String, (Boolean, String?) -> Unit) -> Unit,
         onSnapshot: (LabSnapshot) -> Unit) {
         require(url.startsWith("ws://") || url.startsWith("wss://")) { "broker_url must be a WebSocket URL" }
         val request = Request.Builder().url(url).build()
@@ -141,6 +170,7 @@ class OkHttpLabWebSocketClient(
                     require(value["role"]?.jsonPrimitive?.content == hello.identity.role)
                     require(value["generation"]?.jsonPrimitive?.intOrNull == hello.identity.generation)
                     val requestId = value["request_id"]!!.jsonPrimitive.content
+                    val snapshotRecords = records()
                     val snapshot = buildJsonObject {
                         put("type", JsonPrimitive("snapshot_response"))
                         put("request_id", JsonPrimitive(requestId))
@@ -152,9 +182,10 @@ class OkHttpLabWebSocketClient(
                         put("nearby_candidates", kotlinx.serialization.json.buildJsonArray {
                             nearbyCandidates().forEach { add(JsonPrimitive(it)) }
                         })
+                        put("records", labRecordsJson(snapshotRecords))
                     }
                     webSocket.send(Json.encodeToString(JsonObject.serializer(), snapshot))
-                    onSnapshot(LabSnapshot(requestId, hello.identity.runId, hello.identity.role, hello.identity.deviceId, hello.identity.generation, productionState(), nearbyCandidates()))
+                    onSnapshot(LabSnapshot(requestId, hello.identity.runId, hello.identity.role, hello.identity.deviceId, hello.identity.generation, productionState(), nearbyCandidates(), snapshotRecords))
                 }
             }
         })
@@ -176,10 +207,11 @@ class LabControlBootstrap(
     private val productionState: () -> String,
     private val nearbyCandidates: () -> List<String>,
     private val joinNearbyEvent: (String, (Boolean, String?) -> Unit) -> Unit,
+    private val records: () -> List<LabRecordMetadata> = { emptyList() },
 ) {
     fun start(onSnapshot: (LabSnapshot) -> Unit = {}): Result<Unit> {
         if (brokerUrl.isBlank()) return Result.failure(IllegalStateException("lab broker is not configured"))
-        broker.connect(brokerUrl, LabHello(identity), productionState, nearbyCandidates, joinNearbyEvent, onSnapshot)
+        broker.connect(brokerUrl, LabHello(identity), productionState, nearbyCandidates, records, joinNearbyEvent, onSnapshot)
         return Result.success(Unit)
     }
 

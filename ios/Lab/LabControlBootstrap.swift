@@ -49,11 +49,13 @@ struct LabSnapshot: Equatable {
   let generation: Int
   let productionState: String
   let nearbyCandidates: [String]
+  let records: [LabRecordMetadata]
 }
 
 protocol LabWebSocketClient {
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
                nearbyCandidates: @escaping () -> [String],
+               records: @escaping () -> [LabRecordMetadata],
                joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                onSnapshot: @escaping (LabSnapshot) -> Void,
                onError: @escaping (String) -> Void)
@@ -72,6 +74,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
 
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
                nearbyCandidates: @escaping () -> [String],
+               records: @escaping () -> [LabRecordMetadata],
                joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                onSnapshot: @escaping (LabSnapshot) -> Void,
                onError: @escaping (String) -> Void) {
@@ -81,6 +84,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
     task.resume()
     send(hello.wire(), on: task)
     receive(on: task, hello: hello, productionState: productionState, nearbyCandidates: nearbyCandidates,
+            records: records,
             joinNearbyEvent: joinNearbyEvent, onSnapshot: onSnapshot, onError: onError)
   }
 
@@ -94,6 +98,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
   private func receive(on task: URLSessionWebSocketTask, hello: LabHello,
                        productionState: @escaping () -> String,
                        nearbyCandidates: @escaping () -> [String],
+                       records: @escaping () -> [LabRecordMetadata],
                        joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                        onSnapshot: @escaping (LabSnapshot) -> Void,
                        onError: @escaping (String) -> Void) {
@@ -137,6 +142,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
                      "reason": reason ?? NSNull(), "production_state": productionState()], on: task)
         }
         self.receive(on: task, hello: hello, productionState: productionState, nearbyCandidates: nearbyCandidates,
+                     records: records,
                      joinNearbyEvent: joinNearbyEvent, onSnapshot: onSnapshot, onError: onError)
         return
       }
@@ -151,14 +157,22 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
             runId == hello.identity.runId, role == hello.identity.role,
             generation == hello.identity.generation else { return }
       let state = productionState()
+      let snapshotRecords = records()
       self.send(["type": "snapshot_response", "request_id": requestId,
                  "run_id": hello.identity.runId, "role": hello.identity.role,
                  "device_id": hello.identity.deviceId, "generation": hello.identity.generation,
-                 "production_state": state, "nearby_candidates": nearbyCandidates()], on: task)
+                 "production_state": state, "nearby_candidates": nearbyCandidates(),
+                 "records": snapshotRecords.map { record -> [String: Any] in
+                   ["window_id": record.windowId, "event_id": record.eventId,
+                    "observation_digest": record.observationDigest ?? NSNull(),
+                    "status": record.status, "receipt_stored": record.receiptStored,
+                    "terminal_error": record.terminalError ?? NSNull()]
+                 }], on: task)
       onSnapshot(LabSnapshot(requestId: requestId, runId: runId, role: role,
                              deviceId: hello.identity.deviceId, generation: generation,
-                             productionState: state, nearbyCandidates: nearbyCandidates()))
+                             productionState: state, nearbyCandidates: nearbyCandidates(), records: snapshotRecords))
       self.receive(on: task, hello: hello, productionState: productionState, nearbyCandidates: nearbyCandidates,
+                   records: records,
                    joinNearbyEvent: joinNearbyEvent, onSnapshot: onSnapshot, onError: onError)
     }
   }
@@ -185,6 +199,7 @@ final class LabControlBootstrap: ObservableObject {
                      guard let phase = self?.sensing?.phase else { return "unknown" }
                      return String(describing: phase)
                    }, nearbyCandidates: { [weak self] in self?.sensing?.labJoinableEventCodeHashHexes() ?? [] },
+                   records: { [weak self] in self?.sensing?.labRecordMetadata() ?? [] },
                    joinNearbyEvent: { [weak self] hash, completion in
                      Task { @MainActor in
                        guard let self, self.sensing?.labJoinableEventCodeHashHexes().contains(hash) == true else {

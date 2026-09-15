@@ -5,6 +5,17 @@ import BeidSharedKit
 import Foundation
 import os
 
+/// Bounded, read-only projection for the authenticated Lab host.
+/// Signed payloads, receipts, keys, and raw errors stay on-device.
+struct LabRecordMetadata: Equatable {
+  let windowId: String
+  let eventId: String
+  let observationDigest: String?
+  let status: String
+  let receiptStored: Bool
+  let terminalError: String?
+}
+
 /// The only submission trust material accepted by the runtime. Production
 /// instances are produced from a verified registry EventDefinitionContext;
 /// tests may inject a hermetic equivalent without changing the runtime path.
@@ -352,6 +363,20 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
 
   func excludedWindowCount(forEventCode eventCode: String) -> Int {
     store.exclusions.filter { $0.eventCode == eventCode }.count
+  }
+
+  func labRecordMetadata() -> [LabRecordMetadata] {
+    store.records.compactMap { record in
+      guard let eventId = record.eventIdHex else { return nil }
+      return LabRecordMetadata(
+        windowId: record.id.uuidString.lowercased(),
+        eventId: eventId,
+        observationDigest: record.observationDigestHex,
+        status: record.submissionState.rawValue,
+        receiptStored: record.acceptanceReceiptHex != nil,
+        terminalError: record.terminalErrorCode
+      )
+    }
   }
 
   func submitPending() {

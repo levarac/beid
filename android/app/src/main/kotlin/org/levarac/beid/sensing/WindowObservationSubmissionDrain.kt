@@ -147,6 +147,7 @@ internal class WindowObservationSubmissionDrain(
         val digestHex = checkNotNull(submission.observationReferenceAt(0)) {
             "A submission with maximumWindowCount=1 must name its one observation reference"
         }
+        submissionRecordStore.recordObservationDigest(windowId, digestHex)
 
         val record = submissionRecordStore.recordFor(windowId)
         val configuration = record?.let(::restoreConfiguration)

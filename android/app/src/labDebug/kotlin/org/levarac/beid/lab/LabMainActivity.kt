@@ -35,6 +35,7 @@ class LabMainActivity : MainActivity() {
             productionState = ::labReadOnlyState,
             nearbyCandidates = ::labNearbyCandidateSelectors,
             joinNearbyEvent = ::labJoinNearbyEvent,
+            records = ::labRecordMetadata,
         )
         labBootstrap = bootstrap
         val result = bootstrap.start()

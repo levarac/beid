@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.levarac.beid.navigation.AppNavHost
 import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.persistence.SubmissionRecordStore
+import org.levarac.parallax.submission.SubmissionErrorCode
 import org.levarac.beid.registry.RegistryDependencies
 import org.levarac.beid.scenario.AndroidDataSource
 import org.levarac.beid.scenario.AndroidScenarioAdvance
@@ -58,6 +60,25 @@ open class MainActivity : ComponentActivity() {
             completion(true, null)
         }
     }
+
+    /** Read-only, bounded projection of durable submission metadata for Lab snapshots. */
+    internal fun labRecordMetadata(): List<org.levarac.beid.lab.LabRecordMetadata> =
+        SubmissionRecordStore(SubmissionRecordStore.defaultFile(filesDir)).records.map { record ->
+            org.levarac.beid.lab.LabRecordMetadata(
+                windowId = record.windowId,
+                eventId = record.eventIdHex,
+                observationDigest = record.observationDigestHex,
+                status = when {
+                    record.acceptanceReceiptHex != null -> "accepted"
+                    record.terminalErrorCode != null -> "terminal_failure"
+                    record.unresolvedReason != null -> "unresolved"
+                    else -> "prepared"
+                },
+                receiptStored = record.acceptanceReceiptHex != null,
+                terminalError = record.terminalErrorCode
+                    ?.takeIf { code -> SubmissionErrorCode.values().any { it.wireName == code } },
+            )
+        }
     private var registryClient: RegistryClient? = null
     private var walletBindingFlow: WalletBindingFlow? = null
 
