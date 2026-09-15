@@ -18,7 +18,11 @@ class LabControlBootstrapTest {
     @Test
     fun missingBrokerFailsClosed() {
         val identity = LabControlIdentity("run-1", "participant", "device-1", 1, "token", 1)
-        val result = LabControlBootstrap(identity, "", LabWebSocketClient { _, _, _, _ -> }, { "state=idle" }).start()
+        val broker = object : LabWebSocketClient {
+            override fun connect(url: String, hello: LabHello, productionState: () -> String, onSnapshot: (LabSnapshot) -> Unit) = Unit
+            override fun stop() = Unit
+        }
+        val result = LabControlBootstrap(identity, "", broker, { "state=idle" }).start()
         assertTrue(result.isFailure)
     }
 }

@@ -54,18 +54,26 @@ data class LabSnapshot(
     val productionState: String,
 )
 
-fun interface LabWebSocketClient {
+interface LabWebSocketClient {
     fun connect(url: String, hello: LabHello, productionState: () -> String, onSnapshot: (LabSnapshot) -> Unit)
+    fun stop()
 }
 
 /** Minimal host client. It only answers the broker's snapshot request. */
 class OkHttpLabWebSocketClient(
     private val client: OkHttpClient = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build(),
 ) : LabWebSocketClient {
+    private var socket: WebSocket? = null
+
+    override fun stop() {
+        socket?.close(1000, "lab activity stopped")
+        socket = null
+    }
+
     override fun connect(url: String, hello: LabHello, productionState: () -> String, onSnapshot: (LabSnapshot) -> Unit) {
         require(url.startsWith("ws://") || url.startsWith("wss://")) { "broker_url must be a WebSocket URL" }
         val request = Request.Builder().url(url).build()
-        client.newWebSocket(request, object : WebSocketListener() {
+        socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(Json.encodeToString(JsonObject.serializer(), hello.wire()))
             }
@@ -108,4 +116,6 @@ class LabControlBootstrap(
         broker.connect(brokerUrl, LabHello(identity), productionState, onSnapshot)
         return Result.success(Unit)
     }
+
+    fun stop() = broker.stop()
 }

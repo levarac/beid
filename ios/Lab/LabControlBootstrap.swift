@@ -52,21 +52,29 @@ struct LabSnapshot: Equatable {
 
 protocol LabWebSocketClient {
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
-               onSnapshot: @escaping (LabSnapshot) -> Void)
+               onSnapshot: @escaping (LabSnapshot) -> Void,
+               onError: @escaping (String) -> Void)
+  func stop()
 }
 
 /// Native client for the loopback host broker. It only answers snapshot requests.
 final class URLSessionLabWebSocketClient: LabWebSocketClient {
   private var task: URLSessionWebSocketTask?
 
+  func stop() {
+    task?.cancel(with: .goingAway, reason: nil)
+    task = nil
+  }
+
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
-               onSnapshot: @escaping (LabSnapshot) -> Void) {
+               onSnapshot: @escaping (LabSnapshot) -> Void,
+               onError: @escaping (String) -> Void) {
     let session = URLSession(configuration: .ephemeral)
     let task = session.webSocketTask(with: url)
     self.task = task
     task.resume()
     send(hello.wire(), on: task)
-    receive(on: task, hello: hello, productionState: productionState, onSnapshot: onSnapshot)
+    receive(on: task, hello: hello, productionState: productionState, onSnapshot: onSnapshot, onError: onError)
   }
 
   private func send(_ object: [String: Any], on task: URLSessionWebSocketTask) {
@@ -78,10 +86,15 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
 
   private func receive(on task: URLSessionWebSocketTask, hello: LabHello,
                        productionState: @escaping () -> String,
-                       onSnapshot: @escaping (LabSnapshot) -> Void) {
+                       onSnapshot: @escaping (LabSnapshot) -> Void,
+                       onError: @escaping (String) -> Void) {
     task.receive { [weak self] result in
       guard let self else { return }
-      guard case .success(.string(let text)) = result,
+      guard case .success(.string(let text)) = result else {
+        onError("socket_receive_failed")
+        return
+      }
+      guard
             let data = text.data(using: .utf8),
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let type = object["type"] as? String,
@@ -101,7 +114,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
       onSnapshot(LabSnapshot(requestId: requestId, runId: runId, role: role,
                              deviceId: hello.identity.deviceId, generation: generation,
                              productionState: state))
-      self.receive(on: task, hello: hello, productionState: productionState, onSnapshot: onSnapshot)
+      self.receive(on: task, hello: hello, productionState: productionState, onSnapshot: onSnapshot, onError: onError)
     }
   }
 }
@@ -123,10 +136,18 @@ final class LabControlBootstrap: ObservableObject {
     guard let brokerURL, let broker else { status = LabBootstrapError.missingBroker.localizedDescription; return }
     status = "connecting"
     broker.connect(url: brokerURL, hello: LabHello(identity: identity),
-                   productionState: { [weak self] in String(describing: self?.sensing?.phase ?? .idle) }) { [weak self] snapshot in
+                   productionState: { [weak self] in
+                     guard let phase = self?.sensing?.phase else { return "unknown" }
+                     return String(describing: phase)
+                   }, onSnapshot: { [weak self] snapshot in
       guard let self else { return }
       status = snapshot.runId == identity.runId && snapshot.role == identity.role &&
         snapshot.deviceId == identity.deviceId && snapshot.generation == identity.generation ? "connected" : "snapshot_identity_mismatch"
-    }
+    }, onError: { [weak self] message in self?.status = "error:\(message)" })
+  }
+
+  func stop() {
+    broker?.stop()
+    status = "stopped"
   }
 }

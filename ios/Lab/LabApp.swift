@@ -27,6 +27,7 @@ struct BeidLabApp: App {
     WindowGroup {
       VStack(spacing: 12) { Text("beid Lab"); Text(bootstrap.status).font(.caption) }
         .task { bootstrap.start() }
+        .onDisappear { bootstrap.stop() }
     }
   }
 }

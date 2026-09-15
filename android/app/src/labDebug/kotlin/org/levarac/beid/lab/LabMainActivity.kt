@@ -6,6 +6,8 @@ import org.levarac.beid.MainActivity
 
 /** Lab launcher; production MainActivity remains the coordinator owner. */
 class LabMainActivity : MainActivity() {
+    private var labBootstrap: LabControlBootstrap? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val identity = runCatching {
             LabControlIdentity(
@@ -26,14 +28,22 @@ class LabMainActivity : MainActivity() {
             return
         }
         super.onCreate(savedInstanceState)
-        val result = LabControlBootstrap(
+        val bootstrap = LabControlBootstrap(
             identity = identity,
             brokerUrl = brokerUrl,
             broker = OkHttpLabWebSocketClient(),
             productionState = ::labReadOnlyState,
-        ).start()
+        )
+        labBootstrap = bootstrap
+        val result = bootstrap.start()
         if (result.isFailure) {
             setContentView(TextView(this).apply { text = "Lab bootstrap refused: ${result.exceptionOrNull()?.message}" })
         }
+    }
+
+    override fun onDestroy() {
+        labBootstrap?.stop()
+        labBootstrap = null
+        super.onDestroy()
     }
 }
