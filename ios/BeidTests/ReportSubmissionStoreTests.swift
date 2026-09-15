@@ -7,6 +7,36 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
+  func testLabRecordProjectionReadsPersistedRecordsWithoutSubmissionRuntime() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-lab-record-projection")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let record = makeRecord()
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    try store.add(record)
+
+    let projection = store.labRecordProjection()
+    guard case .success(let metadata) = projection else {
+      return XCTFail("expected persisted Lab metadata projection")
+    }
+    XCTAssertEqual(metadata.count, 1)
+    XCTAssertEqual(metadata[0].windowId, record.id.uuidString.lowercased())
+    XCTAssertEqual(metadata[0].eventId, record.eventIdHex)
+    XCTAssertEqual(metadata[0].observationDigest, record.observationDigestHex)
+    XCTAssertEqual(metadata[0].status, record.submissionState.rawValue)
+    XCTAssertFalse(metadata[0].receiptStored)
+  }
+
+  func testLabRecordProjectionReportsUnreadableStore() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-lab-record-projection-invalid")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    try Data("not-json".utf8).write(to: fileURL)
+
+    let projection = ReportSubmissionStore(fileURL: fileURL).labRecordProjection()
+    XCTAssertEqual(projection, .failure(.unreadable))
+  }
+
   func testLabTerminalErrorProjectionAllowsOnlyExistingCodes() {
     XCTAssertEqual(boundedLabTerminalError("timeout"), "timeout")
     XCTAssertNil(boundedLabTerminalError("raw_private_error_detail"))

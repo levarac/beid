@@ -116,6 +116,8 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 
   func submitPending()
 
+  func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>
+
   /// beid#292's Transparency screen ("Sent"/"Acceptance receipt" rows): the
   /// most-advanced durable submission state (`.accepted` > `.submitting` >
   /// `.prepared`) among this runtime's records for `eventCode`, or `nil` if
@@ -123,6 +125,12 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   /// persisted state — never triggers a network call or a write.
   func submissionState(forEventCode eventCode: String) -> ReportSubmissionState?
   func excludedWindowCount(forEventCode eventCode: String) -> Int
+}
+
+extension WindowReportSubmissionRuntimeProtocol {
+  func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
+    .failure(.unreadable)
+  }
 }
 
 /// Native composition boundary for the inactive-by-default report pipeline.
@@ -373,18 +381,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     store.exclusions.filter { $0.eventCode == eventCode }.count
   }
 
-  func labRecordMetadata() -> [LabRecordMetadata] {
-    store.records.compactMap { record in
-      guard let eventId = record.eventIdHex else { return nil }
-      return LabRecordMetadata(
-        windowId: record.id.uuidString.lowercased(),
-        eventId: eventId,
-        observationDigest: record.observationDigestHex,
-        status: record.submissionState.rawValue,
-        receiptStored: record.acceptanceReceiptHex != nil,
-        terminalError: boundedLabTerminalError(record.terminalErrorCode)
-      )
-    }
+  func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
+    store.labRecordProjection()
   }
 
   func submitPending() {

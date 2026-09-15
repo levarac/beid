@@ -55,7 +55,7 @@ struct LabSnapshot: Equatable {
 protocol LabWebSocketClient {
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
                nearbyCandidates: @escaping () -> [String],
-               records: @escaping () -> [LabRecordMetadata],
+               records: @escaping () -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>,
                joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                onSnapshot: @escaping (LabSnapshot) -> Void,
                onError: @escaping (String) -> Void)
@@ -74,7 +74,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
 
   func connect(url: URL, hello: LabHello, productionState: @escaping () -> String,
                nearbyCandidates: @escaping () -> [String],
-               records: @escaping () -> [LabRecordMetadata],
+               records: @escaping () -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>,
                joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                onSnapshot: @escaping (LabSnapshot) -> Void,
                onError: @escaping (String) -> Void) {
@@ -98,7 +98,7 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
   private func receive(on task: URLSessionWebSocketTask, hello: LabHello,
                        productionState: @escaping () -> String,
                        nearbyCandidates: @escaping () -> [String],
-                       records: @escaping () -> [LabRecordMetadata],
+                       records: @escaping () -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>,
                        joinNearbyEvent: @escaping (String, @escaping (Bool, String?) -> Void) -> Void,
                        onSnapshot: @escaping (LabSnapshot) -> Void,
                        onError: @escaping (String) -> Void) {
@@ -157,7 +157,10 @@ final class URLSessionLabWebSocketClient: LabWebSocketClient {
             runId == hello.identity.runId, role == hello.identity.role,
             generation == hello.identity.generation else { return }
       let state = productionState()
-      let snapshotRecords = records()
+      guard case .success(let snapshotRecords) = records() else {
+        onError("records_unavailable")
+        return
+      }
       self.send(["type": "snapshot_response", "request_id": requestId,
                  "run_id": hello.identity.runId, "role": hello.identity.role,
                  "device_id": hello.identity.deviceId, "generation": hello.identity.generation,
@@ -199,7 +202,9 @@ final class LabControlBootstrap: ObservableObject {
                      guard let phase = self?.sensing?.phase else { return "unknown" }
                      return String(describing: phase)
                    }, nearbyCandidates: { [weak self] in self?.sensing?.labJoinableEventCodeHashHexes() ?? [] },
-                   records: { [weak self] in self?.sensing?.labRecordMetadata() ?? [] },
+                   records: { [weak self] in
+                     self?.sensing?.labRecordProjection() ?? .failure(.unreadable)
+                   },
                    joinNearbyEvent: { [weak self] hash, completion in
                      Task { @MainActor in
                        guard let self, self.sensing?.labJoinableEventCodeHashHexes().contains(hash) == true else {
