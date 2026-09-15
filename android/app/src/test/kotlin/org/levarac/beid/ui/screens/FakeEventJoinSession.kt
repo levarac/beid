@@ -12,6 +12,7 @@ import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 internal class FakeEventJoinSession(
     initial: EventJoinUiState = EventJoinUiState.Idle,
     nearbyEventCards: List<NearbyEventCard> = emptyList(),
+    nearbyEventsOmitted: Boolean = false,
 ) : EventJoinSession {
     private val mutableState = MutableStateFlow(initial)
     override val state: StateFlow<EventJoinUiState> = mutableState.asStateFlow()
@@ -20,6 +21,8 @@ internal class FakeEventJoinSession(
     private val mutableSearchOutcome = MutableStateFlow(NearbyEventSearchOutcome.SEARCHING)
     override val nearbyEventSearchOutcome: StateFlow<NearbyEventSearchOutcome> =
         mutableSearchOutcome.asStateFlow()
+    private val mutableNearbyEventsOmitted = MutableStateFlow(nearbyEventsOmitted)
+    override val nearbyEventsOmitted: StateFlow<Boolean> = mutableNearbyEventsOmitted.asStateFlow()
 
     var joinedCode: String? = null
         private set

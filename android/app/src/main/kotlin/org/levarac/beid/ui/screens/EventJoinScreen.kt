@@ -73,6 +73,7 @@ object EventJoinScreenTestTags {
     const val ACCOUNT_ENTRY = "event_join_account_entry"
     const val MANUAL_BACK_BUTTON = "event_join_manual_back_button"
     const val NEARBY_EVENT_LIST = "nearby_event_list"
+    const val NEARBY_EVENTS_OMITTED = "nearby_events_omitted"
 
     /** beid#463: the rescue route out of a search that found nothing joinable. */
     const val RESCUE_ENTRY_BUTTON = "event_join_rescue_entry_button"
@@ -240,6 +241,7 @@ fun EventJoinContent(
                     cards = state.nearbyEventCards,
                     selectedEventHashHex = state.selectedNearbyEventHashHex,
                     searchOutcome = state.searchOutcome,
+                    omitted = state.nearbyEventsOmitted,
                     enabled = sessionState is EventJoinUiState.Idle || sessionState is EventJoinUiState.OwnerKeyUnavailable,
                     onJoin = onJoinNearbyEvent,
                     onOpenManualEventCode = onOpenManualEventCode,
@@ -399,11 +401,35 @@ fun ManualEventCodeRoute(session: EventJoinSession, onBack: () -> Unit = {}) {
     ManualEventCodeScreen(viewModel, onBack)
 }
 
+/**
+ * Barnard kept 32 hashes and dropped the rest. Saying nothing would leave the
+ * list reading as "this is what is nearby", which it is not.
+ *
+ * **Static, and deliberately without a number.** The SDK reports *that* it
+ * dropped events, never how many, so a count here would be invented.
+ * `docs/specs/event-discovery.md` §5.3 says append one static row rather than
+ * trying to read the omitted event's own payload, which by then carries an
+ * empty marker rather than a real hint (beid#450).
+ *
+ * Shown in the empty branch too: "nothing nearby" plus "some not shown" is
+ * the most misleading combination of all.
+ */
+@Composable
+private fun OmittedNearbyEventsRow() {
+    Text(
+        text = stringResource(R.string.event_join_nearby_events_omitted),
+        style = MaterialTheme.typography.bodySmall,
+        color = BeidTheme.colors.textSecondary,
+        modifier = Modifier.testTag(EventJoinScreenTestTags.NEARBY_EVENTS_OMITTED),
+    )
+}
+
 @Composable
 private fun NearbyEventCards(
     cards: List<NearbyEventCard>,
     selectedEventHashHex: String?,
     searchOutcome: NearbyEventSearchOutcome,
+    omitted: Boolean,
     enabled: Boolean,
     onJoin: (String) -> Unit,
     onOpenManualEventCode: () -> Unit,
@@ -447,6 +473,9 @@ private fun NearbyEventCards(
                         onClick = onOpenManualEventCode,
                         modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
                     )
+                }
+                if (omitted) {
+                    OmittedNearbyEventsRow()
                 }
             }
         }
@@ -537,6 +566,10 @@ private fun NearbyEventCards(
                     modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
                 )
             }
+        }
+
+        if (omitted) {
+            OmittedNearbyEventsRow()
         }
     }
 }

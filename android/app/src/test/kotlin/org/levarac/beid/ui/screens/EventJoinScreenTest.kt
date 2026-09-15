@@ -620,4 +620,86 @@ class EventJoinScreenTest {
 
         assertEquals(1, pasteRequests)
     }
+
+    /// beid#450 — Barnard dropped nearby events and the screen must say so.
+    @Test
+    fun omittedNearbyEventsAreAnnouncedAlongsideTheCards() {
+        val state = EventJoinScreenState(
+            sessionState = EventJoinUiState.Idle,
+            nearbyEventCards = listOf(
+                NearbyEventCard("Verified beacon", "0x0123456789abcdef", 100L, 200L, "1111111111111111"),
+            ),
+            nearbyEventsOmitted = true,
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = state,
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENTS_OMITTED)
+            .assertIsDisplayed()
+    }
+
+    /// The most misleading combination: nothing shown, and something dropped.
+    @Test
+    fun omittedNearbyEventsAreAnnouncedEvenWhenNoCardIsShown() {
+        val state = EventJoinScreenState(
+            sessionState = EventJoinUiState.Idle,
+            nearbyEventCards = emptyList(),
+            nearbyEventsOmitted = true,
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = state,
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENTS_OMITTED)
+            .assertIsDisplayed()
+    }
+
+    /// And stays absent when nothing was dropped, so the row means something.
+    @Test
+    fun noOmissionNoticeWhenNothingWasDropped() {
+        val state = EventJoinScreenState(
+            sessionState = EventJoinUiState.Idle,
+            nearbyEventCards = listOf(
+                NearbyEventCard("Verified beacon", "0x0123456789abcdef", 100L, 200L, "1111111111111111"),
+            ),
+            nearbyEventsOmitted = false,
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = state,
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENTS_OMITTED)
+            .assertDoesNotExist()
+    }
 }

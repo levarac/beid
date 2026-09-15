@@ -2456,6 +2456,17 @@ final class SensingCoordinator: ObservableObject {
       return
     }
     joinRefusal = .registryReadFailed
+    // Classified through the real `shared/` function rather than by writing a
+    // key here, so the fixture cannot drift from what production would say
+    // about the same failure. A transport code is used because that is the
+    // case a participant actually hits, and the one whose wrong answer
+    // ("check the code") sent the owner looking at a correct code for an hour
+    // (beid#472).
+    joinRefusalReasonKey = BeidSharedKit.event.eventJoinFailureReasonKey(
+      reason: BeidSharedKit.event.eventJoinFailureReasonForRegistryErrorCode(
+        errorCode: "timeout"
+      )
+    )
     phase = .idle
   }
 

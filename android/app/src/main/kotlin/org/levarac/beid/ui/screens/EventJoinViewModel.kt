@@ -41,6 +41,8 @@ data class EventJoinScreenState(
     val nearbyEventCards: List<org.levarac.beid.sensing.NearbyEventCard> = emptyList(),
     val selectedNearbyEventHashHex: String? = null,
     val searchOutcome: NearbyEventSearchOutcome = NearbyEventSearchOutcome.SEARCHING,
+    /** See [org.levarac.beid.sensing.EventJoinSession.nearbyEventsOmitted]. */
+    val nearbyEventsOmitted: Boolean = false,
 )
 
 /**
@@ -76,6 +78,11 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
         viewModelScope.launch {
             session.nearbyEventSearchOutcome.collect { outcome ->
                 _uiState.update { it.copy(searchOutcome = outcome) }
+            }
+        }
+        viewModelScope.launch {
+            session.nearbyEventsOmitted.collect { omitted ->
+                _uiState.update { it.copy(nearbyEventsOmitted = omitted) }
             }
         }
         viewModelScope.launch {
