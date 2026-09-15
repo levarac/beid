@@ -691,6 +691,43 @@ class WindowObservationSubmissionDrainTest {
     }
 
     @Test
+    fun observationDigestWriteFailureStopsBeforeNetworkAndRemainsRetryable() {
+        val directory = Files.createTempDirectory("drain-observation-digest-write-failure").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        val recordFile = directory.resolve("submission-records.json")
+        val scheduler = RecordingRetryScheduler()
+        try {
+            val (accumulator, drain) = buildSystem(
+                directory,
+                vectorCryptography(),
+                resolvedConfiguration(endpoint),
+                retryScheduler = scheduler,
+            )
+            closeOneWindow(accumulator)
+
+            check(recordFile.delete())
+            check(recordFile.mkdir())
+            recordFile.resolve("keep").writeText("block atomic replacement")
+
+            drain.drain()
+
+            assertEquals(0, server.postCount, "a failed observation digest write must not reach the operator")
+            assertEquals(0, server.getCount)
+            assertEquals(1, scheduler.scheduledCount)
+            assertTrue(
+                ledgerFile(directory).readText().contains(
+                    "\tretryable_failed\t${NOW_EPOCH_MILLIS + RETRY_BACKOFF_MILLIS}\t",
+                ),
+                "a failed observation digest write must leave the submission retryable",
+            )
+            assertTrue(recordFile.isDirectory, "failed digest storage must remain untouched")
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun resolvedConfigurationWriteFailureStopsBeforeNetworkAndRemainsRetryable() {
         val directory = Files.createTempDirectory("drain-configuration-write-failure").toFile()
         val server = newStubOperatorServer()
