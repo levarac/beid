@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import BeidSharedKit
+import Foundation
 import XCTest
 @testable import Beid
 
@@ -126,5 +127,79 @@ final class AggregationRuntimeTests: XCTestCase {
     XCTAssertTrue(aggregate.isSuccess)
     XCTAssertEqual(Int(aggregate.deviceCount), 0)
     XCTAssertEqual(Int(aggregate.windowCount), 0)
+  }
+
+  /// beid#327's last acceptance condition: **iOS and Android must produce the
+  /// same numbers from the same observations.**
+  ///
+  /// The fixture and its expected values live in `shared/`
+  /// (`aggregationParityFixtureJson`), and Android's `AggregationRuntimeTest`
+  /// already asserts against them. Until this test existed, that proved
+  /// Android agreed with the fixture and nothing more — **the two hosts could
+  /// still disagree with each other, and no test would notice.**
+  ///
+  /// What this actually guards is the *adapter*, not the arithmetic: both
+  /// hosts call the same shared aggregation functions, so the sums cannot
+  /// differ unless a host transforms what it feeds in — deduplicating
+  /// repeated detections, offsetting a window index, dropping the
+  /// no-display-id rows. Those are the changes this goes red for.
+  ///
+  /// **The display ids go through `normalizedDisplayIdOrNull` here because
+  /// that is what production does, and the two hosts do it in different
+  /// places.** Android's `AggregationRuntime` normalises inside
+  /// `recordObservation`; iOS normalises one level up, in
+  /// `SensingCoordinator.handleDetection`, and its runtime trusts its caller.
+  /// The first version of this test fed the fixture raw and reported
+  /// `deviceCount` 3 against Android's 2 — which looked like a product
+  /// divergence and was not one. Both apps count a peer whose display id
+  /// arrives in different hex casing as one device; `DeviceCountTests
+  /// .testDisplayIdMatchingIsCaseInsensitive` pins that through iOS's real
+  /// detection path.
+  func testSharedParityFixtureProducesTheSameNumbersAsAndroid() throws {
+    let json = BeidSharedKit.jointestsupport.aggregationParityFixtureJson()
+    let rows = try XCTUnwrap(
+      try JSONSerialization.jsonObject(
+        with: Data(json.utf8)
+      ) as? [[String: Any]],
+      "the shared fixture must parse as an array of observation objects"
+    )
+    XCTAssertFalse(rows.isEmpty, "an empty fixture would make every assertion below vacuous")
+
+    let runtime = AggregationRuntime()
+    for row in rows {
+      let windowIndex = try XCTUnwrap(row["windowIndex"] as? Int)
+      let peerKey = try XCTUnwrap(row["peerKey"] as? String)
+      // `NSNull` for a detection with no B003 display id, which the fixture
+      // includes on purpose — those observations must not count as devices.
+      let displayId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(
+        detectedDisplayId: row["displayId"] as? String
+      )
+      XCTAssertTrue(
+        runtime.recordObservation(
+          windowIndex: windowIndex,
+          peerKey: peerKey,
+          displayId: displayId
+        ),
+        "shared rejected a fixture row at its boundary check; the fixture and the adapter disagree"
+      )
+    }
+
+    let aggregate = runtime.sessionAggregate
+    XCTAssertEqual(
+      Int(aggregate.observationCount),
+      Int(BeidSharedKit.jointestsupport.aggregationParityExpectedObservations())
+    )
+    XCTAssertEqual(
+      Int(aggregate.windowCount),
+      Int(BeidSharedKit.jointestsupport.aggregationParityExpectedWindows())
+    )
+    XCTAssertEqual(
+      Int(aggregate.deviceCount),
+      Int(BeidSharedKit.jointestsupport.aggregationParityExpectedDevices())
+    )
+    XCTAssertEqual(
+      Int(aggregate.mutualObservationCount),
+      Int(BeidSharedKit.jointestsupport.aggregationParityExpectedMutualObservations())
+    )
   }
 }
