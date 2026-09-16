@@ -40,11 +40,17 @@ import kotlin.test.assertTrue
  * the #121 records list (via the production `wireProofRecording`) and the
  * self-proof store at session end.
  *
- * Android has no submission queue for these records today (AGENTS.md: the
- * unsent-window ledger has neither producer nor consumer on Android), so
- * "queued for submission" is asserted on iOS only. Real-radio relay between
- * physical devices is the ship gate's job (levarac/dispatch#62), not this
- * test's.
+ * Not asserted here: the unsent-window ledger and its submission drain.
+ * Production Android has both — #332's [WindowObservationAccumulator] writing
+ * through `UnsentWindowLedgerStore`, and #525's
+ * [WindowObservationSubmissionDrain] — but this test builds the coordinator
+ * without `ledgerFilesDir`, so neither exists in it. Passing a directory would
+ * not be enough: a window only closes into the ledger with a signature that
+ * verifies, and [FakeSensingCryptography]'s canned signature cannot verify for
+ * a window whose event identity comes from the promoted B005 vector (see
+ * [EventJoinCoordinatorWindowLedgerTest]'s KDoc). So the hand-off to
+ * submission is asserted on iOS only. Real-radio relay between physical
+ * devices is the ship gate's job (levarac/dispatch#62), not this test's.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorRelayedEventInfoContractTest {

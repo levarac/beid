@@ -9,7 +9,8 @@ import XCTest
 
 /// Contract test for levarac/dispatch#50's pre-delivery criterion: a device
 /// that never heard the venue source receives the event info through a relay,
-/// joins, and ends up with an observation record queued for submission.
+/// joins, and ends up with an observation record handed to the submission
+/// runtime seam.
 ///
 /// ## What makes the input relayed
 ///
@@ -24,17 +25,28 @@ import XCTest
 /// ## What it drives, and what it does not
 ///
 /// barnard's real `verify` produces the verified envelope, and the agreement
-/// closure is the production one — barnard's `registryAgreement` against the
-/// definition the coordinator itself builds from the registry answer — so the
-/// promotion only happens if the relayed copy genuinely agrees. The join goes
-/// through the real capability gate, detections cross the confirm threshold,
-/// and ending the session closes the window into the report store and hands it
-/// to the submission runtime.
+/// closure evaluates barnard's real `registryAgreement` against the definition
+/// the coordinator itself builds from the registry answer, so the promotion
+/// only happens if the relayed copy genuinely agrees. The join goes through
+/// the real capability gate, detections cross the confirm threshold, and
+/// ending the session closes the window into the report store and hands it to
+/// the submission runtime through `WindowReportSubmissionRuntimeProtocol`.
 ///
-/// Not driven: `SensingCoordinator.handle(_:)`'s `.eventInfoEnvelopeV2` case.
-/// `BarnardEventInfoEnvelopeV2Event` has no public initializer, so this test
-/// enters at `handleEventInfoEnvelopeV2(...)` with exactly the fields that case
-/// passes. Real-radio relay between physical devices is the ship gate's job
+/// Not driven:
+/// - `SensingCoordinator.handle(_:)`'s `.eventInfoEnvelopeV2` case, including
+///   the agreement closure it builds. `BarnardEventInfoEnvelopeV2Event` has no
+///   public initializer, so this test enters at `handleEventInfoEnvelopeV2(...)`
+///   with the fields that case passes and a copy of its closure's expression
+///   written here. A regression confined to the production closure would not
+///   turn this test red. The test also passes `observedAtEpochMillis`, which
+///   that case leaves to its default; the default reads the injected
+///   `nearbyDiscoveryClock`, which returns the same value.
+/// - The real `ReportSubmissionRuntime`. The runtime here is
+///   `RelayedWindowSubmissionSpy`, which only records the
+///   `captureAndQueueWindow` hand-off, so the real runtime's queue and send
+///   are not exercised.
+///
+/// Real-radio relay between physical devices is the ship gate's job
 /// (levarac/dispatch#62), not this test's.
 @MainActor
 final class RelayedEventInfoContractTests: XCTestCase {
@@ -94,7 +106,9 @@ final class RelayedEventInfoContractTests: XCTestCase {
       submission: submission
     )
 
-    // Field for field what `handle(_:)`'s `.eventInfoEnvelopeV2` case passes.
+    // The fields `handle(_:)`'s `.eventInfoEnvelopeV2` case passes, with a
+    // copy of its agreement closure, plus an explicit `observedAtEpochMillis`
+    // equal to what that case's default reads from `nearbyDiscoveryClock`.
     coordinator.handleEventInfoEnvelopeV2(
       peripheralId: Self.relayerPeripheralId,
       eventDisplayName: verified.eventDisplayName,
