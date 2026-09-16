@@ -60,6 +60,7 @@ struct ScanFlowView: View {
     }
     .sheet(isPresented: $bindingSheetPresented) {
       EventBindingSheetView(sensing: sensing)
+        .environmentObject(coordinator)
     }
     .onChange(of: scenePhase) { oldPhase, newPhase in
       // Extends the existing observer rather than adding a second

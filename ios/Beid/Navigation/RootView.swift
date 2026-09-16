@@ -31,6 +31,7 @@ struct RootView: View {
     .animation(BeidDesign.Animation.soft, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
       ScanFlowView(sensing: coordinator.sensingCoordinator)
+        .environmentObject(coordinator)
         .tint(DS.Color.actionPrimary)
         .presentationBackground(.regularMaterial)
     }
