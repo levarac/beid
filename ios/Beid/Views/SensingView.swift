@@ -110,10 +110,13 @@ struct NearbyEventCardListPresentation {
 struct SensingView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ObservedObject private var sensing: SensingCoordinator
+  /// beid#464. nil on preview paths, which have no preflight to show.
+  private let clockPreflight: ClockPreflightController?
   @State private var pulse = false
 
-  init(sensing: SensingCoordinator) {
+  init(sensing: SensingCoordinator, clockPreflight: ClockPreflightController? = nil) {
     self.sensing = sensing
+    self.clockPreflight = clockPreflight
   }
 
   var body: some View {
@@ -134,6 +137,10 @@ struct SensingView: View {
               .multilineTextAlignment(.center)
               .lineSpacing(2)
               .fixedSize(horizontal: false, vertical: true)
+
+            if isPreJoin, let clockPreflight {
+              ClockPreflightNoticeView(preflight: clockPreflight)
+            }
 
             if let joinRefusalMessage {
               joinRefusalNotice(joinRefusalMessage)
@@ -304,6 +311,12 @@ struct SensingView: View {
   private func nearbyEventCard(_ card: NearbyEventCard, selected: Bool) -> some View {
     Button {
       guard let eventCodeHashHex = card.joinActionEventCodeHashHex else { return }
+      // Re-read the clock preflight at the moment of joining, as Android does:
+      // shared re-measures an expired cache and catches a clock changed since
+      // the scan opened.
+      if let clockPreflight {
+        Task { await clockPreflight.check() }
+      }
       sensing.joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
     } label: {
       BeidPanel {
