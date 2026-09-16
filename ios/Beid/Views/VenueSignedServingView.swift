@@ -11,9 +11,12 @@ import SwiftUI
 /// PR, alongside (not replacing) the v1 `VenueDeviceOrganizerView` entry.
 ///
 /// The screen deliberately uses passive visibility: once a permit is accepted,
-/// the verified event name and exclusive deadline are shown while serving.
-/// There is no blocking confirmation dialog; the owner direction for this
-/// surface is that the operator can see what the venue device is serving.
+/// the verified event name, the event ID and the exclusive deadline are shown
+/// while serving. There is no blocking confirmation dialog; the owner
+/// direction for this surface is that the operator can see what the venue
+/// device is serving. The name alone cannot tell two events at the same venue
+/// apart, so the full event ID of the installed permit is shown beside it
+/// (beid#531).
 ///
 /// The four `switch` statements below have NO `default` case, deliberately.
 /// Adding a case to any of the four venue enums must break this build: a

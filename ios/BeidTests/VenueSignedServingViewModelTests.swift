@@ -978,6 +978,60 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(expiry.scheduledNow, now)
   }
 
+  // MARK: - beid#531 — the serving screen names the event actually installed
+
+  func testServingEventIdIsTheInstalledPermitsEvent() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await supply(viewModel)
+
+    guard case .serving = viewModel.status else {
+      return XCTFail("expected .serving, got \(viewModel.status)")
+    }
+    let installed = try XCTUnwrap(ports.installedPermit)
+    XCTAssertEqual(viewModel.servingEventIdHex, installed.identity.eventIdHex)
+    XCTAssertEqual(viewModel.servingEventIdHex, VenueServingContractFixture.eventIdHex)
+  }
+
+  /// The threat in beid#531 is a different event's pack being served at the
+  /// same venue, so the ID on screen must come from the permit that reached
+  /// `installAndStart`, not from the import receipt. The two agree for every
+  /// permit the production verifier builds today; this test separates them so
+  /// a display sourced from the receipt goes red.
+  func testServingEventIdFollowsThePermitWhenItNamesAnotherEvent() async throws {
+    let viewModel = makeViewModel()
+    let otherIdentity = VenueArtifactIdentity(
+      eventIdHex: "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      definitionSequence: 1,
+      bundleDigestHex: VenueServingContractFixture.bundleDigestHex
+    )
+    // Without this the test would stop discriminating if the literal above
+    // ever drifted onto the fixture's own event.
+    XCTAssertNotEqual(otherIdentity.eventIdHex, fixture.identity.eventIdHex)
+    let otherEventPermit = VenueServingContractTestFactory.permit(
+      identity: otherIdentity,
+      container: fixture.container,
+      displayName: VenueServingContractFixture.displayName,
+      payloadDigestHex: VenueServingContractFixture.payloadDigestHex,
+      currentEnin: VenueServingContractFixture.currentEnin,
+      startAtUnixSeconds: VenueServingContractFixture.currentUnixSeconds,
+      stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
+    )
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(otherEventPermit))]
+
+    await supply(viewModel)
+
+    guard case .serving = viewModel.status else {
+      return XCTFail("expected .serving, got \(viewModel.status)")
+    }
+    XCTAssertEqual(ports.installedPermit?.identity.eventIdHex, otherIdentity.eventIdHex)
+    XCTAssertEqual(viewModel.servingEventIdHex, otherIdentity.eventIdHex)
+    XCTAssertNotEqual(viewModel.servingEventIdHex, fixture.identity.eventIdHex)
+  }
+
   func testExpiryClearsBeforeReEvaluatingAndABlockedRefreshLeavesNothingLive() async throws {
     let viewModel = makeViewModel()
     ports.importReplies = [.immediate(.imported(fixture.imported()))]
