@@ -1380,7 +1380,24 @@ final class SensingCoordinator: ObservableObject {
         additionalNamesOmitted: hint.additionalNamesOmitted,
         additionalEventsOmitted: hint.additionalEventsOmitted
       )
-    default:
+    // The remaining cases are deliberately ignored, and they are named rather
+    // than swept up by `default:` so that this switch is exhaustive over
+    // `BarnardEvent`. Exhaustiveness is the point: with a `default:` here,
+    // deleting any one of the handled cases above compiles and silently stops
+    // handling that event, which is how beid#571's contract test could stay
+    // green with the `.eventInfoEnvelopeV2` case removed. Barnard is an SPM
+    // source dependency without library evolution, so the compiler treats this
+    // enum as frozen and needs no `@unknown default`.
+    //
+    // The cost, accepted on purpose: a barnard version that adds a case breaks
+    // this build. That is the intended prompt to decide what the new event
+    // means here, instead of dropping it without anyone noticing.
+    //
+    // Why each is ignored today: `.constraint` and `.error` are barnard's own
+    // diagnostics, which this app surfaces through its sensing state rather
+    // than by reacting per event, and `.rssiUpdate` is signal strength, which
+    // no beid decision reads.
+    case .constraint, .error, .rssiUpdate:
       break
     }
   }
