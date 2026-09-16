@@ -8,36 +8,54 @@ import XCTest
 /// restart at `.welcome` on cold launch.
 @MainActor
 final class AppCoordinatorRestoreTests: XCTestCase {
-  override func tearDown() {
-    UserDefaults.standard.removeObject(forKey: "beid.hasCompletedOnboarding")
-    super.tearDown()
+  /// A defaults store nothing else in the process can see.
+  ///
+  /// **`beid.hasCompletedOnboarding` in `UserDefaults.standard` is shared
+  /// mutable state across every test in this target**, and writing it is not
+  /// the passive act it looks like: an `AppCoordinator` constructed while it
+  /// is set re-drives `restoreAfterOnboarding()` →
+  /// `requestBluetoothPermission()` → `evaluateBluetoothState()`, which sets
+  /// the key *again*, asynchronously, from whichever test happens to be
+  /// running. These tests used to set it on `.standard` and hold it set for
+  /// up to twenty seconds while polling, which is the window beid#393 was
+  /// escalated for.
+  ///
+  /// Each test gets its own suite, so ordering cannot matter.
+  private func isolatedDefaults(
+    _ function: StaticString = #function
+  ) -> UserDefaults {
+    UserDefaults(
+      suiteName: "AppCoordinatorRestoreTests.\(function).\(UUID().uuidString)"
+    )!
   }
 
   func testColdLaunchWithCompletedOnboardingDoesNotStartAtWelcome() {
-    UserDefaults.standard.set(true, forKey: "beid.hasCompletedOnboarding")
+    let defaults = isolatedDefaults()
+    defaults.set(true, forKey: "beid.hasCompletedOnboarding")
 
-    let coordinator = AppCoordinator()
+    let coordinator = AppCoordinator(userDefaults: defaults)
 
     XCTAssertNotEqual(coordinator.screen, .welcome)
   }
 
   func testColdLaunchWithoutCompletedOnboardingStartsAtWelcome() {
-    UserDefaults.standard.removeObject(forKey: "beid.hasCompletedOnboarding")
+    let defaults = isolatedDefaults()
 
-    let coordinator = AppCoordinator()
+    let coordinator = AppCoordinator(userDefaults: defaults)
 
     XCTAssertEqual(coordinator.screen, .welcome)
   }
 
   func testRestoreLandsOnHomeOrBluetoothOffWithoutSkippingEvaluation() async {
-    UserDefaults.standard.set(true, forKey: "beid.hasCompletedOnboarding")
+    let defaults = isolatedDefaults()
+    defaults.set(true, forKey: "beid.hasCompletedOnboarding")
 
-    let coordinator = AppCoordinator()
+    let coordinator = AppCoordinator(userDefaults: defaults)
 
-    // requestBluetoothPermission() has no awaitable completion handle (see
-    // AppCoordinator.requestBluetoothPermission's ~300ms production delay
-    // before evaluateBluetoothState() runs); this mirrors the async-sleep
-    // style already used in EventCodeJoinTests.waitForDemoSequenceToFinish().
+    // Still polled, and deliberately. `requestBluetoothPermission()` does
+    // return an awaitable `Task` now, but this path is driven from
+    // `AppCoordinator.init` via `restoreAfterOnboarding()`, which hands the
+    // caller no handle — so there is nothing here to await.
     // A single fixed ~500ms sleep is not enough here: constructing
     // CBCentralManager inside the BeidTests unit-test host (no prior test in
     // this suite exercises BluetoothMonitor/CBCentralManager) has been
@@ -57,58 +75,38 @@ final class AppCoordinatorRestoreTests: XCTestCase {
   }
 
   /// Regression for #220: `requestBluetoothPermission()`'s detached `Task`
-  /// must not keep a deallocated `AppCoordinator` alive to write
-  /// `UserDefaults.standard` ~300ms later. `coordinator` is set to `nil`
-  /// immediately after the call, before that delay elapses; a coordinator
-  /// that has died has no business writing state.
+  /// must not keep a deallocated `AppCoordinator` alive to write the
+  /// onboarding key. `coordinator` is set to `nil` immediately after the
+  /// call; a coordinator that has died has no business writing state.
   ///
-  /// **What this test does and does not prove.** The RED run against
-  /// pre-fix (strong-`self`) code failed as expected (see the #220 fix's
-  /// `red-test-run.log`), so the defect this guards against is real and
-  /// this test can catch it — that much is solid. A GREEN result here is
-  /// *consistent with* `[weak self]` having prevented the write, but it is
-  /// not *proof* of prevention: the `Task` under test has no completion
-  /// handle to await (by design — beid#149 rejected adding an injectable
-  /// clock/scheduler or a completion callback purely for test convenience;
-  /// the 300ms delay is real production behavior, not test scaffolding),
-  /// so "the key is still absent" would look identical whether (a) the
-  /// weak capture actually resolved to `nil` and the write never happened,
-  /// or (b) the `Task` simply hasn't been scheduled to run yet by the time
-  /// this test asserts. A diagnostic run during the #220 fix observed
-  /// `Task` creation-to-first-run latency as high as ~5.3s on this host, so
-  /// a short wait cannot tell these two worlds apart — a short-wait GREEN
-  /// would pass just as easily against *unfixed* code on a loaded host.
-  /// Waiting 20s (matching
-  /// `testRestoreLandsOnHomeOrBluetoothOffWithoutSkippingEvaluation`'s
-  /// existing ceiling above, for the same CoreBluetooth-driven timing
-  /// variance) does not close that gap in principle, only shrinks it in
-  /// practice, at the cost of a slower test already in line with this
-  /// file's existing one.
+  /// The RED run against pre-fix (strong-`self`) code failed as expected
+  /// (the #220 fix's `red-test-run.log`), so the defect is real and this
+  /// test can catch it.
   ///
-  /// **Observed timing, for whoever debugs this test next.** With the
-  /// original 500ms wait (#220 fix): all 4 tests in this class together took
-  /// ~15.8s wall time in three back-to-back stability runs
-  /// (`stability-run-{1,2,3}.log`); one separate run failed on this specific
-  /// test at 16.110s with no reproducible cause found across 5 further
-  /// attempts (`green-AppCoordinatorRestoreTests.log`). After widening to
-  /// 20s (this fix): the class normally takes ~36s together, this test
-  /// alone ~30.5-30.7s; one run again failed here, at 30.891s
-  /// (`partA-stability-run-1.log`), with per-instance diagnostic logging
-  /// (deinit + `Task` lifecycle timestamps, tagged per-`AppCoordinator`)
-  /// added afterward and unable to reproduce it across 10 further attempts
-  /// (`partA-stability-run-{2,3,4,5,6}.log`, `diag2-run-{1,2,3,4,5}.log`) —
-  /// in every one of those 10, every coordinator's weak `self` resolved `nil`
-  /// exactly when expected, well inside the window. Two unexplained
-  /// failures now, at two different wait durations, both with an
-  /// unremarkable (non-anomalous) total duration for their respective
-  /// window, both unreproducible under instrumentation — most likely this
-  /// same fundamental design limitation, possibly compounded by other
-  /// tests in this class independently exercising `CBCentralManager` and
-  /// `requestBluetoothPermission()` in the same process, not a defect in
-  /// the `[weak self]` fix. If this test flakes again, that is the first
-  /// thing to re-check, not the production code; if it starts flaking
-  /// often rather than rarely, that would be new evidence worth escalating
-  /// rather than re-explaining away.
+  /// **This test used to be non-deterministic, and its doc used to say so at
+  /// length.** It waited on the wall clock — 500ms, later widened to 20s —
+  /// because the `Task` had no completion handle to await, and it read
+  /// `UserDefaults.standard`. Both are gone: `requestBluetoothPermission()`
+  /// now returns the `Task`, which this test awaits directly, and the
+  /// defaults are a per-test suite with a UUID in its name. There is no
+  /// timing window left to lose, and no shared key for another test in the
+  /// same process to write into.
+  ///
+  /// That matters beyond tidiness. The old doc ended by telling whoever
+  /// debugged this next to re-check `[weak self]` first and not the
+  /// production code — **advice that was already wrong by the time it was
+  /// read.** Two unexplained failures at two different wait durations were
+  /// escalated as beid#393, and the mechanism found there was not the weak
+  /// capture at all: `beid.hasCompletedOnboarding` lives in
+  /// `UserDefaults.standard`, and any `AppCoordinator` constructed while it
+  /// is set re-drives `restoreAfterOnboarding()` →
+  /// `requestBluetoothPermission()` → `evaluateBluetoothState()`, which sets
+  /// the key again — from a different test, inside this test's wait.
+  ///
+  /// The fix changed two things at once (isolate the defaults, await the
+  /// task), so this file does not claim which one alone would have been
+  /// enough. Both are needed for the test to be deterministic, and it now
+  /// is.
   func testRequestBluetoothPermissionDoesNotWriteUserDefaultsAfterCoordinatorDeallocates() async {
     let defaults = UserDefaults(suiteName: "AppCoordinatorRestoreTests.deallocation.\(UUID().uuidString)")!
     defaults.removeObject(forKey: "beid.hasCompletedOnboarding")
@@ -117,9 +115,8 @@ final class AppCoordinatorRestoreTests: XCTestCase {
     let task = coordinator?.requestBluetoothPermission()
     coordinator = nil
 
-    // Await the task directly; no wall-clock timeout is needed.
-    // ceiling above — see the doc comment for why even this wide a margin is
-    // "shrinks the false-pass window" rather than "eliminates it".
+    // Awaited directly: the task is the completion handle the old
+    // wall-clock wait existed for.
     await task?.value
 
     XCTAssertFalse(defaults.bool(forKey: "beid.hasCompletedOnboarding"))
