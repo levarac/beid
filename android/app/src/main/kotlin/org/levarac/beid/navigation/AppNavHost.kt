@@ -17,6 +17,7 @@ import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.sensing.BluetoothRadioMonitor
 import org.levarac.beid.sensing.EventJoinSession
+import org.levarac.beid.sensing.WalletConnectorState
 import org.levarac.beid.ui.screens.AccountRoute
 import org.levarac.beid.ui.screens.BluetoothOffScreen
 import org.levarac.beid.ui.screens.BluetoothPermissionScreen
@@ -40,7 +41,13 @@ import org.levarac.beid.ui.screens.WelcomeScreen
  * not be dropped on Home with a dead radio.
  */
 @Composable
-fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore, sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null, onStartWalletBinding: () -> Unit = {}) {
+fun AppNavHost(
+    session: EventJoinSession,
+    proofRecordStore: ProofRecordStore,
+    sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null,
+    walletState: WalletConnectorState = WalletConnectorState.Idle,
+    onStartWalletBinding: () -> Unit = {},
+) {
     val context = LocalContext.current
     val navController = rememberNavController()
     val onboardingPreferences = remember { OnboardingPreferences(context) }
@@ -106,6 +113,7 @@ fun AppNavHost(session: EventJoinSession, proofRecordStore: ProofRecordStore, se
                 session,
                 onOpenRecords = { navController.navigate(Screen.Records.route) },
                 onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
+                walletState = walletState,
             )
         }
 

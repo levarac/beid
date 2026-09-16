@@ -1,6 +1,8 @@
 package org.levarac.beid.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,8 @@ import org.levarac.beid.R
 import org.levarac.beid.sensing.BluetoothRadioMonitor
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.CachedWalletHint
+import org.levarac.beid.sensing.WalletConnectorState
 import org.levarac.beid.ui.designsystem.BeidSecondaryButton
 import org.levarac.beid.ui.theme.BeidSize
 import org.levarac.beid.ui.theme.BeidSpacing
@@ -44,20 +48,28 @@ object AccountScreenTestTags {
     const val MANUAL_EVENT_CODE_BUTTON = "account_manual_event_code_button"
     const val RELAY_NOTE = "account_relay_note"
     const val VERSION_TEXT = "account_version_text"
+    const val WALLET_REFERENCE = "account_wallet_reference"
 }
 
 /**
  * Account screen (beid#126) — mirrors iOS's `AccountSheetView` at the subset
- * currently in scope on Android: Bluetooth radio status and Leave Event.
- * Manual EventCode rescue and Past Events use the existing Account list;
- * Wallet and Venue Device remain outside this Android slice.
+ * currently in scope on Android. Manual EventCode rescue and Past Events use
+ * the existing Account list. The wallet row is display-only: connection is
+ * still initiated from the recording flow, and no disconnect placement is
+ * invented here.
  *
  * State lives in [viewModel], not here — same split as [EventJoinScreen]/
  * [EventJoinViewModel], so this composable stays a pure function that Compose
  * tests can render directly against a fake session.
  */
 @Composable
-fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRecords: () -> Unit, onOpenManualEventCode: () -> Unit = {}) {
+fun AccountScreen(
+    viewModel: AccountViewModel,
+    isBluetoothOn: Boolean,
+    onOpenRecords: () -> Unit,
+    onOpenManualEventCode: () -> Unit = {},
+    walletState: WalletConnectorState = WalletConnectorState.Idle,
+) {
     val uiState by viewModel.uiState.collectAsState()
     val isSessionActive = uiState.sessionState is EventJoinUiState.Sensing
 
@@ -66,7 +78,8 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRec
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(BeidSpacing.pageMargin),
+                .padding(BeidSpacing.pageMargin)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
         ) {
             Text(
@@ -74,6 +87,8 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRec
                 style = MaterialTheme.typography.headlineLarge,
                 color = BeidTheme.colors.textPrimary,
             )
+
+            WalletReference(walletState)
 
             // Plain Row + colored dot + Text — not BeidStatusPill, whose Tone enum only
             // maps Active/Paused onto signalActive/signalWarning (BLE signal quality),
@@ -176,10 +191,61 @@ fun AccountScreen(viewModel: AccountViewModel, isBluetoothOn: Boolean, onOpenRec
  * state in this codebase.
  */
 @Composable
-fun AccountRoute(session: EventJoinSession, onOpenRecords: () -> Unit, onOpenManualEventCode: () -> Unit) {
+fun AccountRoute(
+    session: EventJoinSession,
+    onOpenRecords: () -> Unit,
+    onOpenManualEventCode: () -> Unit,
+    walletState: WalletConnectorState = WalletConnectorState.Idle,
+) {
     val context = LocalContext.current
     val bluetoothMonitor = remember { BluetoothRadioMonitor(context) }
     val isBluetoothOn = remember { bluetoothMonitor.isOn }
     val viewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(session))
-    AccountScreen(viewModel, isBluetoothOn, onOpenRecords, onOpenManualEventCode)
+    AccountScreen(viewModel, isBluetoothOn, onOpenRecords, onOpenManualEventCode, walletState)
+}
+
+@Composable
+private fun WalletReference(state: WalletConnectorState) {
+    val hint = when (state) {
+        is WalletConnectorState.Restored -> state.hint
+        is WalletConnectorState.Connecting -> state.hint
+        is WalletConnectorState.AwaitingApproval -> state.hint
+        is WalletConnectorState.Connected -> CachedWalletHint(state.live.address, state.live.chainId)
+        is WalletConnectorState.Failed -> state.hint
+        WalletConnectorState.Idle -> null
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().testTag(AccountScreenTestTags.WALLET_REFERENCE),
+        verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
+    ) {
+        Text(
+            text = stringResource(R.string.account_wallet_reference_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = BeidTheme.colors.textPrimary,
+        )
+        if (hint == null) {
+            Text(
+                text = stringResource(R.string.account_wallet_optional),
+                style = MaterialTheme.typography.bodyMedium,
+                color = BeidTheme.colors.textSecondary,
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.account_wallet_reference_value, hint.truncatedAddress, hint.chainId),
+                style = MaterialTheme.typography.bodyMedium,
+                color = BeidTheme.colors.textPrimary,
+            )
+            Text(
+                text = stringResource(
+                    if (state is WalletConnectorState.Connected || state is WalletConnectorState.Failed && state.live != null) {
+                        R.string.account_wallet_live_reference_note
+                    } else {
+                        R.string.account_wallet_restored_reference_note
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = BeidTheme.colors.textSecondary,
+            )
+        }
+    }
 }

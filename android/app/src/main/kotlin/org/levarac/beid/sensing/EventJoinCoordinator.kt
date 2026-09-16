@@ -384,11 +384,10 @@ class EventJoinCoordinator internal constructor(
      *   invoked from `MainActivity.onDestroy()` (an Activity lifecycle
      *   callback, also always the main thread). Both confirmed by reading
      *   their actual callers, not inferred by analogy.
-     * - [completeBinding] has no production caller yet — #124 (wallet-connect
-     *   UI) has not landed, so this branch is reachable only from tests
-     *   today. Once #124 wires a caller, that caller's own thread must be
-     *   checked again before relying on this being main-thread there; do
-     *   not assume it inherits this guarantee without rechecking.
+     * - [completeBinding] is called from [WalletBindingFlow]. The pinned
+     *   MetaMask SDK invokes request callbacks inline from an AIDL response
+     *   stub, so `MetaMaskSdkTransport` explicitly marshals every production
+     *   result onto Android's main looper before the flow reaches this method.
      */
     var onProofSignatureStateChanged: ((proofId: UUID, hasSelfProof: Boolean, hasBinding: Boolean) -> Unit)? = null
 
@@ -1014,9 +1013,7 @@ class EventJoinCoordinator internal constructor(
     }
 
     // MARK: - Wallet connect+binding (mirrors iOS's `SensingCoordinator`
-    // §5.6/`docs/specs/barnard-binding-conformance.md` §2.3/§2.4). No
-    // wallet-connect UI wires into this yet (#124's scope) — see this
-    // task's handoff.
+    // §5.6/`docs/specs/barnard-binding-conformance.md` §2.3/§2.4).
 
     /**
      * Starts (or resumes) this attempt, moving to [EventBindingState.Connecting]

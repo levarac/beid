@@ -5,6 +5,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
@@ -21,12 +23,9 @@ import org.levarac.barnard.WalletBindingVerification
  * `markBindingAwaitingApproval`/`completeBinding`/`failBinding`/
  * `declineBinding` (`ios/Beid/Sensing/SensingCoordinator.swift`).
  *
- * **No wallet-connect UI caller wires into this yet — that is #124's
- * scope, not this task's.** These tests exercise the coordinator API
- * directly with an already-obtained wallet address/signature, the same way
- * `beginBinding`/`completeBinding` are wallet-SDK-agnostic on iOS (the
- * actual `WalletConnector` negotiation lives in `EventBindingSheetView`,
- * not the coordinator).
+ * The production [WalletBindingFlow] calls this same API; most tests here
+ * keep exercising the SDK-agnostic coordinator boundary directly, while the
+ * flow tests below cover the connector-to-coordinator sequencing.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorBindingTest {
@@ -269,7 +268,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
-        val wallet = FakeWalletConnector(WalletConnectOutcome.Connected(walletAddress, 1), WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
+        val wallet = FakeWalletConnector(WalletConnectOutcome.Connected(live(walletAddress)), WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
         WalletBindingFlow(coordinator, wallet).start()
         assertTrue(coordinator.bindingState is EventBindingState.Bound)
         assertEquals(1, wallet.signCalls)
@@ -291,7 +290,7 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
-        val wallet = FakeWalletConnector(WalletConnectOutcome.Connected(walletAddress, 1), WalletConnectOutcome.Signed("0x00"))
+        val wallet = FakeWalletConnector(WalletConnectOutcome.Connected(live(walletAddress)), WalletConnectOutcome.Signed("0x00"))
         WalletBindingFlow(coordinator, wallet).start()
         assertTrue(coordinator.bindingState is EventBindingState.Failed)
     }
@@ -317,7 +316,7 @@ class EventJoinCoordinatorBindingTest {
         val wallet = DeferredWalletConnector()
         WalletBindingFlow(coordinator, wallet).start()
         coordinator.leaveEvent()
-        wallet.connectCallback?.invoke(WalletConnectOutcome.Connected(walletAddress, 1))
+        wallet.connectCallback?.invoke(WalletConnectOutcome.Connected(live(walletAddress)))
         assertTrue(store.records.isEmpty())
     }
 
@@ -328,38 +327,201 @@ class EventJoinCoordinatorBindingTest {
         joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
         val wallet = MultiDeferredWalletConnector(); val flow = WalletBindingFlow(coordinator, wallet)
         flow.start()
-        wallet.connectCallbacks[0](WalletConnectOutcome.Connected(walletAddress, 1))
+        wallet.connectCallbacks[0](WalletConnectOutcome.Connected(live(walletAddress)))
         flow.cancel(); flow.start()
-        wallet.connectCallbacks[1](WalletConnectOutcome.Connected(walletAddress, 1))
+        wallet.connectCallbacks[1](WalletConnectOutcome.Connected(live(walletAddress)))
         wallet.signCallbacks[0](WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
         assertTrue(coordinator.bindingState is EventBindingState.AwaitingApproval)
         wallet.signCallbacks[1](WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
         assertTrue(coordinator.bindingState is EventBindingState.Bound)
     }
 
+    @Test
+    fun restoredHintUsesOneConnectAndSignRoundTripAndPersistsOnlyTheLiveResult() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val store = BindingRecordStore(newTempRecordFile("restored-binding"))
+        val coordinator = coordinator(
+            engine,
+            FakeSensingCryptography(),
+            bindingRecordStore = store,
+            nearbyRegistry = registry,
+        )
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val hint = CachedWalletHint(walletAddress.uppercase(), 1L)
+        val wallet = RestoredWalletConnector(hint, live(walletAddress))
+
+        WalletBindingFlow(coordinator, wallet).start()
+
+        assertEquals(1, wallet.connectAndSignCalls)
+        assertEquals(0, wallet.connectCalls)
+        assertEquals(0, wallet.personalSignCalls)
+        assertEquals(walletAddress, store.records.single().walletAddress)
+    }
+
+    @Test
+    fun restoredRoundTripKeepsTheChainThatWasEmbeddedInTheSignedPendingMessage() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val store = BindingRecordStore(newTempRecordFile("restored-chain"))
+        val coordinator = coordinator(
+            engine,
+            FakeSensingCryptography(),
+            bindingRecordStore = store,
+            nearbyRegistry = registry,
+        )
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val wallet = RestoredWalletConnector(
+            CachedWalletHint(walletAddress, 1L),
+            live(walletAddress, chainId = 8453L),
+        )
+
+        WalletBindingFlow(coordinator, wallet).start()
+
+        assertEquals(1L, store.records.single().chainId, "the signed pending message, not a later SDK field, owns the record chain")
+    }
+
+    @Test
+    fun accountSwitchAfterRestoreCannotPersistUntilExplicitRetryBuildsForLiveAccount() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val store = BindingRecordStore(newTempRecordFile("restored-switch"))
+        val coordinator = coordinator(
+            engine,
+            FakeSensingCryptography(),
+            bindingRecordStore = store,
+            nearbyRegistry = registry,
+        )
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val oldHint = CachedWalletHint("0x" + "11".repeat(20), 1L)
+        val switchedLive = live(walletAddress, chainId = 8453L)
+        val wallet = RestoredWalletConnector(oldHint, switchedLive)
+        val flow = WalletBindingFlow(coordinator, wallet)
+
+        flow.start()
+
+        assertTrue(store.records.isEmpty(), "completeBinding must reject the live address against the restored pending message")
+        assertTrue(coordinator.bindingState is EventBindingState.Failed)
+        assertEquals(1, wallet.connectAndSignCalls)
+        assertEquals(0, wallet.personalSignCalls)
+
+        flow.start()
+
+        val record = store.records.single()
+        assertEquals(switchedLive.address, record.walletAddress)
+        assertEquals(switchedLive.chainId, record.chainId)
+        assertEquals(1, wallet.connectAndSignCalls, "retry must use the already-live SDK session")
+        assertEquals(1, wallet.personalSignCalls)
+    }
+
+    @Test
+    fun leavingEventInvalidatesLateRestoredConnectAndSignCallback() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val store = BindingRecordStore(newTempRecordFile("restored-late-callback"))
+        val coordinator = coordinator(
+            engine,
+            FakeSensingCryptography(),
+            bindingRecordStore = store,
+            nearbyRegistry = registry,
+        )
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        val wallet = DeferredRestoredWalletConnector(CachedWalletHint(walletAddress, 1L))
+
+        WalletBindingFlow(coordinator, wallet).start()
+        coordinator.leaveEvent()
+        wallet.connectAndSignCallback?.invoke(
+            WalletConnectOutcome.ConnectedAndSigned(live(walletAddress), "0x" + "0a".repeat(65)),
+        )
+
+        assertTrue(store.records.isEmpty())
+    }
+
     private class FakeWalletConnector(
         private val connection: WalletConnectOutcome,
         private val signing: WalletConnectOutcome,
     ) : WalletConnector {
+        override val state: StateFlow<WalletConnectorState> = MutableStateFlow(WalletConnectorState.Idle)
         var signCalls = 0
         override fun connect(callback: (WalletConnectOutcome) -> Unit) = callback(connection)
-        override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
+        override fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit) =
+            callback(WalletConnectOutcome.Failed("unexpected connectAndSign"))
+        override fun personalSign(address: LiveWalletAddress, messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
             signCalls += 1; callback(signing)
         }
+        override fun cancelPendingOperation() = Unit
+        override fun disconnect() = Unit
     }
 
     private class DeferredWalletConnector : WalletConnector {
+        override val state: StateFlow<WalletConnectorState> = MutableStateFlow(WalletConnectorState.Idle)
         var connectCallback: ((WalletConnectOutcome) -> Unit)? = null
         override fun connect(callback: (WalletConnectOutcome) -> Unit) { connectCallback = callback }
-        override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) = Unit
+        override fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit) = Unit
+        override fun personalSign(address: LiveWalletAddress, messageHex: String, callback: (WalletConnectOutcome) -> Unit) = Unit
+        override fun cancelPendingOperation() = Unit
+        override fun disconnect() = Unit
     }
 
     private class MultiDeferredWalletConnector : WalletConnector {
+        override val state: StateFlow<WalletConnectorState> = MutableStateFlow(WalletConnectorState.Idle)
         val connectCallbacks = mutableListOf<(WalletConnectOutcome) -> Unit>()
         val signCallbacks = mutableListOf<(WalletConnectOutcome) -> Unit>()
         override fun connect(callback: (WalletConnectOutcome) -> Unit) { connectCallbacks += callback }
-        override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) { signCallbacks += callback }
+        override fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit) = Unit
+        override fun personalSign(address: LiveWalletAddress, messageHex: String, callback: (WalletConnectOutcome) -> Unit) { signCallbacks += callback }
+        override fun cancelPendingOperation() = Unit
+        override fun disconnect() = Unit
     }
+
+    private class RestoredWalletConnector(
+        hint: CachedWalletHint,
+        private val liveResult: LiveWalletAddress,
+    ) : WalletConnector {
+        private val mutableState = MutableStateFlow<WalletConnectorState>(WalletConnectorState.Restored(hint))
+        override val state: StateFlow<WalletConnectorState> = mutableState
+        var connectCalls = 0
+        var connectAndSignCalls = 0
+        var personalSignCalls = 0
+
+        override fun connect(callback: (WalletConnectOutcome) -> Unit) {
+            connectCalls += 1
+            callback(WalletConnectOutcome.Connected(liveResult))
+        }
+
+        override fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
+            connectAndSignCalls += 1
+            mutableState.value = WalletConnectorState.Connected(liveResult)
+            callback(WalletConnectOutcome.ConnectedAndSigned(liveResult, "0x" + "0a".repeat(65)))
+        }
+
+        override fun personalSign(
+            address: LiveWalletAddress,
+            messageHex: String,
+            callback: (WalletConnectOutcome) -> Unit,
+        ) {
+            personalSignCalls += 1
+            callback(WalletConnectOutcome.Signed("0x" + "0a".repeat(65)))
+        }
+
+        override fun cancelPendingOperation() = Unit
+        override fun disconnect() = Unit
+    }
+
+    private class DeferredRestoredWalletConnector(hint: CachedWalletHint) : WalletConnector {
+        override val state: StateFlow<WalletConnectorState> = MutableStateFlow(WalletConnectorState.Restored(hint))
+        var connectAndSignCallback: ((WalletConnectOutcome) -> Unit)? = null
+        override fun connect(callback: (WalletConnectOutcome) -> Unit) = Unit
+        override fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
+            connectAndSignCallback = callback
+        }
+        override fun personalSign(
+            address: LiveWalletAddress,
+            messageHex: String,
+            callback: (WalletConnectOutcome) -> Unit,
+        ) = Unit
+        override fun cancelPendingOperation() = Unit
+        override fun disconnect() = Unit
+    }
+
+    private fun live(address: String, chainId: Long = 1L): LiveWalletAddress =
+        LiveWalletAddress.fromConnectorResult(address, chainId)
 
     private fun confirmRecording(engine: FakeEventJoinEngine) {
         engine.emitDetection(enin = 1, rpid = "aa", detectedDisplayId = "device-1")

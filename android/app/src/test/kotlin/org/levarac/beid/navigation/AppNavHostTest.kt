@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.time.Instant
@@ -21,6 +22,7 @@ import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.sensing.ScanEventSession
 import org.levarac.beid.ui.screens.AccountScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothOffScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothPermissionScreenTestTags
@@ -129,10 +131,34 @@ class AppNavHostTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PHASE_STATUS_PILL).assertIsDisplayed()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
 
-        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON).performClick()
 
         assertEquals(1, session.leaveEventCallCount)
+    }
+
+    @Test
+    fun recordingWalletActionReachesTheInjectedProductionCallerSeam() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession(
+            EventJoinUiState.Sensing(ScanPhase.Recording(ScanEventSession("ABC123"), peersVerified = 3)),
+        )
+        session.markRecordingCeremonyShown()
+        var walletStartCalls = 0
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                AppNavHost(
+                    session = session,
+                    proofRecordStore = proofRecordStore(),
+                    onStartWalletBinding = { walletStartCalls += 1 },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.BIND_WALLET_BUTTON).performScrollTo().performClick()
+        assertEquals(1, walletStartCalls)
     }
 
     @Test
