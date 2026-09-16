@@ -149,6 +149,7 @@ struct AccountSheetView: View {
     }
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()
+        .environmentObject(coordinator)
     }
     // A custom `Binding`, not `$coordinator.eventCodeEntrySheetPresented`
     // directly: swipe-to-dismiss writes `false` through whatever binding
@@ -170,6 +171,7 @@ struct AccountSheetView: View {
       }
     )) {
       EventCodeEntrySheetView()
+        .environmentObject(coordinator)
     }
   }
 

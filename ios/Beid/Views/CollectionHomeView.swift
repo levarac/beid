@@ -112,6 +112,7 @@ struct CollectionHomeView: View {
       }
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
+          .environmentObject(coordinator)
           .presentationDetents([.medium])
           .presentationDragIndicator(.visible)
           // Sheets don't inherit the presenter's .tint (unlike push
