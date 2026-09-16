@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -80,7 +81,8 @@ open class MainActivity : ComponentActivity() {
         registryClient = RegistryDependencies.createClient()
         val coordinator = EventJoinCoordinator(this)
         eventJoinCoordinator = coordinator
-        walletBindingFlow = WalletBindingFlow(coordinator, MetaMaskWalletConnector(this))
+        val walletConnector = MetaMaskWalletConnector(this)
+        walletBindingFlow = WalletBindingFlow(coordinator, walletConnector)
 
         // Sibling store MainActivity owns directly (beid#121) — not something
         // EventJoinCoordinator owns, unlike SelfProofRecordStore/BindingRecordStore.
@@ -90,7 +92,14 @@ open class MainActivity : ComponentActivity() {
 
         setContent {
             BeidAppTheme {
-AppNavHost(coordinator, proofRecordStore, coordinator.sessionAggregateSnapshotStore) { walletBindingFlow?.start() }
+                val walletState by walletConnector.state.collectAsState()
+                AppNavHost(
+                    session = coordinator,
+                    proofRecordStore = proofRecordStore,
+                    sessionAggregateSnapshotStore = coordinator.sessionAggregateSnapshotStore,
+                    walletState = walletState,
+                    onStartWalletBinding = { walletBindingFlow?.start() },
+                )
             }
         }
     }

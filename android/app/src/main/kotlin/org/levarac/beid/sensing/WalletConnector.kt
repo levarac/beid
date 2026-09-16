@@ -4,56 +4,262 @@ import android.content.Context
 import io.metamask.androidsdk.DappMetadata
 import io.metamask.androidsdk.Ethereum
 import io.metamask.androidsdk.Result
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * Address read from this process's live MetaMask SDK result. The only
+ * production construction path is [fromConnectorResult], in this file.
+ * Cached display text cannot be passed to binding completion as this type.
+ */
+class LiveWalletAddress private constructor(
+    val address: String,
+    val chainId: Long,
+) {
+    internal companion object {
+        internal fun fromConnectorResult(address: String, chainId: Long) = LiveWalletAddress(address, chainId)
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is LiveWalletAddress && address == other.address && chainId == other.chainId
+
+    override fun hashCode(): Int = 31 * address.hashCode() + chainId.hashCode()
+
+    override fun toString(): String = "LiveWalletAddress(address=$address, chainId=$chainId)"
+}
+
+sealed class WalletConnectorState {
+    data object Idle : WalletConnectorState()
+    data class Restored(val hint: CachedWalletHint) : WalletConnectorState()
+    data class Connecting(val hint: CachedWalletHint?) : WalletConnectorState()
+    data class AwaitingApproval(val hint: CachedWalletHint?) : WalletConnectorState()
+    data class Connected(val live: LiveWalletAddress) : WalletConnectorState()
+    data class Failed(
+        val reason: String,
+        val hint: CachedWalletHint?,
+        val live: LiveWalletAddress? = null,
+    ) : WalletConnectorState()
+}
 
 sealed class WalletConnectOutcome {
-    data class Connected(val address: String, val chainId: Long) : WalletConnectOutcome()
+    data class Connected(val live: LiveWalletAddress) : WalletConnectOutcome()
     data class Signed(val signatureHex: String) : WalletConnectOutcome()
+    data class ConnectedAndSigned(val live: LiveWalletAddress, val signatureHex: String) : WalletConnectOutcome()
     data object Cancelled : WalletConnectOutcome()
     data class Failed(val reason: String) : WalletConnectOutcome()
 }
 
 interface WalletConnector {
+    val state: StateFlow<WalletConnectorState>
     fun connect(callback: (WalletConnectOutcome) -> Unit)
-    fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit)
+    fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit)
+    fun personalSign(address: LiveWalletAddress, messageHex: String, callback: (WalletConnectOutcome) -> Unit)
+    fun cancelPendingOperation()
+    fun disconnect()
 }
 
-/** Thin native MetaMask adapter. It exposes only account selection and personal_sign. */
-class MetaMaskWalletConnector(context: Context) : WalletConnector {
+internal sealed class MetaMaskTransportResult {
+    data object Success : MetaMaskTransportResult()
+    data class Value(val value: String) : MetaMaskTransportResult()
+    data object Cancelled : MetaMaskTransportResult()
+    data class Failed(val reason: String) : MetaMaskTransportResult()
+}
+
+internal interface MetaMaskTransport {
+    val selectedAddress: String
+    val chainId: String
+    fun connect(callback: (MetaMaskTransportResult) -> Unit)
+    fun connectSign(messageHex: String, callback: (MetaMaskTransportResult) -> Unit)
+    fun personalSign(messageHex: String, address: String, callback: (MetaMaskTransportResult) -> Unit)
+    fun disconnect()
+}
+
+/** The only class that translates the pinned MetaMask Android SDK's result model. */
+private class MetaMaskSdkTransport(context: Context) : MetaMaskTransport {
     private val ethereum = Ethereum(
         context = context.applicationContext,
         dappMetadata = DappMetadata("Beid", "https://beid.levarac.org"),
     )
+    private val callbackDispatcher = MainThreadWalletCallbackDispatcher()
 
-    override fun connect(callback: (WalletConnectOutcome) -> Unit) {
+    override val selectedAddress: String get() = ethereum.selectedAddress
+    override val chainId: String get() = ethereum.chainId
+
+    override fun connect(callback: (MetaMaskTransportResult) -> Unit) =
         ethereum.connect { result ->
-            when (result) {
-                is Result.Success -> {
-                    val address = ethereum.selectedAddress
-                    val chainId = ethereum.chainId.removePrefix("0x").toLongOrNull(16)
-                    if (address.isBlank() || chainId == null) {
-                        callback(WalletConnectOutcome.Failed("MetaMask returned no account or chain"))
-                    } else callback(WalletConnectOutcome.Connected(address, chainId))
-                }
-                is Result.Error -> callback(result.toOutcome())
-            }
+            callbackDispatcher.deliver { callback(result.toTransportResult(expectValue = false)) }
         }
-    }
 
-    override fun personalSign(address: String, messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
+    override fun connectSign(messageHex: String, callback: (MetaMaskTransportResult) -> Unit) =
+        ethereum.connectSign(messageHex) { result ->
+            callbackDispatcher.deliver { callback(result.toTransportResult(expectValue = true)) }
+        }
+
+    override fun personalSign(messageHex: String, address: String, callback: (MetaMaskTransportResult) -> Unit) {
         ethereum.personalSign(messageHex, address) { result ->
-            when (result) {
-                is Result.Success.Item -> callback(WalletConnectOutcome.Signed(result.value))
-                is Result.Success -> callback(WalletConnectOutcome.Failed("MetaMask returned an invalid signing result"))
-                is Result.Error -> callback(result.toOutcome())
-            }
+            callbackDispatcher.deliver { callback(result.toTransportResult(expectValue = true)) }
         }
     }
 
-    private fun Result.Error.toOutcome(): WalletConnectOutcome =
-        if (error.code == USER_REJECTED_REQUEST) WalletConnectOutcome.Cancelled
-        else WalletConnectOutcome.Failed(error.message ?: "MetaMask request failed")
+    override fun disconnect() = ethereum.disconnect(clearSession = true)
+
+    private fun Result.toTransportResult(expectValue: Boolean): MetaMaskTransportResult = when (this) {
+        is Result.Success.Item -> if (expectValue) MetaMaskTransportResult.Value(value) else MetaMaskTransportResult.Success
+        is Result.Success -> if (expectValue) {
+            MetaMaskTransportResult.Failed("MetaMask returned an invalid result")
+        } else {
+            MetaMaskTransportResult.Success
+        }
+        is Result.Error -> if (error.code == USER_REJECTED_REQUEST) {
+            MetaMaskTransportResult.Cancelled
+        } else {
+            MetaMaskTransportResult.Failed(error.message ?: "MetaMask request failed")
+        }
+    }
 
     private companion object { const val USER_REJECTED_REQUEST = 4001 }
+}
+
+/**
+ * Direct MetaMask adapter. It never treats a restored hint as a live account;
+ * live values are read from the SDK only after a successful callback.
+ */
+class MetaMaskWalletConnector internal constructor(
+    private val transport: MetaMaskTransport,
+    private val hintStore: WalletHintStorage,
+) : WalletConnector {
+    constructor(context: Context) : this(MetaMaskSdkTransport(context), WalletHintStore(context))
+
+    private var generation = 0L
+    private var liveAddress: LiveWalletAddress? = null
+    private var cachedHint: CachedWalletHint? = hintStore.load()
+    private val mutableState = MutableStateFlow<WalletConnectorState>(
+        cachedHint?.let(WalletConnectorState::Restored) ?: WalletConnectorState.Idle,
+    )
+    override val state: StateFlow<WalletConnectorState> = mutableState.asStateFlow()
+
+    override fun connect(callback: (WalletConnectOutcome) -> Unit) {
+        val requestGeneration = ++generation
+        mutableState.value = WalletConnectorState.Connecting(cachedHint)
+        mutableState.value = WalletConnectorState.AwaitingApproval(cachedHint)
+        transport.connect { result ->
+            if (generation != requestGeneration) return@connect
+            when (result) {
+                MetaMaskTransportResult.Success -> finishConnected(callback)
+                is MetaMaskTransportResult.Value -> finishConnected(callback)
+                MetaMaskTransportResult.Cancelled -> finishCancelled(callback)
+                is MetaMaskTransportResult.Failed -> finishFailed(result.reason, callback)
+            }
+        }
+    }
+
+    override fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
+        val requestGeneration = ++generation
+        mutableState.value = WalletConnectorState.Connecting(cachedHint)
+        mutableState.value = WalletConnectorState.AwaitingApproval(cachedHint)
+        transport.connectSign(messageHex) { result ->
+            if (generation != requestGeneration) return@connectSign
+            when (result) {
+                is MetaMaskTransportResult.Value -> {
+                    val live = readLiveAddressOrNull()
+                    if (live == null) {
+                        finishFailed("MetaMask returned no account or chain", callback)
+                    } else {
+                        recordLiveAddress(live)
+                        callback(WalletConnectOutcome.ConnectedAndSigned(live, result.value))
+                    }
+                }
+                MetaMaskTransportResult.Cancelled -> finishCancelled(callback)
+                is MetaMaskTransportResult.Failed -> finishFailed(result.reason, callback)
+                MetaMaskTransportResult.Success -> finishFailed("MetaMask returned an invalid signing result", callback)
+            }
+        }
+    }
+
+    override fun personalSign(
+        address: LiveWalletAddress,
+        messageHex: String,
+        callback: (WalletConnectOutcome) -> Unit,
+    ) {
+        if (liveAddress != address) {
+            callback(WalletConnectOutcome.Failed("Wallet session is no longer connected to this account"))
+            return
+        }
+        val requestGeneration = ++generation
+        mutableState.value = WalletConnectorState.AwaitingApproval(cachedHint)
+        transport.personalSign(messageHex, address.address) { result ->
+            if (generation != requestGeneration) return@personalSign
+            when (result) {
+                is MetaMaskTransportResult.Value -> {
+                    mutableState.value = WalletConnectorState.Connected(address)
+                    callback(WalletConnectOutcome.Signed(result.value))
+                }
+                MetaMaskTransportResult.Cancelled -> finishCancelled(callback)
+                is MetaMaskTransportResult.Failed -> finishFailed(result.reason, callback)
+                MetaMaskTransportResult.Success -> finishFailed("MetaMask returned an invalid signing result", callback)
+            }
+        }
+    }
+
+    /** Invalidates app callbacks without clearing MetaMask's session or the display hint. */
+    override fun cancelPendingOperation() {
+        generation += 1
+        mutableState.value = liveAddress?.let(WalletConnectorState::Connected)
+            ?: cachedHint?.let(WalletConnectorState::Restored)
+            ?: WalletConnectorState.Idle
+    }
+
+    /** Explicit forget operation. No current Android UI calls this API. */
+    override fun disconnect() {
+        generation += 1
+        transport.disconnect()
+        liveAddress = null
+        cachedHint = null
+        hintStore.clear()
+        mutableState.value = WalletConnectorState.Idle
+    }
+
+    private fun finishConnected(callback: (WalletConnectOutcome) -> Unit) {
+        val live = readLiveAddressOrNull()
+        if (live == null) {
+            finishFailed("MetaMask returned no account or chain", callback)
+            return
+        }
+        recordLiveAddress(live)
+        callback(WalletConnectOutcome.Connected(live))
+    }
+
+    private fun recordLiveAddress(live: LiveWalletAddress) {
+        liveAddress = live
+        cachedHint = CachedWalletHint(live.address, live.chainId).also(hintStore::save)
+        mutableState.value = WalletConnectorState.Connected(live)
+    }
+
+    private fun finishCancelled(callback: (WalletConnectOutcome) -> Unit) {
+        cancelPendingOperation()
+        callback(WalletConnectOutcome.Cancelled)
+    }
+
+    private fun finishFailed(reason: String, callback: (WalletConnectOutcome) -> Unit) {
+        mutableState.value = WalletConnectorState.Failed(reason, cachedHint, liveAddress)
+        callback(WalletConnectOutcome.Failed(reason))
+    }
+
+    private fun readLiveAddressOrNull(): LiveWalletAddress? {
+        val address = transport.selectedAddress.takeIf { it.isNotBlank() } ?: return null
+        val chain = parseChainId(transport.chainId) ?: return null
+        return LiveWalletAddress.fromConnectorResult(address, chain)
+    }
+
+    private fun parseChainId(raw: String): Long? {
+        val normalized = raw.trim().lowercase()
+        return when {
+            normalized.startsWith("eip155:") -> normalized.removePrefix("eip155:").toLongOrNull()
+            normalized.startsWith("0x") -> normalized.removePrefix("0x").toLongOrNull(16)
+            else -> normalized.toLongOrNull()
+        }
+    }
 }
 
 /** Production caller for the normal connect → sign → verify → owner-ack path. */
@@ -64,10 +270,16 @@ class WalletBindingFlow(
     private var nextAttemptId = 0L
     private var currentAttemptId: Long? = null
 
-    init { coordinator.onBindingAttemptInvalidated = { currentAttemptId = null } }
+    init {
+        coordinator.onBindingAttemptInvalidated = {
+            currentAttemptId = null
+            connector.cancelPendingOperation()
+        }
+    }
 
     fun cancel() {
         currentAttemptId = null
+        connector.cancelPendingOperation()
         coordinator.declineBinding()
     }
 
@@ -75,43 +287,99 @@ class WalletBindingFlow(
         if (currentAttemptId != null) return
         val attemptId = ++nextAttemptId
         currentAttemptId = attemptId
+        when (val connectorState = connector.state.value) {
+            is WalletConnectorState.Connected -> signConnected(attemptId, connectorState.live, onResult)
+            is WalletConnectorState.Restored -> connectAndSignRestored(attemptId, connectorState.hint, onResult)
+            is WalletConnectorState.Failed -> connectorState.live?.let {
+                signConnected(attemptId, it, onResult)
+            } ?: connectorState.hint?.let {
+                connectAndSignRestored(attemptId, it, onResult)
+            } ?: connectFresh(attemptId, onResult)
+            is WalletConnectorState.Idle -> connectFresh(attemptId, onResult)
+            is WalletConnectorState.Connecting, is WalletConnectorState.AwaitingApproval -> currentAttemptId = null
+        }
+    }
+
+    private fun connectFresh(attemptId: Long, onResult: (WalletConnectOutcome) -> Unit) {
         connector.connect { connected ->
             if (currentAttemptId != attemptId) return@connect
             when (connected) {
                 is WalletConnectOutcome.Connected -> {
-                    val message = coordinator.beginBinding(connected.address, connected.chainId)
-                    if (message == null) {
-                        coordinator.failBinding("Wallet binding is unavailable while recording")
-                        finish(onResult, WalletConnectOutcome.Failed("Wallet binding is unavailable while recording"))
-                        return@connect
-                    }
-                    coordinator.markBindingAwaitingApproval()
-                    connector.personalSign(connected.address, message) { signed ->
-                        if (currentAttemptId != attemptId) return@personalSign
-                        when (signed) {
-                            is WalletConnectOutcome.Signed -> {
-                                if (coordinator.completeBinding(connected.address, signed.signatureHex) == null) {
-                                    coordinator.failBinding("Wallet signature did not pass Barnard verification")
-                                    finish(onResult, WalletConnectOutcome.Failed("Wallet signature did not pass Barnard verification"))
-                                } else finish(onResult, signed)
-                            }
-                            is WalletConnectOutcome.Cancelled -> {
-                                coordinator.declineBinding()
-                                finish(onResult, signed)
-                            }
-                            is WalletConnectOutcome.Failed -> {
-                                coordinator.failBinding(signed.reason)
-                                finish(onResult, signed)
-                            }
-                            is WalletConnectOutcome.Connected -> finish(onResult, WalletConnectOutcome.Failed("MetaMask returned an invalid signing result"))
-                        }
-                    }
+                    signConnected(attemptId, connected.live, onResult)
                 }
                 is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); finish(onResult, connected) }
                 is WalletConnectOutcome.Failed -> { coordinator.failBinding(connected.reason); finish(onResult, connected) }
-                is WalletConnectOutcome.Signed -> finish(onResult, WalletConnectOutcome.Failed("MetaMask returned an invalid account result"))
+                is WalletConnectOutcome.Signed, is WalletConnectOutcome.ConnectedAndSigned ->
+                    fail(attemptId, "MetaMask returned an invalid account result", onResult)
             }
         }
+    }
+
+    private fun connectAndSignRestored(
+        attemptId: Long,
+        hint: CachedWalletHint,
+        onResult: (WalletConnectOutcome) -> Unit,
+    ) {
+        val message = coordinator.beginBinding(hint.address, hint.chainId)
+        if (message == null) {
+            fail(attemptId, "Wallet binding is unavailable while recording", onResult)
+            return
+        }
+        coordinator.markBindingAwaitingApproval()
+        connector.connectAndSign(message) { outcome ->
+            if (currentAttemptId != attemptId) return@connectAndSign
+            when (outcome) {
+                is WalletConnectOutcome.ConnectedAndSigned ->
+                    complete(attemptId, outcome.live, outcome.signatureHex, onResult)
+                is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); finish(onResult, outcome) }
+                is WalletConnectOutcome.Failed -> { coordinator.failBinding(outcome.reason); finish(onResult, outcome) }
+                is WalletConnectOutcome.Connected, is WalletConnectOutcome.Signed ->
+                    fail(attemptId, "MetaMask returned an invalid connect-and-sign result", onResult)
+            }
+        }
+    }
+
+    private fun signConnected(
+        attemptId: Long,
+        live: LiveWalletAddress,
+        onResult: (WalletConnectOutcome) -> Unit,
+    ) {
+        val message = coordinator.beginBinding(live.address, live.chainId)
+        if (message == null) {
+            fail(attemptId, "Wallet binding is unavailable while recording", onResult)
+            return
+        }
+        coordinator.markBindingAwaitingApproval()
+        connector.personalSign(live, message) { outcome ->
+            if (currentAttemptId != attemptId) return@personalSign
+            when (outcome) {
+                is WalletConnectOutcome.Signed -> complete(attemptId, live, outcome.signatureHex, onResult)
+                is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); finish(onResult, outcome) }
+                is WalletConnectOutcome.Failed -> { coordinator.failBinding(outcome.reason); finish(onResult, outcome) }
+                is WalletConnectOutcome.Connected, is WalletConnectOutcome.ConnectedAndSigned ->
+                    fail(attemptId, "MetaMask returned an invalid signing result", onResult)
+            }
+        }
+    }
+
+    private fun complete(
+        attemptId: Long,
+        live: LiveWalletAddress,
+        signatureHex: String,
+        onResult: (WalletConnectOutcome) -> Unit,
+    ) {
+        if (currentAttemptId != attemptId) return
+        if (coordinator.completeBinding(live.address, signatureHex) == null) {
+            fail(attemptId, "Wallet signature did not pass Barnard verification", onResult)
+        } else {
+            finish(onResult, WalletConnectOutcome.Signed(signatureHex))
+        }
+    }
+
+    private fun fail(attemptId: Long, reason: String, onResult: (WalletConnectOutcome) -> Unit) {
+        if (currentAttemptId != attemptId) return
+        coordinator.failBinding(reason)
+        finish(onResult, WalletConnectOutcome.Failed(reason))
     }
 
     private fun finish(onResult: (WalletConnectOutcome) -> Unit, result: WalletConnectOutcome) {

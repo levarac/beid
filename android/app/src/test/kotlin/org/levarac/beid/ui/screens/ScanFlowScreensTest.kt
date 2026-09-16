@@ -145,6 +145,26 @@ class ScanFlowScreensTest {
     }
 
     @Test
+    fun recordingScreenWalletButtonInvokesProductionCallerCallback() {
+        var walletBindingStarted = false
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordingScreen(
+                    session = session,
+                    peersVerified = 1,
+                    showEntranceCeremony = false,
+                    onCeremonyFinished = {},
+                    onSimulateSignalLost = {},
+                    onStartWalletBinding = { walletBindingStarted = true },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.BIND_WALLET_BUTTON).performClick()
+        assertTrue(walletBindingStarted)
+    }
+
+    @Test
     fun scanFlowScreenRoutesIdleAndSensingToTheSameSensingScreen() {
         composeTestRule.setContent {
             BeidAppTheme {

@@ -9,9 +9,8 @@ import org.levarac.beid.persistence.BindingRecord
  * because its trigger is decoupled from phase transitions.
  *
  * [EventJoinCoordinator] drives every transition except the wallet-connect
- * SDK negotiation itself — that UI is #124's scope, not this task's; see
- * this task's handoff for what "coordinator-level API, no caller yet" means
- * concretely for [None]/[PendingConnect] here.
+ * SDK negotiation itself, which [WalletBindingFlow] performs through the
+ * direct MetaMask adapter.
  */
 sealed class EventBindingState {
     data object None : EventBindingState()

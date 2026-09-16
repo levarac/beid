@@ -109,7 +109,12 @@
     <string name="account_title">Account</string>
     <string name="account_manual_event_code_button">Enter event code</string>
 
-    <!-- Screen 09-equivalent: Account (mirrors iOS's AccountSheetView, minus wallet/Venue Device/Past Events — see beid#126). -->
+    <!-- Screen 09-equivalent: Account. Wallet address text remains reference-only; connection starts from Recording. -->
+    <string name="account_wallet_reference_title">Last connected wallet (reference only)</string>
+    <string name="account_wallet_optional">No wallet connected. Wallet connection is optional.</string>
+    <string name="account_wallet_reference_value">%1$s · Chain %2$d</string>
+    <string name="account_wallet_restored_reference_note">Restored from this device. Approve in MetaMask before it can be used.</string>
+    <string name="account_wallet_live_reference_note">Reported by the live MetaMask session. Binding is still verified from the signature.</string>
     <string name="account_bluetooth_label">Bluetooth</string>
     <!-- Bluetooth status badge text: the phone's Bluetooth radio is powered on. Not "in use" or "connected to a device" — just radio power state. -->
     <string name="account_bluetooth_status_on">Active</string>
