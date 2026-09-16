@@ -68,23 +68,25 @@ enum WalletConnectorError: Error, Equatable {
   case rejected
   case timedOut
   case relayFailure(String)
-  /// When `cancelPendingOperation()` runs while a `requestPersonalSign()`
-  /// call is in flight (`signGate` non-nil), it MUST resolve that gate's
-  /// `CheckedContinuation` with some value before dropping the reference —
-  /// an unresumed continuation traps on deallocation, so the awaiting
-  /// caller either crashes (debug) or hangs forever (release). Of the other
-  /// three existing cases, none is a truthful value to resolve it with:
-  /// `.rejected` means MetaMask error 4001, a wallet-side decline, which
-  /// never happened; `.notConnected` is the literal string
-  /// `EventBindingSheetView` shows a user ("Wallet not connected"), which
-  /// overclaims — it reads as "your wallet link is broken, reconnect from
-  /// zero," when the SDK session is deliberately left intact; `.timedOut`
-  /// claims a response timer lapsed, which also never happened. `.cancelled`
-  /// is the only honest value available — this justifies the case's
-  /// existence on its own, independent of whether any UI path reaches it
-  /// today. It is also the correct description of what happened: the user
-  /// stopped this specific operation from beid's own UI (Cancel, Try Again,
-  /// Start Over) before it reached — or heard back from — the wallet.
+  /// An in-flight operation that did not complete while the SDK session was
+  /// deliberately left intact. Both `cancelPendingOperation()` and a newer
+  /// connection attempt superseding an older one produce this result. The
+  /// active gate MUST resolve its `CheckedContinuation` with some value
+  /// before dropping the reference — an unresumed continuation traps on
+  /// deallocation, so the awaiting caller either crashes (debug) or hangs
+  /// forever (release). Of the other three existing cases, none is a
+  /// truthful value to resolve it with: `.rejected` means MetaMask error
+  /// 4001, a wallet-side decline, which never happened; `.notConnected` is
+  /// the literal string `EventBindingSheetView` shows a user ("Wallet not
+  /// connected"), which overclaims — it reads as "your wallet link is
+  /// broken, reconnect from zero," when the SDK session is deliberately
+  /// left intact; `.timedOut` claims a response timer lapsed, which also
+  /// never happened. `.cancelled` is the only honest value available — this
+  /// justifies the case's existence on its own, independent of whether any
+  /// UI path reaches it today. For direct user cancellation, it also
+  /// describes what happened: the user stopped this specific operation from
+  /// beid's own UI (Cancel, Try Again, Start Over) before it reached — or
+  /// heard back from — the wallet.
   case cancelled
 }
 

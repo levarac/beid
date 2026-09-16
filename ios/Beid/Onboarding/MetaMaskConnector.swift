@@ -66,6 +66,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   private var account: MetaMaskWalletAccount?
   private var connectionAttemptID: UUID?
   private var connectionGenerationID: UUID?
+  private var connectAndSignGate: MetaMaskConnectAndSignResultGate?
   private var signAttemptID: UUID?
   private var signGate: MetaMaskSignResultGate?
 
@@ -82,6 +83,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   func configureIfNeeded() {}
 
   func connect() async {
+    invalidatePendingConnectionAttempt(with: .cancelled)
     guard transport.isWalletInstalled else {
       account = nil
       connectionGenerationID = nil
@@ -129,6 +131,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
     responseTimeout: TimeInterval = 90,
     onDispatched: (() -> Void)? = nil
   ) async -> Result<(LiveWalletAddress, String), WalletConnectorError> {
+    invalidatePendingConnectionAttempt(with: .cancelled)
     guard transport.isWalletInstalled else {
       account = nil
       connectionGenerationID = nil
@@ -140,40 +143,55 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
     connectionAttemptID = attemptID
     state = .connecting
     state = .awaitingApproval(uri: nil)
-    onDispatched?()
 
-    let result = await transport.connectAndSign(messageHex: messageHex)
-    // Known overclaim, tracked at beid#329, deliberately not fixed here: a
-    // light cancel during this await would also fall into this branch and
-    // report .notConnected, same overclaiming problem .cancelled exists to
-    // fix elsewhere. Unlike requestPersonalSign()'s signGate, there is no
-    // dedicated gate/continuation object for connectAndSign, so
-    // cancelPendingOperation() has nothing to attribute a precise cause to
-    // at this line — building that machinery for a path no current UI
-    // affordance can reach would be premature. See beid#329 for the full
-    // reasoning.
-    guard connectionAttemptID == attemptID else { return .failure(.notConnected) }
-    connectionAttemptID = nil
+    let result = await withCheckedContinuation { continuation in
+      let gate = MetaMaskConnectAndSignResultGate(continuation: continuation)
+      connectAndSignGate = gate
 
-    switch result {
-    case .success(let (account, signature)):
-      self.account = account
-      connectionGenerationID = UUID()
-      let live = LiveWalletAddress.fromConnectorResult(address: account.address, chainId: account.chainId)
-      state = .connected(live)
-      hintStore.save(CachedWalletHint(address: live.address, chainId: live.chainId))
-      return .success((live, signature))
-    case .failure(.rejected):
-      account = nil
-      connectionGenerationID = nil
-      state = .failed("Connection declined")
-      return .failure(.rejected)
-    case .failure(.failed(let message)):
-      account = nil
-      connectionGenerationID = nil
-      state = .failed(message)
-      return .failure(.relayFailure(message))
+      gate.requestTask = Task { @MainActor [weak self, weak gate] in
+        guard let self, let gate else { return }
+        guard self.connectionAttemptID == attemptID else {
+          gate.finish(.failure(.notConnected))
+          return
+        }
+
+        onDispatched?()
+        let result = await self.transport.connectAndSign(messageHex: messageHex)
+        // Non-destructive invalidation (`cancelPendingOperation()` or a
+        // newer attempt) resolves this one-shot gate as `.cancelled`.
+        // Explicit disconnect resolves it as `.notConnected`.
+        guard self.connectionAttemptID == attemptID else {
+          gate.finish(.failure(.notConnected))
+          return
+        }
+
+        switch result {
+        case .success(let (account, signature)):
+          self.account = account
+          self.connectionGenerationID = UUID()
+          let live = LiveWalletAddress.fromConnectorResult(address: account.address, chainId: account.chainId)
+          self.state = .connected(live)
+          self.hintStore.save(CachedWalletHint(address: live.address, chainId: live.chainId))
+          gate.finish(.success((live, signature)))
+        case .failure(.rejected):
+          self.account = nil
+          self.connectionGenerationID = nil
+          self.state = .failed("Connection declined")
+          gate.finish(.failure(.rejected))
+        case .failure(.failed(let message)):
+          self.account = nil
+          self.connectionGenerationID = nil
+          self.state = .failed(message)
+          gate.finish(.failure(.relayFailure(message)))
+        }
+      }
     }
+
+    if connectionAttemptID == attemptID {
+      connectionAttemptID = nil
+      connectAndSignGate = nil
+    }
+    return result
   }
 
   func requestPersonalSign(
@@ -237,7 +255,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   }
 
   func disconnect() {
-    connectionAttemptID = nil
+    invalidatePendingConnectionAttempt(with: .notConnected)
     connectionGenerationID = nil
     signAttemptID = nil
     signGate?.finish(.failure(.notConnected))
@@ -248,7 +266,7 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   }
 
   func cancelPendingOperation() {
-    connectionAttemptID = nil
+    invalidatePendingConnectionAttempt(with: .cancelled)
     connectionGenerationID = nil
     signAttemptID = nil
     signGate?.finish(.failure(.cancelled))
@@ -260,6 +278,32 @@ final class MetaMaskConnector: ObservableObject, WalletConnector {
   @discardableResult
   func handle(url: URL) -> Bool {
     transport.handle(url: url)
+  }
+
+  private func invalidatePendingConnectionAttempt(with error: WalletConnectorError) {
+    connectionAttemptID = nil
+    connectAndSignGate?.finish(.failure(error))
+    connectAndSignGate = nil
+  }
+}
+
+@MainActor
+private final class MetaMaskConnectAndSignResultGate {
+  private var continuation:
+    CheckedContinuation<Result<(LiveWalletAddress, String), WalletConnectorError>, Never>?
+  var requestTask: Task<Void, Never>?
+
+  init(
+    continuation: CheckedContinuation<Result<(LiveWalletAddress, String), WalletConnectorError>, Never>
+  ) {
+    self.continuation = continuation
+  }
+
+  func finish(_ result: Result<(LiveWalletAddress, String), WalletConnectorError>) {
+    requestTask?.cancel()
+    requestTask = nil
+    continuation?.resume(returning: result)
+    continuation = nil
   }
 }
 
