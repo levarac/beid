@@ -76,7 +76,8 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
       eventCodeHashHex: eventCodeHashHex,
       validFromEpochSeconds: nowEpochSeconds - 86_400,
       validUntilEpochSeconds: nowEpochSeconds + 86_400,
-      joinMode: joinMode
+      joinMode: joinMode,
+      keySetDigestHex: nil
     )
   }
 
