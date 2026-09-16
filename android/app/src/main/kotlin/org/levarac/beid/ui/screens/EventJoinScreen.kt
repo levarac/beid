@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -42,7 +43,11 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.levarac.beid.BuildConfig
 import org.levarac.beid.R
+import org.levarac.beid.sensing.ClockPreflightController
+import org.levarac.beid.sensing.OperatorDateHeaderSource
+import org.levarac.beid.sensing.operatorOriginOrNull
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
@@ -81,6 +86,10 @@ object EventJoinScreenTestTags {
     /** beid#463: fills the code field from the clipboard, so no one hand-types 64 hex characters. */
     const val PASTE_BUTTON = "event_join_paste_button"
     const val BIND_WALLET_BUTTON = "event_join_bind_wallet_button"
+
+    /** beid#464: the device-clock notice and its "Check again" action. */
+    const val CLOCK_PREFLIGHT_NOTICE = "event_join_clock_preflight_notice"
+    const val CLOCK_PREFLIGHT_RETRY = "event_join_clock_preflight_retry"
 
     fun nearbyEventCard(eventCodeHashHex: String): String = "nearby_event_card_$eventCodeHashHex"
 }
@@ -135,6 +144,7 @@ fun EventJoinScreen(
         onSimulateSignalLost = viewModel::simulateSignalLost,
         onResumeSensing = viewModel::resumeSensing,
         onStartWalletBinding = onStartWalletBinding,
+        onRetryClockPreflight = viewModel::retryClockPreflight,
         showEntranceCeremony = !viewModel.recordingCeremonyShown,
         onCeremonyFinished = viewModel::markRecordingCeremonyShown,
     )
@@ -184,6 +194,8 @@ fun EventJoinContent(
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
+    /** beid#464. A no-op on the read-only scenario/preview path, which has no preflight. */
+    onRetryClockPreflight: () -> Unit = {},
     showEntranceCeremony: Boolean = false,
     onCeremonyFinished: () -> Unit = {},
 ) {
@@ -237,6 +249,7 @@ fun EventJoinContent(
                     style = MaterialTheme.typography.bodyLarge,
                     color = BeidTheme.colors.textSecondary,
                 )
+                ClockPreflightNotice(state = state.clockPreflight, onRetry = onRetryClockPreflight)
                 NearbyEventCards(
                     cards = state.nearbyEventCards,
                     selectedEventHashHex = state.selectedNearbyEventHashHex,
@@ -589,7 +602,12 @@ fun EventJoinRoute(
     onStartWalletBinding: () -> Unit = {},
 ) {
     LaunchedEffect(session) { session.startNearbyEventDiscovery() }
-    val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session))
+    val clockPreflight = remember {
+        ClockPreflightController(
+            OperatorDateHeaderSource(operatorOriginOrNull(BuildConfig.EVENT_CODE_LOOKUP_URL_TEMPLATE)),
+        )
+    }
+    val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session, clockPreflight))
     EventJoinScreen(viewModel, onOpenAccount, onOpenManualEventCode, onStartWalletBinding)
 }
 
