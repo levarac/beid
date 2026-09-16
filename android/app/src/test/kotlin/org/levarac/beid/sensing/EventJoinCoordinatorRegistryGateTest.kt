@@ -93,6 +93,32 @@ class EventJoinCoordinatorRegistryGateTest {
         )
     }
 
+    /**
+     * beid#434 — the branch iOS calls `definitionNotEligible`.
+     *
+     * A read that succeeded is not by itself permission to join. Until the
+     * shared test factory landed (beid#473) this could not be expressed from a
+     * test on either platform, so a regression that admitted an ineligible
+     * definition would have kept both suites green.
+     *
+     * The definition here is valid and inside its window; the only thing wrong
+     * with it is that it is not open admission. So a refusal can only have come
+     * from the eligibility rule.
+     */
+    @Test
+    fun joinEventStartsNeitherJoinNorSensingWhenTheDefinitionIsNotOpenAdmission() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.DEFINITION_NOT_ELIGIBLE)
+        val coordinator = coordinator(engine, registry)
+
+        coordinator.joinEvent("GATED-EVENT")
+        runCurrent()
+
+        assertEquals(1, registry.definitionRequests, "the gate must have reached the definition read")
+        assertNoJoinAndNoSensing(engine, coordinator)
+        assertIs<EventJoinUiState.JoinFailed>(coordinator.state.value)
+    }
+
     @Test
     fun joinEventStartsNeitherJoinNorSensingWhileTheRegistryLookupIsPending() = runTest {
         val engine = FakeEventJoinEngine()
