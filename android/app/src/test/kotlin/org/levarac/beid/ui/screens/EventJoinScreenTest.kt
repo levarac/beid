@@ -26,10 +26,12 @@ import org.junit.runner.RunWith
 import org.levarac.beid.R
 import org.levarac.beid.scenario.AndroidDemoScenario
 import org.levarac.beid.scenario.snapshot
+import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanEventSession
 import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.sensing.TrustedDateSource
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -171,6 +173,37 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithText(context.getString(R.string.event_join_rescue_guidance)).assertIsDisplayed()
         composeTestRule.onNodeWithText(context.getString(R.string.event_join_code_label)).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertDoesNotExist()
+    }
+
+    /** beid#464: Route が controller を ViewModel に渡していなければ、画面を開いても時計は測られない。 */
+    @Test
+    fun theRouteHandsTheClockPreflightToTheScreenSoOpeningItMeasures() {
+        var fetches = 0
+        val source = object : TrustedDateSource {
+            override suspend fun fetchDateHeader(): String? {
+                fetches += 1
+                return "Wed, 16 Sep 2026 11:58:53 GMT"
+            }
+        }
+        val controller = ClockPreflightController(
+            source = source,
+            wallMillis = { 1_789_559_933_000L },
+            monotonicMillis = { 1_000L },
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinRoute(
+                    session = FakeEventJoinSession(),
+                    onOpenAccount = {},
+                    onOpenManualEventCode = {},
+                    clockPreflight = controller,
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, fetches)
     }
 
     @Test
