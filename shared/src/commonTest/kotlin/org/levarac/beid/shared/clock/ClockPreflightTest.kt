@@ -116,6 +116,11 @@ class ClockPreflightTest {
     }
 
     @Test
+    fun aPointIntervalIsWithin() {
+        assertEquals(ClockPreflightState.WITHIN_TOLERANCE, classifyClockOffset(0, 0, 300))
+    }
+
+    @Test
     fun invertedIntervalIsUndeterminable() {
         assertEquals(ClockPreflightState.UNDETERMINABLE, classifyClockOffset(10, -10, 300))
     }
@@ -174,6 +179,13 @@ class ClockPreflightTest {
         assertEquals(400L, sample.highMillis)
         assertEquals(1_789_559_933_000L, sample.wallAtMillis)
         assertEquals(5_000L, sample.monotonicAtMillis)
+    }
+
+    @Test
+    fun aZeroRoundTripIsAValidSample() {
+        val sample = assertNotNull(clockOffsetSampleFromHttpDate(0L, 10L, 10L, "Thu, 01 Jan 1970 00:00:00 GMT"))
+        assertEquals(-1_000L, sample.lowMillis)
+        assertEquals(0L, sample.highMillis)
     }
 
     @Test
@@ -331,6 +343,17 @@ class ClockPreflightTest {
         assertEquals(
             ClockPreflightState.UNDETERMINABLE,
             preflight.state(epochMillis + 29_600L + 1L, 5_000L + 1L, 300),
+        )
+    }
+
+    @Test
+    fun driftAllowanceIsACeilingOfElapsedOverTenThousand() {
+        val preflight = ClockPreflight()
+        // hi = 400 + 29 599 = 29 999 before drift; 10 001 ms elapsed → drift 2 → 30 001.
+        preflight.recordMeasurement(epochMillis, 5_000L, 5_400L, dateAtEpoch)
+        assertEquals(
+            ClockPreflightState.UNDETERMINABLE,
+            preflight.state(epochMillis + 29_599L + 10_001L, 5_000L + 10_001L, 300),
         )
     }
 
