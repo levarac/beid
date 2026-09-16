@@ -161,6 +161,61 @@ class ClockPreflightTest {
         assertNull(parseHttpDateEpochSeconds("Wed, 00 Sep 2026 00:00:00 GMT"))
     }
 
+    // 期待値はパーサではなく python3 の calendar.timegm で求めた。
+
+    @Test
+    fun parsesDatesInMonthsWhereTheDayOfYearArithmeticDiffers() {
+        // 3 月は month <= 2 の年繰り下げと月番号の付け替えの境目、7 月と 12 月は
+        // (153 * mp + 2) / 5 の切り捨てが +2 に依存する月。
+        assertEquals(1_773_567_000L, parseHttpDateEpochSeconds("Sun, 15 Mar 2026 09:30:00 GMT"))
+        assertEquals(1_782_907_200L, parseHttpDateEpochSeconds("Wed, 01 Jul 2026 12:00:00 GMT"))
+        assertEquals(1_798_761_599L, parseHttpDateEpochSeconds("Thu, 31 Dec 2026 23:59:59 GMT"))
+    }
+
+    @Test
+    fun parsesCenturyDatesThatOnlyTheFourHundredYearRuleGetsRight() {
+        // 2000 年は 400 で割り切れるのでうるう年。
+        assertEquals(951_825_600L, parseHttpDateEpochSeconds("Tue, 29 Feb 2000 12:00:00 GMT"))
+        // era の / 400 と、era 内の年数 yoe の / 100 が効く日付。
+        assertEquals(951_868_800L, parseHttpDateEpochSeconds("Wed, 01 Mar 2000 00:00:00 GMT"))
+        assertEquals(4_107_542_400L, parseHttpDateEpochSeconds("Mon, 01 Mar 2100 00:00:00 GMT"))
+    }
+
+    @Test
+    fun rejectsLeapDaysInCenturiesThatAreNotLeapYears() {
+        assertNull(parseHttpDateEpochSeconds("Thu, 29 Feb 1900 00:00:00 GMT"))
+        assertNull(parseHttpDateEpochSeconds("Mon, 29 Feb 2100 00:00:00 GMT"))
+    }
+
+    @Test
+    fun rejectsTheThirtiethOfFebruaryEvenInALeapYear() {
+        assertNull(parseHttpDateEpochSeconds("Wed, 30 Feb 2028 00:00:00 GMT"))
+    }
+
+    @Test
+    fun acceptsTheLastDayOfEveryThirtyDayMonthAndRejectsTheThirtyFirst() {
+        assertEquals(1_782_777_600L, parseHttpDateEpochSeconds("Tue, 30 Jun 2026 00:00:00 GMT"))
+        assertEquals(1_790_726_400L, parseHttpDateEpochSeconds("Wed, 30 Sep 2026 00:00:00 GMT"))
+        assertEquals(1_795_996_800L, parseHttpDateEpochSeconds("Mon, 30 Nov 2026 00:00:00 GMT"))
+        assertNull(parseHttpDateEpochSeconds("Wed, 31 Jun 2026 00:00:00 GMT"))
+        assertNull(parseHttpDateEpochSeconds("Thu, 31 Sep 2026 00:00:00 GMT"))
+        assertNull(parseHttpDateEpochSeconds("Tue, 31 Nov 2026 00:00:00 GMT"))
+    }
+
+    @Test
+    fun acceptsTheThirtyFirstOfALongMonthAndRejectsTheThirtySecond() {
+        assertEquals(1_785_456_000L, parseHttpDateEpochSeconds("Fri, 31 Jul 2026 00:00:00 GMT"))
+        assertEquals(1_793_404_800L, parseHttpDateEpochSeconds("Sat, 31 Oct 2026 00:00:00 GMT"))
+        assertNull(parseHttpDateEpochSeconds("Sun, 32 Jan 2026 00:00:00 GMT"))
+        assertNull(parseHttpDateEpochSeconds("Fri, 32 Dec 2026 00:00:00 GMT"))
+    }
+
+    @Test
+    fun aLeapSecondIsAcceptedAsTheFollowingSecond() {
+        // 2025-12-31T23:59:60 は 2026-01-01T00:00:00 と同じ Unix 秒になる。
+        assertEquals(1_767_225_600L, parseHttpDateEpochSeconds("Wed, 31 Dec 2025 23:59:60 GMT"))
+    }
+
     // ---- sample: bracketed by the device clock at request time
 
     @Test
@@ -354,6 +409,22 @@ class ClockPreflightTest {
         assertEquals(
             ClockPreflightState.UNDETERMINABLE,
             preflight.state(epochMillis + 29_599L + 10_001L, 5_000L + 10_001L, 300),
+        )
+    }
+
+    @Test
+    fun driftAllowanceWidensTheLowSideDownwardsToo() {
+        val preflight = measuredPreflight()
+        // -29 000 ms の時計変更で [-1 000, 400] は [-30 000, -28 600]。下端はちょうど -T なので WITHIN。
+        assertEquals(
+            ClockPreflightState.WITHIN_TOLERANCE,
+            preflight.state(epochMillis - 29_000L, 5_000L, 300),
+        )
+        // 10 000 ms 経つと drift 1 で下端は -30 001 になり、-T をまたぐので UNDETERMINABLE。
+        // 下端に drift を足す向きだと -29 999 のまま WITHIN に残る。
+        assertEquals(
+            ClockPreflightState.UNDETERMINABLE,
+            preflight.state(epochMillis - 29_000L + 10_000L, 5_000L + 10_000L, 300),
         )
     }
 
