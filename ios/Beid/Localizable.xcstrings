@@ -40,6 +40,11 @@
     "That event isn't open to join right now.": {},
     "beid couldn't verify that event. Check the code with the event organizer.": {},
     "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again.": {},
+    "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
+    "beid couldn't compare the clock with the network, so event times can't be trusted yet. Check your connection, then try again.": {},
+    "Check again": {},
+    "Couldn't check this device's clock": {},
+    "This device's clock is off": {},
     "demo.scenario.longDisplayNames.eventName": {
       "comment": "Long fictional event name used only in the Debug demo scenario to verify wrapping and hierarchy.",
       "localizations": {

@@ -8,8 +8,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.shared.clock.ClockPreflightState
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 import org.levarac.beid.shared.event.normalizedEventCodeOrNull
@@ -43,6 +45,11 @@ data class EventJoinScreenState(
     val searchOutcome: NearbyEventSearchOutcome = NearbyEventSearchOutcome.SEARCHING,
     /** See [org.levarac.beid.sensing.EventJoinSession.nearbyEventsOmitted]. */
     val nearbyEventsOmitted: Boolean = false,
+    /**
+     * beid#464's device-clock preflight. `null` until the first check has an
+     * answer; the notice renders only the two states the participant must be told.
+     */
+    val clockPreflight: ClockPreflightState? = null,
 )
 
 /**
@@ -54,11 +61,20 @@ data class EventJoinScreenState(
  * DECISIONS 2026-08-20), the same `shared/` decision iOS's join path
  * applies, not a native `isBlank()`/trim/lowercase check owned here.
  */
-class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
+class EventJoinViewModel(
+    private val session: EventJoinSession,
+    private val clockPreflight: ClockPreflightController? = null,
+) : ViewModel() {
     private val _uiState = MutableStateFlow(EventJoinScreenState(sessionState = session.state.value))
     val uiState: StateFlow<EventJoinScreenState> = _uiState.asStateFlow()
 
     init {
+        clockPreflight?.let { preflight ->
+            viewModelScope.launch {
+                preflight.state.collect { state -> _uiState.update { it.copy(clockPreflight = state) } }
+            }
+            viewModelScope.launch { preflight.check() }
+        }
         viewModelScope.launch {
             session.state.collect { sessionState ->
                 _uiState.update {
@@ -154,7 +170,15 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
             .firstOrNull { it.eventCodeHashHex == eventCodeHashHex }
             ?: return
         _uiState.update { it.copy(selectedNearbyEventHashHex = eventCodeHashHex) }
+        // Re-read the preflight at the moment of joining: shared re-measures an
+        // expired cache and catches a clock changed since the screen opened.
+        clockPreflight?.let { preflight -> viewModelScope.launch { preflight.check() } }
         session.joinNearbyEvent(eventCodeHashHex)
+    }
+
+    /** The notice's "Check again": always measures, even with a valid cache. */
+    fun retryClockPreflight() {
+        clockPreflight?.let { preflight -> viewModelScope.launch { preflight.check(force = true) } }
     }
 
     fun simulateSignalLost() = session.simulateSignalLost()
@@ -166,8 +190,11 @@ class EventJoinViewModel(private val session: EventJoinSession) : ViewModel() {
 
     fun markRecordingCeremonyShown() = session.markRecordingCeremonyShown()
 
-    class Factory(private val session: EventJoinSession) : ViewModelProvider.Factory {
+    class Factory(
+        private val session: EventJoinSession,
+        private val clockPreflight: ClockPreflightController? = null,
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = EventJoinViewModel(session) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = EventJoinViewModel(session, clockPreflight) as T
     }
 }

@@ -138,7 +138,11 @@ struct ScanFlowView: View {
 
   @ViewBuilder
   private var content: some View {
-    ScanFlowContent.view(phase: sensing.phase, sensing: sensing)
+    ScanFlowContent.view(
+      phase: sensing.phase,
+      sensing: sensing,
+      clockPreflight: coordinator.clockPreflight
+    )
   }
 }
 
@@ -171,11 +175,12 @@ enum ScanFlowContent {
   static func view(
     phase: ScanPhase,
     sensing: SensingCoordinator,
+    clockPreflight: ClockPreflightController? = nil,
     recordingCeremonyDwellNanos: UInt64 = 2_000_000_000
   ) -> some View {
     switch phase {
     case .idle, .sensing:
-      SensingView(sensing: sensing)
+      SensingView(sensing: sensing, clockPreflight: clockPreflight)
     case .eventFound(let event):
       EventFoundView(
         event: event,
