@@ -112,10 +112,12 @@ internal fun TestScope.promoteVectorCandidate(
     registry: FakeNearbyEventRegistry,
     definitionHashHex: String = NearbyEventPromotionFixture.DEFINITION_HASH_HEX,
     blockHashHex: String = NearbyEventPromotionFixture.BLOCK_HASH_HEX,
+    container: ByteArray = NearbyEventPromotionFixture.CONTAINER,
+    peripheralId: String = "peripheral-vector",
 ) {
     engine.emitVerifiedEnvelopeV2(
-        "peripheral-vector",
-        NearbyEventPromotionFixture.CONTAINER,
+        peripheralId,
+        container,
         NearbyEventPromotionFixture.ENIN,
     )
     runCurrent()
@@ -140,8 +142,10 @@ internal fun TestScope.joinPromotedVectorEvent(
     registry: FakeNearbyEventRegistry,
     definitionHashHex: String = NearbyEventPromotionFixture.DEFINITION_HASH_HEX,
     blockHashHex: String = NearbyEventPromotionFixture.BLOCK_HASH_HEX,
+    container: ByteArray = NearbyEventPromotionFixture.CONTAINER,
+    peripheralId: String = "peripheral-vector",
 ) {
-    promoteVectorCandidate(engine, registry, definitionHashHex, blockHashHex)
+    promoteVectorCandidate(engine, registry, definitionHashHex, blockHashHex, container, peripheralId)
     coordinator.joinNearbyEvent(NearbyEventPromotionFixture.EVENT_CODE_HASH)
     runCurrent()
 }

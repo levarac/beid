@@ -42,8 +42,13 @@ import org.levarac.parallax.registry.RegistryDefinitionRecord
  * different builder — that is the point of routing through the real decision.
  *
  * The cryptographic fields are fixed filler. Nothing in the join decision
- * inspects them, and a test that needs a real key, a real digest or real
- * signed bytes must not use this function.
+ * inspects them, and a test that needs a real key or real signed bytes must
+ * not use this function. The one exception is [keySetDigestHex]: barnard's
+ * `registryAgreement` compares the definition's key-set digest with the one a
+ * verified B005 envelope carries, so a test that drives barnard's real
+ * agreement against its conformance vector (levarac/dispatch#50's relay
+ * contract test) must be able to state the vector's digest. It still signs,
+ * verifies and decodes nothing.
  *
  * @param eventIdHex 32-byte event id, with or without the `0x` prefix.
  * @param definitionHashHex 32-byte definition digest the resolution reports.
@@ -53,6 +58,7 @@ import org.levarac.parallax.registry.RegistryDefinitionRecord
  * @param validUntilEpochSeconds inclusive end of the definition's validity.
  * @param joinMode [EventJoinMode.OPEN] admits; [EventJoinMode.GATED] is
  *   refused by the gate, which is how a test covers that branch.
+ * @param keySetDigestHex optional 32-byte key-set digest; zero filler when null.
  */
 public fun createEventDefinitionResolutionForTesting(
     eventIdHex: String,
@@ -62,6 +68,7 @@ public fun createEventDefinitionResolutionForTesting(
     validFromEpochSeconds: Long,
     validUntilEpochSeconds: Long,
     joinMode: EventJoinMode = EventJoinMode.OPEN,
+    keySetDigestHex: String? = null,
 ): EventDefinitionResolution {
     val eventId = ByteString32(eventIdHex.testSupportHexBytes(expectedBytes = 32))
     val definition = EventDefinition(
@@ -70,7 +77,7 @@ public fun createEventDefinitionResolutionForTesting(
         registrar = Address20(ByteArray(20)),
         anchorOperator = Address20(ByteArray(20)),
         nonce = ByteString32(ByteArray(32)),
-        keySetDigest = ByteString32(ByteArray(32)),
+        keySetDigest = ByteString32(keySetDigestHex?.testSupportHexBytes(expectedBytes = 32) ?: ByteArray(32)),
         sequence = ProtocolUInt(1L),
         previousDefinitionDigest = ByteString32(ByteArray(32)),
         eventCodeHash = eventCodeHashHex?.let { it.testSupportHexBytes(expectedBytes = 8) },

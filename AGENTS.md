@@ -47,12 +47,17 @@ change. Repository-wide safety and delivery rules in this file still apply.
 At the verification point above, the walking skeleton is wired into both apps.
 The shared unsent-window ledger reducer and snapshot codec are also wired into
 the iOS production `SensingCoordinator`; native snapshot stores exist on both
-platforms. Android's ledger still has no production writer: #121's list reads
-its own `ProofRecordStore`, not the unsent-window ledger, and Android has no
-submission path to drain that ledger, so the ledger has neither producer nor
-consumer there. #235 landed the signing primitive and the observation hooks
-but deliberately not the writer, because what `persistedObservationReference`
-should name depends on who drains the ledger, which is undecided.
+platforms. Android's ledger now has both a production writer and a drain
+(measured 2026-09-16 against `ab135d5`): #235 landed the signing primitive
+and the observation hooks but not the writer; #332 added the writer
+(`WindowObservationAccumulator` persisting through `UnsentWindowLedgerStore`),
+and #525 added `WindowObservationSubmissionDrain`, which POSTs the signed
+observations that writer leaves on disk. `WindowObservationRuntimeOwner.acquire`
+builds the two together, and `EventJoinCoordinator` acquires them only when it
+is given `ledgerFilesDir`, which its production `Activity` constructor passes.
+A coordinator built without `ledgerFilesDir` has neither; a test that injects
+an accumulator instead gets the writer but no drain. #121's records list still
+reads its own `ProofRecordStore`, not the unsent-window ledger.
 Android's screen set has grown since that verification point and this
 paragraph was measured again on 2026-09-03 against `d267fb5`. Android now has
 six screens—Welcome, Bluetooth permission, Bluetooth off, Join event, Account,
@@ -82,6 +87,9 @@ Do not restate "Android has only one screen"—that was true when Issue #117
 was filed and has not been true since #119/#120/#123/#126/#118 landed.
 Do not restate that Android lacks owner-key binding or a records list either;
 both landed on 2026-09-01 and 2026-09-03 respectively.
+Do not restate that Android's unsent-window ledger has no writer or no
+consumer; the writer landed in #332 (2026-09-04) and the drain in #525
+(2026-09-12).
 The iOS coordinator owns one native `SensingCryptography` facade, with
 `BarnardSensingCryptography` as its production implementation, instead of
 retaining `BarnardIdentity` directly. That facade is a native testability
