@@ -251,9 +251,16 @@ final class ClockPreflightTests: XCTestCase {
 
   /// The eligibility guard stays in front of both effects: a card shared did
   /// not make joinable neither joins nor spends a request on the clock.
+  ///
+  /// The clock half is an inverted expectation rather than a count read after
+  /// one yield, because `fetchDateHeader` runs off the main actor: a single
+  /// yield does not guarantee a fetch would have been observed, so the count
+  /// alone would read as zero even if the guard had moved.
   func testTappingACardSharedDidNotMakeJoinableNeitherChecksNorJoins() async {
     let clocks = Clocks(wall: serverMillis, monotonic: 1_000)
-    let source = FakeSource(header: serverDate)
+    let neverFetched = expectation(description: "a card that cannot be joined never reads the clock")
+    neverFetched.isInverted = true
+    let source = FakeSource(header: serverDate) { neverFetched.fulfill() }
     let preflight = controller(clocks, source)
     let engine = RecordingEventJoinControl()
     let coordinator = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
@@ -268,8 +275,8 @@ final class ClockPreflightTests: XCTestCase {
 
     SensingView(sensing: coordinator, clockPreflight: preflight)
       .joinNearbyEventTapped(notJoinable)
-    await Task.yield()
 
+    await fulfillment(of: [neverFetched], timeout: 0.5)
     XCTAssertEqual(source.fetches, 0)
     XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
     XCTAssertNil(preflight.stateKey)
