@@ -32,15 +32,21 @@ import XCTest
 /// ending the session closes the window into the report store and hands it to
 /// the submission runtime through `WindowReportSubmissionRuntimeProtocol`.
 ///
+/// The envelope enters through the production entry.
+/// `handleObservedEventInfoEnvelopeV2(_:)` is the body of `handle(_:)`'s
+/// `.eventInfoEnvelopeV2` case: the verification guard, the mapping from the
+/// event's fields onto the recording call, and the agreement closure that case
+/// used to build inline. `BarnardEventInfoEnvelopeV2Event` has no public
+/// initializer, so what arrives is a stub conforming to
+/// `ObservedEventInfoEnvelopeV2` carrying barnard's own verified envelope.
+/// No part of the decision is restated in this file, so a regression confined
+/// to the production closure does turn this test red (beid#571).
+///
 /// Not driven:
-/// - `SensingCoordinator.handle(_:)`'s `.eventInfoEnvelopeV2` case, including
-///   the agreement closure it builds. `BarnardEventInfoEnvelopeV2Event` has no
-///   public initializer, so this test enters at `handleEventInfoEnvelopeV2(...)`
-///   with the fields that case passes and a copy of its closure's expression
-///   written here. A regression confined to the production closure would not
-///   turn this test red. The test also passes `observedAtEpochMillis`, which
-///   that case leaves to its default; the default reads the injected
-///   `nearbyDiscoveryClock`, which returns the same value.
+/// - The single line `handle(_:)` keeps: `case .eventInfoEnvelopeV2(let event)`
+///   forwarding to the seam. Deleting that line falls into `default: break`,
+///   and no test in this bundle notices. Everything the case used to decide
+///   now sits below it.
 /// - The real `ReportSubmissionRuntime`. The runtime here is
 ///   `RelayedWindowSubmissionSpy`, which only records the
 ///   `captureAndQueueWindow` hand-off, so the real runtime's queue and send
@@ -66,7 +72,11 @@ final class RelayedEventInfoContractTests: XCTestCase {
   /// ENIN 6_000_000, inside `[validFrom, relayExpires)`.
   private static let currentEnin: Int64 = 6_000_000
   private static let nowEpochMillis: Int64 = 1_800_000_000_000
-  private static let relayerPeripheralId = "peripheral-relaying-participant"
+  /// barnard reports the relayer as a `UUID`; the coordinator records its
+  /// `uuidString`, which is what the discovery snapshot is asserted against.
+  private static let relayerPeripheralId = UUID(
+    uuidString: "0BE1D000-0000-4000-8000-000000000571"
+  )!
 
   func testRelayedEventInfoFromAParticipantReachesJoinAndAQueuedRecord() async throws {
     let sourceEnvelope = try XCTUnwrap(Self.bytes(fromHex: Self.sourceEnvelopeHex))
@@ -106,26 +116,26 @@ final class RelayedEventInfoContractTests: XCTestCase {
       submission: submission
     )
 
-    // The fields `handle(_:)`'s `.eventInfoEnvelopeV2` case passes, with a
-    // copy of its agreement closure, plus an explicit `observedAtEpochMillis`
-    // equal to what that case's default reads from `nearbyDiscoveryClock`.
-    coordinator.handleEventInfoEnvelopeV2(
-      peripheralId: Self.relayerPeripheralId,
-      eventDisplayName: verified.eventDisplayName,
-      eventCodeHash: Data(verified.eventCodeHash),
-      rawContainer: Data(relayedContainer),
-      verifiedEventIdHex: "0x" + Self.hex(verified.eventId),
-      registryAgreement: { definition in
-        BarnardB005EnvelopeV2.registryAgreement(verified, definition: definition) == .agrees
-      },
-      observedAtEpochMillis: Self.nowEpochMillis
+    // Exactly what barnard hands `handle(_:)`, in the shape the production
+    // case reads: the relayer's id, the bytes off the wire, and barnard's own
+    // verified envelope. The observation time is left to the coordinator's
+    // injected `nearbyDiscoveryClock`, as production leaves it.
+    coordinator.handleObservedEventInfoEnvelopeV2(
+      StubObservedEventInfoEnvelopeV2(
+        peripheralId: Self.relayerPeripheralId,
+        rawContainer: Data(relayedContainer),
+        verifiedEnvelope: verified
+      )
     )
     try await waitUntil("the relayed candidate is registry-verified") {
       coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState == .REGISTRY_VERIFIED
     }
 
     let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
-    XCTAssertEqual(candidate.sourceAt(index: 0)?.peripheralId, Self.relayerPeripheralId)
+    XCTAssertEqual(
+      candidate.sourceAt(index: 0)?.peripheralId,
+      Self.relayerPeripheralId.uuidString
+    )
     XCTAssertNil(candidate.sourceAt(index: 1), "only the relayer was ever heard")
     XCTAssertEqual(candidate.rawEnvelopeContainerHex, Self.hex(relayedContainer))
 
@@ -238,6 +248,17 @@ final class RelayedEventInfoContractTests: XCTestCase {
     }
     return result
   }
+}
+
+/// The three fields `handle(_:)`'s `.eventInfoEnvelopeV2` case reads off
+/// barnard's event. barnard's own event type is unavailable to a test
+/// (`BarnardEventInfoEnvelopeV2Event` has no public initializer), but every
+/// field it carries is: the verified envelope here is the one barnard's real
+/// `verify` produced from the relayed container, not a synthesized stand-in.
+private struct StubObservedEventInfoEnvelopeV2: ObservedEventInfoEnvelopeV2 {
+  let peripheralId: UUID
+  let rawContainer: Data
+  let verifiedEnvelope: BarnardB005VerifiedEnvelope?
 }
 
 /// Records what the coordinator hands the submission runtime at window close.
