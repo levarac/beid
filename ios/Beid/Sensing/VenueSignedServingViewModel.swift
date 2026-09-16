@@ -142,10 +142,20 @@ final class VenueSignedServingViewModel: ObservableObject {
 
   @Published private(set) var hasUnsavedArtifact = false
 
+  /// The event of the permit that reached `installAndStart`, shown beside the
+  /// display name while serving (beid#531). Read off the installed permit, not
+  /// the import receipt: the permit is what is actually on the air, and the
+  /// operator needs this value precisely to tell one event's pack from
+  /// another's at the same venue.
   var servingEventIdHex: String? {
     guard case .serving = status else { return nil }
-    return workflow?.receipt?.identity.eventIdHex
+    return servingPermitIdentity?.eventIdHex
   }
+
+  /// Written only immediately before `status = .serving`, and read only
+  /// through `servingEventIdHex`'s `.serving` guard, so a value left from an
+  /// earlier permit is never exposed once serving ends.
+  private var servingPermitIdentity: VenueArtifactIdentity?
 
   var canonicalEventIdHexForAcquisition: String? { canonicalEventIdHex }
 
@@ -597,6 +607,7 @@ final class VenueSignedServingViewModel: ObservableObject {
       return
     }
 
+    servingPermitIdentity = permit.identity
     status = .serving(displayName: permit.displayName, stopAtUnixSeconds: permit.stopAtUnixSeconds)
 
     // Run a timer against the exclusive instant the permit fixed.
