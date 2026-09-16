@@ -251,6 +251,25 @@ class VenueCurrentLeaseTest {
     }
 
     @Test
+    fun aClockExactlyAtTheDefinitionValidUntilIsNotYetExpired() {
+        // validUntil is inclusive: the record check is `clock > record.validUntil`
+        // (VenueCurrentLease.kt:174), so the last second of the event still counts.
+        // Empty candidate list for the same reason as the test above: the only
+        // branch that could say expired here is the record check, and with no
+        // envelope on offer the non-expired answer is noCurrentEnvelope.
+        val decision = evaluateWith(emptyList(), clockSeconds = 1_800_003_299L)
+        assertNull(decision.lease)
+        assertEquals("noCurrentEnvelope", decision.blockCode)
+    }
+
+    @Test
+    fun aClockOneSecondBeforeTheDefinitionValidUntilIsNotExpired() {
+        val decision = evaluateWith(emptyList(), clockSeconds = 1_800_003_298L)
+        assertNull(decision.lease)
+        assertEquals("noCurrentEnvelope", decision.blockCode)
+    }
+
+    @Test
     fun aLeaseInsideTheSignedWindowIsPermitted() {
         // The over-fire witness. If any guard above fires when it should not,
         // the canonical in-window case blocks and this goes red.
