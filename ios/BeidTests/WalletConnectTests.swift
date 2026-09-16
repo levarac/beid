@@ -391,6 +391,103 @@ final class WalletConnectTests: XCTestCase {
     XCTAssertEqual(error, .rejected)
     XCTAssertEqual(connector.state, .failed("Connection declined"))
   }
+
+  func testCancelPendingOperationDuringConnectAndSignResolvesCancelled() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.suspendConnectAndSign = true
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    let connectAndSignTask = Task { await connector.connectAndSign(messageHex: "0xMESSAGE") }
+    await transport.waitUntilConnectAndSignStarts()
+
+    connector.cancelPendingOperation()
+    transport.completeConnectAndSign(
+      with: .success((MetaMaskWalletAccount(address: "0xLATE", chainId: "eip155:1"), "0xSIGNATURE"))
+    )
+
+    guard case .failure(let error) = await connectAndSignTask.value else {
+      XCTFail("expected cancellation")
+      return
+    }
+    XCTAssertEqual(error, .cancelled)
+  }
+
+  func testDisconnectDuringConnectAndSignResolvesNotConnected() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.suspendConnectAndSign = true
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    let connectAndSignTask = Task { await connector.connectAndSign(messageHex: "0xMESSAGE") }
+    await transport.waitUntilConnectAndSignStarts()
+
+    connector.disconnect()
+    transport.completeConnectAndSign(
+      with: .success((MetaMaskWalletAccount(address: "0xLATE", chainId: "eip155:1"), "0xSIGNATURE"))
+    )
+
+    guard case .failure(let error) = await connectAndSignTask.value else {
+      XCTFail("expected disconnected failure")
+      return
+    }
+    XCTAssertEqual(error, .notConnected)
+    XCTAssertEqual(connector.state, .idle)
+    XCTAssertEqual(transport.disconnectCount, 1)
+  }
+
+  func testNewConnectAndSignSupersedesPendingAttemptAsCancelled() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.suspendConnectAndSign = true
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    let firstTask = Task { await connector.connectAndSign(messageHex: "0xFIRST") }
+    await transport.waitUntilConnectAndSignStarts()
+
+    transport.suspendConnectAndSign = false
+    transport.connectAndSignResult = .success(
+      (MetaMaskWalletAccount(address: "0xCURRENT", chainId: "eip155:1"), "0xCURRENT_SIGNATURE")
+    )
+    let currentResult = await connector.connectAndSign(messageHex: "0xCURRENT")
+    transport.completeConnectAndSign(
+      with: .success((MetaMaskWalletAccount(address: "0xSTALE", chainId: "eip155:1"), "0xSTALE_SIGNATURE"))
+    )
+
+    guard case .failure(let firstError) = await firstTask.value else {
+      XCTFail("expected the superseded attempt to fail")
+      return
+    }
+    XCTAssertEqual(firstError, .cancelled)
+    guard case .success(let (live, signature)) = currentResult else {
+      XCTFail("expected the current attempt to succeed")
+      return
+    }
+    XCTAssertEqual(live.address, "0xCURRENT")
+    XCTAssertEqual(signature, "0xCURRENT_SIGNATURE")
+    XCTAssertEqual(connector.state, .connected(live))
+  }
+
+  func testNewConnectSupersedesPendingConnectAndSignAsCancelled() async {
+    let transport = FakeMetaMaskTransport(isWalletInstalled: true)
+    transport.suspendConnectAndSign = true
+    let connector = MetaMaskConnector(transport: transport, hintStore: makeIsolatedHintStore())
+    let firstTask = Task { await connector.connectAndSign(messageHex: "0xFIRST") }
+    await transport.waitUntilConnectAndSignStarts()
+
+    transport.connectResult = .success(
+      MetaMaskWalletAccount(address: "0xCURRENT", chainId: "eip155:1")
+    )
+    await connector.connect()
+    transport.completeConnectAndSign(
+      with: .success((MetaMaskWalletAccount(address: "0xSTALE", chainId: "eip155:1"), "0xSTALE_SIGNATURE"))
+    )
+
+    guard case .failure(let firstError) = await firstTask.value else {
+      XCTFail("expected the superseded attempt to fail")
+      return
+    }
+    XCTAssertEqual(firstError, .cancelled)
+    XCTAssertEqual(connector.address, "0xCURRENT")
+    XCTAssertEqual(
+      connector.state,
+      .connected(LiveWalletAddress.fromConnectorResult(address: "0xCURRENT", chainId: "eip155:1"))
+    )
+  }
 }
 
 @MainActor
@@ -403,6 +500,7 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   var signatureResult: Result<String, MetaMaskTransportError> =
     .failure(.failed("No signature result"))
   var suspendConnect = false
+  var suspendConnectAndSign = false
   var suspendPersonalSign = false
   private(set) var connectCount = 0
   private(set) var disconnectCount = 0
@@ -412,6 +510,8 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   private(set) var connectAndSignMessage: String?
   private var connectContinuation:
     CheckedContinuation<Result<MetaMaskWalletAccount, MetaMaskTransportError>, Never>?
+  private var connectAndSignContinuation:
+    CheckedContinuation<Result<(MetaMaskWalletAccount, String), MetaMaskTransportError>, Never>?
   private var personalSignContinuation:
     CheckedContinuation<Result<String, MetaMaskTransportError>, Never>?
 
@@ -433,7 +533,10 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   ) async -> Result<(MetaMaskWalletAccount, String), MetaMaskTransportError> {
     connectAndSignMessage = messageHex
     sdkConnected = true
-    return connectAndSignResult
+    guard suspendConnectAndSign else { return connectAndSignResult }
+    return await withCheckedContinuation { continuation in
+      connectAndSignContinuation = continuation
+    }
   }
 
   func requestPersonalSign(
@@ -469,6 +572,19 @@ private final class FakeMetaMaskTransport: MetaMaskTransport {
   ) {
     connectContinuation?.resume(returning: result)
     connectContinuation = nil
+  }
+
+  func waitUntilConnectAndSignStarts() async {
+    while connectAndSignMessage == nil {
+      await Task.yield()
+    }
+  }
+
+  func completeConnectAndSign(
+    with result: Result<(MetaMaskWalletAccount, String), MetaMaskTransportError>
+  ) {
+    connectAndSignContinuation?.resume(returning: result)
+    connectAndSignContinuation = nil
   }
 
   func waitUntilPersonalSignStarts() async {
