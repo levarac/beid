@@ -1,24 +1,34 @@
 package org.levarac.beid.sensing
 
+import org.levarac.beid.shared.jointestsupport.createEventDefinitionResolutionForTesting
 import org.levarac.parallax.registry.EventDefinitionResolution
+import org.levarac.parallax.registry.EventJoinMode
 
 /**
  * Drives [EventJoinCoordinator]'s beid#374 join gate from an app-module test.
  *
- * ## What this fake deliberately cannot do
+ * ## What this fake can and cannot answer
  *
- * It cannot answer with a successful read. [EventDefinitionResolution] carries
- * an `internal` constructor scoped to the shared module, so no code in this
- * module — production or test — can build one. This fake can therefore only
- * express a read that FAILED, by answering null, and a read that is still
- * PENDING, by never answering at all.
+ * It used to be unable to answer with a successful read at all:
+ * [EventDefinitionResolution] carries an `internal` constructor scoped to the
+ * shared module, so nothing in this module could build one. The doc here said
+ * so, and treated it as the guarantee working rather than a gap.
  *
- * That is the guarantee working rather than a gap in the fixture, and it is
- * exactly the pair the issue's acceptance criterion asks for: calling join
- * while the registry lookup has failed, or while it is delayed, must start
- * neither join nor sensing. A test that wants a *successful* join reaches it
- * by walking the real promotion path into a registry-verified candidate
- * instead, which is a stronger thing to assert than a fabricated success.
+ * **It was a gap.** The consequence was that the gate's *admitting* branch and
+ * its "read succeeded but the definition is not eligible" branch had no test
+ * on either platform — a regression that refused every event, or admitted an
+ * ineligible one, would have kept both suites green. beid#473 added a shared
+ * factory (`createEventDefinitionResolutionForTesting`) and this fake now uses
+ * it for [Answer.DEFINITION_NOT_ELIGIBLE].
+ *
+ * Still out of reach here, and deliberately: a read whose resolution reports
+ * `isSuccess == false`. The adapter filters those to null before the gate sees
+ * them, which is the contract both platforms rely on, so answering null is the
+ * shape production actually produces.
+ *
+ * A test that wants a *successful* join still reaches it by walking the real
+ * promotion path into a registry-verified candidate, which is a stronger thing
+ * to assert than a fabricated success.
  */
 internal class FakeEventJoinRegistry(
     private val answer: Answer = Answer.LOOKUP_FAILS,
@@ -41,6 +51,16 @@ internal class FakeEventJoinRegistry(
 
         /** Neither call ever answers — the read is still outstanding. */
         HOLDS,
+
+        /**
+         * The read succeeds and the definition is real, and the gate refuses it
+         * anyway because it is not open admission.
+         *
+         * This is the branch iOS calls `definitionNotEligible`. It was
+         * unreachable from a test until beid#473, so "a successful read is not
+         * by itself permission to join" was asserted nowhere (beid#434).
+         */
+        DEFINITION_NOT_ELIGIBLE,
     }
 
     var lookupRequests: Int = 0
@@ -56,7 +76,7 @@ internal class FakeEventJoinRegistry(
         when (answer) {
             Answer.HOLDS -> heldLookup = completion
             Answer.LOOKUP_FAILS -> completion(null, errorCode)
-            Answer.DEFINITION_FAILS -> completion(eventIdHex, null)
+            Answer.DEFINITION_FAILS, Answer.DEFINITION_NOT_ELIGIBLE -> completion(eventIdHex, null)
         }
     }
 
@@ -69,6 +89,7 @@ internal class FakeEventJoinRegistry(
         when (answer) {
             Answer.HOLDS -> heldDefinition = completion
             Answer.LOOKUP_FAILS, Answer.DEFINITION_FAILS -> completion(null, errorCode)
+            Answer.DEFINITION_NOT_ELIGIBLE -> completion(ineligibleResolution(useTimeEpochSeconds), null)
         }
     }
 
@@ -85,6 +106,22 @@ internal class FakeEventJoinRegistry(
         heldDefinition = null
         completion(null, errorCode)
     }
+
+    /**
+     * A definition the gate refuses for one reason: it is [EventJoinMode.GATED],
+     * not open admission. Everything else about it is valid and inside its
+     * validity window, so a refusal here can only have come from the eligibility
+     * rule and not from missing evidence.
+     */
+    private fun ineligibleResolution(nowEpochSeconds: Long): EventDefinitionResolution =
+        createEventDefinitionResolutionForTesting(
+            eventIdHex = eventIdHex,
+            definitionHashHex = "bb".repeat(32),
+            blockHashHex = "cc".repeat(32),
+            validFromEpochSeconds = nowEpochSeconds - 86_400,
+            validUntilEpochSeconds = nowEpochSeconds + 86_400,
+            joinMode = EventJoinMode.GATED,
+        )
 
     companion object {
         val DEFAULT_EVENT_ID_HEX = "21".repeat(32)
