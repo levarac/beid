@@ -33,6 +33,8 @@ final class AppCoordinator: ObservableObject {
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
   let bluetoothMonitor = BluetoothMonitor()
+  /// beid#464's device-clock preflight, checked each time the scan flow opens.
+  let clockPreflight: ClockPreflightController
   private let userDefaults: UserDefaults
   private let permissionEvaluation: () async -> Void
 
@@ -58,6 +60,9 @@ final class AppCoordinator: ObservableObject {
   ) {
     self.registryClient = registryClient
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
+    self.clockPreflight = ClockPreflightController(
+      source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())
+    )
     self.walletConnector = walletConnector
     self.proofStore = proofStore ?? ProofStore()
     self.userDefaults = userDefaults
@@ -524,9 +529,31 @@ final class AppCoordinator: ObservableObject {
 
   // MARK: - Scan flow
 
+  /// The operator origin the preflight reads `Date` from — the event code
+  /// lookup template's origin, the same operator the join flow already
+  /// depends on. `-beid-clock-preflight-fixture` removes it in DEBUG so a UI
+  /// test drives the real controller and shared decision to "undeterminable"
+  /// without depending on the network.
+  private static func clockPreflightOrigin(bundle: Bundle = .main) -> URL? {
+#if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
+      return nil
+    }
+#endif
+    return OperatorDateHeaderSource.origin(
+      fromTemplate: bundle.object(forInfoDictionaryKey: "BeidEventCodeLookupURLTemplate") as? String
+    )
+  }
+
   func startScan() {
     scanPresented = true
+    Task { await clockPreflight.check() }
 #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
+      // Stays on the pre-join Scan screen: no discovery, so the Simulator's
+      // DemoEvent script cannot move the phase past it.
+      return
+    }
     if ProcessInfo.processInfo.arguments.contains("-beid-join-refusal-fixture") {
       sensingCoordinator.injectJoinRefusalForUITesting()
       return

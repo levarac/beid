@@ -11,9 +11,12 @@ import Foundation
 /// floor (this repo's own commit date), which catches a device whose clock
 /// was never set or was reset to an implausible past. It does NOT attempt to
 /// detect a clock that is wrong in more subtle ways (skewed but plausible,
-/// or manually set forward) -- beid#464 is the named future preflight that
-/// takes on that job, for example by corroborating against a trusted network
-/// time source. `.unavailable` must stay reachable rather than dead code, so
+/// or manually set forward). beid#464 added that measurement as
+/// `ClockPreflightController` over shared `ClockPreflight` (operator `Date`
+/// header, `docs/decisions/issue-464-clock-skew-preflight.md`), but only
+/// surfaces it on the participant Scan screen: this clock does not consult
+/// it yet, and wiring its verdict into `.unavailable` is a separate
+/// fail-closed decision. `.unavailable` must stay reachable rather than dead code, so
 /// the floor exists specifically to keep it reachable on a real device
 /// (factory-reset devices and simulators without network time frequently
 /// boot at 2001-01-01) while still passing through every normal reading.
