@@ -600,13 +600,14 @@ fun EventJoinRoute(
     onOpenAccount: () -> Unit,
     onOpenManualEventCode: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
-) {
-    LaunchedEffect(session) { session.startNearbyEventDiscovery() }
-    val clockPreflight = remember {
+    /** beid#464。テストが偽の日付ソースを渡せるように引数にしている。本番は既定値だけを使う。 */
+    clockPreflight: ClockPreflightController = remember {
         ClockPreflightController(
             OperatorDateHeaderSource(operatorOriginOrNull(BuildConfig.EVENT_CODE_LOOKUP_URL_TEMPLATE)),
         )
-    }
+    },
+) {
+    LaunchedEffect(session) { session.startNearbyEventDiscovery() }
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session, clockPreflight))
     EventJoinScreen(viewModel, onOpenAccount, onOpenManualEventCode, onStartWalletBinding)
 }

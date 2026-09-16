@@ -12,9 +12,12 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.sensing.TrustedDateSource
+import org.levarac.beid.shared.clock.ClockPreflightState
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 
@@ -368,7 +371,100 @@ class EventJoinViewModelTest {
         assertEquals(NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED, viewModel.uiState.value.searchOutcome)
     }
 
+    // ---- beid#464: 端末時計 preflight の配線
+
+    /** 取得回数を数える日付ソース。サーバ時刻と同じ時計を返すので、測れば WITHIN になる。 */
+    private class CountingDateSource : TrustedDateSource {
+        var fetches = 0
+        override suspend fun fetchDateHeader(): String? {
+            fetches += 1
+            return SERVER_DATE
+        }
+    }
+
+    private class FakeClocks(var wall: Long = SERVER_MILLIS, var monotonic: Long = 1_000L)
+
+    private fun preflight(source: TrustedDateSource, clocks: FakeClocks) = ClockPreflightController(
+        source = source,
+        wallMillis = { clocks.wall },
+        monotonicMillis = { clocks.monotonic },
+        eninSeconds = 300,
+    )
+
+    @Test
+    fun openingTheScreenChecksTheDeviceClock() = runTest {
+        val source = CountingDateSource()
+        val viewModel = EventJoinViewModel(FakeEventJoinSession(), preflight(source, FakeClocks()))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, source.fetches)
+        assertEquals(ClockPreflightState.WITHIN_TOLERANCE, viewModel.uiState.value.clockPreflight)
+    }
+
+    @Test
+    fun joiningANearbyEventChecksTheDeviceClockAgain() = runTest {
+        val source = CountingDateSource()
+        val clocks = FakeClocks()
+        val session = FakeEventJoinSession(nearbyEventCards = listOf(joinableCard))
+        val viewModel = EventJoinViewModel(session, preflight(source, clocks))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // 画面を開いてから 12 ENIN (300 s x 12) 経ち、キャッシュが失効している。
+        clocks.wall += 3_600_000L
+        clocks.monotonic += 3_600_000L
+        viewModel.joinNearbyEvent(JOINABLE_HASH)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(2, source.fetches)
+        assertEquals(JOINABLE_HASH, session.joinedNearbyEventCodeHashHex)
+    }
+
+    @Test
+    fun joiningANearbyEventSeesAClockChangedSinceTheScreenOpened() = runTest {
+        val source = CountingDateSource()
+        val clocks = FakeClocks()
+        val viewModel = EventJoinViewModel(
+            FakeEventJoinSession(nearbyEventCards = listOf(joinableCard)),
+            preflight(source, clocks),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(ClockPreflightState.WITHIN_TOLERANCE, viewModel.uiState.value.clockPreflight)
+
+        // キャッシュは有効なまま、端末時計だけが 2 分進められた。
+        clocks.wall += 120_000L
+        viewModel.joinNearbyEvent(JOINABLE_HASH)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, source.fetches)
+        assertEquals(ClockPreflightState.OVER_TOLERANCE, viewModel.uiState.value.clockPreflight)
+    }
+
+    @Test
+    fun checkAgainMeasuresEvenWhileTheCacheIsValid() = runTest {
+        val source = CountingDateSource()
+        val viewModel = EventJoinViewModel(FakeEventJoinSession(), preflight(source, FakeClocks()))
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, source.fetches)
+
+        viewModel.retryClockPreflight()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(2, source.fetches)
+    }
+
+    private val joinableCard = NearbyEventCard(
+        beaconDisplayName = "Beacon name",
+        eventIdHex = "0x0123456789abcdef",
+        displayValidFromEpochSeconds = 1_700_000_000L,
+        displayValidUntilEpochSeconds = 1_700_003_600L,
+        eventCodeHashHex = JOINABLE_HASH,
+    )
+
     private companion object {
+        const val JOINABLE_HASH = "1111111111111111"
+        const val SERVER_DATE = "Wed, 16 Sep 2026 11:58:53 GMT"
+        const val SERVER_MILLIS = 1_789_559_933_000L
+
         /** A well-formed canonical open code: the lowercase hex of a whole 32-byte Event ID. */
         const val CANONICAL_OPEN_CODE =
             "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
