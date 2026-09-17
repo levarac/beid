@@ -18,7 +18,7 @@
     "Bluetooth is off": {},
     "Cancel": {},
     "Close": {
-      "comment": "Accessibility label for the scan flow's toolbar close (X) button that dismisses the scan modal."
+      "comment": "Dismisses the current screen without taking further action. Used as the accessibility label for the scan flow's toolbar close (X) button, and as the button on the wallet-binding failure sheet when trying again cannot help (an unsupported smart-contract wallet)."
     },
     "Connect Wallet": {},
     "Connect Your Wallet": {},

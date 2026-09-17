@@ -20,7 +20,10 @@ enum EventBindingState: Equatable {
   case connecting
   case awaitingApproval
   case bound(BindingRecord)
-  case failed(reason: String)
+  /// `retryable` is `false` only when retrying cannot succeed (today only
+  /// the ERC-6492 smart-wallet result, beid#382); the sheet then offers
+  /// Close instead of Try Again.
+  case failed(reason: String, retryable: Bool)
 }
 
 /// Outcome of one `completeBinding` call. Never persisted — not a new
