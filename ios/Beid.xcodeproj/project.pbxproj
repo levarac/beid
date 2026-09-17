@@ -1067,8 +1067,8 @@
 			projectRoot = "";
 			targets = (
 				F1A2076DAC925B3FCE29679E /* Beid */,
-				E9E7F7D494CC29DC094FBE3D /* BeidMetaMaskSupport */,
 				05E49B85AAFAF8B6FB088319 /* BeidLab */,
+				E9E7F7D494CC29DC094FBE3D /* BeidMetaMaskSupport */,
 				0116823B8A813ACB378BF8FB /* BeidTests */,
 				759056DA5DB7A35C5E0B53EE /* BeidUITests */,
 			);

@@ -30,11 +30,54 @@
 # This guard turns that silent, correct-looking failure into a loud one.
 # It is not a substitute for the drift check each caller runs afterwards:
 # drift catches a wrong committed project, this catches a wrong generator.
+#
+# The version check below closes the other half of "a wrong generator"
+# (beid#597, 2026-09-17). A DIFFERENT VERSION of XcodeGen, correctly
+# installed with its presets, writes a project that builds, passes this
+# script's preset check, and still differs from the pinned generator's
+# output. Observed: 2.46.0 orders the `targets` list as Beid,
+# BeidMetaMaskSupport, BeidLab where the pinned 2.45.3 writes Beid, BeidLab,
+# BeidMetaMaskSupport. Nothing local says anything is wrong; the first signal
+# is CI's drift check failing on a one-line reordering, after the run has
+# already taken the single macOS runner the TestFlight lane shares.
+#
+# The version lives in ios/ci_scripts/XCODEGEN_VERSION, which is the same
+# file CI reads, so the two cannot drift apart. As with the presets: do not
+# "fix" a mismatch by editing that file.
 
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ios_dir="$(cd "$script_dir/../ios" && pwd)"
+
+expected_version="$(tr -d '[:space:]' < "$ios_dir/ci_scripts/XCODEGEN_VERSION")"
+installed_version=""
+if command -v xcodegen >/dev/null 2>&1; then
+  installed_version="$(xcodegen --version | awk '{print $2}')"
+fi
+if [[ "$installed_version" != "$expected_version" ]]; then
+  {
+    echo "error: XcodeGen $expected_version is required; found ${installed_version:-none}."
+    echo
+    echo "A different version generates a project that builds and still does not"
+    echo "match the committed one, so the mismatch would first appear as a CI"
+    echo "drift failure rather than here."
+    echo
+    echo "To run the pinned version without disturbing an installed one:"
+    echo
+    echo "  curl -sL -o /tmp/xcodegen.zip \\"
+    echo "    https://github.com/yonaskolb/XcodeGen/releases/download/$expected_version/xcodegen.zip"
+    echo "  unzip -q -o /tmp/xcodegen.zip -d /tmp/xcodegen-$expected_version"
+    echo "  chmod +x /tmp/xcodegen-$expected_version/xcodegen/bin/xcodegen"
+    echo "  PATH=/tmp/xcodegen-$expected_version/xcodegen/bin:\$PATH scripts/xcodegen_generate_checked.sh"
+    echo
+    echo "That archive carries share/xcodegen/SettingPresets beside the binary,"
+    echo "so it does not hit the preset trap described above."
+    echo
+    echo "Do not 'fix' this by changing ios/ci_scripts/XCODEGEN_VERSION."
+  } >&2
+  exit 1
+fi
 
 cd "$ios_dir"
 
