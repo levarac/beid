@@ -117,6 +117,16 @@ internal class NearbyEventDiscoverySession(
     private val nowEpochMillis: () -> Long,
     private val coroutineScope: CoroutineScope,
     private val registry: NearbyEventRegistry? = null,
+    /**
+     * Where this session's diagnostic lines go (beid#584, feeding beid#583).
+     *
+     * Injected rather than called directly so a test can assert the lines
+     * themselves. The field capture behind beid#584 filtered logcat to the
+     * app's own pid and found sixty-nine lines, every one of them Android's
+     * `BluetoothGatt` and not one of them the app's, which is why a stuck
+     * verification could not be diagnosed while the rig was running.
+     */
+    private val log: (String) -> Unit = ::logRuntimeDiagnostic,
 ) {
     private val store = createNearbyEventDiscoveryStore()
     private val _candidates = MutableStateFlow(store.snapshot)
@@ -278,7 +288,9 @@ internal class NearbyEventDiscoverySession(
         repeat(snapshot.candidateCount) { index ->
             val candidate = snapshot.candidateAt(index) ?: return@repeat
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            val attemptNumber = candidate.registryResolutionFailureCount + 1
             val attempt = beginNearbyEventRegistryResolutionFromHex(store, hash) ?: return@repeat
+            log("registry_resolution_begin hash=$hash attempt=$attemptNumber")
             val generation = callbackGeneration
             // The whole body runs on coroutineScope's dispatcher (Main.immediate,
             // set by the caller), matching the iOS adapter's `Task { @MainActor }`
@@ -301,18 +313,18 @@ internal class NearbyEventDiscoverySession(
                         val result = if (resolution.errorCode == "event_code_lookup_not_found")
                             NearbyEventRegistryResolutionResult.NOT_REGISTERED
                         else NearbyEventRegistryResolutionResult.LOOKUP_UNAVAILABLE
-                        publishAndSchedule(
-                            completeNearbyEventRegistryResolutionFromHex(
-                                store = store,
-                                attempt = attempt,
-                                result = result,
-                                resolvedEventIdHex = null,
-                                verifiedDefinitionJoinMode = null,
-                                verifiedDefinitionEventIdHex = null,
-                                verifiedDefinitionEventCodeHashHex = null,
-                                envelopeAgreesWithRegistry = false,
-                            ).snapshot,
+                        val failure = completeNearbyEventRegistryResolutionFromHex(
+                            store = store,
+                            attempt = attempt,
+                            result = result,
+                            resolvedEventIdHex = null,
+                            verifiedDefinitionJoinMode = null,
+                            verifiedDefinitionEventIdHex = null,
+                            verifiedDefinitionEventCodeHashHex = null,
+                            envelopeAgreesWithRegistry = false,
                         )
+                        logResolutionOutcome(hash, "lookup", result, attemptNumber, failure.snapshot)
+                        publishAndSchedule(failure.snapshot)
                         return@launch
                     }
                     lateinit var verification: NearbyEventRegistryRequest
@@ -357,6 +369,7 @@ internal class NearbyEventDiscoverySession(
                                 verified.validUntilEpochSeconds,
                                 update.snapshot,
                             )
+                            logResolutionOutcome(hash, "definition", result, attemptNumber, update.snapshot)
                             publishAndSchedule(update.snapshot)
                         }
                     }
@@ -450,15 +463,53 @@ internal class NearbyEventDiscoverySession(
         val definitionExpiryAt = verifiedMetadataByHash.values.minOfOrNull {
             firstEpochMillisAfter(it.validUntilEpochSeconds)
         }
-        val nextExpiryAt = listOfNotNull(snapshot.nextExpiryAtEpochMillis, definitionExpiryAt).minOrNull() ?: return
-        val delayMillis = if (nextExpiryAt <= now) 0L else nextExpiryAt - now
+        // A due registry retry is a reason to wake up as much as an expiry is
+        // (beid#584). Without it a failed candidate waits for the next beacon
+        // to be re-observed, which is the retry trigger the field capture
+        // showed was not enough.
+        val nextWakeAt = listOfNotNull(
+            snapshot.nextExpiryAtEpochMillis,
+            definitionExpiryAt,
+            snapshot.nextRegistryRetryAtEpochMillis,
+        ).minOrNull() ?: return
+        val delayMillis = if (nextWakeAt <= now) 0L else nextWakeAt - now
         expiryJob = coroutineScope.launch {
             delay(delayMillis)
             expiryJob = null
             if (disposed) return@launch
             val update = refreshNearbyEventDiscovery(store, nowEpochMillis())
             publishAndSchedule(update.snapshot)
+            // The refresh above is what arms a retry whose backoff elapsed;
+            // this is what starts it. The shared reducer clears the deadline
+            // as it arms, so a retry nothing consumes cannot re-arm this
+            // wake-up at a zero delay forever.
+            resolveUnresolvedCandidates(update.snapshot)
         }
+    }
+
+    /**
+     * One line per finished resolution, saying what it answered and when the
+     * next attempt is due (beid#584, feeding beid#583).
+     *
+     * `retry_in_ms` is read back from the shared candidate rather than
+     * recomputed here, so the log cannot disagree with the schedule the
+     * reducer actually holds.
+     */
+    private fun logResolutionOutcome(
+        hash: String,
+        stage: String,
+        result: NearbyEventRegistryResolutionResult,
+        attemptNumber: Int,
+        snapshot: NearbyEventCandidates,
+    ) {
+        val candidate = (0 until snapshot.candidateCount)
+            .mapNotNull(snapshot::candidateAt)
+            .firstOrNull { it.eventCodeHashHex == hash }
+        val retryIn = candidate?.registryRetryAtEpochMillis?.minus(nowEpochMillis())
+        log(
+            "registry_resolution_outcome hash=$hash stage=$stage result=$result " +
+                "status=${candidate?.registryStatus} attempt=$attemptNumber retry_in_ms=${retryIn ?: "none"}",
+        )
     }
 
     /**

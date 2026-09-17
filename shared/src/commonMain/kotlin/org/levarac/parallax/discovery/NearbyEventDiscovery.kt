@@ -4,6 +4,22 @@ import org.levarac.parallax.registry.EventJoinMode
 import org.levarac.parallax.registry.eventCodeHashForOpenEventV1
 
 private const val DISCOVERY_TTL_MILLIS: Long = 300_000L
+
+/**
+ * How long a failed registry resolution waits before it may be tried again
+ * (beid#584). Element `n` is the wait after the `n`-th consecutive failure;
+ * every failure past the end of the list waits
+ * [STEADY_REGISTRY_RETRY_INTERVAL_MILLIS].
+ *
+ * Deliberately short and then flat. The first two entries cover the case this
+ * was written for, a read that failed for a reason that clears by itself, and
+ * the flat tail is what keeps a beacon that is simply not registered from
+ * turning into a request per hint against the operator endpoint. It is here
+ * rather than in either host so iOS and Android retry the same candidate at
+ * the same times.
+ */
+private val REGISTRY_RETRY_BACKOFF_MILLIS: LongArray = longArrayOf(5_000L, 30_000L)
+private const val STEADY_REGISTRY_RETRY_INTERVAL_MILLIS: Long = 120_000L
 private const val EVENT_CODE_HASH_BYTES: Int = 8
 private const val MAX_LIVE_SOURCE_COUNT: Int = 256
 
@@ -124,6 +140,19 @@ public class NearbyEventCandidate internal constructor(
     /** The verified definition's validity window, re-checked when a join is issued. */
     public val definitionValidFromEpochSeconds: Long?,
     public val definitionValidUntilEpochSeconds: Long?,
+    /**
+     * How many resolutions for this candidate have failed in a row, and when
+     * the next one becomes eligible, or null when none is scheduled
+     * (beid#584).
+     *
+     * Diagnostic and scheduling state, never a gate: [registryStatus] remains
+     * the only answer to whether this candidate is registered. A host reads
+     * the deadline to wake itself at the right time and to say, in one log
+     * line, when it will try again — the question the field capture behind
+     * this issue could not answer.
+     */
+    public val registryResolutionFailureCount: Int,
+    public val registryRetryAtEpochMillis: Long?,
     rawEnvelopeContainer: ByteArray?,
 ) {
     private val eventCodeHashBytes: ByteArray = eventCodeHash.copyOf()
@@ -192,6 +221,13 @@ public class NearbyEventCandidates internal constructor(
     public val additionalEventsOmitted: Boolean,
     public val hasLocallyEvictedSources: Boolean,
     public val nextExpiryAtEpochMillis: Long?,
+    /**
+     * The earliest moment any candidate's failed resolution may be retried,
+     * or null when none is scheduled (beid#584). A host with a timer wakes on
+     * the earlier of this and [nextExpiryAtEpochMillis]; one without simply
+     * retries at its next observation.
+     */
+    public val nextRegistryRetryAtEpochMillis: Long?,
     /** See [NearbyEventDiscoveryStore.unverifiedEnvelopeCount]. */
     public val unverifiedEnvelopeCount: Int,
 ) {
@@ -222,10 +258,11 @@ public class NearbyEventDiscoveryStore internal constructor() {
     internal val registry: MutableMap<EventHash, RegistryRecord> = mutableMapOf()
 
     /**
-     * Held apart from [registry] on purpose. `recordNearbyEventHint` replaces a
-     * whole [RegistryRecord] to retry a failed lookup, and a receiver state
-     * stored inside that record would be silently downgraded by an ordinary
-     * re-observation after a flaky registry read.
+     * Held apart from [registry] on purpose. A [RegistryRecord] is rewritten
+     * every time a resolution completes, including the retries beid#584
+     * added, and a receiver state stored inside it would be downgraded by an
+     * ordinary re-observation after a flaky registry read. The tier a hash
+     * has reached is not a property of any one registry attempt.
      */
     internal val receiverStates: MutableMap<EventHash, NearbyEventReceiverState> = mutableMapOf()
 
@@ -279,6 +316,24 @@ internal data class RegistryRecord(
      */
     var definitionValidFromEpochSeconds: Long? = null,
     var definitionValidUntilEpochSeconds: Long? = null,
+    /**
+     * How many resolutions for this hash have come back NOT_REGISTERED or
+     * LOOKUP_UNAVAILABLE in a row, and when the next one may start (beid#584).
+     *
+     * [failedResolutionCount] only ever grows within a session, so the
+     * backoff cannot be reset by a beacon that keeps re-appearing. Both are
+     * cleared by a resolution that stands, and both die with the record on
+     * TTL expiry or reset — a candidate that leaves and comes back genuinely
+     * starts over.
+     *
+     * [retryDue] rather than a return to [NearbyEventRegistryStatus.UNRESOLVED]
+     * because the status is what the card shows: resetting it would put the
+     * card back to "Checking" between attempts, which is the state beid#584
+     * exists to get rid of.
+     */
+    var failedResolutionCount: Int = 0,
+    var retryDue: Boolean = false,
+    var nextRetryAtEpochMillis: Long? = null,
 )
 
 /**
@@ -633,10 +688,6 @@ private fun recordObservation(
         )
         changed = true
     } else {
-        if (store.registry[eventHash]?.status == NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE) {
-            store.registry[eventHash] = RegistryRecord()
-            changed = true
-        }
         val censusChanged = censusProvided && !nullableByteArraysEqual(existing.censusCopy(), census)
         if (existing.eventDisplayName != eventDisplayName) {
             existing.eventDisplayName = eventDisplayName
@@ -656,12 +707,54 @@ private fun recordObservation(
         }
     }
 
+    // A hint is one of the two calls that carry a clock, so it is one of the
+    // two places a due retry can be armed. The other is
+    // `refreshNearbyEventDiscovery`; a host that only ever records hints
+    // still retries, just at whatever cadence its beacon arrives.
+    changed = armDueRegistryRetries(store, observedAtEpochMillis) || changed
+
     return NearbyEventDiscoveryUpdate(
         acceptedHint = true,
         changed = changed,
         snapshot = store.snapshot,
     )
 }
+
+/**
+ * Lets a failed resolution be tried again once its backoff has elapsed
+ * (beid#584).
+ *
+ * Arming clears [RegistryRecord.nextRetryAtEpochMillis] as it sets
+ * [RegistryRecord.retryDue], so a deadline in the past never survives in the
+ * snapshot. A host schedules its next wake-up from that snapshot value, and a
+ * deadline that stayed due would be a wake-up loop for any host that cannot
+ * consume the retry — one with no registry client configured, for instance.
+ */
+private fun armDueRegistryRetries(
+    store: NearbyEventDiscoveryStore,
+    nowEpochMillis: Long,
+): Boolean {
+    var changed = false
+    store.registry.values.forEach { record ->
+        if (record.attempt != null || record.retryDue) return@forEach
+        if (!record.status.isRetryableFailure()) return@forEach
+        val due = record.nextRetryAtEpochMillis ?: return@forEach
+        if (nowEpochMillis < due) return@forEach
+        record.retryDue = true
+        record.nextRetryAtEpochMillis = null
+        changed = true
+    }
+    return changed
+}
+
+private fun NearbyEventRegistryStatus.isRetryableFailure(): Boolean =
+    this == NearbyEventRegistryStatus.NOT_REGISTERED ||
+        this == NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE
+
+/** The wait after [failureCount] consecutive failed resolutions. */
+private fun registryRetryDelayMillis(failureCount: Int): Long =
+    REGISTRY_RETRY_BACKOFF_MILLIS.getOrNull(failureCount - 1)
+        ?: STEADY_REGISTRY_RETRY_INTERVAL_MILLIS
 
 /** Claims the one in-flight resolution slot for a live candidate. */
 public fun beginNearbyEventRegistryResolutionFromHex(
@@ -673,7 +766,12 @@ public fun beginNearbyEventRegistryResolutionFromHex(
     val hash = EventHash(bytes)
     if (store.sources.keys.none { it.eventHash == hash }) return null
     val record = store.registry.getOrPut(hash) { RegistryRecord() }
-    if (record.attempt != null || record.status != NearbyEventRegistryStatus.UNRESOLVED) return null
+    if (record.attempt != null) return null
+    // An armed retry is the second way in (beid#584). The record keeps the
+    // failed verdict it is showing until this attempt replaces it.
+    if (record.status != NearbyEventRegistryStatus.UNRESOLVED && !record.retryDue) return null
+    record.retryDue = false
+    record.nextRetryAtEpochMillis = null
     return NearbyEventRegistryResolutionAttempt(hash).also { record.attempt = it }
 }
 
@@ -751,6 +849,21 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     record.registryBlockHashHex = registryBlockHashHex.takeIf { registrationStands }
     record.definitionValidFromEpochSeconds = verifiedDefinitionValidFromEpochSeconds.takeIf { registrationStands }
     record.definitionValidUntilEpochSeconds = verifiedDefinitionValidUntilEpochSeconds.takeIf { registrationStands }
+    // The reducer holds no clock, and this call carries none. The hash's most
+    // recent observation is the closest instant it does have, and a live one
+    // is guaranteed: the attempt-active check above requires a live source.
+    // It runs slightly early against real time, which only ever means the
+    // retry becomes eligible at the next hint rather than one after it.
+    if (record.status.isRetryableFailure()) {
+        record.failedResolutionCount += 1
+        record.retryDue = false
+        record.nextRetryAtEpochMillis = store.lastSeenAtEpochMillis(hash)
+            ?.plusSaturating(registryRetryDelayMillis(record.failedResolutionCount))
+    } else {
+        record.failedResolutionCount = 0
+        record.retryDue = false
+        record.nextRetryAtEpochMillis = null
+    }
     // Runs after `record.status` is final, and is a no-op unless a
     // radio-self-verified envelope for this same hash is already on record.
     store.promoteToRegistryVerified(hash, envelopeAgreesWithRegistry)
@@ -809,7 +922,8 @@ public fun refreshNearbyEventDiscovery(
     if (nowEpochMillis < 0L) {
         return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
     }
-    val changed = expireAt(store, nowEpochMillis)
+    var changed = expireAt(store, nowEpochMillis)
+    changed = armDueRegistryRetries(store, nowEpochMillis) || changed
     return NearbyEventDiscoveryUpdate(
         acceptedHint = false,
         changed = changed,
@@ -937,6 +1051,8 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
                 registryBlockHashHex = registry[eventHash]?.registryBlockHashHex,
                 definitionValidFromEpochSeconds = registry[eventHash]?.definitionValidFromEpochSeconds,
                 definitionValidUntilEpochSeconds = registry[eventHash]?.definitionValidUntilEpochSeconds,
+                registryResolutionFailureCount = registry[eventHash]?.failedResolutionCount ?: 0,
+                registryRetryAtEpochMillis = registry[eventHash]?.nextRetryAtEpochMillis,
                 rawEnvelopeContainer = rawEnvelopeContainers[eventHash],
             )
         }
@@ -952,9 +1068,18 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
         additionalEventsOmitted = additionalEventsOmittedAtEpochMillis != null,
         hasLocallyEvictedSources = locallyEvictedSources,
         nextExpiryAtEpochMillis = expiryTimes.minOrNull(),
+        nextRegistryRetryAtEpochMillis = registry.values.mapNotNull { it.nextRetryAtEpochMillis }.minOrNull(),
         unverifiedEnvelopeCount = unverifiedEnvelopeCount,
     )
 }
+
+private fun NearbyEventDiscoveryStore.lastSeenAtEpochMillis(hash: EventHash): Long? =
+    sources.values
+        .filter { source -> source.eventHash == hash }
+        .maxOfOrNull { source -> source.lastSeenAtEpochMillis }
+
+private fun Long.plusSaturating(other: Long): Long =
+    if (this > Long.MAX_VALUE - other) Long.MAX_VALUE else this + other
 
 private fun expiryAt(observedAtEpochMillis: Long): Long =
     if (observedAtEpochMillis > Long.MAX_VALUE - DISCOVERY_TTL_MILLIS) {

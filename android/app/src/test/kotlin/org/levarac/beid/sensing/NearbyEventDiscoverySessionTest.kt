@@ -253,14 +253,128 @@ class NearbyEventDiscoverySessionTest {
         )
     }
 
+    /**
+     * beid#584's second defect: a resolution that failed was never tried
+     * again. NOT_REGISTERED was terminal for the whole discovery TTL, and
+     * LOOKUP_UNAVAILABLE was retried only when a beacon happened to be
+     * re-observed. Nothing woke the session on its own.
+     */
+    @Test
+    fun aFailedResolutionIsRetriedOnItsOwnTimerUntilItSucceeds() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry, baseEpochMillis = 150_000L)
+        session.recordRadioSelfVerifiedEnvelope(
+            "peripheral",
+            "Beacon announcement",
+            EVENT_HASH,
+            CONTAINER,
+        ) { true }
+        assertEquals(1, registry.lookupRequests)
+
+        registry.completeLookup(NearbyEventIdLookup(false, null, "protocol_error"))
+        runCurrent()
+        assertEquals(1, registry.lookupRequests)
+
+        advanceTimeBy(FIRST_RETRY_DELAY_MILLIS)
+        runCurrent()
+        assertEquals(2, registry.lookupRequests)
+
+        registry.completeLookup(NearbyEventIdLookup(false, null, "event_code_lookup_not_found"))
+        runCurrent()
+        advanceTimeBy(SECOND_RETRY_DELAY_MILLIS)
+        runCurrent()
+        assertEquals(3, registry.lookupRequests)
+
+        registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
+        runCurrent()
+        registry.completeDefinition(eligibleDefinition())
+        runCurrent()
+
+        val card = session.cards.value.single()
+        assertEquals(EVENT_ID_HEX, card.eventIdHex)
+        assertEquals(NearbyEventCardVerification.READY, card.verification)
+    }
+
+    @Test
+    fun aDueRetryNoOneCanConsumeDoesNotSpinTheExpiryTimer() = runTest {
+        // No registry client, which is the production default before one is
+        // configured: nothing consumes a due retry. The reducer must not
+        // leave the deadline in the past, or this session re-arms a zero
+        // delay wake-up forever.
+        val session = NearbyEventDiscoverySession(
+            nowEpochMillis = { testScheduler.currentTime },
+            coroutineScope = backgroundScope,
+        )
+
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        advanceTimeBy(FIRST_RETRY_DELAY_MILLIS * 4)
+        runCurrent()
+
+        assertEquals(1, session.cards.value.size)
+    }
+
+    @Test
+    fun everyResolutionAttemptAndOutcomeReachesTheLog() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val lines = mutableListOf<String>()
+        val session = session(registry, baseEpochMillis = 150_000L, log = lines::add)
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+
+        registry.completeLookup(NearbyEventIdLookup(false, null, "protocol_error"))
+        runCurrent()
+        advanceTimeBy(FIRST_RETRY_DELAY_MILLIS)
+        runCurrent()
+
+        val hash = EVENT_HASH.toHex()
+        assertEquals(
+            listOf(
+                "registry_resolution_begin hash=$hash attempt=1",
+                "registry_resolution_outcome hash=$hash stage=lookup result=LOOKUP_UNAVAILABLE " +
+                    "status=LOOKUP_UNAVAILABLE attempt=1 retry_in_ms=$FIRST_RETRY_DELAY_MILLIS",
+                "registry_resolution_begin hash=$hash attempt=2",
+            ),
+            lines,
+        )
+    }
+
+    @Test
+    fun aSuccessfulResolutionSaysSoInTheLogAndSchedulesNoRetry() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val lines = mutableListOf<String>()
+        val session = session(registry, baseEpochMillis = 150_000L, log = lines::add)
+        session.recordRadioSelfVerifiedEnvelope(
+            "peripheral",
+            "Beacon announcement",
+            EVENT_HASH,
+            CONTAINER,
+        ) { true }
+
+        registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
+        runCurrent()
+        registry.completeDefinition(eligibleDefinition())
+        runCurrent()
+
+        val hash = EVENT_HASH.toHex()
+        assertEquals(
+            listOf(
+                "registry_resolution_begin hash=$hash attempt=1",
+                "registry_resolution_outcome hash=$hash stage=definition result=VERIFIED " +
+                    "status=REGISTERED_VIA_OPERATOR_LOOKUP attempt=1 retry_in_ms=none",
+            ),
+            lines,
+        )
+    }
+
     private fun kotlinx.coroutines.test.TestScope.session(
         registry: NearbyEventRegistry,
         baseEpochMillis: Long = 0L,
+        log: (String) -> Unit = {},
     ): NearbyEventDiscoverySession =
         NearbyEventDiscoverySession(
             nowEpochMillis = { baseEpochMillis + testScheduler.currentTime },
             coroutineScope = backgroundScope,
             registry = registry,
+            log = log,
         )
 
     private class FakeNearbyEventRegistry : NearbyEventRegistry {
@@ -317,6 +431,10 @@ class NearbyEventDiscoverySessionTest {
         val CONTAINER = byteArrayOf(3, 0, 1, 2)
         val EVENT_HASH = eventCodeHashForOpenEventV1(EVENT_ID_BYTES)
         val EVENT_ID_HEX = "0x" + EVENT_ID_BYTES.toHex()
+
+        /** Mirrors the shared backoff schedule; see `NearbyEventDiscovery.kt`. */
+        const val FIRST_RETRY_DELAY_MILLIS = 5_000L
+        const val SECOND_RETRY_DELAY_MILLIS = 30_000L
 
         fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
