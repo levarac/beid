@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import Barnard
+import BarnardCore
 import BeidSharedKit
 import Foundation
 
@@ -51,12 +52,19 @@ protocol EventJoinControlling: AnyObject {
   /// Asks for the radio permissions sensing needs, and reports the only two
   /// fields this app reads.
   ///
-  /// Takes plain `Bool`s rather than Barnard's `BarnardPermissionStatus` for
-  /// the same reason `SensingCoordinator.handleEventInfoEnvelopeV2` takes
-  /// plain fields rather than `BarnardB005VerifiedEnvelope`: that struct has
-  /// no public initializer, so a test could not synthesize one, and a seam a
-  /// test cannot drive is not a seam. Passing the Barnard type here would
-  /// have left the gate exactly as unobservable as it was before this change.
+  /// Takes plain `Bool`s rather than Barnard's `BarnardPermissionStatus`
+  /// because that struct has no public initializer: a test could not
+  /// synthesize one, and a seam a test cannot drive is not a seam. Passing the
+  /// Barnard type here would have left the gate exactly as unobservable as it
+  /// was before this change.
+  ///
+  /// `ObservedEventInfoEnvelopeV2` below answers the same problem the other
+  /// way round, and the difference is worth keeping straight: a permission
+  /// status can only ever come from the radio, so a test has no way to obtain
+  /// a real one, whereas a `BarnardB005VerifiedEnvelope` is what barnard's own
+  /// `verify` returns from bytes a test can hold. There the un-constructible
+  /// thing is only the event wrapper, so the seam mirrors the wrapper and
+  /// keeps the genuine Barnard value inside it.
   ///
   /// Named apart from Barnard's own `requestPermissions(completion:)` for the
   /// reason `ParticipantRelayControlling.setParticipantRelayVerifier` records:
@@ -99,6 +107,36 @@ protocol EventJoinControlling: AnyObject {
   /// the self-call reason above.
   func currentJoinedEventCode() -> String?
 }
+
+/// The `.eventInfoEnvelopeV2` event as `SensingCoordinator` reads it: the
+/// relayer that served it, the container exactly as it came off the wire, and
+/// barnard's verdict on it.
+///
+/// This exists so the coordinator's handling of that event is reachable from a
+/// test (beid#571). `BarnardEventInfoEnvelopeV2Event` is a public struct whose
+/// memberwise initializer is internal to Barnard, so `BeidTests` cannot build
+/// one and could not enter `handle(_:)`'s case at all — the earlier contract
+/// test had to start below it and restate the case's agreement closure, which
+/// left the production closure untested.
+///
+/// Every field barnard's event carries here is one a test *can* obtain:
+/// `BarnardB005EnvelopeV2.verify` returns the verified envelope from container
+/// bytes. So the seam mirrors the wrapper rather than flattening it into plain
+/// fields, and the mapping onto the recording call stays on the tested side.
+///
+/// `receipt` is deliberately absent: the coordinator only ever asks whether
+/// there is a verified envelope, and a protocol that exposed more would invite
+/// a second reading of barnard's verdict here.
+protocol ObservedEventInfoEnvelopeV2 {
+  var peripheralId: UUID { get }
+  var rawContainer: Data { get }
+  var verifiedEnvelope: BarnardB005VerifiedEnvelope? { get }
+}
+
+/// Production conformance. It is empty on purpose: every member is already
+/// spelled this way on barnard's event, so the compiler — not a hand-written
+/// copy — is what keeps the tested seam and the real event in agreement.
+extension BarnardEventInfoEnvelopeV2Event: ObservedEventInfoEnvelopeV2 {}
 
 /// Production adapter. `onEvent` is satisfied by `BarnardEngine`'s own stored
 /// property; the rest forward, and none of them re-decide anything Barnard

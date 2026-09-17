@@ -1363,27 +1363,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: detection.reporterRpid
       )
     case .eventInfoEnvelopeV2(let envelopeEvent):
-      guard let envelope = envelopeEvent.verifiedEnvelope else {
-        // An unverified receipt carries no parsed identity: barnard's
-        // `verify` returns nothing for both a malformed container and a bad
-        // signature, so there is no event-code hash to key a candidate on.
-        // Counting it keeps the drop observable rather than silent.
-        Self.log.debug(
-          "b005 v2 envelope failed verification, container bytes: \(envelopeEvent.rawContainer.count, privacy: .public)"
-        )
-        handleUnverifiedEventInfoEnvelopeV2()
-        break
-      }
-      handleEventInfoEnvelopeV2(
-        peripheralId: envelopeEvent.peripheralId.uuidString,
-        eventDisplayName: envelope.eventDisplayName,
-        eventCodeHash: Data(envelope.eventCodeHash),
-        rawContainer: envelopeEvent.rawContainer,
-        verifiedEventIdHex: "0x" + Data(envelope.eventId).lowercaseHexString,
-        registryAgreement: { definition in
-          BarnardB005EnvelopeV2.registryAgreement(envelope, definition: definition) == .agrees
-        }
-      )
+      handleObservedEventInfoEnvelopeV2(envelopeEvent)
     case .relayDecision(let relay):
       handleRelayDecision(
         decision: relay.decision,
@@ -1400,7 +1380,24 @@ final class SensingCoordinator: ObservableObject {
         additionalNamesOmitted: hint.additionalNamesOmitted,
         additionalEventsOmitted: hint.additionalEventsOmitted
       )
-    default:
+    // The remaining cases are deliberately ignored, and they are named rather
+    // than swept up by `default:` so that this switch is exhaustive over
+    // `BarnardEvent`. Exhaustiveness is the point: with a `default:` here,
+    // deleting any one of the handled cases above compiles and silently stops
+    // handling that event, which is how beid#571's contract test could stay
+    // green with the `.eventInfoEnvelopeV2` case removed. Barnard is an SPM
+    // source dependency without library evolution, so the compiler treats this
+    // enum as frozen and needs no `@unknown default`.
+    //
+    // The cost, accepted on purpose: a barnard version that adds a case breaks
+    // this build. That is the intended prompt to decide what the new event
+    // means here, instead of dropping it without anyone noticing.
+    //
+    // Why each is ignored today: `.constraint` and `.error` are barnard's own
+    // diagnostics, which this app surfaces through its sensing state rather
+    // than by reacting per event, and `.rssiUpdate` is signal strength, which
+    // no beid decision reads.
+    case .constraint, .error, .rssiUpdate:
       break
     }
   }
@@ -2630,14 +2627,54 @@ final class SensingCoordinator: ObservableObject {
     resolveNearbyCandidates(update.snapshot)
   }
 
+  /// Handles one B005 v2 envelope receipt: the whole of what `handle(_:)`'s
+  /// `.eventInfoEnvelopeV2` case used to do inline.
+  ///
+  /// Not `private`, and taking `ObservedEventInfoEnvelopeV2` rather than
+  /// barnard's `BarnardEventInfoEnvelopeV2Event`, because that event type has
+  /// no public initializer: with the case written inline, no test could enter
+  /// it, and the contract test had to start at
+  /// `handleEventInfoEnvelopeV2(peripheralId:...)` with its own copy of the
+  /// agreement closure below — so a regression in that closure stayed green
+  /// (beid#571). Everything the case decided now lives here, where a test
+  /// drives it with barnard's own verified envelope; what remains above is a
+  /// single forwarding line the compiler checks against the conformance.
+  /// Production still only ever reaches this from `handle(_:)`, already
+  /// MainActor-isolated by `engine.onEvent`'s `Task { @MainActor in }`.
+  func handleObservedEventInfoEnvelopeV2(_ event: some ObservedEventInfoEnvelopeV2) {
+    guard let envelope = event.verifiedEnvelope else {
+      // An unverified receipt carries no parsed identity: barnard's
+      // `verify` returns nothing for both a malformed container and a bad
+      // signature, so there is no event-code hash to key a candidate on.
+      // Counting it keeps the drop observable rather than silent.
+      Self.log.debug(
+        "b005 v2 envelope failed verification, container bytes: \(event.rawContainer.count, privacy: .public)"
+      )
+      handleUnverifiedEventInfoEnvelopeV2()
+      return
+    }
+    handleEventInfoEnvelopeV2(
+      peripheralId: event.peripheralId.uuidString,
+      eventDisplayName: envelope.eventDisplayName,
+      eventCodeHash: Data(envelope.eventCodeHash),
+      rawContainer: event.rawContainer,
+      verifiedEventIdHex: "0x" + Data(envelope.eventId).lowercaseHexString,
+      registryAgreement: { definition in
+        BarnardB005EnvelopeV2.registryAgreement(envelope, definition: definition) == .agrees
+      }
+    )
+  }
+
   /// Records a B005 v2 envelope barnard reported as `RADIO_SELF_VERIFIED`.
   ///
   /// Not `private`, and taking plain fields plus an agreement closure rather
-  /// than barnard's event type, for the same reason
-  /// `handleEventInfoHint(peripheralId:...)` does: `BarnardB005VerifiedEnvelope`
-  /// has no public initializer, so `BeidTests` could otherwise not drive this
-  /// path at all. Production code only ever reaches it from `handle(_:)`,
-  /// already MainActor-isolated by `engine.onEvent`'s `Task { @MainActor in }`.
+  /// than barnard's event type, for the reason
+  /// `handleEventInfoHint(peripheralId:...)` records. Production reaches it
+  /// only from `handleObservedEventInfoEnvelopeV2(_:)` just above, which is
+  /// where the mapping from the event's fields and the agreement closure now
+  /// live; tests that only need a hash and a container still call this
+  /// directly. Both entries are MainActor-isolated by `engine.onEvent`'s
+  /// `Task { @MainActor in }`.
   ///
   /// This records an observation and raises the hash's receiver tier. It never
   /// joins, never touches session state, and never assigns REGISTRY_VERIFIED
