@@ -190,9 +190,16 @@ class NearbyEventReceiverStateTest {
     }
 
     /**
-     * `recordNearbyEventHint` replaces the whole registry record to retry a
-     * lookup that came back unavailable. That retry must not take the receiver
-     * state with it.
+     * A retry of a lookup that came back unavailable must not take the
+     * receiver state with it.
+     *
+     * The hint is recorded after the first backoff step rather than one
+     * millisecond later, because beid#584 replaced the immediate
+     * retry-on-every-hint with a bounded schedule, and the refresh before it
+     * is what anchors that schedule to a clock. The status the candidate
+     * shows is now the failed verdict it is still displaying, not UNRESOLVED:
+     * the retry is armed, and the record keeps its verdict until an attempt
+     * replaces it.
      */
     @Test
     fun retryingAFailedLookupKeepsTheReceiverState() {
@@ -210,11 +217,32 @@ class NearbyEventReceiverStateTest {
             envelopeAgreesWithRegistry = false,
         )
 
-        val update = recordNearbyEventHint(store, "p", "Event", HASH.hexBytes(), null, false, false, 2L)
+        // The completion only records how long to wait; this refresh is the
+        // clock reading that turns it into a deadline, exactly as the
+        // Android session's own post-completion refresh does.
+        refreshNearbyEventDiscovery(store, 1L)
+        val update = recordNearbyEventHint(store, "p", "Event", HASH.hexBytes(), null, false, false, 5_001L)
 
         val candidate = assertNotNull(update.snapshot.candidateAt(0))
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
-        assertEquals(NearbyEventRegistryStatus.UNRESOLVED, candidate.registryStatus)
+        assertEquals(NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE, candidate.registryStatus)
+
+        val retry = assertNotNull(beginNearbyEventRegistryResolutionFromHex(store, HASH))
+        completeNearbyEventRegistryResolutionFromHex(
+            store = store,
+            attempt = retry,
+            result = NearbyEventRegistryResolutionResult.VERIFIED,
+            resolvedEventIdHex = EVENT_ID,
+            verifiedDefinitionJoinMode = EventJoinMode.OPEN,
+            verifiedDefinitionEventIdHex = EVENT_ID,
+            verifiedDefinitionEventCodeHashHex = HASH,
+            envelopeAgreesWithRegistry = true,
+        )
+
+        assertEquals(
+            NearbyEventReceiverState.REGISTRY_VERIFIED,
+            assertNotNull(store.snapshot.candidateAt(0)).receiverState,
+        )
     }
 
     @Test

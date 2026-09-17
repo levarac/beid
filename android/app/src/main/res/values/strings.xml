@@ -78,6 +78,14 @@
     <string name="event_join_selected">Selected</string>
     <string name="event_join_candidate_verified">Ready to join</string>
     <string name="event_join_candidate_unverified">Checking</string>
+    <!-- Card status pill: a registry read for this beacon failed and the app is still trying. Kept as short as the other pill labels because it shares their one-line row. -->
+    <string name="event_join_candidate_retrying">Retrying</string>
+    <!-- Card status pill: the operator lookup answered that this beacon's event code is not registered. Not a network problem. -->
+    <string name="event_join_candidate_not_registered">Not registered</string>
+    <!-- Card body line, shown under a card that failed verification at least once. Says the app keeps trying so the user does not restart the scan. -->
+    <string name="event_join_verification_retrying">Could not verify this event yet. Still trying.</string>
+    <!-- Card body line: the lookup succeeded and answered that this event is unknown to the registry. The app keeps checking in case it is registered while the beacon is still nearby. -->
+    <string name="event_join_verification_not_registered">This event is not registered. Still checking.</string>
     <string name="event_join_join_affordance">Join this event</string>
 
     <!-- Peer first detected but not yet confirmed as a real event (below the confirm threshold). -->

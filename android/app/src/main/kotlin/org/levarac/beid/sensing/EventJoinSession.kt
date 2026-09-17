@@ -34,7 +34,42 @@ data class NearbyEventCard(
     val displayValidUntilEpochSeconds: Long? = null,
     /** Stable B005 candidate identity; unlike list position, it survives reordering. */
     val eventCodeHashHex: String,
+    /**
+     * Why this card is not joinable yet, for the status surface only
+     * (beid#584).
+     *
+     * Not a second joinability rule: [eventIdHex] stays the one answer to
+     * "may this be tapped", and this says only what the screen should tell
+     * the user while that answer is null. Before beid#584 there was nothing
+     * to say — a candidate whose registry read had failed and a candidate
+     * whose read had not returned yet both rendered as "Checking", so a
+     * permanent failure was indistinguishable from a slow success and the
+     * Pixel sat at "Waiting for event verification" for over an hour with no
+     * hint that anything had gone wrong.
+     */
+    val verification: NearbyEventCardVerification = NearbyEventCardVerification.CHECKING,
 )
+
+/**
+ * The status a nearby card shows while it is not joinable.
+ *
+ * [CHECKING] and [RETRYING] differ in what has already happened, not in what
+ * the app is doing next: both are waiting on a registry resolution, but
+ * [RETRYING] has at least one failed resolution behind it.
+ */
+enum class NearbyEventCardVerification {
+    /** No resolution has failed for this candidate yet. */
+    CHECKING,
+
+    /** A registry read failed; the bounded retry schedule is still running. */
+    RETRYING,
+
+    /** The operator lookup answered that this event code is not registered. */
+    NOT_REGISTERED,
+
+    /** Registry-verified and inside its validity window: the card is joinable. */
+    READY,
+}
 
 /**
  * The narrow surface [EventJoinViewModel][org.levarac.beid.ui.screens.EventJoinViewModel]

@@ -29,6 +29,7 @@ import org.levarac.beid.scenario.snapshot
 import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
+import org.levarac.beid.sensing.NearbyEventCardVerification
 import org.levarac.beid.sensing.ScanEventSession
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.sensing.TrustedDateSource
@@ -146,6 +147,74 @@ class EventJoinScreenTest {
             .assertIsNotSelected()
             .performClick()
         composeTestRule.runOnIdle { assertNull(joinedHash) }
+    }
+
+    /**
+     * beid#584: a card that failed verification and a card whose read has not
+     * returned yet must not read the same. The Pixel held "Checking" and
+     * "Waiting for event verification" for over an hour on a candidate whose
+     * every registry read had failed, which is how a settled failure passed
+     * for a slow success.
+     */
+    @Test
+    fun eachNonJoinableVerificationStateGetsItsOwnCopy() {
+        val checkingHash = "1111111111111111"
+        val retryingHash = "2222222222222222"
+        val unregisteredHash = "3333333333333333"
+        val state = EventJoinScreenState(
+            sessionState = EventJoinUiState.Idle,
+            nearbyEventCards = listOf(
+                NearbyEventCard(
+                    beaconDisplayName = "Checking beacon",
+                    eventCodeHashHex = checkingHash,
+                    verification = NearbyEventCardVerification.CHECKING,
+                ),
+                NearbyEventCard(
+                    beaconDisplayName = "Retrying beacon",
+                    eventCodeHashHex = retryingHash,
+                    verification = NearbyEventCardVerification.RETRYING,
+                ),
+                NearbyEventCard(
+                    beaconDisplayName = "Unregistered beacon",
+                    eventCodeHashHex = unregisteredHash,
+                    verification = NearbyEventCardVerification.NOT_REGISTERED,
+                ),
+            ),
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinContent(
+                    state = state,
+                    onOpenAccount = {},
+                    onJoinNearbyEvent = {},
+                    onOpenSettings = {},
+                    onSimulateSignalLost = {},
+                    onResumeSensing = {},
+                )
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        listOf(
+            R.string.event_join_candidate_unverified,
+            R.string.event_join_not_joinable_yet,
+            R.string.event_join_candidate_retrying,
+            R.string.event_join_verification_retrying,
+            R.string.event_join_candidate_not_registered,
+            R.string.event_join_verification_not_registered,
+        ).forEach { copy ->
+            composeTestRule.onNodeWithText(context.getString(copy))
+                .performScrollTo()
+                .assertIsDisplayed()
+        }
+
+        // None of the three is joinable, so the failure copy never arrives
+        // with an affordance that implies it is.
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(retryingHash))
+            .assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.nearbyEventCard(unregisteredHash))
+            .assertIsNotEnabled()
     }
 
     /**
