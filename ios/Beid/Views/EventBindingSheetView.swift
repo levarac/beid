@@ -99,8 +99,8 @@ struct EventBindingSheetView: View {
       connectContent
     case .bound(let record):
       boundContent(record: record)
-    case .failed(let reason):
-      failedContent(reason: reason)
+    case .failed(let reason, let retryable):
+      failedContent(reason: reason, retryable: retryable)
     }
   }
 
@@ -194,7 +194,7 @@ struct EventBindingSheetView: View {
     }
   }
 
-  private func failedContent(reason: String) -> some View {
+  private func failedContent(reason: String, retryable: Bool) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
         systemImage: "xmark.octagon.fill",
@@ -206,10 +206,18 @@ struct EventBindingSheetView: View {
         .font(DS.Font.meta)
         .foregroundStyle(DS.Color.textSecondary)
         .multilineTextAlignment(.center)
-      BeidSecondaryButton(title: "Try Again") {
-        sensing.declineBinding()
+      if retryable {
+        BeidSecondaryButton(title: "Try Again") {
+          sensing.declineBinding()
+        }
+        .tint(DS.Color.actionPrimary)
+      } else {
+        BeidSecondaryButton(title: "Close") {
+          sensing.declineBinding()
+          dismiss()
+        }
+        .tint(DS.Color.actionPrimary)
       }
-      .tint(DS.Color.actionPrimary)
     }
   }
 
@@ -291,7 +299,8 @@ struct EventBindingSheetView: View {
   /// `sensing.completeBinding` returns a `BindingCompletionResult` that this
   /// switches over: `.bound` needs no further action here (the sheet
   /// dismisses on the resulting `bindingState` change), `.smartWalletUnsupported`
-  /// (beid#359) gets its own non-retryable reason, and `.notVerified` covers
+  /// (beid#359) gets its own non-retryable reason (also non-retryable in the
+  /// UI: Close instead of Try Again, beid#382), and `.notVerified` covers
   /// everything else — stale/malformed inputs, a wallet signature of the
   /// wrong length (beid#357), and a genuine signer mismatch the coordinator's
   /// own verification caught (beid#316). Before beid#316 only the
@@ -316,7 +325,7 @@ struct EventBindingSheetView: View {
         format (e.g. Safe, other smart accounts). beid does not support this wallet type yet. Do not imply \
         the user can fix this by trying again or reconnecting — it cannot succeed until beid adds support.
         """
-      ))
+      ), retryable: false)
     case .notVerified:
       sensing.failBinding(reason: String(
         localized: "scan.binding.verificationFailed",
@@ -328,7 +337,7 @@ struct EventBindingSheetView: View {
         (scan.binding.smartWalletUnsupported), which has its own reason. The user can try again — this case \
         covers failures that could be transient (e.g. transport corruption), unlike the smart-wallet case.
         """
-      ))
+      ), retryable: true)
     }
   }
 
@@ -339,27 +348,27 @@ struct EventBindingSheetView: View {
         localized: "scan.binding.declined",
         defaultValue: "Declined in wallet",
         comment: "Reason shown when the user's wallet app declines the binding signature request."
-      ))
+      ), retryable: true)
     case .notConnected:
       sensing.failBinding(reason: String(
         localized: "scan.binding.notConnected",
         defaultValue: "Wallet not connected",
         comment: "Reason shown when the binding signature request has no connected wallet session to use."
-      ))
+      ), retryable: true)
     case .timedOut:
       sensing.failBinding(reason: String(
         localized: "scan.binding.timedOut",
         defaultValue: "Wallet did not respond in time",
         comment: "Reason shown when the wallet app never responds to the binding signature request within the timeout."
-      ))
+      ), retryable: true)
     case .relayFailure(let message):
-      sensing.failBinding(reason: message)
+      sensing.failBinding(reason: message, retryable: true)
     case .cancelled:
       // The user stopped this from beid's own UI (Cancel/Try Again/Start
       // Over on the wallet-connect step), not a wallet-side rejection or a
       // stuck request. failedContent's header ("Couldn't seal attendance",
       // a red X) is unconditionally alarming regardless of the reason text
-      // below it, so routing this through failBinding(reason:) would tell
+      // below it, so routing this through failBinding(reason:retryable:) would tell
       // a user who cancelled themselves that something went wrong.
       // declineBinding() is the same neutral "attempt not completed, no
       // error" transition this sheet's own Cancel toolbar button and

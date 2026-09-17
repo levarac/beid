@@ -3402,12 +3402,15 @@ final class SensingCoordinator: ObservableObject {
     pendingBindingMessage = nil
   }
 
-  /// The wallet declined, or a transport/timeout error occurred. Distinct
+  /// The binding attempt failed: the wallet declined, a transport/timeout
+  /// error occurred, or the returned signature did not verify. Distinct
   /// from `declineBinding()`: this is the round trip failing, not the user
-  /// dismissing the sheet before starting one.
-  func failBinding(reason: String) {
+  /// dismissing the sheet before starting one. `retryable` is `false` only
+  /// when retrying cannot succeed (the ERC-6492 smart-wallet result,
+  /// beid#382), so the sheet offers Close instead of Try Again.
+  func failBinding(reason: String, retryable: Bool) {
     pendingBindingMessage = nil
-    bindingState = .failed(reason: reason)
+    bindingState = .failed(reason: reason, retryable: retryable)
   }
 
   /// The user closed the sheet without completing a binding (decline,

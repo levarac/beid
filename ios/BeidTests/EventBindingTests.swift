@@ -426,9 +426,9 @@ final class EventBindingTests: XCTestCase {
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
 
-    coordinator.failBinding(reason: "Declined in wallet")
+    coordinator.failBinding(reason: "Declined in wallet", retryable: true)
 
-    XCTAssertEqual(coordinator.bindingState, .failed(reason: "Declined in wallet"))
+    XCTAssertEqual(coordinator.bindingState, .failed(reason: "Declined in wallet", retryable: true))
     XCTAssertEqual(
       coordinator.completeBinding(walletAddress: "0xLATE", walletSignatureHex: "0xLATE"),
       .notVerified,
@@ -470,7 +470,7 @@ final class EventBindingTests: XCTestCase {
     coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
     await coordinator.waitForDemoSequenceToFinish()
     _ = coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId)
-    coordinator.failBinding(reason: "boom")
+    coordinator.failBinding(reason: "boom", retryable: true)
 
     coordinator.declineBinding()
 
@@ -479,6 +479,52 @@ final class EventBindingTests: XCTestCase {
       .none,
       "must land directly on .pendingConnect, never transiently on .none, or ScanFlowView's sheet would dismiss mid-retry"
     )
+    XCTAssertEqual(coordinator.bindingState, .pendingConnect(event))
+  }
+
+  /// beid#382: an unsupported smart-contract wallet (ERC-6492) can never
+  /// succeed on retry, so its failure must be non-retryable and its Close
+  /// button (`declineBinding()`, then the sheet dismisses) must land on
+  /// `.pendingConnect`. The `failBinding(reason:retryable:)` call below
+  /// (with `retryable: false`) mirrors
+  /// `EventBindingSheetView.completeBindingOrFailVerification`'s
+  /// `.smartWalletUnsupported` branch. The view's own choice of
+  /// `retryable: false` cannot be reached from a unit test (there is no
+  /// view-test harness), so this test pins the state contract the sheet
+  /// renders from, not the view's branch.
+  func testSmartWalletFailureIsNotRetryableAndCloseLandsOnPendingConnect() async {
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      sensingCryptography: BarnardBackedBindingCryptography()
+    )
+    let event = EventSession(id: "TEST-BINDING", name: "Test Binding Event", venue: nil)
+    coordinator.runDemoSequence(demoEvent: event, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    guard coordinator.beginBinding(walletAddress: realWalletAddress, chainId: testChainId) != nil else {
+      XCTFail("expected beginBinding to succeed")
+      return
+    }
+
+    // erc6492Magic per BarnardCoreOwnerKey.swift: 16 repetitions of 0x64 0x92.
+    let erc6492MagicHex = String(repeating: "6492", count: 16)
+    let smartWalletSignatureHex = "0x" + String(repeating: "cd", count: 32) + erc6492MagicHex
+    XCTAssertEqual(
+      coordinator.completeBinding(walletAddress: realWalletAddress, walletSignatureHex: smartWalletSignatureHex),
+      .smartWalletUnsupported
+    )
+
+    coordinator.failBinding(reason: "Unsupported wallet", retryable: false)
+
+    XCTAssertEqual(coordinator.bindingState, .failed(reason: "Unsupported wallet", retryable: false))
+    XCTAssertNotEqual(
+      coordinator.bindingState,
+      .failed(reason: "Unsupported wallet", retryable: true),
+      "identical reason copy must still leave a non-retryable failure distinguishable from a retryable one"
+    )
+
+    // The coordinator action of the sheet's Close button.
+    coordinator.declineBinding()
+
     XCTAssertEqual(coordinator.bindingState, .pendingConnect(event))
   }
 
