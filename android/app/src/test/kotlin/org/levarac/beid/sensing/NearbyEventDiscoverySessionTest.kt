@@ -295,12 +295,17 @@ class NearbyEventDiscoverySessionTest {
         assertEquals(NearbyEventCardVerification.READY, card.verification)
     }
 
+    /**
+     * A session with no registry client never resolves, so it never fails,
+     * so it must never schedule a retry either. This is the constructor's
+     * default and the state before one is configured; the reducer-side
+     * guarantee that an armed retry leaves no deadline behind for the timer
+     * to wake on again is asserted in the shared
+     * `NearbyEventRegistryRetryTest`, which can reach the failed record this
+     * session cannot produce.
+     */
     @Test
-    fun aDueRetryNoOneCanConsumeDoesNotSpinTheExpiryTimer() = runTest {
-        // No registry client, which is the production default before one is
-        // configured: nothing consumes a due retry. The reducer must not
-        // leave the deadline in the past, or this session re-arms a zero
-        // delay wake-up forever.
+    fun aSessionWithNoRegistryClientSchedulesNoRetry() = runTest {
         val session = NearbyEventDiscoverySession(
             nowEpochMillis = { testScheduler.currentTime },
             coroutineScope = backgroundScope,
@@ -311,6 +316,7 @@ class NearbyEventDiscoverySessionTest {
         runCurrent()
 
         assertEquals(1, session.cards.value.size)
+        assertNull(session.candidates.value.nextRegistryRetryAtEpochMillis)
     }
 
     @Test
