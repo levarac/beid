@@ -24,6 +24,14 @@ import kotlin.test.assertTrue
  * defaults they came from, for the reason `BeidConfigTest` records: a test
  * that read the same source the production value reads would stay green
  * under any mutation of it, including a revert to the empty string.
+ *
+ * The cost of that choice is deliberate and worth stating, because it will
+ * surprise someone: a build carrying `-Pbeid.definitionUrlTemplate=...` or
+ * `-Pbeid.eventKeySetUrlTemplate=...` turns these red. Pointing a lab build
+ * at another operator is a legitimate thing to do, and this test says it is
+ * not the shipped configuration rather than that it is wrong. Reading the
+ * expected value back from the same Gradle property would remove the noise
+ * and the protection together (PR 595 review, P2b).
  */
 class RegistryDependenciesConfigTest {
 
@@ -32,6 +40,7 @@ class RegistryDependenciesConfigTest {
         assertEquals(
             "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}",
             BuildConfig.EVENT_DEFINITION_URL_TEMPLATE,
+            "not the shipped definition URL; expected if this build passed -Pbeid.definitionUrlTemplate",
         )
         assertNotNull(createDefinitionUrlTemplate(BuildConfig.EVENT_DEFINITION_URL_TEMPLATE))
     }
@@ -41,6 +50,7 @@ class RegistryDependenciesConfigTest {
         assertEquals(
             "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}",
             BuildConfig.EVENT_KEY_SET_URL_TEMPLATE,
+            "not the shipped key-set URL; expected if this build passed -Pbeid.eventKeySetUrlTemplate",
         )
         assertNotNull(createEventKeySetUrlTemplate(BuildConfig.EVENT_KEY_SET_URL_TEMPLATE))
     }
