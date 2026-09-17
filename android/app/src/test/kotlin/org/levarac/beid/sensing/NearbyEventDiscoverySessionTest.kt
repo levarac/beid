@@ -160,6 +160,99 @@ class NearbyEventDiscoverySessionTest {
         assertNull(session.cards.value.single().eventIdHex)
     }
 
+    /**
+     * beid#584: a candidate whose registry read has not returned yet and one
+     * whose read failed both rendered as "Checking", so the Pixel's permanent
+     * failure was indistinguishable from a slow success.
+     */
+    @Test
+    fun aCandidateWithNoFailedResolutionYetReportsChecking() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry)
+
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+
+        assertEquals(
+            NearbyEventCardVerification.CHECKING,
+            session.cards.value.single().verification,
+        )
+    }
+
+    @Test
+    fun aLookupThatCouldNotBeCompletedReportsRetrying() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry)
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+
+        registry.completeLookup(NearbyEventIdLookup(false, null, "protocol_error"))
+        runCurrent()
+
+        assertEquals(
+            NearbyEventCardVerification.RETRYING,
+            session.cards.value.single().verification,
+        )
+    }
+
+    /**
+     * The definition read is the leg that beid#584's unconfigured URL
+     * template failed on, and it reaches the card through the same status.
+     */
+    @Test
+    fun aDefinitionReadThatFailedReportsRetrying() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry, baseEpochMillis = 150_000L)
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+
+        registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
+        runCurrent()
+        registry.completeDefinition(
+            NearbyEventDefinitionVerification(false, null, null, null, null, null),
+        )
+        runCurrent()
+
+        assertEquals(
+            NearbyEventCardVerification.RETRYING,
+            session.cards.value.single().verification,
+        )
+    }
+
+    @Test
+    fun anUnregisteredEventCodeIsReportedApartFromATransportFailure() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry)
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+
+        registry.completeLookup(NearbyEventIdLookup(false, null, "event_code_lookup_not_found"))
+        runCurrent()
+
+        assertEquals(
+            NearbyEventCardVerification.NOT_REGISTERED,
+            session.cards.value.single().verification,
+        )
+    }
+
+    @Test
+    fun aJoinableCandidateReportsReady() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry, baseEpochMillis = 150_000L)
+        session.recordRadioSelfVerifiedEnvelope(
+            "peripheral",
+            "Beacon announcement",
+            EVENT_HASH,
+            CONTAINER,
+        ) { true }
+
+        registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
+        runCurrent()
+        registry.completeDefinition(eligibleDefinition())
+        runCurrent()
+
+        assertEquals(
+            NearbyEventCardVerification.READY,
+            session.cards.value.single().verification,
+        )
+    }
+
     private fun kotlinx.coroutines.test.TestScope.session(
         registry: NearbyEventRegistry,
         baseEpochMillis: Long = 0L,

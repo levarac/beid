@@ -438,6 +438,7 @@ internal class NearbyEventDiscoverySession(
                             displayValidUntilEpochSeconds = candidate.definitionValidUntilEpochSeconds
                                 .takeIf { joinable },
                             eventCodeHashHex = candidate.eventCodeHashHex,
+                            verification = cardVerification(joinable, candidate.registryStatus),
                         ),
                     )
                 }
@@ -458,6 +459,26 @@ internal class NearbyEventDiscoverySession(
             val update = refreshNearbyEventDiscovery(store, nowEpochMillis())
             publishAndSchedule(update.snapshot)
         }
+    }
+
+    /**
+     * What the card says while it is not joinable (beid#584).
+     *
+     * Reads the shared candidate's registry status rather than counting
+     * failures natively, so both platforms describe the same candidate the
+     * same way. [joinable] stays the gate's answer and is checked first: a
+     * candidate can be REGISTERED_VIA_OPERATOR_LOOKUP and still not joinable
+     * (an expired window, or a v2 envelope not yet registry-verified), and
+     * that is a wait, not a failure.
+     */
+    private fun cardVerification(
+        joinable: Boolean,
+        status: NearbyEventRegistryStatus,
+    ): NearbyEventCardVerification = when {
+        joinable -> NearbyEventCardVerification.READY
+        status == NearbyEventRegistryStatus.NOT_REGISTERED -> NearbyEventCardVerification.NOT_REGISTERED
+        status == NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE -> NearbyEventCardVerification.RETRYING
+        else -> NearbyEventCardVerification.CHECKING
     }
 
     /**

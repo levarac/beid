@@ -51,6 +51,7 @@ import org.levarac.beid.sensing.operatorOriginOrNull
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
 import org.levarac.beid.sensing.NearbyEventCard
+import org.levarac.beid.sensing.NearbyEventCardVerification
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
@@ -529,9 +530,18 @@ private fun NearbyEventCards(
                         )
                     }
                     BeidStatusPill(
+                        // `eventIdHex` stays the single joinability gate, here as
+                        // everywhere else on this card; `verification` only breaks
+                        // down the not-yet-joinable case (beid#584).
                         label = stringResource(
-                            if (card.eventIdHex != null) R.string.event_join_candidate_verified
-                            else R.string.event_join_candidate_unverified,
+                            when {
+                                card.eventIdHex != null -> R.string.event_join_candidate_verified
+                                card.verification == NearbyEventCardVerification.RETRYING ->
+                                    R.string.event_join_candidate_retrying
+                                card.verification == NearbyEventCardVerification.NOT_REGISTERED ->
+                                    R.string.event_join_candidate_not_registered
+                                else -> R.string.event_join_candidate_unverified
+                            },
                         ),
                         tone = if (card.eventIdHex != null) BeidStatusPill.Tone.Active else BeidStatusPill.Tone.Neutral,
                     )
@@ -545,8 +555,20 @@ private fun NearbyEventCards(
                     style = MaterialTheme.typography.bodyMedium,
                     color = BeidTheme.colors.textSecondary,
                 )
+                // beid#584: this line used to say "Waiting for event
+                // verification" for every non-joinable card, including one
+                // whose every registry read had failed. It is the full-width
+                // line rather than the pill because the pill shares a row with
+                // the beacon name and cannot hold a sentence.
                 if (card.eventIdHex == null) Text(
-                    text = stringResource(R.string.event_join_not_joinable_yet),
+                    text = stringResource(
+                        when (card.verification) {
+                            NearbyEventCardVerification.RETRYING -> R.string.event_join_verification_retrying
+                            NearbyEventCardVerification.NOT_REGISTERED ->
+                                R.string.event_join_verification_not_registered
+                            else -> R.string.event_join_not_joinable_yet
+                        },
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = BeidTheme.colors.textSecondary,
                 )
