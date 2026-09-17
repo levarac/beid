@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import SwiftUI
+import UIKit
 
 /// The venue broadcast screen: what this device is holding for an event, and
 /// what can be done with it.
@@ -21,8 +22,8 @@ import SwiftUI
 /// broadcast. Not bundle, handoff, supply, import or signed — those name the
 /// protocol and the code, and they are in this file's comments where they belong.
 ///
-/// The six `switch` statements below have NO `default` case, deliberately.
-/// Adding a case to any of the six venue enums must break this build: a
+/// The seven `switch` statements below have NO `default` case, deliberately.
+/// Adding a case to any of the seven venue enums must break this build: a
 /// `default` would turn a new outcome into a silently mislabelled one, and
 /// the build break is the control that prevents that.
 struct VenueSignedServingView: View {
@@ -34,6 +35,9 @@ struct VenueSignedServingView: View {
 
   @State private var venueLinkText = ""
   @State private var isScanning = false
+  /// The system's own description of why scanning would not start, kept so the
+  /// operator can report it rather than describe a black screen.
+  @State private var scannerStartFailure: String?
 
   init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
     _viewModel = StateObject(wrappedValue: viewModel())
@@ -78,11 +82,17 @@ struct VenueSignedServingView: View {
     }
     .sheet(isPresented: $isScanning) {
       NavigationStack {
-        VenueLinkScannerView(onScan: { payload in
-          isScanning = false
-          venueLinkText = payload
-          supply(payload)
-        })
+        VenueLinkScannerView(
+          onScan: { payload in
+            isScanning = false
+            venueLinkText = payload
+            supply(payload)
+          },
+          onStartFailure: { description in
+            isScanning = false
+            scannerStartFailure = description
+          }
+        )
         .ignoresSafeArea(edges: .bottom)
         .navigationTitle("Scan QR code")
         .navigationBarTitleDisplayMode(.inline)
@@ -204,10 +214,34 @@ struct VenueSignedServingView: View {
         .accessibilityIdentifier("Use this link")
         .disabled(venueLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-      if VenueLinkScanner.isAvailable {
-        Button("Scan QR code") { isScanning = true }
+      if let unavailability = VenueLinkScanner.unavailability {
+        // The button is not offered, so say why rather than leaving a gap where
+        // an operator expects it. Silence here reads as a missing feature.
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+          Text(message(for: unavailability))
+            .font(DS.Font.supporting)
+            .foregroundStyle(DS.Color.textSecondary)
+          if unavailability == .restricted, let settings = URL(string: UIApplication.openSettingsURLString) {
+            Link("Open Settings", destination: settings)
+              .font(DS.Font.body)
+          }
+        }
+      } else {
+        Button("Scan QR code") {
+          scannerStartFailure = nil
+          isScanning = true
+        }
           .font(DS.Font.body)
           .accessibilityIdentifier("Scan QR code")
+      }
+
+      if let failure = scannerStartFailure {
+        Text("The camera could not start. Paste the link instead.")
+          .font(DS.Font.supporting)
+          .foregroundStyle(DS.Color.statusCaution)
+        Text(verbatim: failure)
+          .font(DS.Font.meta)
+          .foregroundStyle(DS.Color.textSecondary)
       }
 
       // Said beside the field it is about, and never through `status`: a link
@@ -297,7 +331,16 @@ struct VenueSignedServingView: View {
       .formatted(date: .omitted, time: .shortened)
   }
 
-  // MARK: - Exhaustive outcome copy. No `default` in any of the six.
+  // MARK: - Exhaustive outcome copy. No `default` in any of the seven.
+
+  private func message(for unavailability: VenueLinkScanner.Unavailability) -> LocalizedStringKey {
+    switch unavailability {
+    case .notSupported:
+      return "This device cannot scan QR codes. Paste the link instead."
+    case .restricted:
+      return "QR scanning is unavailable, usually because camera access is off for beid. Paste the link instead."
+    }
+  }
 
   private func message(for failure: VenueLinkFailure) -> LocalizedStringKey {
     switch failure {
@@ -364,6 +407,8 @@ struct VenueSignedServingView: View {
       return "The pack could not be fetched."
     case .eventIdentityMismatch:
       return "The pack is not for the event this link named."
+    case .timedOut:
+      return "Fetching the pack took too long. Check the network and try again."
     }
   }
 
