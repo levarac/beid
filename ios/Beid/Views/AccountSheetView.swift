@@ -86,6 +86,13 @@ struct AccountSheetView: View {
         // row (gh#138) is withdrawn from this sheet rather than deleted:
         // `VenueDeviceOrganizerView` and its view model are untouched, so
         // restoring it is one NavigationLink if dispatch#4 decides it ships.
+        //
+        // `canonicalEventIdHex` and `bundleURLTemplate` are no longer passed.
+        // They fed the operator-endpoint path, whose only caller was the old
+        // screen's Supply button; a link now names its own bundle URL. The view
+        // model still accepts both, because tests construct it that way to
+        // exercise `supplyConfigured`, but wiring them from here would be
+        // dead configuration that reads as live.
         Section {
           NavigationLink {
             VenueSignedServingView(viewModel: VenueSignedServingViewModel(
@@ -93,9 +100,7 @@ struct AccountSheetView: View {
               broadcasting: BarnardVenueSignedContainerBroadcasting(),
               acquisition: VenueArtifactAcquisition(),
               store: VenuePublicArtifactStore(),
-              clock: { VenueDeviceClock.read() },
-              canonicalEventIdHex: coordinator.sensingCoordinator.joinedCanonicalEventIdHex,
-              bundleURLTemplate: RegistryDependencies.venueBundleURLTemplate()
+              clock: { VenueDeviceClock.read() }
             ))
           } label: {
             Label("Venue broadcast", systemImage: "antenna.radiowaves.left.and.right")
