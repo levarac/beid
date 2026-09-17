@@ -38,6 +38,8 @@ struct VenueSignedServingView: View {
   /// The system's own description of why scanning would not start, kept so the
   /// operator can report it rather than describe a black screen.
   @State private var scannerStartFailure: String?
+  /// Why the camera was not opened after the operator asked for it.
+  @State private var scannerRefusal: VenueLinkScanner.Authorization?
 
   init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
     _viewModel = StateObject(wrappedValue: viewModel())
@@ -218,25 +220,45 @@ struct VenueSignedServingView: View {
         .accessibilityIdentifier("Use this link")
         .disabled(venueLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-      if let unavailability = VenueLinkScanner.unavailability {
-        // The button is not offered, so say why rather than leaving a gap where
-        // an operator expects it. Silence here reads as a missing feature.
+      if VenueLinkScanner.isSupported {
+        Button("Scan QR code") {
+          scannerStartFailure = nil
+          scannerRefusal = nil
+          // Ask for the camera here rather than inferring the answer from a
+          // property. The button stays visible before anyone has been asked,
+          // because that is the only moment at which asking can happen.
+          requestTask?.cancel()
+          requestTask = Task {
+            switch await VenueLinkScanner.authorize() {
+            case .granted:
+              isScanning = true
+            case .denied:
+              scannerRefusal = .denied
+            case .unavailableAnyway:
+              scannerRefusal = .unavailableAnyway
+            }
+          }
+        }
+        .font(DS.Font.body)
+        .accessibilityIdentifier("Scan QR code")
+      } else {
+        // Not offered, so say why rather than leaving a gap where an operator
+        // expects a button. Silence there reads as a missing feature.
+        Text("This device cannot scan QR codes. Paste the link instead.")
+          .font(DS.Font.supporting)
+          .foregroundStyle(DS.Color.textSecondary)
+      }
+
+      if let refusal = scannerRefusal {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
-          Text(message(for: unavailability))
+          Text(message(for: refusal))
             .font(DS.Font.supporting)
-            .foregroundStyle(DS.Color.textSecondary)
-          if unavailability == .restricted, let settings = URL(string: UIApplication.openSettingsURLString) {
+            .foregroundStyle(DS.Color.statusCaution)
+          if refusal == .denied, let settings = URL(string: UIApplication.openSettingsURLString) {
             Link("Open Settings", destination: settings)
               .font(DS.Font.body)
           }
         }
-      } else {
-        Button("Scan QR code") {
-          scannerStartFailure = nil
-          isScanning = true
-        }
-          .font(DS.Font.body)
-          .accessibilityIdentifier("Scan QR code")
       }
 
       if let failure = scannerStartFailure {
@@ -337,12 +359,16 @@ struct VenueSignedServingView: View {
 
   // MARK: - Exhaustive outcome copy. No `default` in any of the seven.
 
-  private func message(for unavailability: VenueLinkScanner.Unavailability) -> LocalizedStringKey {
-    switch unavailability {
-    case .notSupported:
-      return "This device cannot scan QR codes. Paste the link instead."
-    case .restricted:
-      return "QR scanning is unavailable, usually because camera access is off for beid. Paste the link instead."
+  private func message(for authorization: VenueLinkScanner.Authorization) -> LocalizedStringKey {
+    switch authorization {
+    case .granted:
+      // Not shown; the camera opens instead. Present so that adding an
+      // authorization outcome later breaks this build rather than going unsaid.
+      return "The camera is ready."
+    case .denied:
+      return "beid does not have camera access, so it cannot scan. Turn it on in Settings, or paste the link instead."
+    case .unavailableAnyway:
+      return "Camera access is on, but scanning is unavailable on this device — a Screen Time restriction can do this. Paste the link instead."
     }
   }
 

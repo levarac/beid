@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import AVFoundation
 import SwiftUI
 import UIKit
 import VisionKit
@@ -22,33 +23,51 @@ import VisionKit
 /// opinion about a link's validity, on one platform.
 @MainActor
 enum VenueLinkScanner {
-  /// Why the Scan button is not on screen, or nil when it is.
+  /// Whether this device can scan at all. Hardware only, and nothing an operator
+  /// does changes it.
   ///
-  /// The two conditions are kept apart because they need different answers from
-  /// the operator. `isSupported` is a fact about the hardware and nothing can be
-  /// done about it. `isAvailable` goes false when the device is restricted from
-  /// scanning — camera access refused, or a Screen Time restriction — and that
-  /// is fixable in Settings, so the screen offers the way there.
+  /// `DataScannerViewController.isAvailable` is deliberately NOT part of this.
+  /// Apple defines it as "whether a person grants your app access to the camera
+  /// and doesn't have any restrictions to using the camera" — it is false before
+  /// anyone has been asked. Gating the button on it makes a fresh install a dead
+  /// end: the button is hidden until access is granted, and access is only ever
+  /// requested by starting the camera, which requires the button. That is the
+  /// venue device's first run, on the one device class the Simulator cannot
+  /// stand in for, so it would have been found at the venue.
   ///
-  /// UNVERIFIED and worth checking on a device: whether `isAvailable` is true
-  /// while camera permission is still UNDETERMINED. If it were false, hiding the
-  /// button would be a dead end, because permission is requested by
-  /// `startScanning()` and nothing would ever call it. The Settings line below
-  /// keeps a way out even in that case, which is why it is written as guidance
-  /// rather than as a diagnosis of which condition failed.
-  enum Unavailability {
-    case notSupported
-    case restricted
+  /// Permission is therefore asked for explicitly, by `authorize()`, rather than
+  /// inferred from a property that answers a different question.
+  static var isSupported: Bool { DataScannerViewController.isSupported }
+
+  enum Authorization {
+    case granted
+    /// Asked and refused, or refused by a restriction such as Screen Time.
+    /// Fixable, so the screen offers Settings.
+    case denied
+    /// Camera access is granted and the scanner is still unavailable. Left
+    /// separate because it is not something Settings' camera switch fixes.
+    case unavailableAnyway
   }
 
-  static var unavailability: Unavailability? {
-    guard DataScannerViewController.isSupported else { return .notSupported }
-    guard DataScannerViewController.isAvailable else { return .restricted }
-    return nil
+  /// Asks for camera access if nobody has been asked yet, then reports whether
+  /// scanning can actually begin.
+  ///
+  /// `requestAccess` returns immediately with the stored answer when the status
+  /// is already settled, so this is safe to call on every tap.
+  static func authorize() async -> Authorization {
+    switch AVCaptureDevice.authorizationStatus(for: .video) {
+    case .authorized:
+      break
+    case .notDetermined:
+      guard await AVCaptureDevice.requestAccess(for: .video) else { return .denied }
+    case .denied, .restricted:
+      return .denied
+    @unknown default:
+      return .denied
+    }
+    // Access is granted; anything still blocking is a restriction of its own.
+    return DataScannerViewController.isAvailable ? .granted : .unavailableAnyway
   }
-
-  /// Whether offering the button is honest on this device, right now.
-  static var isAvailable: Bool { unavailability == nil }
 }
 
 struct VenueLinkScannerView: UIViewControllerRepresentable {
