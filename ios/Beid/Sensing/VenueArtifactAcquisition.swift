@@ -17,6 +17,11 @@ enum VenueAcquisitionFailure: String, CaseIterable, Hashable, Error {
   case unreadable
   case transportFailure
   case eventIdentityMismatch
+  /// The request ran out its own clock. Separate from `transportFailure`
+  /// because the operator's next move differs: a transport failure says the
+  /// address or the network is wrong, a timeout says to try again, and at a
+  /// venue on a crowded network that is the likely one.
+  case timedOut
 }
 
 /// Bounded acquisition of the two public artifacts, from a file or over HTTPS.
@@ -25,6 +30,13 @@ enum VenueAcquisitionFailure: String, CaseIterable, Hashable, Error {
 /// the verifier, and refuses every redirect.
 protocol VenueArtifactAcquiring: AnyObject {
   func acquire(bundleSource: URL, handoffSource: URL) async throws -> VenuePublicArtifact
+  /// The bundle alone, for a handoff that did not arrive over the network.
+  ///
+  /// A handoff carried in a link's fragment never reaches a server, which is the
+  /// property that lets a consumer treat it as coming from whoever handed the link
+  /// over. Fetching it would throw that away, so the link path has bytes already and
+  /// needs only the bundle those bytes name.
+  func acquireBundle(bundleSource: URL) async throws -> Data
 }
 
 enum VenueArtifactBounds {
@@ -69,14 +81,37 @@ final class VenueArtifactAcquisition: VenueArtifactAcquiring {
   private let session: URLSession
   private let redirectDelegate = VenueRedirectRefusingDelegate()
 
-  init(session: URLSession = .shared) {
-    self.session = session
+  /// A request that never answers and a request that fails are the same to an
+  /// operator watching "Getting the pack." forever, except that the second one
+  /// ends. `URLSession.shared` carries the system default of 60 seconds per
+  /// request and 7 days per resource, and a venue device on a crowded network is
+  /// exactly where the difference is felt, so this lane sets its own bounds
+  /// rather than inheriting them.
+  static let requestTimeoutSeconds: TimeInterval = 30
+
+  private static func defaultSession() -> URLSession {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.timeoutIntervalForRequest = requestTimeoutSeconds
+    configuration.timeoutIntervalForResource = requestTimeoutSeconds * 2
+    // These bytes are verified by digest, never by cache freshness, and a stale
+    // cached bundle would be re-verified anyway. Not caching keeps the acquired
+    // bytes and the fetched bytes the same thing.
+    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+    return URLSession(configuration: configuration)
+  }
+
+  init(session: URLSession? = nil) {
+    self.session = session ?? Self.defaultSession()
   }
 
   func acquire(bundleSource: URL, handoffSource: URL) async throws -> VenuePublicArtifact {
-    let bundleBytes = try await read(bundleSource, cap: VenueArtifactBounds.maxBundleBytes)
+    let bundleBytes = try await acquireBundle(bundleSource: bundleSource)
     let handoffBytes = try await read(handoffSource, cap: VenueArtifactBounds.maxHandoffBytes)
     return VenuePublicArtifact(bundleBytes: bundleBytes, handoffBytes: handoffBytes)
+  }
+
+  func acquireBundle(bundleSource: URL) async throws -> Data {
+    try await read(bundleSource, cap: VenueArtifactBounds.maxBundleBytes)
   }
 
   private func read(_ source: URL, cap: Int) async throws -> Data {
@@ -115,7 +150,7 @@ final class VenueArtifactAcquisition: VenueArtifactAcquiring {
     do {
       (stream, response) = try await session.bytes(from: source, delegate: redirectDelegate)
     } catch {
-      throw VenueAcquisitionFailure.transportFailure
+      throw Self.failure(for: error)
     }
 
     guard let http = response as? HTTPURLResponse else {
@@ -142,8 +177,14 @@ final class VenueArtifactAcquisition: VenueArtifactAcquiring {
     } catch let failure as VenueAcquisitionFailure {
       throw failure
     } catch {
-      throw VenueAcquisitionFailure.transportFailure
+      throw Self.failure(for: error)
     }
     return data
+  }
+
+  /// Timeouts are told apart from every other transport error, and nothing else
+  /// is: this maps one URLError code and leaves the rest as they were.
+  private static func failure(for error: Error) -> VenueAcquisitionFailure {
+    (error as? URLError)?.code == .timedOut ? .timedOut : .transportFailure
   }
 }

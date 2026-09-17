@@ -89,15 +89,37 @@ public fun decodeVenueHandoff(bytes: ByteArray): VenueHandoff? = try {
 }
 
 /** Decodes the same handoff from the base64url fragment of a link or QR link. */
+public fun decodeVenueHandoffLink(link: String): VenueHandoff? =
+    decodeVenueHandoffLinkBytes(link)?.let(::decodeVenueHandoff)
+
+/**
+ * The handoff bytes a link carries, for a caller that must match a bundle against the
+ * same bytes this decoder accepted.
+ *
+ * A consumer holds two things: the decoded handoff it reads fields from, and the bytes
+ * it keeps so the pair can be re-imported later. Without this entry point a native
+ * caller would decode the fragment itself to obtain those bytes, which is a second
+ * implementation of the same decision on each platform -- exactly what moving the
+ * decision here is meant to prevent. The rules live once, in this function, and
+ * [decodeVenueHandoffLink] is a decode of what this returns.
+ *
+ * Returns the bytes only when they also decode as a handoff, so a caller can never
+ * retain a fragment that names no handoff.
+ */
 @OptIn(ExperimentalEncodingApi::class)
-public fun decodeVenueHandoffLink(link: String): VenueHandoff? = try {
+public fun decodeVenueHandoffLinkBytes(link: String): ByteArray? = try {
     require(link.length <= 8192)
     val delimiter = link.indexOf('#')
     require(delimiter > 0 && isAbsoluteVenueUri(link.substring(0, delimiter)))
     val fragment = link.substring(delimiter + 1)
     require(fragment.length <= 5464 && BASE64URL.matches(fragment))
     val padded = fragment.padEnd((fragment.length + 3) / 4 * 4, '=')
-    decodeVenueHandoff(Base64.UrlSafe.decode(padded))
+    val bytes = Base64.UrlSafe.decode(padded)
+    // The fragment is not a handoff until it decodes as one. Handing back bytes that
+    // do not would let a caller store and later re-import an artifact pair whose
+    // handoff half was never readable.
+    requireNotNull(decodeVenueHandoff(bytes))
+    bytes
 } catch (_: IllegalArgumentException) {
     null
 }
