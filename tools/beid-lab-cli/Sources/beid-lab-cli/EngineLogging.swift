@@ -84,7 +84,15 @@ enum EngineLogging {
           "rssi": .int(detection.rssi),
           "enin": .int(Int(detection.enin)),
           "formatVersion": .int(detection.formatVersion),
-          "peer": detection.detectedDisplayId.map { .string($0) } ?? .null,
+          // `displayId` is SHA256(TEK)[0:4], served by B003 and rotating with
+          // the TEK — the same rotating-pseudonym class as the RPID beside
+          // it, and unlike `observe`'s peripheral identifier it is a wire
+          // value and therefore identical on every machine that sees it. So
+          // it is redacted on the same terms, which is also what this file's
+          // own rule at the top has always claimed.
+          "peer": detection.detectedDisplayId.map {
+            .string(LabRedaction.rpid($0, at: emitter.level))
+          } ?? .null,
         ])
 
     case .rssiUpdate(let update):
@@ -94,7 +102,9 @@ enum EngineLogging {
           "rpid": .string(LabRedaction.rpid(update.rpid, at: emitter.level)),
           "rssi": .int(update.rssi),
           "enin": .int(Int(update.enin)),
-          "peer": update.detectedDisplayId.map { .string($0) } ?? .null,
+          "peer": update.detectedDisplayId.map {
+            .string(LabRedaction.rpid($0, at: emitter.level))
+          } ?? .null,
           "update": .bool(true),
         ])
 
@@ -156,43 +166,20 @@ enum EngineLogging {
   // MARK: Debug callbacks
 
   static func log(debug event: BarnardDebugEvent, to emitter: LabEmitter) {
-    // Some debug names are the run's finding rather than debug noise, and
-    // they are promoted out of the generic stream: given their own stage so
-    // they are greppable, and raised to `info` so a default-level log shows
-    // them. Run 2 on 2026-09-17 failed every GATT resolution it attempted,
-    // and reconstructing that needed a `--log-level debug` capture nobody had
-    // asked for in advance. A run that resolved nothing should say so at the
-    // level an operator actually runs.
-    let stage: LabStage
-    var level = LabLogLevel.debug
-    var result = LabResult.ok
-    switch event.name {
-    case "gatt_read_event_code_hash", "gatt_respond_event_code_hash", "gatt_b004_mismatch":
-      stage = .gattB004
-      level = .info
-      if let matches = event.data?["matches"] as? Bool {
-        result = matches ? .match : .mismatch
-      } else if event.name == "gatt_b004_mismatch" {
-        result = .mismatch
-      }
-    case "connect_attempt", "connected", "connect_queue_full":
-      stage = .gattConnect
-    case "gatt_exchange_timeout":
-      // Carries the engine's own `seconds`, which is the only way the
-      // connect timeout becomes observable: the constant itself is private.
-      stage = .gattResolution
-      level = .info
-      result = .timeout
-    case "gatt_resolution_failed", "gatt_read_failed":
-      stage = .gattResolution
-      level = .info
-      result = .rejected
-    case "gatt_resolution_backoff":
-      stage = .gattResolution
-    default:
-      stage = .engineDebug
-    }
-    guard emitter.wants(level) else { return }
+    // The stage/level/result decision lives in `BeidLabCliCore` so a test can
+    // reach it: this file is in the executable target, which no test target
+    // can import. That is not a stylistic preference — the previous version
+    // of this function computed a promoted level, gated on it, then passed a
+    // hardcoded `.debug` to `emit`, and nothing could go red.
+    //
+    // Passing `routing.level` to both `wants` and `emit` is what makes the
+    // two agree by construction rather than by remembering.
+    let routing = LabEngineDebugRouting.routing(
+      forDebugEventNamed: event.name, matches: event.data?["matches"] as? Bool)
+    // The early return is an optimisation only -- `emit` applies the same
+    // gate -- and it skips the payload mapping below, which walks a
+    // dictionary and may hex-encode.
+    guard emitter.wants(routing.level) else { return }
 
     var data = mapped(event.data, at: emitter.level)
     // Nested under its own key rather than merged: debug payloads carry their
@@ -200,7 +187,9 @@ enum EngineLogging {
     // overwrite the event name and make the stream unreadable.
     data["event"] = .string(event.name)
     data["engineLevel"] = .string(event.level)
-    emitter.emit(stage, at: .debug, result: result, data: data)
+    // Deliberately the routing overload rather than the four-argument one:
+    // it takes no level, so the defect above cannot be rewritten here.
+    emitter.emit(routing, data: data)
   }
 
   /// Applies the shape rule described on the type.

@@ -4,6 +4,7 @@ The checker's own failure mode is passing when it should not -- a guard that
 quietly checks nothing looks exactly like a guard that passes. So these cover
 both directions: the real source is clean today, and a planted call is caught.
 """
+import contextlib
 import importlib.util
 import sys
 import tempfile
@@ -47,6 +48,66 @@ class OffendingLinesTest(unittest.TestCase):
             "central.connect(p)\nlet x = 1\nperipheral.discoverServices(nil)\n"
         )
         self.assertEqual([1, 3], [number for number, _, _ in found])
+
+
+class ScanFilterTest(unittest.TestCase):
+    """chk-beid-590 mutated `withServices: [B001]` to `nil` and everything
+    stayed green. These are the cover for that."""
+
+    def test_the_real_scan_is_correctly_aimed(self):
+        self.assertEqual([], checker.scan_failures(REPO_ROOT))
+
+    def test_a_nil_service_filter_is_caught(self):
+        with self._mutated("withServices: [Self.discoveryServiceUUID]", "withServices: nil") as root:
+            failures = checker.scan_failures(root)
+            self.assertTrue(failures)
+            self.assertTrue(any("overflow area" in failure for failure in failures))
+
+    def test_hardcoding_the_uuid_away_from_the_policy_is_caught(self):
+        # The constant and its use must not drift: a test pins the policy
+        # value, so a scan that stops reading it is unpinned again.
+        with self._mutated(
+            "CBUUID(string: LabScanPolicy.discoveryServiceUUIDString)",
+            'CBUUID(string: "0000FFFF-0000-1000-8000-00805F9B34FB")',
+        ) as root:
+            failures = checker.scan_failures(root)
+            self.assertTrue(any("LabScanPolicy" in failure for failure in failures))
+
+    def test_removing_the_scan_entirely_is_caught(self):
+        with self._mutated("central.scanForPeripherals(", "central.doNothing(") as root:
+            failures = checker.scan_failures(root)
+            self.assertTrue(any("does observe still scan" in failure for failure in failures))
+
+    def test_a_missing_policy_file_fails_rather_than_passing(self):
+        with tempfile.TemporaryDirectory() as sandbox:
+            self.assertTrue(checker.scan_failures(Path(sandbox)))
+
+    def test_a_commented_out_nil_does_not_trip_it(self):
+        # The source explains the rule by naming the mistake.
+        with self._mutated(
+            "    central.scanForPeripherals(",
+            "    // withServices: nil would be wrong\n    central.scanForPeripherals(",
+        ) as root:
+            self.assertEqual([], checker.scan_failures(root))
+
+    @contextlib.contextmanager
+    def _mutated(self, old, new):
+        """A copy of the tree with one substitution applied to the scan source."""
+        with tempfile.TemporaryDirectory() as sandbox:
+            root = Path(sandbox)
+            for relative in set(checker.OBSERVE_SOURCES) | {
+                checker.SCAN_SOURCE,
+                checker.SCAN_POLICY_SOURCE,
+            }:
+                source = REPO_ROOT / relative
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                text = source.read_text(encoding="utf-8")
+                if relative == checker.SCAN_SOURCE:
+                    self.assertIn(old, text, f"mutation target missing from {relative}")
+                    text = text.replace(old, new)
+                target.write_text(text, encoding="utf-8")
+            yield root
 
 
 class MainTest(unittest.TestCase):

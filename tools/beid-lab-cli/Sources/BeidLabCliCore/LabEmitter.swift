@@ -113,6 +113,22 @@ public final class LabEmitter {
     for sink in sinks { sink.write(line: encoded) }
   }
 
+  /// Emits a routed engine debug event.
+  ///
+  /// This overload exists because the four-argument one was misused: a call
+  /// site computed a promoted level, gated on it, and then passed a literal
+  /// `.debug` to `emit`, so every promoted line was dropped at the default
+  /// level (chk-beid-590, D1). A test could not catch it, because the call
+  /// site is in the executable target and `BarnardDebugEvent` has no public
+  /// initializer, so no test can synthesise one to drive it.
+  ///
+  /// So the fix is not a test — it is that **there is no longer a level
+  /// argument to get wrong**. The routing carries stage, level and result
+  /// together, and the gate and the emission read the same field.
+  public func emit(_ routing: LabEngineDebugRouting, data: [String: LabValue] = [:]) {
+    emit(routing.stage, at: routing.level, result: routing.result, data: data)
+  }
+
   /// The last line of every run, on every exit path. Written at
   /// `LabLine.resultLineLevel`, so no setting of `--log-level` can remove a
   /// run's verdict from its own log.

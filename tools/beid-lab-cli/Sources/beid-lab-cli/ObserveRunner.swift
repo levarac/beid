@@ -27,12 +27,11 @@ import Foundation
 /// that names that UUID. A `nil` filter therefore misses exactly the
 /// backgrounded phones this is pointed at.
 final class ObserveRunner: NSObject, CBCentralManagerDelegate {
-  /// Barnard's discovery service. Copied from `BarnardEngine.swift:283` at
-  /// v0.9.2, where it is `private`, so this is a duplicated constant rather
-  /// than a shared one. It is a wire value fixed by the protocol, not a
-  /// decision — but if the SDK ever changes it, this line is the one that
-  /// goes stale, and the symptom would be a run that sees nothing.
-  static let discoveryServiceUUID = CBUUID(string: "0000B001-0000-1000-8000-00805F9B34FB")
+  /// Barnard's discovery service, taken from `LabScanPolicy` rather than
+  /// written here, so the value a test pins and the value the radio receives
+  /// are the same string. See that type for why both scan parameters are
+  /// worth pinning at all.
+  static let discoveryServiceUUID = CBUUID(string: LabScanPolicy.discoveryServiceUUIDString)
 
   /// How often the loss deadline is checked. Finer than any useful
   /// `--lost-after`, coarse enough that the sweep is not the thing keeping
@@ -107,18 +106,19 @@ final class ObserveRunner: NSObject, CBCentralManagerDelegate {
       }
       return
     }
+    // `withServices` is never nil: see `LabScanPolicy`. Both arguments come
+    // from there, and `scripts/check_observe_never_connects.py` cross-checks
+    // this call against it -- a mutation to `nil` used to leave the entire
+    // suite green (chk-beid-590).
     central.scanForPeripherals(
       withServices: [Self.discoveryServiceUUID],
-      // Every advertisement, not one per peripheral: the repeat rate is this
-      // tool's decision (`--repeat-every`), and a coalescing radio would
-      // otherwise decide when a peripheral looks lost.
-      options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: LabScanPolicy.allowDuplicates]
     )
     emitter.emit(
       .scanStart, at: .info,
       data: [
         "service": .string(Self.discoveryServiceUUID.uuidString),
-        "allowDuplicates": .bool(true),
+        "allowDuplicates": .bool(LabScanPolicy.allowDuplicates),
         "lostAfterSeconds": .double(options.observe.lostAfterSeconds),
         "repeatEverySeconds": .double(options.observe.repeatEverySeconds),
       ]

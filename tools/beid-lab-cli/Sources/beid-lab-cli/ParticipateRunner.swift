@@ -183,7 +183,11 @@ final class ParticipateRunner {
         announcedDisplayId = true
         emitter.emit(
           .runStart, at: .info,
-          data: ["myDisplayId": .string(engine.getMyDisplayId()), "radioActive": .bool(true)])
+          data: [
+            "myDisplayId": .string(
+              LabRedaction.rpid(engine.getMyDisplayId(), at: emitter.level)),
+            "radioActive": .bool(true),
+          ])
       }
     case .detection(let detection):
       note(peer: detection.detectedDisplayId)
@@ -292,7 +296,11 @@ final class ParticipateRunner {
     emitter.emit(
       .peerFirstSeen, at: .info,
       data: [
-        "peer": .string(displayId),
+        // Redacted on the same terms as an RPID: `displayId` is a rotating
+        // pseudonym on the wire, not a per-host handle. The *set* it is
+        // counted into still uses the whole value, so the count is exact
+        // whatever the log shows.
+        "peer": .string(LabRedaction.rpid(displayId, at: emitter.level)),
         "peers": .int(peers.count),
         "expectPeers": .int(options.participate.expectPeers),
       ])

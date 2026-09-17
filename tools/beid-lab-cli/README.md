@@ -243,10 +243,21 @@ room.
 | `b004` (event-code hash) | full, `info` | Served over GATT to anything that connects, and carried in the signed definition. A run's own B004 is the single most useful line for diagnosing a gate mismatch, and withholding it would hide the thing the log exists to show. |
 | `payloadDigest` (relay) | full, `info` | A local dedup key over an envelope that is itself broadcast. It identifies a *message*, not a person or a device. |
 | `eventDisplayName` | full, `info` | On the wire by design — it is what a participant is shown. |
-| Peripheral identifier (`peer`) | full | A CoreBluetooth per-host value, not a hardware address, and not stable across machines. Truncating it would create collisions and destroy the only way to correlate two lines about one device. |
-| RPID | prefix below `trace` | On the wire, but rotating and person-linked. See above. |
+| `peer` in **`observe`** — a `CBPeripheral.identifier` | full | A CoreBluetooth per-host UUID. It is not a hardware address and **not stable across machines**, so it identifies nothing outside this one run. Truncating it would create collisions and destroy the only way to correlate two lines about one device. |
+| `peer` in **`participate`** — a `displayId` | prefix below `trace` | A different value under the same key, with the opposite property. `displayId` is `SHA256(TEK)[0:4]`, served over B003 and rotating with the TEK, so it **is** on the wire and therefore identical on every machine that sees it — that is the whole reason two devices can recognise each other by it. Same rotating-pseudonym class as an RPID, so it is redacted on the same terms. |
+| `myDisplayId` (this host's own) | prefix below `trace` | Same value class, same treatment. Correlating two hosts' logs by it needs `-vv`. |
+| RPID | prefix below `trace` | On the wire, but rotating and person-linked. |
 | Join string | prefix below `trace` | **Not** on the wire. Only its hash is. |
 | Key material | never, any level | — |
+
+The two `peer` rows are the pair most likely to be misread, because one key
+carries two values with opposite properties. An earlier version of this table
+had a single row justified by "a CoreBluetooth per-host value" — true of the
+`observe` value and false of the other, which is on the wire by design. The
+`participate` value is a pseudonym and is treated as one.
+
+Counting is unaffected by any of this: the peer set uses whole values, so
+`peers` in the closing `result` line is exact whatever the log shows.
 
 The last two rows are the pair worth reading together, because printing a
 hash while redacting its input looks inconsistent until you ask what an
