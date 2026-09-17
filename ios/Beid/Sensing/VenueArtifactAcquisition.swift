@@ -25,6 +25,13 @@ enum VenueAcquisitionFailure: String, CaseIterable, Hashable, Error {
 /// the verifier, and refuses every redirect.
 protocol VenueArtifactAcquiring: AnyObject {
   func acquire(bundleSource: URL, handoffSource: URL) async throws -> VenuePublicArtifact
+  /// The bundle alone, for a handoff that did not arrive over the network.
+  ///
+  /// A handoff carried in a link's fragment never reaches a server, which is the
+  /// property that lets a consumer treat it as coming from whoever handed the link
+  /// over. Fetching it would throw that away, so the link path has bytes already and
+  /// needs only the bundle those bytes name.
+  func acquireBundle(bundleSource: URL) async throws -> Data
 }
 
 enum VenueArtifactBounds {
@@ -74,9 +81,13 @@ final class VenueArtifactAcquisition: VenueArtifactAcquiring {
   }
 
   func acquire(bundleSource: URL, handoffSource: URL) async throws -> VenuePublicArtifact {
-    let bundleBytes = try await read(bundleSource, cap: VenueArtifactBounds.maxBundleBytes)
+    let bundleBytes = try await acquireBundle(bundleSource: bundleSource)
     let handoffBytes = try await read(handoffSource, cap: VenueArtifactBounds.maxHandoffBytes)
     return VenuePublicArtifact(bundleBytes: bundleBytes, handoffBytes: handoffBytes)
+  }
+
+  func acquireBundle(bundleSource: URL) async throws -> Data {
+    try await read(bundleSource, cap: VenueArtifactBounds.maxBundleBytes)
   }
 
   private func read(_ source: URL, cap: Int) async throws -> Data {

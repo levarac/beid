@@ -53,6 +53,8 @@
 	<string>beid uses Bluetooth to automatically sense nearby events and collect proof of attendance.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>beid uses Bluetooth to automatically sense nearby events and collect proof of attendance.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>beid uses the camera only to scan a venue link QR code when a venue device is set up.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

@@ -766,6 +766,59 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     }
   }
 
+  /// beid#597 — a link whose fragment was altered must be refused, and the refusal
+  /// must come from the same handoff/bundle comparison the two-URL form ran.
+  ///
+  /// The handoff now travels in the fragment, which is the one part of a link a
+  /// server never sees and therefore never validates. Nothing but this comparison
+  /// stands between an altered fragment and a venue device serving for it, so the
+  /// carrier change is only safe if a one-byte edit still fails here.
+  func testAVenueLinkWithATamperedDigestFragmentIsRejectedByTheSameHandoffComparison() async throws {
+    let valid = try XCTUnwrap(try VenueBundleConformanceFixture.loadAll().first { $0.name == "valid" })
+    // The bundle digest is the handoff's last field, so its last byte is the last
+    // byte of the encoding. Flipping it changes what the handoff claims about the
+    // bundle without disturbing the CBOR the decoder reads.
+    var tampered = valid.handoff
+    tampered[tampered.index(before: tampered.endIndex)] ^= 0x01
+    XCTAssertEqual(tampered.count, valid.handoff.count)
+    XCTAssertNotEqual(tampered, valid.handoff)
+
+    let link = "https://artifacts.example/venue-bundles/\(valid.eventId)#" + tampered
+      .base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
+    // The link itself is well-formed: the shared decoder accepts it and returns the
+    // altered bytes. A tampered fragment is not a malformed link, and reporting it
+    // as one would tell an operator to retype a link that is not the problem.
+    let carried = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueHandoffLinkBytes(link: link))
+    let carriedBytes = Data((0..<Int(carried.size)).map { UInt8(bitPattern: carried[Int32($0)]) })
+    XCTAssertEqual(carriedBytes, tampered)
+
+    let server = try LoopbackJSONRPCServer { body in RecordedVenueRegistryURLProtocol.responseData(for: body) }
+    let endpoint = try await server.start()
+    defer { server.stop() }
+    let client = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+      readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+      primaryEndpointUrl: endpoint.absoluteString, secondaryEndpointUrl: endpoint.absoluteString))
+    defer { client.close() }
+    let result = await ProductionVenueBundleVerifier(registryClient: client).importBundle(
+      bundleBytes: valid.bundle, handoffBytes: carriedBytes)
+    guard case .rejected(let failure) = result else {
+      return XCTFail("a tampered digest must reject at import: \(result); \(server.summary)")
+    }
+    XCTAssertEqual(failure, .handoffMismatch)
+
+    // The same bundle with the untampered fragment still imports, so the rejection
+    // above is the digest and not the fixture or the loopback registry.
+    let untampered = await ProductionVenueBundleVerifier(registryClient: client).importBundle(
+      bundleBytes: valid.bundle, handoffBytes: valid.handoff)
+    guard case .imported = untampered else {
+      return XCTFail("the untampered pair must import: \(untampered); \(server.summary)")
+    }
+  }
+
   func testNativeVerifierRejectsMixedValidAndTamperedBundleAtImport() async throws {
     let bundle = Bundle(for: Self.self)
     let bundleURL = try XCTUnwrap(bundle.url(

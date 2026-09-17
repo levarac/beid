@@ -77,14 +77,25 @@ final class StubVenueArtifactAcquisition: VenueArtifactAcquiring {
   }
 
   var replies: [Reply] = []
-  private(set) var requestedSources: [(bundle: URL, handoff: URL)] = []
+  private(set) var requestedSources: [(bundle: URL, handoff: URL?)] = []
   private var pending: [Int: CheckedContinuation<VenuePublicArtifact, Error>] = [:]
   private var nextRequestID = 0
   private var observers: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
   var pendingAcquisitionIDs: [Int] { pending.keys.sorted() }
 
+  /// The bundle-only request the link path makes. It draws from the same scripted
+  /// `replies` queue and returns that reply's bundle half, so a test scripting a
+  /// link supply and a test scripting the two-URL supply write the same thing.
+  func acquireBundle(bundleSource: URL) async throws -> Data {
+    try await acquire(bundleSource: bundleSource, handoffSource: nil).bundleBytes
+  }
+
   func acquire(bundleSource: URL, handoffSource: URL) async throws -> VenuePublicArtifact {
+    try await acquire(bundleSource: bundleSource, handoffSource: Optional(handoffSource))
+  }
+
+  private func acquire(bundleSource: URL, handoffSource: URL?) async throws -> VenuePublicArtifact {
     let id = nextRequestID
     nextRequestID += 1
     requestedSources.append((bundleSource, handoffSource))

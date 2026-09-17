@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import Foundation
 
 enum VenueBundleURLTemplate {
@@ -74,6 +75,23 @@ final class VenueExpiryTimer: VenueExpiryScheduling {
 /// at all — the name exists only on an SDK-verified permit. A case here that
 /// could hold a name would be a case that invites presenting a receipt as
 /// ready, so the type refuses to hold one.
+/// Why a pasted or scanned venue link never became a request.
+///
+/// Deliberately its own type, beside `VenueAcquisitionFailure` and
+/// `VenueImportFailure` rather than folded into either. Nothing was fetched and
+/// nothing was verified, so an operator holding a mistyped link must not be told
+/// that a bundle was rejected — the link never named one.
+enum VenueLinkFailure: String, CaseIterable, Hashable {
+  /// No absolute URI before the `#`, no fragment, or a fragment that is not the
+  /// base64url of a `VenueHandoffV1`. The shared decoder decides all three.
+  case malformedLink
+  /// A six-field handoff. It is valid, and it names no bundle, so this screen has
+  /// nothing to fetch. `venue-bundle.md` makes label 7 optional on purpose.
+  case missingBundleUrl
+  /// The handoff's `bundleUrl` is syntactically a URI but not one this app fetches.
+  case unsupportedBundleUrl
+}
+
 enum VenueServingStatus: Equatable {
   case idle
   case acquiring
@@ -88,6 +106,8 @@ enum VenueServingStatus: Equatable {
   case blocked(VenueServingRejection)
   case importRejected(VenueImportFailure)
   case acquisitionFailed(VenueAcquisitionFailure)
+  /// The link itself was refused. No fetch was made and no verdict was issued.
+  case linkRejected(VenueLinkFailure)
   /// The radio refused the bytes. Kept separate from `blocked` so an effect
   /// failure is never displayed as a verification verdict the verifier never
   /// issued.
@@ -112,6 +132,16 @@ final class VenueSignedServingViewModel: ObservableObject {
   @Published private(set) var status: VenueServingStatus = .idle
   @Published private(set) var radio: VenueRadioUpdate
   @Published private(set) var storedSourceDescription: String?
+
+  /// The event id the pasted link's own fragment named, published the moment the
+  /// fragment decodes and before anything is fetched.
+  ///
+  /// Distinct from `servingEventIdHex`, which is copied off an installed permit.
+  /// This one is only what the operator was handed: it says which event the link
+  /// claims, not that the claim was verified. Issue #597 asks for it because
+  /// Supply was previously silent, so a venue operator could not tell a link that
+  /// decoded from one that did nothing.
+  @Published private(set) var linkEventIdHex: String?
 
   private let verifier: any VenueBundleVerifying
   private var broadcasting: any VenueSignedContainerBroadcasting
@@ -380,6 +410,94 @@ final class VenueSignedServingViewModel: ObservableObject {
       hasUnsavedArtifact = store.persistenceWriteFailure != nil || store.isPersistenceSuspended
       storedSourceDescription = sourceDescription
     }
+  }
+
+  /// Supplies from the single carrier a venue operator actually hands over: a
+  /// link whose fragment holds the base64url `VenueHandoffV1`, pasted or scanned
+  /// (beid#597).
+  ///
+  /// The fragment never reaches a server, so the handoff is treated as coming
+  /// from whoever handed the link over — which is exactly what
+  /// `protocol/spec/v0.1/venue-bundle.md` requires and what the previous
+  /// two-URL form could not express, because it fetched the handoff from a host.
+  ///
+  /// Both the bytes and the fields come from `shared/`. Nothing here decodes
+  /// base64url or CBOR: the bytes handed to the verifier are the bytes the shared
+  /// decoder accepted, so there is no second, native opinion about what a link
+  /// carries. Verification itself is unchanged — the same import compares every
+  /// field this handoff shares with the bundle, and the same digest check runs.
+  func supply(link rawLink: String) async {
+    guard sessionActive else { return }
+    let link = rawLink.trimmingCharacters(in: .whitespacesAndNewlines)
+    linkEventIdHex = nil
+    guard
+      let handoffBytes = ExportedKotlinPackages.org.levarac.parallax.venue
+        .decodeVenueHandoffLinkBytes(link: link),
+      let handoff = ExportedKotlinPackages.org.levarac.parallax.venue
+        .decodeVenueHandoffLink(link: link)
+    else {
+      invalidate()
+      workflow = nil
+      status = .linkRejected(.malformedLink)
+      return
+    }
+    linkEventIdHex = Self.hexString(Self.swiftBytes(fromKotlin: handoff.eventId.toByteArray()))
+    guard let bundleUrlText = handoff.bundleUrl else {
+      invalidate()
+      workflow = nil
+      status = .linkRejected(.missingBundleUrl)
+      return
+    }
+    // `bundleUrl` passed the shared decoder's URI-syntax check, which deliberately
+    // admits schemes this app does not fetch. Which transports are permitted is a
+    // native policy, and it is enforced here rather than by widening that check.
+    guard let bundleSource = URL(string: bundleUrlText),
+      bundleSource.isFileURL || bundleSource.scheme?.lowercased() == "https"
+    else {
+      invalidate()
+      workflow = nil
+      status = .linkRejected(.unsupportedBundleUrl)
+      return
+    }
+
+    let owner = select(nil, stage: .acquiring)
+    status = eligible ? .acquiring : .idle
+    await runOperation(owner: owner) { [self] operation in
+      let bundleBytes: Data
+      do {
+        bundleBytes = try await acquisition.acquireBundle(bundleSource: bundleSource)
+      } catch {
+        guard mayCommit(owner, operation: operation) else { return }
+        workflow = nil
+        status = eligible ? .acquisitionFailed((error as? VenueAcquisitionFailure) ?? .transportFailure) : .idle
+        return
+      }
+      guard mayCommit(owner, operation: operation) else { return }
+      let artifact = VenuePublicArtifact(
+        bundleBytes: bundleBytes,
+        handoffBytes: Data(Self.swiftBytes(fromKotlin: handoffBytes))
+      )
+      workflow?.artifact = artifact
+      await resumeSelected(owner: owner, operation: operation)
+      guard mayCommit(owner, operation: operation) else { return }
+      // Names where the BUNDLE came from. The handoff came from the link, and the
+      // spec is explicit that a consumer credits it to whoever handed that over,
+      // never to a host — so this string must not read as the handoff's origin.
+      let description = "link, bundle from \(bundleSource.host ?? bundleUrlText)"
+      store.store(VenuePublicArtifactRecord(
+        bundleBytes: artifact.bundleBytes, handoffBytes: artifact.handoffBytes,
+        sourceDescription: description, storedAt: Date()))
+      hasUnsavedArtifact = store.persistenceWriteFailure != nil || store.isPersistenceSuspended
+      storedSourceDescription = description
+    }
+  }
+
+  private static func swiftBytes(fromKotlin bytes: ExportedKotlinPackages.kotlin.ByteArray) -> [UInt8] {
+    (0..<Int(bytes.size)).map { UInt8(bitPattern: bytes[Int32($0)]) }
+  }
+
+  private static func hexString(_ bytes: [UInt8]) -> String {
+    bytes.map { String(format: "%02x", $0) }.joined()
   }
 
   /// Acquires the selected event's bundle when the app is configured for the

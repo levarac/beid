@@ -1829,7 +1829,7 @@ extension VenueSignedServingViewModelTests {
     await acquisition.waitForAcquisitionCount(1)
     XCTAssertEqual(acquisition.requestedSources.first?.bundle.absoluteString,
                    "https://venue.example/artifacts/\(eventId)")
-    XCTAssertEqual(acquisition.requestedSources.first?.handoff.absoluteString,
+    XCTAssertEqual(acquisition.requestedSources.first?.handoff?.absoluteString,
                    "https://venue.example/handoff")
     _ = await task.value
   }

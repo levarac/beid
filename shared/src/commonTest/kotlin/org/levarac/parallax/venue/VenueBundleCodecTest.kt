@@ -2,6 +2,8 @@ package org.levarac.parallax.venue
 
 import org.levarac.parallax.observation.CanonicalCbor
 import org.levarac.parallax.registry.EventDefinitionCborCodec.StrictCborReader
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -174,6 +176,56 @@ class VenueBundleCodecTest {
     }
 
     @Test
+    fun linkBytesAreTheSameBytesTheLinkDecoderAccepted() {
+        val link = "https://handoff.example/#$HANDOFF_BASE64URL"
+        // The bytes a caller matches a bundle against must be the ones this
+        // decoder validated, not a second base64url decode on the native side.
+        // A native reimplementation would be a second branch deciding the same
+        // product outcome, which is what shared/ exists to prevent.
+        assertContentEquals(handoffBytes(), assertNotNull(decodeVenueHandoffLinkBytes(link)))
+        assertEquals(
+            assertNotNull(decodeVenueHandoffLink(link)).eventId.toByteArray().toHex(),
+            assertNotNull(decodeVenueHandoff(assertNotNull(decodeVenueHandoffLinkBytes(link))))
+                .eventId.toByteArray().toHex(),
+        )
+    }
+
+    @Test
+    fun linkBytesRefuseExactlyWhatTheLinkDecoderRefuses() {
+        for (malformed in listOf(
+            "https://handoff.example/",
+            "relative#$HANDOFF_BASE64URL",
+            "https://handoff.example/#%%%",
+            "#$HANDOFF_BASE64URL",
+        )) {
+            assertNull(decodeVenueHandoffLinkBytes(malformed), malformed)
+            assertNull(decodeVenueHandoffLink(malformed), malformed)
+        }
+    }
+
+    @Test
+    fun linkBytesRefuseAWellFormedFragmentThatIsNotAHandoff() {
+        // Reachable only past the syntax guards: this fragment is valid base64url on a
+        // valid absolute URI, so nothing before the handoff decode rejects it. Without
+        // that decode a caller would receive bytes it could store and later re-import
+        // as an artifact pair whose handoff half never decoded.
+        val link = "https://handoff.example/#" + ByteArray(8) { 0x5a }.base64UrlForTest()
+        assertNull(decodeVenueHandoffLinkBytes(link))
+        assertNull(decodeVenueHandoffLink(link))
+    }
+
+    @Test
+    fun linkBytesCarryAHandoffWhoseBundleUrlSurvivesTheFragment() {
+        val bytes = handoffBytes("https://artifacts.example/venue-bundles/a")
+        val link = "https://artifacts.example/venue-bundles/a#" + bytes.base64UrlForTest()
+        assertContentEquals(bytes, assertNotNull(decodeVenueHandoffLinkBytes(link)))
+        assertEquals(
+            "https://artifacts.example/venue-bundles/a",
+            assertNotNull(decodeVenueHandoffLink(link)).bundleUrl,
+        )
+    }
+
+    @Test
     fun rejectsOversizeWholeInputs() {
         assertNull(decodeVenueBundle(ByteArray(1_048_577)))
         assertNull(decodeVenueHandoff(ByteArray(4097)))
@@ -215,6 +267,10 @@ class VenueBundleCodecTest {
         assertEquals((MAX_VENUE_BUNDLE_BYTES + 1) * 2, oversizeHex.length)
         assertNull(decodeVenueBundleHex(oversizeHex))
     }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun ByteArray.base64UrlForTest(): String =
+        Base64.UrlSafe.encode(this).trimEnd('=')
 
     private fun ByteArray.toHex(): String = joinToString("") { byte ->
         val value = byte.toInt() and 0xff

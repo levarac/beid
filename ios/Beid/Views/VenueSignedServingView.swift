@@ -18,8 +18,8 @@ import SwiftUI
 /// apart, so the full event ID of the installed permit is shown beside it
 /// (beid#531).
 ///
-/// The four `switch` statements below have NO `default` case, deliberately.
-/// Adding a case to any of the four venue enums must break this build: a
+/// The five `switch` statements below have NO `default` case, deliberately.
+/// Adding a case to any of the five venue enums must break this build: a
 /// `default` would turn a new outcome into a silently mislabelled one, and
 /// the build break is the control that prevents that.
 struct VenueSignedServingView: View {
@@ -29,8 +29,8 @@ struct VenueSignedServingView: View {
   @State private var requestTask: Task<Void, Never>?
   @StateObject private var lifecycleTasks = VenueLifecycleTaskOwner()
 
-  @State private var bundleURLText = ""
-  @State private var handoffURLText = ""
+  @State private var venueLinkText = ""
+  @State private var isScanning = false
 
   init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
     _viewModel = StateObject(wrappedValue: viewModel())
@@ -77,37 +77,40 @@ struct VenueSignedServingView: View {
 
   private var sourceSection: some View {
     Section {
-      TextField("Bundle URL", text: $bundleURLText, prompt: Text("https://"))
+      TextField("Venue link", text: $venueLinkText, prompt: Text("https://…#…"), axis: .vertical)
         .font(DS.Font.body)
+        .lineLimit(1...3)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .accessibilityIdentifier("Venue bundle URL")
+        .accessibilityIdentifier("Venue link")
 
-      TextField("Handoff URL", text: $handoffURLText, prompt: Text("https://"))
-        .font(DS.Font.body)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-        .accessibilityIdentifier("Venue handoff URL")
+      if VenueLinkScanner.isAvailable {
+        Button("Scan QR") { isScanning = true }
+          .font(DS.Font.body)
+          .accessibilityIdentifier("Scan QR")
+      }
 
-      Button("Supply bundle") {
-        guard let handoff = URL(string: handoffURLText) else { return }
+      Button("Supply") {
+        let link = venueLinkText
         requestTask?.cancel()
-        requestTask = Task {
-          if let template = RegistryDependencies.venueBundleURLTemplate(),
-             let eventId = viewModel.canonicalEventIdHexForAcquisition {
-            await viewModel.supplyConfigured(
-              canonicalEventIdHex: eventId,
-              bundleURLTemplate: template,
-              handoffSource: handoff,
-              sourceDescription: "configured venue endpoint"
-            )
-          } else if let bundle = URL(string: bundleURLText) {
-            await viewModel.supply(bundleSource: bundle, handoffSource: handoff, sourceDescription: bundle.host ?? bundleURLText)
-          }
-        }
+        requestTask = Task { await viewModel.supply(link: link) }
       }
       .font(DS.Font.cta)
-      .disabled((bundleURLText.isEmpty && RegistryDependencies.venueBundleURLTemplate() == nil) || handoffURLText.isEmpty)
+      .accessibilityIdentifier("Supply")
+      .disabled(venueLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+      // What the link's own fragment said, before anything was fetched or checked.
+      // Shown as soon as it decodes, because Supply used to be silent: an operator
+      // could not tell a link that decoded from one that did nothing (beid#597).
+      if let eventId = viewModel.linkEventIdHex {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+          Text("Link event")
+            .font(DS.Font.meta)
+            .foregroundStyle(DS.Color.textSecondary)
+          Text(verbatim: eventId.prefix(16) + "…")
+            .font(DS.Font.ledgerMono)
+        }
+      }
 
       if let stored = viewModel.storedSourceDescription {
         Button("Reload stored bundle") {
@@ -135,6 +138,23 @@ struct VenueSignedServingView: View {
       // Says plainly that storage is not a shortcut past verification.
       Text("Stored bundles are verified again each time they are loaded.")
         .font(DS.Font.meta)
+      // The fragment never reaches a server, so the handoff's authority is the
+      // person who handed the link over. Saying so on the screen is the only place
+      // an operator meets that rule.
+      Text("The link carries the handoff itself. Use one handed over by the event's organiser.")
+        .font(DS.Font.meta)
+    }
+    .sheet(isPresented: $isScanning) {
+      VenueLinkScannerView(
+        onScan: { payload in
+          isScanning = false
+          venueLinkText = payload
+          requestTask?.cancel()
+          requestTask = Task { await viewModel.supply(link: payload) }
+        },
+        onCancel: { isScanning = false }
+      )
+      .ignoresSafeArea()
     }
   }
 
@@ -187,6 +207,8 @@ struct VenueSignedServingView: View {
         label(message(for: failure), tint: DS.Color.statusCaution)
       case .acquisitionFailed(let failure):
         label(message(for: failure), tint: DS.Color.statusCaution)
+      case .linkRejected(let failure):
+        label(message(for: failure), tint: DS.Color.statusCaution)
       case .radioRefused(let failure):
         label(message(for: failure), tint: DS.Color.statusCaution)
       }
@@ -231,7 +253,18 @@ struct VenueSignedServingView: View {
       .formatted(date: .omitted, time: .shortened)
   }
 
-  // MARK: - Exhaustive outcome copy. No `default` in any of the four.
+  // MARK: - Exhaustive outcome copy. No `default` in any of the five.
+
+  private func message(for failure: VenueLinkFailure) -> LocalizedStringKey {
+    switch failure {
+    case .malformedLink:
+      return "That is not a venue link. Paste the whole link, including the part after the #."
+    case .missingBundleUrl:
+      return "This link names an event but no bundle to fetch."
+    case .unsupportedBundleUrl:
+      return "This link's bundle address is not one this app can fetch."
+    }
+  }
 
   private func message(for failure: VenueImportFailure) -> LocalizedStringKey {
     switch failure {
