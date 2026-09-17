@@ -330,9 +330,24 @@ internal data class RegistryRecord(
      * because the status is what the card shows: resetting it would put the
      * card back to "Checking" between attempts, which is the state beid#584
      * exists to get rid of.
+     *
+     * A completion records [pendingRetryDelayMillis], a duration, and the
+     * next call that carries a clock turns it into
+     * [nextRetryAtEpochMillis], an instant. The reducer has no clock of its
+     * own, and the alternative of anchoring to the candidate's most recent
+     * observation is wrong rather than merely approximate: a beacon that
+     * goes quiet stops advancing that observation, so once the backoff
+     * outgrows its age every deadline computed that way is already in the
+     * past, and a host that wakes on these deadlines runs back-to-back
+     * requests until the TTL evicts the candidate — worst precisely when
+     * connectivity is down, which is when the failures happen (PR 595
+     * review, P1). The same collapse occurs whenever a request takes longer
+     * than its own backoff step. Both are ruled out by measuring from a
+     * clock read at or after the completion.
      */
     var failedResolutionCount: Int = 0,
     var retryDue: Boolean = false,
+    var pendingRetryDelayMillis: Long? = null,
     var nextRetryAtEpochMillis: Long? = null,
 )
 
@@ -738,6 +753,16 @@ private fun armDueRegistryRetries(
     store.registry.values.forEach { record ->
         if (record.attempt != null || record.retryDue) return@forEach
         if (!record.status.isRetryableFailure()) return@forEach
+        val pending = record.pendingRetryDelayMillis
+        if (pending != null) {
+            // This clock reading is the first one taken at or after the
+            // completion that scheduled the wait, which is what makes the
+            // deadline genuinely ahead of it.
+            record.nextRetryAtEpochMillis = nowEpochMillis.plusSaturating(pending)
+            record.pendingRetryDelayMillis = null
+            changed = true
+            return@forEach
+        }
         val due = record.nextRetryAtEpochMillis ?: return@forEach
         if (nowEpochMillis < due) return@forEach
         record.retryDue = true
@@ -771,6 +796,7 @@ public fun beginNearbyEventRegistryResolutionFromHex(
     // failed verdict it is showing until this attempt replaces it.
     if (record.status != NearbyEventRegistryStatus.UNRESOLVED && !record.retryDue) return null
     record.retryDue = false
+    record.pendingRetryDelayMillis = null
     record.nextRetryAtEpochMillis = null
     return NearbyEventRegistryResolutionAttempt(hash).also { record.attempt = it }
 }
@@ -812,6 +838,35 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     val record = store.registry[hash]
         ?: return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
     if (!isNearbyEventRegistryResolutionAttemptActive(store, attempt)) {
+        // A completion can be inactive for two different reasons, and only
+        // one of them is the stale-attempt guard doing its job (PR 595
+        // review, P2c).
+        //
+        // Superseded: reset or TTL expiry built a newer record, so this
+        // attempt is not the one the record holds. Identity decides it --
+        // `===` can only match the record's own attempt -- so nothing here
+        // can release a slot belonging to a live newer attempt.
+        //
+        // Stranded: this IS the record's attempt, but source eviction at
+        // MAX_LIVE_SOURCE_COUNT took the hash's last source while the
+        // request was in flight, and eviction deliberately leaves the
+        // registry evidence standing (beid#454). Returning without clearing
+        // the slot held it forever: a later beacon re-admits the hash and
+        // `begin` still refuses it. Releasing it costs nothing, because this
+        // attempt can never complete meaningfully now.
+        if (record.attempt === attempt) {
+            record.attempt = null
+            // A stranded *retry* needs its wait back as well as its slot.
+            // Its status is a failed verdict rather than UNRESOLVED and its
+            // due flag was consumed when it began, so a released slot alone
+            // still leaves `begin` refusing the hash on both counts.
+            if (record.status.isRetryableFailure() && !record.retryDue &&
+                record.nextRetryAtEpochMillis == null
+            ) {
+                record.pendingRetryDelayMillis =
+                    registryRetryDelayMillis(record.failedResolutionCount + 1)
+            }
+        }
         return NearbyEventDiscoveryUpdate(false, false, store.snapshot)
     }
     record.attempt = null
@@ -849,19 +904,18 @@ public fun completeNearbyEventRegistryResolutionFromHex(
     record.registryBlockHashHex = registryBlockHashHex.takeIf { registrationStands }
     record.definitionValidFromEpochSeconds = verifiedDefinitionValidFromEpochSeconds.takeIf { registrationStands }
     record.definitionValidUntilEpochSeconds = verifiedDefinitionValidUntilEpochSeconds.takeIf { registrationStands }
-    // The reducer holds no clock, and this call carries none. The hash's most
-    // recent observation is the closest instant it does have, and a live one
-    // is guaranteed: the attempt-active check above requires a live source.
-    // It runs slightly early against real time, which only ever means the
-    // retry becomes eligible at the next hint rather than one after it.
+    // A duration, not an instant: this call carries no clock, and the next
+    // one that does will anchor the wait. See [RegistryRecord] for why the
+    // candidate's own last observation is not an acceptable substitute.
     if (record.status.isRetryableFailure()) {
         record.failedResolutionCount += 1
         record.retryDue = false
-        record.nextRetryAtEpochMillis = store.lastSeenAtEpochMillis(hash)
-            ?.plusSaturating(registryRetryDelayMillis(record.failedResolutionCount))
+        record.pendingRetryDelayMillis = registryRetryDelayMillis(record.failedResolutionCount)
+        record.nextRetryAtEpochMillis = null
     } else {
         record.failedResolutionCount = 0
         record.retryDue = false
+        record.pendingRetryDelayMillis = null
         record.nextRetryAtEpochMillis = null
     }
     // Runs after `record.status` is final, and is a no-op unless a
@@ -1072,11 +1126,6 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
         unverifiedEnvelopeCount = unverifiedEnvelopeCount,
     )
 }
-
-private fun NearbyEventDiscoveryStore.lastSeenAtEpochMillis(hash: EventHash): Long? =
-    sources.values
-        .filter { source -> source.eventHash == hash }
-        .maxOfOrNull { source -> source.lastSeenAtEpochMillis }
 
 private fun Long.plusSaturating(other: Long): Long =
     if (this > Long.MAX_VALUE - other) Long.MAX_VALUE else this + other

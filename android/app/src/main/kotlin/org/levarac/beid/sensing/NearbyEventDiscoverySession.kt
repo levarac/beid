@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.levarac.barnard.BarnardEventDefinitionV1
+import org.levarac.beid.BuildConfig
 import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.discovery.NearbyEventJoinEligibility
 import org.levarac.parallax.discovery.NearbyEventRegistryStatus
@@ -121,7 +122,10 @@ internal class NearbyEventDiscoverySession(
      * Where this session's diagnostic lines go (beid#584, feeding beid#583).
      *
      * Injected rather than called directly so a test can assert the lines
-     * themselves. The field capture behind beid#584 filtered logcat to the
+     * themselves. Every call site is gated on `BuildConfig.DEBUG`, matching
+     * `WindowObservationAccumulator`: the event-code hash is public on the
+     * radio, but a release log that records which event a device was near,
+     * persistently and per candidate, is more than diagnosis needs. The field capture behind beid#584 filtered logcat to the
      * app's own pid and found sixty-nine lines, every one of them Android's
      * `BluetoothGatt` and not one of them the app's, which is why a stuck
      * verification could not be diagnosed while the rig was running.
@@ -290,7 +294,7 @@ internal class NearbyEventDiscoverySession(
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
             val attemptNumber = candidate.registryResolutionFailureCount + 1
             val attempt = beginNearbyEventRegistryResolutionFromHex(store, hash) ?: return@repeat
-            log("registry_resolution_begin hash=$hash attempt=$attemptNumber")
+            if (BuildConfig.DEBUG) log("registry_resolution_begin hash=$hash attempt=$attemptNumber")
             val generation = callbackGeneration
             // The whole body runs on coroutineScope's dispatcher (Main.immediate,
             // set by the caller), matching the iOS adapter's `Task { @MainActor }`
@@ -323,8 +327,14 @@ internal class NearbyEventDiscoverySession(
                             verifiedDefinitionEventCodeHashHex = null,
                             envelopeAgreesWithRegistry = false,
                         )
-                        logResolutionOutcome(hash, "lookup", result, attemptNumber, failure.snapshot)
-                        publishAndSchedule(failure.snapshot)
+                        // The reducer scheduled a wait, not a deadline; this
+                        // refresh is the clock reading that anchors it, and it
+                        // has to happen before the log line and the wake-up
+                        // scheduling both read it back (PR 595 review, P1).
+                        val armed = refreshNearbyEventDiscovery(store, nowEpochMillis())
+                        logResolutionOutcome(hash, "lookup", result, attemptNumber, armed.snapshot)
+                        publishAndSchedule(armed.snapshot)
+                        resolveUnresolvedCandidates(armed.snapshot)
                         return@launch
                     }
                     lateinit var verification: NearbyEventRegistryRequest
@@ -362,15 +372,17 @@ internal class NearbyEventDiscoverySession(
                                     verifiedDefinitionValidFromEpochSeconds = verified.validFromEpochSeconds,
                                     verifiedDefinitionValidUntilEpochSeconds = verified.validUntilEpochSeconds,
                                 )
+                            val armed = refreshNearbyEventDiscovery(store, nowEpochMillis())
                             updateVerifiedCard(
                                 hash,
                                 eventId,
                                 verified.validFromEpochSeconds,
                                 verified.validUntilEpochSeconds,
-                                update.snapshot,
+                                armed.snapshot,
                             )
-                            logResolutionOutcome(hash, "definition", result, attemptNumber, update.snapshot)
-                            publishAndSchedule(update.snapshot)
+                            logResolutionOutcome(hash, "definition", result, attemptNumber, armed.snapshot)
+                            publishAndSchedule(armed.snapshot)
+                            resolveUnresolvedCandidates(armed.snapshot)
                         }
                     }
                     registryRequests += verification
@@ -502,6 +514,7 @@ internal class NearbyEventDiscoverySession(
         attemptNumber: Int,
         snapshot: NearbyEventCandidates,
     ) {
+        if (!BuildConfig.DEBUG) return
         val candidate = (0 until snapshot.candidateCount)
             .mapNotNull(snapshot::candidateAt)
             .firstOrNull { it.eventCodeHashHex == hash }

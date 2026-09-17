@@ -195,7 +195,8 @@ class NearbyEventReceiverStateTest {
      *
      * The hint is recorded after the first backoff step rather than one
      * millisecond later, because beid#584 replaced the immediate
-     * retry-on-every-hint with a bounded schedule. The status the candidate
+     * retry-on-every-hint with a bounded schedule, and the refresh before it
+     * is what anchors that schedule to a clock. The status the candidate
      * shows is now the failed verdict it is still displaying, not UNRESOLVED:
      * the retry is armed, and the record keeps its verdict until an attempt
      * replaces it.
@@ -216,6 +217,10 @@ class NearbyEventReceiverStateTest {
             envelopeAgreesWithRegistry = false,
         )
 
+        // The completion only records how long to wait; this refresh is the
+        // clock reading that turns it into a deadline, exactly as the
+        // Android session's own post-completion refresh does.
+        refreshNearbyEventDiscovery(store, 1L)
         val update = recordNearbyEventHint(store, "p", "Event", HASH.hexBytes(), null, false, false, 5_001L)
 
         val candidate = assertNotNull(update.snapshot.candidateAt(0))

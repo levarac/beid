@@ -319,6 +319,50 @@ class NearbyEventDiscoverySessionTest {
         assertNull(session.candidates.value.nextRegistryRetryAtEpochMillis)
     }
 
+    /**
+     * PR 595 review, P1. The retry deadline used to be measured from the
+     * candidate's most recent observation, which stops advancing as soon as
+     * the beacon goes quiet. Once the backoff grew past the age of that
+     * observation the deadline was already in the past, the session's wake-up
+     * delay computed to zero, and the candidate went to back-to-back operator
+     * requests until the TTL evicted it -- worst exactly when connectivity is
+     * down, which is when the failures happen in the first place.
+     *
+     * No hint is recorded after the first, so nothing moves the observation
+     * time. The assertion is that the fourth failure buys real time like the
+     * three before it: no further request without the clock advancing.
+     */
+    @Test
+    fun aSilentBeaconStillGetsARealWaitBetweenRetries() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val session = session(registry)
+        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        assertEquals(1, registry.lookupRequests)
+
+        listOf(FIRST_RETRY_DELAY_MILLIS, SECOND_RETRY_DELAY_MILLIS, STEADY_RETRY_INTERVAL_MILLIS)
+            .forEachIndexed { index, delay ->
+                registry.completeLookup(NearbyEventIdLookup(false, null, "protocol_error"))
+                runCurrent()
+                assertEquals(index + 1, registry.lookupRequests)
+                advanceTimeBy(delay)
+                runCurrent()
+                assertEquals(index + 2, registry.lookupRequests)
+            }
+
+        // The fourth failure. Its backoff (120 s) is by now far longer than
+        // the age of the single observation, which is what used to collapse.
+        registry.completeLookup(NearbyEventIdLookup(false, null, "protocol_error"))
+        runCurrent()
+
+        assertEquals(4, registry.lookupRequests)
+        advanceTimeBy(STEADY_RETRY_INTERVAL_MILLIS - 1L)
+        runCurrent()
+        assertEquals(4, registry.lookupRequests)
+        advanceTimeBy(1L)
+        runCurrent()
+        assertEquals(5, registry.lookupRequests)
+    }
+
     @Test
     fun everyResolutionAttemptAndOutcomeReachesTheLog() = runTest {
         val registry = FakeNearbyEventRegistry()
@@ -441,6 +485,7 @@ class NearbyEventDiscoverySessionTest {
         /** Mirrors the shared backoff schedule; see `NearbyEventDiscovery.kt`. */
         const val FIRST_RETRY_DELAY_MILLIS = 5_000L
         const val SECOND_RETRY_DELAY_MILLIS = 30_000L
+        const val STEADY_RETRY_INTERVAL_MILLIS = 120_000L
 
         fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
