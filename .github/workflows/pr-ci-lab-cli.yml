@@ -145,13 +145,37 @@ jobs:
           # child's own status alongside its test counts.
           set -uo pipefail
           log="$RUNNER_TEMP/lab-cli-tests.log"
+
+          # The expected count comes from the package itself rather than a
+          # number written here, so it cannot go stale. Its real job is to
+          # catch a test target that silently did not run: green plus a
+          # plausible-looking total is exactly what that failure looks like,
+          # and this repository has the Gradle NO-SOURCE trap on record for
+          # the same reason.
+          expected=$(swift test --list-tests 2>/dev/null | grep -c .)
+          echo "targets: $(swift test --list-tests 2>/dev/null | cut -d. -f1 | sort -u | tr '\n' ' ')"
+          echo "expected tests: $expected"
+
           swift test > "$log" 2>&1
           rc=$?
-          # The count is the evidence. A suite that silently executed zero
-          # tests would otherwise pass this step.
-          grep -E "Executed [0-9]+ tests" "$log" | tail -n 4 || true
+          grep -E "Executed [0-9]+ tests" "$log" || true
           if [ "$rc" -ne 0 ]; then
             tail -n 120 "$log"
+            echo "exit=$rc"
+            exit "$rc"
+          fi
+
+          # Sum the per-bundle totals. Two toolchains disagree about whether
+          # the bundles are reported separately or merged, so this reads the
+          # `All tests` lines, which appear once per bundle either way.
+          executed=$(grep -E "^Test Suite 'All tests' (passed|failed)" -A1 "$log" \
+            | grep -oE "Executed [0-9]+ tests" | grep -oE "[0-9]+" \
+            | awk '{ total += $1 } END { print total + 0 }')
+          echo "executed tests: $executed"
+          if [ "$expected" -eq 0 ] || [ "$executed" -lt "$expected" ]; then
+            echo "error: expected $expected tests, $executed executed -- a test target did not run" >&2
+            tail -n 60 "$log"
+            exit 1
           fi
           echo "exit=$rc"
           exit "$rc"
