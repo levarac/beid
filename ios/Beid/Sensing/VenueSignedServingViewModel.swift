@@ -457,8 +457,15 @@ final class VenueSignedServingViewModel: ObservableObject {
     // `bundleUrl` passed the shared decoder's URI-syntax check, which deliberately
     // admits schemes this app does not fetch. Which transports are permitted is a
     // native policy, and it is enforced here rather than by widening that check.
+    //
+    // https only. The acquisition layer can read a `file:` URL, and the old
+    // two-URL form used that to load a bundle an operator had put on the device
+    // themselves. A link is different: its `bundleUrl` is chosen by whoever wrote
+    // the link, so honouring `file:` here would let a handed-over link name a path
+    // on this device. That reach is not something the old form gave away, and the
+    // link carrier has no use for it.
     guard let bundleSource = URL(string: bundleUrlText),
-      bundleSource.isFileURL || bundleSource.scheme?.lowercased() == "https"
+      bundleSource.scheme?.lowercased() == "https"
     else {
       linkFailure = .unsupportedBundleUrl
       return
@@ -517,6 +524,12 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// Reload is a new explicit selection and supersedes every older operation.
   func restoreFromStorage() async {
     guard sessionActive else { return }
+    // Both belong to the last link, and this loads a different pack. Left
+    // standing, a refused paste keeps complaining beside a running broadcast,
+    // and the event id a rejected link claimed sits above a pack that is not
+    // it.
+    linkEventIdHex = nil
+    linkFailure = nil
     let owner = select(store.record?.artifact, stage: .parked)
     guard let record = store.record else {
       workflow = nil

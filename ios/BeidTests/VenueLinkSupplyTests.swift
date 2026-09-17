@@ -135,14 +135,22 @@ final class VenueLinkSupplyTests: XCTestCase {
 
   func testABundleUrlThisAppCannotFetchIsRefusedBeforeAnyRequest() async {
     // The shared decoder checks URI syntax only, and says so: which transports are
-    // permitted is a native policy. `ftp:` is a well-formed absolute URI.
-    let handoffBytes = Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: "ftp://artifacts.example/b")
-    let link = Self.link(base: "https://venue.example/join", handoff: handoffBytes)
+    // permitted is a native policy. Both of these are well-formed absolute URIs.
     let viewModel = makeViewModel()
-    await viewModel.supply(link: link)
-
-    XCTAssertEqual(viewModel.linkFailure, .unsupportedBundleUrl)
-    XCTAssertEqual(acquisition.requestedSources.count, 0)
+    for url in [
+      "ftp://artifacts.example/b",
+      // `file:` is the one that matters. Acquisition can read it, and the old
+      // two-URL form used that for a bundle the operator had put on the device.
+      // Here the value comes from whoever wrote the link, so honouring it would
+      // let a handed-over link name a path on this device.
+      "file:///etc/passwd",
+      "http://artifacts.example/b",
+    ] {
+      let handoffBytes = Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: url)
+      await viewModel.supply(link: Self.link(base: "https://venue.example/join", handoff: handoffBytes))
+      XCTAssertEqual(viewModel.linkFailure, .unsupportedBundleUrl, url)
+      XCTAssertEqual(acquisition.requestedSources.count, 0, url)
+    }
   }
 
   // MARK: - A bad paste must not take a live event off the air
@@ -196,6 +204,31 @@ final class VenueLinkSupplyTests: XCTestCase {
     XCTAssertEqual(observed, Set(VenueLinkFailure.allCases))
   }
 
+  // MARK: - Fetching the pack the link named
+
+  func testEveryAcquisitionRefusalOnTheLinkPathIsSaidAsItself() async {
+    let handoffBytes = Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: Self.bundleUrl)
+    let link = Self.link(base: Self.bundleUrl, handoff: handoffBytes)
+    // allCases, not a list: a refusal added later is covered here without anyone
+    // remembering to come back. `.timedOut` arrived that way (beid#597 review).
+    for failure in VenueAcquisitionFailure.allCases {
+      ports = ScriptedVenuePorts()
+      acquisition = StubVenueArtifactAcquisition()
+      store = makeTemporaryArtifactStore()
+      let viewModel = makeViewModel()
+      acquisition.replies = [.failure(failure)]
+
+      await viewModel.supply(link: link)
+
+      XCTAssertEqual(viewModel.status, .acquisitionFailed(failure), failure.rawValue)
+      // The link was fine. Saying it was not would send the operator to retype a
+      // link that is not the problem.
+      XCTAssertNil(viewModel.linkFailure, failure.rawValue)
+      XCTAssertEqual(viewModel.linkEventIdHex, VenueServingContractFixture.eventIdHex, failure.rawValue)
+      XCTAssertTrue(ports.calls.isEmpty, failure.rawValue)
+    }
+  }
+
   // MARK: - What is stored
 
   func testTheStoredSourceNamesTheBundleHostAndNeverClaimsAHostForTheHandoff() async throws {
@@ -228,6 +261,37 @@ final class VenueLinkSupplyTests: XCTestCase {
     XCTAssertNil(viewModel.linkEventIdHex)
     XCTAssertNil(viewModel.linkFailure)
     XCTAssertEqual(viewModel.status, .idle)
+  }
+
+  func testLoadingTheStoredPackClearsWhatTheLastLinkLeftBehind() async throws {
+    let handoffBytes = Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: Self.bundleUrl)
+    let artifact = VenuePublicArtifact(bundleBytes: fixture.artifact.bundleBytes, handoffBytes: handoffBytes)
+    ports.importReplies = [
+      .immediate(.imported(VenueServingContractTestFactory.imported(
+        identity: fixture.identity, publicArtifact: artifact))),
+      .immediate(.imported(VenueServingContractTestFactory.imported(
+        identity: fixture.identity, publicArtifact: artifact))),
+    ]
+    ports.evaluationReplies = [
+      .immediate(.blocked(try XCTUnwrap(VenueServingRejection(reason: .expired)))),
+      .immediate(.blocked(try XCTUnwrap(VenueServingRejection(reason: .expired)))),
+    ]
+    acquisition.replies = [.artifact(artifact)]
+
+    let viewModel = makeViewModel()
+    await viewModel.supply(link: Self.link(base: Self.bundleUrl, handoff: handoffBytes))
+    XCTAssertNotNil(store.record)
+    // Then a bad paste, which leaves a complaint and an event id on the screen.
+    await viewModel.supply(link: "https://artifacts.example/bundle#not-base64!")
+    XCTAssertEqual(viewModel.linkFailure, .malformedLink)
+
+    await viewModel.restoreFromStorage()
+
+    // Loading the stored pack is a different act on a different pack. Carrying
+    // the last link's complaint into it would have the screen arguing about a
+    // link that is no longer the subject.
+    XCTAssertNil(viewModel.linkFailure)
+    XCTAssertNil(viewModel.linkEventIdHex)
   }
 
   // MARK: - Fixtures
