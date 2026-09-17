@@ -1337,12 +1337,12 @@
       }
     },
     "venue.serving.servingUntil": {
-      "comment": "The value is a time of day. This instant is fixed by the permit and is exclusive - serving stops at it, it does not continue through it.",
+      "comment": "The value is a time of day. This instant is fixed by the permit and is exclusive - broadcasting stops at it, it does not continue through it. \"Broadcasting\" is the word the venue screen uses throughout; it is not a claim that the radio is confirmed on air, which the radio section states separately.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Serving until %@."
+            "value": "Broadcasting until %@."
           }
         }
       }

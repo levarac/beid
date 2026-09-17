@@ -176,6 +176,10 @@ struct VenueSignedServingView: View {
         String(
           localized: "venue.serving.servingUntil",
           defaultValue: "Broadcasting until \(Self.instantText(stopAtUnixSeconds)).",
+          // The catalogue holds a translated `en` unit for this key and it WINS
+          // over this defaultValue — changing the wording here alone left the
+          // screen still saying "Serving until" (beid#599 review). The
+          // catalogue entry is the one to edit; this stays in step with it.
           comment: "The value is a time of day. This instant is fixed by the permit and is exclusive — broadcasting stops at it, it does not continue through it."
         )
       )
