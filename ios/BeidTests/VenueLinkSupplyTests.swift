@@ -180,8 +180,13 @@ final class VenueLinkSupplyTests: XCTestCase {
     guard case .serving = viewModel.status else {
       return XCTFail("a refused link must not change what is being served: \(viewModel.status)")
     }
+    // The whole point, and the only form of it that is true: the port log did
+    // not MOVE. Asserting `.clearing` is absent from the log outright would be
+    // wrong, because reaching `.serving` at all required a `select()` that
+    // cleared the radio first — that clearing is the supply doing its job, not
+    // the refused link doing damage. CI caught that difference; this machine has
+    // no simulator to run these on.
     XCTAssertEqual(ports.calls, callsWhileServing, "a refused link must reach no port at all")
-    XCTAssertFalse(ports.calls.contains(.clearing))
     XCTAssertEqual(viewModel.servingEventIdHex, VenueServingContractFixture.eventIdHex)
   }
 
@@ -225,7 +230,14 @@ final class VenueLinkSupplyTests: XCTestCase {
       // link that is not the problem.
       XCTAssertNil(viewModel.linkFailure, failure.rawValue)
       XCTAssertEqual(viewModel.linkEventIdHex, VenueServingContractFixture.eventIdHex, failure.rawValue)
-      XCTAssertTrue(ports.calls.isEmpty, failure.rawValue)
+      // No import was attempted, which is the claim that matters: nothing was
+      // verified, so no verdict about a pack may exist. The log is NOT empty —
+      // a new supply supersedes the previous one and clears the radio on the way
+      // in, exactly as the two-URL path always did.
+      XCTAssertFalse(
+        ports.calls.contains { if case .importing = $0 { return true } else { return false } },
+        failure.rawValue
+      )
     }
   }
 
