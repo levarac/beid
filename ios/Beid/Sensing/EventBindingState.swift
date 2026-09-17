@@ -22,7 +22,11 @@ enum EventBindingState: Equatable {
   case bound(BindingRecord)
   /// `retryable` is `false` only when retrying cannot succeed (today only
   /// the ERC-6492 smart-wallet result, beid#382); the sheet then offers
-  /// Close instead of Try Again.
+  /// Close instead of Try Again. A non-retryable failure is also sticky for
+  /// the rest of the session: `SensingCoordinator.declineBinding()` leaves
+  /// it in place and `ScanFlowView` only re-presents the sheet from
+  /// `.pendingConnect`, so it is not re-offered until the session ends
+  /// (beid#591).
   case failed(reason: String, retryable: Bool)
 }
 

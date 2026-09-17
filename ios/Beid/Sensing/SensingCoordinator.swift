@@ -3415,11 +3415,29 @@ final class SensingCoordinator: ObservableObject {
 
   /// The user closed the sheet without completing a binding (decline,
   /// swipe-dismiss, or backing out of a failure) — wallet is optional
-  /// (DESIGN.md §1), so this only resets `bindingState`, never `phase`;
+  /// (DESIGN.md §1), so this only touches `bindingState`, never `phase`;
   /// recording keeps running untouched. Re-offered next foreground per
   /// §5.6, never re-shown mid-session on its own.
+  ///
+  /// Narrowing of §5.6: a non-retryable failure is not re-offered for the
+  /// rest of the session (beid#591).
+  ///
+  /// Backing out of a non-retryable failure (beid#382's Close, the Cancel
+  /// toolbar button, or the sheet's `onDisappear`; beid#591) leaves
+  /// `bindingState` as is. `ScanFlowView` only re-presents the sheet from
+  /// `.pendingConnect`, so the sheet is not re-offered for the rest of the
+  /// session; `resetSessionState()` clears it at session end. A retryable
+  /// failure still goes straight to `.pendingConnect`, never through
+  /// `.none`. Idempotent, so Close followed by the sheet's `onDisappear`
+  /// lands on the same state as a single call.
+  ///
+  /// `pendingBindingMessage` is always discarded first, even when
+  /// `bindingState` is left as is (beid#316).
   func declineBinding() {
     pendingBindingMessage = nil
+    if case .failed(_, retryable: false) = bindingState {
+      return
+    }
     if let event = currentBindingEvent {
       bindingState = .pendingConnect(event)
     } else {
