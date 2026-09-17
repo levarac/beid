@@ -23,6 +23,7 @@
 > one. A single phone with no peer nearby will correctly show the "sensing" state and produce no
 > record, which is the honest result rather than a failure.
 >
+> <VIDEO — 添付してからこの段落を使う。動画がまだ無いなら、この段落ごと削る。>
 > We have attached a video showing the complete flow between two devices at a real event:
 > joining, mutual sensing, the record appearing, and the record's detail.
 >
