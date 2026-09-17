@@ -231,8 +231,32 @@ everywhere else. Note that this relaxes issue #588's text, which said no raw
 RPID at any level; the relaxation is Ken's instruction of 2026-09-17, and it
 is written down here rather than left for a reader to discover.
 
-The join string is redacted the same way: it gates B004, so it is not
-something to leave lying in a shared log.
+### What is logged in full, and why that is not a leak
+
+Some values are printed whole at `info`. The rule is not "short things are
+safe" — it is **whether the value is already public by construction**, which
+for this tool means: is it on the wire, or derivable by anyone who was in the
+room.
+
+| Value | Level | Why |
+| --- | --- | --- |
+| `b004` (event-code hash) | full, `info` | Served over GATT to anything that connects, and carried in the signed definition. A run's own B004 is the single most useful line for diagnosing a gate mismatch, and withholding it would hide the thing the log exists to show. |
+| `payloadDigest` (relay) | full, `info` | A local dedup key over an envelope that is itself broadcast. It identifies a *message*, not a person or a device. |
+| `eventDisplayName` | full, `info` | On the wire by design — it is what a participant is shown. |
+| Peripheral identifier (`peer`) | full | A CoreBluetooth per-host value, not a hardware address, and not stable across machines. Truncating it would create collisions and destroy the only way to correlate two lines about one device. |
+| RPID | prefix below `trace` | On the wire, but rotating and person-linked. See above. |
+| Join string | prefix below `trace` | **Not** on the wire. Only its hash is. |
+| Key material | never, any level | — |
+
+The last two rows are the pair worth reading together, because printing a
+hash while redacting its input looks inconsistent until you ask what an
+attacker gains. For a canonical Event ID the preimage is 32 random bytes, so
+publishing `b004` reveals nothing that reading the air would not. For a
+low-entropy synthetic code — `LABPROBE1` — the hash **is** reversible by
+dictionary attack, and the four-character prefix leaks besides. That is
+accepted rather than overlooked: a synthetic code is not a secret, it exists
+so a rehearsal cannot touch a real event. Do not read the join string's
+redaction as protection for a code you actually needed to keep.
 
 Redaction is a **mapping, not a passthrough**. The Barnard lab runner
 forwards every JSON-valid field a debug callback carries, which is why its

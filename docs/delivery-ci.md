@@ -45,6 +45,33 @@ dates). The contract every agent must know before touching delivery files:
     追加するたびに古くなり、しかもそれを検査するものが無い。drift 検出を説明する
     文書に、手で維持する数字を置かないこと
 
+  - **`.github/workflows/pr-ci-lab-cli.yml`(beid#588、2026-09-17 追加)** —
+    `tools/beid-lab-cli` (macOS の device-lab CLI) を
+    `swift build -c release` + `swift test` で検査する lane。job 名は
+    `beid-lab-cli build and test`。**required ではない**。同じ self-hosted
+    Mac 上で動くが、**上の simulator lane とは別 workflow** である。理由は
+    2 つあり、どちらも意図的:
+    - この job は約 1 分で終わる。simulator lane の約 24 分に相乗りさせると、
+      simulator test に影響し得ない変更のために #479 が意図的に狭めた
+      trigger を広げることになる。**`pr-ci-ios-macos.yml` の `paths` に
+      `tools/**` を足してはならない**
+    - `synchronize` を**含む**。simulator lane が merge-candidate head を
+      1 回測るのに対し、こちらは author が回しながら見る fast feedback で
+      あり、`opened` だけでは 2 commit 目以降すべて stale になる。
+      同じ理由で draft guard も無い (1 分は draft から取り上げる価値が無く、
+      draft こそこの答えが欲しい時である)
+    job 内の step は `scripts/ci_change_filter.py` の `labcli` 出力で gate
+    される。`paths` が workflow を起動するかを決め、classifier が build する
+    価値があるかを決める — つまり `tools/beid-lab-cli` の「この変更は build が
+    要るか」の定義が YAML の glob と Python の規則に分裂せず 1 つで済む。
+    classification が壊れたら全 lane true に倒れる (fail closed) ので、
+    gate の故障は skip ではなく build になる。
+    **`tools/beid-lab-cli/` は Android lane と SwiftLint lane を起動しない** —
+    どの app target も link していない standalone SwiftPM package なので。
+    ただし `Package.resolved` の basename 規則からの除外は
+    `tools/beid-lab-cli/` だけに効く。`tools/` 配下の未分類の path は従来どおり
+    fail closed のままである。
+
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
 

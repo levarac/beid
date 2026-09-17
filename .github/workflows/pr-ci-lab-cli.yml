@@ -1,0 +1,167 @@
+name: PR lab CLI (self-hosted macOS)
+
+# `tools/beid-lab-cli` builds and tests in about a minute, and it needs a Mac
+# (CoreBluetooth). Those two facts together are why this is its own workflow
+# rather than a step in `pr-ci-ios-macos.yml`.
+#
+# Folding it into that lane would have tied a one-minute check to a
+# ~24-minute simulator job, on the repository's single self-hosted runner,
+# which also serves TestFlight delivery. gh#479 narrowed that lane's triggers
+# for exactly that reason, and adding `tools/**` to its `paths` would have
+# undone the narrowing for changes that cannot affect a simulator test.
+#
+# So the split is not tidiness: a tools-only PR runs this and nothing else,
+# and the expensive lane keeps the trigger set it was deliberately given.
+on:
+  # `synchronize` is present here where the simulator lane omits it. That lane
+  # measures a merge-candidate head once; this one is a fast feedback check an
+  # author iterates against, and a check that only ever ran on `opened` would
+  # be stale for every commit after the first -- which is the state this
+  # workflow was added to fix.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/pr-ci-lab-cli.yml"
+      - "tools/beid-lab-cli/**"
+      - "scripts/ci_change_filter.py"
+      - "scripts/check_lab_cli_barnard_pin.py"
+      - "scripts/check_observe_never_connects.py"
+      # The app's Barnard pin: `check_lab_cli_barnard_pin.py` fails the two
+      # apart, so a bump here must be seen by this job even though nothing
+      # under `tools/` changed.
+      - "ios/project.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/pr-ci-lab-cli.yml"
+      - "tools/beid-lab-cli/**"
+      - "scripts/ci_change_filter.py"
+      - "scripts/check_lab_cli_barnard_pin.py"
+      - "scripts/check_observe_never_connects.py"
+      - "ios/project.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Its own group: cancelling this must never cancel the simulator lane, and
+  # vice versa.
+  group: pr-lab-cli-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lab-cli:
+    name: beid-lab-cli build and test
+    runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
+    # No draft guard, unlike the simulator lane. That guard exists because 30
+    # minutes of the delivery runner is worth withholding from a draft; one
+    # minute is not, and a draft is exactly when an author wants this answer.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The `paths` filter above decides whether this workflow runs at all.
+      # This decides whether the build is worth doing, and it is the same
+      # classifier `pr-ci.yml` uses -- so `tools/beid-lab-cli` has exactly one
+      # definition of "does this change need a build", rather than a YAML glob
+      # here and a Python rule there that drift apart.
+      #
+      # The case it actually catches is a README-only change: `paths` matches,
+      # nothing needs compiling.
+      - name: Collect changed paths
+        id: changed
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const outputPath = `${process.env.RUNNER_TEMP}/beid-lab-cli-changed-files.json`;
+            try {
+              if (context.eventName !== 'pull_request') {
+                throw new Error(`classification only applies to pull_request, not ${context.eventName}`);
+              }
+              const files = await github.paginate(
+                github.rest.pulls.listFiles,
+                { owner: context.repo.owner, repo: context.repo.repo, pull_number: context.issue.number, per_page: 100 },
+                response => response.data.flatMap(file => [file.filename, file.previous_filename].filter(Boolean)),
+              );
+              fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
+            } catch (error) {
+              core.warning(`changed-path collection failed; the lab CLI job will run: ${error.message}`);
+              fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
+            }
+
+      - name: Classify (fail closed)
+        id: classify
+        if: always()
+        # A corrupt or missing input makes the classifier return every lane
+        # true, so a broken gate builds rather than silently skipping. A check
+        # that quietly stops checking is worse than one that costs a minute.
+        run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-lab-cli-changed-files.json" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the Barnard pin matches the app
+        if: ${{ steps.classify.outputs.labcli != 'false' }}
+        # First, and outside the Swift build, because it is the failure that
+        # invalidates everything the tool would otherwise measure: a lab CLI
+        # resolving a different Barnard than the app ships produces numbers
+        # nobody can use, with no error anywhere.
+        run: python3 scripts/check_lab_cli_barnard_pin.py
+
+      - name: Verify observe never connects to what it measures
+        if: ${{ steps.classify.outputs.labcli != 'false' }}
+        run: python3 scripts/check_observe_never_connects.py
+
+      - name: Build (release)
+        if: ${{ steps.classify.outputs.labcli != 'false' }}
+        # Release rather than debug: it is what a lab host actually runs, and
+        # it is the configuration whose advertising carries no debug local
+        # name.
+        working-directory: tools/beid-lab-cli
+        run: |
+          # `set -o pipefail` is load bearing: without it the pipeline's exit
+          # status is `tail`'s, which always succeeds, and a failed build would
+          # pass this step.
+          set -uo pipefail
+          log="$RUNNER_TEMP/lab-cli-build.log"
+          swift build -c release > "$log" 2>&1
+          rc=$?
+          tail -n 40 "$log"
+          echo "build exit=$rc"
+          exit "$rc"
+
+      - name: Test
+        if: ${{ steps.classify.outputs.labcli != 'false' }}
+        working-directory: tools/beid-lab-cli
+        # `BeidLabCliCore` imports Foundation only and `BeidLabCliBarnardTests`
+        # is pure crypto, so nothing here needs a Bluetooth radio -- which is
+        # just as well, since this runner has one and must not be put on the
+        # air by CI.
+        run: |
+          # Deliberately not `set -e`: it would abort on a failing `swift test`
+          # before `rc` is captured, and the whole point here is to report the
+          # child's own status alongside its test counts.
+          set -uo pipefail
+          log="$RUNNER_TEMP/lab-cli-tests.log"
+          swift test > "$log" 2>&1
+          rc=$?
+          # The count is the evidence. A suite that silently executed zero
+          # tests would otherwise pass this step.
+          grep -E "Executed [0-9]+ tests" "$log" | tail -n 4 || true
+          if [ "$rc" -ne 0 ]; then
+            tail -n 120 "$log"
+          fi
+          echo "exit=$rc"
+          exit "$rc"
+
+      - name: Confirm --help runs from the built binary
+        if: ${{ steps.classify.outputs.labcli != 'false' }}
+        # Cheap end-to-end proof that the executable target links and starts.
+        # Everything else in this job tests a library.
+        working-directory: tools/beid-lab-cli
+        run: |
+          set -euo pipefail
+          "$(swift build -c release --show-bin-path)/beid-lab-cli" --help > /dev/null
+          echo "help ran and exited 0"
