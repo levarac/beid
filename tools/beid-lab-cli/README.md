@@ -110,9 +110,14 @@ The scan names Barnard's discovery service rather than passing `nil`: an iOS
 app advertising in the background moves its service UUID into the
 advertisement's overflow area, which CoreBluetooth surfaces **only** to a
 scan that names that UUID. A `nil` filter would miss exactly the backgrounded
-phones this is pointed at. A local 20-second run on 2026-09-17 confirmed
-this shape directly — a peripheral matched the B001 filter while its
-`CBAdvertisementDataServiceUUIDsKey` came through empty.
+phones this is pointed at.
+
+A local 20-second run on 2026-09-17 saw the shape this predicts: a peripheral
+matched the B001 filter while its `CBAdvertisementDataServiceUUIDsKey` came
+through empty, so whatever matched was not in the visible advertisement.
+That is consistent with the overflow area and is the reason to keep the named
+filter — but the run observed the symptom, not the mechanism, and no phone
+was instrumented to confirm what it actually broadcast.
 
 ### `venue`
 
