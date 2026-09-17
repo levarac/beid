@@ -80,22 +80,13 @@ struct AccountSheetView: View {
             .foregroundStyle(DS.Color.textSecondary)
         }
 
+        // One venue entry, not two (beid#597). What a venue operator has is a
+        // pack for an event; whether the bytes inside it are signed is how the
+        // feature works, not a choice to put in front of them. The unsigned v1
+        // row (gh#138) is withdrawn from this sheet rather than deleted:
+        // `VenueDeviceOrganizerView` and its view model are untouched, so
+        // restoring it is one NavigationLink if dispatch#4 decides it ships.
         Section {
-          NavigationLink {
-            VenueDeviceOrganizerView(sensingCoordinator: coordinator.sensingCoordinator)
-          } label: {
-            Label("Venue Device", systemImage: "antenna.radiowaves.left.and.right")
-          }
-
-          // beid#432: the signed (v2) venue-serving screen, parallel to the
-          // v1 hint-broadcasting row above rather than replacing it. Real
-          // production dependencies, first wired here:
-          // `ProductionVenueBundleVerifier` (this PR), `VenueArtifactAcquisition`
-          // (first real instantiation; every existing test uses
-          // `StubVenueArtifactAcquisition`), and `VenueDeviceClock` (first
-          // production clock supplier; see its own doc comment for what
-          // ".unavailable" means here). `BarnardVenueSignedContainerBroadcasting`
-          // and `VenuePublicArtifactStore` were already production-ready.
           NavigationLink {
             VenueSignedServingView(viewModel: VenueSignedServingViewModel(
               verifier: ProductionVenueBundleVerifier(registryClient: RegistryDependencies.createClient()),
@@ -107,7 +98,7 @@ struct AccountSheetView: View {
               bundleURLTemplate: RegistryDependencies.venueBundleURLTemplate()
             ))
           } label: {
-            Label("Venue Device (Signed)", systemImage: "checkmark.seal")
+            Label("Venue broadcast", systemImage: "antenna.radiowaves.left.and.right")
           }
         }
 

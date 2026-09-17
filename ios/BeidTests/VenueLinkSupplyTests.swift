@@ -214,6 +214,22 @@ final class VenueLinkSupplyTests: XCTestCase {
     XCTAssertEqual(record.sourceDescription, "link, bundle from artifacts.example")
   }
 
+  func testStopClearsWhatTheScreenSaysAboutTheLastLink() async {
+    let viewModel = makeViewModel()
+    await viewModel.supply(
+      link: Self.link(base: "https://venue.example/join", handoff: fixture.artifact.handoffBytes))
+    XCTAssertEqual(viewModel.linkFailure, .missingBundleUrl)
+    XCTAssertNotNil(viewModel.linkEventIdHex)
+
+    viewModel.stop()
+
+    // Both belong to a link that is no longer being acted on. Leaving them would
+    // show an event id and a complaint beside an empty screen.
+    XCTAssertNil(viewModel.linkEventIdHex)
+    XCTAssertNil(viewModel.linkFailure)
+    XCTAssertEqual(viewModel.status, .idle)
+  }
+
   // MARK: - Fixtures
 
   /// base64url, unpadded — the form `venueHandoffLink` on the operator side emits.
