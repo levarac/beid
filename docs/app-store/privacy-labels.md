@@ -32,7 +32,7 @@ App Store Connect の「App のプライバシー」に入れる回答と、**�
 
 ### 収集するデータ
 
-**「データを収集していません」で申告する。**
+**「データを収集していません」で申告する見込み。ただし下の「未確認」2 点を owner が Cloudflare で確認するまでは申告しない。**
 
 beid が外に出す通信は次の 3 つだけで、いずれも**ユーザーに紐づくデータを送っていない**。
 
@@ -59,8 +59,26 @@ operator 側でアクセスログを保存している場合は話が変わる�
 
 保存していて、かつそれを解析等に使っているなら、「診断」または「使用状況データ」の申告が要る可能性がある。
 Cloudflare Workers の既定のログ保持だけであれば通常は申告不要の範囲。
-**これは私（prep-review）が確認できておらず、operator を持っている側に確認が要る。**
 「データを収集していません」は強い主張なので、これを確認しないまま出すべきではない。
+
+ops-event に確認した結果（2026-09-17 19:2x JST）:
+
+- **リポジトリ上は保存していない。** `operator/wrangler.jsonc` に observability / logpush / Analytics Engine /
+  KV / R2 のいずれも無く、binding は D1 と静的アセットだけ。Worker が `console.error` を呼ぶのはエラー経路だけで、
+  それは一時的な tail にしか出ない。
+- **確認できていないのは 2 点で、どちらも Cloudflare ダッシュボードを見られる owner の作業。**
+  アカウント単位の Logpush はリポジトリから見えない。デプロイ中の Worker（version `7f58367c`、parallax `0c6e2a85`
+  から 09-14 にビルド）が現設定と一致するかも照合していない。
+
+## 送信を有効にした瞬間に、この申告は見直しになる
+
+operator は**観測データを D1 に無期限で保存する**（health endpoint 自身が retention indefinite と返す）。
+保存するのは `signed_observation`, `acceptance_receipt`, `context`, `accepted_at`, `delegation_cert`。
+これらが Apple の言う「ユーザーに紐づく収集データ」に当たるかは、中身が何を運ぶかで決まる。
+
+現ビルドで問題にならないのは、送信が `BEID_REPORT_SUBMISSION_ENABLED: "NO"` で止まっているからだけで、
+D1 にも 2 日間 1 件も受け付けられていないことを ops-event が確認している。
+**アクセスログより、こちらのほうが申告を変える力が大きい。**
 
 ## 変更に強くするために
 
