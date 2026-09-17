@@ -100,6 +100,21 @@ struct VenueRadioUpdate: Equatable {
   }
 }
 
+/// Reading Kotlin bytes and printing them as hex.
+///
+/// One definition, because two would be a second opinion about what a shared
+/// value says — the same reason the acquisition ceilings are read through Swift
+/// Export rather than restated.
+enum VenueKotlinBytes {
+  static func swiftBytes(_ bytes: ExportedKotlinPackages.kotlin.ByteArray) -> [UInt8] {
+    (0..<Int(bytes.size)).map { UInt8(bitPattern: bytes[Int32($0)]) }
+  }
+
+  static func hexString(_ bytes: [UInt8]) -> String {
+    bytes.map { String(format: "%02x", $0) }.joined()
+  }
+}
+
 /// Public source artifacts, safe to persist. They must be imported again after
 /// restart; persistence is not a cache of verification or a serving permit.
 struct VenuePublicArtifact: Equatable {
@@ -1011,11 +1026,11 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
   // MARK: - Byte/hex conversions
 
   private static func swiftBytes(fromKotlin bytes: ExportedKotlinPackages.kotlin.ByteArray) -> [UInt8] {
-    (0..<Int(bytes.size)).map { UInt8(bitPattern: bytes[Int32($0)]) }
+    VenueKotlinBytes.swiftBytes(bytes)
   }
 
   private static func hexString(_ bytes: [UInt8]) -> String {
-    bytes.map { String(format: "%02x", $0) }.joined()
+    VenueKotlinBytes.hexString(bytes)
   }
 
   private static func bytes(fromHex hex: String) -> [UInt8]? {

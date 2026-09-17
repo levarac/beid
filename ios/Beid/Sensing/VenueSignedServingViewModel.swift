@@ -106,8 +106,6 @@ enum VenueServingStatus: Equatable {
   case blocked(VenueServingRejection)
   case importRejected(VenueImportFailure)
   case acquisitionFailed(VenueAcquisitionFailure)
-  /// The link itself was refused. No fetch was made and no verdict was issued.
-  case linkRejected(VenueLinkFailure)
   /// The radio refused the bytes. Kept separate from `blocked` so an effect
   /// failure is never displayed as a verification verdict the verifier never
   /// issued.
@@ -142,6 +140,17 @@ final class VenueSignedServingViewModel: ObservableObject {
   /// Supply was previously silent, so a venue operator could not tell a link that
   /// decoded from one that did nothing.
   @Published private(set) var linkEventIdHex: String?
+
+  /// Why the last link was refused, or nil.
+  ///
+  /// Deliberately NOT a `VenueServingStatus` case. A refused link is a fact about
+  /// the text field, not about what the radio is doing: an operator already
+  /// serving who fumbles a paste must keep serving. Routing this through `status`
+  /// would have put a bad paste on the same path as a verdict, and every
+  /// invalidating status transition clears the radio first — so a typo would have
+  /// taken an event off the air, which is the accident class beid#597 exists to
+  /// remove rather than relocate.
+  @Published private(set) var linkFailure: VenueLinkFailure?
 
   private let verifier: any VenueBundleVerifying
   private var broadcasting: any VenueSignedContainerBroadcasting
@@ -430,22 +439,19 @@ final class VenueSignedServingViewModel: ObservableObject {
     guard sessionActive else { return }
     let link = rawLink.trimmingCharacters(in: .whitespacesAndNewlines)
     linkEventIdHex = nil
+    linkFailure = nil
     guard
       let handoffBytes = ExportedKotlinPackages.org.levarac.parallax.venue
         .decodeVenueHandoffLinkBytes(link: link),
       let handoff = ExportedKotlinPackages.org.levarac.parallax.venue
         .decodeVenueHandoffLink(link: link)
     else {
-      invalidate()
-      workflow = nil
-      status = .linkRejected(.malformedLink)
+      linkFailure = .malformedLink
       return
     }
-    linkEventIdHex = Self.hexString(Self.swiftBytes(fromKotlin: handoff.eventId.toByteArray()))
+    linkEventIdHex = VenueKotlinBytes.hexString(VenueKotlinBytes.swiftBytes(handoff.eventId.toByteArray()))
     guard let bundleUrlText = handoff.bundleUrl else {
-      invalidate()
-      workflow = nil
-      status = .linkRejected(.missingBundleUrl)
+      linkFailure = .missingBundleUrl
       return
     }
     // `bundleUrl` passed the shared decoder's URI-syntax check, which deliberately
@@ -454,9 +460,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     guard let bundleSource = URL(string: bundleUrlText),
       bundleSource.isFileURL || bundleSource.scheme?.lowercased() == "https"
     else {
-      invalidate()
-      workflow = nil
-      status = .linkRejected(.unsupportedBundleUrl)
+      linkFailure = .unsupportedBundleUrl
       return
     }
 
@@ -475,7 +479,7 @@ final class VenueSignedServingViewModel: ObservableObject {
       guard mayCommit(owner, operation: operation) else { return }
       let artifact = VenuePublicArtifact(
         bundleBytes: bundleBytes,
-        handoffBytes: Data(Self.swiftBytes(fromKotlin: handoffBytes))
+        handoffBytes: Data(VenueKotlinBytes.swiftBytes(handoffBytes))
       )
       workflow?.artifact = artifact
       await resumeSelected(owner: owner, operation: operation)
@@ -490,14 +494,6 @@ final class VenueSignedServingViewModel: ObservableObject {
       hasUnsavedArtifact = store.persistenceWriteFailure != nil || store.isPersistenceSuspended
       storedSourceDescription = description
     }
-  }
-
-  private static func swiftBytes(fromKotlin bytes: ExportedKotlinPackages.kotlin.ByteArray) -> [UInt8] {
-    (0..<Int(bytes.size)).map { UInt8(bitPattern: bytes[Int32($0)]) }
-  }
-
-  private static func hexString(_ bytes: [UInt8]) -> String {
-    bytes.map { String(format: "%02x", $0) }.joined()
   }
 
   /// Acquires the selected event's bundle when the app is configured for the
@@ -548,6 +544,10 @@ final class VenueSignedServingViewModel: ObservableObject {
     activeOperation = nil
     workflow = nil
     status = .idle
+    // Both belong to the link that is no longer being acted on. Leaving them
+    // would show an event id beside "Not serving."
+    linkEventIdHex = nil
+    linkFailure = nil
   }
 
   // MARK: - Lifecycle

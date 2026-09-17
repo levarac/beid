@@ -793,7 +793,7 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     // as one would tell an operator to retype a link that is not the problem.
     let carried = try XCTUnwrap(
       ExportedKotlinPackages.org.levarac.parallax.venue.decodeVenueHandoffLinkBytes(link: link))
-    let carriedBytes = Data((0..<Int(carried.size)).map { UInt8(bitPattern: carried[Int32($0)]) })
+    let carriedBytes = Data(VenueKotlinBytes.swiftBytes(carried))
     XCTAssertEqual(carriedBytes, tampered)
 
     let server = try LoopbackJSONRPCServer { body in RecordedVenueRegistryURLProtocol.responseData(for: body) }

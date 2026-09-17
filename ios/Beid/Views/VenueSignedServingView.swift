@@ -112,6 +112,12 @@ struct VenueSignedServingView: View {
         }
       }
 
+      // Shown in the Source section, not in Status: this says the text field is
+      // wrong, and Status keeps saying what the radio is actually doing.
+      if let failure = viewModel.linkFailure {
+        label(message(for: failure), tint: DS.Color.statusCaution)
+      }
+
       if let stored = viewModel.storedSourceDescription {
         Button("Reload stored bundle") {
           requestTask?.cancel()
@@ -145,16 +151,26 @@ struct VenueSignedServingView: View {
         .font(DS.Font.meta)
     }
     .sheet(isPresented: $isScanning) {
-      VenueLinkScannerView(
-        onScan: { payload in
-          isScanning = false
-          venueLinkText = payload
-          requestTask?.cancel()
-          requestTask = Task { await viewModel.supply(link: payload) }
-        },
-        onCancel: { isScanning = false }
-      )
-      .ignoresSafeArea()
+      NavigationStack {
+        VenueLinkScannerView(
+          onScan: { payload in
+            isScanning = false
+            venueLinkText = payload
+            requestTask?.cancel()
+            requestTask = Task { await viewModel.supply(link: payload) }
+          }
+        )
+        .ignoresSafeArea(edges: .bottom)
+        .navigationTitle("Scan QR")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          // A sheet with a live camera and no way out but a swipe is a trap on a
+          // venue iPad in a case.
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") { isScanning = false }
+          }
+        }
+      }
     }
   }
 
@@ -206,8 +222,6 @@ struct VenueSignedServingView: View {
       case .importRejected(let failure):
         label(message(for: failure), tint: DS.Color.statusCaution)
       case .acquisitionFailed(let failure):
-        label(message(for: failure), tint: DS.Color.statusCaution)
-      case .linkRejected(let failure):
         label(message(for: failure), tint: DS.Color.statusCaution)
       case .radioRefused(let failure):
         label(message(for: failure), tint: DS.Color.statusCaution)

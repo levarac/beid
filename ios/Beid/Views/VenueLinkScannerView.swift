@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import SwiftUI
+import UIKit
 import VisionKit
 
 /// Reads a venue handoff link from a QR code with the platform camera (beid#597).
@@ -32,31 +33,62 @@ struct VenueLinkScannerView: UIViewControllerRepresentable {
   /// a second frame cannot deliver a different link into a screen already acting on
   /// the first one.
   let onScan: (String) -> Void
-  let onCancel: () -> Void
 
   func makeCoordinator() -> Coordinator {
     Coordinator(onScan: onScan)
   }
 
-  func makeUIViewController(context: Context) -> DataScannerViewController {
-    let controller = DataScannerViewController(
-      recognizedDataTypes: [.barcode(symbologies: [.qr])],
-      qualityLevel: .balanced,
-      recognizesMultipleItems: false,
-      isHighFrameRateTrackingEnabled: false,
-      isHighlightingEnabled: true
-    )
-    controller.delegate = context.coordinator
-    return controller
+  func makeUIViewController(context: Context) -> VenueLinkScannerHost {
+    VenueLinkScannerHost(delegate: context.coordinator)
   }
 
-  func updateUIViewController(_ controller: DataScannerViewController, context: Context) {
-    guard !controller.isScanning else { return }
-    try? controller.startScanning()
+  func updateUIViewController(_ host: VenueLinkScannerHost, context: Context) {}
+
+  static func dismantleUIViewController(_ host: VenueLinkScannerHost, coordinator: Coordinator) {
+    host.scanner.stopScanning()
   }
 
-  static func dismantleUIViewController(_ controller: DataScannerViewController, coordinator: Coordinator) {
-    controller.stopScanning()
+  /// Hosts the scanner and starts it from `viewDidAppear`.
+  ///
+  /// `startScanning()` throws if the controller is not yet in a window, and a
+  /// representable's `updateUIViewController` can run before it is. Swallowing
+  /// that error there leaves a camera that simply never starts — at a venue, on a
+  /// device where the Simulator cannot reproduce it, because scanning is
+  /// unavailable there at all. `DataScannerViewController` is not `open`, so this
+  /// is a container rather than a subclass.
+  @MainActor
+  final class VenueLinkScannerHost: UIViewController {
+    let scanner: DataScannerViewController
+
+    init(delegate: DataScannerViewControllerDelegate) {
+      scanner = DataScannerViewController(
+        recognizedDataTypes: [.barcode(symbologies: [.qr])],
+        qualityLevel: .balanced,
+        recognizesMultipleItems: false,
+        isHighFrameRateTrackingEnabled: false,
+        isHighlightingEnabled: true
+      )
+      super.init(nibName: nil, bundle: nil)
+      scanner.delegate = delegate
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("not available from a storyboard") }
+
+    override func viewDidLoad() {
+      super.viewDidLoad()
+      addChild(scanner)
+      scanner.view.frame = view.bounds
+      scanner.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      view.addSubview(scanner.view)
+      scanner.didMove(toParent: self)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+      super.viewDidAppear(animated)
+      guard !scanner.isScanning else { return }
+      try? scanner.startScanning()
+    }
   }
 
   @MainActor

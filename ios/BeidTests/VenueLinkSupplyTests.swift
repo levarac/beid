@@ -83,7 +83,7 @@ final class VenueLinkSupplyTests: XCTestCase {
     await viewModel.supply(link: "\n  \(link)  \n")
 
     // It reached the verifier at all: a link refused for its surrounding
-    // whitespace would have stopped at `.linkRejected` and fetched nothing.
+    // whitespace would have set `linkFailure` and fetched nothing.
     XCTAssertEqual(viewModel.status, .importRejected(.handoffMismatch))
   }
 
@@ -99,7 +99,7 @@ final class VenueLinkSupplyTests: XCTestCase {
       "#pgEBAlgg",                                    // fragment without an absolute URI
     ] {
       await viewModel.supply(link: malformed)
-      XCTAssertEqual(viewModel.status, .linkRejected(.malformedLink), malformed)
+      XCTAssertEqual(viewModel.linkFailure, .malformedLink, malformed)
       XCTAssertNil(viewModel.linkEventIdHex, malformed)
     }
     // Nothing was fetched and nothing was verified, so no verdict about a bundle
@@ -111,7 +111,7 @@ final class VenueLinkSupplyTests: XCTestCase {
   func testAFragmentThatIsValidBase64UrlButNotAHandoffIsStillABadLink() async {
     let viewModel = makeViewModel()
     await viewModel.supply(link: "https://artifacts.example/bundle#" + Self.base64url(Data([0x01, 0x02, 0x03])))
-    XCTAssertEqual(viewModel.status, .linkRejected(.malformedLink))
+    XCTAssertEqual(viewModel.linkFailure, .malformedLink)
     XCTAssertEqual(acquisition.requestedSources.count, 0)
   }
 
@@ -125,7 +125,7 @@ final class VenueLinkSupplyTests: XCTestCase {
     let viewModel = makeViewModel()
     await viewModel.supply(link: link)
 
-    XCTAssertEqual(viewModel.status, .linkRejected(.missingBundleUrl))
+    XCTAssertEqual(viewModel.linkFailure, .missingBundleUrl)
     // The event id is still shown: the operator learns which event they were
     // handed, which is what tells them whether the link is merely incomplete or
     // outright the wrong one.
@@ -141,8 +141,59 @@ final class VenueLinkSupplyTests: XCTestCase {
     let viewModel = makeViewModel()
     await viewModel.supply(link: link)
 
-    XCTAssertEqual(viewModel.status, .linkRejected(.unsupportedBundleUrl))
+    XCTAssertEqual(viewModel.linkFailure, .unsupportedBundleUrl)
     XCTAssertEqual(acquisition.requestedSources.count, 0)
+  }
+
+  // MARK: - A bad paste must not take a live event off the air
+
+  func testARefusedLinkLeavesAServingDeviceServing() async throws {
+    let handoffBytes = Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: Self.bundleUrl)
+    let artifact = VenuePublicArtifact(bundleBytes: fixture.artifact.bundleBytes, handoffBytes: handoffBytes)
+    ports.importReplies = [.immediate(.imported(VenueServingContractTestFactory.imported(
+      identity: fixture.identity, publicArtifact: artifact)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    acquisition.replies = [.artifact(artifact)]
+
+    let viewModel = makeViewModel()
+    await viewModel.supply(link: Self.link(base: Self.bundleUrl, handoff: handoffBytes))
+    guard case .serving = viewModel.status else {
+      return XCTFail("the fixture must reach serving before this test means anything: \(viewModel.status)")
+    }
+    let callsWhileServing = ports.calls
+
+    // The venue is running. Someone fumbles a paste into the field and taps Supply.
+    await viewModel.supply(link: "https://artifacts.example/bundle#not-base64!")
+
+    XCTAssertEqual(viewModel.linkFailure, .malformedLink)
+    // Still on the air. Routing a refused link through `status` would have
+    // cleared the radio on the way — the operator would have lost the event to a
+    // typo, which is the accident this issue removes rather than relocates.
+    guard case .serving = viewModel.status else {
+      return XCTFail("a refused link must not change what is being served: \(viewModel.status)")
+    }
+    XCTAssertEqual(ports.calls, callsWhileServing, "a refused link must reach no port at all")
+    XCTAssertFalse(ports.calls.contains(.clearing))
+    XCTAssertEqual(viewModel.servingEventIdHex, VenueServingContractFixture.eventIdHex)
+  }
+
+  func testEveryLinkFailureIsReachableFromSomeLink() async {
+    let viewModel = makeViewModel()
+    var observed: Set<VenueLinkFailure> = []
+    for link in [
+      "not a link",
+      Self.link(base: "https://venue.example/join", handoff: fixture.artifact.handoffBytes),
+      Self.link(
+        base: "https://venue.example/join",
+        handoff: Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: "ftp://artifacts.example/b")),
+    ] {
+      await viewModel.supply(link: link)
+      if let failure = viewModel.linkFailure { observed.insert(failure) }
+    }
+    // Observed, never prefilled from allCases: the same rule
+    // `assertVenueOutcomeCoverage` applies to the other venue enums. A case added
+    // here without a link that produces it fails this.
+    XCTAssertEqual(observed, Set(VenueLinkFailure.allCases))
   }
 
   // MARK: - What is stored
