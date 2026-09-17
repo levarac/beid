@@ -15,7 +15,12 @@ import SwiftUI
 ///
 /// Wallet is optional (DESIGN.md §1): declining or dismissing at any point
 /// leaves `bindingState` at `.pendingConnect` and never touches `phase` —
-/// recording keeps running untouched either way.
+/// recording keeps running untouched either way. The one exception is a
+/// non-retryable failure, which stays `.failed` for the rest of the session
+/// (beid#591).
+///
+/// Narrowing of §5.6: a non-retryable failure is not re-offered for the
+/// rest of the session (beid#591).
 struct EventBindingSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensing: SensingCoordinator
@@ -212,6 +217,10 @@ struct EventBindingSheetView: View {
         }
         .tint(DS.Color.actionPrimary)
       } else {
+        Text(verbatim: differentWalletHint)
+          .font(DS.Font.meta)
+          .foregroundStyle(DS.Color.textSecondary)
+          .multilineTextAlignment(.center)
         BeidSecondaryButton(title: "Close") {
           sensing.declineBinding()
           dismiss()
@@ -219,6 +228,21 @@ struct EventBindingSheetView: View {
         .tint(DS.Color.actionPrimary)
       }
     }
+  }
+
+  /// Shown only under a non-retryable failure, which is not re-offered for
+  /// the rest of the session (beid#591).
+  private var differentWalletHint: String {
+    String(
+      localized: "scan.binding.differentWalletHint",
+      defaultValue: "To use a different wallet, end this session, then disconnect in Account.",
+      comment: """
+      Shown under the unsupported-wallet failure (scan.binding.smartWalletUnsupported). Tells the participant \
+      that the only way to use a different wallet is to end the current recording session (the X on the scan \
+      screen) and then use Disconnect Wallet in the Account screen. Do not imply that retrying or reconnecting \
+      the same wallet will work.
+      """
+    )
   }
 
   // MARK: - Binding round trip
