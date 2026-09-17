@@ -10,8 +10,20 @@ fun String.asBuildConfigString(): String =
 val registryReaderAddress = providers.gradleProperty("beid.registryReaderAddress")
     .orElse("0xd4852f8526A1555A1b2C34145f0eCDA412a53c51")
 val etherscanApiKey = providers.gradleProperty("beid.etherscanApiKey").orElse("")
-val definitionUrlTemplate = providers.gradleProperty("beid.definitionUrlTemplate").orElse("")
-val eventKeySetUrlTemplate = providers.gradleProperty("beid.eventKeySetUrlTemplate").orElse("")
+// Defaulted to the same operator artifact URLs `ios/project.yml` bakes into
+// BEID_EVENT_DEFINITION_URL_TEMPLATE and BEID_EVENT_KEY_SET_URL_TEMPLATE.
+// Both defaulted to the empty string until beid#584, and nothing in this
+// repository, in CI, or in the documented build commands ever supplied them,
+// so every Android build shipped with no definition fetcher at all: the
+// event-code-hash lookup succeeded, `resolveEventDefinition` then threw
+// NOT_CONFIGURED, and a discovered event sat at "Waiting for event
+// verification" forever while iOS verified the same beacon. A `-P` override
+// still wins, which is how a lab or a different operator is pointed
+// elsewhere; the default only decides what an unparameterized build does.
+val definitionUrlTemplate = providers.gradleProperty("beid.definitionUrlTemplate")
+    .orElse("https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}")
+val eventKeySetUrlTemplate = providers.gradleProperty("beid.eventKeySetUrlTemplate")
+    .orElse("https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}")
 val eventCodeLookupUrlTemplate = providers.gradleProperty("beid.eventCodeLookupUrlTemplate")
     .orElse("https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}")
 val eventCodeHashLookupUrlTemplate = providers.gradleProperty("beid.eventCodeHashLookupUrlTemplate")
