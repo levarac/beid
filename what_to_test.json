@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "You should not need to type an event code any more. Tap Sense Event and nearby events now appear as cards — tap one to start recording. A card marked Verified is the app agreeing with the registry; a card without that is shown but cannot be tapped, which is intended. If no card appears, the code entry is still there below the list, and we want to hear which one you had to use. Still open from earlier builds: connect a wallet with MetaMask, approve one signature, and confirm the app returns on its own."
+    "text": "Start from Sense Event and a nearby event card as before. New here: if your phone's clock is off, the Scan screen says so and offers Check again — tell us if that warning shows up when your clock looks fine. While serving, confirm the event ID on screen is the event you actually joined. On the wallet side, an unsupported smart wallet now ends with Close instead of Try Again, and connecting with MetaMask should no longer say you are not connected after you approve the signature."
   }
 ]
