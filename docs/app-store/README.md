@@ -7,16 +7,17 @@ App Store Connect の Web 画面で直接書き換えない。理由は 3 つあ
   リポジトリの中にあれば、挙動を変える PR のレビューで気づける。Web 画面にしか無い文言は誰も見に行かない。
 - 審査ノートは審査員が読む手順書で、**書いてあるとおりに動かないと落ちる**。
   コードと同じ場所に置いて、同じ PR で直す。
-- 反映は `asc metadata plan` → `apply` で差分を取って行う。手で打ち込むと、
+- 反映は `apply-asc.sh` で、このディレクトリの JSON から読んで行う。手で打ち込むと、
   何をいつ変えたかが残らない。
 
 ## ファイル
 
 | パス | 中身 | App Store Connect に反映するか |
 | --- | --- | --- |
-| `en-US/app-info.json` | アプリ名・サブタイトル・プライバシーポリシー URL | する |
-| `en-US/version.json` | 説明文・キーワード・サポート URL・プロモーションテキスト | する |
-| `ja/app-info.json`, `ja/version.json` | 上記の日本語版 | **まだしない**（下記） |
+| `app-info/en-US.json` | サブタイトル | する |
+| `version/1.0/en-US.json` | 説明文・キーワード・プロモーションテキスト・What's New | する |
+| `ja-draft/version.json` | 上記の日本語版 | **まだしない**（下記） |
+| `apply-asc.sh` | 上の JSON と年齢レーティングを App Store Connect に書き込むスクリプト | — |
 | `review-notes.en-US.md` | 審査ノート本文と連絡先の草案 | する（`asc review details-create`） |
 | `age-rating.md` | 年齢レーティング 24 問の回答と、その理由 | する（`asc age-rating edit`） |
 | `privacy-labels.md` | プライバシーラベルの回答と、その根拠になるコード上の事実 | Apple の Web セッションが要る（後述） |
@@ -57,20 +58,31 @@ asc web privacy publish --app 6789376188 --confirm
 
 ## 反映のしかた
 
+`apply-asc.sh` を使う。テキストはすべてこのディレクトリの JSON から読むので、
+**このリポジトリに無い文言が App Store Connect に書かれることは無い。**
+
 ```sh
-# 差分を見る
-asc --profile KENICHINAOE metadata plan \
-  --app 6789376188 --version 1.0 --platform IOS --dir docs/app-store
-
-# 適用する
-asc --profile KENICHINAOE metadata apply \
-  --app 6789376188 --version 1.0 --platform IOS --dir docs/app-store --confirm
-
-# 提出前チェックを再実行して blocking が減ったことを確認する
-asc --profile KENICHINAOE validate \
-  --app 6789376188 --version-id <VERSION_ID> --platform IOS --output table
+docs/app-store/apply-asc.sh --dry-run   # 書き込む 6 件と文字数を表示するだけ
+docs/app-store/apply-asc.sh             # 1 フィールドずつ書き込み、最後に validate を再実行
 ```
 
-`asc metadata` が読むのは `app-info/<locale>.json` と `version/<version>/<locale>.json` という
-レイアウトなので、反映時は `en-US/` の中身をその形に移す（`plan` が読めない配置なら差分ゼロで
-黙って通ってしまうため、必ず `plan` の出力に変更行が出ることを確認する）。
+書き込むのは次の 6 件で、この順に実行する。
+
+1. サブタイトル
+2. 説明文
+3. キーワード
+4. プロモーションテキスト
+5. What's New
+6. 年齢レーティング（24 問を 1 回で）
+
+入れていないものと理由:
+
+- **著作権表示** — 名義（法人名か個人名か）は法的な宣言で、owner がまだ決めていない
+- **審査情報** — 連絡先の氏名・メール・電話を推測で埋めない
+- **サポート URL / プライバシーポリシー URL** — ページが実在しない
+- **カテゴリ・第三者コンテンツ申告・配信地域・ビルド添付・提出** — このスクリプトの範囲外
+
+JSON のフィールドが空のときは、書き込む前に止まる（空文字で上書きする事故を防ぐ）。
+
+`asc metadata plan` / `approve` / `apply` の経路は使わない。`approve` が作業ディレクトリに
+承認ファイルを書く手順を挟むため、1 回の承認で済まない。

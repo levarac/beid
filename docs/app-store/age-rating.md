@@ -16,7 +16,7 @@ App Store Connect 上は 24 問すべてが `null` で、全部がブロッキ�
 | `gunsOrOtherWeapons` | NONE | 該当なし |
 | `healthOrWellnessTopics` | false | 健康・ウェルネスの話題を扱わない |
 | `lootBox` | false | 該当なし |
-| `medicalOrTreatmentInformation` | false | 該当なし |
+| `medicalOrTreatmentInformation` | NONE | 該当なし（真偽値ではなく頻度で答える設問） |
 | `messagingAndChat` | false | **下記参照** |
 | `parentalControls` | false | 保護者向け機能は無い |
 | `profanityOrCrudeHumor` | NONE | 該当なし |
@@ -67,10 +67,6 @@ false で出して指摘されたら、そのとき会場ラベルの説明を�
 
 ## 適用コマンド
 
-```sh
-asc --profile KENICHINAOE age-rating edit --app 6789376188 \
-  --advertising false \
-  --gambling false \
-  --health-or-wellness-topics false \
-  ... （実際のフラグ名は asc age-rating edit --help で確認する）
-```
+`docs/app-store/apply-asc.sh` の 6 番目の手順が、この表の 24 問をそのままフラグで渡す。
+`--all-none` を使わず 1 問ずつ書いてあるのは、どの値がこの表のどの行から来たかを追えるようにするため。
+表を変えたらスクリプトも同じ PR で変える。
