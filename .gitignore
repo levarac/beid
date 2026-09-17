@@ -27,3 +27,9 @@ ios/xcodemake_*.log
 # command dirties the working tree for anyone who follows it.
 __pycache__/
 *.pyc
+
+# SwiftPM scratch directory. `tools/beid-lab-cli` builds with `swift build`
+# rather than through the Xcode project, so its dependency checkouts and
+# object files land here (beid#588). `Package.resolved` is tracked -- it is
+# the evidence of which Barnard revision the tool actually resolved.
+.build/
