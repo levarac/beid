@@ -52,7 +52,7 @@ public final class LabFileSink: LabLineSink {
 public final class LabEmitter {
   public let level: LabLogLevel
   private let mode: LabSubcommand
-  private let eventIdPrefix: String?
+  private var eventIdPrefix: String?
   private let sinks: [LabLineSink]
   private let now: () -> Date
   private var closed = false
@@ -77,6 +77,20 @@ public final class LabEmitter {
   /// Exposed so the expensive mappings — hex encoding a GATT value, walking a
   /// debug dictionary — are skipped rather than built and discarded.
   public func wants(_ lineLevel: LabLogLevel) -> Bool { level.admits(lineLevel) }
+
+  /// Labels the rest of the run with an event id the run discovered rather
+  /// than was told.
+  ///
+  /// `venue` learns its event id by decoding the container it was handed, so
+  /// without this every line before the decode would carry `null` and every
+  /// line after it would too. An explicit `--event-id` always wins: an
+  /// operator who labelled the run meant that label, and a container that
+  /// disagrees is a finding they need to see in the `venue_ready` line rather
+  /// than have silently overwritten.
+  public func adoptEventId(_ prefix: String) {
+    guard eventIdPrefix == nil else { return }
+    eventIdPrefix = prefix
+  }
 
   public func emit(
     _ stage: LabStage,

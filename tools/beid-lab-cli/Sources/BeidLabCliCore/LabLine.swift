@@ -25,6 +25,10 @@ public enum LabStage: String, Sendable {
   /// line records a request. Only a receiver proves the air.
   case advertiseRequested = "advertise_requested"
   case advertiseStop = "advertise_stop"
+  /// `venue` only: the container was accepted by the engine and describes
+  /// this event. Carries what the container says about itself, which is the
+  /// operator's one chance to notice they copied the wrong file.
+  case venueReady = "venue_ready"
   /// One raw advertisement, `observe` only.
   case discovery = "discovery"
   case peerFirstSeen = "peer_first_seen"
@@ -32,6 +36,12 @@ public enum LabStage: String, Sendable {
   /// The event-code-hash read and its verdict — the gate that decides whether
   /// a peer resolves at all.
   case gattB004 = "gatt_b004"
+  /// Connect attempts and completions, so a run that never got a read
+  /// through can be told apart from one that read and was gated.
+  case gattConnect = "gatt_connect"
+  /// A GATT exchange that did not finish: a timeout, a missing service, a
+  /// failed read, and the backoff that follows.
+  case gattResolution = "gatt_resolution"
   case detection = "detection"
   case envelopeV2 = "envelope_v2"
   case state = "state"

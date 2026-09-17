@@ -44,6 +44,19 @@ let package = Package(
             name: "BeidLabCliCoreTests",
             dependencies: ["BeidLabCliCore"],
             path: "Tests/BeidLabCliCoreTests"
+        ),
+        // Separate from the core tests because it links the SDK. It needs no
+        // radio -- it is pure crypto -- but it does need BarnardCore, and
+        // keeping that dependency out of the core suite is what lets the core
+        // suite stay the thing that runs anywhere.
+        .testTarget(
+            name: "BeidLabCliBarnardTests",
+            dependencies: [
+                "BeidLabCliCore",
+                .product(name: "Barnard", package: "barnard"),
+                .product(name: "BarnardCore", package: "barnard")
+            ],
+            path: "Tests/BeidLabCliBarnardTests"
         )
     ]
 )

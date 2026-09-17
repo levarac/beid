@@ -88,6 +88,28 @@ final class LabEmitterTests: XCTestCase {
     for line in sink.lines { XCTAssertTrue(line.contains(#""event":"1a2b3c4d""#)) }
   }
 
+  /// `venue` learns its event id by decoding the container, so the label has
+  /// to be adoptable after the emitter exists.
+  func testAnAdoptedEventIdLabelsEverySubsequentLine() {
+    let sink = RecordingSink()
+    let emitter = self.emitter(.info, sink: sink, eventIdPrefix: nil)
+    emitter.emit(.runStart, at: .info)
+    emitter.adoptEventId("deadbeef")
+    emitter.emit(.venueReady, at: .info)
+    XCTAssertTrue(sink.lines[0].contains(#""event":null"#))
+    XCTAssertTrue(sink.lines[1].contains(#""event":"deadbeef""#))
+  }
+
+  /// An operator who passed `--event-id` meant that label. A container that
+  /// disagrees is a finding to report, not a label to swap in silently.
+  func testAnExplicitEventIdIsNotOverwrittenByAdoption() {
+    let sink = RecordingSink()
+    let emitter = self.emitter(.info, sink: sink)
+    emitter.adoptEventId("deadbeef")
+    emitter.emit(.venueReady, at: .info)
+    XCTAssertTrue(sink.lines[0].contains(#""event":"1a2b3c4d""#))
+  }
+
   func testAnUnlabelledRunStillCarriesTheKey() {
     let sink = RecordingSink()
     let emitter = self.emitter(.info, sink: sink, eventIdPrefix: nil)

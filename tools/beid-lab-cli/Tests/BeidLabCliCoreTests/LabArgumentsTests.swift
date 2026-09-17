@@ -8,6 +8,10 @@ import XCTest
 /// driven over ssh from a room where a measurement is running: a flag that is
 /// silently ignored spends a device-seat window, and there is no second one.
 final class LabArgumentsTests: XCTestCase {
+  /// A real-shaped 32-byte canonical Event ID -- the string beid actually
+  /// hands the engine.
+  private let eventId = "9f3c71aab20d4e58a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718"
+
   private func parse(_ arguments: String...) throws -> LabOptions {
     try LabOptions.parse(arguments)
   }
@@ -27,7 +31,7 @@ final class LabArgumentsTests: XCTestCase {
   func testThreeSubcommandsParse() throws {
     XCTAssertEqual(try parse("observe").subcommand, .observe)
     XCTAssertEqual(try parse("venue", "--container", "/tmp/c.bin").subcommand, .venue)
-    XCTAssertEqual(try parse("participate", "--event-code", "BND").subcommand, .participate)
+    XCTAssertEqual(try parse("participate", "--event-id", eventId).subcommand, .participate)
   }
 
   func testHelpIsRecognisedWithAndWithoutASubcommand() {
@@ -176,39 +180,115 @@ final class LabArgumentsTests: XCTestCase {
     }
   }
 
-  // MARK: participate
+  // MARK: participate -- the join string
 
-  func testParticipateRequiresAnEventCode() {
+  /// The 2026-09-17 session joined with the operator lookup code and
+  /// measured nothing while reporting a clean run. These are the guard rails
+  /// that came out of it.
+
+  func testParticipateNeedsAJoinSource() {
     XCTAssertThrowsError(try parse("participate")) {
-      XCTAssertEqual($0 as? LabArgumentError, .missingEventCode)
-    }
-    XCTAssertThrowsError(try parse("participate", "--event-code", "")) {
-      XCTAssertEqual($0 as? LabArgumentError, .badValue("--event-code", ""))
+      XCTAssertEqual($0 as? LabArgumentError, .missingJoinSource)
     }
   }
 
-  /// `--event-id` cannot join: Barnard joins by code, and B004 is that code's
-  /// hash. So an event id supplied alone is refused rather than quietly
-  /// treated as a code that will never match anything on the air.
-  func testParticipateRefusesAnEventIdWithoutAnEventCode() {
-    XCTAssertThrowsError(try parse("participate", "--event-id", String(repeating: "a", count: 64))) {
-      XCTAssertEqual($0 as? LabArgumentError, .missingEventCode)
+  /// `--event-id` is the label everywhere else and the wire value here, so a
+  /// truncated id -- which would label the log correctly -- is refused.
+  func testParticipateJoinsWithTheFullEventId() throws {
+    let options = try parse("participate", "--event-id", eventId)
+    XCTAssertEqual(options.participate.join, .eventId(eventId))
+    XCTAssertEqual(options.eventIdPrefix, String(eventId.prefix(8)))
+  }
+
+  func testParticipateNormalisesTheEventIdTheWayTheAppDoes() throws {
+    let options = try parse("participate", "--event-id", "0x" + eventId.uppercased())
+    XCTAssertEqual(options.participate.join, .eventId(eventId))
+  }
+
+  func testParticipateRefusesAnEventIdThatIsNotThirtyTwoBytes() {
+    let short = String(eventId.dropLast(2))
+    XCTAssertThrowsError(try parse("participate", "--event-id", short)) {
+      XCTAssertEqual($0 as? LabArgumentError, .badValue("--event-id", short))
+    }
+  }
+
+  /// The heart of it: a non-canonical `--event-code` is refused, not warned
+  /// about. The failure it guards is silent -- a mismatched B004 makes the
+  /// engine discard every peer before B002, so the run emits no detection and
+  /// reads exactly like an empty room.
+  func testANonCanonicalEventCodeIsRefusedRatherThanWarnedAbout() {
+    XCTAssertThrowsError(
+      try parse("participate", "--event-code", "parallax-sepolia-20260917-05")
+    ) {
+      XCTAssertEqual(
+        $0 as? LabArgumentError,
+        .nonCanonicalCodeRefused("parallax-sepolia-20260917-05"))
+    }
+  }
+
+  func testTheRefusalNamesTheFlagToUseInstead() {
+    let message = LabArgumentError.nonCanonicalCodeRefused("x").description
+    XCTAssertTrue(message.contains("--event-id"))
+    XCTAssertTrue(message.contains("--allow-noncanonical-code"))
+  }
+
+  /// A synthetic rehearsal is the safest thing this tool can do beside a live
+  /// measurement, so it stays available -- behind one explicit flag.
+  func testAnAcknowledgedSyntheticCodeIsAllowed() throws {
+    let options = try parse(
+      "participate", "--event-code", "LABPROBE1", "--allow-noncanonical-code")
+    XCTAssertEqual(options.participate.join, .rawCode("LABPROBE1"))
+    XCTAssertTrue(options.participate.allowNonCanonicalCode)
+  }
+
+  /// An `--event-code` that already is a canonical Event ID needs no
+  /// acknowledgement: it is the same string `--event-id` would produce.
+  func testACanonicalEventCodeNeedsNoAcknowledgement() throws {
+    XCTAssertEqual(
+      try parse("participate", "--event-code", eventId).participate.join, .rawCode(eventId))
+  }
+
+  /// Uppercase hex of the right length is a different join string and hashes
+  /// to a different B004, so it is not canonical.
+  func testAnUppercaseEventCodeIsStillRefused() {
+    let upper = eventId.uppercased()
+    XCTAssertThrowsError(try parse("participate", "--event-code", upper)) {
+      XCTAssertEqual($0 as? LabArgumentError, .nonCanonicalCodeRefused(upper))
+    }
+  }
+
+  func testParticipateCanTakeTheEventIdFromASignedContainer() throws {
+    XCTAssertEqual(
+      try parse("participate", "--container", "/tmp/c.bin").participate.join,
+      .container("/tmp/c.bin"))
+  }
+
+  func testTwoJoinSourcesAreRefused() {
+    XCTAssertThrowsError(
+      try parse("participate", "--event-id", eventId, "--container", "/tmp/c.bin")
+    ) {
+      XCTAssertEqual($0 as? LabArgumentError, .conflictingJoinSources)
+    }
+    XCTAssertThrowsError(
+      try parse("participate", "--event-id", eventId, "--event-code", eventId)
+    ) {
+      XCTAssertEqual($0 as? LabArgumentError, .conflictingJoinSources)
     }
   }
 
   func testParticipateDefaults() throws {
-    let options = try parse("participate", "--event-code", "BND")
-    XCTAssertEqual(options.participate.eventCode, "BND")
+    let options = try parse("participate", "--event-id", eventId)
     XCTAssertEqual(options.participate.role, .auto)
     XCTAssertEqual(options.participate.expectPeers, 0)
     XCTAssertFalse(options.participate.relayEnabled)
+    XCTAssertFalse(options.participate.allowNonCanonicalCode)
     XCTAssertNil(options.participate.eninSeconds)
     XCTAssertNil(options.participate.eninMode)
   }
 
   func testParticipateRoleRelayAndPeerCount() throws {
     let options = try parse(
-      "participate", "--event-code", "BND", "--role", "scan",
+      "participate", "--event-id", eventId, "--role", "scan",
       "--expect-peers", "2", "--relay", "on")
     XCTAssertEqual(options.participate.role, .scan)
     XCTAssertEqual(options.participate.expectPeers, 2)
@@ -216,13 +296,15 @@ final class LabArgumentsTests: XCTestCase {
   }
 
   func testParticipateRejectsBadRoleRelayAndPeerCount() {
-    XCTAssertThrowsError(try parse("participate", "--event-code", "B", "--role", "sniff")) {
+    XCTAssertThrowsError(try parse("participate", "--event-id", eventId, "--role", "sniff")) {
       XCTAssertEqual($0 as? LabArgumentError, .badValue("--role", "sniff"))
     }
-    XCTAssertThrowsError(try parse("participate", "--event-code", "B", "--relay", "yes")) {
+    XCTAssertThrowsError(try parse("participate", "--event-id", eventId, "--relay", "yes")) {
       XCTAssertEqual($0 as? LabArgumentError, .badValue("--relay", "yes"))
     }
-    XCTAssertThrowsError(try parse("participate", "--event-code", "B", "--expect-peers", "-1")) {
+    XCTAssertThrowsError(
+      try parse("participate", "--event-id", eventId, "--expect-peers", "-1")
+    ) {
       XCTAssertEqual($0 as? LabArgumentError, .badValue("--expect-peers", "-1"))
     }
   }
@@ -232,10 +314,12 @@ final class LabArgumentsTests: XCTestCase {
   /// reading a comparable-looking log derived from a different window.
   func testParticipateEninSecondsIsBoundedToTheEnginesRange() throws {
     XCTAssertEqual(
-      try parse("participate", "--event-code", "B", "--enin-seconds", "600")
+      try parse("participate", "--event-id", eventId, "--enin-seconds", "600")
         .participate.eninSeconds, 600)
     for bad in ["11", "3601"] {
-      XCTAssertThrowsError(try parse("participate", "--event-code", "B", "--enin-seconds", bad)) {
+      XCTAssertThrowsError(
+        try parse("participate", "--event-id", eventId, "--enin-seconds", bad)
+      ) {
         XCTAssertEqual($0 as? LabArgumentError, .badValue("--enin-seconds", bad))
       }
     }
@@ -243,14 +327,47 @@ final class LabArgumentsTests: XCTestCase {
 
   func testParticipateEninModeMatchesTheSdkSpelling() throws {
     XCTAssertEqual(
-      try parse("participate", "--event-code", "B", "--enin-mode", "fixedLength")
+      try parse("participate", "--event-id", eventId, "--enin-mode", "fixedLength")
         .participate.eninMode, .fixedLength)
     XCTAssertEqual(
-      try parse("participate", "--event-code", "B", "--enin-mode", "beaconSlot")
+      try parse("participate", "--event-id", eventId, "--enin-mode", "beaconSlot")
         .participate.eninMode, .beaconSlot)
-    XCTAssertThrowsError(try parse("participate", "--event-code", "B", "--enin-mode", "fixed")) {
+    XCTAssertThrowsError(
+      try parse("participate", "--event-id", eventId, "--enin-mode", "fixed")
+    ) {
       XCTAssertEqual($0 as? LabArgumentError, .badValue("--enin-mode", "fixed"))
     }
+  }
+
+  /// `--allow-noncanonical-code` must not be reachable where there is no code
+  /// to acknowledge.
+  func testTheAcknowledgementFlagIsParticipateOnly() {
+    XCTAssertThrowsError(try parse("observe", "--allow-noncanonical-code")) {
+      XCTAssertEqual($0 as? LabArgumentError, .flagNotValidHere("--allow-noncanonical-code", .observe))
+    }
+  }
+
+  /// An argument error is logged before parsing succeeds, so the mode on
+  /// that line comes from this hint. Getting it wrong means an operator
+  /// filtering their own run by mode never sees why it failed.
+  func testSubcommandHintReadsTheFirstWord() {
+    XCTAssertEqual(LabOptions.subcommandHint(["venue"]), .venue)
+    XCTAssertEqual(LabOptions.subcommandHint(["participate", "--event-code"]), .participate)
+    XCTAssertNil(LabOptions.subcommandHint(["--timeout", "5"]))
+    XCTAssertNil(LabOptions.subcommandHint([]))
+  }
+
+  func testLogLevelHintSurvivesAnUnparseableCommandLine() {
+    XCTAssertEqual(LabOptions.logLevelHint(["venue", "-vv", "--bogus"]), .trace)
+    XCTAssertEqual(LabOptions.logLevelHint(["venue", "--log-level", "error"]), .error)
+    XCTAssertEqual(LabOptions.logLevelHint(["venue", "--log-level"]), .info)
+    XCTAssertEqual(LabOptions.logLevelHint([]), .info)
+  }
+
+  func testLogPathHintSurvivesAnUnparseableCommandLine() {
+    XCTAssertEqual(LabOptions.logPathHint(["venue", "--log", "/tmp/a.jsonl"]), "/tmp/a.jsonl")
+    XCTAssertNil(LabOptions.logPathHint(["venue", "--log"]))
+    XCTAssertNil(LabOptions.logPathHint(["venue"]))
   }
 
   func testUsageNamesEverySubcommand() {
