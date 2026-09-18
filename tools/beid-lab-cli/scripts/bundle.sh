@@ -30,7 +30,7 @@ TOOL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BINARY_NAME="beid-lab-cli"
 # Must match `LabBundle.identifier` in Sources/beid-lab-cli/EngineLogging.swift.
 # The two agreeing is what makes the Bluetooth grant survive a rebuild.
-BUNDLE_ID="org.levarac.beid.LabCli"
+BUNDLE_ID="org.levarac.beid.lab-cli"
 CONFIGURATION="${CONFIGURATION:-release}"
 BUILD_DIR="${BUILD_DIR:-$TOOL_DIR/.build}"
 APP_DIR="${APP_DIR:-$TOOL_DIR/build}"

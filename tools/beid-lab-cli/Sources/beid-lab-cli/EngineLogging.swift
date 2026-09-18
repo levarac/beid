@@ -9,7 +9,7 @@ enum LabBundle {
   /// Must match `scripts/bundle.sh`. macOS keys the Bluetooth grant to this
   /// plus the code signature, so the two files agreeing is what makes the
   /// grant survive a rebuild.
-  static let identifier = "org.levarac.beid.LabCli"
+  static let identifier = "org.levarac.beid.lab-cli"
 }
 
 /// Turns Barnard's event and debug streams into log lines.
