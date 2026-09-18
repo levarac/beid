@@ -3,7 +3,8 @@ package org.levarac.beid.shared.report
 /** Counts durable closed observation windows, across all saved events and days.
  * Open or unpersisted windows are excluded. Acceptance means a durable ledger
  * acknowledgement, never merely a proof record or an attempted network request.
- * A permanently held report has the existing ledger deadline Long.MAX_VALUE.
+ * A stopped report is TERMINAL_FAILED, or the Long.MAX_VALUE deadline older
+ * builds wrote before beid#607.
  * This projection is read-only and cannot schedule, acknowledge, or retry work.
  */
 public data class UnsentWindowSubmissionSummary(
@@ -26,7 +27,7 @@ public fun summarizeUnsentWindowSubmissions(ledger: UnsentWindowLedger): UnsentW
                 summary.copy(queued = summary.queued + 1)
             report.status == LedgerReportStatus.ACKNOWLEDGED -> summary.copy(accepted = summary.accepted + 1)
             report.status == LedgerReportStatus.IN_FLIGHT -> summary.copy(sending = summary.sending + 1)
-            report.retryNotBeforeEpochMilliseconds == Long.MAX_VALUE -> summary.copy(stopped = summary.stopped + 1)
+            report.isStopped -> summary.copy(stopped = summary.stopped + 1)
             else -> summary.copy(retrying = summary.retrying + 1)
         }
     }

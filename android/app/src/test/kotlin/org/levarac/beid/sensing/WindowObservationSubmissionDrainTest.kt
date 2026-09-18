@@ -435,7 +435,7 @@ class WindowObservationSubmissionDrainTest {
             val record = requireNotNull(submissionRecordStore(directory).recordFor(WINDOW_ID))
             assertEquals("invalid_configuration", record.terminalErrorCode)
             assertTrue(
-                ledgerFile(directory).readText().contains("\tretryable_failed\t${Long.MAX_VALUE}\t"),
+                ledgerFile(directory).readText().contains("\tterminal_failed\t-\t-\t"),
                 "permanently unusable verified evidence must remain held",
             )
 

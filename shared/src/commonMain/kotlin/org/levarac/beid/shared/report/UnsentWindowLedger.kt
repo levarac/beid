@@ -102,7 +102,33 @@ internal enum class LedgerReportStatus {
     IN_FLIGHT,
     RETRYABLE_FAILED,
     ACKNOWLEDGED,
+
+    /** Automatic submission stopped for good; the report no longer occupies the head (beid#607). */
+    TERMINAL_FAILED,
 }
+
+/**
+ * The deadline builds before beid#607 wrote for a stopped report. Such rows
+ * are still on devices and still decode as RETRYABLE_FAILED; they mean the
+ * same thing as [LedgerReportStatus.TERMINAL_FAILED] and are never retried.
+ */
+private const val LEGACY_STOPPED_RETRY_NOT_BEFORE = Long.MAX_VALUE
+
+/** A report whose automatic submission will never be attempted again. */
+internal val LedgerReport.isStopped: Boolean
+    get() = status == LedgerReportStatus.TERMINAL_FAILED ||
+        (status == LedgerReportStatus.RETRYABLE_FAILED &&
+            retryNotBeforeEpochMilliseconds == LEGACY_STOPPED_RETRY_NOT_BEFORE)
+
+/**
+ * The one report the ledger is still working on. Live work stays strictly
+ * head-of-line (one submission in flight or waiting to retry at a time), but
+ * acknowledged and stopped reports never hold the head: a report that will
+ * never be attempted again must not keep every later window from being
+ * selected (beid#607).
+ */
+internal val LedgerReport.occupiesHead: Boolean
+    get() = status != LedgerReportStatus.ACKNOWLEDGED && !isStopped
 
 private val LEDGER_INSTANCE_ID = Regex("[0-9a-f]{32}")
 
@@ -301,9 +327,7 @@ public fun prepareNextUnsentWindowSubmission(
         return ledger.unchanged()
     }
 
-    val activeReport = ledger.state.reports.firstOrNull {
-        it.status != LedgerReportStatus.ACKNOWLEDGED
-    }
+    val activeReport = ledger.state.reports.firstOrNull { it.occupiesHead }
     if (activeReport != null) {
         if (activeReport.updatedRevision > ledger.state.durableRevision) {
             return ledger.unchanged()
@@ -393,7 +417,11 @@ public fun markUnsentWindowSubmissionRetryable(
     submissionKey: String,
     retryNotBeforeEpochMilliseconds: Long,
 ): UnsentWindowLedgerTransition {
-    if (retryNotBeforeEpochMilliseconds < 0L) {
+    // A deadline that never arrives is not a retry. Stopping is stated with
+    // markUnsentWindowSubmissionTerminal, which releases the head (beid#607).
+    if (retryNotBeforeEpochMilliseconds < 0L ||
+        retryNotBeforeEpochMilliseconds == LEGACY_STOPPED_RETRY_NOT_BEFORE
+    ) {
         return ledger.failure("invalid_retry_not_before")
     }
 
@@ -417,6 +445,44 @@ public fun markUnsentWindowSubmissionRetryable(
                     updatedRevision = revision,
                     status = LedgerReportStatus.RETRYABLE_FAILED,
                     retryNotBeforeEpochMilliseconds = retryNotBeforeEpochMilliseconds,
+                )
+            } else {
+                current
+            }
+        },
+    )
+    return ledger.persistenceRequired(updated)
+}
+
+/**
+ * Stops automatic submission of an in-flight report for good: its windows
+ * are never selected or sent again, and the next closed window can become
+ * the head. Native code records why, beside the ledger.
+ */
+public fun markUnsentWindowSubmissionTerminal(
+    ledger: UnsentWindowLedger,
+    submissionKey: String,
+): UnsentWindowLedgerTransition {
+    val report = ledger.state.reports.firstOrNull {
+        it.submissionKey == submissionKey
+    } ?: return ledger.failure("unknown_submission_key")
+    if (report.status != LedgerReportStatus.IN_FLIGHT) {
+        return ledger.failure("submission_not_in_flight")
+    }
+    if (report.updatedRevision > ledger.state.durableRevision) {
+        return ledger.failure("submission_not_durable")
+    }
+
+    val revision = ledger.state.revision.incrementRevisionOrNull()
+        ?: return ledger.failure("ledger_capacity_exceeded")
+    val updated = ledger.state.copy(
+        revision = revision,
+        reports = ledger.state.reports.map { current ->
+            if (current.submissionKey == submissionKey) {
+                current.copy(
+                    updatedRevision = revision,
+                    status = LedgerReportStatus.TERMINAL_FAILED,
+                    retryNotBeforeEpochMilliseconds = null,
                 )
             } else {
                 current
@@ -535,7 +601,7 @@ public fun resumeUnsentWindowSubmissionAfterRestore(
 
 /** Returns the durable head retry deadline, if the head is waiting to retry. */
 public fun retryNotBeforeEpochMilliseconds(ledger: UnsentWindowLedger): Long? =
-    ledger.state.reports.firstOrNull { it.status != LedgerReportStatus.ACKNOWLEDGED }
+    ledger.state.reports.firstOrNull { it.occupiesHead }
         ?.retryNotBeforeEpochMilliseconds
 
 private fun LedgerState.emitDurableSubmissionIfNeeded(): UnsentWindowLedgerTransition {

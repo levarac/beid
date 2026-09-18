@@ -38,6 +38,74 @@ class UnsentWindowLedgerStoppedReportTest {
     }
 
     @Test
+    fun terminalReportReleasesTheHeadAndSurvivesRelaunchBesideLiveWork() {
+        val held = inFlight("a")
+        val stopped = markUnsentWindowSubmissionTerminal(held.ledger, held.submission.submissionKey)
+        assertTrue(stopped.isSuccess, "terminal failed: ${stopped.errorCode}")
+        assertTrue(assertNotNull(stopped.snapshotText).contains("\tterminal_failed\t-\t-\t"))
+        val stoppedLedger = confirmUnsentWindowLedgerPersistence(stopped.ledger, stopped.persistenceRevision).ledger
+        assertEquals(null, retryNotBeforeEpochMilliseconds(stoppedLedger))
+        assertFalse(
+            prepareNextUnsentWindowSubmission(stoppedLedger, maximumWindowCount = 1, nowEpochMilliseconds = Long.MAX_VALUE).changed,
+            "a stopped report is never attempted again, however late it is",
+        )
+
+        val ready = closeDurably(stoppedLedger, "b")
+        val prepared = prepareNextUnsentWindowSubmission(ready, maximumWindowCount = 1, nowEpochMilliseconds = NOW)
+        val emitted = confirmUnsentWindowLedgerPersistence(prepared.ledger, prepared.persistenceRevision)
+        assertEquals("b", assertNotNull(emitted.submission, "the window behind a stopped report must be handed on").windowIdAt(0))
+
+        val snapshot = assertNotNull(prepared.snapshotText)
+        val expected = """
+            beid-ledger-snapshot\t1
+            revision\t7
+            ledger-id\t000102030405060708090a0b0c0d0e0f
+            next-window-sequence\t3
+            next-report-sequence\t3
+            windows\t2
+            window\t61\t1\t2\t61
+            window\t62\t2\t6\t62
+            reports\t2
+            report\t000102030405060708090a0b0c0d0e0f0000000000000001\t4\t1\tterminal_failed\t-\t-\t61
+            report\t000102030405060708090a0b0c0d0e0f0000000000000002\t7\t1\tin_flight\t-\t-\t62
+            end
+        """.trimIndent().replace("\\t", "\t") + "\n"
+        assertEquals(expected, snapshot)
+        val restored = decodeUnsentWindowLedgerSnapshot(snapshot)
+        assertTrue(restored.isSuccess, "stopped plus live must decode (${restored.errorCode})")
+        assertEquals(snapshot, encodeUnsentWindowLedgerSnapshot(assertNotNull(restored.ledger)))
+        assertEquals(
+            UnsentWindowSubmissionSummary(sending = 1, stopped = 1),
+            summarizeUnsentWindowSubmissions(assertNotNull(restored.ledger)),
+        )
+    }
+
+    @Test
+    fun liveWorkIsStillStrictlyHeadOfLine() {
+        val first = inFlight("a")
+        val ready = closeDurably(first.ledger, "b")
+        assertFalse(
+            prepareNextUnsentWindowSubmission(ready, maximumWindowCount = 1, nowEpochMilliseconds = NOW).changed,
+            "an in-flight report must still block selection of the next window",
+        )
+        val retrying = markUnsentWindowSubmissionRetryable(ready, first.submission.submissionKey, NOW + 30_000L)
+        val retryingLedger = confirmUnsentWindowLedgerPersistence(retrying.ledger, retrying.persistenceRevision).ledger
+        assertFalse(
+            prepareNextUnsentWindowSubmission(retryingLedger, maximumWindowCount = 1, nowEpochMilliseconds = NOW).changed,
+            "a report waiting on a finite retry must still block selection of the next window",
+        )
+        assertEquals(NOW + 30_000L, retryNotBeforeEpochMilliseconds(retryingLedger))
+    }
+
+    @Test
+    fun legacyHeldReportIsCountedAsStoppedAndKeepsItsBytes() {
+        val legacy = assertNotNull(decodeUnsentWindowLedgerSnapshot(LEGACY_HELD_SNAPSHOT).ledger)
+        assertEquals(UnsentWindowSubmissionSummary(stopped = 1), summarizeUnsentWindowSubmissions(legacy))
+        assertEquals(LEGACY_HELD_SNAPSHOT, encodeUnsentWindowLedgerSnapshot(legacy))
+        assertEquals(null, retryNotBeforeEpochMilliseconds(legacy))
+    }
+
+    @Test
     fun aDeadlineThatNeverArrivesIsNotARetry() {
         val durable = inFlight("a")
         val result = markUnsentWindowSubmissionRetryable(durable.ledger, durable.submission.submissionKey, Long.MAX_VALUE)

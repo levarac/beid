@@ -59,6 +59,12 @@ public fun encodeUnsentWindowLedgerSnapshot(
                 inclusionDetail = "-"
             }
 
+            LedgerReportStatus.TERMINAL_FAILED -> {
+                statusToken = "terminal_failed"
+                statusDetail = "-"
+                inclusionDetail = "-"
+            }
+
             LedgerReportStatus.ACKNOWLEDGED -> {
                 statusToken = "acknowledged"
                 statusDetail = checkNotNull(report.acceptanceReceiptReference).encodeUtf8Hex()
@@ -228,6 +234,15 @@ private fun parseSnapshot(encoded: String): LedgerState {
                     inclusionReceiptReference = null
                 }
 
+                "terminal_failed" -> {
+                    require(fields[5] == "-")
+                    require(fields[6] == "-")
+                    status = LedgerReportStatus.TERMINAL_FAILED
+                    retryNotBefore = null
+                    acceptanceReceiptReference = null
+                    inclusionReceiptReference = null
+                }
+
                 "acknowledged" -> {
                     status = LedgerReportStatus.ACKNOWLEDGED
                     retryNotBefore = null
@@ -271,7 +286,8 @@ private fun parseSnapshot(encoded: String): LedgerState {
 
     require(reports.map { it.submissionKey }.toSet().size == reports.size)
     require(reports == reports.sortedBy { it.submissionKey })
-    require(reports.count { it.status != LedgerReportStatus.ACKNOWLEDGED } <= 1)
+    // Only live work is head-of-line; stopped reports may precede it (beid#607).
+    require(reports.count { it.occupiesHead } <= 1)
 
     val windowsById = windows.associateBy { it.windowId }
     val membership = mutableMapOf<String, String>()

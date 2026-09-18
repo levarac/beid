@@ -128,7 +128,7 @@ internal class WindowObservationSubmissionDrain(
 
     private fun scheduleRestoredRetryIfNeeded() {
         val deadline = accumulator.retryNotBeforeEpochMilliseconds() ?: return
-        if (deadline == Long.MAX_VALUE || closed) return
+        if (closed) return
         val delay = (deadline - nowEpochMilliseconds()).coerceAtLeast(0L)
         scheduledRetry?.cancel()
         scheduledRetry = retryScheduler?.schedule(delay) { drain() }
@@ -303,12 +303,13 @@ internal class WindowObservationSubmissionDrain(
             if (!persistSubmissionRecord(submission.submissionKey, windowId, "terminal_failure") {
                 submissionRecordStore.recordTerminalFailure(windowId, result.errorCode ?: "submission_failed")
             }) return
-            accumulator.completeSubmissionRetryable(submission.submissionKey, retryNotBeforeEpochMilliseconds = Long.MAX_VALUE)
+            accumulator.completeSubmissionTerminal(submission.submissionKey)
             logSubmissionOutcome("stopped automatic submission for window $windowId: ${result.errorCode}")
+            // A stopped report releases the head; the next durable window is
+            // ordinary fresh work (beid#607).
+            drain()
         }
-        // Terminal or not-yet-due-retryable: the head-of-line slot stays
-        // occupied. No chained `drain()` call — beid#525's honest
-        // head-of-line-blocking behavior, stated in the PR description.
+        // A not-yet-due retry keeps the head-of-line slot until its timer fires.
     }
 
     /** An artifact whose configuration or stored bytes cannot be trusted is held, never guessed at — beid#525 part 2. */
@@ -316,8 +317,11 @@ internal class WindowObservationSubmissionDrain(
         if (!persistSubmissionRecord(submissionKey, windowId, "hold") {
             submissionRecordStore.recordTerminalFailure(windowId, "invalid_configuration")
         }) return
-        accumulator.completeSubmissionRetryable(submissionKey, retryNotBeforeEpochMilliseconds = Long.MAX_VALUE)
+        accumulator.completeSubmissionTerminal(submissionKey)
         logSubmissionOutcome("held window $windowId: $reason")
+        // Held means this window is never sent; it does not mean the windows
+        // closed after it are never sent (beid#607).
+        drain()
     }
 
     /** Missing/suspended records and disk failures cannot stand in for a durable write. */
