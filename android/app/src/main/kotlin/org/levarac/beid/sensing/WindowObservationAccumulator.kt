@@ -20,6 +20,7 @@ import org.levarac.beid.shared.report.createUnsentWindowObservationRecoveryInput
 import org.levarac.beid.shared.report.createUnsentWindowLedger
 import org.levarac.beid.shared.report.createWindowObservationDraft
 import org.levarac.beid.shared.report.markUnsentWindowSubmissionRetryable
+import org.levarac.beid.shared.report.markUnsentWindowSubmissionTerminal
 import org.levarac.beid.shared.report.openUnsentWindow
 import org.levarac.beid.shared.report.prepareNextUnsentWindowSubmission
 import org.levarac.beid.shared.report.reconcileUnsentWindowLedgerAfterRelaunch
@@ -586,23 +587,23 @@ internal class WindowObservationAccumulator(
         apply(recordUnsentWindowSubmissionAcceptance(ledger, submissionKey, acceptanceReceiptReference))
     }
 
-    /**
-     * Schedules (or, with [retryNotBeforeEpochMilliseconds] pinned to
-     * [Long.MAX_VALUE], permanently defers) the next attempt for
-     * [submissionKey].
-     *
-     * The shared reducer has no separate terminal state — only IN_FLIGHT,
-     * RETRYABLE_FAILED and ACKNOWLEDGED — so beid#525's "stop automatic
-     * POSTing for a terminal failure, or an artifact whose configuration
-     * cannot be resolved" is implemented as RETRYABLE_FAILED with a retry
-     * deadline that will not arrive. This is a deliberate overload of an
-     * existing state, not a bug: the reducer's own head-of-line blocking
-     * (`UnsentWindowLedger.kt:304-312`) then does the "stop and surface the
-     * reason" job on its own, and nothing here schedules a timer for it.
-     */
+    /** Schedules the next attempt for [submissionKey] at a finite deadline. */
     @Synchronized
     internal fun completeSubmissionRetryable(submissionKey: String, retryNotBeforeEpochMilliseconds: Long) {
         apply(markUnsentWindowSubmissionRetryable(ledger, submissionKey, retryNotBeforeEpochMilliseconds))
+    }
+
+    /**
+     * Stops automatic submission of [submissionKey] for good — beid#525's
+     * terminal failure or unresolvable configuration — and releases the
+     * ledger's head so windows closed after it still drain.
+     *
+     * Before beid#607 this was a retry deadline of [Long.MAX_VALUE], which
+     * kept the stopped report at the head and blocked every later window.
+     */
+    @Synchronized
+    internal fun completeSubmissionTerminal(submissionKey: String) {
+        apply(markUnsentWindowSubmissionTerminal(ledger, submissionKey))
     }
 
     /** Loads the exact durable bytes an already-selected submission must send — never re-signed, never re-derived. */

@@ -103,7 +103,7 @@ class TodaySummarySubmissionRouteTest {
         val key = requireNotNull(confirmed.submission).submissionKey
         val result = when (state) {
             "accepted" -> recordUnsentWindowSubmissionAcceptance(confirmed.ledger, key, "receipt-1")
-            "held" -> markUnsentWindowSubmissionRetryable(confirmed.ledger, key, Long.MAX_VALUE)
+            "held" -> markUnsentWindowSubmissionTerminal(confirmed.ledger, key)
             else -> markUnsentWindowSubmissionRetryable(confirmed.ledger, key, 30000)
         }
         check(result.isSuccess)

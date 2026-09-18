@@ -10,10 +10,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.levarac.beid.persistence.SubmissionRecord
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.persistence.WindowObservationDraftStore
 import org.levarac.beid.shared.report.addWindowObservationDraftRpid
+import org.levarac.beid.shared.report.closeUnsentWindow
 import org.levarac.beid.shared.report.confirmUnsentWindowLedgerPersistence
 import org.levarac.beid.shared.report.createUnsentWindowLedger
 import org.levarac.beid.shared.report.createWindowObservationDraft
@@ -433,7 +435,7 @@ class WindowObservationSubmissionDrainTest {
             val record = requireNotNull(submissionRecordStore(directory).recordFor(WINDOW_ID))
             assertEquals("invalid_configuration", record.terminalErrorCode)
             assertTrue(
-                ledgerFile(directory).readText().contains("\tretryable_failed\t${Long.MAX_VALUE}\t"),
+                ledgerFile(directory).readText().contains("\tterminal_failed\t-\t-\t"),
                 "permanently unusable verified evidence must remain held",
             )
 
@@ -758,6 +760,128 @@ class WindowObservationSubmissionDrainTest {
         }
     }
 
+    /**
+     * beid#607, fresh-install shape: a window whose registry evidence is
+     * permanently unusable is held, and a window closed after it must still
+     * reach the operator. The held window is built from ledger primitives
+     * (the conformance-vector signature is valid for exactly one window id,
+     * which the real window [WINDOW_ID] behind it needs).
+     */
+    @Test
+    fun aHeldWindowDoesNotBlockTheWindowClosedAfterIt() {
+        val directory = Files.createTempDirectory("drain-held-head").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            val ledgerStore = UnsentWindowLedgerStore(ledgerFile(directory))
+            val created = requireNotNull(createUnsentWindowLedger(LEDGER_INSTANCE_ID).ledger)
+            val opened = openUnsentWindow(created, HELD_WINDOW_ID)
+            ledgerStore.persist(opened)
+            val openedLedger = confirmUnsentWindowLedgerPersistence(opened.ledger, opened.persistenceRevision).ledger
+            val closed = closeUnsentWindow(openedLedger, HELD_WINDOW_ID, HELD_OBSERVATION_DIGEST_HEX)
+            ledgerStore.persist(closed)
+            submissionRecordStore(directory).add(unresolvedRecord(HELD_WINDOW_ID))
+
+            val resolver = FakeConfigurationResolver(
+                resolutions = listOf(
+                    SubmissionConfigurationResolution.PermanentlyUnusable("definition_hash_mismatch"),
+                    SubmissionConfigurationResolution.Resolved(resolvedConfiguration(endpoint)),
+                ),
+            )
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+            )
+            closeOneWindow(accumulator)
+
+            drain.drain()
+
+            waitUntil { server.postCount == 1 }
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            Thread.sleep(150)
+            assertEquals(2, resolver.callCount, "the held window and the window behind it must each be resolved once")
+            assertEquals(1, server.postCount, "the window behind the held one must be POSTed exactly once")
+            assertEquals(
+                "invalid_configuration",
+                submissionRecordStore(directory).recordFor(HELD_WINDOW_ID)?.terminalErrorCode,
+                "held still means held: the held window itself is never sent",
+            )
+        } finally {
+            server.stop()
+        }
+    }
+
+    /**
+     * beid#607, the shape already on devices: a ledger written before the
+     * fix, whose head report was held as RETRYABLE_FAILED with a
+     * Long.MAX_VALUE deadline. A relaunched process must drain past it
+     * without rewriting, rejecting or retrying the held report.
+     */
+    @Test
+    fun aLedgerHeldByAnEarlierBuildDrainsTheWindowClosedAfterRelaunch() {
+        val directory = Files.createTempDirectory("drain-legacy-held-head").toFile()
+        val server = newStubOperatorServer()
+        val endpoint = server.start()
+        try {
+            ledgerFile(directory).writeText(legacyHeldLedgerSnapshot())
+            submissionRecordStore(directory).add(
+                unresolvedRecord(HELD_WINDOW_ID).copy(terminalErrorCode = "invalid_configuration"),
+            )
+            val resolver = FakeConfigurationResolver(resolvedConfiguration(endpoint))
+            val (accumulator, drain) = buildSystem(
+                directory = directory,
+                cryptography = vectorCryptography(),
+                submissionConfiguration = null,
+                configurationResolver = resolver,
+            )
+            accumulator.recoverAfterRelaunch()
+            drain.resumeAfterRestore()
+            closeOneWindow(accumulator)
+
+            drain.drain()
+
+            waitUntil { server.postCount == 1 }
+            waitUntil { submissionRecordStore(directory).recordFor(WINDOW_ID)?.acceptanceReceiptHex != null }
+            Thread.sleep(150)
+            assertEquals(1, server.postCount)
+            assertEquals(1, resolver.callCount, "only the new window is resolved; the held one is never retried")
+        } finally {
+            server.stop()
+        }
+    }
+
+    private fun unresolvedRecord(windowId: String) = SubmissionRecord(
+        windowId = windowId,
+        eventIdHex = HELD_EVENT_ID_HEX,
+        submissionEndpoint = null,
+        receiptPublicKeyHex = null,
+        operatorIdHex = null,
+        eventDefinitionDigestHex = null,
+        validFrom = null,
+        validUntil = null,
+        unresolvedReason = "no verified Event Definition was available when this window opened",
+    )
+
+    /** open (r1), close (r2), select (r3), hold with Long.MAX_VALUE (r4) — what the drain wrote before #607. */
+    private fun legacyHeldLedgerSnapshot(): String {
+        val windowHex = HELD_WINDOW_ID.encodeToByteArray().toLowercaseHex()
+        val referenceHex = HELD_OBSERVATION_DIGEST_HEX.encodeToByteArray().toLowercaseHex()
+        return listOf(
+            "beid-ledger-snapshot\t1",
+            "revision\t4",
+            "ledger-id\t$LEDGER_INSTANCE_ID",
+            "next-window-sequence\t2",
+            "next-report-sequence\t2",
+            "windows\t1",
+            "window\t$windowHex\t1\t2\t$referenceHex",
+            "reports\t1",
+            "report\t${LEDGER_INSTANCE_ID}0000000000000001\t4\t1\tretryable_failed\t${Long.MAX_VALUE}\t-\t$windowHex",
+            "end",
+        ).joinToString("\n", postfix = "\n")
+    }
+
     private class FakeConfigurationResolver(
         private val resolutions: List<SubmissionConfigurationResolution>,
     ) : WindowObservationSubmissionDrain.SubmissionConfigurationResolver {
@@ -906,6 +1030,9 @@ class WindowObservationSubmissionDrainTest {
         val PARTICIPANT_COMMITMENT_HEX = "ab".repeat(32)
         const val LEDGER_INSTANCE_ID = "000102030405060708090a0b0c0d0e0f"
         const val WINDOW_ID = "00112233-4455-6677-8899-aabbccddeeff"
+        const val HELD_WINDOW_ID = "ffeeddcc-bbaa-9988-7766-554433221100"
+        val HELD_OBSERVATION_DIGEST_HEX = "44".repeat(32)
+        val HELD_EVENT_ID_HEX = "33".repeat(32)
         const val REPORTER_RPID = "0110101010101010101010101010101010"
         const val RPID_ONE = "0111111111111111111111111111111111"
         const val RPID_TWO = "0122222222222222222222222222222222"

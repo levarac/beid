@@ -25,7 +25,7 @@ class UnsentWindowSubmissionSummaryTest {
         assertEquals(UnsentWindowSubmissionSummary(queued = 1, sending = 2), summarizeUnsentWindowSubmissions(sending.ledger))
         val retry = markUnsentWindowSubmissionRetryable(sending.ledger, key, 30000)
         assertEquals(UnsentWindowSubmissionSummary(queued = 1, retrying = 2), summarizeUnsentWindowSubmissions(durable(retry)))
-        val hold = markUnsentWindowSubmissionRetryable(sending.ledger, key, Long.MAX_VALUE)
+        val hold = markUnsentWindowSubmissionTerminal(sending.ledger, key)
         assertEquals(UnsentWindowSubmissionSummary(queued = 1, stopped = 2), summarizeUnsentWindowSubmissions(durable(hold)))
         val accepted = recordUnsentWindowSubmissionAcceptance(sending.ledger, key, "receipt")
         // A receipt that has not been persisted cannot be reported as received.

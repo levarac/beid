@@ -108,3 +108,22 @@ surfaced.
 Nothing else in this decision route changed — the shared reducer still has no
 opinion on configuration, and the "which configuration governs a submission"
 decision is still entirely native.
+
+## Update (beid#607): a held artifact no longer blocks the ones after it
+
+Holding was implemented as `RETRYABLE_FAILED` with a retry deadline of
+`Long.MAX_VALUE`, and the shared reducer treats any non-acknowledged report as
+the head. One held artifact therefore stopped every later window from being
+selected, so nothing after it was ever resolved or POSTed.
+
+The shared ledger now has a `TERMINAL_FAILED` report status
+(`markUnsentWindowSubmissionTerminal`). Acknowledged and stopped reports never
+occupy the head; in-flight work and finite retries are still strictly
+head-of-line. A deadline of `Long.MAX_VALUE` is refused as a retry, and the
+rows older builds already wrote in that shape are read as stopped without
+being rewritten. The drain chains the next `drain()` after a hold or terminal
+failure, as it already did after an acceptance.
+
+**Still true**: a held artifact is never sent. Only the windows behind it are.
+iOS was already per-record (`ReportSubmissionRuntime.finishFailedSubmission`)
+and does not use the shared ledger's submission path, so it is unchanged.
