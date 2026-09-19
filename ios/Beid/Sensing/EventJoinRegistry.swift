@@ -22,21 +22,18 @@ import Foundation
 ///
 /// ## The completion is Optional, and that is the point
 ///
-/// `EventDefinitionResolution` carries an `internal` Kotlin constructor, so
-/// Swift Export gives it only a `package` initializer and no Swift code —
-/// production or test — can build one. A fake can therefore answer:
+/// The shared `jointestsupport` factory makes the resolution shape available
+/// to tests without exposing the registry constructor to production callers.
+/// A fake can therefore answer:
 ///
 /// - **nil**, the read failed or produced no definition;
 /// - **never**, the read is still outstanding;
 /// - **late**, after the caller has moved on.
 ///
-/// It cannot answer with a *successful* read, and that is a property of the
-/// shared type rather than a gap here. Android records the same limit in
-/// `FakeEventJoinRegistry` and reaches a successful join by walking the real
-/// promotion path instead. iOS has no caller for that path yet, so the
-/// positive case stays unexpressible on this host until shared test support
-/// exists (beid#391). The three refusals above are exactly the ones beid#374's
-/// acceptance criterion names.
+/// It can also answer with a successful read or a failed non-null resolution;
+/// the production adapter filters the latter to nil before the join gate sees
+/// it. Pending and late answers remain explicit cases because cancellation and
+/// stale-completion guards are separate behavior.
 /// Why a join attempt was refused, for a surface the user can see.
 ///
 /// Native rather than shared on purpose. Android reports refusals through
@@ -103,10 +100,32 @@ protocol EventJoinRegistry: AnyObject {
 /// enough to join is the shared issuer's decision, not this adapter's.
 @MainActor
 final class RegistryEventJoinRegistry: EventJoinRegistry {
-  private let client: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient
+  typealias DefinitionReader = (
+    String,
+    Int64,
+    @escaping (ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution) -> Void
+  ) -> any EventIdentityVerificationRequest
+
+  private let readDefinition: DefinitionReader
 
   init(client: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient) {
-    self.client = client
+    self.readDefinition = { eventIdHex, nowEpochSeconds, completion in
+      let request = client.resolveEventDefinition(
+        eventIdHex: eventIdHex,
+        pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin(),
+        useTimeEpochSeconds: nowEpochSeconds
+      ) { resolution in
+        completion(resolution)
+      }
+      return RegistryEventJoinRequest(request: request)
+    }
+  }
+
+  /// Test seam for the adapter itself. Production continues to use the
+  /// platform's real KMP RegistryClient above; tests can supply a non-null
+  /// failed resolution, which is the shape that client actually returns.
+  init(testReader: @escaping DefinitionReader) {
+    self.readDefinition = testReader
   }
 
   @discardableResult
@@ -118,11 +137,7 @@ final class RegistryEventJoinRegistry: EventJoinRegistry {
       _ failureErrorCode: String?
     ) -> Void
   ) -> any EventIdentityVerificationRequest {
-    let request = client.resolveEventDefinition(
-      eventIdHex: eventIdHex,
-      pin: ExportedKotlinPackages.org.levarac.parallax.registry.safeRegistryReadPin(),
-      useTimeEpochSeconds: nowEpochSeconds
-    ) { resolution in
+    return readDefinition(eventIdHex, nowEpochSeconds) { resolution in
       Task { @MainActor in
         // Mirrors Android's `EventJoinRegistry.kt:69`
         // (`completion(resolution.takeIf { it.isSuccess })`).
@@ -135,15 +150,13 @@ final class RegistryEventJoinRegistry: EventJoinRegistry {
         // came back refused as `.definitionNotEligible`, which left the nil
         // branch — `.registryReadFailed` — dead on a real device and
         // reachable only from a fake. The two branches now mean on iOS what
-        // they mean on Android, and the fake's nil is the shape production
-        // actually produces.
+        // they mean on Android.
         completion(
           resolution.isSuccess ? resolution : nil,
           resolution.isSuccess ? nil : resolution.errorCode
         )
       }
     }
-    return RegistryEventJoinRequest(request: request)
   }
 }
 

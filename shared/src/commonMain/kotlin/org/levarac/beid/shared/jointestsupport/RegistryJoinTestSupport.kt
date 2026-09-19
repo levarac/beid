@@ -114,6 +114,27 @@ public fun createEventDefinitionResolutionForTesting(
     )
 }
 
+/**
+ * A failed registry read for native join-gate tests.
+ *
+ * [EventDefinitionResolution] deliberately keeps its constructor internal to
+ * the shared registry package. This test-only factory lets an app-module fake
+ * reproduce the real non-null failure object that [RegistryClient] delivers,
+ * before the native adapter filters it to the nullable seam.
+ */
+public fun createFailedEventDefinitionResolutionForTesting(
+    errorCode: String? = null,
+    errorMessage: String? = null,
+): EventDefinitionResolution = EventDefinitionResolution(
+    isSuccess = false,
+    context = null,
+    blockNumber = 0L,
+    blockHashHex = null,
+    definitionHashHex = null,
+    errorCode = errorCode,
+    errorMessage = errorMessage,
+)
+
 private const val ZERO_32_HEX = "0x0000000000000000000000000000000000000000000000000000000000000000"
 
 /**
