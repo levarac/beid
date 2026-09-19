@@ -111,7 +111,7 @@ final class AppCoordinatorRestoreTests: XCTestCase {
     let defaults = UserDefaults(suiteName: "AppCoordinatorRestoreTests.deallocation.\(UUID().uuidString)")!
     defaults.removeObject(forKey: "beid.hasCompletedOnboarding")
 
-    var coordinator: AppCoordinator? = AppCoordinator(userDefaults: defaults, permissionEvaluation: {})
+    var coordinator: AppCoordinator? = AppCoordinator(userDefaults: defaults, permissionEvaluation: { .granted })
     let task = coordinator?.requestBluetoothPermission()
     coordinator = nil
 
@@ -125,10 +125,47 @@ final class AppCoordinatorRestoreTests: XCTestCase {
   func testRequestBluetoothPermissionWritesWhenCoordinatorStaysAlive() async {
     let defaults = UserDefaults(suiteName: "AppCoordinatorRestoreTests.alive.\(UUID().uuidString)")!
     defaults.removeObject(forKey: "beid.hasCompletedOnboarding")
-    let coordinator = AppCoordinator(userDefaults: defaults, permissionEvaluation: {})
+    let coordinator = AppCoordinator(userDefaults: defaults, permissionEvaluation: { .granted })
 
     await coordinator.requestBluetoothPermission().value
 
     XCTAssertTrue(defaults.bool(forKey: "beid.hasCompletedOnboarding"))
+  }
+
+  func testDeniedBluetoothPermissionRoutesToGuidance() async {
+    let defaults = isolatedDefaults()
+    let coordinator = AppCoordinator(
+      userDefaults: defaults,
+      permissionEvaluation: { .denied }
+    )
+
+    await coordinator.requestBluetoothPermission().value
+
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+  }
+
+  func testUndeterminedBluetoothPermissionDoesNotAdvance() async {
+    let defaults = isolatedDefaults()
+    let coordinator = AppCoordinator(
+      userDefaults: defaults,
+      permissionEvaluation: { .notDetermined }
+    )
+
+    await coordinator.requestBluetoothPermission().value
+
+    XCTAssertEqual(coordinator.screen, .bluetoothPermission)
+    XCTAssertFalse(defaults.bool(forKey: "beid.hasCompletedOnboarding"))
+  }
+
+  func testGrantedBluetoothPermissionRoutesToHome() async {
+    let defaults = isolatedDefaults()
+    let coordinator = AppCoordinator(
+      userDefaults: defaults,
+      permissionEvaluation: { .granted }
+    )
+
+    await coordinator.requestBluetoothPermission().value
+
+    XCTAssertEqual(coordinator.screen, .home)
   }
 }

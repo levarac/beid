@@ -18,8 +18,6 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>BeidReportSubmissionEnabled</key>
-	<string>$(BEID_REPORT_SUBMISSION_ENABLED)</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>beid Lab uses Bluetooth for the device harness.</string>
 	<key>UILaunchScreen</key>

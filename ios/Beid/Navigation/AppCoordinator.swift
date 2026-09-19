@@ -32,11 +32,11 @@ final class AppCoordinator: ObservableObject {
   let proofStore: ProofStore
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
-  let bluetoothMonitor = BluetoothMonitor()
+  let bluetoothMonitor: BluetoothMonitor
   /// beid#464's device-clock preflight, checked each time the scan flow opens.
   let clockPreflight: ClockPreflightController
   private let userDefaults: UserDefaults
-  private let permissionEvaluation: () async -> Void
+  private let permissionEvaluation: (() async -> BluetoothAuthorizationState)?
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
 
@@ -54,10 +54,9 @@ final class AppCoordinator: ObservableObject {
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
-    permissionEvaluation: @escaping () async -> Void = {
-      try? await Task.sleep(nanoseconds: 300_000_000)
-    }
+    permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil
   ) {
+    let bluetoothMonitor = BluetoothMonitor()
     self.registryClient = registryClient
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
     self.clockPreflight = ClockPreflightController(
@@ -66,6 +65,7 @@ final class AppCoordinator: ObservableObject {
     self.walletConnector = walletConnector
     self.proofStore = proofStore ?? ProofStore()
     self.userDefaults = userDefaults
+    self.bluetoothMonitor = bluetoothMonitor
     self.permissionEvaluation = permissionEvaluation
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
@@ -483,16 +483,40 @@ final class AppCoordinator: ObservableObject {
   @discardableResult
   func requestBluetoothPermission() -> Task<Void, Never> {
     bluetoothMonitor.start()
-    // Give CoreBluetooth's delegate callback a beat to land before deciding.
-    return Task { [weak self, permissionEvaluation] in
-      await permissionEvaluation()
-      self?.evaluateBluetoothState()
+    let permissionEvaluation = permissionEvaluation
+    let bluetoothMonitor = bluetoothMonitor
+    return Task { [weak self] in
+      let state: BluetoothAuthorizationState
+      if let permissionEvaluation {
+        state = await permissionEvaluation()
+      } else {
+        state = await bluetoothMonitor.waitForAuthorizationResolution()
+      }
+      self?.applyBluetoothState(state)
     }
   }
 
   func evaluateBluetoothState() {
+    applyBluetoothState(bluetoothMonitor.state)
+  }
+
+  private func applyBluetoothState(_ state: BluetoothAuthorizationState) {
+    guard state != .notDetermined else {
+      screen = .bluetoothPermission
+      return
+    }
+
     userDefaults.set(true, forKey: Self.hasCompletedOnboardingKey)
-    screen = bluetoothMonitor.isPoweredOff ? .bluetoothOff : .home
+    switch state {
+    case .denied:
+      screen = .bluetoothDenied
+    case .poweredOff:
+      screen = .bluetoothOff
+    case .granted:
+      screen = .home
+    case .notDetermined:
+      screen = .bluetoothPermission
+    }
   }
 
   /// Presents the real WalletConnect pairing flow as a sheet over the
