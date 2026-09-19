@@ -4,7 +4,6 @@
 import Barnard
 import BarnardCore
 import BeidSharedKit
-import CryptoKit
 import Foundation
 import os
 
@@ -36,14 +35,34 @@ struct WindowReportRedeliveryBuffer {
 }
 
 #if DEBUG
-private func diagnosticIsCanonicalEventId(_ value: String) -> Bool {
-  value.count == 64 && value == value.lowercased() && !value.hasPrefix("0x") && value.allSatisfy { $0.isHexDigit }
-}
-
-private func diagnosticDomainHash(_ value: String) -> String {
-  SHA256.hash(data: Data(value.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+private func diagnosticEventIdPrefix(_ value: String?) -> String {
+  guard let value else { return "unknown" }
+  let normalized = value.hasPrefix("0x") ? String(value.dropFirst(2)) : value
+  guard normalized.count == 64,
+    normalized == normalized.lowercased(),
+    normalized.allSatisfy({ $0.isHexDigit })
+  else { return "unknown" }
+  return String(normalized.prefix(8))
 }
 #endif
+
+private func emitJoinStageDiagnostic(
+  _ log: (String) -> Void,
+  eventIdHex: String?,
+  stage: String,
+  outcome: String,
+  attempt: String? = nil,
+  retryAtEpochMillis: Int64? = nil
+) {
+#if DEBUG
+  log(
+    "join_stage event_id=\(diagnosticEventIdPrefix(eventIdHex)) " +
+      "stage=\(stage) outcome=\(outcome) " +
+      "attempt=\(attempt ?? "none") " +
+      "retry_at_epoch_ms=\(retryAtEpochMillis.map(String.init) ?? "none")"
+  )
+#endif
+}
 
 /// The shared unsent-window ledger's operating state: whether
 /// `unsentWindowLedgerRuntime` and the window-report/redelivery pipeline
@@ -405,6 +424,12 @@ final class SensingCoordinator: ObservableObject {
   /// `<private>` in exactly the shipping-build device log this exists to
   /// populate.
   private static let ledgerLog = Logger(subsystem: "org.levarac.beid", category: "ledger")
+
+  private static func defaultJoinDiagnosticLog(_ message: String) {
+#if DEBUG
+    log.debug("\(message, privacy: .public)")
+#endif
+  }
 
   /// The Barnard participation operations this coordinator drives (beid#410).
   ///
@@ -857,6 +882,9 @@ final class SensingCoordinator: ObservableObject {
   /// failed to produce) `joinedCanonicalEventIdHex`.
   private var joinedLookupErrorCode: String?
 
+  /// Test-replaceable sink for the Debug-only join path diagnostics.
+  private let joinDiagnosticLog: (String) -> Void
+
   /// Why the last join attempt was refused, as
   /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value, or nil when
   /// nothing has been refused.
@@ -1211,6 +1239,7 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryClock: @escaping () -> Int64 = {
       Int64((Date().timeIntervalSince1970 * 1_000).rounded())
     },
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1234,6 +1263,7 @@ final class SensingCoordinator: ObservableObject {
       eventJoinControl: eventJoinControl,
       eventJoinRegistry: eventJoinRegistry,
       nearbyDiscoveryStore: nearbyDiscoveryStore,
+      joinDiagnosticLog: joinDiagnosticLog,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds
     )
@@ -1260,6 +1290,7 @@ final class SensingCoordinator: ObservableObject {
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
     nearbyDiscoveryStore injectedNearbyDiscoveryStore:
       ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1296,6 +1327,7 @@ final class SensingCoordinator: ObservableObject {
     self.ownerKeyRestorationAcknowledgementDefaults = ownerKeyRestorationAcknowledgementDefaults
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
     self.nearbyRegistryClient = nearbyRegistryClient
+    self.joinDiagnosticLog = joinDiagnosticLog
     self.eventJoinRegistry = eventJoinRegistry
       ?? nearbyRegistryClient.map { RegistryEventJoinRegistry(client: $0) }
     let nearbyDiscoveryStore = injectedNearbyDiscoveryStore
@@ -2211,18 +2243,17 @@ final class SensingCoordinator: ObservableObject {
     switch decision {
     case .admit(let context):
       joinRefusal = nil
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog,
+        eventIdHex: context.eventIdHex,
+        stage: "admission",
+        outcome: "admitted"
+      )
       // `startAuto()` keeps an already-running Central scan alive and adds
       // advertising. From this instant it is automatic-operation transport,
       // not a discovery-only scan this pre-join flow may later stop.
       discoveryOnlyScanOwned = false
       engine.joinAndStart(context)
-      #if DEBUG
-      if let actualCode = engine.currentJoinedEventCode() {
-        Self.log.debug("join_input event_id_length=\(actualCode.count, privacy: .public) canonical=\(diagnosticIsCanonicalEventId(actualCode), privacy: .public) domain_hash=\(diagnosticDomainHash(actualCode), privacy: .public) sdk_join_code_present=true")
-      } else {
-        Self.log.debug("join_input sdk_join_code_present=false")
-      }
-      #endif
       // The relay gate opens here, from the capability the gate just admitted,
       // in the same shape as Android's `EventJoinCoordinator.beginVerifiedJoin`
       // (beid#437). The id is the definition's own `eventIdHex`, not the
@@ -2303,6 +2334,23 @@ final class SensingCoordinator: ObservableObject {
     reasonKey: String? = nil
   ) {
     Self.log.error("\(message, privacy: .public)")
+    let outcome: String
+    switch refusal {
+    case .noRegistryConfigured:
+      outcome = "no_registry_configured"
+    case .noCanonicalEventId:
+      outcome = "no_canonical_event_id"
+    case .registryReadFailed:
+      outcome = "registry_read_failed"
+    case .definitionNotEligible:
+      outcome = "definition_not_eligible"
+    }
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog,
+      eventIdHex: pendingCanonicalEventIdHex ?? joinedCanonicalEventIdHex,
+      stage: "admission",
+      outcome: "rejected_\(outcome)"
+    )
     joinRefusal = refusal
     joinRefusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
       reason: Self.sharedReason(for: refusal, lookupErrorCode: joinedLookupErrorCode)
@@ -2608,6 +2656,12 @@ final class SensingCoordinator: ObservableObject {
     additionalEventsOmitted: Bool,
     observedAtEpochMillis: Int64? = nil
   ) {
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog,
+      eventIdHex: nil,
+      stage: "detection",
+      outcome: "detected"
+    )
     // One time value drives both the record and the expiry schedule below.
     // Reading the clock a second time for scheduling would let a caller-
     // supplied `observedAtEpochMillis` disagree with "now", which collapses
@@ -2647,9 +2701,6 @@ final class SensingCoordinator: ObservableObject {
       // `verify` returns nothing for both a malformed container and a bad
       // signature, so there is no event-code hash to key a candidate on.
       // Counting it keeps the drop observable rather than silent.
-      Self.log.debug(
-        "b005 v2 envelope failed verification, container bytes: \(event.rawContainer.count, privacy: .public)"
-      )
       handleUnverifiedEventInfoEnvelopeV2()
       return
     }
@@ -2708,6 +2759,12 @@ final class SensingCoordinator: ObservableObject {
         observedAtEpochMillis: observedAt
       )
     guard update.acceptedHint else { return }
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog,
+      eventIdHex: verifiedEventIdHex,
+      stage: "envelope_verification",
+      outcome: "success"
+    )
     if let verifiedEventIdHex {
       nearbyVerifiedEventIds[hash] = verifiedEventIdHex
     }
@@ -2725,6 +2782,12 @@ final class SensingCoordinator: ObservableObject {
   /// identity at all -- so this tally is the only trace the drop leaves.
   /// Not `private`, for the same test-seam reason as the two handlers above.
   func handleUnverifiedEventInfoEnvelopeV2() {
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog,
+      eventIdHex: nil,
+      stage: "envelope_verification",
+      outcome: "rejected_unverified"
+    )
     // Publishes the snapshot so the tally is observable, and stops there.
     // Deliberately not `publishNearbyEventDiscovery`: no candidate, source or
     // expiry time moved, so rebuilding from it and re-arming the expiry
@@ -2953,9 +3016,27 @@ final class SensingCoordinator: ObservableObject {
     for index in 0..<snapshot.candidateCount {
       guard let candidate = snapshot.candidateAt(index: index) else { continue }
       let hash = candidate.eventCodeHashHex
+      guard nearbyRegistryClient != nil else {
+        emitJoinStageDiagnostic(
+          joinDiagnosticLog,
+          eventIdHex: nearbyVerifiedEventIds[hash],
+          stage: "registry_resolution",
+          outcome: "rejected_no_registry",
+          attempt: "none"
+        )
+        continue
+      }
       guard let attempt = ExportedKotlinPackages.org.levarac.parallax.discovery
         .beginNearbyEventRegistryResolutionFromHex(store: nearbyDiscoveryStore, eventCodeHashHex: hash)
       else { continue }
+      let attemptNumber = candidate.registryResolutionFailureCount + 1
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog,
+        eventIdHex: nearbyVerifiedEventIds[hash],
+        stage: "registry_resolution",
+        outcome: "started",
+        attempt: String(describing: attemptNumber)
+      )
       let generation = nearbyDiscoveryCallbackGeneration
       if let verifiedEventId = nearbyVerifiedEventIds[hash] {
         // B005 v2 already carried Barnard's verified canonical Event ID.
@@ -2965,6 +3046,7 @@ final class SensingCoordinator: ObservableObject {
           eventIdHex: verifiedEventId,
           hash: hash,
           attempt: attempt,
+          attemptNumber: attemptNumber,
           generation: generation
         )
       } else {
@@ -2997,12 +3079,20 @@ final class SensingCoordinator: ObservableObject {
                   verifiedDefinitionValidUntilEpochSeconds: nil
                 )
               self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+              self.logNearbyRegistryOutcome(
+                snapshot: update.snapshot,
+                hash: hash,
+                eventIdHex: nil,
+                outcome: self.nearbyRegistryOutcome(result),
+                attempt: String(describing: attemptNumber)
+              )
               return
             }
             self.resolveNearbyEventDefinition(
               eventIdHex: eventID,
               hash: hash,
               attempt: attempt,
+              attemptNumber: attemptNumber,
               generation: generation
             )
           }
@@ -3016,6 +3106,7 @@ final class SensingCoordinator: ObservableObject {
     eventIdHex: String,
     hash: String,
     attempt: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventRegistryResolutionAttempt,
+    attemptNumber: Int32,
     generation: UInt64
   ) {
     guard let eventJoinRegistry else { return }
@@ -3056,9 +3147,56 @@ final class SensingCoordinator: ObservableObject {
             verifiedDefinitionValidUntilEpochSeconds: verified?.context?.validUntil.value
           )
         self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+        self.logNearbyRegistryOutcome(
+          snapshot: update.snapshot,
+          hash: hash,
+          eventIdHex: eventIdHex,
+          outcome: self.nearbyRegistryOutcome(result),
+          attempt: String(describing: attemptNumber)
+        )
       }
     }
     nearbyEventDefinitionRequests.append(verification)
+  }
+
+  private func nearbyRegistryOutcome(
+    _ result: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventRegistryResolutionResult
+  ) -> String {
+    switch result {
+    case .VERIFIED:
+      return "success"
+    case .LOOKUP_UNAVAILABLE:
+      return "rejected_lookup_unavailable"
+    case .NOT_REGISTERED:
+      return "rejected_not_registered"
+    case .VERIFICATION_UNAVAILABLE:
+      return "rejected_verification_unavailable"
+    default:
+      return "rejected_unknown"
+    }
+  }
+
+  private func logNearbyRegistryOutcome(
+    snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates,
+    hash: String,
+    eventIdHex: String?,
+    outcome: String,
+    attempt: String
+  ) {
+    var retryAtEpochMillis: Int64?
+    for index in 0..<snapshot.candidateCount {
+      guard let candidate = snapshot.candidateAt(index: index), candidate.eventCodeHashHex == hash else { continue }
+      retryAtEpochMillis = candidate.registryRetryAtEpochMillis
+      break
+    }
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog,
+      eventIdHex: eventIdHex,
+      stage: "registry_resolution",
+      outcome: outcome,
+      attempt: attempt,
+      retryAtEpochMillis: retryAtEpochMillis
+    )
   }
 
   /// Builds barnard's `BarnardEventDefinitionV1` from a verified registry read.

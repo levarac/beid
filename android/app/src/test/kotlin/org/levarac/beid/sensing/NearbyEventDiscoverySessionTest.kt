@@ -375,13 +375,13 @@ class NearbyEventDiscoverySessionTest {
         advanceTimeBy(FIRST_RETRY_DELAY_MILLIS)
         runCurrent()
 
-        val hash = EVENT_HASH.toHex()
         assertEquals(
             listOf(
-                "registry_resolution_begin hash=$hash attempt=1",
-                "registry_resolution_outcome hash=$hash stage=lookup result=LOOKUP_UNAVAILABLE " +
-                    "status=LOOKUP_UNAVAILABLE attempt=1 retry_in_ms=$FIRST_RETRY_DELAY_MILLIS",
-                "registry_resolution_begin hash=$hash attempt=2",
+                "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+                "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
+                "join_stage event_id=unknown stage=registry_resolution outcome=rejected_lookup_unavailable " +
+                    "attempt=1 retry_at_epoch_ms=${150_000L + FIRST_RETRY_DELAY_MILLIS}",
+                "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=2 retry_at_epoch_ms=none",
             ),
             lines,
         )
@@ -404,12 +404,28 @@ class NearbyEventDiscoverySessionTest {
         registry.completeDefinition(eligibleDefinition())
         runCurrent()
 
-        val hash = EVENT_HASH.toHex()
         assertEquals(
             listOf(
-                "registry_resolution_begin hash=$hash attempt=1",
-                "registry_resolution_outcome hash=$hash stage=definition result=VERIFIED " +
-                    "status=REGISTERED_VIA_OPERATOR_LOOKUP attempt=1 retry_in_ms=none",
+                "join_stage event_id=unknown stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+                "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
+                "join_stage event_id=01020304 stage=registry_resolution outcome=success attempt=1 retry_at_epoch_ms=none",
+            ),
+            lines,
+        )
+    }
+
+    @Test
+    fun anUnverifiedEnvelopeIsLoggedAsARejectionWithoutAnIdentifier() = runTest {
+        val registry = FakeNearbyEventRegistry()
+        val lines = mutableListOf<String>()
+        val session = session(registry, log = lines::add)
+
+        session.recordUnverifiedEnvelope()
+
+        assertEquals(
+            listOf(
+                "join_stage event_id=unknown stage=envelope_verification " +
+                    "outcome=rejected_unverified attempt=none retry_at_epoch_ms=none",
             ),
             lines,
         )

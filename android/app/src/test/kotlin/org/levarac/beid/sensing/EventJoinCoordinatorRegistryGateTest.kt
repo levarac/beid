@@ -48,6 +48,28 @@ class EventJoinCoordinatorRegistryGateTest {
         assertIs<EventJoinUiState.JoinFailed>(coordinator.state.value)
     }
 
+    @Test
+    fun aRegistryRejectionIsWrittenToTheReplaceableJoinDiagnosticSink() = runTest {
+        val engine = FakeEventJoinEngine()
+        val lines = mutableListOf<String>()
+        val coordinator = coordinator(
+            engine,
+            FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.LOOKUP_FAILS),
+            diagnosticLog = lines::add,
+        )
+
+        coordinator.joinEvent("UNREGISTERED-EVENT")
+        runCurrent()
+
+        assertTrue(
+            lines.contains(
+                "join_stage event_id=unknown stage=admission outcome=rejected_unknown " +
+                    "attempt=none retry_at_epoch_ms=none",
+            ),
+            "diagnostic lines: $lines",
+        )
+    }
+
     /**
      * The definition read comes back **empty**, which is what a failed read
      * looks like on this side: `EventJoinRegistry`'s adapter filters a
@@ -224,7 +246,8 @@ class EventJoinCoordinatorRegistryGateTest {
         val engine = FakeEventJoinEngine()
         val nearby = FakeNearbyEventRegistry()
         val joinRegistry = FakeEventJoinRegistry()
-        val coordinator = coordinator(engine, joinRegistry, nearby)
+        val lines = mutableListOf<String>()
+        val coordinator = coordinator(engine, joinRegistry, nearby, diagnosticLog = lines::add)
 
         joinPromotedVectorEvent(coordinator, engine, nearby)
 
@@ -235,6 +258,13 @@ class EventJoinCoordinatorRegistryGateTest {
             0,
             joinRegistry.lookupRequests + joinRegistry.definitionRequests,
             "shape (a) issues from retained promotion evidence and reads the registry again for nothing",
+        )
+        assertTrue(
+            lines.contains(
+                "join_stage event_id=5d5891b9 stage=admission outcome=admitted " +
+                    "attempt=none retry_at_epoch_ms=none",
+            ),
+            "diagnostic lines: $lines",
         )
     }
 
@@ -294,6 +324,7 @@ class EventJoinCoordinatorRegistryGateTest {
         engine: FakeEventJoinEngine,
         joinRegistry: FakeEventJoinRegistry?,
         nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
+        diagnosticLog: (String) -> Unit = {},
     ): EventJoinCoordinator = EventJoinCoordinator(
         engine = engine,
         joinRegistry = joinRegistry,
@@ -303,5 +334,6 @@ class EventJoinCoordinatorRegistryGateTest {
         sensingCryptography = FakeSensingCryptography(),
         selfProofRecordStore = SelfProofRecordStore(newTempRecordFile("gate-self-proofs")),
         bindingRecordStore = BindingRecordStore(newTempRecordFile("gate-binding-records")),
+        joinDiagnostics = diagnosticLog,
     )
 }
