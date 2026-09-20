@@ -66,7 +66,20 @@ final class AppCoordinator: ObservableObject {
     self.proofStore = proofStore ?? ProofStore()
     self.userDefaults = userDefaults
     self.bluetoothMonitor = bluetoothMonitor
+    #if DEBUG
+    if permissionEvaluation == nil,
+      ProcessInfo.processInfo.arguments.contains("-beid-ui-test")
+    {
+      // UI tests run without a real CoreBluetooth daemon. Keep their existing
+      // onboarding contract deterministic while production and normal Debug
+      // launches continue to wait for the real authorization callback.
+      self.permissionEvaluation = { .granted }
+    } else {
+      self.permissionEvaluation = permissionEvaluation
+    }
+    #else
     self.permissionEvaluation = permissionEvaluation
+    #endif
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
     }
