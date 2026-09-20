@@ -1327,8 +1327,12 @@ final class SensingCoordinatorTests: XCTestCase {
       lines,
       [
         "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+          "attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=unknown stage=envelope_verification outcome=rejected_unverified attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=abababab stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=abababab stage=registry_resolution outcome=rejected_no_registry " +
+          "attempt=none retry_at_epoch_ms=none",
       ]
     )
   }
@@ -1355,6 +1359,59 @@ final class SensingCoordinatorTests: XCTestCase {
       lines.contains(
         "join_stage event_id=5d5891b9 stage=admission outcome=admitted " +
           "attempt=none retry_at_epoch_ms=none"
+      ),
+      "diagnostic lines: \(lines)"
+    )
+  }
+
+  func testRegistryFailureLogsRetryDeadlineAndRetriesWhenTheClockReachesIt() async throws {
+    let eventIdHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    let eventCodeHash = Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc])
+    var nowEpochMillis: Int64 = 1_800_000_000_000
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .readFails(errorCode: nil)
+    var lines: [String] = []
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinRegistry: registry,
+      nearbyDiscoveryClock: { nowEpochMillis },
+      joinDiagnosticLog: { lines.append($0) }
+    )
+
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "peripheral-a",
+      eventDisplayName: "Community night",
+      eventCodeHash: eventCodeHash,
+      rawContainer: Self.envelopeContainer,
+      verifiedEventIdHex: "0x\(eventIdHex)",
+      registryAgreement: { _ in true },
+      observedAtEpochMillis: nowEpochMillis
+    )
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertEqual(registry.requestedEventIdHexes, ["0x\(eventIdHex)"])
+    XCTAssertTrue(
+      lines.contains(
+        "join_stage event_id=00010203 stage=registry_resolution " +
+          "outcome=rejected_verification_unavailable attempt=1 " +
+          "retry_at_epoch_ms=1800000005000"
+      ),
+      "diagnostic lines: \(lines)"
+    )
+
+    nowEpochMillis += 5_000
+    coordinator.refreshNearbyEventDiscovery()
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertEqual(
+      registry.requestedEventIdHexes,
+      ["0x\(eventIdHex)", "0x\(eventIdHex)"]
+    )
+    XCTAssertTrue(
+      lines.contains(
+        "join_stage event_id=00010203 stage=registry_resolution " +
+          "outcome=rejected_verification_unavailable attempt=2 " +
+          "retry_at_epoch_ms=1800000035000"
       ),
       "diagnostic lines: \(lines)"
     )

@@ -413,7 +413,7 @@ final class SensingCoordinator: ObservableObject {
   /// the fact — and `print` reaches neither. Every interpolation is
   /// `.public` because none of it is personal data: they are small integers,
   /// and no identifier is ever logged.
-  private static let log = Logger(subsystem: "org.levarac.beid", category: "sensing")
+  private static let log = Logger(subsystem: "BeidRuntimeDiagnostics", category: "sensing")
   /// Ledger/window-report/redelivery failure diagnostics (beid#131). A
   /// separate category (`"ledger"`, not `"sensing"`) so this failure family
   /// filters on its own in Console.app/sysdiagnose, apart from `Self.log`'s
@@ -2558,9 +2558,9 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Applies the shared TTL refresh immediately. Production's scheduled
-  /// expiry task and race tests use the same entry so the published snapshot
-  /// is always the current join authority.
+  /// Applies the shared time-based refresh immediately. Production's scheduled
+  /// wake-up and race tests use the same entry so expired sources and due
+  /// registry retries are reflected in the current join authority together.
   func refreshNearbyEventDiscovery() {
     let refreshedAt = nearbyDiscoveryClock()
     let update = ExportedKotlinPackages.org.levarac.parallax.discovery
@@ -2569,6 +2569,7 @@ final class SensingCoordinator: ObservableObject {
         nowEpochMillis: refreshedAt
       )
     publishNearbyEventDiscovery(update.snapshot, asOf: refreshedAt)
+    resolveNearbyCandidates(update.snapshot)
   }
 
   /// One-tap nearby join (beid#141). The action carries only the stable B005
@@ -2798,11 +2799,11 @@ final class SensingCoordinator: ObservableObject {
       .snapshot
   }
 
-  /// Publishes one snapshot and rearms the single expiry wake-up for the
-  /// earlier of source TTL or the first millisecond after a retained
-  /// definition's inclusive validity window. The latter mirrors Android's
-  /// native scheduling effect: shared remains the authority on joinability,
-  /// while native wakes SwiftUI when that time-dependent answer can change.
+  /// Publishes one snapshot and rearms the single wake-up for the earliest of
+  /// source TTL, a registry retry, or the first millisecond after a retained
+  /// definition's inclusive validity window. This mirrors Android's native
+  /// scheduling effect: shared remains the authority on joinability, while
+  /// native wakes SwiftUI when that time-dependent answer can change.
   private func publishNearbyEventDiscovery(
     _ snapshot: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventCandidates,
     asOf now: Int64
@@ -2824,7 +2825,7 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryExpiryTask?.cancel()
     nearbyDiscoveryExpiryTask = nil
 
-    var nextExpiryAtEpochMillis = snapshot.nextExpiryAtEpochMillis
+    var nextWakeAtEpochMillis = snapshot.nextExpiryAtEpochMillis
     let nowEpochSeconds = now / 1_000
     for index in 0..<snapshot.candidateCount {
       guard
@@ -2833,10 +2834,13 @@ final class SensingCoordinator: ObservableObject {
         validUntilEpochSeconds >= nowEpochSeconds
       else { continue }
       let definitionExpiryAt = Self.firstEpochMillisAfter(validUntilEpochSeconds)
-      nextExpiryAtEpochMillis = min(nextExpiryAtEpochMillis ?? definitionExpiryAt, definitionExpiryAt)
+      nextWakeAtEpochMillis = min(nextWakeAtEpochMillis ?? definitionExpiryAt, definitionExpiryAt)
     }
-    guard let nextExpiryAtEpochMillis else { return }
-    let delayMillis = nextExpiryAtEpochMillis <= now ? 0 : nextExpiryAtEpochMillis - now
+    if let registryRetryAt = snapshot.nextRegistryRetryAtEpochMillis {
+      nextWakeAtEpochMillis = min(nextWakeAtEpochMillis ?? registryRetryAt, registryRetryAt)
+    }
+    guard let nextWakeAtEpochMillis else { return }
+    let delayMillis = nextWakeAtEpochMillis <= now ? 0 : nextWakeAtEpochMillis - now
     // `expiryAt` saturates at `Long.MAX_VALUE` in shared, so the nanosecond
     // conversion is done saturating rather than trapping.
     let delayNanos = UInt64(clamping: delayMillis).multipliedReportingOverflow(by: 1_000_000)
@@ -3016,10 +3020,14 @@ final class SensingCoordinator: ObservableObject {
     for index in 0..<snapshot.candidateCount {
       guard let candidate = snapshot.candidateAt(index: index) else { continue }
       let hash = candidate.eventCodeHashHex
-      guard nearbyRegistryClient != nil else {
+      let verifiedEventId = nearbyVerifiedEventIds[hash]
+      let canResolveCandidate = verifiedEventId != nil
+        ? eventJoinRegistry != nil
+        : nearbyRegistryClient != nil
+      guard canResolveCandidate else {
         emitJoinStageDiagnostic(
           joinDiagnosticLog,
-          eventIdHex: nearbyVerifiedEventIds[hash],
+          eventIdHex: verifiedEventId,
           stage: "registry_resolution",
           outcome: "rejected_no_registry",
           attempt: "none"
@@ -3038,7 +3046,7 @@ final class SensingCoordinator: ObservableObject {
         attempt: String(describing: attemptNumber)
       )
       let generation = nearbyDiscoveryCallbackGeneration
-      if let verifiedEventId = nearbyVerifiedEventIds[hash] {
+      if let verifiedEventId {
         // B005 v2 already carried Barnard's verified canonical Event ID.
         // Route it directly to the definition read; the legacy operator hash
         // lookup remains the v1 hint path below.
@@ -3065,7 +3073,7 @@ final class SensingCoordinator: ObservableObject {
               let result: ExportedKotlinPackages.org.levarac.parallax.discovery
                 .NearbyEventRegistryResolutionResult = resolution.errorCode == "event_code_lookup_not_found"
                 ? .NOT_REGISTERED : .LOOKUP_UNAVAILABLE
-              let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+              _ = ExportedKotlinPackages.org.levarac.parallax.discovery
                 .completeNearbyEventRegistryResolutionFromHex(
                   store: self.nearbyDiscoveryStore, attempt: attempt,
                   result: result, resolvedEventIdHex: nil,
@@ -3078,14 +3086,21 @@ final class SensingCoordinator: ObservableObject {
                   verifiedDefinitionValidFromEpochSeconds: nil,
                   verifiedDefinitionValidUntilEpochSeconds: nil
                 )
-              self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+              let completedAt = self.nearbyDiscoveryClock()
+              let armed = ExportedKotlinPackages.org.levarac.parallax.discovery
+                .refreshNearbyEventDiscovery(
+                  store: self.nearbyDiscoveryStore,
+                  nowEpochMillis: completedAt
+                )
+              self.publishNearbyEventDiscovery(armed.snapshot, asOf: completedAt)
               self.logNearbyRegistryOutcome(
-                snapshot: update.snapshot,
+                snapshot: armed.snapshot,
                 hash: hash,
                 eventIdHex: nil,
                 outcome: self.nearbyRegistryOutcome(result),
                 attempt: String(describing: attemptNumber)
               )
+              self.resolveNearbyCandidates(armed.snapshot)
               return
             }
             self.resolveNearbyEventDefinition(
@@ -3133,7 +3148,7 @@ final class SensingCoordinator: ObservableObject {
           self.nearbyVerifiedDefinitions.removeValue(forKey: hash)
         }
         let agrees = definition.map { self.nearbyEnvelopeAgreements[hash]?($0) ?? false } ?? false
-        let update = ExportedKotlinPackages.org.levarac.parallax.discovery
+        _ = ExportedKotlinPackages.org.levarac.parallax.discovery
           .completeNearbyEventRegistryResolutionFromHex(
             store: self.nearbyDiscoveryStore, attempt: attempt,
             result: result, resolvedEventIdHex: eventIdHex,
@@ -3146,14 +3161,21 @@ final class SensingCoordinator: ObservableObject {
             verifiedDefinitionValidFromEpochSeconds: verified?.context?.validFrom.value,
             verifiedDefinitionValidUntilEpochSeconds: verified?.context?.validUntil.value
           )
-        self.publishNearbyEventDiscovery(update.snapshot, asOf: self.nearbyDiscoveryClock())
+        let completedAt = self.nearbyDiscoveryClock()
+        let armed = ExportedKotlinPackages.org.levarac.parallax.discovery
+          .refreshNearbyEventDiscovery(
+            store: self.nearbyDiscoveryStore,
+            nowEpochMillis: completedAt
+          )
+        self.publishNearbyEventDiscovery(armed.snapshot, asOf: completedAt)
         self.logNearbyRegistryOutcome(
-          snapshot: update.snapshot,
+          snapshot: armed.snapshot,
           hash: hash,
           eventIdHex: eventIdHex,
           outcome: self.nearbyRegistryOutcome(result),
           attempt: String(describing: attemptNumber)
         )
+        self.resolveNearbyCandidates(armed.snapshot)
       }
     }
     nearbyEventDefinitionRequests.append(verification)
