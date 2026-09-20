@@ -1,0 +1,11 @@
+// Explicit local proof build: retain normal debug code but isolate app data and Keystore by UID.
+// Shipping release and the existing lab variant are unchanged.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.plugins.withId('com.android.application') {
+            project.androidComponents.finalizeDsl { android ->
+                android.buildTypes.getByName('debug').applicationIdSuffix = '.persistenceproof'
+            }
+        }
+    }
+}
