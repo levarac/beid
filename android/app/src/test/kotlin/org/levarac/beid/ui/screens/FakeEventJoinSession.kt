@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 
@@ -13,6 +14,7 @@ internal class FakeEventJoinSession(
     initial: EventJoinUiState = EventJoinUiState.Idle,
     nearbyEventCards: List<NearbyEventCard> = emptyList(),
     nearbyEventsOmitted: Boolean = false,
+    initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.Granted,
 ) : EventJoinSession {
     private val mutableState = MutableStateFlow(initial)
     override val state: StateFlow<EventJoinUiState> = mutableState.asStateFlow()
@@ -23,6 +25,7 @@ internal class FakeEventJoinSession(
         mutableSearchOutcome.asStateFlow()
     private val mutableNearbyEventsOmitted = MutableStateFlow(nearbyEventsOmitted)
     override val nearbyEventsOmitted: StateFlow<Boolean> = mutableNearbyEventsOmitted.asStateFlow()
+    override val bluetoothPermissionState: BluetoothPermissionState = initialBluetoothPermissionState
 
     var joinedCode: String? = null
         private set
@@ -55,9 +58,9 @@ internal class FakeEventJoinSession(
         openedAppSettings = true
     }
 
-    override fun requestBluetoothPermission(onComplete: () -> Unit) {
+    override fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit) {
         permissionRequested = true
-        onComplete()
+        onResult(bluetoothPermissionState)
     }
 
     override fun startNearbyEventDiscovery() {

@@ -27,6 +27,12 @@
     <string name="bluetooth_off_open_settings_button">Open Settings</string>
     <string name="bluetooth_off_turned_on_button">I\'ve turned it on</string>
 
+    <!-- Screen 04: Bluetooth permission denied recovery. -->
+    <string name="bluetooth_denied_title">Bluetooth permission required</string>
+    <string name="bluetooth_denied_message">This feature requires Bluetooth permission.</string>
+    <string name="bluetooth_denied_open_settings_button">Open Settings</string>
+    <string name="bluetooth_denied_check_again_button">I\'ve granted it</string>
+
     <string name="event_join_title">Join an event</string>
     <string name="event_join_account_action">Open account</string>
     <string name="event_join_discovery_heading">Find an event nearby</string>

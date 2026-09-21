@@ -11,6 +11,7 @@ enum AppScreen: Equatable {
   case walletConnect
   case eventCodeEntry
   case bluetoothPermission
+  case bluetoothDenied
   case bluetoothOff
   case home
 }
