@@ -123,9 +123,9 @@ internal class NearbyEventDiscoverySession(
      *
      * Injected rather than called directly so a test can assert the lines
      * themselves. Every call site is gated on `BuildConfig.DEBUG`, matching
-     * `WindowObservationAccumulator`: the event-code hash is public on the
-     * radio, but a release log that records which event a device was near,
-     * persistently and per candidate, is more than diagnosis needs. The field capture behind beid#584 filtered logcat to the
+     * `WindowObservationAccumulator`. Diagnostics never log an event-code
+     * hash, RPID or raw envelope; only the first eight hex characters of a
+     * verified Event ID may appear. The field capture behind beid#584 filtered logcat to the
      * app's own pid and found sixty-nine lines, every one of them Android's
      * `BluetoothGatt` and not one of them the app's, which is why a stuck
      * verification could not be diagnosed while the rig was running.
@@ -194,6 +194,7 @@ internal class NearbyEventDiscoverySession(
         additionalEventsOmitted: Boolean,
     ) {
         if (disposed) return
+        emitJoinStageDiagnostic(log, eventIdHex = null, stage = "detection", outcome = "detected")
         val update = recordNearbyEventHint(
             store = store,
             peripheralId = peripheralId,
@@ -245,6 +246,12 @@ internal class NearbyEventDiscoverySession(
             observedAtEpochMillis = nowEpochMillis(),
         )
         if (!update.acceptedHint) return
+        emitJoinStageDiagnostic(
+            log,
+            eventIdHex = verifiedEventIdHex,
+            stage = "envelope_verification",
+            outcome = "success",
+        )
         if (verifiedEventIdHex != null) {
             verifiedEventIdByHash[hash] = verifiedEventIdHex
         }
@@ -265,6 +272,12 @@ internal class NearbyEventDiscoverySession(
      */
     fun recordUnverifiedEnvelope() {
         if (disposed) return
+        emitJoinStageDiagnostic(
+            log,
+            eventIdHex = null,
+            stage = "envelope_verification",
+            outcome = "rejected_unverified",
+        )
         // Publishes the candidates flow so the tally is observable, and stops
         // there. Deliberately not publishAndSchedule: no candidate, source or
         // expiry time moved, so rebuilding the card list and re-arming the
@@ -294,7 +307,13 @@ internal class NearbyEventDiscoverySession(
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
             val attemptNumber = candidate.registryResolutionFailureCount + 1
             val attempt = beginNearbyEventRegistryResolutionFromHex(store, hash) ?: return@repeat
-            if (BuildConfig.DEBUG) log("registry_resolution_begin hash=$hash attempt=$attemptNumber")
+            emitJoinStageDiagnostic(
+                log,
+                eventIdHex = verifiedEventIdByHash[hash],
+                stage = "registry_resolution",
+                outcome = "started",
+                attempt = attemptNumber,
+            )
             val generation = callbackGeneration
             // The whole body runs on coroutineScope's dispatcher (Main.immediate,
             // set by the caller), matching the iOS adapter's `Task { @MainActor }`
@@ -332,7 +351,7 @@ internal class NearbyEventDiscoverySession(
                         // has to happen before the log line and the wake-up
                         // scheduling both read it back (PR 595 review, P1).
                         val armed = refreshNearbyEventDiscovery(store, nowEpochMillis())
-                        logResolutionOutcome(hash, "lookup", result, attemptNumber, armed.snapshot)
+                        logResolutionOutcome(hash, null, result, attemptNumber, armed.snapshot)
                         publishAndSchedule(armed.snapshot)
                         resolveUnresolvedCandidates(armed.snapshot)
                         return@launch
@@ -380,7 +399,7 @@ internal class NearbyEventDiscoverySession(
                                 verified.validUntilEpochSeconds,
                                 armed.snapshot,
                             )
-                            logResolutionOutcome(hash, "definition", result, attemptNumber, armed.snapshot)
+                            logResolutionOutcome(hash, eventId, result, attemptNumber, armed.snapshot)
                             publishAndSchedule(armed.snapshot)
                             resolveUnresolvedCandidates(armed.snapshot)
                         }
@@ -509,7 +528,7 @@ internal class NearbyEventDiscoverySession(
      */
     private fun logResolutionOutcome(
         hash: String,
-        stage: String,
+        eventIdHex: String?,
         result: NearbyEventRegistryResolutionResult,
         attemptNumber: Int,
         snapshot: NearbyEventCandidates,
@@ -518,10 +537,19 @@ internal class NearbyEventDiscoverySession(
         val candidate = (0 until snapshot.candidateCount)
             .mapNotNull(snapshot::candidateAt)
             .firstOrNull { it.eventCodeHashHex == hash }
-        val retryIn = candidate?.registryRetryAtEpochMillis?.minus(nowEpochMillis())
-        log(
-            "registry_resolution_outcome hash=$hash stage=$stage result=$result " +
-                "status=${candidate?.registryStatus} attempt=$attemptNumber retry_in_ms=${retryIn ?: "none"}",
+        val outcome = when (result) {
+            NearbyEventRegistryResolutionResult.VERIFIED -> "success"
+            NearbyEventRegistryResolutionResult.LOOKUP_UNAVAILABLE -> "rejected_lookup_unavailable"
+            NearbyEventRegistryResolutionResult.NOT_REGISTERED -> "rejected_not_registered"
+            NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE -> "rejected_verification_unavailable"
+        }
+        emitJoinStageDiagnostic(
+            log,
+            eventIdHex = eventIdHex,
+            stage = "registry_resolution",
+            outcome = outcome,
+            attempt = attemptNumber,
+            retryAtEpochMillis = candidate?.registryRetryAtEpochMillis,
         )
     }
 

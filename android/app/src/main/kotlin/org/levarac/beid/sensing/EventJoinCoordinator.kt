@@ -2,7 +2,6 @@ package org.levarac.beid.sensing
 
 import android.app.Activity
 import android.util.Log
-import java.security.MessageDigest
 import java.io.File
 import java.time.Instant
 import java.util.UUID
@@ -136,8 +135,9 @@ class EventJoinCoordinator internal constructor(
      * The join gate's registry seam (beid#374), injected only by tests.
      * Production derives it from [registryClient]. Separate from
      * [nearbyRegistry] on purpose — see [EventJoinRegistry].
-     */
+    */
     joinRegistry: EventJoinRegistry? = null,
+    private val joinDiagnostics: (String) -> Unit = ::logRuntimeDiagnostic,
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.NotDetermined,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
@@ -169,6 +169,7 @@ class EventJoinCoordinator internal constructor(
         nowEpochMillis = nowEpochMillis,
         coroutineScope = coroutineScope,
         registry = nearbyRegistry ?: registryClient?.let(::RegistryClientNearbyEventRegistry),
+        log = joinDiagnostics,
     )
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
@@ -561,8 +562,17 @@ class EventJoinCoordinator internal constructor(
     }
 
     /** A refusal decided before any registry read was started. */
-    private fun refuseJoinWithoutVerification(reason: EventJoinFailureReason) {
+    private fun refuseJoinWithoutVerification(
+        reason: EventJoinFailureReason,
+        eventIdHex: String? = null,
+    ) {
         joinVerificationOwner = null
+        emitJoinStageDiagnostic(
+            joinDiagnostics,
+            eventIdHex = eventIdHex,
+            stage = "admission",
+            outcome = "rejected_${reason.name.lowercase()}",
+        )
         stopParticipantRelay()
         _state.value = EventJoinUiState.JoinFailed(reason)
     }
@@ -641,6 +651,7 @@ class EventJoinCoordinator internal constructor(
                                 nowEpochSeconds = useTimeEpochSeconds,
                             ),
                         ),
+                        eventIdHex = eventIdHex,
                     )
                     return@launch
                 }
@@ -657,9 +668,15 @@ class EventJoinCoordinator internal constructor(
      * The one refusal. Every way a join can fail to prove itself lands here so
      * the surface cannot be left waiting on an answer that will never come.
      */
-    private fun refuseJoin(owner: Any, reason: EventJoinFailureReason) {
+    private fun refuseJoin(owner: Any, reason: EventJoinFailureReason, eventIdHex: String? = null) {
         if (disposed || joinVerificationOwner !== owner) return
         joinVerificationOwner = null
+        emitJoinStageDiagnostic(
+            joinDiagnostics,
+            eventIdHex = eventIdHex,
+            stage = "admission",
+            outcome = "rejected_${reason.name.lowercase()}",
+        )
         stopParticipantRelay()
         _state.value = EventJoinUiState.JoinFailed(reason)
     }
@@ -686,13 +703,22 @@ class EventJoinCoordinator internal constructor(
         try {
             sensingCryptography.ownerPublicKey()
         } catch (error: OwnerKeyUnavailableException) {
+            emitJoinStageDiagnostic(
+                joinDiagnostics,
+                eventIdHex = context.eventIdHex,
+                stage = "admission",
+                outcome = "rejected_owner_key_unavailable",
+            )
             stopParticipantRelay()
             _state.value = EventJoinUiState.OwnerKeyUnavailable(error.failure)
             return
         }
-        if (BuildConfig.DEBUG) {
-            logRuntimeDiagnostic("join_admitted event_id_length=${context.eventIdHex.length} canonical=${isCanonicalDiagnosticEventId(context.eventIdHex)} domain_hash=${diagnosticDomainHash(context.eventIdHex)}")
-        }
+        emitJoinStageDiagnostic(
+            joinDiagnostics,
+            eventIdHex = context.eventIdHex,
+            stage = "admission",
+            outcome = "admitted",
+        )
         windowObservationRuntime?.beginEvent(context.joinCode)
         engine.joinAndStart(context)
         windowObservationRuntime?.updateContext(
@@ -1316,12 +1342,6 @@ internal fun logWindowRecoveryFailure(error: Exception) {
         // The logger is unavailable. There is nothing to report it to.
     }
 }
-
-private fun isCanonicalDiagnosticEventId(value: String): Boolean =
-    value.length == 64 && value == value.lowercase() && !value.startsWith("0x") && value.all { it in '0'..'9' || it in 'a'..'f' }
-
-private fun diagnosticDomainHash(value: String): String =
-    MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
 
 /** Runtime diagnostics must never turn an unavailable Android logger into a product failure. */
 internal fun logRuntimeDiagnostic(message: String) {
