@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">beid</string>
-
     <!-- Screen 01: Welcome (mirrors iOS's WelcomeView). -->
     <string name="welcome_title">beid</string>
     <string name="welcome_subtitle">Prove you were there. Automatically.</string>
