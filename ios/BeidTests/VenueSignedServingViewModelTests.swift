@@ -1133,6 +1133,38 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     XCTAssertEqual(ports.calls.last, .clearing)
   }
 
+  /// A clock notification can be delivered while CoreBluetooth keeps the
+  /// process alive after the scene entered background. The VM transition must
+  /// remain ineligible there: a callback must not re-evaluate the selected
+  /// receipt, install a permit, or arm a new deadline.
+  ///
+  /// This is deliberately a VM-only witness. It proves the effect of a
+  /// delivered callback, not that iOS delivers NSSystemClockDidChange in the
+  /// background or that radio bytes remain on air after suspension.
+  func testBackgroundClockChangeCannotRestartAnActiveServingLease() async throws {
+    let viewModel = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+
+    await supply(viewModel)
+    XCTAssertNotNil(ports.installedPermit)
+    XCTAssertTrue(expiry.isScheduled)
+
+    viewModel.sceneDidEnterBackground()
+    let callsAfterBackground = ports.calls.count
+
+    await viewModel.systemClockDidChange()
+
+    XCTAssertEqual(
+      ports.calls.count,
+      callsAfterBackground,
+      "a background clock callback must not start a new verification"
+    )
+    XCTAssertNil(ports.installedPermit, "background clock must not restart serving")
+    XCTAssertFalse(expiry.isScheduled, "background clock must not arm a deadline")
+    XCTAssertEqual(viewModel.status, .idle)
+  }
+
   // MARK: - Scenario 7 — clear before replace, clear again on failure
 
   func testRejectedReplacementClearsBeforeInstallingAndClearsAgainOnFailure() async throws {
