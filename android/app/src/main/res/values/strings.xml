@@ -95,7 +95,6 @@
     <string name="event_join_join_affordance">Join this event</string>
 
     <!-- Peer first detected but not yet confirmed as a real event (below the confirm threshold). -->
-    <string name="event_join_status_event_found">Event found — waiting to confirm…</string>
     <string name="event_join_status_recording">Recording</string>
     <!-- "Signal lost" here is our own manual/simulated trigger, not a real Bluetooth radio outage. -->
     <string name="event_join_status_signal_lost">Signal lost — recording paused</string>

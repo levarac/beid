@@ -1,6 +1,9 @@
 package org.levarac.beid.ui.screens
 
 import android.content.Context
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -16,6 +19,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import kotlin.test.assertNull
 import kotlin.test.assertEquals
@@ -217,6 +224,43 @@ class EventJoinScreenTest {
             .assertIsNotEnabled()
     }
 
+    @Test
+    fun checkingLabelRemainsHorizontalAtNarrowWidthWithLargeText() {
+        val checkingHash = "1111111111111111"
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(density = 1f, fontScale = 1.5f)) {
+                BeidAppTheme {
+                    Box(Modifier.width(320.dp)) {
+                        EventJoinContent(
+                            state = EventJoinScreenState(
+                                nearbyEventCards = listOf(
+                                    NearbyEventCard(
+                                        beaconDisplayName = "A long nearby event name",
+                                        eventCodeHashHex = checkingHash,
+                                        verification = NearbyEventCardVerification.CHECKING,
+                                    ),
+                                ),
+                            ),
+                            onOpenAccount = {},
+                            onJoinNearbyEvent = {},
+                            onOpenSettings = {},
+                            onSimulateSignalLost = {},
+                            onResumeSensing = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val bounds = composeTestRule
+            .onNodeWithText(context.getString(R.string.event_join_candidate_unverified))
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+            .boundsInRoot
+        assertTrue(bounds.width > bounds.height, "Checking must remain a horizontal label: $bounds")
+    }
+
     /**
      * beid#363: the legacy event-code text input is gone from the
      * scenario/preview path — an empty candidate list now shows production's
@@ -411,6 +455,7 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithText(context.getString(R.string.scan_recording_ceremony_title)).assertDoesNotExist()
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
         composeTestRule.onNodeWithText("2").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).assertIsDisplayed()
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON)
             .performScrollTo()
@@ -637,6 +682,9 @@ class EventJoinScreenTest {
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON)
             .performScrollTo()
             .assertIsDisplayed()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        composeTestRule.onNodeWithText(context.getString(R.string.event_join_rescue_prompt))
+            .assertDoesNotExist()
     }
 
     /**
