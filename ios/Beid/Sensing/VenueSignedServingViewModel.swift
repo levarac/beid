@@ -515,7 +515,15 @@ final class VenueSignedServingViewModel: ObservableObject {
     guard let bundleSource = VenueBundleURLTemplate.url(
       template: bundleURLTemplate, eventIdHex: canonicalEventIdHex
     ) else {
-      status = .acquisitionFailed(.unsupportedScheme)
+      // Invalid configured input is rejected before a replacement workflow is
+      // selected. If an older permit is already serving, keep the published
+      // status aligned with the bytes still installed on the radio; reporting
+      // an acquisition failure here would make the screen contradict the
+      // active lease without clearing it.
+      guard case .serving = status else {
+        status = .acquisitionFailed(.unsupportedScheme)
+        return
+      }
       return
     }
     await supply(bundleSource: bundleSource, handoffSource: handoffSource, sourceDescription: sourceDescription, expectedCanonicalEventIdHex: canonicalEventIdHex)
