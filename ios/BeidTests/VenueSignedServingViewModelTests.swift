@@ -1845,6 +1845,29 @@ extension VenueSignedServingViewModelTests {
 
 
 extension VenueSignedServingViewModelTests {
+  func testInvalidConfiguredReplacementCannotClaimFailureWhileAnOlderPermitIsServing() async throws {
+    let model = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(model)
+
+    let permitBefore = ports.installedPermit
+    let statusBefore = model.status
+    XCTAssertNotNil(permitBefore)
+    XCTAssertTrue(expiry.isScheduled)
+
+    await model.supplyConfigured(
+      canonicalEventIdHex: fixture.identity.eventIdHex,
+      bundleURLTemplate: "http://venue.example/artifacts/{eventId}",
+      handoffSource: URL(string: "https://venue.example/handoff")!,
+      sourceDescription: "venue.example"
+    )
+
+    XCTAssertEqual(model.status, statusBefore, "invalid input must not contradict the active permit")
+    XCTAssertEqual(ports.installedPermit?.identity.eventIdHex, permitBefore?.identity.eventIdHex)
+    XCTAssertTrue(expiry.isScheduled)
+  }
+
   func testConfiguredBundleTemplateUsesCanonicalEventIDForAcquisition() async throws {
     let model = makeViewModel()
     acquisition.replies = [.artifact(fixture.artifact)]
