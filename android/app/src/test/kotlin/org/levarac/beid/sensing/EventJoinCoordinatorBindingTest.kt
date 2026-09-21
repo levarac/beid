@@ -13,9 +13,11 @@ import org.levarac.beid.persistence.SelfProofRecordStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.levarac.barnard.WalletBindingVerification
+import org.levarac.barnard.WalletSignatureClassification
 
 /**
  * `EventJoinCoordinator`'s owner-key wallet-binding coordinator API —
@@ -94,7 +96,7 @@ class EventJoinCoordinatorBindingTest {
     fun completeBindingReturnsNullWithoutAnInFlightAttempt() = runTest {
         val coordinator = coordinator(FakeEventJoinEngine(), FakeSensingCryptography())
 
-        assertNull(coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65)))
+        assertIs<BindingCompletionResult.NotVerified>(coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65)))
     }
 
     @Test
@@ -124,7 +126,7 @@ class EventJoinCoordinatorBindingTest {
         val diskBefore = if (file.exists()) file.readBytes().toList() else null
 
         for (address in listOf(differentAddress, "0xzz", "0x" + "ab".repeat(19))) {
-            assertNull(coordinator.completeBinding(address, "0x" + "0a".repeat(65)))
+            assertIs<BindingCompletionResult.NotVerified>(coordinator.completeBinding(address, "0x" + "0a".repeat(65)))
             assertEquals(0, acknowledgementCalls)
             assertTrue(store.records.isEmpty())
             assertEquals(stateBefore, coordinator.bindingState)
@@ -142,10 +144,10 @@ class EventJoinCoordinatorBindingTest {
         joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         val original = assertNotNull(coordinator.beginBinding(walletAddress, chainId = 1))
-        assertNull(coordinator.completeBinding("0x" + "ab".repeat(20), "0x" + "0a".repeat(65)))
+        assertIs<BindingCompletionResult.NotVerified>(coordinator.completeBinding("0x" + "ab".repeat(20), "0x" + "0a".repeat(65)))
         assertEquals(original, coordinator.beginBinding(walletAddress, chainId = 1))
         val sameAddress = "0x" + walletAddress.removePrefix("0x").uppercase()
-        val record = assertNotNull(coordinator.completeBinding(sameAddress, "0x" + "0a".repeat(65)))
+        val record = assertIs<BindingCompletionResult.Bound>(coordinator.completeBinding(sameAddress, "0x" + "0a".repeat(65))).record
         assertEquals(listOf(record), store.records)
     }
 
@@ -159,7 +161,7 @@ class EventJoinCoordinatorBindingTest {
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
-        val record = coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))
+        val record = assertIs<BindingCompletionResult.Bound>(coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))).record
 
         assertNotNull(record)
         assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, record.eventCode)
@@ -229,10 +231,10 @@ class EventJoinCoordinatorBindingTest {
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
-        coordinator.failBinding("wallet declined")
+        coordinator.failBinding(WalletBindingFailure.Declined)
 
-        assertEquals(EventBindingState.Failed("wallet declined"), coordinator.bindingState)
-        assertNull(coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65)), "the pending message must be gone after a failure")
+        assertEquals(EventBindingState.Failed(WalletBindingFailure.Declined), coordinator.bindingState)
+        assertIs<BindingCompletionResult.NotVerified>(coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65)), "the pending message must be gone after a failure")
     }
 
     @Test
@@ -275,14 +277,17 @@ class EventJoinCoordinatorBindingTest {
     }
 
     @Test
-    fun walletCancellationReturnsToPendingConnectWithoutPersistenceAndCanRetry() = runTest {
+    fun walletCancellationShowsRetryableFailureWithoutPersistence() = runTest {
         val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
         val wallet = FakeWalletConnector(WalletConnectOutcome.Cancelled, WalletConnectOutcome.Cancelled)
         WalletBindingFlow(coordinator, wallet).start()
-        assertTrue(coordinator.bindingState is EventBindingState.PendingConnect)
+        assertEquals(EventBindingState.Failed(WalletBindingFailure.Declined), coordinator.bindingState)
         assertEquals(0, wallet.signCalls)
+
+        coordinator.declineBinding()
+        assertTrue(coordinator.bindingState is EventBindingState.PendingConnect)
     }
 
     @Test
@@ -296,6 +301,25 @@ class EventJoinCoordinatorBindingTest {
     }
 
     @Test
+    fun erc6492SignatureIsUnsupportedBeforeOwnerAcknowledgementSigning() = runTest {
+        val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
+        val cryptography = FakeSensingCryptography(
+            walletSignatureClassification = WalletSignatureClassification.SMART_WALLET_UNSUPPORTED,
+        )
+        val coordinator = coordinator(engine, cryptography, nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
+        coordinator.beginBinding(walletAddress, chainId = 1)
+
+        val result = coordinator.completeBinding(
+            walletAddress,
+            "0x" + "cd".repeat(32) + "6492".repeat(16),
+        )
+
+        assertIs<BindingCompletionResult.SmartWalletUnsupported>(result)
+        assertTrue(cryptography.calls.none { it is FakeSensingCryptography.Call.SignWalletAcknowledgement })
+    }
+
+    @Test
     fun walletSignatureCannotBePersistedUnderADifferentAddress() = runTest {
         val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
         val store = BindingRecordStore(newTempRecordFile("binding-records"))
@@ -303,7 +327,7 @@ class EventJoinCoordinatorBindingTest {
         joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
         val otherAddress = "0x" + "22".repeat(20)
-        assertNull(coordinator.completeBinding(otherAddress, "0x" + "0a".repeat(65)))
+        assertIs<BindingCompletionResult.NotVerified>(coordinator.completeBinding(otherAddress, "0x" + "0a".repeat(65)))
         assertTrue(store.records.isEmpty())
     }
 
@@ -441,7 +465,7 @@ class EventJoinCoordinatorBindingTest {
         var signCalls = 0
         override fun connect(callback: (WalletConnectOutcome) -> Unit) = callback(connection)
         override fun connectAndSign(messageHex: String, callback: (WalletConnectOutcome) -> Unit) =
-            callback(WalletConnectOutcome.Failed("unexpected connectAndSign"))
+            callback(WalletConnectOutcome.Failed(WalletBindingFailure.NotConnected))
         override fun personalSign(address: LiveWalletAddress, messageHex: String, callback: (WalletConnectOutcome) -> Unit) {
             signCalls += 1; callback(signing)
         }
