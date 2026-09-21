@@ -1,0 +1,6 @@
+jobs:
+  sanity:
+    name: Repository sanity
+    steps:
+      - name: Run scripts contract tests
+        run: python3 -m unittest discover -s scripts/tests -t .

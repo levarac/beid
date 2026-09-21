@@ -26,6 +26,7 @@ BLOCK_SCALAR_RE = re.compile(r"^[|>][-+0-9]*\s*$")
 GRADLE_TASK_RE = re.compile(r":\w[\w:-]*\w")
 SCRIPT_PATH_RE = re.compile(r"scripts/\S+\.(?:sh|py)")
 BARE_SCRIPT_RE = re.compile(r"^(scripts/\S+\.(?:sh|py))$")
+UNITTEST_DISCOVER_COMMAND = "python3 -m unittest discover -s scripts/tests -t ."
 
 DOC_BULLET_JOB_NAME_RE = re.compile(r"^\s*-\s+([A-Za-z][A-Za-z0-9 /]{1,40}?):\s")
 DOC_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
@@ -120,7 +121,10 @@ def workflow_command_tokens(run_blocks):
     """Distinguishing literal command tokens: every Gradle-task-shaped token found
     anywhere in a run: block, plus script paths that are a run: step's *entire*
     (single-line) content — i.e. the job is identified by that bare script
-    invocation, the same way `scripts/lint.sh` identifies the SwiftLint job today.
+    invocation, the same way `scripts/lint.sh` identifies the SwiftLint job today,
+    plus the repository's documented scripts test-discovery command. The latter
+    accepts shell whitespace and backslash-newline formatting, but no different
+    executable, arguments, or surrounding command.
     A script invoked with extra args/flags alongside other setup lines (e.g.
     prepare_testflight_notes.py inside the sanity job) is a supporting step, not
     a distinguishing token, so it is intentionally not swept in here.
@@ -133,6 +137,13 @@ def workflow_command_tokens(run_blocks):
             bare = BARE_SCRIPT_RE.match(non_empty_lines[0].strip())
             if bare:
                 tokens.add(bare.group(1))
+        # Check individual lines as well as the whole block: the latter covers a
+        # command split over lines in a literal/folded YAML scalar. Exact argv
+        # matching keeps incidental mentions (for example, an echo) invisible.
+        candidates = non_empty_lines + [block.replace("\\\n", " ")]
+        expected_argv = UNITTEST_DISCOVER_COMMAND.split()
+        if any(candidate.split() == expected_argv for candidate in candidates):
+            tokens.add(UNITTEST_DISCOVER_COMMAND)
     return tokens
 
 
@@ -180,9 +191,15 @@ def reverse_check(job_names, section_text, workflow_text):
     for code_span in DOC_INLINE_CODE_RE.findall(section_text):
         is_gradle_task = bool(GRADLE_TASK_RE.fullmatch(code_span))
         is_script_path = bool(SCRIPT_PATH_RE.fullmatch(code_span))
-        if not (is_gradle_task or is_script_path):
+        is_unittest_discovery = code_span.split() == UNITTEST_DISCOVER_COMMAND.split()
+        if not (is_gradle_task or is_script_path or is_unittest_discovery):
             continue
-        if code_span not in workflow_text:
+        workflow_has_token = (
+            UNITTEST_DISCOVER_COMMAND in workflow_command_tokens(collect_run_blocks(workflow_text))
+            if is_unittest_discovery
+            else code_span in workflow_text
+        )
+        if not workflow_has_token:
             failures.append(
                 f"AGENTS.md's ### PR CI section quotes command token '{code_span}' that does "
                 f"not appear anywhere in .github/workflows/pr-ci.yml. "
