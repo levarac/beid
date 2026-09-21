@@ -12,6 +12,7 @@ import java.util.UUID
 sealed class Screen(val route: String) {
     data object Welcome : Screen("welcome")
     data object BluetoothPermission : Screen("bluetooth_permission")
+    data object BluetoothDenied : Screen("bluetooth_denied")
     data object BluetoothOff : Screen("bluetooth_off")
     data object EventJoin : Screen("event_join")
     data object Account : Screen("account")

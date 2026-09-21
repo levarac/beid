@@ -46,32 +46,30 @@ final class AppCoordinatorRestoreTests: XCTestCase {
     XCTAssertEqual(coordinator.screen, .welcome)
   }
 
-  func testRestoreLandsOnHomeOrBluetoothOffWithoutSkippingEvaluation() async {
+  func testRestoreEvaluatesBluetoothPermissionBeforeLandingOnHome() async {
     let defaults = isolatedDefaults()
     defaults.set(true, forKey: "beid.hasCompletedOnboarding")
+    let evaluated = expectation(description: "Bluetooth permission evaluated")
 
-    let coordinator = AppCoordinator(userDefaults: defaults)
+    let coordinator = AppCoordinator(
+      userDefaults: defaults,
+      permissionEvaluation: {
+        evaluated.fulfill()
+        return .granted
+      }
+    )
 
-    // Still polled, and deliberately. `requestBluetoothPermission()` does
-    // return an awaitable `Task` now, but this path is driven from
-    // `AppCoordinator.init` via `restoreAfterOnboarding()`, which hands the
-    // caller no handle — so there is nothing here to await.
-    // A single fixed ~500ms sleep is not enough here: constructing
-    // CBCentralManager inside the BeidTests unit-test host (no prior test in
-    // this suite exercises BluetoothMonitor/CBCentralManager) has been
-    // observed to make CoreBluetooth's XPC handshake take upwards of 15s in
-    // this environment, well past the ~300ms production delay — so this
-    // polls with a generous overall ceiling instead of asserting after one
-    // fixed delay.
-    let deadline = Date().addingTimeInterval(20)
+    // `restoreAfterOnboarding()` starts this work from init and exposes no
+    // task handle, so wait for the injected evaluation and then for its
+    // state transition. The real CoreBluetooth XPC connection is outside
+    // this unit test's contract and is covered by device/runtime evidence.
+    await fulfillment(of: [evaluated], timeout: 1)
+    let deadline = Date().addingTimeInterval(1)
     while coordinator.screen == .bluetoothPermission, Date() < deadline {
-      try? await Task.sleep(nanoseconds: 100_000_000)
+      try? await Task.sleep(nanoseconds: 10_000_000)
     }
 
-    // The Simulator always reports Bluetooth powered-on (ios/README.md), so
-    // only the .home branch is actually observable here — .bluetoothOff is
-    // asserted as an allowed outcome for documentation, not exercised.
-    XCTAssertTrue(coordinator.screen == .home || coordinator.screen == .bluetoothOff)
+    XCTAssertEqual(coordinator.screen, .home)
   }
 
   /// Regression for #220: `requestBluetoothPermission()`'s detached `Task`
@@ -111,7 +109,7 @@ final class AppCoordinatorRestoreTests: XCTestCase {
     let defaults = UserDefaults(suiteName: "AppCoordinatorRestoreTests.deallocation.\(UUID().uuidString)")!
     defaults.removeObject(forKey: "beid.hasCompletedOnboarding")
 
-    var coordinator: AppCoordinator? = AppCoordinator(userDefaults: defaults, permissionEvaluation: {})
+    var coordinator: AppCoordinator? = AppCoordinator(userDefaults: defaults, permissionEvaluation: { .granted })
     let task = coordinator?.requestBluetoothPermission()
     coordinator = nil
 
@@ -125,10 +123,47 @@ final class AppCoordinatorRestoreTests: XCTestCase {
   func testRequestBluetoothPermissionWritesWhenCoordinatorStaysAlive() async {
     let defaults = UserDefaults(suiteName: "AppCoordinatorRestoreTests.alive.\(UUID().uuidString)")!
     defaults.removeObject(forKey: "beid.hasCompletedOnboarding")
-    let coordinator = AppCoordinator(userDefaults: defaults, permissionEvaluation: {})
+    let coordinator = AppCoordinator(userDefaults: defaults, permissionEvaluation: { .granted })
 
     await coordinator.requestBluetoothPermission().value
 
     XCTAssertTrue(defaults.bool(forKey: "beid.hasCompletedOnboarding"))
+  }
+
+  func testDeniedBluetoothPermissionRoutesToGuidance() async {
+    let defaults = isolatedDefaults()
+    let coordinator = AppCoordinator(
+      userDefaults: defaults,
+      permissionEvaluation: { .denied }
+    )
+
+    await coordinator.requestBluetoothPermission().value
+
+    XCTAssertEqual(coordinator.screen, .bluetoothDenied)
+  }
+
+  func testUndeterminedBluetoothPermissionDoesNotAdvance() async {
+    let defaults = isolatedDefaults()
+    let coordinator = AppCoordinator(
+      userDefaults: defaults,
+      permissionEvaluation: { .notDetermined }
+    )
+
+    await coordinator.requestBluetoothPermission().value
+
+    XCTAssertEqual(coordinator.screen, .bluetoothPermission)
+    XCTAssertFalse(defaults.bool(forKey: "beid.hasCompletedOnboarding"))
+  }
+
+  func testGrantedBluetoothPermissionRoutesToHome() async {
+    let defaults = isolatedDefaults()
+    let coordinator = AppCoordinator(
+      userDefaults: defaults,
+      permissionEvaluation: { .granted }
+    )
+
+    await coordinator.requestBluetoothPermission().value
+
+    XCTAssertEqual(coordinator.screen, .home)
   }
 }

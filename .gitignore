@@ -33,3 +33,6 @@ __pycache__/
 # object files land here (beid#588). `Package.resolved` is tracked -- it is
 # the evidence of which Barnard revision the tool actually resolved.
 .build/
+
+# asc metadata plan/approve working directory
+.asc/

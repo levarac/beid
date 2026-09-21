@@ -83,10 +83,8 @@ class EventJoinCoordinatorRegistryGateTest {
      * `resolveEventDefinition`, exactly as `LOOKUP_FAILS` does. **The two
      * answers differ only in whether `resolveEventId` succeeds.**
      *
-     * The ineligible case is not reachable from this module at all: the
-     * fake cannot build a non-null `EventDefinitionResolution`, because that
-     * type's constructor is `internal` to `shared/` — which is the seam
-     * beid#434 exists to add.
+     * The fake now builds the real non-null failure through shared test
+     * support, then applies the same adapter filter production uses.
      */
     @Test
     fun joinEventStartsNeitherJoinNorSensingWhenTheDefinitionReadReturnsNothing() = runTest {
@@ -174,15 +172,6 @@ class EventJoinCoordinatorRegistryGateTest {
         assertNoJoinAndNoSensing(engine, coordinator)
         assertEquals(EventJoinUiState.VerifyingRegistry, coordinator.state.value)
     }
-
-    // DELETED, and deliberately: the code-entry SUCCESS case cannot be
-    // expressed in this module. Its evidence is an EventDefinitionResolution,
-    // whose constructor is internal to shared, so no app-module fake can
-    // produce one -- which is the unforgeability this round is built on rather
-    // than a gap in the fixture. That case is proven in shared by
-    // RegistryVerifiedJoinContextTest's operator-lookup suite. The code-entry
-    // FAILED and PENDING cases remain here, above, because those a fake can
-    // express by answering null or by never answering.
 
     @Test
     fun joinEventStartsNeitherJoinNorSensingWhenNoRegistryIsConfigured() = runTest {
