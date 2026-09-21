@@ -34,6 +34,15 @@ class ParsesRealSources(unittest.TestCase):
         self.assertIn("appReviewGolden", ios)
         self.assertIn("appReviewGolden", android)
 
+    def test_both_platform_rosters_match_the_shared_catalog(self):
+        catalog = beid_scenarios.load_catalog()
+        ios, android = beid_scenarios.load_rosters()
+        self.assertTrue(catalog)
+        self.assertEqual(
+            {"iOS": ([], []), "Android": ([], [])},
+            beid_scenarios.catalog_mismatches(catalog, ios, android),
+        )
+
 
 class ParsingShape(unittest.TestCase):
     def test_ios_identifiers_come_from_initialisers_in_source_order(self):
@@ -73,6 +82,27 @@ class RosterDifference(unittest.TestCase):
     def test_agreement_is_an_empty_pair_not_a_special_case(self):
         same = ["appReviewGolden", "crowdSurge"]
         self.assertEqual(([], []), beid_scenarios.roster_difference(same, list(reversed(same))))
+
+    def test_a_unilateral_platform_addition_fails_catalog_parity(self):
+        mismatches = beid_scenarios.catalog_mismatches(
+            ["appReviewGolden"],
+            ["appReviewGolden", "iosOnly"],
+            ["appReviewGolden"],
+        )
+        self.assertEqual(([], ["iosOnly"]), mismatches["iOS"])
+        self.assertEqual(([], []), mismatches["Android"])
+
+
+class CatalogParsing(unittest.TestCase):
+    def test_comments_and_blank_lines_are_not_catalog_entries(self):
+        self.assertEqual(
+            ["appReviewGolden", "crowdSurge"],
+            beid_scenarios.parse_catalog("# comment\nappReviewGolden\n\n crowdSurge \n"),
+        )
+
+    def test_duplicate_identifier_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            beid_scenarios.parse_catalog("crowdSurge\ncrowdSurge\n")
 
 
 class LaunchCommands(unittest.TestCase):

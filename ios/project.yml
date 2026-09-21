@@ -212,6 +212,8 @@ targets:
     platform: iOS
     sources:
       - BeidTests
+      - path: ../shared/src/commonTest/fixtures/demo-scenarios.txt
+        buildPhase: resources
       # One frozen public artifact for the venue provider/consumer contract.
       - path: ../shared/src/commonTest/fixtures/vectors/positive/venue-current-lease-v1.json
         buildPhase: resources

@@ -5,22 +5,10 @@ beid#399: a developer should not have to remember the shape of
 `-beid-demo-scenario` or `am start --es beid-demo-scenario` to see a scenario
 running.
 
-**Why this reads both platforms instead of nominating one as authoritative.**
-The scenario identifiers exist twice — `DemoScenario.allScenarios` in Swift and
-the `AndroidDemoScenario` enum in Kotlin — and the two are not required to
-agree at any given commit. Reading one and reporting it as "the scenarios"
-would print a roster that is true of neither platform whenever they diverge,
-and a divergence is a real product fact rather than noise.
-
-No counts are quoted here on purpose. Whether the two rosters currently agree
-is exactly what this command exists to answer, and a number written into this
-docstring would be a second, unmaintained copy of that answer — stale the next
-time either roster moves, which sibling work does routinely.
-
-So this prints two rosters, names the platform on each, and prints the
-difference explicitly. It does not reconcile them and does not pick a winner.
-If they converge later, the difference section simply goes empty — which is
-the correct behaviour rather than a special case to remove.
+The shared fixture is the catalog source of truth. Platform enums retain their
+public cases, while this command and host tests require their identifiers to
+match the fixture. A unilateral platform addition therefore fails repository
+sanity instead of becoming a third catalog to reconcile by hand.
 
 **Why `run` refuses an unknown scenario instead of passing it through.** Both
 apps deliberately fall back to `appReviewGolden` for an unrecognised value, so
@@ -39,6 +27,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+CATALOG = ROOT / "shared" / "src" / "commonTest" / "fixtures" / "demo-scenarios.txt"
 IOS_SOURCE = ROOT / "ios" / "Beid" / "Models" / "DemoScenario.swift"
 ANDROID_SOURCE = (
     ROOT / "android" / "app" / "src" / "main" / "kotlin" / "org" / "levarac" / "beid"
@@ -83,6 +72,18 @@ def roster_difference(ios: list[str], android: list[str]) -> tuple[list[str], li
     return sorted(set(ios) - set(android)), sorted(set(android) - set(ios))
 
 
+def parse_catalog(text: str) -> list[str]:
+    """Read the canonical identifiers, ignoring comments and blank lines."""
+    identifiers = [line.strip() for line in text.splitlines()
+                   if line.strip() and not line.lstrip().startswith("#")]
+    invalid = [name for name in identifiers if re.fullmatch(r"[A-Za-z0-9_]+", name) is None]
+    if invalid:
+        raise ValueError(f"invalid scenario identifier(s): {', '.join(invalid)}")
+    if len(identifiers) != len(set(identifiers)):
+        raise ValueError("duplicate scenario identifier in catalog")
+    return identifiers
+
+
 def ios_launch_command(udid: str, scenario: str) -> list[str]:
     """`simctl launch` with the scenario argument.
 
@@ -118,38 +119,56 @@ def load_rosters() -> tuple[list[str], list[str]]:
     )
 
 
+def load_catalog() -> list[str]:
+    return parse_catalog(read(CATALOG))
+
+
+def catalog_mismatches(
+    catalog: list[str], ios: list[str], android: list[str]
+) -> dict[str, tuple[list[str], list[str]]]:
+    """Return each platform's (missing, unexpected) identifiers."""
+    expected = set(catalog)
+    return {
+        "iOS": (sorted(expected - set(ios)), sorted(set(ios) - expected)),
+        "Android": (sorted(expected - set(android)), sorted(set(android) - expected)),
+    }
+
+
 def command_list(_: argparse.Namespace) -> int:
+    catalog = load_catalog()
     ios, android = load_rosters()
-    if not ios or not android:
+    if not catalog or not ios or not android:
         # An empty roster means the parse stopped matching, not that a
         # platform has no scenarios. Saying so beats printing an empty list
         # that reads like a fact.
         print(
-            "warning: a scenario roster came back empty, which usually means the "
-            "source layout changed and the parse no longer matches",
+            "error: the catalog or a platform roster is empty",
             file=sys.stderr,
         )
+        return 1
 
-    print(f"iOS ({IOS_SOURCE.relative_to(ROOT)}) — {len(ios)}")
-    for name in ios:
-        print(f"  {name}")
-    print(f"\nAndroid ({ANDROID_SOURCE.relative_to(ROOT)}) — {len(android)}")
-    for name in android:
+    print(f"Catalog ({CATALOG.relative_to(ROOT)}) — {len(catalog)}")
+    for name in catalog:
         print(f"  {name}")
 
-    ios_only, android_only = roster_difference(ios, android)
-    print("\nDifference")
-    if not ios_only and not android_only:
-        print("  none — both platforms carry the same scenario names")
-    for name in ios_only:
-        print(f"  iOS only:     {name}")
-    for name in android_only:
-        print(f"  Android only: {name}")
+    mismatches = catalog_mismatches(catalog, ios, android)
+    failing = False
+    print("\nParity")
+    for platform, (missing, unexpected) in mismatches.items():
+        if not missing and not unexpected:
+            print(f"  {platform}: matches")
+            continue
+        failing = True
+        print(f"  {platform}: mismatch")
+        for name in missing:
+            print(f"    missing:    {name}")
+        for name in unexpected:
+            print(f"    unexpected: {name}")
 
     print("\nSurfaces")
     print(f"  Android: {', '.join(ANDROID_SURFACES)}")
     print("  iOS:     none yet — the -beid-demo-surface argument is not implemented")
-    return 0
+    return 1 if failing else 0
 
 
 def command_run(args: argparse.Namespace) -> int:

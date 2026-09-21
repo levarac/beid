@@ -238,6 +238,7 @@
 		D1944B85BB42880CCCD7822B /* EventCodeLookupJoinIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 915D8034E148F3C903BCAABB /* EventCodeLookupJoinIntegrationTests.swift */; };
 		D1C6F47263C1132085547364 /* WindowReportStoreDurabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F7094F03F3DA765492BFFC /* WindowReportStoreDurabilityTests.swift */; };
 		D244F2EF45BA1F0ED4C3BCF8 /* VenueDeviceAssignmentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA596FDBF8F1F004E195D54E /* VenueDeviceAssignmentStore.swift */; };
+		D2789F126E7C7A84A3EB28AD /* demo-scenarios.txt in Resources */ = {isa = PBXBuildFile; fileRef = 37FA90EF414E13290219CDF5 /* demo-scenarios.txt */; };
 		D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6660B6477CE489C244F95FED /* ProofCardView.swift */; };
 		D6D222534D0B2F3B27077CA3 /* BindingRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0AA6219B53ABF42EDACF85 /* BindingRecordStore.swift */; };
 		D73B6341358666EAAAD9F200 /* EventJoinRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80C88CDD0300DFD1CEBD0F9 /* EventJoinRegistry.swift */; };
@@ -392,6 +393,7 @@
 		32DAC007552E0BB965748B79 /* DeterministicSensingCryptography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeterministicSensingCryptography.swift; sourceTree = "<group>"; };
 		36546FA758ACEADAB6A72464 /* EventIdentityVerification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventIdentityVerification.swift; sourceTree = "<group>"; };
 		374F94F6CCF46C03274745B6 /* VenueLifecycleTaskOwnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueLifecycleTaskOwnerTests.swift; sourceTree = "<group>"; };
+		37FA90EF414E13290219CDF5 /* demo-scenarios.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "demo-scenarios.txt"; sourceTree = "<group>"; };
 		394E6F2E97311572D2BAED89 /* Proof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Proof.swift; sourceTree = "<group>"; };
 		3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowReportFinalizationTests.swift; sourceTree = "<group>"; };
 		3EC9F4DB6268EFD5BC4F9AFD /* ProductionVenueBundleVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionVenueBundleVerifierTests.swift; sourceTree = "<group>"; };
@@ -625,6 +627,7 @@
 				CB30DC35F92C60B4287A0A32 /* BeidMetaMaskSupport */,
 				DA293E8A0771B440603690A0 /* BeidTests */,
 				490CBC4967C88D5ADFE619BA /* BeidUITests */,
+				90338DE1E89FB1B3E0936275 /* fixtures */,
 				A1E9D5CB79093CF80756E358 /* Lab */,
 				2D3FC70C0D371CE89503E6F3 /* positive */,
 				FD5D5F11FE5F3503CFF91250 /* Products */,
@@ -793,6 +796,15 @@
 				54F11AED207016A2105C874E /* valid.venue-handoff.cbor */,
 			);
 			path = "venue-bundle-conformance";
+			sourceTree = "<group>";
+		};
+		90338DE1E89FB1B3E0936275 /* fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				37FA90EF414E13290219CDF5 /* demo-scenarios.txt */,
+			);
+			name = fixtures;
+			path = ../shared/src/commonTest/fixtures;
 			sourceTree = "<group>";
 		};
 		A1E9D5CB79093CF80756E358 /* Lab */ = {
@@ -1107,6 +1119,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CF46534885146EDE59CDBC60 /* Beid in Resources */,
+				D2789F126E7C7A84A3EB28AD /* demo-scenarios.txt in Resources */,
 				164FAB6EFBE2F34BE8F31302 /* foreign-event-id.venue-bundle.cbor in Resources */,
 				4F62239BDDCCB72322D98DA6 /* foreign-event-id.venue-handoff.cbor in Resources */,
 				330A9E521CACD5011A12C491 /* manifest.json in Resources */,

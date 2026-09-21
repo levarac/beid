@@ -121,6 +121,8 @@ android {
         }
     }
 
+    sourceSets.getByName("test").resources.srcDir("../../shared/src/commonTest/fixtures")
+
 }
 
 dependencies {
