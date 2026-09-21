@@ -7,28 +7,18 @@ import Foundation
 
 /// Drives `SensingCoordinator`'s beid#410 join gate from a unit test.
 ///
-/// ## What this fake deliberately cannot do
+/// ## What this fake can do
 ///
-/// It cannot answer with a successful read. `EventDefinitionResolution`
-/// carries an `internal` Kotlin constructor, so Swift Export gives it only a
-/// `package` initializer and no code in this target — production or test — can
-/// build one. This fake can therefore express a read that **failed**, by
-/// answering nil; one that is still **pending**, by never answering; and one
-/// that answers **late**, after the caller has moved on.
-///
-/// That is the guarantee working rather than a gap in the fixture, and it is
-/// the same limit Android records in its own `FakeEventJoinRegistry`. It is
-/// also exactly the set beid#374's acceptance criterion names: a read that
-/// failed, and a read still outstanding, must start neither join nor sensing.
-///
-/// A *successful* join stays unexpressible on iOS until shared test support
-/// exists (beid#391). Android reaches one by walking the real promotion path
-/// into a registry-verified candidate; that fixture is Kotlin-side, and iOS
-/// has no surface that joins a discovered candidate yet.
+/// It uses shared test factories for both a real failed resolution and a real
+/// successful resolution. The failed resolution is passed through the same
+/// nullable filter as the production adapter, so the coordinator sees the
+/// exact post-adapter shape while this fixture still exercises the non-null
+/// object the KMP client actually returns.
 @MainActor
 final class FakeEventJoinRegistry: EventJoinRegistry {
   enum Answer {
-    /// Answers nil immediately: the read produced no definition.
+    /// Builds a failed non-null resolution, then applies the production
+    /// adapter's filter before answering the coordinator.
     ///
     /// `errorCode` is what the registry reported, which is what a refusal is
     /// classified from. `nil` models a failure that carried no code.
@@ -45,9 +35,8 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
     /// `FakeEventJoinRegistry.admittingResolution(...)`, or hand-build a
     /// rejected one to cover a refusing branch of the real gate.
     ///
-    /// This case could not exist until beid#473 added a Kotlin seam for
-    /// constructing an `EventDefinitionResolution`; every constructor in that
-    /// chain is `internal`, so Swift had no way to express a successful read.
+    /// The shared test factory builds the successful resolution without making
+    /// the registry constructors public to production callers.
     case resolves(
       ExportedKotlinPackages.org.levarac.parallax.registry.EventDefinitionResolution
     )
@@ -122,7 +111,15 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
     requestedEventIdHexes.append(eventIdHex)
     switch answer {
     case let .readFails(errorCode):
-      completion(nil, errorCode)
+      let resolution = BeidSharedKit.jointestsupport
+        .createFailedEventDefinitionResolutionForTesting(
+          errorCode: errorCode,
+          errorMessage: "fake definition read failed"
+        )
+      completion(
+        resolution.isSuccess ? resolution : nil,
+        resolution.isSuccess ? nil : resolution.errorCode
+      )
     case .holds:
       heldCompletion = completion
     case let .resolves(resolution):
@@ -142,8 +139,8 @@ final class FakeEventJoinRegistry: EventJoinRegistry {
 
   /// Answers a held read with a resolution.
   ///
-  /// This used to be impossible, and the type doc said so: there was no way to
-  /// build the resolution a success would carry. beid#473 added the seam.
+  /// The shared test factory makes this late successful answer constructible
+  /// without changing the production registry API.
   func answerHeldRead(
     with resolution: ExportedKotlinPackages.org.levarac.parallax.registry
       .EventDefinitionResolution
