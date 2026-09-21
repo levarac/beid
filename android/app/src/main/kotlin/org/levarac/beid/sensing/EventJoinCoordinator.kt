@@ -138,6 +138,7 @@ class EventJoinCoordinator internal constructor(
      * [nearbyRegistry] on purpose — see [EventJoinRegistry].
      */
     joinRegistry: EventJoinRegistry? = null,
+    initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.NotDetermined,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -149,6 +150,7 @@ class EventJoinCoordinator internal constructor(
         bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(activity.filesDir)),
         ledgerFilesDir = activity.filesDir,
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
+        initialBluetoothPermissionState = currentBluetoothPermissionState(activity),
     )
 
     private val accounting = ScanDeviceAccounting()
@@ -171,6 +173,9 @@ class EventJoinCoordinator internal constructor(
 
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
+    private var currentBluetoothPermissionState = initialBluetoothPermissionState
+    override val bluetoothPermissionState: BluetoothPermissionState
+        get() = currentBluetoothPermissionState
     override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = nearbyDiscovery.cards
 
     private val _nearbyEventSearchOutcome =
@@ -1117,14 +1122,16 @@ class EventJoinCoordinator internal constructor(
 
     override fun openAppSettings() = engine.openAppSettings()
 
-    override fun requestBluetoothPermission(onComplete: () -> Unit) {
+    override fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit) {
         if (disposed) return
         engine.requestPermissions { result ->
             if (disposed) return@requestPermissions
-            if (result is BarnardPermissionResult.Granted && result.status.canScan) {
+            val permissionState = mapOnboardingPermissionResult(result)
+            currentBluetoothPermissionState = permissionState
+            if (permissionState == BluetoothPermissionState.Granted) {
                 startNearbyEventDiscoveryIfIdle()
             }
-            onComplete()
+            onResult(permissionState)
         }
     }
 

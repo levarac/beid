@@ -60,6 +60,7 @@
 		2F36014D656BCE29F29D3F19 /* VenueSignedServingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5157DE43C6934B2D9C92AC3 /* VenueSignedServingView.swift */; };
 		2F98E9B2465705813B204FEE /* PastEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E3EC74423D098E4990BF12 /* PastEventsView.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
+		3116FAC12C905DDC8829DF22 /* BluetoothDeniedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */; };
 		31ED6E4C0D3E950B31987CE1 /* RecordSchemaEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */; };
 		322BD9E32E34B01EA0112610 /* ReportSubmissionRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A081D0042D973884E68126CE /* ReportSubmissionRuntime.swift */; };
 		32748E6878B0222D43791988 /* VenueServingPortContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28130177943FD5AF67651CDB /* VenueServingPortContractTests.swift */; };
@@ -273,6 +274,7 @@
 		ECD429DD4E52BAAED0CB39A2 /* FakeVenueDeviceBroadcasting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831658C5506647E4B2DBFB48 /* FakeVenueDeviceBroadcasting.swift */; };
 		ED2C196D7B759444827F2079 /* ProofStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9068D6CA13763655D1A148A9 /* ProofStoreTests.swift */; };
 		ED3FB185C17EC78A0FAA32A1 /* FakeEventJoinRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29505FEC31838C7138BC1AC3 /* FakeEventJoinRegistry.swift */; };
+		ED4C9157F292A203458751D3 /* BluetoothDeniedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */; };
 		EE10C8AFE088668EDA0F9E20 /* LabControlBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CBE775AF8E377BFF519F8E /* LabControlBootstrap.swift */; };
 		EE5EAFD4BA8E5F8C09684B97 /* EventBindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25F9B71C531690F799D13498 /* EventBindingTests.swift */; };
 		EEC27BE7A4E3F2AFFDB4C08B /* VenueDeviceBroadcasting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CBBE87F0D227CFFF2509D9E /* VenueDeviceBroadcasting.swift */; };
@@ -441,6 +443,7 @@
 		85F54669D72FA3CD4E816097 /* RelayedEventInfoContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayedEventInfoContractTests.swift; sourceTree = "<group>"; };
 		8812C170544758548D2A4DCC /* AppScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppScreen.swift; sourceTree = "<group>"; };
 		884640A5A92A08B45287E2FE /* SelfProofCheckpointStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofCheckpointStore.swift; sourceTree = "<group>"; };
+		8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothDeniedView.swift; sourceTree = "<group>"; };
 		8D7E4363D6595156BB5B3C21 /* BeidUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BeidUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8EAEB0CA3E864A05492129FB /* SessionAggregateExposureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateExposureTests.swift; sourceTree = "<group>"; };
 		8F2E357058CCA15BA3DCAE5E /* ReportSubmissionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSubmissionStoreTests.swift; sourceTree = "<group>"; };
@@ -743,6 +746,7 @@
 			isa = PBXGroup;
 			children = (
 				1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */,
+				8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */,
 				A80A94378B0116CC976961AC /* BluetoothOffView.swift */,
 				1C959252AD2159B71CCCEC02 /* BluetoothPermissionView.swift */,
 				52A6E868212391771EFD73E5 /* ClockPreflightNoticeView.swift */,
@@ -1218,6 +1222,7 @@
 				82B5B9723A9965F700F395FA /* BindingMessage.swift in Sources */,
 				8FDC27D2283A74EB215D9DE0 /* BindingRecord.swift in Sources */,
 				D6D222534D0B2F3B27077CA3 /* BindingRecordStore.swift in Sources */,
+				ED4C9157F292A203458751D3 /* BluetoothDeniedView.swift in Sources */,
 				A83073FA595B09EB126E1947 /* BluetoothMonitor.swift in Sources */,
 				3997E2D0E7F054A9A7753D36 /* BluetoothOffView.swift in Sources */,
 				12870D87674811949F67B9BA /* BluetoothPermissionView.swift in Sources */,
@@ -1396,6 +1401,7 @@
 				1B942A1AE5234AE85F9F3051 /* BindingMessage.swift in Sources */,
 				92E18F40505179D2B6354798 /* BindingRecord.swift in Sources */,
 				DFBE1C1F985E8D1C6DCFA11E /* BindingRecordStore.swift in Sources */,
+				3116FAC12C905DDC8829DF22 /* BluetoothDeniedView.swift in Sources */,
 				F2359D4E836132B79CDE1F89 /* BluetoothMonitor.swift in Sources */,
 				75D96359F6F721997E61406D /* BluetoothOffView.swift in Sources */,
 				2CF69935F2CB56B7EB2B95C8 /* BluetoothPermissionView.swift in Sources */,

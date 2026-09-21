@@ -21,10 +21,12 @@ import org.levarac.beid.onboarding.OnboardingPreferences
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.sensing.ScanEventSession
 import org.levarac.beid.ui.screens.AccountScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothOffScreenTestTags
+import org.levarac.beid.ui.screens.BluetoothDeniedScreenTestTags
 import org.levarac.beid.ui.screens.BluetoothPermissionScreenTestTags
 import org.levarac.beid.ui.screens.EventJoinScreenTestTags
 import org.levarac.beid.ui.screens.FakeEventJoinSession
@@ -58,6 +60,62 @@ class AppNavHostTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
     private val shadowAdapter: ShadowBluetoothAdapter get() = shadowOf(BluetoothAdapter.getDefaultAdapter())
     private fun proofRecordStore() = ProofRecordStore(File(tempFolder.root, "proof-records-v1.json"))
+
+    @Test
+    fun deniedPermissionRoutesToDedicatedGuidanceWithoutEventCards() {
+        OnboardingPreferences(context).hasCompletedOnboarding = false
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession(
+            initialBluetoothPermissionState = BluetoothPermissionState.Denied,
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(WelcomeScreenTestTags.GET_STARTED_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(BluetoothPermissionScreenTestTags.ALLOW_BUTTON).performClick()
+
+        composeTestRule.onNodeWithTag(BluetoothDeniedScreenTestTags.OPEN_SETTINGS_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertDoesNotExist()
+    }
+
+    @Test
+    fun undeterminedPermissionDoesNotAdvanceFromPermissionScreen() {
+        OnboardingPreferences(context).hasCompletedOnboarding = false
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession(
+            initialBluetoothPermissionState = BluetoothPermissionState.NotDetermined,
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(WelcomeScreenTestTags.GET_STARTED_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(BluetoothPermissionScreenTestTags.ALLOW_BUTTON).performClick()
+
+        composeTestRule.onNodeWithTag(BluetoothPermissionScreenTestTags.ALLOW_BUTTON).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertDoesNotExist()
+    }
+
+    @Test
+    fun grantedPermissionWithRadioOnRoutesToHome() {
+        OnboardingPreferences(context).hasCompletedOnboarding = false
+        shadowAdapter.setEnabled(true)
+        val session = FakeEventJoinSession(
+            initialBluetoothPermissionState = BluetoothPermissionState.Granted,
+        )
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(session, proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(WelcomeScreenTestTags.GET_STARTED_BUTTON).performClick()
+        composeTestRule.onNodeWithTag(BluetoothPermissionScreenTestTags.ALLOW_BUTTON).performClick()
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
+    }
 
     @Test
     fun firstRunWalksWelcomeThroughBluetoothPermissionToBluetoothOffThenToHomeOnceRadioIsEnabled() {
