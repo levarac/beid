@@ -1,0 +1,7 @@
+# Canonical demo scenario identifiers. One identifier per line; order is not API.
+appReviewGolden
+crowdSurge
+signalLostMidway
+longDisplayNames
+zeroPeersForever
+unidentifiedHeavy

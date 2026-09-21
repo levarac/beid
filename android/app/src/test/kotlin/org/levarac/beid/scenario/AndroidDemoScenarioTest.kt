@@ -11,17 +11,18 @@ import org.levarac.beid.sensing.ScanPhase
 
 class AndroidDemoScenarioTest {
     @Test
-    fun everyRequiredScenarioIsEnumerableByItsExactSharedIdentifier() {
+    fun enumIdentifiersMatchTheSharedScenarioCatalog() {
+        val catalog = checkNotNull(javaClass.getResourceAsStream("/demo-scenarios.txt")) {
+            "shared demo scenario catalog must be present in test resources"
+        }.bufferedReader().useLines { lines ->
+            lines.map(String::trim)
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+                .toSet()
+        }
         assertEquals(
-            listOf(
-                "zeroPeersForever",
-                "crowdSurge",
-                "longDisplayNames",
-                "unidentifiedHeavy",
-                "signalLostMidway",
-                "appReviewGolden",
-            ),
-            AndroidDemoScenario.entries.map(AndroidDemoScenario::identifier),
+            catalog,
+            AndroidDemoScenario.entries.map(AndroidDemoScenario::identifier).toSet(),
+            "AndroidDemoScenario must match the shared catalog; update both intentionally",
         )
     }
 

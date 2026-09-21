@@ -77,37 +77,19 @@ final class DemoScenarioInvariantTests: XCTestCase {
     )
   }
 
-  /// iOS's roster, pinned as a set, plus the fallback staying first.
-  ///
-  /// **This does not check Android, despite the names below being Android's.**
-  /// It compares iOS against a literal that a human keeps in step with the
-  /// Kotlin enum; nothing here reads that enum, and no Swift test can. So
-  /// adding a scenario to `AndroidDemoScenario` tomorrow leaves this green
-  /// while the platforms diverge. What is genuinely covered is the *changing*
-  /// side: each platform's own literal fails when that platform's roster
-  /// moves, so a one-sided change is caught where it is made — nothing forces
-  /// the other side to follow.
-  ///
-  /// A real cross-platform assertion needs one fixture both hosts read, which
-  /// is a larger change than beid#395 and deliberately out of its scope
-  /// ("fixture のファイル化はこの issue では行わない").
-  ///
-  /// The set and not the order: iOS lists `appReviewGolden` first because it
-  /// is the launch-argument fallback, while `AndroidDemoScenarioTest` pins a
-  /// different order for its own reasons. Comparing sequences would make one
-  /// platform's ordering a constraint on the other's for no product reason,
-  /// and the first thing to break would be iOS's fallback.
-  func testIosOffersTheAgreedScenarioNamesAndKeepsTheFallbackFirst() {
+  func testIosIdentifiersMatchTheSharedScenarioCatalogAndKeepTheFallbackFirst() throws {
+    let fixtureURL = try XCTUnwrap(
+      Bundle(for: Self.self).url(forResource: "demo-scenarios", withExtension: "txt")
+    )
+    let catalog = try String(contentsOf: fixtureURL, encoding: .utf8)
+      .split(whereSeparator: \.isNewline)
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+
     XCTAssertEqual(
       Set(DemoScenario.allScenarios.map(\.identifier)),
-      [
-        "zeroPeersForever",
-        "crowdSurge",
-        "longDisplayNames",
-        "unidentifiedHeavy",
-        "signalLostMidway",
-        "appReviewGolden",
-      ]
+      Set(catalog),
+      "DemoScenario must match the shared catalog; update both intentionally"
     )
     XCTAssertEqual(
       DemoScenario.allScenarios.first?.identifier,
