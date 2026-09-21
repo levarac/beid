@@ -584,7 +584,7 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
   /// production verifier derives the current lease. No Kotlin object is
   /// constructed by Swift; the only test seam is URLProtocol at the HTTP
   /// boundary used by the existing production client.
-  func testProductionClientAndVerifierReachPermittedForTheRealSignedFixture() async throws {
+  func testProductionClientAndVerifierRejectIncompleteSignedFixture() async throws {
     let fixture = try VenueServingContractFixture.load()
     let server = try LoopbackJSONRPCServer { body in
       RecordedVenueRegistryURLProtocol.responseData(for: body)
@@ -606,22 +606,75 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
       bundleBytes: fixture.artifact.bundleBytes,
       handoffBytes: fixture.artifact.handoffBytes
     )
-    guard case .imported(let imported) = importedResult else {
-      return XCTFail("the production client and signed fixture must reach imported, got \(importedResult); server=\(server.summary)")
+    guard case .rejected(let failure) = importedResult else {
+      return XCTFail("the incomplete signed fixture must reject, got \(importedResult); server=\(server.summary)")
     }
-
-    let decision = await verifier.evaluate(
-      imported,
-      clock: .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
-    )
-    guard case .permitted(let permit) = decision else {
-      return XCTFail("the production verifier must reach permitted, got \(decision)")
-    }
-    XCTAssertEqual(permit.identity.eventIdHex, VenueServingContractFixture.eventIdHex)
-    XCTAssertGreaterThan(permit.stopAtUnixSeconds, VenueServingContractFixture.currentUnixSeconds)
+    XCTAssertEqual(failure, .definitionRejected)
   }
 
-  func testProductionClientAndVerifierReachPermittedAfterDelayedRegistryResponse() async throws {
+  func testProductionVerifierRejectsSignedBundleWithScheduleGapAtImport() async throws {
+    let fixture = try XCTUnwrap(try VenueBundleConformanceFixture.loadAll().first { $0.name == "valid" })
+    let server = try LoopbackJSONRPCServer { body in
+      RecordedVenueRegistryURLProtocol.responseData(for: body)
+    }
+    let endpoint = try await server.start()
+    defer { server.stop() }
+    let client = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+        readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+        primaryEndpointUrl: endpoint.absoluteString,
+        secondaryEndpointUrl: endpoint.absoluteString
+      )
+    )
+    defer { client.close() }
+
+    let result = await ProductionVenueBundleVerifier(registryClient: client).importBundle(
+      bundleBytes: fixture.bundle, handoffBytes: fixture.handoff
+    )
+    guard case .rejected(let failure) = result else {
+      return XCTFail("a signed bundle with a schedule gap must reject at import: \(result); \(server.summary)")
+    }
+    XCTAssertEqual(failure, .definitionRejected)
+  }
+
+  func testProductionVerifierImportsAndPermitsFullScheduleBundle() async throws {
+    let fixture = try VenueBundleConformanceFixture.loadFullSchedule()
+    let server = try LoopbackJSONRPCServer { body in
+      RecordedVenueRegistryURLProtocol.responseData(
+        for: body,
+        contextABIHex: RecordedVenueRegistryURLProtocol.fullScheduleContextABIHex
+      )
+    }
+    let endpoint = try await server.start()
+    defer { server.stop() }
+    let client = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints(
+        readerAddressHex: "0xd4852f8526a1555a1b2c34145f0ecda412a53c51",
+        primaryEndpointUrl: endpoint.absoluteString,
+        secondaryEndpointUrl: endpoint.absoluteString
+      )
+    )
+    defer { client.close() }
+    let verifier = ProductionVenueBundleVerifier(registryClient: client)
+
+    let importedResult = await verifier.importBundle(
+      bundleBytes: fixture.bundle, handoffBytes: fixture.handoff
+    )
+    guard case .imported(let imported) = importedResult else {
+      return XCTFail("a contiguous full-schedule bundle must import: \(importedResult)")
+    }
+    let decision = await verifier.evaluate(
+      imported,
+      clock: .available(unixSeconds: 1_790_294_401)
+    )
+    guard case .permitted(let permit) = decision else {
+      return XCTFail("a contiguous full-schedule bundle must permit its first lease: \(decision)")
+    }
+    XCTAssertEqual(permit.identity.eventIdHex, fixture.eventId)
+    XCTAssertEqual(permit.currentEnin, 5_967_648)
+  }
+
+  func testProductionClientAndVerifierRejectIncompleteFixtureAfterDelayedRegistryResponse() async throws {
     let fixture = try VenueServingContractFixture.load()
     let delay: UInt64 = 50_000_000
     let server = try LoopbackJSONRPCServer(responseDelayNanoseconds: delay) { body in
@@ -645,20 +698,14 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
       handoffBytes: fixture.artifact.handoffBytes
     )
     let elapsed = started.duration(to: .now)
-    guard case .imported(let imported) = importedResult else {
-      return XCTFail("delayed production registry response must still import: \(importedResult); server=\(server.summary)")
+    guard case .rejected(let failure) = importedResult else {
+      return XCTFail("delayed production registry response must still reject the incomplete fixture: \(importedResult); server=\(server.summary)")
     }
-    let decision = await verifier.evaluate(
-      imported,
-      clock: .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
-    )
-    guard case .permitted = decision else {
-      return XCTFail("delayed production registry response must still permit: \(decision); server=\(server.summary)")
-    }
+    XCTAssertEqual(failure, .definitionRejected)
     XCTAssertGreaterThanOrEqual(elapsed, .milliseconds(90), "both production registry RPC responses must be delayed")
   }
 
-  func testDelayedProductionRegistryThroughViewModelStopsAtDeadlineAndCanResume() async throws {
+  func testDelayedProductionRegistryThroughViewModelRejectsIncompleteFixtureBeforeServing() async throws {
     let fixture = try VenueServingContractFixture.load()
     let clock = LockedVenueTestClock(.available(unixSeconds: VenueServingContractFixture.currentUnixSeconds))
     // The production registry fixture's permit is two 300-second ENINs ahead
@@ -709,31 +756,13 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
       handoffSource: URL(string: "https://venue.example/handoff")!,
       sourceDescription: "venue.example"
     )
-    guard case .blocked(let rejection) = model.status,
-      rejection.reason == .expired || rejection.reason == .envelopeRejected else {
-      return XCTFail("deadline crossing must remain visibly blocked: \(model.status); server=\(server.summary), requests=\(requests)")
-    }
+    XCTAssertEqual(model.status, .importRejected(.definitionRejected), "server=\(server.summary), requests=\(requests)")
     XCTAssertNil(ports.installedPermit, "server=\(server.summary), requests=\(requests)")
-    XCTAssertEqual(requests, 4, "import plus exactly one fresh production registry evaluation retry: \(server.summary)")
-    XCTAssertTrue(server.summary.contains("bodyBytes=[80,299,299,80]"), server.summary)
-    XCTAssertTrue(server.summary.contains("rpcMethods=eth_getBlockByNumber,eth_call,eth_call,eth_getBlockByNumber"), server.summary)
-    XCTAssertTrue(server.summary.contains("rpcCallSelectors=0xf8cd791d,0xf8cd791d"), server.summary)
+    XCTAssertEqual(requests, 3, "import performs the two registry reads before rejecting the incomplete fixture: \(server.summary)")
     XCTAssertFalse(expiry.isScheduled)
-
-    clock.set(.available(unixSeconds: VenueServingContractFixture.currentUnixSeconds))
-    let installsBeforeRefresh = ports.calls.filter { if case .installing = $0 { return true }; return false }.count
-    await model.refresh()
-    XCTAssertNotNil(ports.installedPermit, "an operator refresh after the deadline must be able to resume")
-    XCTAssertEqual(model.status, .serving(
-      displayName: VenueServingContractFixture.displayName,
-      stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds
-    ))
-    XCTAssertEqual(ports.calls.filter { if case .installing = $0 { return true }; return false }.count, installsBeforeRefresh + 1)
-    XCTAssertTrue(expiry.isScheduled)
-    XCTAssertGreaterThanOrEqual(requests, 4)
   }
 
-  func testNativeVerifierAcceptsValidAndRejectsEveryConformanceVariant() async throws {
+  func testNativeVerifierRejectsIncompleteAndInvalidConformanceVariants() async throws {
     let variants = try VenueBundleConformanceFixture.loadAll()
     XCTAssertEqual(Set(variants.map(\.name)), ["valid", "foreign-event-id", "tampered-envelope", "overlapping-envelope"])
     for variant in variants {
@@ -748,10 +777,8 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
       let importedResult = await verifier.importBundle(bundleBytes: variant.bundle, handoffBytes: variant.handoff)
       switch variant.name {
       case "valid":
-        guard case .imported(let imported) = importedResult else { return XCTFail("valid must import: \(importedResult); \(server.summary)") }
-        let decision = await verifier.evaluate(imported, clock: .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds))
-        guard case .permitted(let permit) = decision else { return XCTFail("valid must permit: \(decision); \(server.summary)") }
-        XCTAssertEqual(permit.identity.eventIdHex, variant.eventId)
+        guard case .rejected(let failure) = importedResult else { return XCTFail("phase-1 valid fixture must reject without full schedule coverage: \(importedResult); \(server.summary)") }
+        XCTAssertEqual(failure, .definitionRejected)
       case "foreign-event-id":
         guard case .rejected(let failure) = importedResult else { return XCTFail("foreign must reject: \(importedResult); \(server.summary)") }
         XCTAssertEqual(failure, .definitionRejected)
@@ -810,13 +837,14 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
     }
     XCTAssertEqual(failure, .handoffMismatch)
 
-    // The same bundle with the untampered fragment still imports, so the rejection
-    // above is the digest and not the fixture or the loopback registry.
+    // The same bundle with the untampered fragment reaches the phase-2 coverage
+    // gate, so the rejection above is specifically the digest mismatch.
     let untampered = await ProductionVenueBundleVerifier(registryClient: client).importBundle(
       bundleBytes: valid.bundle, handoffBytes: valid.handoff)
-    guard case .imported = untampered else {
-      return XCTFail("the untampered pair must import: \(untampered); \(server.summary)")
+    guard case .rejected(let failure) = untampered else {
+      return XCTFail("the untampered incomplete pair must reject: \(untampered); \(server.summary)")
     }
+    XCTAssertEqual(failure, .definitionRejected)
   }
 
   func testNativeVerifierRejectsMixedValidAndTamperedBundleAtImport() async throws {
@@ -908,6 +936,23 @@ private struct VenueBundleConformanceFixture {
     }
   }
 
+  static func loadFullSchedule() throws -> (bundle: Data, handoff: Data, eventId: String) {
+    let bundle = Bundle(for: ProductionVenueBundleVerifierTests.self)
+    let bundleURL = try XCTUnwrap(bundle.url(
+      forResource: "full-schedule.venue-bundle", withExtension: "hex", subdirectory: "venue-bundle-conformance"))
+    let handoffURL = try XCTUnwrap(bundle.url(
+      forResource: "full-schedule.venue-handoff", withExtension: "hex", subdirectory: "venue-bundle-conformance"))
+    let bundleHex = String(decoding: try Data(contentsOf: bundleURL), as: UTF8.self)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let handoffHex = String(decoding: try Data(contentsOf: handoffURL), as: UTF8.self)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return (
+      Data(hex: bundleHex),
+      Data(hex: handoffHex),
+      "996ab4d7cd0785199b715e6ff004f41ef740ead3b3363602ce1cb14b812d1f94"
+    )
+  }
+
   private static func sha256(_ data: Data) -> String {
     SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
@@ -935,6 +980,14 @@ private final class RecordedVenueRegistryURLProtocol: URLProtocol {
     "00000000000000000000000000000000000000000000000000000000000000b7" +
     "a3010102a40154111111111111111111111111111111111111111102542222222222222222222222222222222222222222035820cba59e50c7666ef2468a14f2e53f04decfd078933cd245a9a2d77532eb23b700041a6b49c26003a30101020103818601582000000000000000000000000000000000000000000000000000000000000000005820f1b4b54e6c911f1f02c1c9383c4914af56ffa3888ec28910f9f3204812276d7f1a6b49c6481a6b49dee31a6b49c3f0000000000000000000"
 
+  static let fullScheduleContextABIHex =
+    "0000000000000000000000000000000000000000000000000000000000000020" +
+    "00000000000000000000000000000000000000000000000000000000000000b7" +
+    "a3010102a40154df6986bbadd189309d52d437851c10e47ca02e200254d34c8acff6dbc4dc192e0712aa97b1c836770512" +
+    "035820e8dab1e251bac55f04aa0316e67916b7fff99c15c9ee4e4f41ba44599b5bf223041a6ab4641803a3010102010381" +
+    "86015820000000000000000000000000000000000000000000000000000000000000000058203440ccbda7e59782ff36f" +
+    "7760275298ee2ebb71e994f11d4127fb1259efb5c2c1a6ab5b9801a6ab85c801a6ab46800000000000000000000"
+
   override class func canInit(with request: URLRequest) -> Bool {
     request.url?.scheme == "https"
   }
@@ -954,12 +1007,12 @@ private final class RecordedVenueRegistryURLProtocol: URLProtocol {
 
   override func stopLoading() {}
 
-  static func responseData(for body: Data) -> Data {
+  static func responseData(for body: Data, contextABIHex: String = contextABIHex) -> Data {
     let text = String(data: body, encoding: .utf8) ?? ""
     if text.contains("eth_getBlockByNumber") {
       return Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"number\":\"0x2a\",\"hash\":\"0x2222222222222222222222222222222222222222222222222222222222222222\"}}".utf8)
     }
-    return Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":\"0x\(Self.contextABIHex)\"}".utf8)
+    return Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":\"0x\(contextABIHex)\"}".utf8)
   }
 }
 #endif

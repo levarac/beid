@@ -490,12 +490,11 @@ enum VenueBundleVerificationLogic {
   /// invariant this file cannot enforce on its own, so it is not assumed
   /// impossible.
   ///
-  /// PHASE 2 MACHINERY. Nothing in `ProductionVenueBundleVerifier` calls this
-  /// today: the venue lane owner's 2026-09-10 ruling
-  /// (`docs/plans/2026-09-10-venue-bundle-import.md`) scopes phase 1 to a
-  /// current lease and explicitly not to complete signed schedule coverage,
-  /// so `evaluateCurrentLease` deliberately does not gate on it. It is kept,
-  /// with its tests, because phase 2 needs exactly this.
+  /// PHASE 2 GATE. `ProductionVenueBundleVerifier.importBundle` calls this
+  /// after every envelope has been verified through Barnard and compared with
+  /// the anchored definition. The phase-1 ruling in
+  /// `docs/plans/2026-09-10-venue-bundle-import.md` deliberately excluded this
+  /// gate; the phase-2 acceptance condition now makes it load-bearing.
   enum CoverageOutcome: Equatable { case uncomputable, gap, covered }
 
   /// KNOWN LIMITATION, latent rather than live: `coverageIntervals` are
@@ -655,9 +654,6 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     case .rejected(let code):
       return .rejected(VenueBundleVerificationLogic.importFailure(forIdentityCode: code) ?? .definitionRejected)
     case .ok(let identity):
-      if Self.hasInvalidOrOverlappingEnvelope(bundle: bundle, nameValidator: nameValidator) {
-        return .rejected(.definitionRejected)
-      }
       // Identity is sound, but this host serves open events only. Refusing
       // here rather than at serving time is what makes the outcome legible:
       // the operator is told when they load the pack.
@@ -665,6 +661,13 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         forProjection: Self.definitionProjection(of: identity.definition)
       ) {
         return .rejected(failure)
+      }
+      guard case .usable(let barnardDefinition) = Self.barnardDefinition(from: identity.definition),
+            !Self.hasInvalidOrOverlappingEnvelope(
+              bundle: bundle, definition: barnardDefinition, nameValidator: nameValidator
+      )
+      else {
+        return .rejected(.definitionRejected)
       }
       return .imported(VenueImportedBundle(
         identity: VenueArtifactIdentity(
@@ -679,9 +682,11 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
 
   private static func hasInvalidOrOverlappingEnvelope(
     bundle: ExportedKotlinPackages.org.levarac.parallax.venue.VenueBundle,
+    definition: BarnardEventDefinitionV1,
     nameValidator: any BarnardB005DisplayNameNormalizing
   ) -> Bool {
     var intervals: [(start: Int64, end: Int64, eninSeconds: Int64)] = []
+    var referenceEninSeconds: UInt16?
     for index in 0..<Int(bundle.envelopeCount) {
       guard let bytes = bundle.envelopeAt(index: Int32(index)) else { return true }
       let signed = Self.swiftBytes(fromKotlin: bytes)
@@ -690,13 +695,24 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         hint.eninSeconds > 0,
         let verified = BarnardB005EnvelopeV2.verify(
           container: container, currentEnin: hint.validFromEnin, nameValidator: nameValidator
-        ) else { return true }
+        ),
+        BarnardB005EnvelopeV2.registryAgreement(verified, definition: definition) == .agrees
+      else { return true }
+      if let referenceEninSeconds, referenceEninSeconds != verified.eninSeconds {
+        return true
+      }
+      referenceEninSeconds = verified.eninSeconds
       if VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals(
         intervals + [(start: verified.validFromEnin, end: verified.relayExpiresAtEnin, eninSeconds: Int64(verified.eninSeconds))]
       ) { return true }
       intervals.append((start: verified.validFromEnin, end: verified.relayExpiresAtEnin, eninSeconds: Int64(verified.eninSeconds)))
     }
-    return false
+    return VenueBundleVerificationLogic.coverageOutcome(
+      referenceEninSeconds: referenceEninSeconds,
+      validFromUnixSeconds: definition.validFromUnixSeconds,
+      validUntilUnixSeconds: definition.validUntilUnixSeconds,
+      coverageIntervals: intervals.map { ($0.start, $0.end) }
+    ) != .covered
   }
 
   func evaluate(_ imported: VenueImportedBundle, clock: VenueClockReading) async -> VenueServingDecision {
@@ -824,10 +840,10 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
   /// disagrees with the registry is treated as rejected, exactly like a
   /// failed signature.
   ///
-  /// This method deliberately does NOT check signed schedule coverage over
-  /// the definition's whole validity window. See the comment before the
-  /// `evaluateVenueCurrentLease` call below for the ruling that puts that in
-  /// phase 2.
+  /// Import has already rejected any bundle that does not provide complete
+  /// signed schedule coverage. This method therefore keeps its responsibility
+  /// narrow: re-verify the selected current lease through Barnard at the live
+  /// clock ENIN and ask shared code which current lease is eligible.
   private func evaluateCurrentLease(
     identity: ExportedKotlinPackages.org.levarac.parallax.venue.VenueBundleIdentity,
     bundle: ExportedKotlinPackages.org.levarac.parallax.venue.VenueBundle,
@@ -897,37 +913,10 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
       servableByIndex[index] = (leaseVerified, container)
     }
 
-    // NO SIGNED-SCHEDULE-COVERAGE GATE HERE, DELIBERATELY. Do not "restore"
-    // one as a missing security check.
-    //
-    // An earlier revision of this method computed
-    // `VenueBundleVerificationLogic.coverageOutcome` over the definition's
-    // whole validity window and refused on `.gap`/`.uncomputable` before
-    // reaching `evaluateVenueCurrentLease`. That is phase-2 scope, and the
-    // venue lane owner ruled it out of phase 1 on 2026-09-10. The ruling is
-    // recorded verbatim in `docs/plans/2026-09-10-venue-bundle-import.md`
-    // ("Dependencies and evidence"): phase 1 proves a CURRENT LEASE, ending
-    // no later than `currentEnin + 1`, after real SDK verification at the
-    // current ENIN; it does not claim complete signed schedule coverage.
-    //
-    // The gate was not merely out of scope, it was wrong for the packs that
-    // exist: a bundle carrying a single envelope for an event longer than one
-    // relay lifetime cannot tile its own definition window, so the gate
-    // refused before a current permit or a `notStarted` recheck could be
-    // issued at all. That describes every pack barnard's producer can make
-    // today.
-    //
-    // `coverageOutcome` and the helpers under it are kept, unused by this
-    // path, because phase 2 needs exactly that machinery. Their round-2
-    // property -- that "could not determine coverage" must never read as
-    // "coverage is satisfied" -- still holds inside those functions and is
-    // still tested. That concern is about a gate's fail-open direction, so it
-    // only bites when coverage gates something; in phase 1 it gates nothing.
-    //
-    // Every other refusal in this file is load-bearing and stays: an
-    // unreadable envelope, a missing `barnardDefinition`, a `servableByIndex`
-    // miss, an unknown re-verification code, an unknown block code, and a
-    // failed rejection init all still fail closed.
+    // Every envelope was verified at import and the complete schedule gate
+    // ran against those verified bounds. The current-clock pass below remains
+    // necessary because the selected lease must still be freshly verified at
+    // the live ENIN before shared code can permit serving.
     let decision = ExportedKotlinPackages.org.levarac.parallax.venue.evaluateVenueCurrentLease(
       identity: identity, candidates: currentLeaseCandidates, clockUnixSeconds: now
     )
