@@ -61,6 +61,7 @@
 		2F98E9B2465705813B204FEE /* PastEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E3EC74423D098E4990BF12 /* PastEventsView.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
 		3116FAC12C905DDC8829DF22 /* BluetoothDeniedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */; };
+		31CE600EA10E59FFD728B074 /* full-schedule.venue-handoff.hex in Resources */ = {isa = PBXBuildFile; fileRef = 6D2D84FE7BCBF4F102CD3D7E /* full-schedule.venue-handoff.hex */; };
 		31ED6E4C0D3E950B31987CE1 /* RecordSchemaEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */; };
 		322BD9E32E34B01EA0112610 /* ReportSubmissionRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A081D0042D973884E68126CE /* ReportSubmissionRuntime.swift */; };
 		32748E6878B0222D43791988 /* VenueServingPortContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28130177943FD5AF67651CDB /* VenueServingPortContractTests.swift */; };
@@ -201,6 +202,7 @@
 		AEDD604C35D291975F93AA73 /* overlapping-envelope.venue-bundle.cbor in Resources */ = {isa = PBXBuildFile; fileRef = 3FBEC508A2909B9992D8103A /* overlapping-envelope.venue-bundle.cbor */; };
 		AEE938B9C75A91DE415ED1D2 /* VenueDeviceOrganizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 596FC02E4F5386F9BC759C20 /* VenueDeviceOrganizerView.swift */; };
 		AF1B90A7E58E1AE31010D662 /* EventGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE9AB6A36B71BDF979C1435 /* EventGrouping.swift */; };
+		AF3AAF47C6A898FC58D53455 /* full-schedule.venue-bundle.hex in Resources */ = {isa = PBXBuildFile; fileRef = FA86758F3E5D63FF819402B6 /* full-schedule.venue-bundle.hex */; };
 		B0E3E30E54CE1D67ECF3B04D /* SensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CBF12A379E8AA8E65BDEC5 /* SensingView.swift */; };
 		B16AB15AD93A88425908D591 /* ClockPreflightNoticeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52A6E868212391771EFD73E5 /* ClockPreflightNoticeView.swift */; };
 		B31E5C4B7FFA24E8138EC93F /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC3BF967894221C74134CEB6 /* ProofSignatureStateCaseAdditionForwardCompatibilityTests.swift */; };
@@ -417,6 +419,7 @@
 		6660B6477CE489C244F95FED /* ProofCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCardView.swift; sourceTree = "<group>"; };
 		6ABE91EEC79381F7778A6872 /* venue-bundle-conformance */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "venue-bundle-conformance"; path = "BeidTests/Fixtures/venue-bundle-conformance"; sourceTree = SOURCE_ROOT; };
 		6B26B23A64184D96C012A5B6 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		6D2D84FE7BCBF4F102CD3D7E /* full-schedule.venue-handoff.hex */ = {isa = PBXFileReference; path = "full-schedule.venue-handoff.hex"; sourceTree = "<group>"; };
 		6D5351B7C5A9BC1BD4D690FC /* VenueLinkSupplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueLinkSupplyTests.swift; sourceTree = "<group>"; };
 		6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventMembershipUITests.swift; sourceTree = "<group>"; };
 		709FBACC800E9850372F64D7 /* SessionAggregateSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateSnapshotStore.swift; sourceTree = "<group>"; };
@@ -539,6 +542,7 @@
 		F4EF63521813A9A66345C1DA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidAdaptiveContent.swift; sourceTree = "<group>"; };
 		F5CC905CF81F08471CF0F471 /* EventBindingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventBindingState.swift; sourceTree = "<group>"; };
+		FA86758F3E5D63FF819402B6 /* full-schedule.venue-bundle.hex */ = {isa = PBXFileReference; path = "full-schedule.venue-bundle.hex"; sourceTree = "<group>"; };
 		FB0AA6219B53ABF42EDACF85 /* BindingRecordStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BindingRecordStore.swift; sourceTree = "<group>"; };
 		FB4E6C2E50AC9B640357744A /* Illustrations.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Illustrations.xcassets; sourceTree = "<group>"; };
 		FC8CA45932A23FDA03ED6137 /* JoinRefusalUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinRefusalUITests.swift; sourceTree = "<group>"; };
@@ -785,6 +789,8 @@
 			children = (
 				4D45CB0DDC4C10CA06882131 /* foreign-event-id.venue-bundle.cbor */,
 				2D82C1F37781FF549DBD5F0F /* foreign-event-id.venue-handoff.cbor */,
+				FA86758F3E5D63FF819402B6 /* full-schedule.venue-bundle.hex */,
+				6D2D84FE7BCBF4F102CD3D7E /* full-schedule.venue-handoff.hex */,
 				49619E91992765D75183C44F /* manifest.json */,
 				71FF5942D5AF87CE40E9C652 /* mixed-valid-tampered.venue-bundle.cbor */,
 				83457A9E61EE0684ED06F529 /* mixed-valid-tampered.venue-handoff.cbor */,
@@ -1122,6 +1128,8 @@
 				D2789F126E7C7A84A3EB28AD /* demo-scenarios.txt in Resources */,
 				164FAB6EFBE2F34BE8F31302 /* foreign-event-id.venue-bundle.cbor in Resources */,
 				4F62239BDDCCB72322D98DA6 /* foreign-event-id.venue-handoff.cbor in Resources */,
+				AF3AAF47C6A898FC58D53455 /* full-schedule.venue-bundle.hex in Resources */,
+				31CE600EA10E59FFD728B074 /* full-schedule.venue-handoff.hex in Resources */,
 				330A9E521CACD5011A12C491 /* manifest.json in Resources */,
 				E7137A3684D5288199EAE586 /* mixed-valid-tampered.venue-bundle.cbor in Resources */,
 				9830B5A7CFC5625EC669E278 /* mixed-valid-tampered.venue-handoff.cbor in Resources */,
