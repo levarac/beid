@@ -172,6 +172,7 @@
 		944F351AEF60619AC52162B2 /* EventBindingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CC905CF81F08471CF0F471 /* EventBindingState.swift */; };
 		95A3A750404DCA7A584953FC /* BeidConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9C29C55477E4B93296A630 /* BeidConfig.swift */; };
 		97AA182D016AC94E0A562C29 /* UnsentWindowLedgerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5E4675B28D0F28D480086D /* UnsentWindowLedgerStore.swift */; };
+		97FE413C8256A0FB1432339D /* DesignTokensTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 841D4F72E9887AE161C1B2D5 /* DesignTokensTests.swift */; };
 		9830B5A7CFC5625EC669E278 /* mixed-valid-tampered.venue-handoff.cbor in Resources */ = {isa = PBXBuildFile; fileRef = 83457A9E61EE0684ED06F529 /* mixed-valid-tampered.venue-handoff.cbor */; };
 		9864B0CD6BBF8881D52A1DC2 /* VenueDeviceBroadcasting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CBBE87F0D227CFFF2509D9E /* VenueDeviceBroadcasting.swift */; };
 		98FCE6B6BA44E379E953EA16 /* BeidAdaptiveContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A818B57A67F2DA23DB9D2 /* BeidAdaptiveContent.swift */; };
@@ -442,6 +443,7 @@
 		82026A01F786700EA024C27A /* ReportSubmissionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSubmissionStore.swift; sourceTree = "<group>"; };
 		831658C5506647E4B2DBFB48 /* FakeVenueDeviceBroadcasting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeVenueDeviceBroadcasting.swift; sourceTree = "<group>"; };
 		83457A9E61EE0684ED06F529 /* mixed-valid-tampered.venue-handoff.cbor */ = {isa = PBXFileReference; path = "mixed-valid-tampered.venue-handoff.cbor"; sourceTree = "<group>"; };
+		841D4F72E9887AE161C1B2D5 /* DesignTokensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokensTests.swift; sourceTree = "<group>"; };
 		84726C95B7683B5A6ADDEC46 /* valid.venue-bundle.cbor */ = {isa = PBXFileReference; path = "valid.venue-bundle.cbor"; sourceTree = "<group>"; };
 		85156AD558E5D8E621CA49B2 /* DailyRollupRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRollupRuntime.swift; sourceTree = "<group>"; };
 		85D4BB1E8554749B09C045A3 /* EventIdentityVerificationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventIdentityVerificationCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -861,6 +863,7 @@
 				23A7CBFE0F3CC0DFE56DD777 /* CorruptStoreQuarantineTests.swift */,
 				299022E955C6AD2273DF22FA /* DailyRollupRuntimeTests.swift */,
 				947190410BDDDD3DB0C6F24D /* DemoScenarioInvariantTests.swift */,
+				841D4F72E9887AE161C1B2D5 /* DesignTokensTests.swift */,
 				A5703915F87566D192896C7B /* DeviceCountTests.swift */,
 				25F9B71C531690F799D13498 /* EventBindingTests.swift */,
 				E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */,
@@ -1345,6 +1348,7 @@
 				AAA084FCDB8DD4558C438B58 /* CorruptStoreQuarantineTests.swift in Sources */,
 				793ABCD05499EECD465E379A /* DailyRollupRuntimeTests.swift in Sources */,
 				9E85C338D129992CB713A690 /* DemoScenarioInvariantTests.swift in Sources */,
+				97FE413C8256A0FB1432339D /* DesignTokensTests.swift in Sources */,
 				5A5BD6CD875999D8E6C36A8C /* DetectionFixtures.swift in Sources */,
 				D1620A2C2A2333B61408ACD0 /* DeterministicSensingCryptography.swift in Sources */,
 				F8EEF80F16E6515536765320 /* DeviceCountTests.swift in Sources */,

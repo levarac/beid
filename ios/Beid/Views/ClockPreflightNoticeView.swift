@@ -61,7 +61,7 @@ struct ClockPreflightNotice: View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
           HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
             Image(systemName: "clock.badge.exclamationmark")
-              .foregroundStyle(DS.Color.statusCaution)
+              .foregroundStyle(DS.Color.textPrimary)
               .accessibilityHidden(true)
             Text(presentation.title)
               .font(DS.Font.cardTitle)

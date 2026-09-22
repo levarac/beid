@@ -126,7 +126,7 @@ struct SensingView: View {
 
       ScrollView {
         BeidAdaptiveContent {
-          VStack(spacing: BeidDesign.Spacing.section) {
+          VStack(spacing: DS.Space.l) {
             BeidStatusPill(state: .sensingAutomatically)
 
             radar
@@ -151,15 +151,16 @@ struct SensingView: View {
             }
           }
           .frame(maxWidth: .infinity)
-          .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+          .padding(.horizontal, DS.Space.pageMargin)
           .padding(.vertical, DS.Space.l)
         }
       }
     }
-    // Sensing screen: DESIGN.md §5 "one motif accent per screen" — also
-    // what the radar rings' `.tint.opacity(...)` and the center glyph's
-    // default `.accentColor` resolve to.
-    .tint(DS.Color.signalActive)
+    // Sensing screen: actionPrimary tint — Flat 2b has one ink and no
+    // per-screen motif accents (DESIGN.md §5). Also what the radar rings'
+    // `.tint.opacity(...)` and the center glyph's default `.accentColor`
+    // resolve to.
+    .tint(DS.Color.actionPrimary)
     .onAppear { pulse = !reduceMotion }
     .safeAreaInset(edge: .bottom) {
       if isPreJoin {
@@ -227,8 +228,8 @@ struct SensingView: View {
   }
 
   /// DESIGN.md §15's error formula — what happened and one action — rendered
-  /// in the non-signal caution register (§5: `statusCaution` is for errors
-  /// that are not about BLE signal, which a refused join is not).
+  /// in `textPrimary`: Flat 2b has no error color, and the words carry the
+  /// meaning (DESIGN.md §5).
   /// One surface for one refusal.
   ///
   /// There were briefly two: this one, and a `BeidPanel` inside
@@ -242,7 +243,7 @@ struct SensingView: View {
     BeidPanel {
       HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
         Image(systemName: "exclamationmark.triangle.fill")
-          .foregroundStyle(DS.Color.statusCaution)
+          .foregroundStyle(DS.Color.textPrimary)
         Text(message)
           .font(DS.Font.supporting)
           .foregroundStyle(DS.Color.textPrimary)

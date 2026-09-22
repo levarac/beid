@@ -49,7 +49,7 @@ struct ProofCardView: View {
     }
     .padding(DS.Space.m)
     .frame(maxWidth: .infinity, alignment: .top)
-    .beidSurface(interactive: true, cornerRadius: BeidDesign.Radius.card)
+    .beidSurface(interactive: true, cornerRadius: DS.Radius.card)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilityLabelText)
   }

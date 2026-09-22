@@ -61,13 +61,13 @@ struct ParticipationSummaryView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
-          VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+        BeidGlassGroup(spacing: DS.Space.l) {
+          VStack(alignment: .leading, spacing: DS.Space.l) {
             header
             BeidPanel { headlineRow }
             BeidPanel { bandBuildupSection }
           }
-          .padding(BeidDesign.Spacing.screenHorizontal)
+          .padding(DS.Space.pageMargin)
         }
       }
     }
@@ -101,7 +101,7 @@ struct ParticipationSummaryView: View {
     BeidMetricRow(
       label: headlineLabelKey,
       verbatimValue: mutualCountUnavailableText,
-      valueStyle: AnyShapeStyle(DS.Color.statusOff)
+      valueStyle: AnyShapeStyle(DS.Color.textSecondary)
     )
   }
 
@@ -150,7 +150,7 @@ struct ParticipationSummaryView: View {
     } else {
       Text(notYetAvailableText)
         .font(DS.Font.meta)
-        .foregroundStyle(DS.Color.statusOff)
+        .foregroundStyle(DS.Color.textSecondary)
     }
   }
 

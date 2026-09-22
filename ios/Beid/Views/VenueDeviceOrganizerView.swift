@@ -54,11 +54,11 @@ struct VenueDeviceOrganizerView: View {
         if let validationError = viewModel.validationError {
           HStack(alignment: .top, spacing: DS.Space.s) {
             Image(systemName: "exclamationmark.triangle.fill")
-              .foregroundStyle(DS.Color.statusCaution)
+              .foregroundStyle(DS.Color.textPrimary)
               .accessibilityHidden(true)
             Text(message(for: validationError))
               .font(DS.Font.supporting)
-              .foregroundStyle(DS.Color.statusCaution)
+              .foregroundStyle(DS.Color.textPrimary)
           }
         }
       } header: {
@@ -106,7 +106,7 @@ struct VenueDeviceOrganizerView: View {
                 if viewModel.isBroadcasting, record.id == viewModel.history.first?.id {
                   Text("Active")
                     .font(DS.Font.meta)
-                    .foregroundStyle(DS.Color.statusOn)
+                    .foregroundStyle(DS.Color.textPrimary)
                 }
               }
               Text(validityRangeText(for: record))

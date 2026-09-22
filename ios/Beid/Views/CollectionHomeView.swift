@@ -77,7 +77,7 @@ struct CollectionHomeView: View {
             }
           }
         }
-        .contentMargins(.horizontal, BeidDesign.Spacing.screenHorizontal, for: .scrollContent)
+        .contentMargins(.horizontal, DS.Space.pageMargin, for: .scrollContent)
         .contentMargins(.vertical, DS.Space.m, for: .scrollContent)
       }
       .navigationTitle("Collection")
@@ -105,7 +105,7 @@ struct CollectionHomeView: View {
       .safeAreaInset(edge: .bottom) {
         BeidAdaptiveContent {
           scanButton
-            .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+            .padding(.horizontal, DS.Space.pageMargin)
             .padding(.vertical, DS.Space.s)
         }
         .background(.bar)
@@ -187,7 +187,7 @@ struct CollectionHomeView: View {
     VStack {
       Spacer()
       BeidPanel {
-        VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
           // TODO(asset): encounter-field-empty
           BeidGlyph(systemImage: "tray", assetImage: "encounter-field-empty", tint: .secondary, size: 32)
           Text("No proofs yet")

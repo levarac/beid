@@ -145,13 +145,13 @@ struct VenueSignedServingView: View {
     case .serving(let displayName, let stopAtUnixSeconds):
       servingPack(displayName: displayName, stopAtUnixSeconds: stopAtUnixSeconds)
     case .blocked(let rejection):
-      label(message(for: rejection.reason), tint: DS.Color.statusCaution)
+      label(message(for: rejection.reason), tint: DS.Color.textPrimary)
     case .importRejected(let failure):
-      label(message(for: failure), tint: DS.Color.statusCaution)
+      label(message(for: failure), tint: DS.Color.textPrimary)
     case .acquisitionFailed(let failure):
-      label(message(for: failure), tint: DS.Color.statusCaution)
+      label(message(for: failure), tint: DS.Color.textPrimary)
     case .radioRefused(let failure):
-      label(message(for: failure), tint: DS.Color.statusCaution)
+      label(message(for: failure), tint: DS.Color.textPrimary)
     }
   }
 
@@ -253,7 +253,7 @@ struct VenueSignedServingView: View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
           Text(message(for: refusal))
             .font(DS.Font.supporting)
-            .foregroundStyle(DS.Color.statusCaution)
+            .foregroundStyle(DS.Color.textPrimary)
           if refusal == .denied, let settings = URL(string: UIApplication.openSettingsURLString) {
             Link("Open Settings", destination: settings)
               .font(DS.Font.body)
@@ -264,7 +264,7 @@ struct VenueSignedServingView: View {
       if let failure = scannerStartFailure {
         Text("The camera could not start. Paste the link instead.")
           .font(DS.Font.supporting)
-          .foregroundStyle(DS.Color.statusCaution)
+          .foregroundStyle(DS.Color.textPrimary)
         Text(verbatim: failure)
           .font(DS.Font.meta)
           .foregroundStyle(DS.Color.textSecondary)
@@ -274,7 +274,7 @@ struct VenueSignedServingView: View {
       // refused here is a fact about this text, not about what the radio is
       // doing, and an operator already broadcasting must stay on the air.
       if let failure = viewModel.linkFailure {
-        label(message(for: failure), tint: DS.Color.statusCaution)
+        label(message(for: failure), tint: DS.Color.textPrimary)
       }
 
       if viewModel.storedSourceDescription != nil {
@@ -303,7 +303,7 @@ struct VenueSignedServingView: View {
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         if viewModel.hasUnsavedArtifact {
           Text("This pack could not be saved. It stays on this device only until the app closes.")
-            .foregroundStyle(DS.Color.statusCaution)
+            .foregroundStyle(DS.Color.textPrimary)
         }
         // Says plainly that keeping a pack is not a shortcut past checking it.
         Text("A saved pack is checked again every time it is loaded.")
@@ -476,11 +476,11 @@ struct VenueSignedServingView: View {
     case .stopped:
       return DS.Color.statusOff
     case .waitingForBluetooth:
-      return DS.Color.statusCaution
+      return DS.Color.statusPending
     case .advertisingRequested:
       return DS.Color.statusOn
     case .failed:
-      return DS.Color.signalWarning
+      return DS.Color.statusOff
     }
   }
 }

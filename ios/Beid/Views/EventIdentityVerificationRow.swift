@@ -147,7 +147,7 @@ struct EventIdentityVerificationRow: View {
   private func statusColor(
     for presentation: EventIdentityVerificationPresentation
   ) -> Color {
-    presentation.usesProofSeal ? DS.Color.proofSeal : DS.Color.textSecondary
+    presentation.usesProofSeal ? DS.Color.textPrimary : DS.Color.textSecondary
   }
 }
 

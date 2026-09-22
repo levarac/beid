@@ -76,7 +76,7 @@ struct EventCodeEntryView: View {
               .padding(DS.Space.m)
               .background(
                 RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous)
-                  .fill(DS.Color.surfaceRaised)
+                  .fill(DS.Color.surfaceCanvas)
               )
               .overlay(
                 RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous)

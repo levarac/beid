@@ -35,10 +35,11 @@ struct EventFoundView: View {
         .opacity(appeared ? 1 : 0)
       }
     )
-    // Sensing screen: DESIGN.md §5 "one motif accent per screen".
-    .tint(DS.Color.signalActive)
+    // Sensing screen: actionPrimary tint — Flat 2b has one ink and no
+    // per-screen motif accents (DESIGN.md §5).
+    .tint(DS.Color.actionPrimary)
     .onAppear {
-      withAnimation(reduceMotion ? nil : BeidDesign.Animation.entrance) {
+      withAnimation(reduceMotion ? nil : DS.Motion.entrance) {
         appeared = true
       }
     }

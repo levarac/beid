@@ -23,11 +23,11 @@ struct BluetoothOffView: View {
       title: "Bluetooth is off",
       message: "beid can't sense events or collect proofs while Bluetooth is off.",
       accessory: {
-        BeidNumberedStepList(steps: steps, labelColor: DS.Color.labelOnWarning)
+        BeidNumberedStepList(steps: steps)
       },
       footer: {
         VStack(spacing: DS.Space.s) {
-          BeidPrimaryButton("Open Settings", systemImage: "gearshape", labelColor: DS.Color.labelOnWarning) {
+          BeidPrimaryButton("Open Settings", systemImage: "gearshape") {
             coordinator.sensingCoordinator.reset()
             UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
           }
@@ -39,10 +39,9 @@ struct BluetoothOffView: View {
       }
     )
     // Recovery screen: the whole screen (header glyph, step-list badges, and
-    // both buttons) gets the shared signalWarning accent, not just the
-    // header — DESIGN.md §5 "one motif accent per screen" for
-    // BluetoothOffView/SignalLostView.
-    .tint(DS.Color.signalWarning)
+    // both buttons) takes the actionPrimary tint — Flat 2b has one ink and
+    // no per-screen motif accents (DESIGN.md §5).
+    .tint(DS.Color.actionPrimary)
   }
 }
 

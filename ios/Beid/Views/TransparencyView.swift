@@ -65,14 +65,14 @@ struct TransparencyView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
-          VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+        BeidGlassGroup(spacing: DS.Space.l) {
+          VStack(alignment: .leading, spacing: DS.Space.l) {
             header
             participationPanel
             participationRecordPanel
             verifiedProofPanel
           }
-          .padding(BeidDesign.Spacing.screenHorizontal)
+          .padding(DS.Space.pageMargin)
         }
       }
     }
@@ -264,7 +264,7 @@ private struct TierRow: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
       Image(systemName: isAvailable ? "checkmark.circle.fill" : "circle")
-        .foregroundStyle(isAvailable ? DS.Color.proofSeal : DS.Color.statusOff)
+        .foregroundStyle(isAvailable ? DS.Color.textPrimary : DS.Color.textSecondary)
         .accessibilityHidden(true)
 
       if let label {
@@ -289,7 +289,7 @@ private struct TierRow: View {
     } else {
       Text(notYetAvailableText)
         .font(DS.Font.meta)
-        .foregroundStyle(DS.Color.statusOff)
+        .foregroundStyle(DS.Color.textSecondary)
     }
   }
 

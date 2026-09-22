@@ -40,7 +40,7 @@ struct ScanFlowView: View {
   var body: some View {
     NavigationStack {
       content
-        .animation(BeidDesign.Animation.soft, value: sensing.phase)
+        .animation(DS.Motion.screenTransition, value: sensing.phase)
         .navigationTitle("Scan")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {

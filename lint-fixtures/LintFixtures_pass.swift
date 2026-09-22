@@ -19,7 +19,7 @@ struct LintFixturesPass: View {
         .padding(.top, 1)
       Spacer(minLength: 0)
       RoundedRectangle(cornerRadius: DS.Radius.card)
-        .fill(DS.Color.surfaceRaised)
+        .fill(DS.Color.surfaceTile)
         // shadow with a token color and a blur radius — blur radius is not
         // a corner radius and must not trip no_hardcoded_radius.
         .shadow(color: DS.Color.strokeHairline, radius: 2)
