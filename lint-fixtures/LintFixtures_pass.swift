@@ -32,3 +32,29 @@ struct LintFixturesPass: View {
     .tint(DS.Color.actionPrimary)
   }
 }
+
+// no_glass_or_material near-misses taken from ios/Beid: an argument label
+// ending in "Material" (ParticipantRelayVerifier), identifiers starting with
+// "bar" (SensingCoordinator, VenueBundleVerification) and `.barcode`
+// (VenueLinkScannerView).
+struct LintFixturesPassGlassNearMisses: View {
+  var body: some View {
+    Text("Flat")
+      .beidSurface(cornerRadius: DS.Radius.card)
+      .onAppear {
+        _ = Verifier.verify(randomnessSeedMaterial: nil)
+        _ = Self.barnardDefinition(from: nil)
+        _ = Self.barnardJoinMode(from: nil)
+        _ = Scanner(recognizedDataTypes: [.barcode(symbologies: [.qr])])
+      }
+  }
+
+  static func barnardDefinition(from context: String?) -> String? { context }
+
+  static func barnardJoinMode(from mode: String?) -> String? { mode }
+
+  func handle(_ item: RecognizedItem) {
+    guard case .barcode(let barcode) = item else { return }
+    _ = barcode
+  }
+}

@@ -52,7 +52,7 @@ struct ScanFlowView: View {
               Image(systemName: "xmark")
                 .foregroundStyle(DS.Color.textPrimary)
                 .frame(width: DS.Size.minHitTarget, height: DS.Size.minHitTarget)
-                .beidSurface(interactive: true, cornerRadius: DS.Radius.pill)
+                .beidSurface(cornerRadius: DS.Radius.pill)
             }
             .accessibilityLabel("Close")
           }

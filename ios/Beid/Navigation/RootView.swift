@@ -35,7 +35,7 @@ struct RootView: View {
       ScanFlowView(sensing: coordinator.sensingCoordinator)
         .environmentObject(coordinator)
         .tint(DS.Color.actionPrimary)
-        .presentationBackground(.regularMaterial)
+        .presentationBackground(DS.Color.surfaceCanvas)
     }
   }
 }

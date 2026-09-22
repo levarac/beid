@@ -56,21 +56,19 @@ struct CollectionHomeView: View {
                 Text(proofCountText)
                   .font(DS.Font.supporting)
                   .foregroundStyle(DS.Color.textSecondary)
-                BeidGlassGroup(spacing: DS.Space.m) {
-                  LazyVGrid(columns: columns, spacing: DS.Space.m) {
-                    ForEach(eventCards) { card in
-                      Button {
-                        BeidDesign.haptic()
-                        coordinator.openProof(card.representative)
-                      } label: {
-                        ProofCardView(
-                          proof: card.representative,
-                          artworkSeed: card.artworkSeed,
-                          sessionCount: card.sessionCount
-                        )
-                      }
-                      .buttonStyle(.plain)
+                LazyVGrid(columns: columns, spacing: DS.Space.m) {
+                  ForEach(eventCards) { card in
+                    Button {
+                      BeidDesign.haptic()
+                      coordinator.openProof(card.representative)
+                    } label: {
+                      ProofCardView(
+                        proof: card.representative,
+                        artworkSeed: card.artworkSeed,
+                        sessionCount: card.sessionCount
+                      )
                     }
+                    .buttonStyle(.plain)
                   }
                 }
               }
@@ -108,7 +106,7 @@ struct CollectionHomeView: View {
             .padding(.horizontal, DS.Space.pageMargin)
             .padding(.vertical, DS.Space.s)
         }
-        .background(.bar)
+        .beidBottomBar()
       }
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
@@ -120,6 +118,9 @@ struct CollectionHomeView: View {
           // render system blue. Same fix as AccountSheetView's own
           // WalletConnectSheetView doc comment already describes.
           .tint(DS.Color.actionPrimary)
+          // Interim opaque background replacing the OS-default sheet glass;
+          // #642 takes it to ink together with the content.
+          .presentationBackground(DS.Color.surfaceCanvas)
       }
       .navigationDestination(isPresented: $coordinator.dailySummaryPresented) {
         DailySummaryView()
@@ -141,17 +142,10 @@ struct CollectionHomeView: View {
         coordinator.startScan()
       }
     } else {
-      Group {
-        if #available(iOS 26.0, *) {
-          Button(action: startScan, label: scanIcon)
-            .buttonStyle(.glassProminent)
-        } else {
-          Button(action: startScan, label: scanIcon)
-            .buttonStyle(.borderedProminent)
-        }
-      }
-      .buttonBorderShape(.circle)
-      .accessibilityLabel("Sense Event")
+      Button(action: startScan, label: scanIcon)
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Sense Event")
     }
   }
 
@@ -186,7 +180,7 @@ struct CollectionHomeView: View {
   private var emptyState: some View {
     VStack {
       Spacer()
-      BeidPanel {
+      BeidEmptyBlock {
         VStack(alignment: .leading, spacing: DS.Space.m) {
           // TODO(asset): encounter-field-empty
           BeidGlyph(systemImage: "tray", assetImage: "encounter-field-empty", tint: .secondary, size: 32)

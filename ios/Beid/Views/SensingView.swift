@@ -178,7 +178,7 @@ struct SensingView: View {
           .padding(.vertical, DS.Space.s)
           .accessibilityIdentifier("scan.manual-entry")
         }
-        .background(.bar)
+        .beidBottomBar()
       }
     }
     .accessibilityIdentifier("scan.sensing")

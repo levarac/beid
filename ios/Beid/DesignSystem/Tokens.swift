@@ -131,6 +131,9 @@ enum DS {
     static let itemDetailArtwork: CGFloat = 190
     /// The 1 pt rule: hairline dividers and the empty block's dashed frame.
     static let hairline: CGFloat = 1
+    /// Dash and gap length of the empty block's dashed frame (`Block/Empty`
+    /// dashPattern [4, 4]).
+    static let emptyBlockDash: CGFloat = 4
     /// `Row/List` minimum height (content, excluding its top hairline).
     static let listRowMinHeight: CGFloat = 92
     /// `Row/KeyValue` minimum height.

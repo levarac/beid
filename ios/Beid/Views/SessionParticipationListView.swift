@@ -27,22 +27,20 @@ struct SessionParticipationListView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: DS.Space.l) {
-          VStack(alignment: .leading, spacing: DS.Space.l) {
-            header
-            BeidPanel {
-              VStack(alignment: .leading, spacing: DS.Space.m) {
-                ForEach(Array(sessions.enumerated()), id: \.offset) { index, session in
-                  if index > 0 {
-                    Divider()
-                  }
-                  sessionRow(session)
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+          header
+          BeidPanel {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+              ForEach(Array(sessions.enumerated()), id: \.offset) { index, session in
+                if index > 0 {
+                  Divider()
                 }
+                sessionRow(session)
               }
             }
           }
-          .padding(DS.Space.pageMargin)
         }
+        .padding(DS.Space.pageMargin)
       }
     }
     .background(DS.Color.surfaceCanvas)

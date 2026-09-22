@@ -110,7 +110,8 @@ verbatim.
 | Color collection `Flat 2b / Color` (13 variables, §5) | `DS.Color` + `Colors.xcassets`; also the fate of the 8 old color tokens with no Flat 2b counterpart | #628 (names and fates: §5) |
 | Text styles (Display / Title / Body / Label Mono, §6) | `DS.Font` + bundled font files | #629 |
 | `Button/Primary` | SwiftUI primary-button component (replaces the §10 CTA pattern) | not assigned to an issue yet (none of #628–#644 names it) |
-| `Row/List`, `Row/KeyValue`, `Label/Section`, `Block/Empty` | SwiftUI row / key-value / section-label / empty-block components | not assigned to an issue yet (none of #628–#644 names it) |
+| `Row/List`, `Row/KeyValue`, `Label/Section` | SwiftUI row / key-value / section-label components | not assigned to an issue yet (none of #628–#644 names it) |
+| `Block/Empty` | `BeidEmptyBlock` (`ios/Beid/DesignSystem.swift`), the dashed empty-state frame (§8) | #630 (2026-09-23) |
 | `Bar/Nav` | Text-only navigation row | #631 |
 | `Sigil/Mini` | The mini form of the Sigil generator | #633 |
 
@@ -162,6 +163,12 @@ prepared:
   - 01 Welcome and 10's footer still show "SENSEPROOF" (the product name
     is beid; see above).
 - The values in §5/§6 are unaffected: the Library values match the spec.
+- `Block/Empty` (node `190:53`) was read again on **2026-09-23** through
+  the Figma API for #630: stroke `line-dashed` (a variable alias), weight
+  1, align INSIDE, dash pattern [4, 4]; corner radius 16; padding 24
+  horizontal and 40 vertical; item spacing 10; no fills. Its
+  component description: 「空状態ブロック。破線1px・角丸16。タイトルは等幅大文字、本文は2行まで。」
+  `DS.Size.emptyBlockDash` (4) comes from this read.
 
 The spec's own open questions (spec §10: window length, peer cap, the
 Rejected report state, AVG SIGNAL display, the Account address typeface,
@@ -1033,6 +1040,37 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   `Button/Primary`'s 28 at 56pt and 26 at 52pt (half its height) are
   expressed, with no separate token. Rounded rectangles keep
   `style: .continuous`; Flat 2b does not contradict it.
+- Surfaces (#630, 2026-09-23): `View.beidSurface(cornerRadius:)`
+  (`ios/Beid/DesignSystem.swift`) is a `DS.Color.surfaceCanvas` fill plus
+  a 1px `DS.Color.strokeHairline` border with continuous corners — no
+  glass, no `Material`, no OS-version branch; its `interactive:` and
+  `fallback:` parameters are gone. `BeidGlassGroup` was deleted.
+  `BeidPrimaryButton` is `.borderedProminent` at `.controlSize(.large)`
+  and `BeidSecondaryButton` `.bordered`, both a `DS.Radius.control`
+  rounded rectangle; Home's icon Scan button is a `.borderedProminent`
+  circle. The scan-flow cover's presentation background is `surfaceCanvas`
+  (was `.regularMaterial`), and so is the Account sheet's (was the
+  OS-default sheet glass) — an interim value; #642 takes the sheet to
+  `ink` with its content. Home's Scan-button inset and Sensing's
+  manual-entry inset are opaque `surfaceCanvas` with a 1px
+  `strokeHairline` rule on their top edge (were `.background(.bar)`). No
+  `#available(iOS 26, *)` branch remains (there were five); the
+  deployment target is still iOS 17. Two gaps are left open deliberately:
+  the primary button is not yet a pill (building `Button/Primary` is not
+  assigned, §0), and `.bordered` is a system tint fill, not `bg` +
+  `line`. Left as is: the toolbar and navigation-bar glass the OS draws
+  on the iOS 26 SDK (#631 owns the navigation bar; hiding it would need
+  an iOS 26-only API), `EventCardView`'s `.tint.opacity` badge, and
+  `DS.Artwork.proofCardGradient` (#633).
+- Empty block (#630, 2026-09-23): `BeidEmptyBlock`
+  (`ios/Beid/DesignSystem.swift`) is `Block/Empty` — a dashed 1px
+  `DS.Color.strokeEmptyState` frame, radius `DS.Radius.emptyBlock` (16),
+  dash `DS.Size.emptyBlockDash` (4, as [4, 4]; from the 2026-09-23 Figma
+  read, §0), padding `DS.Space.l` horizontal and
+  `DS.Space.emptyBlockVertical` (40) vertical, no fill, content centered.
+  It replaces `BeidPanel` at two empty states, `CollectionHomeView`'s
+  (04b) and `DailySummaryView`'s empty day; their content is unchanged
+  (the 04b copy is #635's, the glyph #631's).
 
 Radii in `DS.Radius`: `control 12 / card 16 / seal 28 / pill 999 /
 glyph 24 / emptyBlock 16 / nowCard 20`. All rounded rectangles use
@@ -1081,9 +1119,10 @@ difference, not just an API rename.**]**
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** No glass, no materials,
-> no blur (above). #630 removes the code. The iOS 26 availability gates
-> that exist only for glass become unnecessary; the deployment target
-> stays iOS 17 (`ios/project.yml` — a fact, not a decision made here).
+> no blur (above). #630 removed the code (2026-09-23), including the five
+> iOS 26 availability gates that existed only for glass; the deployment
+> target stays iOS 17 (`ios/project.yml` — a fact, not a decision made
+> here).
 > Provenance: the "Materials:" bullet and the `glassEffect` MUST were added
 > in revision round 1 (`79cd005`, NAOE Kenichi, 2026-07-10; §C "Adopted
 > (structural; PROPOSAL tags unchanged)"); the blur FORBIDDEN is from the
@@ -1129,15 +1168,16 @@ difference, not just an API rename.**]**
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** All of §8a is replaced
 > by §8's Flat 2b surface rules: no glass, no materials, no blur. #630
-> removes `beidSurface`'s glass path, the glass button styles and
-> `BeidGlassGroup`; until then the code below is migration debt. The iOS 26
-> availability gates exist only for glass and become unnecessary; the
-> deployment target stays iOS 17 (a fact about `ios/project.yml`, not a
-> decision made here). Provenance: added in `0d6394f` (NAOE Kenichi,
-> **2026-07-22**, PR #49), with its own `DesignException: this section` in
-> the heading; §C has no row for it. Ken's "ふんだんに" (generously)
-> directive, quoted below, is retired with it. Overturned on the owner's
-> authority without Ken's sign-off; Ken is to be informed afterwards.
+> removed `beidSurface`'s glass path, the glass button styles and
+> `BeidGlassGroup` (2026-09-23), so the code the text below describes no
+> longer exists (§8 "Surfaces (#630)"). The five iOS 26 availability gates
+> existed only for glass and went with it; the deployment target stays
+> iOS 17 (a fact about `ios/project.yml`, not a decision made here).
+> Provenance: added in `0d6394f` (NAOE Kenichi, **2026-07-22**, PR #49),
+> with its own `DesignException: this section` in the heading; §C has no
+> row for it. Ken's "ふんだんに" (generously) directive, quoted below, is
+> retired with it. Overturned on the owner's authority without Ken's
+> sign-off; Ken is to be informed afterwards.
 > Previously (verbatim):
 >
 > Beid expresses Liquid Glass through the quiet-field-instrument register, not
@@ -1294,6 +1334,12 @@ Real components in this codebase. Each entry is the contract for reuse.
 > tokens are gone from iOS, tints are `actionPrimary`, and status dots use
 > `statusOn`/`statusPending`/`statusOff` (§5). The entries below name the
 > current tokens; Android notes still name Android's own.
+>
+> **Update (#630, 2026-09-23).** The glass part is done: `beidSurface` is
+> a `surfaceCanvas` fill plus a 1px `strokeHairline` border with no glass
+> path, and `BeidGlassGroup` and the glass button styles are gone (§8
+> "Surfaces (#630)"). Where an entry below names `beidSurface`, it is that
+> flat surface, no longer migration debt.
 
 ### Component: ProofCardView
 
@@ -1326,6 +1372,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   {date}".
 - *Flat 2b (2026-09-22): the gradient avatar and `beidSurface` are
   migration debt (#633, #630); the home becomes an event list (#635).*
+  The `beidSurface` part was done by #630 (2026-09-23; a flat
+  `surfaceCanvas` fill and hairline, §8).
 
 ### Component: ScanFlowView (phase container)
 
@@ -1419,8 +1467,9 @@ Real components in this codebase. Each entry is the contract for reuse.
 - *Flat 2b (2026-09-22): the dot colors and `beidSurface` are migration
   debt (#628, #630). Under Flat 2b a status dot uses a semantic color for
   its one meaning, always beside its text label (§5).* The dot colors
-  were done by #628 (2026-09-23; `statusOn`/`statusPending` above);
-  `beidSurface` is still #630's.
+  were done by #628 (2026-09-23; `statusOn`/`statusPending` above), and
+  `beidSurface` by #630 (2026-09-23; a flat `surfaceCanvas` fill and
+  hairline, §8).
 
 ### Component: BeidBulletRow
 
@@ -1610,6 +1659,9 @@ Real components in this codebase. Each entry is the contract for reuse.
   >
   > **Update (#628, 2026-09-23):** the `proofSeal` part is done
   > (`textPrimary`, annotation above).
+  >
+  > **Update (#630, 2026-09-23):** the `beidSurface` part is done (a flat
+  > `surfaceCanvas` fill and hairline, §8).
 
 ### Pattern: Primary CTA button
 
@@ -1648,7 +1700,9 @@ Real components in this codebase. Each entry is the contract for reuse.
   `DS.Size.compactPrimaryButtonWidth` (140). #628 added the tokens only;
   `BeidPrimaryButton`'s geometry (min height 52 today) is unchanged, and
   building the `Button/Primary` component is not assigned to an issue yet
-  (§0).
+  (§0). Since #630 (2026-09-23) `BeidPrimaryButton` is `.borderedProminent`
+  on every OS version (its iOS 26 `.glassProminent` branch is gone), still
+  a `DS.Radius.control` rounded rectangle, not the pill (§8).
 
   > **Superseded by #628 (2026-09-23).** The accent-map tints were removed
   > (§5). Previously (verbatim):
@@ -1966,8 +2020,9 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 >   superseded: the account entry becomes the address text (#631, #642).
 >   The labeling MUST itself stands and now covers text controls that read
 >   badly aloud (§12).
-> - Reduce Transparency has no materials left to degrade once #630 lands
->   (§8).
+> - Reduce Transparency has no app-drawn materials left to degrade since
+>   #630 (2026-09-23, §8); the toolbar and navigation-bar glass the OS
+>   draws on the iOS 26 SDK is left as is (#631).
 > - Flat 2b's own accessibility ask is adopted as part of the contract
 >   (spec §9): graphs and Sigils carry information, not decoration, so
 >   each carries a VoiceOver summary (for example, "7 mutual, 13 detected,
@@ -2005,8 +2060,8 @@ Acceptance criteria for every component and screen, not post-hoc QA:
   is plain clickable `Text`, which is inherently labeled by its own
   visible string, not an icon-only control needing a separate label.]**
 - MUST: Reduce Motion honored (§9); Reduce Transparency degrades any
-  remaining material to a solid surface (`surfaceCanvas`; there are none
-  once #630 lands). **[Android counterpart per §9: Android's
+  remaining material to a solid surface (`surfaceCanvas`; the app draws
+  none since #630, 2026-09-23, §8). **[Android counterpart per §9: Android's
   motion-reduction setting, not currently read anywhere in this codebase —
   a real gap, not a mechanism gap. "Reduce Transparency" has no Android
   analogue to name yet, since Android has no glass/transparency material
@@ -2304,10 +2359,10 @@ Copy-paste this into every UI PR description and check each item:
 
 Enforcement layers:
 
-1. **Lint-level**: `.swiftlint.yml` encodes five custom rules —
+1. **Lint-level**: `.swiftlint.yml` encodes six custom rules —
    `no_hardcoded_swiftui_color`, `no_hardcoded_swiftui_font`,
-   `no_hardcoded_spacing`, `no_hardcoded_radius`,
-   `no_hardcoded_animation` — activated via `only_rules: [custom_rules]`,
+   `no_hardcoded_spacing`, `no_hardcoded_radius`, `no_hardcoded_animation`,
+   `no_glass_or_material` — activated via `only_rules: [custom_rules]`,
    with `match_kinds` excluding comments/strings. Known scaffold debt is
    recorded in the checked-in, violation-level baseline **template**
    `lint/baseline.template.json` (SwiftLint 0.65 baselines store absolute
@@ -2342,7 +2397,13 @@ Enforcement layers:
    2026-09-22), so no-glass, no-icons and single-appearance are
    review-level until a lint rule lands. Any such rule belongs to #628,
    #630, #631 or #632, not to this document. (The decorative-symbol size
-   and one-accent map named above are superseded, §12 and §5.)*
+   and one-accent map named above are superseded, §12 and §5.)* Since
+   #630 (2026-09-23) no-glass is lint-covered: `no_glass_or_material`,
+   scoped to `ios/Beid` like the other rules but, unlike them, with no
+   excluded paths, so `ios/Beid/DesignSystem/` is covered too, flags
+   `glassEffect`, `GlassEffectContainer`, the glass button styles,
+   `Material` and its members, and the `.bar` shape style. No-icons and
+   single-appearance are still review-level.
 2. **Review-level**: the checklist above.
 3. **Exception process**: a PR that must deviate states
    `DesignException: <reason>` in its description and links the decision;
@@ -2439,6 +2500,7 @@ to.]**
 | `layout.grid.card.minimum.compact` | `DS.Layout.compactGridCardMinimumWidth` | 150 pt | Minimum proof-card width in compact grids |
 | `size.status.dot` | `DS.Size.statusDot` | 8 pt | `BeidStatusPill` dot diameter |
 | `size.hairline` | `DS.Size.hairline` | 1 pt | The hairline rule's thickness |
+| `size.emptyBlock.dash` | `DS.Size.emptyBlockDash` | 4 pt | `Block/Empty` dash and gap length ([4, 4]; #630) |
 | `size.row.list.minHeight` | `DS.Size.listRowMinHeight` | 92 pt | `Row/List` minimum height |
 | `size.row.keyValue.minHeight` | `DS.Size.keyValueRowMinHeight` | 44 pt | `Row/KeyValue` minimum height |
 | `size.row.session.minHeight` | `DS.Size.sessionRowMinHeight` | 48 pt | Session row minimum height |
@@ -2457,7 +2519,7 @@ to.]**
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 | `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/0.88 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
 
-(Full set: 17 color tokens, 8 space, 7 radius, 17 size, 4 layout, 9 font,
+(Full set: 17 color tokens, 8 space, 7 radius, 18 size, 4 layout, 9 font,
 7 motion, plus 1 artwork generator — see
 `ios/Beid/DesignSystem/Tokens.swift`. Hex values are the primitive
 colorset's Library variable (§4, §5); illustrative only, §0. The
@@ -2573,6 +2635,7 @@ inventory evidence. Naming remains governed by §12.
 | 2026-09-22 | §6 SF Pro ramp `PROPOSAL` (`14ebd53`, never ratified) superseded by Bricolage Grotesque / DM Sans / DM Mono, bundled (#629). Recorded as a superseded proposal, not an overturned rule | Superseded proposal — owner decision 2026-09-22 |
 | 2026-09-22 | Settled by the owner (relayed by the PM): (A) "Verified" only after third-party verification — #144/#240 stance stands, Flat 2b's VERIFIED strings not authorized (#636/#637/#638); (B) English-only UI, consistent with the 2026-08-21 `en`-only locale policy, String Catalog MUST unchanged; (C) SHARE is not built — the 2026-07-28 rejection stands (#631/#638) | Adopted — owner decision 2026-09-22 |
 | 2026-09-23 | **Flat 2b tokens landed** (beid#628): `DS.Color` is 17 tokens named by role over 13 single-appearance primitive colorsets named after the Library variables (§4, §5); several roles may share a primitive. Of the 8 old tokens with no Flat 2b counterpart, `signalActive`, `signalWarning`, `proofSeal`, `statusCaution`, `labelOnWarning` and `labelOnSeal` were removed (tints → `actionPrimary`; text and icons → `textPrimary`; dots → `statusOn`/`statusPending`/`statusOff`), and `statusOn`/`statusOff` were mapped to `semantic/green`/`semantic/red`; `surfaceRaised` was also removed (→ `surfaceCanvas`). `Button/Primary` tone pairs: `actionPrimary`/`labelOnActionPrimary` (Tone=Primary) and `actionInverse`/`labelOnActionInverse` (Tone=Inverse). `DS.Space.pageMargin` 32 → 24, new `emptyBlockVertical`, `DS.Radius.glyph`/`emptyBlock`/`nowCard`, new row/button minimum sizes and `DS.Motion.screenTransition`. `BeidDesign`'s duplicate scales folded into `DS` (content spacing 14 → 16, card radius 18 → 16, control radius 14 → 12); only `haptic(_:)` remains in `BeidDesign` | Adopted — token naming delegated to #628 by D-627 |
+| 2026-09-23 | **Flat 2b surfaces landed** (beid#630): `beidSurface` is a `surfaceCanvas` fill plus a 1px `strokeHairline` border (glass path, `Material` fallback and its `interactive:`/`fallback:` parameters removed); `BeidGlassGroup` and its 7 wrappers deleted; the glass button styles replaced (`BeidPrimaryButton` `.borderedProminent`, `BeidSecondaryButton` `.bordered`, both a `DS.Radius.control` rounded rectangle; Home's icon Scan button a `.borderedProminent` circle); all 5 `#available(iOS 26, *)` branches removed (deployment target still iOS 17); the scan-flow cover's `.regularMaterial` and the Home/Sensing insets' `.background(.bar)` → opaque `surfaceCanvas` (insets with a top `strokeHairline` rule); new `BeidEmptyBlock` (`Block/Empty`, `DS.Size.emptyBlockDash` 4 from the 2026-09-23 Figma read) replaces `BeidPanel` at the 04b and empty-day states; new lint rule `no_glass_or_material` (six custom rules). Open gaps named, not fixed: the primary button is not yet a pill (`Button/Primary` unassigned), and `.bordered` is a system tint fill, not `bg` + `line`. The Account sheet's background is `surfaceCanvas` as an interim value replacing the OS-default sheet glass; #642 takes it to `ink`. Left as is: the OS-drawn toolbar/navigation-bar glass (#631), `EventCardView`'s `.tint.opacity` badge, `DS.Artwork.proofCardGradient` (#633) | Adopted — implements the 2026-09-22 §8/§8a decision |
 
 ### D. Deprecated patterns
 
