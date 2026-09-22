@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">beid</string>
-
     <!-- Screen 01: Welcome (mirrors iOS's WelcomeView). -->
     <string name="welcome_title">beid</string>
     <string name="welcome_subtitle">Prove you were there. Automatically.</string>
@@ -145,6 +144,7 @@
     <string name="account_leave_event_button">Leave Event</string>
     <!-- Nav row on the Account screen (mirrors iOS's AccountSheetView "Past Events" row) that opens the Records screen. -->
     <string name="account_records_button">Records</string>
+    <string name="account_venue_broadcast_button">Venue broadcast</string>
     <!-- %1$s is the build version, e.g. "1.0.0 (1234+1000000091)". Not copy: do not translate the value. -->
     <string name="account_version_label">Version %1$s</string>
 

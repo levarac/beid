@@ -126,6 +126,22 @@ class AccountScreenTest {
     }
 
     @Test
+    fun venueBroadcastEntryIsPresentedInAccount() {
+        val viewModel = AccountViewModel(FakeEventJoinSession())
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                AccountScreen(viewModel = viewModel, isBluetoothOn = true, onOpenRecords = {})
+            }
+        }
+
+        composeTestRule
+            .onNodeWithTag("account_venue_broadcast_button")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
     fun restoredWalletIsShownImmediatelyAsReferenceOnly() {
         val viewModel = AccountViewModel(FakeEventJoinSession())
         val hint = CachedWalletHint("0x1234567890abcdef1234567890abcdef12345678", 8453L)

@@ -1,6 +1,7 @@
 package org.levarac.beid.navigation
 
 import android.bluetooth.BluetoothAdapter
+import android.app.Application
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -35,6 +36,7 @@ import org.levarac.beid.ui.screens.RecordsScreenTestTags
 import org.levarac.beid.ui.screens.TodaySummaryScreenTestTags
 import org.levarac.beid.ui.screens.WelcomeScreenTestTags
 import org.levarac.beid.ui.theme.BeidAppTheme
+import org.levarac.beid.venue.VenueActivity
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -292,5 +294,26 @@ class AppNavHostTest {
         composeTestRule.onNodeWithTag(AccountScreenTestTags.MANUAL_EVENT_CODE_BUTTON).performClick()
 
         composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SUBMIT_BUTTON).assertIsDisplayed()
+    }
+
+    @Test
+    fun venueBroadcastEntryStartsTheExplicitVenueActivity() {
+        OnboardingPreferences(context).hasCompletedOnboarding = true
+        shadowAdapter.setEnabled(true)
+
+        composeTestRule.setContent {
+            BeidAppTheme { AppNavHost(FakeEventJoinSession(), proofRecordStore()) }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.ACCOUNT_ENTRY).performClick()
+        composeTestRule
+            .onNodeWithTag(AccountScreenTestTags.VENUE_BROADCAST_BUTTON)
+            .performScrollTo()
+            .performClick()
+
+        assertEquals(
+            VenueActivity::class.java.name,
+            shadowOf(ApplicationProvider.getApplicationContext<Application>()).nextStartedActivity.component?.className,
+        )
     }
 }
