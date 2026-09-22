@@ -25,6 +25,7 @@ jobs:
       android: ${{ steps.classify.outputs.android }}
       lint: ${{ steps.classify.outputs.lint }}
       sanity: ${{ steps.classify.outputs.sanity }}
+      xcode_cloud: ${{ steps.classify.outputs.xcode_cloud }}
     steps:
       - name: Reject fork pull request code on the private runner
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}

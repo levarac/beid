@@ -11,10 +11,17 @@ independently dispatched reviewer was ever assigned, while CI stayed green and
 mergeable. A gate that is documented but never runs is worse than no gate,
 because it gets cited as though it were in force.
 
-What suspension does **not** relax: the Xcode Cloud requirement below still
-stands in full — verify that the iOS check **exists on the exact head SHA and
-succeeded**, not merely that a green check exists somewhere. That check is the
-only automated gate left, so treat its absence as a hard stop.
+What suspension does **not** relax: when the repository's authoritative
+changed-path classifier returns `xcode_cloud=true`, verify that the iOS check
+**exists on the exact head SHA and succeeded**, not merely that a green check
+exists somewhere. For a pure Android app source/resources/tests change under
+`android/app/src/`, the classifier returns `xcode_cloud=false`; absence of an
+iOS check is then expected. Do not replace this with a blanket `android/**`
+exclusion: build inputs and unclassified Android paths fail closed.
+
+This merge requirement is separate from App Store Connect's start-condition
+convenience. ASC may skip a workflow for configured exclusions, but an ASC
+skip is not evidence that a required iOS/shared check passed.
 
 **Carve-out — when absence is configuration rather than a hard stop.** Xcode
 Cloud runs `DO_NOT_START_IF_ALL_FILES_MATCH` over a set of path matchers
@@ -27,13 +34,14 @@ record:
    the head being merged, and show each one falls inside the exclusion set.
    Give the count (`N of N`).
 
-   **The set itself is defined in ASC and is not restated here as a rule.** As
-   read from the ASC API on **2026-09-09** it was {`docs/`, `.github/`,
-   `*.md`} — use that to classify the obvious cases without a GUI, but treat it
-   as a dated observation rather than as the contract, and **re-read ASC before
-   relying on it for any PR whose classification is not obvious**, or whose
-   answer would change if a matcher had been added or removed. The ASC GUI is
-   the source of truth for workflow settings, as stated elsewhere in this file.
+   **The set is defined in ASC and is not restated here as a rule.** The
+   2026-09-22 readback recorded the matchers `docs/`, `.github/`, `*.md`, and
+   `android/app/src/`. See the full before/update/after artifact at
+   `/Users/kenichi/Repository/Levarac/evidence/xcode-platform-gate-20260922/asc/write-readback.json`.
+   This is configuration/predicate evidence, not runtime proof that a new
+   Android-only PR will produce no run; no run was triggered for the update.
+   Re-read ASC before relying on the set for a future PR. The ASC GUI is the
+   source of truth for workflow settings, as stated elsewhere in this file.
 2. **Complement** — state that anything failing (1) is outside the set **by
    definition**, so an iOS-affecting change cannot qualify for this record.
    Do not enumerate what lies outside. The predicate already answers it, and a

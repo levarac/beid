@@ -35,6 +35,28 @@ def _is_lab_cli(path: str) -> bool:
     return normalized.startswith(LAB_CLI_PREFIX)
 
 
+def _is_android_app_source(path: str) -> bool:
+    normalized = path[2:] if path.startswith("./") else path
+    return normalized.startswith("android/app/src/")
+
+
+def _all_lanes(*, xcode_cloud: bool = True) -> dict[str, bool]:
+    return {
+        "android": True,
+        "lint": True,
+        "labcli": True,
+        "sanity": True,
+        "xcode_cloud": xcode_cloud,
+        "error": False,
+    }
+
+
+def _fail_closed() -> dict[str, bool]:
+    result = _all_lanes()
+    result["error"] = True
+    return result
+
+
 def _is_force_all(path: str) -> bool:
     normalized = path[2:] if path.startswith("./") else path
     # Exempted ahead of the basename rules below, which would otherwise catch
@@ -49,6 +71,7 @@ def _is_force_all(path: str) -> bool:
         normalized.startswith(".github/workflows/")
         or normalized.startswith("scripts/")
         or normalized.startswith("gradle/")
+        or normalized.startswith("android/gradle/wrapper/")
         or basename in {
             "build.gradle",
             "build.gradle.kts",
@@ -60,6 +83,8 @@ def _is_force_all(path: str) -> bool:
             "Package.resolved",
             "project.yml",
             ".swiftlint.yml",
+            "gradlew",
+            "gradlew.bat",
         }
     )
 
@@ -67,16 +92,23 @@ def _is_force_all(path: str) -> bool:
 def classify(files: Iterable[str]) -> dict[str, bool]:
     paths = sorted({path[2:] if path.startswith("./") else path for path in files if path})
     if not paths:
-        return {"android": True, "lint": True, "labcli": True, "sanity": True, "error": True}
+        return _fail_closed()
 
     if any(_is_force_all(path) for path in paths):
-        return {"android": True, "lint": True, "labcli": True, "sanity": True, "error": False}
+        return _all_lanes()
 
     non_docs = [path for path in paths if not _is_documentation(path)]
     if not non_docs:
         # Repository sanity remains required because it validates repository
         # control documents; the expensive build/lint lanes can be skipped.
-        return {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False}
+        return {
+            "android": False,
+            "lint": False,
+            "labcli": False,
+            "sanity": True,
+            "xcode_cloud": False,
+            "error": False,
+        }
 
     android = False
     lint = False
@@ -84,8 +116,12 @@ def classify(files: Iterable[str]) -> dict[str, bool]:
     for path in non_docs:
         if _is_lab_cli(path):
             labcli = True
-        elif path.startswith("android/"):
+        elif _is_android_app_source(path):
             android = True
+        elif path.startswith("android/"):
+            # Build inputs and unclassified Android paths can affect the
+            # shared/iOS graph; do not inherit the Android-only exemption.
+            return _fail_closed()
         elif path.startswith("ios/"):
             lint = True
         elif path.startswith("shared/"):
@@ -93,9 +129,16 @@ def classify(files: Iterable[str]) -> dict[str, bool]:
             lint = True
         else:
             # Unknown product/source paths fail closed.
-            return {"android": True, "lint": True, "labcli": True, "sanity": True, "error": True}
+            return _fail_closed()
 
-    return {"android": android, "lint": lint, "labcli": labcli, "sanity": True, "error": False}
+    return {
+        "android": android,
+        "lint": lint,
+        "labcli": labcli,
+        "sanity": True,
+        "xcode_cloud": lint,
+        "error": False,
+    }
 
 
 def main() -> int:
@@ -111,7 +154,7 @@ def main() -> int:
         result = classify(files)
     except Exception as error:  # fail closed if the detector input is unavailable/corrupt
         print(f"warning: CI change classification failed: {error}", file=sys.stderr)
-        result = {"android": True, "lint": True, "sanity": True, "error": True}
+        result = _fail_closed()
 
     for key, value in result.items():
         print(f"{key}={str(value).lower()}")

@@ -373,6 +373,19 @@ not depend on generated Swift artifacts being committed to the repository.
 
 ## When Xcode Cloud declines to start — the measurement record
 
+The repository-side requirement decision is made by
+`scripts/ci_change_filter.py`, not by a second ASC-oriented matcher. On
+2026-09-22, the PR workflow's live readback verified the ASC convenience
+exclusion as `android/app/src/` alongside the existing documentation/control-
+file exclusions. The readback showed the `Test - iOS` action still had
+`isRequiredToPass: true`, and Release Build was untouched. See the full
+before/update/after artifact at
+`/Users/kenichi/Repository/Levarac/evidence/xcode-platform-gate-20260922/asc/write-readback.json`.
+Do not add a blanket `android/` exclusion: Gradle settings, wrapper,
+dependency, and other build inputs can change the iOS/shared build graph and
+remain `xcode_cloud=true`. Shared and iOS/native Swift paths also remain
+required.
+
 **This section is the source of truth for what has actually been measured about
 `DO_NOT_START_IF_ALL_FILES_MATCH`.** The *rule* for citing that behaviour in a
 merge record lives in the [PR CI / review-gate carve-out](../AGENTS.md#review-gate--suspended-as-of-2026-08-19),
@@ -380,7 +393,10 @@ which points here rather than restating the evidence. Rule and evidence are
 split because the rule is read on every merge and should stay short, while the
 evidence accretes an entry per observation.
 
-Verified 2026-09-10.
+The 2026-09-22 readback is configuration/predicate evidence only. No Xcode
+Cloud run was triggered, so it does not demonstrate runtime no-run behaviour
+for a new Android-only PR. The earlier runtime observations below remain
+separate evidence.
 
 ### What is being decided
 

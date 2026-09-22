@@ -72,10 +72,19 @@ dates). The contract every agent must know before touching delivery files:
     `tools/beid-lab-cli/` だけに効く。`tools/` 配下の未分類の path は従来どおり
     fail closed のままである。
 
+  - **Xcode Cloud requirement classification** — the same
+    `scripts/ci_change_filter.py` result exposed by the `changes` job has an
+    `xcode_cloud` output. Pure Android app source/resources/tests under
+    `android/app/src/` set it to `false`; Android build inputs, shared code,
+    iOS/native Swift, workflow/scripts, and unknown paths set it to `true`.
+    This is a merge-evidence requirement decision, separate from whether App
+    Store Connect starts a workflow. Do not exclude all of `android/`.
+
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
 
-  - **Xcode Cloud** — merge 判断の対象。**branch protection による強制ではない。**
+  - **Xcode Cloud** — merge 判断の対象 when `xcode_cloud=true`.
+    **branch protection による強制ではない。**
     この repository に branch protection は存在しない (`GET
     /repos/.../branches/main/protection` は 403 *Upgrade to GitHub Pro or make
     this repository public* を返す)。つまり required context は 1 つも設定されて

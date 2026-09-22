@@ -275,12 +275,16 @@ the same name shadows them.
 
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
-- **Require the Xcode Cloud iOS check on the exact head SHA.** The current
-  automatic PR workflow can silently omit the check while the Ubuntu checks
-  remain green. Verify both existence and success on the commit under
-  review. Xcode Cloud is metered, so pushing to a branch with an open PR can
-  spend real budget; use local builds for iteration and batch pushes. If the
-  workflow later becomes manually triggered, invert the existence rule:
+- **Require the Xcode Cloud iOS check only when the authoritative changed-path
+  classifier says `xcode_cloud=true`, and require it on the exact head SHA.**
+  Android app source, resources, and tests under `android/app/src/` are
+  intentionally exempt. Shared code, iOS/native Swift, Android build inputs,
+  workflow/scripts, and unknown paths remain fail-closed and require the check.
+  The classifier output is exposed by the `changes` job in
+  `.github/workflows/pr-ci.yml`; do not create a second path classifier in
+  merge guidance. Xcode Cloud is metered, so pushing to a branch with an open
+  PR can spend real budget; use local builds for iteration and batch pushes.
+  If the workflow later becomes manually triggered, invert the existence rule:
   absence before the deliberate trigger is expected, and the evidence must
   instead record that the manual run targeted the exact head and passed.
 - **Negative compile fixtures are manual today.** The fixtures in

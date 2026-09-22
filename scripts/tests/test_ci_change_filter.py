@@ -7,7 +7,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_docs_only_skips_expensive_lanes_but_keeps_sanity(self):
         self.assertEqual(
             classify(["README.md", "docs/ci.md"]),
-            {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": False, "sanity": True, "xcode_cloud": False, "error": False},
         )
 
     def test_android_change_runs_android_only(self):
@@ -15,11 +15,51 @@ class CIChangeFilterTests(unittest.TestCase):
         self.assertEqual(result["android"], True)
         self.assertEqual(result["lint"], False)
         self.assertEqual(result["sanity"], True)
+        self.assertEqual(result["xcode_cloud"], False)
+
+    def test_android_app_source_resources_and_tests_do_not_require_xcode_cloud(self):
+        result = classify(
+            [
+                "android/app/src/main/kotlin/org/levarac/beid/MainActivity.kt",
+                "android/app/src/main/res/values/strings.xml",
+                "android/app/src/test/kotlin/org/levarac/beid/MainActivityTest.kt",
+                "android/app/src/androidTest/kotlin/org/levarac/beid/MainActivityTest.kt",
+            ]
+        )
+        self.assertEqual(result["android"], True)
+        self.assertEqual(result["lint"], False)
+        self.assertEqual(result["xcode_cloud"], False)
+        self.assertEqual(result["error"], False)
+
+    def test_android_build_inputs_retain_xcode_cloud_requirement(self):
+        for path in [
+            "android/build.gradle.kts",
+            "android/settings.gradle.kts",
+            "android/gradle.properties",
+            "android/gradlew",
+            "android/gradle/wrapper/gradle-wrapper.properties",
+        ]:
+            with self.subTest(path=path):
+                result = classify([path])
+                self.assertEqual(result["xcode_cloud"], True)
+                self.assertEqual(result["error"], False)
 
     def test_shared_change_runs_both_product_lanes(self):
         result = classify(["shared/src/commonMain/kotlin/Policy.kt"])
         self.assertEqual(result["android"], True)
         self.assertEqual(result["lint"], True)
+        self.assertEqual(result["xcode_cloud"], True)
+
+    def test_android_source_mixed_with_shared_requires_xcode_cloud(self):
+        result = classify(
+            [
+                "android/app/src/main/kotlin/org/levarac/beid/MainActivity.kt",
+                "shared/src/commonMain/kotlin/org/levarac/beid/shared/Policy.kt",
+            ]
+        )
+        self.assertEqual(result["android"], True)
+        self.assertEqual(result["lint"], True)
+        self.assertEqual(result["xcode_cloud"], True)
 
     def test_workflow_and_dependency_changes_run_everything(self):
         for path in [
@@ -31,7 +71,7 @@ class CIChangeFilterTests(unittest.TestCase):
             result = classify([path])
             self.assertEqual(
                 result,
-                {"android": True, "lint": True, "labcli": True, "sanity": True, "error": False},
+                {"android": True, "lint": True, "labcli": True, "sanity": True, "xcode_cloud": True, "error": False},
             )
 
     def test_mixed_paths_are_union_of_relevant_lanes(self):
@@ -48,7 +88,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_missing_or_empty_input_fails_closed(self):
         self.assertEqual(
             classify([]),
-            {"android": True, "lint": True, "labcli": True, "sanity": True, "error": True},
+            {"android": True, "lint": True, "labcli": True, "sanity": True, "xcode_cloud": True, "error": True},
         )
 
 
@@ -58,7 +98,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_lab_cli_change_runs_only_its_own_job(self):
         self.assertEqual(
             classify(["tools/beid-lab-cli/Sources/BeidLabCliCore/LabLine.swift"]),
-            {"android": False, "lint": False, "labcli": True, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": True, "sanity": True, "xcode_cloud": False, "error": False},
         )
 
     def test_lab_cli_package_resolved_does_not_force_every_lane(self):
@@ -69,7 +109,7 @@ class CIChangeFilterTests(unittest.TestCase):
         # would run the Android build.
         self.assertEqual(
             classify(["tools/beid-lab-cli/Package.resolved"]),
-            {"android": False, "lint": False, "labcli": True, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": True, "sanity": True, "xcode_cloud": False, "error": False},
         )
         # The app's own pin is unaffected by that exemption.
         self.assertEqual(classify(["ios/Package.resolved"])["android"], True)
@@ -77,7 +117,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_lab_cli_docs_need_no_build(self):
         self.assertEqual(
             classify(["tools/beid-lab-cli/README.md"]),
-            {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": False, "sanity": True, "xcode_cloud": False, "error": False},
         )
 
     def test_a_lab_cli_change_beside_a_product_change_runs_both(self):
