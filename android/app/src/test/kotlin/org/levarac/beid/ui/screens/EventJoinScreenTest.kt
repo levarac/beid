@@ -464,6 +464,30 @@ class EventJoinScreenTest {
         assertTrue(session.signalLostSimulated)
     }
 
+    // Pins only that the flag threads EventJoinScreen -> EventJoinContent ->
+    // ScanFlowScreen -> RecordingScreen; unit tests run the debug variant, so
+    // release behavior (BuildConfig.DEBUG = false) is not proven here (beid#651).
+    @Test
+    fun recordingPhaseOmitsSimulateSignalLostControlWhenDisabled() {
+        val session = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Recording(session1, peersVerified = 2)))
+        session.markRecordingCeremonyShown()
+        val viewModel = EventJoinViewModel(session)
+
+        composeTestRule.setContent {
+            BeidAppTheme {
+                EventJoinScreen(
+                    viewModel,
+                    onOpenAccount = {},
+                    onOpenManualEventCode = {},
+                    showSimulateSignalLost = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON).assertDoesNotExist()
+    }
+
     @Test
     fun tappingTheAccountEntryInvokesOnOpenAccount() {
         val session = FakeEventJoinSession()
