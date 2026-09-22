@@ -40,11 +40,11 @@ struct DailySummaryView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
           recordSection
           submissionSection
         }
-        .padding(BeidDesign.Spacing.screenHorizontal)
+        .padding(DS.Space.pageMargin)
       }
     }
     .background(DS.Color.surfaceCanvas)

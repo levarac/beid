@@ -104,7 +104,7 @@ struct PastEventsView: View {
               comment: "Trailing label on the Past Events row for the event this device is presently joined to — a plain state marker, not an external verification claim."
             )
             .font(DS.Font.meta)
-            .foregroundStyle(DS.Color.statusOn)
+            .foregroundStyle(DS.Color.textPrimary)
           }
         }
       }

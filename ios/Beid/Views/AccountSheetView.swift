@@ -68,7 +68,7 @@ struct AccountSheetView: View {
               Text(bluetoothStatusText)
                 .font(DS.Font.supporting)
                 .fontWeight(.semibold)
-                .foregroundStyle(bluetoothStatusColor)
+                .foregroundStyle(DS.Color.textPrimary)
             }
           }
         } footer: {

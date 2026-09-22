@@ -47,7 +47,7 @@ struct RecordingView: View {
 
   var body: some View {
     BeidScreen {
-      VStack(spacing: BeidDesign.Spacing.section) {
+      VStack(spacing: DS.Space.l) {
         if showEntranceCeremony {
           // Reuses ProofCollectedView's retired hero content verbatim (same
           // already-localized strings, §5.5) as a one-time highlight, not a
@@ -57,7 +57,7 @@ struct RecordingView: View {
             assetImage: "proof-seal-mark",
             title: "Proof Collected",
             subtitle: "Added to your collection.",
-            tint: DS.Color.proofSeal
+            tint: DS.Color.actionPrimary
           )
           .transition(.opacity)
         }
@@ -73,7 +73,7 @@ struct RecordingView: View {
               // denominator exists to show a fraction of (§5.2). Not
               // `ProgressView(value:)`.
               ProgressView()
-                .tint(DS.Color.proofSeal)
+                .tint(DS.Color.actionPrimary)
               Text(recordingCaption)
                 .font(DS.Font.meta)
                 .foregroundStyle(DS.Color.textSecondary)
@@ -107,10 +107,9 @@ struct RecordingView: View {
       }
       #endif
     }
-    // Ceremony screen: DESIGN.md §5 "one motif accent per screen" — the
-    // one-time change from 06a's signalActive to proofSeal once recording
-    // is confirmed (§5.2).
-    .tint(DS.Color.proofSeal)
+    // Ceremony screen: actionPrimary tint — Flat 2b has one ink and no
+    // per-screen motif accents (DESIGN.md §5).
+    .tint(DS.Color.actionPrimary)
     .onAppear {
       // beid#222: `ScanFlowView` chains the wallet-binding sheet's
       // auto-presentation to `sensing.entranceCeremonyFinished` rather than

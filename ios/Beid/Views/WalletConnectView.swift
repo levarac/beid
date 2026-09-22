@@ -5,8 +5,8 @@ import SwiftUI
 
 /// Wallet step in the `.walletFirst` `OnboardingMode` order. Direct
 /// app-to-app connection via `WalletConnectPairingView` — see
-/// ios/README.md "WalletConnect". Not a motif-accent screen (§5): every
-/// tint here is `DS.Color.actionPrimary`, same as the rest of onboarding.
+/// ios/README.md "WalletConnect". Every tint here is
+/// `DS.Color.actionPrimary`, as on every screen (DESIGN.md §5).
 struct WalletConnectView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 

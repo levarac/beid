@@ -29,14 +29,14 @@ struct EventCardView<Caption: View>: View {
 
   var body: some View {
     BeidPanel {
-      VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+      VStack(alignment: .leading, spacing: DS.Space.m) {
         HStack(alignment: .top, spacing: DS.Space.m) {
           Image(systemName: "calendar")
             .font(DS.Font.cardTitle)
             .foregroundStyle(.tint)
             .symbolRenderingMode(.hierarchical)
-            .frame(width: BeidDesign.Size.bulletIcon, height: BeidDesign.Size.bulletIcon)
-            .beidSurface(cornerRadius: BeidDesign.Radius.control, fallback: .thinMaterial)
+            .frame(width: DS.Size.bulletIcon, height: DS.Size.bulletIcon)
+            .beidSurface(cornerRadius: DS.Radius.control, fallback: .thinMaterial)
             .accessibilityHidden(true)
 
           VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -96,7 +96,7 @@ struct EventCardView<Caption: View>: View {
       .foregroundStyle(DS.Color.textSecondary)
   }
   .padding()
-  .tint(DS.Color.signalActive)
+  .tint(DS.Color.actionPrimary)
 }
 
 #Preview("Recording") {
@@ -106,7 +106,7 @@ struct EventCardView<Caption: View>: View {
       .foregroundStyle(DS.Color.textSecondary)
   }
   .padding()
-  .tint(DS.Color.proofSeal)
+  .tint(DS.Color.actionPrimary)
 }
 
 #Preview("Paused (Dark)") {
@@ -114,7 +114,7 @@ struct EventCardView<Caption: View>: View {
     BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "5")
   }
   .padding()
-  .tint(DS.Color.signalWarning)
+  .tint(DS.Color.actionPrimary)
   .preferredColorScheme(.dark)
 }
 
@@ -128,5 +128,5 @@ struct EventCardView<Caption: View>: View {
       .foregroundStyle(DS.Color.textSecondary)
   }
   .padding()
-  .tint(DS.Color.proofSeal)
+  .tint(DS.Color.actionPrimary)
 }

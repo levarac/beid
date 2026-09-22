@@ -27,8 +27,8 @@ struct SessionParticipationListView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
-          VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+        BeidGlassGroup(spacing: DS.Space.l) {
+          VStack(alignment: .leading, spacing: DS.Space.l) {
             header
             BeidPanel {
               VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -41,7 +41,7 @@ struct SessionParticipationListView: View {
               }
             }
           }
-          .padding(BeidDesign.Spacing.screenHorizontal)
+          .padding(DS.Space.pageMargin)
         }
       }
     }
@@ -109,7 +109,7 @@ struct SessionParticipationListView: View {
   private var trailingValue: some View {
     Text(mutualCountUnavailableText)
       .font(DS.Font.supporting)
-      .foregroundStyle(DS.Color.statusOff)
+      .foregroundStyle(DS.Color.textSecondary)
   }
 
   /// Shared verbatim (same key/defaultValue/comment) with

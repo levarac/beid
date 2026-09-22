@@ -39,8 +39,8 @@ struct ItemDetailView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
-          VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+        BeidGlassGroup(spacing: DS.Space.l) {
+          VStack(alignment: .leading, spacing: DS.Space.l) {
             artworkHeader
 
             BeidPanel {
@@ -74,7 +74,7 @@ struct ItemDetailView: View {
               participationSummaryRow
             }
           }
-          .padding(BeidDesign.Spacing.screenHorizontal)
+          .padding(DS.Space.pageMargin)
         }
       }
     }
@@ -125,7 +125,7 @@ struct ItemDetailView: View {
       Spacer(minLength: DS.Space.m)
       Label(recordedOnDeviceStatusText, systemImage: "checkmark.circle.fill")
         .font(DS.Font.cardTitle)
-        .foregroundStyle(DS.Color.proofSeal)
+        .foregroundStyle(DS.Color.textPrimary)
     }
   }
 

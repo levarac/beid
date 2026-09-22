@@ -5,31 +5,7 @@ import SwiftUI
 import UIKit
 
 enum BeidDesign {
-  enum Spacing {
-    static let screenHorizontal: CGFloat = 24
-    static let section: CGFloat = 24
-    static let content: CGFloat = 14
-    static let compact: CGFloat = 8
-  }
-
-  enum Radius {
-    static let card: CGFloat = 18
-    static let control: CGFloat = 14
-    static let glyph: CGFloat = 24
-  }
-
-  enum Size {
-    /// Icon roundel diameter for two-line bullet rows (screen 02 benefits).
-    static let bulletIcon: CGFloat = 32
-    /// Numbered badge diameter for step lists (screen 03).
-    static let stepBadge: CGFloat = 28
-  }
-
-  enum Animation {
-    static let entrance = DS.Motion.entrance
-    static let soft = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)
-  }
-
+  // Design values live in `DS` (DesignSystem/Tokens.swift); this keeps only UIKit feedback behavior.
   static func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
     UIImpactFeedbackGenerator(style: style).impactOccurred()
   }
@@ -53,15 +29,15 @@ struct BeidScreen<Content: View, Footer: View>: View {
         .ignoresSafeArea()
 
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
-          VStack(spacing: BeidDesign.Spacing.section) {
+        BeidGlassGroup(spacing: DS.Space.l) {
+          VStack(spacing: DS.Space.l) {
             Spacer(minLength: 20)
             content
             Spacer(minLength: 20)
             footer
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+          .padding(.horizontal, DS.Space.pageMargin)
           .padding(.bottom, 28)
         }
       }
@@ -93,10 +69,10 @@ struct BeidHeroHeader: View {
   }
 
   var body: some View {
-    VStack(spacing: BeidDesign.Spacing.content) {
+    VStack(spacing: DS.Space.m) {
       BeidGlyph(systemImage: systemImage, assetImage: assetImage, tint: tint)
 
-      VStack(spacing: BeidDesign.Spacing.compact) {
+      VStack(spacing: DS.Space.s) {
         Text(title)
           .font(DS.Font.screenTitle)
           .multilineTextAlignment(.center)
@@ -139,7 +115,7 @@ struct BeidGlyph: View {
       }
     }
     .frame(width: size, height: size)
-    .beidSurface(cornerRadius: BeidDesign.Radius.glyph, fallback: .thinMaterial)
+    .beidSurface(cornerRadius: DS.Radius.glyph, fallback: .thinMaterial)
     .accessibilityHidden(true)
   }
 }
@@ -153,7 +129,7 @@ struct BeidPrimaryButton: View {
   init(
     _ title: LocalizedStringKey,
     systemImage: String? = nil,
-    labelColor: Color = DS.Color.surfaceCanvas,
+    labelColor: Color = DS.Color.labelOnActionPrimary,
     action: @escaping () -> Void
   ) {
     self.title = title
@@ -170,7 +146,7 @@ struct BeidPrimaryButton: View {
       } else {
         Button(action: performAction, label: label)
           .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.roundedRectangle(radius: BeidDesign.Radius.control))
+          .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
       }
     }
     .controlSize(.large)
@@ -184,12 +160,10 @@ struct BeidPrimaryButton: View {
       Text(title)
     }
     .font(DS.Font.cta)
-    // Prominent styles default the label to white, which disappears on the
-    // light fills this palette uses in dark mode (actionPrimary dark is
-    // #E8EAEC → 1.2:1). Label pairing lives in DESIGN.md §5's CTA-label
-    // rule: the surfaceCanvas default fits actionPrimary; proofSeal and
-    // signalWarning call sites pass labelOnSeal / labelOnWarning; a future
-    // signalActive CTA needs its own on-fill token before it exists.
+    // The label color is set explicitly rather than left to the prominent
+    // style's default: DESIGN.md §5 pairs every fill with an on-fill label
+    // token. The default fits the actionPrimary fill; a call site with an
+    // actionInverse fill passes labelOnActionInverse.
     .foregroundStyle(labelColor)
     .frame(maxWidth: .infinity)
     .frame(minHeight: 52)
@@ -212,7 +186,7 @@ struct BeidSecondaryButton: View {
     } else {
       Button(action: performAction, label: label)
         .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: BeidDesign.Radius.control))
+        .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
     }
   }
 
@@ -242,8 +216,8 @@ struct BeidBulletRow: View {
         .font(DS.Font.cardTitle)
         .foregroundStyle(.tint)
         .symbolRenderingMode(.hierarchical)
-        .frame(width: BeidDesign.Size.bulletIcon, height: BeidDesign.Size.bulletIcon)
-        .beidSurface(cornerRadius: BeidDesign.Radius.control, fallback: .thinMaterial)
+        .frame(width: DS.Size.bulletIcon, height: DS.Size.bulletIcon)
+        .beidSurface(cornerRadius: DS.Radius.control, fallback: .thinMaterial)
         .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -278,8 +252,8 @@ struct BeidStatusPill: View {
 
     fileprivate var dotColor: Color {
       switch self {
-      case .sensingAutomatically: DS.Color.signalActive
-      case .sensingPaused: DS.Color.signalWarning
+      case .sensingAutomatically: DS.Color.statusOn
+      case .sensingPaused: DS.Color.statusPending
       }
     }
   }
@@ -306,13 +280,13 @@ struct BeidStatusPill: View {
 /// Sequential numbered instructions in a bordered card — one filled index
 /// badge + one line per step (screen 03's "Open Settings / Tap Bluetooth /
 /// Switch it on" — DESIGN.md §10). The badge fill follows the ambient
-/// `.tint()` (so it picks up whichever motif accent the hosting screen sets,
-/// e.g. `signalWarning` on a recovery screen); `labelColor` must be the
-/// on-fill pairing token for that same tint (see DESIGN.md §5's CTA-label
-/// rule — the same pairing applies to any text sitting on a tint fill).
+/// `.tint()` (so it picks up whichever fill the hosting screen sets, e.g.
+/// `actionPrimary` on a recovery screen); `labelColor` must be the on-fill
+/// pairing token for that same tint (see DESIGN.md §5's CTA-label rule —
+/// the same pairing applies to any text sitting on a tint fill).
 struct BeidNumberedStepList: View {
   let steps: [LocalizedStringKey]
-  var labelColor: Color = DS.Color.surfaceCanvas
+  var labelColor: Color = DS.Color.labelOnActionPrimary
 
   var body: some View {
     VStack(spacing: 0) {
@@ -321,7 +295,7 @@ struct BeidNumberedStepList: View {
           Text("\(index + 1)")
             .font(DS.Font.meta.weight(.semibold))
             .foregroundStyle(labelColor)
-            .frame(width: BeidDesign.Size.stepBadge, height: BeidDesign.Size.stepBadge)
+            .frame(width: DS.Size.stepBadge, height: DS.Size.stepBadge)
             .background(.tint, in: Circle())
 
           Text(step)
@@ -336,12 +310,12 @@ struct BeidNumberedStepList: View {
 
         if index < steps.count - 1 {
           Divider()
-            .padding(.leading, DS.Space.m + BeidDesign.Size.stepBadge + DS.Space.m)
+            .padding(.leading, DS.Space.m + DS.Size.stepBadge + DS.Space.m)
         }
       }
     }
     .padding(.vertical, DS.Space.xs)
-    .beidSurface(cornerRadius: BeidDesign.Radius.card)
+    .beidSurface(cornerRadius: DS.Radius.card)
   }
 }
 
@@ -356,7 +330,7 @@ struct BeidPanel<Content: View>: View {
     content
       .padding(18)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .beidSurface(cornerRadius: BeidDesign.Radius.card)
+      .beidSurface(cornerRadius: DS.Radius.card)
   }
 }
 
@@ -390,7 +364,7 @@ struct BeidStatusLayout<Accessory: View, Footer: View>: View {
 
   var body: some View {
     BeidScreen {
-      VStack(spacing: BeidDesign.Spacing.section) {
+      VStack(spacing: DS.Space.l) {
         BeidHeroHeader(systemImage: systemImage, assetImage: assetImage, title: title, subtitle: message, tint: tint)
         accessory
       }
@@ -447,7 +421,7 @@ struct BeidMetricRow: View {
 /// a footer button); do not wrap views that are far apart or on different
 /// screens — that defeats the container's purpose.
 struct BeidGlassGroup<Content: View>: View {
-  var spacing: CGFloat = BeidDesign.Spacing.content
+  var spacing: CGFloat = DS.Space.m
   @ViewBuilder let content: () -> Content
 
   var body: some View {

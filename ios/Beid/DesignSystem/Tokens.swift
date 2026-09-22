@@ -15,72 +15,86 @@ enum DS {
 
   // MARK: - Color
   //
-  // Values live in Colors.xcassets as adaptive (light + dark) sets and are
-  // exposed via Xcode's generated asset symbols. Semantic roles and hex
-  // anchors are documented in DESIGN.md §5.
+  // Two tiers (DESIGN.md §4). Tier 1 is the Flat 2b Library palette: one
+  // colorset per Library variable in Colors.xcassets, each a single
+  // appearance (one sRGB value, no dark variant) — DESIGN.md §5 allows
+  // only the Library colors. Tier 2 is `DS.Color`: tokens named by role,
+  // each mapped onto one primitive; several roles may share a primitive.
+  // Views use tier 2 only. Roles and allowed uses are in DESIGN.md §5.
   enum Color {
-    /// Root background of every screen.
-    static let surfaceCanvas = SwiftUI.Color(.surfaceCanvas)
-    /// Card and sheet surfaces sitting on the canvas.
-    static let surfaceRaised = SwiftUI.Color(.surfaceRaised)
-    /// Primary text.
-    static let textPrimary = SwiftUI.Color(.textPrimary)
-    /// Secondary/supporting text.
-    static let textSecondary = SwiftUI.Color(.textSecondary)
-    /// Neutral primary action. CTA tint on screens that have no motif
-    /// accent; also the intended app-level accent once views migrate.
-    static let actionPrimary = SwiftUI.Color(.actionPrimary)
-    /// Live sensing signal. The single accent of sensing screens
-    /// (SensingView, EventFoundView) — DESIGN.md §5 map.
-    static let signalActive = SwiftUI.Color(.signalActive)
-    /// Degraded/lost signal. The single accent of recovery screens
-    /// (SignalLostView, BluetoothOffView); not for generic warnings.
-    static let signalWarning = SwiftUI.Color(.signalWarning)
-    /// CTA label on a signalWarning fill. That fill is mid-luminance in
-    /// BOTH modes, so the fill-inverse default (surfaceCanvas) fails in
-    /// light mode — this stays ink in both (5.5:1 / 9.9:1 measured).
-    static let labelOnWarning = SwiftUI.Color(.labelOnWarning)
-    /// CTA label on a proofSeal fill: white in light (4.8:1, the inverse
-    /// default only reaches 4.4:1), ink in dark (6.8:1).
-    static let labelOnSeal = SwiftUI.Color(.labelOnSeal)
-    /// Verified proof artifacts: seals, seal success, ceremony moments.
-    static let proofSeal = SwiftUI.Color(.proofSeal)
-    /// Hairline strokes and dividers.
-    static let strokeHairline = SwiftUI.Color(.strokeHairline)
-    /// Non-signal caution/error state — e.g. a declined, timed-out, or
-    /// failed wallet-signature attempt. Deliberately distinct from
-    /// `signalWarning`, which is reserved for BLE signal degradation only
-    /// (DESIGN.md §5: "Errors that aren't signal-related" is a forbidden
-    /// use of `signalWarning`).
-    static let statusCaution = SwiftUI.Color(.statusCaution)
-    /// Binary on/off status indicators — currently the Bluetooth power
-    /// state in `AccountSheetView`. Deliberately distinct from
-    /// `signalWarning` (BLE *signal quality* degradation only, not a
-    /// simple power toggle), `statusCaution` (wallet-signature failure
-    /// only), and `signalActive` (the single reserved accent of sensing
-    /// screens, not for use outside sensing moments).
-    static let statusOn = SwiftUI.Color(.statusOn)
-    /// The "off" half of the `statusOn` pair — see its doc comment.
-    static let statusOff = SwiftUI.Color(.statusOff)
+    /// Page ground of every screen. Library `bg`.
+    static let surfaceCanvas = SwiftUI.Color(.bg)
+    /// Primary text and marks (icons, neutral dots) on the page ground.
+    /// Library `ink`.
+    static let textPrimary = SwiftUI.Color(.ink)
+    /// Secondary text and section labels on the page ground. Library `sub`.
+    static let textSecondary = SwiftUI.Color(.sub)
+    /// 1pt row and list dividers on the page ground. Library `line`.
+    static let strokeHairline = SwiftUI.Color(.line)
+    /// Dashed 1pt frame of the empty block (`Block/Empty`). Library
+    /// `line-dashed`.
+    static let strokeEmptyState = SwiftUI.Color(.lineDashed)
+    /// Gray tiles and the timeline track. Library `tile`.
+    static let surfaceTile = SwiftUI.Color(.tile)
+    /// "Detected" bars in charts. Library `chart-muted`.
+    static let chartDetected = SwiftUI.Color(.chartMuted)
+    /// Secondary text on an ink ground. Library `on-ink/sub`.
+    static let textSecondaryOnInk = SwiftUI.Color(.onInkSub)
+    /// Dividers, graph rings and future-window bars on an ink ground.
+    /// Library `on-ink/line`.
+    static let strokeHairlineOnInk = SwiftUI.Color(.onInkLine)
+    /// Detected-only (idle) graph nodes on an ink ground. Library
+    /// `on-ink/idle`.
+    static let graphNodeIdle = SwiftUI.Color(.onInkIdle)
+    /// `Button/Primary` Tone=Primary fill; also the app-level tint.
+    /// Library `ink`.
+    static let actionPrimary = SwiftUI.Color(.ink)
+    /// Label on an `actionPrimary` fill. Library `bg`.
+    static let labelOnActionPrimary = SwiftUI.Color(.bg)
+    /// `Button/Primary` Tone=Inverse fill, for black screens and the black
+    /// sheet. Library `bg`.
+    static let actionInverse = SwiftUI.Color(.bg)
+    /// Label on an `actionInverse` fill. Library `ink`.
+    static let labelOnActionInverse = SwiftUI.Color(.ink)
+    /// Active / on. An indicator dot paired with a text label on the page
+    /// ground; text only on an ink ground (DESIGN.md §5). Library
+    /// `semantic/green`.
+    static let statusOn = SwiftUI.Color(.semanticGreen)
+    /// Verifying / pending. Same restriction as `statusOn`. Library
+    /// `semantic/amber`.
+    static let statusPending = SwiftUI.Color(.semanticAmber)
+    /// Destructive / off. Same restriction as `statusOn`. Library
+    /// `semantic/red`.
+    static let statusOff = SwiftUI.Color(.semanticRed)
   }
 
   // MARK: - Space
   //
   // 4 pt base scale. See DESIGN.md §7.
   enum Space {
+    /// 4 pt.
     static let xs: CGFloat = 4
+    /// 8 pt.
     static let s: CGFloat = 8
+    /// 16 pt.
     static let m: CGFloat = 16
+    /// 24 pt.
     static let l: CGFloat = 24
+    /// 32 pt.
     static let xl: CGFloat = 32
+    /// 48 pt.
     static let xxl: CGFloat = 48
-    /// Default horizontal page margin for full-width content and CTAs.
-    static let pageMargin: CGFloat = 32
+    /// Default horizontal page margin for full-width content and CTAs
+    /// (Flat 2b: 354 pt content width on a 402 pt screen).
+    static let pageMargin: CGFloat = 24
+    /// Vertical padding of the empty block (`Block/Empty`, DESIGN.md §8).
+    static let emptyBlockVertical: CGFloat = 40
   }
 
   // MARK: - Radius
   //
-  // See DESIGN.md §8.
+  // See DESIGN.md §8. `Button/Primary` is a capsule (radius = height / 2),
+  // expressed with `pill`, not a separate token.
   enum Radius {
     /// Small controls and inline chips.
     static let control: CGFloat = 12
@@ -88,11 +102,19 @@ enum DS {
     static let card: CGFloat = 16
     /// Proof seal artwork and ceremony surfaces.
     static let seal: CGFloat = 28
-    /// Fully rounded pills.
+    /// Fully rounded pills and capsule buttons.
     static let pill: CGFloat = 999
+    /// `BeidGlyph`'s icon roundel.
+    static let glyph: CGFloat = 24
+    /// Frame of the empty block (`Block/Empty`).
+    static let emptyBlock: CGFloat = 16
+    /// The now-sensing ink card (DESIGN.md §8).
+    static let nowCard: CGFloat = 20
   }
 
   // MARK: - Size
+  //
+  // Row heights are minimums: rows grow with Dynamic Type (DESIGN.md §16).
   enum Size {
     /// HIG minimum hit region for interactive elements.
     static let minHitTarget: CGFloat = 44
@@ -107,6 +129,29 @@ enum DS {
     /// `ItemDetailView`'s circular per-proof gradient avatar diameter —
     /// the same artwork generator as `proofCardArtwork`, at detail scale.
     static let itemDetailArtwork: CGFloat = 190
+    /// The 1 pt rule: hairline dividers and the empty block's dashed frame.
+    static let hairline: CGFloat = 1
+    /// `Row/List` minimum height (content, excluding its top hairline).
+    static let listRowMinHeight: CGFloat = 92
+    /// `Row/KeyValue` minimum height.
+    static let keyValueRowMinHeight: CGFloat = 44
+    /// Session row minimum height.
+    static let sessionRowMinHeight: CGFloat = 48
+    /// Report row minimum height.
+    static let reportRowMinHeight: CGFloat = 60
+    /// Proof row minimum height.
+    static let proofRowMinHeight: CGFloat = 72
+    /// `Button/Primary` Size=Large minimum height. Its width is the full
+    /// content width at `Space.pageMargin`, so it has no width token.
+    static let primaryButtonMinHeight: CGFloat = 56
+    /// `Button/Primary` Size=Small minimum height (Home's Scan).
+    static let compactPrimaryButtonMinHeight: CGFloat = 52
+    /// `Button/Primary` Size=Small width (Home's Scan).
+    static let compactPrimaryButtonWidth: CGFloat = 140
+    /// Icon roundel diameter for two-line bullet rows (`BeidBulletRow`).
+    static let bulletIcon: CGFloat = 32
+    /// Numbered badge diameter for step lists (`BeidNumberedStepList`).
+    static let stepBadge: CGFloat = 28
   }
 
   // MARK: - Layout
@@ -160,6 +205,8 @@ enum DS {
     static let standard = Animation.spring(response: 0.35, dampingFraction: 1.0)
     /// Content entering the screen (e.g. event card slide-in on EventFoundView).
     static let entrance = Animation.spring(response: 0.5, dampingFraction: 0.85)
+    /// Transition between top-level screens (RootView, ScanFlowView).
+    static let screenTransition = Animation.spring(response: 0.36, dampingFraction: 0.88)
     /// The proof seal/resolve ceremony (RecordingView's one-time entrance
     /// ceremony fading into its steady state).
     static let proofResolve = Animation.spring(response: 0.6, dampingFraction: 0.8)
