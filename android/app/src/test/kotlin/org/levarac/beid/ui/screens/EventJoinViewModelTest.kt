@@ -4,6 +4,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
@@ -141,6 +142,19 @@ class EventJoinViewModelTest {
         viewModel.resumeSensing()
 
         assertTrue(session.sensingResumed)
+    }
+
+    @Test
+    fun markingRecordingCeremonyShownUpdatesObservableUiState() {
+        val session = FakeEventJoinSession()
+        val viewModel = EventJoinViewModel(session)
+
+        assertFalse(viewModel.uiState.value.recordingCeremonyShown)
+
+        viewModel.markRecordingCeremonyShown()
+
+        assertTrue(session.recordingCeremonyShown)
+        assertTrue(viewModel.uiState.value.recordingCeremonyShown)
     }
 
     @Test
