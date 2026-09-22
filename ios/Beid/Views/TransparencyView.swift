@@ -65,15 +65,13 @@ struct TransparencyView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: DS.Space.l) {
-          VStack(alignment: .leading, spacing: DS.Space.l) {
-            header
-            participationPanel
-            participationRecordPanel
-            verifiedProofPanel
-          }
-          .padding(DS.Space.pageMargin)
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+          header
+          participationPanel
+          participationRecordPanel
+          verifiedProofPanel
         }
+        .padding(DS.Space.pageMargin)
       }
     }
     .background(DS.Color.surfaceCanvas)

@@ -61,6 +61,11 @@ final class DesignTokensTests: XCTestCase {
     XCTAssertEqual(DS.Size.hairline, 1)
   }
 
+  func testEmptyBlockDashMatchesFlat2bLibrary() {
+    // `Block/Empty` dashPattern [4, 4].
+    XCTAssertEqual(DS.Size.emptyBlockDash, 4)
+  }
+
   func testRowMinimumHeightsMatchFlat2b() {
     XCTAssertEqual(DS.Size.listRowMinHeight, 92)
     XCTAssertEqual(DS.Size.keyValueRowMinHeight, 44)

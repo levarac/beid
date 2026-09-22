@@ -39,43 +39,41 @@ struct ItemDetailView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: DS.Space.l) {
-          VStack(alignment: .leading, spacing: DS.Space.l) {
-            artworkHeader
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+          artworkHeader
 
-            BeidPanel {
-              VStack(alignment: .leading, spacing: DS.Space.m) {
-                BeidMetricRow(label: "Method", verbatimValue: proof.method)
-                // "Devices", not "Peers": the number counts distinct nearby
-                // devices, and only those whose identity could be read. See
-                // beid#154 and `SensingCoordinator.devicesVerified`.
-                //
-                // Omitted entirely for a multi-session group (beid#217,
-                // spec §6.2): `proof.peersVerified` is session-scoped, and
-                // showing only the representative session's count here
-                // would carry the same false whole-event signal risk the
-                // ruling rejected for Participation summary — no
-                // fabricated event-scoped substitute exists (summing would
-                // double-count a device seen in more than one session).
-                // Each session's own count stays fully visible, correctly
-                // scoped, in the session list (§6.3) instead.
-                if groupSessions.count == 1 {
-                  BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(proof.peersVerified)")
-                }
-                statusRow
+          BeidPanel {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+              BeidMetricRow(label: "Method", verbatimValue: proof.method)
+              // "Devices", not "Peers": the number counts distinct nearby
+              // devices, and only those whose identity could be read. See
+              // beid#154 and `SensingCoordinator.devicesVerified`.
+              //
+              // Omitted entirely for a multi-session group (beid#217,
+              // spec §6.2): `proof.peersVerified` is session-scoped, and
+              // showing only the representative session's count here
+              // would carry the same false whole-event signal risk the
+              // ruling rejected for Participation summary — no
+              // fabricated event-scoped substitute exists (summing would
+              // double-count a device seen in more than one session).
+              // Each session's own count stays fully visible, correctly
+              // scoped, in the session list (§6.3) instead.
+              if groupSessions.count == 1 {
+                BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "\(proof.peersVerified)")
               }
-            }
-
-            BeidPanel {
-              transparencyRow
-            }
-
-            BeidPanel {
-              participationSummaryRow
+              statusRow
             }
           }
-          .padding(DS.Space.pageMargin)
+
+          BeidPanel {
+            transparencyRow
+          }
+
+          BeidPanel {
+            participationSummaryRow
+          }
         }
+        .padding(DS.Space.pageMargin)
       }
     }
     .background(DS.Color.surfaceCanvas)
@@ -91,7 +89,7 @@ struct ItemDetailView: View {
         .accessibilityHidden(true)
         .frame(maxWidth: .infinity)
         .padding(.vertical, DS.Space.xl)
-        .beidSurface(interactive: false, cornerRadius: DS.Radius.seal)
+        .beidSurface(cornerRadius: DS.Radius.seal)
 
       VStack(spacing: DS.Space.s) {
         Text(proof.eventName)

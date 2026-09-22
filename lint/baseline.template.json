@@ -1,42 +1,42 @@
 [
   {
-    "text": "            Spacer(minLength: 20)",
+    "text": "          Spacer(minLength: 20)",
     "violation": {
       "ruleIdentifier": "no_hardcoded_spacing",
       "location": {
         "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 34,
-        "character": 13
-      },
-      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded spacing",
-      "severity": "error"
-    }
-  },
-  {
-    "text": "            Spacer(minLength: 20)",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_spacing",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 36,
-        "character": 13
-      },
-      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
-      "ruleDescription": "",
-      "ruleName": "No hardcoded spacing",
-      "severity": "error"
-    }
-  },
-  {
-    "text": "          .padding(.bottom, 28)",
-    "violation": {
-      "ruleIdentifier": "no_hardcoded_spacing",
-      "location": {
-        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
-        "line": 41,
+        "line": 33,
         "character": 11
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "          Spacer(minLength: 20)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 35,
+        "character": 11
+      },
+      "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
+      "ruleDescription": "",
+      "ruleName": "No hardcoded spacing",
+      "severity": "error"
+    }
+  },
+  {
+    "text": "        .padding(.bottom, 28)",
+    "violation": {
+      "ruleIdentifier": "no_hardcoded_spacing",
+      "location": {
+        "file": "file://__REPO_ROOT__/ios/Beid/DesignSystem.swift",
+        "line": 40,
+        "character": 9
       },
       "reason": "Use DS.Space.* for padding/spacing (0 and 1 are allowed literals).",
       "ruleDescription": "",

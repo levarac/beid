@@ -55,7 +55,7 @@ struct DailySummaryView: View {
   @ViewBuilder
   private var recordSection: some View {
     if todaysProofs.isEmpty {
-      BeidPanel {
+      BeidEmptyBlock {
         VStack(alignment: .leading, spacing: DS.Space.s) {
           Text(
             "No proofs yet today",
@@ -78,19 +78,17 @@ struct DailySummaryView: View {
           Text(recordCountText)
             .font(DS.Font.sectionTitle)
             .foregroundStyle(DS.Color.textPrimary)
-          BeidGlassGroup(spacing: DS.Space.s) {
-            VStack(spacing: DS.Space.s) {
-              ForEach(Array(todaysProofs.enumerated()), id: \.element.id) { index, proof in
-                Button {
-                  BeidDesign.haptic()
-                  coordinator.openProof(proof)
-                } label: {
-                  recordRow(for: proof)
-                }
-                .buttonStyle(.plain)
-                if index < todaysProofs.count - 1 {
-                  Divider()
-                }
+          VStack(spacing: DS.Space.s) {
+            ForEach(Array(todaysProofs.enumerated()), id: \.element.id) { index, proof in
+              Button {
+                BeidDesign.haptic()
+                coordinator.openProof(proof)
+              } label: {
+                recordRow(for: proof)
+              }
+              .buttonStyle(.plain)
+              if index < todaysProofs.count - 1 {
+                Divider()
               }
             }
           }

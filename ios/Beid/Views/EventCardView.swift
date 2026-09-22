@@ -36,7 +36,7 @@ struct EventCardView<Caption: View>: View {
             .foregroundStyle(.tint)
             .symbolRenderingMode(.hierarchical)
             .frame(width: DS.Size.bulletIcon, height: DS.Size.bulletIcon)
-            .beidSurface(cornerRadius: DS.Radius.control, fallback: .thinMaterial)
+            .beidSurface(cornerRadius: DS.Radius.control)
             .accessibilityHidden(true)
 
           VStack(alignment: .leading, spacing: DS.Space.xs) {

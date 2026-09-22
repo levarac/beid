@@ -29,17 +29,15 @@ struct BeidScreen<Content: View, Footer: View>: View {
         .ignoresSafeArea()
 
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: DS.Space.l) {
-          VStack(spacing: DS.Space.l) {
-            Spacer(minLength: 20)
-            content
-            Spacer(minLength: 20)
-            footer
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .padding(.horizontal, DS.Space.pageMargin)
-          .padding(.bottom, 28)
+        VStack(spacing: DS.Space.l) {
+          Spacer(minLength: 20)
+          content
+          Spacer(minLength: 20)
+          footer
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, DS.Space.pageMargin)
+        .padding(.bottom, 28)
       }
     }
   }
@@ -115,7 +113,7 @@ struct BeidGlyph: View {
       }
     }
     .frame(width: size, height: size)
-    .beidSurface(cornerRadius: DS.Radius.glyph, fallback: .thinMaterial)
+    .beidSurface(cornerRadius: DS.Radius.glyph)
     .accessibilityHidden(true)
   }
 }
@@ -139,17 +137,10 @@ struct BeidPrimaryButton: View {
   }
 
   var body: some View {
-    Group {
-      if #available(iOS 26.0, *) {
-        Button(action: performAction, label: label)
-          .buttonStyle(.glassProminent)
-      } else {
-        Button(action: performAction, label: label)
-          .buttonStyle(.borderedProminent)
-          .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
-      }
-    }
-    .controlSize(.large)
+    Button(action: performAction, label: label)
+      .buttonStyle(.borderedProminent)
+      .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
+      .controlSize(.large)
   }
 
   private func label() -> some View {
@@ -180,14 +171,9 @@ struct BeidSecondaryButton: View {
   let action: () -> Void
 
   var body: some View {
-    if #available(iOS 26.0, *) {
-      Button(action: performAction, label: label)
-        .buttonStyle(.glass)
-    } else {
-      Button(action: performAction, label: label)
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
-    }
+    Button(action: performAction, label: label)
+      .buttonStyle(.bordered)
+      .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
   }
 
   private func label() -> some View {
@@ -217,7 +203,7 @@ struct BeidBulletRow: View {
         .foregroundStyle(.tint)
         .symbolRenderingMode(.hierarchical)
         .frame(width: DS.Size.bulletIcon, height: DS.Size.bulletIcon)
-        .beidSurface(cornerRadius: DS.Radius.control, fallback: .thinMaterial)
+        .beidSurface(cornerRadius: DS.Radius.control)
         .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -413,53 +399,60 @@ struct BeidMetricRow: View {
   }
 }
 
-/// Groups nearby Liquid Glass surfaces so iOS 26 can blend and morph them
-/// as one material instead of compositing each independently — see
-/// DESIGN.md §8 "Materials". Below iOS 26 there is no glass to group, so
-/// this is a plain passthrough. Wrap any cluster of `beidSurface`-backed
-/// views that sit visually close together on one screen (a glyph, a panel,
-/// a footer button); do not wrap views that are far apart or on different
-/// screens — that defeats the container's purpose.
-struct BeidGlassGroup<Content: View>: View {
-  var spacing: CGFloat = DS.Space.m
-  @ViewBuilder let content: () -> Content
+/// The empty state's dashed 1 pt frame — the repository home of the Figma
+/// Library component `Block/Empty` (file xf2uFHceIYg0h0gJndUkmI, node
+/// 190:53; DESIGN.md §8): a `line-dashed` inside stroke with a 4/4 dash,
+/// radius 16, 24 pt horizontal and 40 pt vertical padding, no fill, content
+/// centered. This is the frame only: the block's 10 pt title/body gap and its
+/// mono title belong to the content the caller passes in (#635).
+struct BeidEmptyBlock<Content: View>: View {
+  let content: Content
+
+  init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
 
   var body: some View {
-    if #available(iOS 26.0, *) {
-      GlassEffectContainer(spacing: spacing) {
-        content()
+    content
+      .padding(.horizontal, DS.Space.l)
+      .padding(.vertical, DS.Space.emptyBlockVertical)
+      .frame(maxWidth: .infinity)
+      .overlay {
+        RoundedRectangle(cornerRadius: DS.Radius.emptyBlock, style: .continuous)
+          .strokeBorder(
+            DS.Color.strokeEmptyState,
+            style: StrokeStyle(lineWidth: DS.Size.hairline, dash: [DS.Size.emptyBlockDash, DS.Size.emptyBlockDash])
+          )
       }
-    } else {
-      content()
-    }
   }
 }
 
 extension View {
-  /// The one sanctioned way to give a view a physical surface: Liquid
-  /// Glass on iOS 26+, a system material + hairline stroke below it. This
-  /// modifier owns the entire surface fill — MUST NOT be paired with a
-  /// separate `.background(material:)`/`.background(color:)` call, which
-  /// would stack a second material or color directly underneath the glass
-  /// (DESIGN.md §8: no glass-on-glass nesting).
-  @ViewBuilder
-  func beidSurface(
-    interactive: Bool = false,
-    cornerRadius: CGFloat,
-    fallback: Material = .regularMaterial
-  ) -> some View {
-    if #available(iOS 26.0, *) {
-      self.glassEffect(
-        interactive ? .regular.interactive() : .regular,
-        in: .rect(cornerRadius: cornerRadius)
-      )
-    } else {
-      self
-        .background(fallback, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .overlay {
-          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .strokeBorder(DS.Color.strokeHairline, lineWidth: 1)
-        }
-    }
+  /// The one sanctioned way to give a view a surface under Flat 2b: the
+  /// `bg` fill plus a 1 pt `line` hairline border (DESIGN.md §8 — no glass,
+  /// no materials, no blur). This modifier owns the entire surface fill —
+  /// MUST NOT be paired with a separate `.background(...)` call, which would
+  /// stack a second fill directly underneath it.
+  func beidSurface(cornerRadius: CGFloat) -> some View {
+    self
+      .background(DS.Color.surfaceCanvas, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+      .overlay {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+          .strokeBorder(DS.Color.strokeHairline, lineWidth: DS.Size.hairline)
+      }
+  }
+
+  /// The opaque bar behind a bottom `safeAreaInset` under Flat 2b: the `bg`
+  /// fill, reaching under the home indicator like the system bar style did,
+  /// with a 1 pt `line` rule on its top edge (DESIGN.md §8: hairlines sit on
+  /// the top edge).
+  func beidBottomBar() -> some View {
+    self
+      .background(DS.Color.surfaceCanvas)
+      .overlay(alignment: .top) {
+        Rectangle()
+          .fill(DS.Color.strokeHairline)
+          .frame(height: DS.Size.hairline)
+      }
   }
 }
