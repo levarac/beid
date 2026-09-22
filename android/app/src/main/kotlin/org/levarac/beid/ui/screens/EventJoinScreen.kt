@@ -126,6 +126,10 @@ private fun EventJoinFieldError.message(): String = when (this) {
  * [EventJoinViewModel.uiState] and forwards user actions back to it. The
  * rendering itself belongs to [EventJoinContent], the one renderer this
  * production path and the read-only scenario/preview path share (beid#363).
+ *
+ * [showSimulateSignalLost] defaults to `BuildConfig.DEBUG`, so the
+ * Recording screen's test-only signal-loss trigger is absent from release
+ * builds (beid#651); the renderers below it default to `false`.
  */
 @Composable
 fun EventJoinScreen(
@@ -133,6 +137,7 @@ fun EventJoinScreen(
     onOpenAccount: () -> Unit,
     onOpenManualEventCode: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
+    showSimulateSignalLost: Boolean = BuildConfig.DEBUG,
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -148,6 +153,7 @@ fun EventJoinScreen(
         onRetryClockPreflight = viewModel::retryClockPreflight,
         showEntranceCeremony = !uiState.recordingCeremonyShown,
         onCeremonyFinished = viewModel::markRecordingCeremonyShown,
+        showSimulateSignalLost = showSimulateSignalLost,
     )
 }
 
@@ -199,6 +205,7 @@ fun EventJoinContent(
     onRetryClockPreflight: () -> Unit = {},
     showEntranceCeremony: Boolean = false,
     onCeremonyFinished: () -> Unit = {},
+    showSimulateSignalLost: Boolean = false,
 ) {
     Scaffold(
         containerColor = BeidTheme.colors.surfaceCanvas,
@@ -234,6 +241,7 @@ fun EventJoinContent(
                     phase = sessionState.phase,
                     showEntranceCeremony = showEntranceCeremony,
                     onCeremonyFinished = onCeremonyFinished,
+                    showSimulateSignalLost = showSimulateSignalLost,
                     onSimulateSignalLost = onSimulateSignalLost,
                     onResumeSensing = onResumeSensing,
                     onStartWalletBinding = onStartWalletBinding,

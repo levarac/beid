@@ -126,6 +126,24 @@ class ScanFlowScreensTest {
     }
 
     @Test
+    fun recordingScreenOmitsSimulateSignalLostButtonByDefault() {
+        composeTestRule.setContent {
+            BeidAppTheme {
+                RecordingScreen(
+                    session = session,
+                    peersVerified = 1,
+                    showEntranceCeremony = false,
+                    onCeremonyFinished = {},
+                    onSimulateSignalLost = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON).assertDoesNotExist()
+    }
+
+    @Test
     fun recordingScreenSimulateSignalLostButtonInvokesCallback() {
         var simulated = false
         composeTestRule.setContent {
@@ -135,6 +153,7 @@ class ScanFlowScreensTest {
                     peersVerified = 1,
                     showEntranceCeremony = false,
                     onCeremonyFinished = {},
+                    showSimulateSignalLost = true,
                     onSimulateSignalLost = { simulated = true },
                 )
             }
