@@ -18,5 +18,20 @@ sealed class EventBindingState {
     data object Connecting : EventBindingState()
     data object AwaitingApproval : EventBindingState()
     data class Bound(val record: BindingRecord) : EventBindingState()
-    data class Failed(val reason: String) : EventBindingState()
+    data class Failed(val failure: WalletBindingFailure) : EventBindingState()
+}
+
+/** User-actionable failure categories kept in parity with iOS. */
+enum class WalletBindingFailure(val retryable: Boolean) {
+    Declined(true),
+    NotConnected(true),
+    TimedOut(true),
+    VerificationFailed(true),
+    SmartWalletUnsupported(false),
+}
+
+sealed class BindingCompletionResult {
+    data class Bound(val record: BindingRecord) : BindingCompletionResult()
+    data object SmartWalletUnsupported : BindingCompletionResult()
+    data object NotVerified : BindingCompletionResult()
 }

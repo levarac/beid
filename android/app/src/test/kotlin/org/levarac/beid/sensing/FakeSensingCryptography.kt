@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import java.io.File
+import org.levarac.barnard.WalletSignatureClassification
 
 /**
  * Fast test double for coordinator behavior tests that do not own
@@ -29,6 +30,7 @@ internal open class FakeSensingCryptography(
         v = 0,
     ),
     private val buildAccountBindingTextResult: ((String, ByteArray, ByteArray, Long, ByteArray, String) -> String?)? = null,
+    private val walletSignatureClassification: WalletSignatureClassification? = null,
 ) : SensingCryptography {
     sealed class Call {
         data class EventSigningPublicKey(val eventCode: String) : Call()
@@ -52,6 +54,13 @@ internal open class FakeSensingCryptography(
     }
 
     val calls = mutableListOf<Call>()
+
+    override fun classifyWalletSignature(walletSignature: ByteArray): WalletSignatureClassification =
+        walletSignatureClassification ?: if (walletSignature.size == 65) {
+            WalletSignatureClassification.VALID_EOA_SHAPE
+        } else {
+            WalletSignatureClassification.INVALID
+        }
 
     override fun eventSigningPublicKey(eventCode: String): ByteArray {
         calls += Call.EventSigningPublicKey(eventCode)

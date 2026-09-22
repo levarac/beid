@@ -294,8 +294,11 @@ class EventJoinCoordinator internal constructor(
     private var activeProofId: UUID? = null
 
     /** Wallet connect+binding lifecycle for the currently recording event — see [EventBindingState]. */
-    var bindingState: EventBindingState = EventBindingState.None
-        private set
+    private val _bindingState = MutableStateFlow<EventBindingState>(EventBindingState.None)
+    val bindingStateFlow: StateFlow<EventBindingState> = _bindingState.asStateFlow()
+    var bindingState: EventBindingState
+        get() = _bindingState.value
+        private set(value) { _bindingState.value = value }
 
     /** Fixed once per binding attempt and reused across the wallet signature and the later owner-key wallet-ack — see [beginBinding]. */
     private var pendingBindingMessage: BindingMessage? = null
@@ -1085,30 +1088,39 @@ class EventJoinCoordinator internal constructor(
      * Completes the round trip: has the owner key countersign a
      * `barnard-wallet-ack:v1` message referencing the wallet's own
      * signature bytes, builds and persists the [BindingRecord], and moves
-     * to [EventBindingState.Bound]. `null` (no state change) if there is no
-     * in-flight attempt to complete, or `walletSignatureHex` isn't valid
-     * hex.
+     * to [EventBindingState.Bound]. Returns a classified result without a
+     * state change when the attempt cannot be verified.
      */
-    fun completeBinding(walletAddress: String, walletSignatureHex: String): BindingRecord? {
-        val message = pendingBindingMessage ?: return null
-        val proofId = activeProofId ?: return null
-        val event = currentRecordingSession() ?: return null
-        val walletAddressBytes = walletAddress.hexToByteArrayOrNull() ?: return null
-        if (!message.walletAddress.contentEquals(walletAddressBytes)) return null
-        val walletSignatureBytes = walletSignatureHex.hexToByteArrayOrNull() ?: return null
-        if (walletSignatureBytes.size != 65) return null
-        val persistedAddress = walletAddress.hexToByteArrayOrNull() ?: return null
-        if (!persistedAddress.contentEquals(message.walletAddress)) return null
+    fun completeBinding(walletAddress: String, walletSignatureHex: String): BindingCompletionResult {
+        val message = pendingBindingMessage ?: return BindingCompletionResult.NotVerified
+        val proofId = activeProofId ?: return BindingCompletionResult.NotVerified
+        val event = currentRecordingSession() ?: return BindingCompletionResult.NotVerified
+        val walletAddressBytes = walletAddress.hexToByteArrayOrNull() ?: return BindingCompletionResult.NotVerified
+        if (!message.walletAddress.contentEquals(walletAddressBytes)) return BindingCompletionResult.NotVerified
+        val walletSignatureBytes = walletSignatureHex.hexToByteArrayOrNull() ?: return BindingCompletionResult.NotVerified
+        when (sensingCryptography.classifyWalletSignature(walletSignatureBytes)) {
+            org.levarac.barnard.WalletSignatureClassification.SMART_WALLET_UNSUPPORTED ->
+                return BindingCompletionResult.SmartWalletUnsupported
+            org.levarac.barnard.WalletSignatureClassification.INVALID -> return BindingCompletionResult.NotVerified
+            org.levarac.barnard.WalletSignatureClassification.VALID_EOA_SHAPE -> Unit
+        }
+        val persistedAddress = walletAddress.hexToByteArrayOrNull() ?: return BindingCompletionResult.NotVerified
+        if (!persistedAddress.contentEquals(message.walletAddress)) return BindingCompletionResult.NotVerified
         val ackSignature = sensingCryptography.signWalletAcknowledgement(message.walletAddress, walletSignatureBytes)
-            ?: return null
+            ?: return BindingCompletionResult.NotVerified
         val verification = sensingCryptography.verifyWalletBinding(
-            text = message.canonicalText(sensingCryptography) ?: return null,
+            text = message.canonicalText(sensingCryptography) ?: return BindingCompletionResult.NotVerified,
             walletSignature = walletSignatureBytes,
             walletAddress = message.walletAddress,
             ownerPublicKey = message.ownerPublicKey,
             acknowledgement = ackSignature,
         )
-        if (verification != org.levarac.barnard.WalletBindingVerification.VALID) return null
+        when (verification) {
+            org.levarac.barnard.WalletBindingVerification.SMART_WALLET_UNSUPPORTED ->
+                return BindingCompletionResult.SmartWalletUnsupported
+            org.levarac.barnard.WalletBindingVerification.INVALID -> return BindingCompletionResult.NotVerified
+            org.levarac.barnard.WalletBindingVerification.VALID -> Unit
+        }
 
         val record = BindingRecord(
             proofId = proofId,
@@ -1126,13 +1138,18 @@ class EventJoinCoordinator internal constructor(
         onProofSignatureStateChanged?.invoke(proofId, selfProofRecordStore.recordForProofId(proofId) != null, true)
         bindingState = EventBindingState.Bound(record)
         pendingBindingMessage = null
-        return record
+        return BindingCompletionResult.Bound(record)
     }
 
     /** The wallet declined, or a transport/timeout error occurred. Distinct from [declineBinding]: this is the round trip failing, not the user dismissing the attempt before starting one. */
-    fun failBinding(reason: String) {
+    fun failBinding(failure: WalletBindingFailure) {
         pendingBindingMessage = null
-        bindingState = EventBindingState.Failed(reason)
+        bindingState = EventBindingState.Failed(failure)
+    }
+
+    /** Foreground trigger reuses the process-owned runtime and therefore its single-flight drain. */
+    fun drainPendingSubmissionsOnForeground() {
+        windowObservationRuntime?.drainPendingSubmissions()
     }
 
     /**

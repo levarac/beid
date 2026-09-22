@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="wallet_error_title">Couldn’t seal attendance</string>
+    <string name="wallet_error_declined">Declined in wallet</string>
+    <string name="wallet_error_not_connected">Wallet not connected</string>
+    <string name="wallet_error_timed_out">Wallet did not respond in time</string>
+    <string name="wallet_error_verification_failed">Couldn’t verify this wallet</string>
+    <string name="wallet_error_smart_wallet_unsupported">This wallet type isn’t supported yet</string>
+    <string name="wallet_error_try_again">Try Again</string>
+    <string name="wallet_error_close">Close</string>
+</resources>
