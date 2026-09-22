@@ -864,11 +864,48 @@ Flat 2b rules:
 
 - MUST: Every Flat 2b style is defined in `DS.Font` with
   `Font.custom(_:size:relativeTo:)`, so the base size scales with a text
-  style. #629 picks the text style for each role. `Font.custom` stays
-  inside `DesignSystem/` (§2 rule 2).
-- MUST: Mono labels are uppercase (spec §3.2). Whether buttons are too is
-  open — §15, #24, Open item 1 (D-627).
-- Tabular figures: the scope is decided in #629.
+  style. `Font.custom` stays inside `DesignSystem/` (§2 rule 2). That
+  constraint governs app code; the test target may construct a comparison
+  font, which is how #629 asserts that a Display style stays on a flatter
+  curve than `.body` (it is the only way to build the same face on a
+  different curve).
+- **Text styles (#629, 2026-09-23).** Each style takes the Apple text
+  style whose *default* size is nearest its base size, so the Dynamic Type
+  multiplier starts near 1: Title/19 → `.title3`, 17 → `.headline`, 16 →
+  `.callout`, 15 → `.subheadline`; Body/15 → `.subheadline`, 13 →
+  `.footnote`; Label/Mono 13 value → `.footnote`, and Mono 11, 11 time, 10,
+  10 tight and 9 → `.caption2`. **Every Display style is the exception: all
+  five take `.largeTitle`**, the flattest accessibility curve available.
+
+  What `UIFontMetrics.scaledValue` actually does (measured on iOS 26.5, and
+  *not* what an earlier draft of this bullet claimed): for a given (text
+  style, content size category) it applies a **single constant multiplier**
+  to any base size, quantised to 1/3 pt. That multiplier is **not** the
+  ratio of the text style's own preferred sizes — `.largeTitle`'s own size
+  goes 34 → 52 at AX3, a ratio of 1.53, while the multiplier it scales by
+  is about 1.49. Measured at AX3: `.largeTitle` about 1.49, `.body` about
+  2.18, `.caption2` about 2.69. The multiplier falls as the text style's
+  own size rises, which is why `.largeTitle`, the largest text style, is
+  the flattest curve available. (Only those three styles were measured;
+  the trend is stated, not measured, for the rest of the ramp.)
+
+  Consequence, measured on iOS 26.5: Display/60 reaches **89.33 pt at AX3**
+  and **102.33 pt at AX5**. The same 60 pt on `.body`'s curve would reach
+  **131.0 pt at AX3** and **169.0 pt at AX5**, which the AX3 MUST below
+  would not survive.
+- MUST: Mono labels are uppercase (spec §3.2). In code this is the three
+  *label* styles only — Mono 11, 10 and 9. The three *value* styles (Mono
+  13 value, 11 time, 10 tight) are deliberately not uppercased: they carry
+  addresses, times and IDs, and an EIP-55 address encodes its checksum in
+  the letter case of its hex digits, so uppercasing one is a correctness
+  bug, not a style choice (#629). Whether buttons are uppercase is still
+  open — §15, #24, Open item 1 (D-627); #629 uppercases no string that
+  exists today, so #24 is untouched.
+- **Tabular figures (#629, 2026-09-23):** `Display/Number 40` only. Those
+  are the digits that change while someone is watching them, and
+  proportional digits make the figure jitter sideways as it counts. DM Mono
+  needs no such setting — it is already monospaced — and no other style
+  displays a live number.
 - **Language (owner decision 2026-09-22, settled item B in D-627):** the
   UI is English-only, so the three families having no Japanese glyphs is
   not a gap. This matches the existing locale policy — target locales are
@@ -889,22 +926,109 @@ Flat 2b rules:
 > `PROPOSAL — Ken ratification pending` (ramp choice: system SF Pro + SF Mono
 > for ledger traces; no custom brand font in this phase)
 
-Current code (migration debt until #629 — the table describes today's
-`DS.Font`, not the Flat 2b target):
+Current code (2026-09-23, #629 landed — `DS.Font` is two tiers, the same
+shape #628 gave `DS.Color`; §4). Tier 1 is `DS.Font.Library`: 17
+`DS.Font.Style` constants, one per ramp row above, named after the Library
+because only `DS.Font` reads them. Tier 2 is the eight role tokens Views
+use. `DS.Font.Style` carries the face's PostScript name, the base size, the
+text style, tracking, line height, case and tabular digits.
 
-Ramp (all Dynamic Type text styles, defined in `DS.Font`):
+Tier 1 — `DS.Font.Library` (base size and text style; families, tracking
+and line heights are the ramp table above):
 
-| Token | Style | Role | Constraint |
+| Library style | `DS.Font.Library` | Base size | Text style |
 | --- | --- | --- | --- |
-| `DS.Font.screenTitle` | `.largeTitle` bold | Screen title | Max one per screen |
-| `DS.Font.ceremonyTitle` | `.title` bold | "Proof Collected" entrance in `RecordingView` | Ceremony moments only |
-| `DS.Font.sectionTitle` | `.title3` semibold | State/section titles | |
-| `DS.Font.cardTitle` | `.subheadline` semibold | Card titles | `lineLimit(1)` + truncation on cards |
-| `DS.Font.body` | `.body` | Body copy | |
-| `DS.Font.supporting` | `.subheadline` | Supporting copy | Pair with `textSecondary` |
-| `DS.Font.meta` | `.caption` | Dates, counts | |
-| `DS.Font.ledgerMono` | `.footnote` monospaced | Addresses, hashes, proof IDs | Ledger Trace motif only |
-| `DS.Font.cta` | `.headline` | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
+| Display/60 | `display60` | 60 | `.largeTitle` |
+| Display/52 | `display52` | 52 | `.largeTitle` |
+| Display/46 | `display46` | 46 | `.largeTitle` |
+| Display/Number 40 | `displayNumber40` | 40 | `.largeTitle` (tabular digits) |
+| Display/Address 34 | `displayAddress34` | 34 | `.largeTitle` |
+| Title/19 | `title19` | 19 | `.title3` |
+| Title/17 | `title17` | 17 | `.headline` |
+| Title/16 | `title16` | 16 | `.callout` |
+| Title/15 | `title15` | 15 | `.subheadline` |
+| Body/15 | `body15` | 15 | `.subheadline` |
+| Body/13 | `body13` | 13 | `.footnote` |
+| Label/Mono 11 | `labelMono11` | 11 | `.caption2` (uppercase) |
+| Label/Mono 10 | `labelMono10` | 10 | `.caption2` (uppercase) |
+| Label/Mono 9 | `labelMono9` | 9 | `.caption2` (uppercase) |
+| Label/Mono 10 tight | `labelMono10Tight` | 10 | `.caption2` |
+| Label/Mono 11 time | `labelMono11Time` | 11 | `.caption2` |
+| Label/Mono 13 value | `labelMono13Value` | 13 | `.footnote` |
+
+Tier 2 — the roles Views use. Names and call sites are unchanged from the
+superseded SF Pro ramp; #629 re-pointed them, so no View changed:
+
+| Token | Library style | Role | Constraint |
+| --- | --- | --- | --- |
+| `DS.Font.screenTitle` | `display46` | Screen title | Max one per screen |
+| `DS.Font.sectionTitle` | `title19` | State/section titles | |
+| `DS.Font.cardTitle` | `title17` (the Library's `Row/List` title) | Card and row titles | `lineLimit(1)` + truncation on cards |
+| `DS.Font.body` | `body15` | Body copy | |
+| `DS.Font.supporting` | `body13` | Supporting copy | Pair with `textSecondary` |
+| `DS.Font.meta` | `body13` | Dates, counts, fine print | Deliberately not a mono label style — see below |
+| `DS.Font.ledgerMono` | `labelMono13Value` | Addresses, hashes, proof IDs | Ledger Trace motif only; never uppercased |
+| `DS.Font.cta` | `title16` (the Library's `Button/Primary` label) | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
+
+`meta` is `Body/13`, not a mono label style, on purpose: the Library's mono
+labels are uppercase, and `meta`'s 44 call sites carry sentence-case copy
+that #629 does not re-author. A mono meta role belongs with the screen
+issues.
+
+**TRANSITIONAL GAP (#629, 2026-09-23).** A role token is a
+`SwiftUI.Font`, so a plain `.font(DS.Font.body)` call site — which is every
+call site today — gets **family, size, Dynamic Type and tabular figures,
+and none of tracking, line height or case**. Those three reach a view only
+through `beidTextStyle(_:)`, the full-style modifier in `Tokens.swift`,
+which the screen issues adopt. Concretely: `screenTitle`'s −1.5% tracking
+and Body's 140% line height are **not** applied at today's call sites, and
+no mono label is uppercased today because no role points at one. This is a
+known, named gap, not a claim that the ramp is fully wired.
+
+**Display 100% line-height gap (#629, 2026-09-23).** Display/60 · 52 · 46
+ask for a 100% line height, but Bricolage Grotesque's own line height is
+1.2 em (hhea 930/−270 over 1000 upem), so 100% needs *negative* extra
+spacing. SwiftUI's only line-height control on this deployment target
+(iOS 17) is `View.lineSpacing(_:)`, which writes
+`EnvironmentValues.lineSpacing` and is additive; UIKit documents the
+underlying `NSParagraphStyle.lineSpacing` as "always nonnegative"
+(`NSParagraphStyle.h`, iPhoneSimulator27.0 SDK). A real line-height API
+exists — `View.lineHeight(_:)` taking `AttributedString.LineHeight`, in
+`SwiftUICore.swiftinterface` — but it is `@available(iOS 26.0, *)`, above
+the iOS 17 deployment target. So the Library value stays 1.0 in
+`DS.Font.Library` (it is the Library's value) and
+`DS.Font.Style.lineSpacing(atPointSize:)` clamps at 0: **a line height
+below the face's own is not applied, and Display renders at Bricolage's
+1.2 em.** Nothing is faked and §6's table is not rewritten to match what
+SwiftUI can do. Closing it needs either an owner decision to raise the
+deployment target or an OS-version-conditional path; neither is taken here.
+Tracked as **#661**, which owns that choice — not #629.
+
+> **Superseded by #629 (2026-09-23).** The table below described the SF Pro
+> ramp that `DS.Font` carried until #629 replaced it, and is kept for
+> provenance only. Every role above kept its name; the *values* changed
+> from `Font.system(...)` to bundled `Font.custom(...)` Library styles, and
+> `DS.Font.ceremonyTitle` was **removed**: it had no Swift call site
+> (`git grep -w ceremonyTitle` found only documentation), and a role with
+> no caller is a guess about a screen nobody has built. #637 may add one.
+> Previously (verbatim):
+>
+> Current code (migration debt until #629 — the table describes today's
+> `DS.Font`, not the Flat 2b target):
+>
+> Ramp (all Dynamic Type text styles, defined in `DS.Font`):
+>
+> | Token | Style | Role | Constraint |
+> | --- | --- | --- | --- |
+> | `DS.Font.screenTitle` | `.largeTitle` bold | Screen title | Max one per screen |
+> | `DS.Font.ceremonyTitle` | `.title` bold | "Proof Collected" entrance in `RecordingView` | Ceremony moments only |
+> | `DS.Font.sectionTitle` | `.title3` semibold | State/section titles | |
+> | `DS.Font.cardTitle` | `.subheadline` semibold | Card titles | `lineLimit(1)` + truncation on cards |
+> | `DS.Font.body` | `.body` | Body copy | |
+> | `DS.Font.supporting` | `.subheadline` | Supporting copy | Pair with `textSecondary` |
+> | `DS.Font.meta` | `.caption` | Dates, counts | |
+> | `DS.Font.ledgerMono` | `.footnote` monospaced | Addresses, hashes, proof IDs | Ledger Trace motif only |
+> | `DS.Font.cta` | `.headline` | Primary CTA labels | Label color per §5's CTA-label rule (never the style default white) |
 
 **Android counterpart** (verified `ui/theme/Type.kt`, `BeidTypography`):
 `screenTitle` → `headlineLarge`, `ceremonyTitle` → `headlineMedium`,
@@ -913,7 +1037,11 @@ Ramp (all Dynamic Type text styles, defined in `DS.Font`):
 `ledgerMono` → `bodySmall` (monospace `FontFamily`), `cta` → `labelLarge`.
 Reached as `MaterialTheme.typography.*`, the same way `DS.Font.*` is
 reached on iOS. This mapping already exists in the codebase's own kdoc —
-this document did not have to invent it.
+this document did not have to invent it. *(#629, 2026-09-23: the iOS side
+of the `ceremonyTitle` → `headlineMedium` pair no longer exists — the role
+was removed as callerless. Android's `Type.kt` is unchanged and still
+names it; Android is out of #629's scope, and its Flat 2b follow-up is
+still unscheduled.)*
 
 Rules:
 
@@ -1586,8 +1714,9 @@ Real components in this codebase. Each entry is the contract for reuse.
   Used by `WelcomeView`, `BluetoothPermissionView`, `BluetoothOffView`,
   and `SignalLostView`.
 - Required tokens: `DS.Space.l` stack spacing, `DS.Space.pageMargin`
-  margins, `DS.Font.sectionTitle`/`ceremonyTitle` + `DS.Font.supporting`,
-  bottom CTA with `DS.Font.cta`. **[Android counterpart, verified in
+  margins, `DS.Font.sectionTitle` + `DS.Font.supporting`, bottom CTA with
+  `DS.Font.cta`. (#629 removed `DS.Font.ceremonyTitle`, which this slot
+  also named; it had no call site — §6.) **[Android counterpart, verified in
   `BeidStateScreen.kt`/`BeidScreen.kt`: `BeidSpacing.l` stack spacing,
   `BeidSpacing.pageMargin` margins, `MaterialTheme.typography.titleLarge`/
   `headlineMedium` + `.bodyLarge`, footer CTA with `.labelLarge`.]**
@@ -2464,9 +2593,10 @@ to.]**
 > **Migration debt (2026-09-22, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** This table describes
 > today's `Tokens.swift`. #628's part is done (2026-09-23): the colors,
-> space, radius and size rows below are the Flat 2b tokens. #629 (fonts)
-> and #633 (artwork) remain, so `DS.Font` and `DS.Artwork` are still the
-> pre-Flat 2b values (§6, §5).
+> space, radius and size rows below are the Flat 2b tokens. #629's is done
+> too (2026-09-23): `DS.Font` is the bundled Flat 2b ramp (§6, including
+> its two named gaps). #633 (artwork) remains, so `DS.Artwork` is still the
+> pre-Flat 2b value (§5).
 
 | Token | Swift | Value | Role |
 | --- | --- | --- | --- |
@@ -2515,11 +2645,15 @@ to.]**
 | `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center glyph (`SensingView`) |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
-| `type.section.title` | `DS.Font.sectionTitle` | title3 semibold | State titles |
+| `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |
+| `type.section.title` | `DS.Font.sectionTitle` | `Library.title19` — DM Sans Bold 19 / `.title3` | State and section titles |
+| `type.ledger.mono` | `DS.Font.ledgerMono` | `Library.labelMono13Value` — DM Mono Medium 13 / `.footnote` | Addresses, hashes, proof IDs |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
 | `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/0.88 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
 
-(Full set: 17 color tokens, 8 space, 7 radius, 18 size, 4 layout, 9 font,
+(Full set: 17 color tokens, 8 space, 7 radius, 18 size, 4 layout, 8 font
+roles over 17 `DS.Font.Library` styles (§6; #629 removed `ceremonyTitle`,
+which had no call site, taking the roles from 9 to 8),
 7 motion, plus 1 artwork generator — see
 `ios/Beid/DesignSystem/Tokens.swift`. Hex values are the primitive
 colorset's Library variable (§4, §5); illustrative only, §0. The
@@ -2636,6 +2770,7 @@ inventory evidence. Naming remains governed by §12.
 | 2026-09-22 | Settled by the owner (relayed by the PM): (A) "Verified" only after third-party verification — #144/#240 stance stands, Flat 2b's VERIFIED strings not authorized (#636/#637/#638); (B) English-only UI, consistent with the 2026-08-21 `en`-only locale policy, String Catalog MUST unchanged; (C) SHARE is not built — the 2026-07-28 rejection stands (#631/#638) | Adopted — owner decision 2026-09-22 |
 | 2026-09-23 | **Flat 2b tokens landed** (beid#628): `DS.Color` is 17 tokens named by role over 13 single-appearance primitive colorsets named after the Library variables (§4, §5); several roles may share a primitive. Of the 8 old tokens with no Flat 2b counterpart, `signalActive`, `signalWarning`, `proofSeal`, `statusCaution`, `labelOnWarning` and `labelOnSeal` were removed (tints → `actionPrimary`; text and icons → `textPrimary`; dots → `statusOn`/`statusPending`/`statusOff`), and `statusOn`/`statusOff` were mapped to `semantic/green`/`semantic/red`; `surfaceRaised` was also removed (→ `surfaceCanvas`). `Button/Primary` tone pairs: `actionPrimary`/`labelOnActionPrimary` (Tone=Primary) and `actionInverse`/`labelOnActionInverse` (Tone=Inverse). `DS.Space.pageMargin` 32 → 24, new `emptyBlockVertical`, `DS.Radius.glyph`/`emptyBlock`/`nowCard`, new row/button minimum sizes and `DS.Motion.screenTransition`. `BeidDesign`'s duplicate scales folded into `DS` (content spacing 14 → 16, card radius 18 → 16, control radius 14 → 12); only `haptic(_:)` remains in `BeidDesign` | Adopted — token naming delegated to #628 by D-627 |
 | 2026-09-23 | **Flat 2b surfaces landed** (beid#630): `beidSurface` is a `surfaceCanvas` fill plus a 1px `strokeHairline` border (glass path, `Material` fallback and its `interactive:`/`fallback:` parameters removed); `BeidGlassGroup` and its 7 wrappers deleted; the glass button styles replaced (`BeidPrimaryButton` `.borderedProminent`, `BeidSecondaryButton` `.bordered`, both a `DS.Radius.control` rounded rectangle; Home's icon Scan button a `.borderedProminent` circle); all 5 `#available(iOS 26, *)` branches removed (deployment target still iOS 17); the scan-flow cover's `.regularMaterial` and the Home/Sensing insets' `.background(.bar)` → opaque `surfaceCanvas` (insets with a top `strokeHairline` rule); new `BeidEmptyBlock` (`Block/Empty`, `DS.Size.emptyBlockDash` 4 from the 2026-09-23 Figma read) replaces `BeidPanel` at the 04b and empty-day states; new lint rule `no_glass_or_material` (six custom rules). Open gaps named, not fixed: the primary button is not yet a pill (`Button/Primary` unassigned), and `.bordered` is a system tint fill, not `bg` + `line`. The Account sheet's background is `surfaceCanvas` as an interim value replacing the OS-default sheet glass; #642 takes it to `ink`. Left as is: the OS-drawn toolbar/navigation-bar glass (#631), `EventCardView`'s `.tint.opacity` badge, `DS.Artwork.proofCardGradient` (#633) | Adopted — implements the 2026-09-22 §8/§8a decision |
+| 2026-09-23 | **Flat 2b type ramp landed** (beid#629): the three OFL families (Bricolage Grotesque ExtraBold, DM Sans Bold/Regular, DM Mono Medium) are bundled, and `DS.Font` becomes two tiers — `DS.Font.Library`, the 17 Library text styles as `DS.Font.Style` values, and the 8 role tokens Views use, re-pointed onto them with no call site changed (§6). `ceremonyTitle` removed (no Swift call site). Text styles: nearest-default-size per style, `.largeTitle` for all five Display styles — `UIFontMetrics` applies one constant multiplier per (text style, content size category), quantised to 1/3 pt, and that multiplier is not the style's own size ratio; measured at AX3 on iOS 26.5, `.largeTitle` is about 1.49 against `.body`'s 2.18 and `.caption2`'s 2.69, so Display/60 reaches 89.33 pt at AX3 and 102.33 pt at AX5, versus 131.0 pt and 169.0 pt on `.body`'s curve. Uppercase: the three mono *label* styles only — the mono *value* styles stay mixed-case because EIP-55 addresses carry their checksum in letter case. Tabular figures: `Display/Number 40` only. `beidTextStyle(_:)` in `Tokens.swift` applies a whole style (tracking and line height scaled with Dynamic Type, case); plain `.font(DS.Font.x)` call sites still get family/size/Dynamic Type only — a named transitional gap. Display's 100% line height is **not** applied: `lineSpacing` is additive and nonnegative and `View.lineHeight(_:)` is iOS 26+, above the iOS 17 deployment target — also a named gap. #24 (button capitalization) untouched: #629 uppercases no existing string | Adopted — text-style, uppercase-scope and tabular-figure choices delegated to #629 by §6/D-627 |
 
 ### D. Deprecated patterns
 
