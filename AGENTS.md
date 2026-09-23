@@ -25,11 +25,11 @@ measures, which `scripts/check_observe_never_connects.py` enforces.
 1 台も無くても Android 側を実機検証できる（2026-09-18、iPad/iPhone 抜きで beid#584 を
 確認済み）。端末が揃わない時にまず試す選択肢。
 
-lab CLI の bundle id は現状 `org.levarac.beid.LabCli`
-（`tools/beid-lab-cli/scripts/bundle.sh`）。#605（未マージ）が
-`org.levarac.beid.lab-cli` への変更を提案しており、altair 機の許可は既にこの新 id で
-取得済み — #605 が main に入るまでは、main から作った build を altair に持ち込むと id が
-食い違い、許可を取り直すことになる。macOS は Bluetooth 許可を bundle id とコード署名の
+lab CLI の bundle id は `org.levarac.beid.lab-cli`（`tools/beid-lab-cli/scripts/bundle.sh`
+と `Sources/beid-lab-cli/EngineLogging.swift`）。PR #605 は 2026-09-18 に merge 済み
+（merge commit `9cf35f617880dce585b14f40cee7390ca3c3fc03`）。旧 id
+`org.levarac.beid.LabCli` の build を持ち込むと、現行 id に与えた許可は使えない。
+macOS は Bluetooth 許可を bundle id とコード署名の
 組でホストごとに記憶するため、署名済み `.app` はコピーだけで別ホストに持ち込め、秘密鍵の
 無いホストでも `codesign --verify` は通る（再署名は不要）。ただし bundle id を後から
 変えると許可は失効するので、新しいホストで許可を取る前にリネームを済ませる。この CLI は
@@ -53,7 +53,8 @@ PMO project) — it is not checked into `thegreeting/beid`.
 
 ## 実機オペレーションで毎回効く知識
 
-2026-09-18 に origin/main `225d3e6` に対して確認。
+2026-09-18 の実機観測を起点とし、コードに関する記述は 2026-09-23 に
+origin/main `047fa4e` で再確認。端末固有の観測はその日の記録として読む。
 
 ### iPad を shell から操作する
 
@@ -66,44 +67,45 @@ capture screenshot` を併用すると agent なしで確認できる）。iPad 
 ### バックグラウンドでのセンシングは OS で振る舞いが違う（beid#606）
 
 - **iOS は条件付きで継続する。** `UIBackgroundModes` に
-  `bluetooth-central`/`bluetooth-peripheral` を宣言し（`ios/project.yml:83-85`、
-  `ios/Beid/App/Info.plist:58-61`）、scan は service UUID 指定なので背面でも許可される。
-  `ScanFlowView.swift:65-94` は背面遷移時に `checkpointOpenWindowForBackgrounding()`
-  （`SensingCoordinator.swift:3619`）を呼ぶだけで scan は止めない
-  （`stopDiscoveryScan()` の呼び出し元は `deinit` と `stopSensing()` のみ、
-  `SensingCoordinator.swift:1347,2509`）。開いていたウィンドウはその瞬間までに
+  `bluetooth-central`/`bluetooth-peripheral` を宣言し（`ios/project.yml`、
+  `ios/Beid/App/Info.plist`）、scan は service UUID 指定なので背面でも許可される。
+  `ScanFlowView.swift` は背面遷移時に `checkpointOpenWindowForBackgrounding()`
+  を呼ぶが、scan は止めない（`SensingCoordinator.swift`）。開いていたウィンドウはその瞬間までに
   切り詰めて保存される（喪失ではない）。
 - **Android は実質的にアプリを前面に置く必要がある。** foreground service も
-  `FOREGROUND_SERVICE*` 権限も無く（`android/app/src/main/AndroidManifest.xml:9-12`）、
+  `FOREGROUND_SERVICE*` 権限も無く（`android/app/src/main/AndroidManifest.xml`）、
   scan の開始/停止は Activity lifecycle ではなく discovery 状態で駆動され、dispose は
-  `MainActivity.onDestroy()` のみ（`EventJoinCoordinator.kt:1149,1200`、
-  `MainActivity.kt:146-150`）。self-proof の保存も leaveEvent/dispose 時のみで
-  セッション途中には無い（`EventJoinCoordinator.kt:312-317`、PR#314 が開示した喪失）。
+  `MainActivity.onDestroy()` のみ（`EventJoinCoordinator.kt`、
+  `MainActivity.kt`）。self-proof の保存も leaveEvent/dispose 時のみで
+  セッション途中には無い（`EventJoinCoordinator.kt`、PR#314 が開示した喪失）。
   iOS が「切り詰め」で済むところが、Android では「喪失」になる。
 
-### 送信 drain の一括焼失リスク（beid#607 / PR#609、未解決の部分）
+### 送信 drain で複数の窓が停止するリスク（beid#607 / PR#609 の後続課題）
 
 PR#609 は、hold された（再送不可な）窓が送信 ledger の先頭に永久に居座り、後続の窓が
-一切 drain に渡されない不具合を直した（`shared/.../report/UnsentWindowLedger.kt:115-131`
-の `isStopped`、`UnsentWindowLedgerSnapshot.kt:286-290` の不変条件緩和）。この修正自体が
-新しいリスクを持ち込んでいる。
+一切 drain に渡されない不具合を直した（`UnsentWindowLedger.kt` の `isStopped` と
+`UnsentWindowLedgerSnapshot.kt` の不変条件緩和）。この修正により、既存の解決失敗が
+後続の窓にも連続して作用しうる。
 
-- registry のエラーは network 以外すべて `PermanentlyUnusable` に分類される
-  （`WindowObservationAccumulator.kt:42-47`；`VALIDITY_MISMATCH`/
-  `definition_validity_mismatch` も `RegistryClient.kt:160-166,468` →
-  `EventJoinFailureReason.kt:94-96` 経由で該当する）。
+- 保存済みの送信設定を復元できない窓では registry を再照会する。network 系以外の
+  エラーは `PermanentlyUnusable` に分類される（`WindowObservationAccumulator.kt` の
+  `submissionConfigurationResolutionForRegistryResult`）。有効期間切れの
+  `definition_validity_mismatch` も該当する（`RegistryClient.kt`、
+  `EventJoinFailureReason.kt`）。
 - `PermanentlyUnusable` になった窓は `hold()` → `TERMINAL_FAILED` → 次の窓の
-  `drain()` → …と連鎖する（`WindowObservationSubmissionDrain.kt:174-191`）。
+  `drain()` と進む（`WindowObservationSubmissionDrain.kt`）。停止した窓は自動送信されない。
 - 定義解決はウィンドウ自身の時刻ではなく**現在時刻**で行われる
-  （`WindowObservationAccumulator.kt:185-188` の
+  （`WindowObservationAccumulator.kt` の
   `resolveEventDefinition(eventIdHex, nowEpochSeconds())`）。
 
-**帰結: イベント定義の有効期限が切れた後に新ビルドを実機へ入れる／drain させると、
-キュー中の未送信窓がその1回の連鎖で一括焼失し、以後どのビルドでも送れなくなる。**
-対処は運用側にしかない — **定義が有効なうちにインストールする**か、**未送信ウィンドウを
-保持する端末へ新ビルドを入れる前に ledger snapshot のバイトコピーを取る**
-（`unsent-window-ledger-v1.snapshot` 等）。2026-09-18 の実機投入はこの退避があったから
-安全に行えた。別 issue はまだ切られていない（beid#607 のコメントで提案のみ）。
+**帰結: 定義の有効期限が切れた後の drain では、送信設定が未解決のまま残った
+同一イベントの複数窓が、順に `TERMINAL_FAILED` となり自動送信の対象から外れうる。**
+設定を既に保存した窓は registry 再照会を通らないため、この条件だけで全キューの停止や
+保存済みバイトの削除までは言えない。新ビルドのインストール自体が停止の条件でもない。
+未送信窓を持つ端末で drain を走らせる前に、ledger snapshot だけでなく
+`submission-records-v1.json` と `canonical-observations-v1/` の署名済みデータも
+合わせて退避する。2026-09-18 の実機投入時は事前の退避と、投入後の受理結果が記録された
+（beid#607）。退避だけで自動送信を再開できる保証はない。
 
 ## KMP shared/native development contract
 
