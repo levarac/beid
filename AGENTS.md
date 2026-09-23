@@ -26,13 +26,15 @@ measures, which `scripts/check_observe_never_connects.py` enforces.
 確認済み）。端末が揃わない時にまず試す選択肢。
 
 lab CLI の bundle id は `org.levarac.beid.lab-cli`（`tools/beid-lab-cli/scripts/bundle.sh`
-と `Sources/beid-lab-cli/EngineLogging.swift`）。PR #605 は 2026-09-18 に merge 済み
+と `tools/beid-lab-cli/Sources/beid-lab-cli/EngineLogging.swift`）。PR #605 は 2026-09-18 に merge 済み
 （merge commit `9cf35f617880dce585b14f40cee7390ca3c3fc03`）。旧 id
 `org.levarac.beid.LabCli` の build を持ち込むと、現行 id に与えた許可は使えない。
 macOS は Bluetooth 許可を bundle id とコード署名の
-組でホストごとに記憶するため、署名済み `.app` はコピーだけで別ホストに持ち込め、秘密鍵の
-無いホストでも `codesign --verify` は通る（再署名は不要）。ただし bundle id を後から
-変えると許可は失効するので、新しいホストで許可を取る前にリネームを済ませる。この CLI は
+組でホストごとに記憶する。署名済み `.app` は別ホストにコピーして署名を検証できるが、
+`codesign --verify` は Bluetooth 許可や継続運用を保証しない。lab CLI README の
+別ホスト向け標準手順は転送先の `CODESIGN_IDENTITY` で再署名し、そこで許可を取る。
+転送先に署名鍵が無い場合はこの手順を完了できないので、コピーだけで運用できると決めつけない。
+bundle id を後から変えると許可は失効するため、新しいホストで許可を取る前に確定する。この CLI は
 ssh 越しに動かす前提の headless app（`bundle.sh` が生成する `Info.plist` の
 `LSUIElement`）だが、許可ダイアログ
 自体は GUI セッションが無いと描画されない — ssh 越しの初回起動はプロンプトなしのエラーで
