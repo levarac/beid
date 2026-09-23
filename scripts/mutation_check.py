@@ -12,10 +12,19 @@ maintained.
 
 For each mutable site found in --target, this script: mutates exactly that
 site, reruns --test-task, records whether any test newly failed ("killed")
-or none did ("survived"), then restores the file via `git checkout --` before
-moving to the next site. A survived mutant is a behavior with no test
-protecting it. Exit status is non-zero if any mutant survives, so this is
-usable as an on-demand pass/fail check, not just an FYI.
+or none did ("survived"), then restores the file before moving to the next
+site. A survived mutant is a behavior with no test protecting it. Exit status
+is non-zero if any mutant survives, so this is usable as an on-demand
+pass/fail check, not just an FYI.
+
+Restore is snapshot-based, not `git checkout --`: the bytes of every target
+file are copied once, up front, into a temporary backup directory, and each
+restore writes those bytes back and then reads the file back and compares
+bytes. Two consequences. It runs against untracked and dirty files -- which
+is the normal state of work you are adding tests for, and which this tool
+previously refused outright. And a restore that did not actually land stops
+the run loudly, naming the backup, instead of leaving a mutated constant in
+your source tree where nothing turns red.
 
 WHAT THIS IS NOT: a Kotlin AST mutation engine. Site-finding is line/regex
 based against Kotlin source text with comments and string/char literals
@@ -29,10 +38,19 @@ lambda arrow for a comparison; a real comparison written without surrounding
 spaces will be missed. This is deliberate: err toward missing a mutation
 site over corrupting one into invalid syntax.
 
+Known misses in the two numeric scanners, verified rather than assumed: in a
+range literal only the lower bound is matched, because the lookbehind rejects
+a digit preceded by `.`. `0.0..1.0` yields a site for `0.0` and none for
+`1.0`, and `1..10` likewise yields only `1`. `1.0.toInt()`, by contrast, IS
+matched, and becomes `0.9.toInt()`, which is valid Kotlin.
+
 Mutation operators:
   - comparison:  ==/!=, </<=, >/>=  (each swapped for its pair)
   - boolean:     true/false literal flips
-  - numeric:     integer literal N -> N+1 (preserves an `L`/`l` suffix),
+  - integer:     INTEGER literals only. N -> N+1, preserving an `L`/`l`
+                 suffix. A literal written with a decimal point or an
+                 exponent is not touched by this operator at all; it belongs
+                 to the float operator below. The integer operator applies
                  anywhere in the file text (this includes `val`/`const val`
                  declarations, not just literals inside expressions or
                  function bodies) -- deliberately, since a constant
@@ -40,6 +58,42 @@ Mutation operators:
                  test that compares against a constant *by reference* moves
                  both sides of its own assertion when the constant changes,
                  so it never goes red no matter how wrong the value becomes.
+  - float:       Double/Float literals -- `12.5`, `1.5f`, `0.0`, `0.0001`,
+                 `1e3`, `2E-5F`, `1_000.5` -- scaled toward zero by a factor
+                 of 0.9, preserving an `f`/`F` suffix. 0.0 is the one value
+                 relative scaling cannot move, so it gets a single absolute
+                 special case: 0.0 -> 1.0.
+
+                 Why scale down by 10%, rather than nudge by a constant:
+
+                 * Scaling toward zero keeps the mutant inside
+                   [0, original]. So every upper-bound validation the
+                   original satisfied -- an alpha in 0.0..1.0, a fraction, a
+                   normalised ratio -- the mutant satisfies too. This
+                   matters: if a mutation tripped a `require(x in 0.0..1.0)`,
+                   the run would report "killed" because a range check threw,
+                   not because any test checks the behavior. That is a false
+                   sense of protection, which is the exact beid#110 failure
+                   this tool exists to prevent.
+                 * The change is relative, not absolute. An absolute nudge is
+                   invisible on 200.0 and enormous on 0.0001. (The ad-hoc
+                   pass written during beid#633 used `x * 1.1 + 0.05`; that
+                   additive term turns 0.0001 into 0.0511, a 511x change,
+                   which is not a plausible wrong value.)
+                 * Sign is preserved for free. A Kotlin literal as written is
+                   never negative -- a leading `-` is a separate unary-minus
+                   token -- so the scanner only ever sees a non-negative
+                   body, and a positive factor keeps it non-negative.
+                 * 1.0, the special case for 0.0, is the top of the canonical
+                   0.0..1.0 ratio range, so it stays valid where a ratio is
+                   validated, while being a large change for a coordinate or
+                   an angle.
+
+                 So "survived" for a float site means exactly one thing, and
+                 it is narrower than it looks: NO TEST PINS THIS VALUE TO
+                 BETTER THAN 10% RELATIVE. It does not mean the value is
+                 unchecked in every sense -- it means nothing in the suite
+                 noticed a 10% error in it.
 
 Usage:
   scripts/mutation_check.py --target shared/src/commonMain/kotlin/.../Foo.kt \\
@@ -60,10 +114,14 @@ mutable sites is a dozen full Gradle test invocations).
 """
 import argparse
 import json
+import math
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -73,6 +131,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ANDROID_DIR = REPO_ROOT / "android"
 GRADLEW = ANDROID_DIR / "gradlew"
 RESOLVE_JAVA_HOME_SCRIPT = REPO_ROOT / "scripts" / "resolve_kmp_java_home.sh"
+
+def display_path(path: Path) -> str:
+    """Path relative to REPO_ROOT when it is under it, absolute otherwise.
+
+    `Path.relative_to` raises for a path outside the repository. Calling it
+    unguarded crashed the tool on an out-of-tree --target and made the tool
+    impossible to unit-test against a temporary directory.
+    """
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
 
 COMPARISON_SWAP = {
     "==": "!=",
@@ -86,6 +157,48 @@ COMPARISON_SWAP = {
 COMPARISON_RE = re.compile(r"==|!=|<=|>=|<|>")
 BOOLEAN_RE = re.compile(r"\b(true|false)\b")
 NUMERIC_RE = re.compile(r"(?<![\w.])(\d[\d_]*)([Ll]?)(?!\w)")
+# Group 1 is the numeric body as written (underscores included); group 2 is an
+# optional Float suffix. The leading lookbehind is what keeps this scanner and
+# NUMERIC_RE off each other's characters: NUMERIC_RE skips a digit run followed
+# by `.<digit>`, and this one refuses a digit run preceded by `.` -- so `12.5`
+# is a float site and not two integer sites, and `1..10` stays integer-only.
+FLOAT_RE = re.compile(
+    r"(?<![\w.])"
+    r"(\d[\d_]*\.\d[\d_]*(?:[eE][+-]?\d[\d_]*)?"
+    r"|\d[\d_]*[eE][+-]?\d[\d_]*"
+    r"|\d[\d_]*(?=[fF]))"
+    r"([fF]?)"
+    r"(?!\w|\.\d)"
+)
+
+
+def perturb_float_literal(body: str):
+    """Return the mutated numeric body for a Double/Float literal, or None.
+
+    Scales toward zero by a factor of 0.9 -- see the "float" bullet in this
+    module's docstring for why that factor and that direction, which is the
+    substance of the operator rather than an arbitrary nudge. 0.0 cannot be
+    moved by scaling, so it becomes 1.0.
+
+    `body` is the literal as written, without any `f`/`F` suffix; the caller
+    re-attaches the suffix.
+    """
+    value = float(body.replace("_", ""))
+    if not math.isfinite(value):
+        return None
+    if value == 0.0:
+        new_value = 1.0
+    else:
+        new_value = float(f"{value * 0.9:.12g}")
+    text = repr(new_value)
+    if "." not in text and "e" not in text and "E" not in text:
+        # Defensive. A bare integer token is a type error where a Double is
+        # expected, so emitting one would be a compile failure this tool would
+        # then misreport as "killed (build failed)". repr() of a Python float
+        # never does this today; the guard is here so a future change to this
+        # function fails loudly instead of silently emitting broken Kotlin.
+        return None
+    return text
 
 
 @dataclass
@@ -94,13 +207,15 @@ class Site:
     line: int
     start: int  # absolute char offset into the file's full text
     end: int
-    kind: str  # "comparison" | "boolean" | "numeric"
+    kind: str  # "comparison" | "boolean" | "integer" | "float"
     original: str
     mutated: str
 
     def label(self) -> str:
-        rel = self.file.relative_to(REPO_ROOT)
-        return f"{rel}:{self.line} [{self.kind}] {self.original!r} -> {self.mutated!r}"
+        return (
+            f"{display_path(self.file)}:{self.line} "
+            f"[{self.kind}] {self.original!r} -> {self.mutated!r}"
+        )
 
 
 @dataclass
@@ -216,8 +331,20 @@ def mask_source(text: str) -> str:
     return "".join(out)
 
 
+def read_source_text(path: Path) -> str:
+    """Decode the file's bytes without newline translation.
+
+    `read_text` opens in universal-newlines mode, so a CRLF file would be
+    handed to the scanner as LF and every character offset after the first
+    line break would be wrong relative to the bytes actually on disk. Sites
+    are spliced back into the snapshot's decoded bytes, so both sides have to
+    decode the same way.
+    """
+    return path.read_bytes().decode("utf-8")
+
+
 def find_sites(path: Path) -> list:
-    text = path.read_text(encoding="utf-8")
+    text = read_source_text(path)
     masked = mask_source(text)
     candidates = []
 
@@ -241,12 +368,23 @@ def find_sites(path: Path) -> list:
             continue  # looks like a decimal float; skip rather than corrupt it
         digits, suffix = m.group(1), m.group(2)
         value = int(digits.replace("_", "")) + 1
-        candidates.append((start, end, "numeric", digits + suffix, f"{value}{suffix}"))
+        candidates.append((start, end, "integer", digits + suffix, f"{value}{suffix}"))
+
+    for m in FLOAT_RE.finditer(masked):
+        body, suffix = m.group(1), m.group(2)
+        mutated_body = perturb_float_literal(body)
+        if mutated_body is None:
+            continue
+        candidates.append((m.start(), m.end(), "float", body + suffix, mutated_body + suffix))
 
     candidates.sort(key=lambda c: c[0])
     kept = []
     last_end = -1
     for start, end, kind, original, mutated in candidates:
+        if mutated == original:
+            # A mutation that changes nothing would be reported as "survived"
+            # having tested nothing, and would burn a full Gradle run doing it.
+            continue
         if start < last_end:
             continue  # overlapping match from another operator; keep the first
         line = text.count("\n", 0, start) + 1
@@ -284,25 +422,82 @@ def git_status_porcelain(rel_path: str) -> str:
     return result.stdout.strip()
 
 
-def ensure_clean(file_path: Path, when: str):
-    rel = str(file_path.relative_to(REPO_ROOT))
+@dataclass
+class FileSnapshot:
+    path: Path
+    original_bytes: bytes
+    backup_path: Path
+
+
+def note_if_dirty(file_path: Path):
+    """Informational only -- never a refusal.
+
+    This tool used to refuse any file git reported as dirty or untracked,
+    because it restored with `git checkout --` and so could only restore what
+    git already had. Restore is now from this tool's own byte snapshot, so a
+    file that has never been committed -- exactly the state of the work you
+    are writing tests for -- is supported. The note still prints, because it
+    changes what a `git diff` means while the run is in flight.
+    """
+    try:
+        rel = str(file_path.relative_to(REPO_ROOT))
+    except ValueError:
+        return  # outside the repository; git has nothing to say about it
     status = git_status_porcelain(rel)
     if status:
-        raise RuntimeError(
-            f"refusing to proceed: {rel} is not clean {when} "
-            f"(git status --porcelain shows: {status!r}). "
-            "This tool only mutates a file it has confirmed is clean, so it "
-            "can always restore via `git checkout --`. Commit or revert your "
-            "changes to this file first."
+        print(
+            f"note: {rel} is dirty or untracked (git status: {status!r}). "
+            "Proceeding -- restore is from this tool's own byte snapshot, not git."
         )
 
 
-def restore_file(file_path: Path):
-    rel = str(file_path.relative_to(REPO_ROOT))
-    result = run(["git", "checkout", "--", rel], cwd=REPO_ROOT)
-    if result.returncode != 0:
-        raise RuntimeError(f"git checkout -- {rel} failed:\n{result.stdout}")
-    ensure_clean(file_path, "after restore")
+def snapshot_files(files, backup_dir: Path) -> dict:
+    """Copy every target file's bytes into backup_dir, once, up front."""
+    snapshots = {}
+    for i, f in enumerate(files):
+        original_bytes = f.read_bytes()
+        backup_path = backup_dir / f"{i:04d}-{f.name}"
+        backup_path.write_bytes(original_bytes)
+        snapshots[f] = FileSnapshot(f, original_bytes, backup_path)
+    return snapshots
+
+
+def restore(snapshot: FileSnapshot):
+    """Write the snapshot back, then read it back and compare bytes.
+
+    The read-back is the point. A restore that silently did not land leaves a
+    mutated constant in a source file and nothing turns red -- which is the
+    same class of quiet wrongness this whole tool exists to catch.
+    """
+    snapshot.path.write_bytes(snapshot.original_bytes)
+    readback = snapshot.path.read_bytes()
+    if readback != snapshot.original_bytes:
+        raise RuntimeError(
+            f"restore of {display_path(snapshot.path)} did not land: wrote "
+            f"{len(snapshot.original_bytes)} byte(s), read back {len(readback)}"
+        )
+
+
+def restore_or_die(snapshot: FileSnapshot, backup_dir: Path):
+    try:
+        restore(snapshot)
+    except Exception as exc:  # including OSError from the write itself
+        bar = "!" * 72
+        sys.stderr.write(
+            f"\n{bar}\n"
+            "RESTORE FAILED -- STOPPING NOW.\n"
+            "A MUTATED LITERAL MAY STILL BE IN YOUR SOURCE TREE.\n"
+            f"  file:   {snapshot.path}\n"
+            f"  backup: {snapshot.backup_path}\n"
+            f"  reason: {exc}\n"
+            "\nRestore it by hand with:\n"
+            f"  cp {shlex.quote(str(snapshot.backup_path))} "
+            f"{shlex.quote(str(snapshot.path))}\n"
+            f"\nThe backup directory has been kept: {backup_dir}\n"
+            f"{bar}\n"
+        )
+        sys.stderr.flush()
+        sys.exit(2)
 
 
 def parse_junit_results(xml_paths):
@@ -408,18 +603,28 @@ def main():
         all_sites.extend(find_sites(f))
 
     if not all_sites:
-        print(f"No mutable sites found in {target} (comparison/boolean/numeric-literal scan).")
+        print(
+            f"No mutable sites found in {target} "
+            "(comparison/boolean/integer-literal/float-literal scan)."
+        )
         sys.exit(0)
 
     print(f"Found {len(all_sites)} mutable site(s) across {len(files)} file(s).")
     print(f"Test task(s): {', '.join(tasks)}\n")
+
+    for f in files:
+        note_if_dirty(f)
+    backup_dir = Path(tempfile.mkdtemp(prefix="mutation_check-backup-"))
+    snapshots = snapshot_files(files, backup_dir)
+    print(f"Byte snapshot of {len(files)} target file(s) taken; backups in: {backup_dir}\n")
 
     print("Running baseline (unmutated) test pass to record pre-existing failures...")
     baseline_rc, baseline_results, baseline_tail = run_tests(tasks, env, args.verbose)
     if baseline_results is None:
         sys.exit(
             "error: baseline test run produced no fresh JUnit XML for "
-            f"{tasks} -- cannot proceed. Gradle tail:\n" + "\n".join(baseline_tail)
+            f"{tasks} -- cannot proceed (backups kept in {backup_dir}). "
+            "Gradle tail:\n" + "\n".join(baseline_tail)
         )
     baseline_failures = {t for t, failed in baseline_results.items() if failed}
     if baseline_failures:
@@ -434,11 +639,17 @@ def main():
     site_results = []
     for i, site in enumerate(all_sites, start=1):
         print(f"[{i}/{len(all_sites)}] {site.label()}")
-        ensure_clean(site.file, "before mutating")
-        full_text = site.file.read_text(encoding="utf-8")
-        mutated_text = full_text[: site.start] + site.mutated + full_text[site.end :]
+        snapshot = snapshots[site.file]
+        # Splice into the snapshot's own decoded bytes, not a fresh read: the
+        # offsets were measured against exactly these bytes, and this way a
+        # failed restore from a previous site cannot silently compound.
+        original_text = snapshot.original_bytes.decode("utf-8")
+        mutated_text = original_text[: site.start] + site.mutated + original_text[site.end :]
         try:
-            site.file.write_text(mutated_text, encoding="utf-8")
+            # write_bytes, not write_text: write_text applies newline
+            # translation, so a CRLF file would have every line ending
+            # silently rewritten as a side effect of one mutated literal.
+            site.file.write_bytes(mutated_text.encode("utf-8"))
             rc, results, tail = run_tests(tasks, env, args.verbose)
             if results is None:
                 site_results.append(
@@ -460,7 +671,7 @@ def main():
                 site_results.append(SiteResult(site, "survived", []))
                 print("  -> SURVIVED (no test caught this)")
         finally:
-            restore_file(site.file)
+            restore_or_die(snapshot, backup_dir)
 
     killed = [r for r in site_results if r.verdict.startswith("killed")]
     survived = [r for r in site_results if r.verdict == "survived"]
@@ -474,7 +685,7 @@ def main():
     print("=" * 72)
 
     report = {
-        "target": str(target.relative_to(REPO_ROOT)),
+        "target": display_path(target),
         "test_tasks": tasks,
         "baseline_pre_existing_failures": sorted(baseline_failures),
         "sites_mutated": len(site_results),
@@ -482,7 +693,7 @@ def main():
         "survived": len(survived),
         "results": [
             {
-                "file": str(r.site.file.relative_to(REPO_ROOT)),
+                "file": display_path(r.site.file),
                 "line": r.site.line,
                 "kind": r.site.kind,
                 "original": r.site.original,
@@ -500,6 +711,11 @@ def main():
     else:
         print("\nJSON report:")
         print(report_json)
+
+    # Every restore in the loop above was verified by byte comparison, and a
+    # failure would have exited before reaching here, so the backups have done
+    # their job and are safe to drop.
+    shutil.rmtree(backup_dir, ignore_errors=True)
 
     sys.exit(1 if survived else 0)
 
