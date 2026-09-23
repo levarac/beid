@@ -324,7 +324,7 @@ private fun List<AggregationObservation>.distinctDisplayIdCount(): Int {
 private fun List<AggregationObservation>.withoutDisplayIdCount(): Int =
     count { it.displayId == null }
 
-private fun String.isValidAggregationTextField(): Boolean {
+internal fun String.isValidAggregationTextField(): Boolean {
     if (isEmpty()) {
         return false
     }
