@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import SwiftUI
+import UIKit
 
 /// Canonical design tokens for beid. This file and `Colors.xcassets` are the
 /// only places raw color/font/spacing/radius/motion values may appear —
@@ -174,27 +175,241 @@ enum DS {
 
   // MARK: - Font
   //
-  // System font (SF Pro) ramp, Dynamic Type compatible. `Font.system` is
-  // allowed here and nowhere else. See DESIGN.md §6.
+  // Two tiers (DESIGN.md §4), the same shape #628 gave `DS.Color`. Tier 1
+  // is `Font.Library`: the 17 Flat 2b Library text styles, carrying the
+  // bundled face, the base size and the typographic settings §6 records.
+  // Tier 2 is `DS.Font` itself: tokens named by role, each pointing at one
+  // Library style; several roles may share one. Views use tier 2 only.
+  //
+  // `Font.custom(_:size:relativeTo:)` is the only font constructor here
+  // (§6's Dynamic Type MUST) and is allowed in this directory and nowhere
+  // else. The three families are bundled with the app (#629); their
+  // PostScript names appear only in `Library`.
   enum Font {
-    /// One per screen. Large screen title.
-    static let screenTitle = SwiftUI.Font.system(.largeTitle, weight: .bold)
-    /// Ceremony moments: Verified, Proof Collected.
-    static let ceremonyTitle = SwiftUI.Font.system(.title, weight: .bold)
-    /// Section and state titles (e.g. "Sensing automatically").
-    static let sectionTitle = SwiftUI.Font.system(.title3, weight: .semibold)
-    /// Card titles (e.g. event name on a proof card).
-    static let cardTitle = SwiftUI.Font.system(.subheadline, weight: .semibold)
-    /// Body copy.
-    static let body = SwiftUI.Font.system(.body)
-    /// Supporting copy under titles.
-    static let supporting = SwiftUI.Font.system(.subheadline)
-    /// Metadata: dates, counts, fine print.
-    static let meta = SwiftUI.Font.system(.caption)
+
+    /// One Flat 2b Library text style: the bundled face, its base size at
+    /// the default content size, and the settings §6's ramp table records
+    /// for it.
+    ///
+    /// `font` alone carries family, size and Dynamic Type. Tracking, line
+    /// height and case reach a view only through `beidTextStyle(_:)`, which
+    /// needs the whole value — which is why this is a value type and not
+    /// nine parallel `SwiftUI.Font` constants.
+    struct Style {
+      /// PostScript name of the bundled face (`UIAppFonts`, #629).
+      let postScriptName: String
+      /// Base size in points at the default content size (`.large`).
+      let size: CGFloat
+      /// Apple text style whose Dynamic Type curve scales `size`.
+      let textStyle: SwiftUI.Font.TextStyle
+      /// Letter spacing as a fraction of the point size — the Library's
+      /// percentage over 100, so it scales with the text rather than
+      /// staying a fixed point offset.
+      let tracking: CGFloat
+      /// Line height as a multiple of the point size. `nil` is the
+      /// Library's "auto": the face's own line height, untouched.
+      let lineHeight: CGFloat?
+      /// Whether the style renders uppercase.
+      let isUppercase: Bool
+      /// Whether digits are forced to equal width.
+      let usesMonospacedDigits: Bool
+
+      init(
+        postScriptName: String,
+        size: CGFloat,
+        textStyle: SwiftUI.Font.TextStyle,
+        tracking: CGFloat = 0,
+        lineHeight: CGFloat? = nil,
+        isUppercase: Bool = false,
+        usesMonospacedDigits: Bool = false
+      ) {
+        self.postScriptName = postScriptName
+        self.size = size
+        self.textStyle = textStyle
+        self.tracking = tracking
+        self.lineHeight = lineHeight
+        self.isUppercase = isUppercase
+        self.usesMonospacedDigits = usesMonospacedDigits
+      }
+
+      /// The face at its base size, scaling on `textStyle`'s curve.
+      var font: SwiftUI.Font {
+        let scaling = SwiftUI.Font.custom(postScriptName, size: size, relativeTo: textStyle)
+        return usesMonospacedDigits ? scaling.monospacedDigit() : scaling
+      }
+
+      /// Letter spacing in points at `pointSize` — the Dynamic Type-scaled
+      /// size, not `size`, so tracking keeps its proportion as text grows.
+      func tracking(atPointSize pointSize: CGFloat) -> CGFloat {
+        tracking * pointSize
+      }
+
+      /// Extra space to add *between* lines at `pointSize` so the line box
+      /// measures `lineHeight × pointSize`.
+      ///
+      /// Returns 0 when `lineHeight` is nil, when the face is unavailable,
+      /// and — deliberately — whenever the requested line height is below
+      /// the face's own: `lineSpacing` is additive and
+      /// `NSParagraphStyle.lineSpacing` "is always nonnegative", so there is
+      /// no supported way to tighten a line box on this deployment target.
+      /// Display/60 · 52 · 46 ask for 100% against Bricolage's 1.2 em face
+      /// and therefore land on the face's line height, not the Library's —
+      /// see §6's line-height gap.
+      func lineSpacing(atPointSize pointSize: CGFloat) -> CGFloat {
+        guard
+          let lineHeight,
+          let face = UIFont(name: postScriptName, size: pointSize)
+        else { return 0 }
+        return max(0, lineHeight * pointSize - face.lineHeight)
+      }
+    }
+
+    /// Tier 1: the 17 Flat 2b Library text styles, one constant per style
+    /// in §6's ramp table.
+    ///
+    /// Named after the Library rather than by role — the §4 role-naming
+    /// MUST governs tier 2, and only `DS.Font` reads these, exactly as
+    /// `Colors.xcassets`' primitives are named after the Library variables
+    /// while `DS.Color` names roles. Views use tier 2.
+    ///
+    /// **Text styles (§6, #629).** Each style takes the Apple text style
+    /// whose *default* size is nearest its base size, so the Dynamic Type
+    /// multiplier starts near 1. Every Display style is the exception: they
+    /// all take `.largeTitle`, the flattest curve available.
+    ///
+    /// What `UIFontMetrics.scaledValue` does, measured on iOS 26.5: for a
+    /// given (text style, content size category) it applies a *single*
+    /// constant multiplier to any base size, quantised to 1/3 pt. That
+    /// multiplier is **not** the ratio of the text style's own preferred
+    /// sizes: `.largeTitle`'s own size goes 34 → 52 at AX3, a ratio of
+    /// 1.53, while the multiplier it scales by is about 1.49. Measured at
+    /// AX3, `.largeTitle` is about 1.49, `.body` about 2.18 and `.caption2`
+    /// about 2.69 — the multiplier falls as the text style's own size
+    /// rises, which is why `.largeTitle`, the largest text style, is the
+    /// flattest curve available. So Display/60 reaches 89.33 pt at AX3 and
+    /// 102.33 pt at AX5, where the same 60 pt on `.body`'s curve would
+    /// reach 131.0 pt and 169.0 pt — sizes the layout §6 requires to
+    /// survive AX3 would not take. The curve and the style's own size
+    /// progression are different things; do not derive one from the other.
+    enum Library {
+      private static let displayFace = "BricolageGrotesque-ExtraBold"
+      private static let titleFace = "DMSans-Bold"
+      private static let bodyFace = "DMSans-Regular"
+      private static let monoFace = "DMMono-Medium"
+
+      /// `Display/60` — Home title "Events".
+      static let display60 = Style(
+        postScriptName: displayFace, size: 60, textStyle: .largeTitle,
+        tracking: -0.02, lineHeight: 1.0
+      )
+      /// `Display/52` — onboarding titles.
+      static let display52 = Style(
+        postScriptName: displayFace, size: 52, textStyle: .largeTitle,
+        tracking: -0.02, lineHeight: 1.0
+      )
+      /// `Display/46` — screen titles (event name, Session 1, Report #2).
+      static let display46 = Style(
+        postScriptName: displayFace, size: 46, textStyle: .largeTitle,
+        tracking: -0.015, lineHeight: 1.0
+      )
+      /// `Display/Number 40` — sensing figures. The only style with
+      /// monospaced digits: these are the numbers that change while
+      /// someone is watching them, and proportional digits make the figure
+      /// jitter sideways as it counts. DM Mono needs no such setting — it
+      /// is already monospaced.
+      static let displayNumber40 = Style(
+        postScriptName: displayFace, size: 40, textStyle: .largeTitle,
+        tracking: -0.01, usesMonospacedDigits: true
+      )
+      /// `Display/Address 34` — the Account sheet address (typeface still
+      /// open: spec §10-5, #642).
+      static let displayAddress34 = Style(
+        postScriptName: displayFace, size: 34, textStyle: .largeTitle,
+        tracking: -0.01
+      )
+      /// `Title/19` — section and state titles.
+      static let title19 = Style(postScriptName: titleFace, size: 19, textStyle: .title3)
+      /// `Title/17` — `Row/List` titles.
+      static let title17 = Style(postScriptName: titleFace, size: 17, textStyle: .headline)
+      /// `Title/16` — `Button/Primary` label.
+      static let title16 = Style(postScriptName: titleFace, size: 16, textStyle: .callout)
+      /// `Title/15` — `Row/KeyValue` values.
+      static let title15 = Style(postScriptName: titleFace, size: 15, textStyle: .subheadline)
+      /// `Body/15` — body copy.
+      static let body15 = Style(
+        postScriptName: bodyFace, size: 15, textStyle: .subheadline, lineHeight: 1.4
+      )
+      /// `Body/13` — supporting copy, metadata.
+      static let body13 = Style(
+        postScriptName: bodyFace, size: 13, textStyle: .footnote, lineHeight: 1.4
+      )
+      /// `Label/Mono 11` — section labels, nav, status.
+      static let labelMono11 = Style(
+        postScriptName: monoFace, size: 11, textStyle: .caption2,
+        tracking: 0.08, isUppercase: true
+      )
+      /// `Label/Mono 10` — meta labels.
+      static let labelMono10 = Style(
+        postScriptName: monoFace, size: 10, textStyle: .caption2,
+        tracking: 0.08, isUppercase: true
+      )
+      /// `Label/Mono 9` — the smallest labels.
+      static let labelMono9 = Style(
+        postScriptName: monoFace, size: 9, textStyle: .caption2,
+        tracking: 0.06, isUppercase: true
+      )
+      /// `Label/Mono 10 tight` — in-row meta (IDs, session numbers). Not
+      /// uppercased: it carries values, not labels — see `labelMono13Value`.
+      static let labelMono10Tight = Style(
+        postScriptName: monoFace, size: 10, textStyle: .caption2, tracking: 0.06
+      )
+      /// `Label/Mono 11 time` — times. Not uppercased, for the same reason
+      /// as `labelMono13Value`.
+      static let labelMono11Time = Style(
+        postScriptName: monoFace, size: 11, textStyle: .caption2
+      )
+      /// `Label/Mono 13 value` — addresses, hashes, proof identifiers.
+      ///
+      /// The three value styles (this, `labelMono11Time`,
+      /// `labelMono10Tight`) are deliberately *not* uppercased while the
+      /// three label styles are. §6's uppercase MUST is about labels, and
+      /// uppercasing a value here would be a correctness bug, not a style
+      /// choice: an EIP-55 wallet address carries its checksum in the
+      /// letter case of its hex digits, so `.uppercase` destroys it.
+      static let labelMono13Value = Style(
+        postScriptName: monoFace, size: 13, textStyle: .footnote
+      )
+    }
+
+    // Tier 2: roles. Names and call sites are unchanged from the SF Pro
+    // ramp — #629 re-points them at Flat 2b Library styles, so no View
+    // changes. Tracking, line height and case are NOT carried by these:
+    // a plain `.font(DS.Font.body)` call site gets family, size and
+    // Dynamic Type only. The full style reaches a view through
+    // `beidTextStyle(_:)`, which the screen issues adopt (§6).
+
+    /// One per screen. Large screen title. `Display/46`.
+    static let screenTitle = Library.display46.font
+    /// Section and state titles (e.g. "Sensing automatically"). `Title/19`.
+    static let sectionTitle = Library.title19.font
+    /// Card and row titles (e.g. event name on a proof card). The Library's
+    /// `Row/List` title, `Title/17`.
+    static let cardTitle = Library.title17.font
+    /// Body copy. `Body/15`.
+    static let body = Library.body15.font
+    /// Supporting copy under titles. `Body/13`.
+    static let supporting = Library.body13.font
+    /// Metadata: dates, counts, fine print. `Body/13`, deliberately the
+    /// same style as `supporting` and deliberately *not* a mono label
+    /// style: the Library's mono labels are uppercase, and today's 44
+    /// `meta` call sites carry sentence-case copy that #629 does not
+    /// re-author. A mono meta role belongs with the screen work.
+    static let meta = Library.body13.font
     /// Ledger traces: wallet addresses, hashes, proof identifiers.
-    static let ledgerMono = SwiftUI.Font.system(.footnote, design: .monospaced)
-    /// Primary CTA label.
-    static let cta = SwiftUI.Font.system(.headline)
+    /// `Label/Mono 13 value`.
+    static let ledgerMono = Library.labelMono13Value.font
+    /// Primary CTA label. The Library's `Button/Primary` label, `Title/16`.
+    static let cta = Library.title16.font
   }
 
   // MARK: - Motion
@@ -245,5 +460,50 @@ enum DS {
         endPoint: .bottomTrailing
       )
     }
+  }
+}
+
+extension View {
+  /// The one sanctioned way to apply a whole Flat 2b text style: the face
+  /// and its Dynamic Type curve, plus the tracking, line height and case
+  /// §6's ramp table records for it. Named for `beidSurface`, the same
+  /// "this modifier owns the whole treatment" contract.
+  ///
+  /// `.font(DS.Font.someRole)` remains valid and is what today's call sites
+  /// do; it carries family, size and Dynamic Type but none of the three
+  /// settings above. Prefer this modifier when a screen is being built to
+  /// the Library.
+  ///
+  /// Line height is applied as `lineSpacing`, which is additive, so a
+  /// Library line height *below* the face's own is not applied — see
+  /// `DS.Font.Style.lineSpacing(atPointSize:)` and §6's line-height gap.
+  /// Tracking and line height scale with Dynamic Type: both are computed
+  /// at the scaled point size, not the base size.
+  func beidTextStyle(_ style: DS.Font.Style) -> some View {
+    modifier(BeidTextStyleModifier(style: style))
+  }
+}
+
+/// Applies a `DS.Font.Style` in full. Separate from the `View` extension
+/// because `@ScaledMetric` needs a stored property to track the content
+/// size category, and its text style is only known per style.
+private struct BeidTextStyleModifier: ViewModifier {
+  private let style: DS.Font.Style
+  /// `style.size` after Dynamic Type, on `style.textStyle`'s curve — the
+  /// same curve `Font.custom(_:size:relativeTo:)` scales the face on, so
+  /// tracking and line spacing stay in proportion to the rendered text.
+  @ScaledMetric private var scaledSize: CGFloat
+
+  init(style: DS.Font.Style) {
+    self.style = style
+    _scaledSize = ScaledMetric(wrappedValue: style.size, relativeTo: style.textStyle)
+  }
+
+  func body(content: Content) -> some View {
+    content
+      .font(style.font)
+      .tracking(style.tracking(atPointSize: scaledSize))
+      .lineSpacing(style.lineSpacing(atPointSize: scaledSize))
+      .textCase(style.isUppercase ? .uppercase : nil)
   }
 }
