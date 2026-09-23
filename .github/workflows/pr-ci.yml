@@ -16,7 +16,7 @@ concurrency:
 jobs:
   changes:
     name: Determine changed paths
-    runs-on: [self-hosted, Linux, ARM64, default]
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
       contents: read
@@ -25,11 +25,12 @@ jobs:
       android: ${{ steps.classify.outputs.android }}
       lint: ${{ steps.classify.outputs.lint }}
       sanity: ${{ steps.classify.outputs.sanity }}
+      emi_skip: ${{ steps.emi_scope.outputs.emi_skip }}
     steps:
-      - name: Reject fork pull request code on the private runner
+      - name: Reject fork pull request code before checkout
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          echo "Fork pull requests are not executed on the private self-hosted runner."
+          echo "Fork pull requests are not executed by this workflow."
           exit 1
       - uses: actions/checkout@v4
         with:
@@ -74,10 +75,14 @@ jobs:
         if: always()
         run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
 
+      - name: Confirm repository-only emi skip scope
+        id: emi_scope
+        run: python3 scripts/ci_emi_skip.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
+
   android:
     name: Android build
     needs: changes
-    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.android == 'true') }}
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.android == 'true' && needs.changes.outputs.emi_skip != 'true' }}
     runs-on: [self-hosted, macOS, ARM64, emi]
     timeout-minutes: 20
     steps:
@@ -143,7 +148,7 @@ jobs:
   lint:
     name: SwiftLint
     needs: changes
-    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.lint == 'true') }}
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.lint == 'true' && needs.changes.outputs.emi_skip != 'true' }}
     runs-on: [self-hosted, macOS, ARM64, emi]
     timeout-minutes: 10
     steps:
@@ -183,15 +188,20 @@ jobs:
     name: Repository sanity
     needs: changes
     if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.sanity == 'true') }}
-    runs-on: [self-hosted, Linux, ARM64, default]
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     steps:
-      - name: Reject fork pull request code on the private runner
+      - name: Reject fork pull request code before checkout
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          echo "Fork pull requests are not executed on the private self-hosted runner."
+          echo "Fork pull requests are not executed by this workflow."
           exit 1
       - uses: actions/checkout@v4
+      - name: Require successful changed-path classification
+        if: ${{ always() && needs.changes.result != 'success' }}
+        run: |
+          echo "Changed-path classification failed; repository sanity cannot pass." >&2
+          exit 1
       - name: Set up Python
         env:
           PYTHON_SHA256: b61b856c3e1a4fc65b8f6e6b0495ef975dd0924f90c59f3ea61b38a079173b84

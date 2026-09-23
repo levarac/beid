@@ -45,6 +45,18 @@ dates). The contract every agent must know before touching delivery files:
     追加するたびに古くなり、しかもそれを検査するものが無い。drift 検出を説明する
     文書に、手で維持する数字を置かないこと
 
+  - Determine changed paths and Repository sanity use GitHub-hosted
+    `ubuntu-24.04-arm`. The emi exception is limited to PR #620's exact
+    reviewed nine-file change set and approved `pr-ci.yml` digest; later
+    workflow edits do not inherit it. This keeps that change set off both the
+    macOS and OrbStack/Linux runners on `emi`. GitHub-hosted minutes
+    count against the repository owner's Actions allowance. The change list
+    must be known and contain no product/source path. Collection or malformed
+    input leaves change detection and Repository sanity red rather than
+    scheduling a macOS fallback. A changed path set or workflow digest does
+    not inherit this exception: normal CI lanes apply, including `emi` where
+    applicable. Recheck the exact set before updating PR #620.
+
   - **`.github/workflows/pr-ci-lab-cli.yml`(beid#588、2026-09-17 追加)** —
     `tools/beid-lab-cli` (macOS の device-lab CLI) を
     `swift build -c release` + `swift test` で検査する lane。job 名は
@@ -64,8 +76,9 @@ dates). The contract every agent must know before touching delivery files:
     される。`paths` が workflow を起動するかを決め、classifier が build する
     価値があるかを決める — つまり `tools/beid-lab-cli` の「この変更は build が
     要るか」の定義が YAML の glob と Python の規則に分裂せず 1 つで済む。
-    classification が壊れたら全 lane true に倒れる (fail closed) ので、
-    gate の故障は skip ではなく build になる。
+    classification が壊れたら全 lane true に倒れる (fail closed)。ただし
+    `pr-ci.yml` の別途の emi 除外判定が入力不備を検出した場合は、
+    change-detection と Repository sanity を赤にし、emi へ代替実行しない。
     **`tools/beid-lab-cli/` は Android lane と SwiftLint lane を起動しない** —
     どの app target も link していない standalone SwiftPM package なので。
     ただし `Package.resolved` の basename 規則からの除外は
@@ -75,14 +88,14 @@ dates). The contract every agent must know before touching delivery files:
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
 
-  - **Xcode Cloud** — merge 判断の対象。**branch protection による強制ではない。**
-    この repository に branch protection は存在しない (`GET
-    /repos/.../branches/main/protection` は 403 *Upgrade to GitHub Pro or make
-    this repository public* を返す)。つまり required context は 1 つも設定されて
-    おらず、**「すべての required check が緑」と「required check が 1 つも無い」
-    は GitHub 上で区別が付かない** — `mergeStateStatus` の `CLEAN` はどちらでも
-    同じように出る。したがって iOS check を待つのは**運用ルールとしての hard
-    stop** であって仕組みではない。人が守らなければ何も止めない。
+  - **Xcode Cloud** — iOS／共有コード／iOS に影響するビルド設定を含む
+    変更の merge 判断対象。**Android 専用変更と今回の CI 文書契約の変更には
+    要求しない。** branch protection による強制ではない。
+    `GET /repos/.../branches/main/protection` は 403 *Upgrade to GitHub Pro
+    or make this repository public* を返すため、現時点の required context を
+    この API から確定できない。`mergeStateStatus` の `CLEAN` だけを iOS check
+    通過の証拠にせず、対象となる iOS 変更では**運用ルールとして**Xcode Cloud
+    の成功を確認する。Android 専用変更へこの運用ルールを拡張しない。
     稼働状況をここに書かない — compute 枠は動くので、状態を書き写した瞬間に
     古くなる (#433 が同じ subsection に入れた「件数をここに書かない」と同じ
     失敗を、件数ではなく**状態**という通貨でやることになる)。現在動いているか

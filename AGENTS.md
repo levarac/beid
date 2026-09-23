@@ -337,7 +337,13 @@ job and three named gates are:
 files or the `main` push comparison, and `scripts/ci_change_filter.py`
 classifies them. Documentation-only changes skip Android build and SwiftLint;
 Repository sanity always runs. Unknown paths, dependency/workflow/build-script
-changes, and classifier failures run the relevant or all gates fail-closed.
+changes run the relevant or all gates. Only the exact reviewed nine-file CI
+contract change set for PR #620, with the approved workflow content digest,
+skips the two `emi` jobs. Any later workflow change requires a fresh review;
+file names alone do not grant an exception. Repository sanity still runs the
+complete scripts contract suite. Missing or malformed change-list input fails
+both change detection and Repository sanity, leaving the PR red without
+scheduling `emi` as a fallback.
 
 **Android build**: `:shared:testAndroidHostTest`, `:app:testDebugUnitTest`,
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
@@ -353,8 +359,8 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 The workflow remains the execution source of truth; this subsection records
 the jobs and command tokens checked for documentation drift.
 
-Determine changed paths and Repository sanity run on the existing Linux ARM64
-self-hosted labels `self-hosted, Linux, ARM64, default`. Repository sanity
+Determine changed paths and Repository sanity run on GitHub-hosted
+`ubuntu-24.04-arm`, not the Linux self-hosted runners on `emi`. Repository sanity
 installs the pinned Python 3.12 standalone build into the runner's temporary
 directory. SwiftLint remains on the existing private `emi` macOS ARM64 runner
 because this repository's lint requires Xcode SourceKit; the official Linux
