@@ -373,18 +373,15 @@ not depend on generated Swift artifacts being committed to the repository.
 
 ## When Xcode Cloud declines to start — the measurement record
 
-The repository-side requirement decision is made by
-`scripts/ci_change_filter.py`, not by a second ASC-oriented matcher. On
-2026-09-22, the PR workflow's live readback verified the ASC convenience
-exclusion as `android/app/src/` alongside the existing documentation/control-
-file exclusions. The readback showed the `Test - iOS` action still had
-`isRequiredToPass: true`, and Release Build was untouched. See the full
-before/update/after artifact at
-`/Users/kenichi/Repository/Levarac/evidence/xcode-platform-gate-20260922/asc/write-readback.json`.
-Do not add a blanket `android/` exclusion: Gradle settings, wrapper,
-dependency, and other build inputs can change the iOS/shared build graph and
-remain `xcode_cloud=true`. Shared and iOS/native Swift paths also remain
-required.
+On 2026-09-22, the PR workflow's live readback verified `android/app/src/`
+alongside the existing `docs/`, `.github/`, and `*.md` exclusions
+([decision and readback: #625](https://github.com/thegreeting/beid/issues/625)).
+The `Test - iOS` action still had `isRequiredToPass: true`; Release Build
+was untouched. The PR start condition uses `DO_NOT_START_IF_ALL_FILES_MATCH`:
+only a PR whose complete changed-file list matches the exclusions is skipped.
+Do not add a blanket `android/` exclusion: Gradle settings, wrapper, and
+other build inputs can change the iOS/shared build graph. Shared and
+iOS/native Swift paths remain outside the configured set.
 
 **This section is the source of truth for what has actually been measured about
 `DO_NOT_START_IF_ALL_FILES_MATCH`.** The *rule* for citing that behaviour in a

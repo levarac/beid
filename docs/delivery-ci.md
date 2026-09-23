@@ -72,18 +72,19 @@ dates). The contract every agent must know before touching delivery files:
     `tools/beid-lab-cli/` だけに効く。`tools/` 配下の未分類の path は従来どおり
     fail closed のままである。
 
-  - **Xcode Cloud requirement classification** — the same
-    `scripts/ci_change_filter.py` result exposed by the `changes` job has an
-    `xcode_cloud` output. Pure Android app source/resources/tests under
-    `android/app/src/` set it to `false`; Android build inputs, shared code,
-    iOS/native Swift, workflow/scripts, and unknown paths set it to `true`.
-    This is a merge-evidence requirement decision, separate from whether App
-    Store Connect starts a workflow. Do not exclude all of `android/`.
+  - **Xcode Cloud PR gate** — ASC's live `PR Build & Test` start condition is
+    the source for whether its iOS check is expected. On 2026-09-22 its
+    `DO_NOT_START_IF_ALL_FILES_MATCH` exclusions were `docs/`, `.github/`,
+    `*.md`, and `android/app/src/` ([#625](https://github.com/thegreeting/beid/issues/625)).
+    Android app source/resources/manifest/tests alone need no Xcode Cloud run;
+    a mixed PR with `shared/`, `ios/`, Android build inputs, or another
+    nonexcluded path still requires the iOS check. Re-read ASC before applying
+    this dated observation to a future PR. Do not exclude all of `android/`.
 
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
 
-  - **Xcode Cloud** — merge 判断の対象 when `xcode_cloud=true`.
+  - **Xcode Cloud** — ASC の PR file exclusions に該当しない時に merge 判断の対象。
     **branch protection による強制ではない。**
     この repository に branch protection は存在しない (`GET
     /repos/.../branches/main/protection` は 403 *Upgrade to GitHub Pro or make
