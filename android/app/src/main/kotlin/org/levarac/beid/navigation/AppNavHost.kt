@@ -29,6 +29,7 @@ import org.levarac.beid.ui.screens.RecordDetailRoute
 import org.levarac.beid.ui.screens.RecordsRoute
 import org.levarac.beid.ui.screens.TodaySummaryRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
+import org.levarac.beid.venue.VenueActivity
 
 /**
  * Root navigation scaffold — the Compose-Navigation equivalent of iOS's
@@ -137,6 +138,7 @@ fun AppNavHost(
                 onOpenRecords = { navController.navigate(Screen.Records.route) },
                 onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
                 walletState = walletState,
+                onOpenVenue = { context.startActivity(VenueActivity.createIntent(context)) },
             )
         }
 

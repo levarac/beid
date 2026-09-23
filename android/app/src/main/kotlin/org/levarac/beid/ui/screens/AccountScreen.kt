@@ -46,6 +46,7 @@ object AccountScreenTestTags {
     const val LEAVE_EVENT_BUTTON = "account_leave_event_button"
     const val RECORDS_BUTTON = "account_records_button"
     const val MANUAL_EVENT_CODE_BUTTON = "account_manual_event_code_button"
+    const val VENUE_BROADCAST_BUTTON = "account_venue_broadcast_button"
     const val RELAY_NOTE = "account_relay_note"
     const val VERSION_TEXT = "account_version_text"
     const val WALLET_REFERENCE = "account_wallet_reference"
@@ -69,6 +70,7 @@ fun AccountScreen(
     onOpenRecords: () -> Unit,
     onOpenManualEventCode: () -> Unit = {},
     walletState: WalletConnectorState = WalletConnectorState.Idle,
+    onOpenVenue: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isSessionActive = uiState.sessionState is EventJoinUiState.Sensing
@@ -155,6 +157,14 @@ fun AccountScreen(
                 modifier = Modifier.testTag(AccountScreenTestTags.MANUAL_EVENT_CODE_BUTTON),
             )
 
+            BeidSecondaryButton(
+                text = stringResource(R.string.account_venue_broadcast_button),
+                contentColor = BeidTheme.colors.textPrimary,
+                borderColor = BeidTheme.colors.strokeHairline,
+                onClick = onOpenVenue,
+                modifier = Modifier.testTag(AccountScreenTestTags.VENUE_BROADCAST_BUTTON),
+            )
+
             // No motif accent (DESIGN.md §5: account is outside sensing/ceremony/recovery
             // moments) and no destructive-colored tint (no ratified DS.Color for that,
             // see the PR report) — same neutral secondary-button treatment EventJoinScreen
@@ -196,12 +206,20 @@ fun AccountRoute(
     onOpenRecords: () -> Unit,
     onOpenManualEventCode: () -> Unit,
     walletState: WalletConnectorState = WalletConnectorState.Idle,
+    onOpenVenue: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val bluetoothMonitor = remember { BluetoothRadioMonitor(context) }
     val isBluetoothOn = remember { bluetoothMonitor.isOn }
     val viewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory(session))
-    AccountScreen(viewModel, isBluetoothOn, onOpenRecords, onOpenManualEventCode, walletState)
+    AccountScreen(
+        viewModel = viewModel,
+        isBluetoothOn = isBluetoothOn,
+        onOpenRecords = onOpenRecords,
+        onOpenManualEventCode = onOpenManualEventCode,
+        walletState = walletState,
+        onOpenVenue = onOpenVenue,
+    )
 }
 
 @Composable

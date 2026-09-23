@@ -6,6 +6,7 @@ import androidx.test.core.app.ActivityScenario
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.security.MessageDigest
@@ -28,6 +29,29 @@ import org.levarac.beid.shared.report.encodeUnsentWindowLedgerSnapshot
 /** Device proof for dispatch#52 using the production stores and key custody. */
 @RunWith(AndroidJUnit4::class)
 class Dispatch52PersistenceInstrumentationTest {
+    @Before
+    fun requireExplicitTargetAndSinglePhase() {
+        val arguments = InstrumentationRegistry.getArguments()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assertEquals(
+            "Pass the intended fixture package explicitly",
+            context.packageName,
+            arguments.getString("dispatch52TargetPackage"),
+        )
+        val selection = arguments.getString("class").orEmpty()
+        assertTrue(
+            "Run one phase per instrumentation process",
+            selection.startsWith("${javaClass.name}#") && !selection.contains(','),
+        )
+        assertEquals("Instrumentation must run as the target app", context.applicationInfo.uid, android.os.Process.myUid())
+        if (!selection.endsWith("#seedProductionOwnerKeyAndUnsentLedger")) {
+            assertTrue(
+                "Seed a baseline before running another phase",
+                context.getSharedPreferences("dispatch52_test_baseline", 0).contains("seed_pid"),
+            )
+        }
+    }
+
     @Test
     fun finishProductionActivityNormally() {
         ActivityScenario.launch(MainActivity::class.java).use { it.close() }
@@ -59,9 +83,9 @@ class Dispatch52PersistenceInstrumentationTest {
         ).publicKeyCompressed()
         assertEquals(publicKey.sha256(), productionReadBack.sha256())
 
+        val fixtureWindowId = java.util.UUID.randomUUID()
         val runtime = WindowObservationRuntimeOwner(
-            newWindowId = { java.util.UUID.fromString("00112233-4455-6677-8899-aabbccddeeff") },
-            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
+            newWindowId = { fixtureWindowId },
         ).acquire(context.filesDir, BarnardSensingCryptography(context), { 1_800_000_000.75 })
         val eventId = "21".repeat(32)
         val eventDigest = "22".repeat(32)
@@ -83,7 +107,8 @@ class Dispatch52PersistenceInstrumentationTest {
         val testPrefs = InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("dispatch52_test_baseline", 0)
         val artifact = context.filesDir.resolve("canonical-observations-v1").listFiles().orEmpty()
-            .singleOrNull { it.extension == "cose" } ?: error("signed artifact missing")
+            .singleOrNull { it.extension == "cose" && it.name.startsWith("$fixtureWindowId--") }
+            ?: error("this run's signed artifact missing")
         val windowId = artifact.name.substringBefore("--")
         val observationReference = artifact.name.substringAfter("--").removeSuffix(".cose")
         assertLedgerLinks(file, windowId, observationReference)
@@ -96,9 +121,11 @@ class Dispatch52PersistenceInstrumentationTest {
         assertEquals(configuration.operatorId.toByteArray().hex(), submissionRecord.operatorIdHex)
         assertEquals(configuration.eventDefinitionDigest?.toByteArray()?.hex(), submissionRecord.eventDefinitionDigestHex)
         assertEquals(null, submissionRecord.unresolvedReason)
-        val seedFingerprint = (AndroidKeystoreOwnerKeyStorage(ownerKeyPreferences(context))
-            .readBytes("beid.ownerKeySeed") as? OwnerKeyReadResult.Present)?.bytes?.sha256()
-        testPrefs.edit()
+        val storedSeed = AndroidKeystoreOwnerKeyStorage(ownerKeyPreferences(context))
+            .readBytes("beid.ownerKeySeed")
+        assertTrue(storedSeed is OwnerKeyReadResult.Present)
+        val seedFingerprint = (storedSeed as OwnerKeyReadResult.Present).bytes.sha256()
+        assertTrue("Persist baseline before ending the seed process", testPrefs.edit()
             .putString("owner_key_sha256", publicKey.sha256())
             .putString("seed_sha256", seedFingerprint)
             .putString("artifact_name", artifact.name)
@@ -109,7 +136,9 @@ class Dispatch52PersistenceInstrumentationTest {
             .putString("receipt_public_key_hex", submissionRecord.receiptPublicKeyHex)
             .putString("operator_id_hex", submissionRecord.operatorIdHex)
             .putString("event_definition_digest_hex", submissionRecord.eventDefinitionDigestHex)
-            .commit()
+            .putInt("seed_pid", android.os.Process.myPid())
+            .commit())
+        assertEquals(seedFingerprint, testPrefs.getString("seed_sha256", null))
     }
 
     @Test
@@ -127,6 +156,8 @@ class Dispatch52PersistenceInstrumentationTest {
         assertNotNull(restored.ledger)
         val testPrefs = InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("dispatch52_test_baseline", 0)
+        assertTrue("Seed in an earlier process before verifying", testPrefs.contains("seed_pid"))
+        assertTrue("Verification must use another process", testPrefs.getInt("seed_pid", -1) != android.os.Process.myPid())
         val storedSeed = AndroidKeystoreOwnerKeyStorage(ownerKeyPreferences(context))
             .readBytes("beid.ownerKeySeed")
         assertTrue(storedSeed is OwnerKeyReadResult.Present)

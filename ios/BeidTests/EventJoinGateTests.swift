@@ -118,6 +118,26 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertNil(relay.verifier, "a refused join must leave the relay disarmed")
   }
 
+  func testRefusedJoinWritesAnAdmissionDiagnostic() {
+    var lines: [String] = []
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      joinDiagnosticLog: { lines.append($0) }
+    )
+
+    coordinator.applyJoinGateDecision(
+      .refuse(.noRegistryConfigured, "No registry configured; refusing to join.")
+    )
+
+    XCTAssertEqual(
+      lines,
+      [
+        "join_stage event_id=unknown stage=admission outcome=rejected_no_registry_configured " +
+          "attempt=none retry_at_epoch_ms=none"
+      ]
+    )
+  }
+
   /// Mirrors Android's `joinEventStartsNeitherJoinNorSensingWhenTheRegistryLookupFails`.
   func testStartSensingStartsNeitherJoinNorSensingWhenTheRegistryReadFails() async {
     let engine = RecordingEventJoinControl()

@@ -45,6 +45,8 @@ data class EventJoinScreenState(
     val searchOutcome: NearbyEventSearchOutcome = NearbyEventSearchOutcome.SEARCHING,
     /** See [org.levarac.beid.sensing.EventJoinSession.nearbyEventsOmitted]. */
     val nearbyEventsOmitted: Boolean = false,
+    /** Observable presentation mirror of [EventJoinSession.recordingCeremonyShown]. */
+    val recordingCeremonyShown: Boolean = false,
     /**
      * beid#464's device-clock preflight. `null` until the first check has an
      * answer; the notice renders only the two states the participant must be told.
@@ -65,7 +67,12 @@ class EventJoinViewModel(
     private val session: EventJoinSession,
     private val clockPreflight: ClockPreflightController? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(EventJoinScreenState(sessionState = session.state.value))
+    private val _uiState = MutableStateFlow(
+        EventJoinScreenState(
+            sessionState = session.state.value,
+            recordingCeremonyShown = session.recordingCeremonyShown,
+        ),
+    )
     val uiState: StateFlow<EventJoinScreenState> = _uiState.asStateFlow()
 
     init {
@@ -185,10 +192,10 @@ class EventJoinViewModel(
 
     fun resumeSensing() = session.resumeSensing()
 
-    /** See [EventJoinSession.recordingCeremonyShown]. */
-    val recordingCeremonyShown: Boolean get() = session.recordingCeremonyShown
-
-    fun markRecordingCeremonyShown() = session.markRecordingCeremonyShown()
+    fun markRecordingCeremonyShown() {
+        session.markRecordingCeremonyShown()
+        _uiState.update { it.copy(recordingCeremonyShown = true) }
+    }
 
     class Factory(
         private val session: EventJoinSession,

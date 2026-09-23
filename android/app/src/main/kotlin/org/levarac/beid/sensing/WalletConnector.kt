@@ -47,7 +47,7 @@ sealed class WalletConnectOutcome {
     data class Signed(val signatureHex: String) : WalletConnectOutcome()
     data class ConnectedAndSigned(val live: LiveWalletAddress, val signatureHex: String) : WalletConnectOutcome()
     data object Cancelled : WalletConnectOutcome()
-    data class Failed(val reason: String) : WalletConnectOutcome()
+    data class Failed(val failure: WalletBindingFailure) : WalletConnectOutcome()
 }
 
 interface WalletConnector {
@@ -149,7 +149,7 @@ class MetaMaskWalletConnector internal constructor(
                 MetaMaskTransportResult.Success -> finishConnected(callback)
                 is MetaMaskTransportResult.Value -> finishConnected(callback)
                 MetaMaskTransportResult.Cancelled -> finishCancelled(callback)
-                is MetaMaskTransportResult.Failed -> finishFailed(result.reason, callback)
+                is MetaMaskTransportResult.Failed -> finishFailed(if (result.reason.contains("timeout", ignoreCase = true)) WalletBindingFailure.TimedOut else WalletBindingFailure.NotConnected, callback)
             }
         }
     }
@@ -164,15 +164,15 @@ class MetaMaskWalletConnector internal constructor(
                 is MetaMaskTransportResult.Value -> {
                     val live = readLiveAddressOrNull()
                     if (live == null) {
-                        finishFailed("MetaMask returned no account or chain", callback)
+                    finishFailed(WalletBindingFailure.NotConnected, callback)
                     } else {
                         recordLiveAddress(live)
                         callback(WalletConnectOutcome.ConnectedAndSigned(live, result.value))
                     }
                 }
                 MetaMaskTransportResult.Cancelled -> finishCancelled(callback)
-                is MetaMaskTransportResult.Failed -> finishFailed(result.reason, callback)
-                MetaMaskTransportResult.Success -> finishFailed("MetaMask returned an invalid signing result", callback)
+                is MetaMaskTransportResult.Failed -> finishFailed(if (result.reason.contains("timeout", ignoreCase = true)) WalletBindingFailure.TimedOut else WalletBindingFailure.NotConnected, callback)
+                MetaMaskTransportResult.Success -> finishFailed(WalletBindingFailure.VerificationFailed, callback)
             }
         }
     }
@@ -183,7 +183,7 @@ class MetaMaskWalletConnector internal constructor(
         callback: (WalletConnectOutcome) -> Unit,
     ) {
         if (liveAddress != address) {
-            callback(WalletConnectOutcome.Failed("Wallet session is no longer connected to this account"))
+            callback(WalletConnectOutcome.Failed(WalletBindingFailure.NotConnected))
             return
         }
         val requestGeneration = ++generation
@@ -196,8 +196,8 @@ class MetaMaskWalletConnector internal constructor(
                     callback(WalletConnectOutcome.Signed(result.value))
                 }
                 MetaMaskTransportResult.Cancelled -> finishCancelled(callback)
-                is MetaMaskTransportResult.Failed -> finishFailed(result.reason, callback)
-                MetaMaskTransportResult.Success -> finishFailed("MetaMask returned an invalid signing result", callback)
+                is MetaMaskTransportResult.Failed -> finishFailed(if (result.reason.contains("timeout", ignoreCase = true)) WalletBindingFailure.TimedOut else WalletBindingFailure.NotConnected, callback)
+                MetaMaskTransportResult.Success -> finishFailed(WalletBindingFailure.VerificationFailed, callback)
             }
         }
     }
@@ -223,7 +223,7 @@ class MetaMaskWalletConnector internal constructor(
     private fun finishConnected(callback: (WalletConnectOutcome) -> Unit) {
         val live = readLiveAddressOrNull()
         if (live == null) {
-            finishFailed("MetaMask returned no account or chain", callback)
+            finishFailed(WalletBindingFailure.NotConnected, callback)
             return
         }
         recordLiveAddress(live)
@@ -241,9 +241,9 @@ class MetaMaskWalletConnector internal constructor(
         callback(WalletConnectOutcome.Cancelled)
     }
 
-    private fun finishFailed(reason: String, callback: (WalletConnectOutcome) -> Unit) {
-        mutableState.value = WalletConnectorState.Failed(reason, cachedHint, liveAddress)
-        callback(WalletConnectOutcome.Failed(reason))
+    private fun finishFailed(failure: WalletBindingFailure, callback: (WalletConnectOutcome) -> Unit) {
+        mutableState.value = WalletConnectorState.Failed(failure.name, cachedHint, liveAddress)
+        callback(WalletConnectOutcome.Failed(failure))
     }
 
     private fun readLiveAddressOrNull(): LiveWalletAddress? {
@@ -307,10 +307,10 @@ class WalletBindingFlow(
                 is WalletConnectOutcome.Connected -> {
                     signConnected(attemptId, connected.live, onResult)
                 }
-                is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); finish(onResult, connected) }
-                is WalletConnectOutcome.Failed -> { coordinator.failBinding(connected.reason); finish(onResult, connected) }
+                is WalletConnectOutcome.Cancelled -> fail(attemptId, WalletBindingFailure.Declined, onResult)
+                is WalletConnectOutcome.Failed -> { coordinator.failBinding(connected.failure); finish(onResult, connected) }
                 is WalletConnectOutcome.Signed, is WalletConnectOutcome.ConnectedAndSigned ->
-                    fail(attemptId, "MetaMask returned an invalid account result", onResult)
+                    fail(attemptId, WalletBindingFailure.NotConnected, onResult)
             }
         }
     }
@@ -322,7 +322,7 @@ class WalletBindingFlow(
     ) {
         val message = coordinator.beginBinding(hint.address, hint.chainId)
         if (message == null) {
-            fail(attemptId, "Wallet binding is unavailable while recording", onResult)
+            fail(attemptId, WalletBindingFailure.NotConnected, onResult)
             return
         }
         coordinator.markBindingAwaitingApproval()
@@ -331,10 +331,10 @@ class WalletBindingFlow(
             when (outcome) {
                 is WalletConnectOutcome.ConnectedAndSigned ->
                     complete(attemptId, outcome.live, outcome.signatureHex, onResult)
-                is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); finish(onResult, outcome) }
-                is WalletConnectOutcome.Failed -> { coordinator.failBinding(outcome.reason); finish(onResult, outcome) }
+                is WalletConnectOutcome.Cancelled -> fail(attemptId, WalletBindingFailure.Declined, onResult)
+                is WalletConnectOutcome.Failed -> { coordinator.failBinding(outcome.failure); finish(onResult, outcome) }
                 is WalletConnectOutcome.Connected, is WalletConnectOutcome.Signed ->
-                    fail(attemptId, "MetaMask returned an invalid connect-and-sign result", onResult)
+                    fail(attemptId, WalletBindingFailure.VerificationFailed, onResult)
             }
         }
     }
@@ -346,7 +346,7 @@ class WalletBindingFlow(
     ) {
         val message = coordinator.beginBinding(live.address, live.chainId)
         if (message == null) {
-            fail(attemptId, "Wallet binding is unavailable while recording", onResult)
+            fail(attemptId, WalletBindingFailure.NotConnected, onResult)
             return
         }
         coordinator.markBindingAwaitingApproval()
@@ -354,10 +354,10 @@ class WalletBindingFlow(
             if (currentAttemptId != attemptId) return@personalSign
             when (outcome) {
                 is WalletConnectOutcome.Signed -> complete(attemptId, live, outcome.signatureHex, onResult)
-                is WalletConnectOutcome.Cancelled -> { coordinator.declineBinding(); finish(onResult, outcome) }
-                is WalletConnectOutcome.Failed -> { coordinator.failBinding(outcome.reason); finish(onResult, outcome) }
+                is WalletConnectOutcome.Cancelled -> fail(attemptId, WalletBindingFailure.Declined, onResult)
+                is WalletConnectOutcome.Failed -> { coordinator.failBinding(outcome.failure); finish(onResult, outcome) }
                 is WalletConnectOutcome.Connected, is WalletConnectOutcome.ConnectedAndSigned ->
-                    fail(attemptId, "MetaMask returned an invalid signing result", onResult)
+                    fail(attemptId, WalletBindingFailure.VerificationFailed, onResult)
             }
         }
     }
@@ -369,17 +369,19 @@ class WalletBindingFlow(
         onResult: (WalletConnectOutcome) -> Unit,
     ) {
         if (currentAttemptId != attemptId) return
-        if (coordinator.completeBinding(live.address, signatureHex) == null) {
-            fail(attemptId, "Wallet signature did not pass Barnard verification", onResult)
-        } else {
-            finish(onResult, WalletConnectOutcome.Signed(signatureHex))
+        when (coordinator.completeBinding(live.address, signatureHex)) {
+            is BindingCompletionResult.Bound -> finish(onResult, WalletConnectOutcome.Signed(signatureHex))
+            BindingCompletionResult.SmartWalletUnsupported ->
+                fail(attemptId, WalletBindingFailure.SmartWalletUnsupported, onResult)
+            BindingCompletionResult.NotVerified ->
+                fail(attemptId, WalletBindingFailure.VerificationFailed, onResult)
         }
     }
 
-    private fun fail(attemptId: Long, reason: String, onResult: (WalletConnectOutcome) -> Unit) {
+    private fun fail(attemptId: Long, failure: WalletBindingFailure, onResult: (WalletConnectOutcome) -> Unit) {
         if (currentAttemptId != attemptId) return
-        coordinator.failBinding(reason)
-        finish(onResult, WalletConnectOutcome.Failed(reason))
+        coordinator.failBinding(failure)
+        finish(onResult, WalletConnectOutcome.Failed(failure))
     }
 
     private fun finish(onResult: (WalletConnectOutcome) -> Unit, result: WalletConnectOutcome) {

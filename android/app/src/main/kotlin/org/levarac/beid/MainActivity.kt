@@ -22,10 +22,12 @@ import org.levarac.beid.scenario.selectAndroidDataSource
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.sensing.MetaMaskWalletConnector
 import org.levarac.beid.sensing.WalletBindingFlow
+import org.levarac.beid.sensing.EventBindingState
 import org.levarac.beid.sensing.ProofRecordingBridge
 import org.levarac.beid.ui.screens.EventJoinContent
 import org.levarac.beid.ui.screens.RecordsScreen
 import org.levarac.beid.ui.theme.BeidAppTheme
+import org.levarac.beid.ui.wallet.WalletBindingFailureDialog
 import org.levarac.parallax.registry.RegistryClient
 
 /**
@@ -93,6 +95,7 @@ open class MainActivity : ComponentActivity() {
         setContent {
             BeidAppTheme {
                 val walletState by walletConnector.state.collectAsState()
+                val bindingState by coordinator.bindingStateFlow.collectAsState()
                 AppNavHost(
                     session = coordinator,
                     proofRecordStore = proofRecordStore,
@@ -100,8 +103,23 @@ open class MainActivity : ComponentActivity() {
                     walletState = walletState,
                     onStartWalletBinding = { walletBindingFlow?.start() },
                 )
+                (bindingState as? EventBindingState.Failed)?.let { failed ->
+                    WalletBindingFailureDialog(
+                        failure = failed.failure,
+                        onRetry = {
+                            coordinator.declineBinding()
+                            walletBindingFlow?.start()
+                        },
+                        onClose = coordinator::declineBinding,
+                    )
+                }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        eventJoinCoordinator?.drainPendingSubmissionsOnForeground()
     }
 
     /**

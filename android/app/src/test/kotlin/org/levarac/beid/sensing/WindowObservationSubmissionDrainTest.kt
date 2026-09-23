@@ -269,16 +269,16 @@ class WindowObservationSubmissionDrainTest {
                 submissionConfiguration = configuration,
             )
             closeOneWindow(accumulator)
+            val runtime = WindowObservationRuntime(accumulator, drain, WindowObservationContextState())
 
             val ready = CountDownLatch(2)
             val go = CountDownLatch(1)
-            val threads = List(2) {
-                Thread {
-                    ready.countDown()
-                    go.await()
-                    drain.drain()
-                }
-            }
+            // The first call is the exact foreground entry point; the second
+            // represents a close/retry trigger racing it.
+            val threads = listOf(
+                Thread { ready.countDown(); go.await(); runtime.drainPendingSubmissions() },
+                Thread { ready.countDown(); go.await(); drain.drain() },
+            )
             threads.forEach { it.start() }
             ready.await()
             go.countDown()
