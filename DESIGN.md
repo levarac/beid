@@ -297,18 +297,23 @@ fully coherent to a user who never connects a wallet.
 > a capped decorative-symbol size, a documented-exception process). Rules
 > 1–4 and 11 name iOS APIs as their *current expression* — Android
 > counterparts are named per-rule below. Rule 5's exact number is iOS-only
-> as written (see below). None of rules 1–12 has any automated check on
+> as written (see below). None of rules 1–13 has any automated check on
 > Android today (§16's new note); on iOS, rules 1–4 have lint plus the
-> author's own review, and rules 5–12 have only the author's own review —
-> the independent-review gate described later in this document is
-> currently suspended repo-wide (AGENTS.md).
+> author's own review, rules 5–12 have only the author's own review, and
+> rule 13 alone is test-backed (below) — the independent-review gate
+> described later in this document is currently suspended repo-wide
+> (AGENTS.md).
 
 Rules 1–4 are lint-backed for their *common surface forms*
 (`.swiftlint.yml` catches the direct call-site patterns — roughly the 80%
 case); values reached through expressions, wrappers, or indirection are
 review-level (§16 lists the known long tail). Rules 5–12 are review-level
 checks against running UI, previews, or PR metadata — auditable, but not
-by grep alone.
+by grep alone. Rule 13 is in neither category: it is **test-backed**.
+`ios/BeidTests/SignalStrengthNeverRecordedTests.swift` (beid#652) goes red
+if signal strength reaches persistence, signature input or the submission
+payload. That test is the guard; rule 13 records what it guards, and this
+document enforces nothing.
 
 1. MUST: All colors in Views come from `DS.Color.*`. FORBIDDEN: `Color(red:`,
    `Color(hue:`, `Color(hex:`, `Color.white/.black/.blue/...`, shorthand
@@ -402,6 +407,20 @@ by grep alone.
 12. MUST: Any deviation from this document links a decision record in the PR
     (`DesignException: <link or rationale>`). **[Platform-neutral process
     rule; not tied to any iOS API.]**
+13. MUST: Signal strength (BLE RSSI) is
+    **used for display only, never for any decision** (beid#652). It MAY
+    reach the sensing-time drawing (§10's sensing-graph entry, #634) and
+    nothing else. FORBIDDEN: signal strength — or any value derived from
+    it — in records, in signature input, or in the submission payload.
+    **[Android counterpart: none exists. Android is out of scope for
+    beid#652 because the receiving branch does not exist there yet — there
+    is no Android sensing graph for signal strength to be drawn in. Named,
+    not left silent: whenever that branch is built, this constraint is what
+    it has to satisfy.]**
+    *Backed by `ios/BeidTests/SignalStrengthNeverRecordedTests.swift`
+    (beid#652), which goes red if signal strength reaches persistence,
+    signature input or the submission payload. The test is the primary
+    guard; this rule is the second one, and it is second.*
 
 ## 3. Tone and Manner
 
@@ -1531,7 +1550,8 @@ Real components in this codebase. Each entry is the contract for reuse.
 > **Platform scope:** iOS-only as written — no Android counterpart exists
 > (§9's motion section already establishes Android has zero animation code
 > today; there is also no `SensingView`-equivalent screen for a pulse to
-> live in, §11).
+> live in, §11). Android is out of scope for #652 on the same grounds:
+> there is no Android sensing graph for signal strength to be drawn in.
 
 - Purpose: The Encounter Field ambient indicator while scanning.
 - Required tokens: `DS.Color.actionPrimary` (the screen tint the rings
@@ -1539,6 +1559,21 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Rules: the only permitted `repeatForever` animation; MUST degrade under
   Reduce Motion (§9); center symbol needs `.accessibilityHidden(true)` with
   the state conveyed by the title text.
+- Signal strength (#652, 2026-09-23): the graph's radial axis is BLE signal
+  strength, and it is **used for display only, never for any decision**. No
+  beid decision reads it, and records, signatures and submissions do not
+  contain it — #652's tests pin that; this sentence does not, and no lint
+  rule can. A node with no usable measurement yet MUST be drawn at the
+  weakest position — outermost — never at the center. On a graph whose
+  semantic is "distance from center = signal strength", drawing an
+  unmeasured node at the center would make the strongest possible proximity
+  claim from zero measurement: absence of evidence must never render as
+  evidence of proximity. The damping that keeps nodes from jittering
+  (smoothing plus redraw coalescing) is **not verified on real hardware** —
+  no device was run for this change, so its constants are unverified, not
+  tuned; only a run on real devices with real peers moving settles them.
+  The drawing itself is #634, not #652 — #652 builds the data path #634
+  consumes.
 - *Flat 2b (2026-09-22): the pulse is replaced by the sensing graph
   (#634), which carries a VoiceOver summary (§13). Its former tint,
   `signalActive`, was removed by #628 (2026-09-23).*
@@ -2453,7 +2488,9 @@ lives in `AGENTS.md`.
 > new enforcement-layer note below), "44×44 pt" → §2 rule 5's Android note
 > (a different platform minimum, 48×48dp, not a unit conversion), "SF
 > Symbols"/TODO(asset) → §12's Android note, §15 → its own per-bullet
-> notes above. Use an Android PR's own checklist by substituting those
+> notes above, `SignalStrengthNeverRecordedTests` → **no Android
+> counterpart exists** (§2 rule 13; Android is out of scope for beid#652).
+> Use an Android PR's own checklist by substituting those
 > named counterparts, not by pasting the iOS-worded block unchanged.
 >
 > **Flat 2b (2026-09-22, beid#627,
@@ -2482,6 +2519,7 @@ Copy-paste this into every UI PR description and check each item:
 - [ ] Graphs and Sigils carry a VoiceOver summary (§13).
 - [ ] Empty/error/loading states implemented for new surfaces (empty = dashed block, §8).
 - [ ] State is never conveyed by color alone.
+- [ ] No new field reaching persistence, signature input, or the submission payload carries signal strength, or anything derived from it (§2.13). ("No" = I read the diff for it; a green `SignalStrengthNeverRecordedTests` is necessary, not sufficient.)
 - [ ] Copy follows §15 (English source, String Catalog, vocabulary, no web3 jargon, error formula; no unauthorized Flat 2b strings).
 - [ ] Any deviation carries `DesignException: <rationale or link>`.
 ```
@@ -2564,6 +2602,16 @@ Enforcement layers:
    as binding Android, while only iOS has a lint gate and neither platform
    has independent review, would become exactly that. See the decision
    doc's cost analysis for how this bears on the Option A/B choice.
+5. **Test-level (§2 rule 13 only)**:
+   `ios/BeidTests/SignalStrengthNeverRecordedTests.swift` (beid#652) goes
+   red if signal strength reaches persistence, signature input or the
+   submission payload. What it pins is the observable *outputs* — the
+   persisted bytes, the signature input, the payload — not the shape of the
+   code that produces them, which is where the guarantee actually lives.
+   So it is necessary, not sufficient: a green suite does not substitute
+   for reading the diff for a new field, which is what the checklist line
+   above asks for. iOS only — Android is out of scope for beid#652, so
+   nothing of this kind exists there.
 
 Known pre-existing lint debt is the exact five-entry set recorded in
 `lint/baseline.template.json`, all in `ios/Beid/DesignSystem.swift` at the
