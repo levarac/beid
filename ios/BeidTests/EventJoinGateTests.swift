@@ -38,23 +38,10 @@ import XCTest
 /// skipped a cancel), because asserting "nothing joined" cannot distinguish a
 /// working guard from an answer that would never have joined anyway.
 ///
-/// ## What still cannot be expressed here
-///
-/// Swift still cannot construct the successful `EventDefinitionResolution`
-/// needed to prove the *operator-lookup* evidence shape admits. That type —
-/// like `EventDefinitionContext` behind it — has an internal Kotlin
-/// constructor, which Swift Export emits with only a package initializer.
-/// `RegistryClient` also has no public fakeable initializer.
-///
-/// beid#141 closes the broader positive-control gap through the other evidence
-/// shape: focused `SensingCoordinatorTests` walk the real nearby promotion
-/// reducer, issue `fromNearbyCandidate`, and assert one capability reaches
-/// `joinAndStart`. The nearby refusal below also reaches
-/// `.definitionNotEligible` directly with an unverified candidate. The
-/// remaining unpinned claim is narrower: `RegistryEventJoinRegistry` filters
-/// a failed non-optional production resolution to nil before the
-/// operator-lookup gate sees it. That adapter still rests on inspection and
-/// Android symmetry until a constructible Swift registry result exists.
+/// Shared test factories now make both failed and successful registry
+/// resolutions constructible from Swift. The tests below therefore pin the
+/// production adapter's failed-read filter and the operator-lookup refusal
+/// for an ineligible definition directly.
 @MainActor
 final class EventJoinGateTests: XCTestCase {
   private let canonicalEventIdHex = "0x\(String(repeating: "a", count: 64))"
@@ -131,6 +118,26 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertNil(relay.verifier, "a refused join must leave the relay disarmed")
   }
 
+  func testRefusedJoinWritesAnAdmissionDiagnostic() {
+    var lines: [String] = []
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self,
+      joinDiagnosticLog: { lines.append($0) }
+    )
+
+    coordinator.applyJoinGateDecision(
+      .refuse(.noRegistryConfigured, "No registry configured; refusing to join.")
+    )
+
+    XCTAssertEqual(
+      lines,
+      [
+        "join_stage event_id=unknown stage=admission outcome=rejected_no_registry_configured " +
+          "attempt=none retry_at_epoch_ms=none"
+      ]
+    )
+  }
+
   /// Mirrors Android's `joinEventStartsNeitherJoinNorSensingWhenTheRegistryLookupFails`.
   func testStartSensingStartsNeitherJoinNorSensingWhenTheRegistryReadFails() async {
     let engine = RecordingEventJoinControl()
@@ -150,6 +157,34 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertFalse(engine.didJoin, "a failed read must start neither join nor sensing")
     XCTAssertEqual(coordinator.joinRefusal, .registryReadFailed)
     XCTAssertEqual(coordinator.phase, .idle, "a refusal must not leave the user on a sensing screen")
+  }
+
+  func testRegistryAdapterFiltersFailedNonNullResolutionToNil() async {
+    let failedResolution = BeidSharedKit.jointestsupport
+      .createFailedEventDefinitionResolutionForTesting(
+        errorCode: "definition_not_found",
+        errorMessage: "no definition was available"
+      )
+    let registry = RegistryEventJoinRegistry(testReader: { _, _, completion in
+      completion(failedResolution)
+      return NoopEventJoinRequest()
+    })
+    var receivedResolution: ExportedKotlinPackages.org.levarac.parallax.registry
+      .EventDefinitionResolution?
+    var receivedErrorCode: String?
+
+    registry.resolveEventDefinition(
+      eventIdHex: canonicalEventIdHex,
+      nowEpochSeconds: 1_800_000_000,
+      completion: { resolution, errorCode in
+        receivedResolution = resolution
+        receivedErrorCode = errorCode
+      }
+    )
+    await settle()
+
+    XCTAssertNil(receivedResolution)
+    XCTAssertEqual(receivedErrorCode, "definition_not_found")
   }
 
   /// Mirrors Android's `joinEventStartsNeitherJoinNorSensingWhileTheRegistryLookupIsPending`.
@@ -296,6 +331,7 @@ final class EventJoinGateTests: XCTestCase {
 
     XCTAssertEqual(registry.requestedEventIdHexes, [canonicalEventIdHex], "the read still happened")
     XCTAssertFalse(engine.didJoin, "a successful read is not by itself permission to join")
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
     guard case .idle = coordinator.phase else {
       return XCTFail("a refused join must return the phase to idle, not \(coordinator.phase)")
     }
@@ -355,9 +391,9 @@ final class EventJoinGateTests: XCTestCase {
   /// Mirrors Android's `aVerificationThatAnswersAfterTheUserLeftStartsNothing`.
   ///
   /// Asserts that the stale grant never reaches the registry. Asserting only
-  /// "nothing joined" would pass whether or not the guard exists, because the
-  /// fake registry cannot answer with a success anyway — so that assertion
-  /// could not tell the guard from the limitation.
+  /// "nothing joined" would pass whether or not the guard exists, so the
+  /// registry request assertion is the evidence that the abandoned attempt
+  /// never reached the join gate.
   func testAPermissionGrantThatLandsAfterTheUserStoppedStartsNothing() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .answersLate
@@ -398,8 +434,8 @@ final class EventJoinGateTests: XCTestCase {
   /// The assertion with teeth is `joinRefusal`, not `didJoin`. A stale answer
   /// that got through would write `.registryReadFailed` into a session the
   /// user already ended, leaving a refusal on screen for an attempt that no
-  /// longer exists; `didJoin` would stay false either way, because the fake
-  /// cannot answer with a success (see `FakeEventJoinRegistry`).
+  /// longer exists; `didJoin` would stay false either way, so this assertion
+  /// distinguishes the stale-answer guard from the ordinary refusal path.
   func testARegistryReadThatAnswersAfterTheUserStoppedStartsNothing() async {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
@@ -525,4 +561,9 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertEqual(engine.leaveJoinedEventCallCount, 1)
     XCTAssertNil(coordinator.joinedEventCode)
   }
+}
+
+@MainActor
+private final class NoopEventJoinRequest: EventIdentityVerificationRequest {
+  func cancel() {}
 }

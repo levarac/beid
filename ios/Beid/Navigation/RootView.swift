@@ -17,6 +17,8 @@ struct RootView: View {
         EventCodeEntryView()
       case .bluetoothPermission:
         BluetoothPermissionView()
+      case .bluetoothDenied:
+        BluetoothDeniedView()
       case .bluetoothOff:
         BluetoothOffView()
       case .home:

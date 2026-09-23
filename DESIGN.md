@@ -28,6 +28,21 @@ mark the values still genuinely undecided (type ramp choice, exact secondary
 hex values, CTA sentence-case grandfathering). Structural and enforcement
 rules carry no tag and are not pending.
 
+> **Annotation 2026-09-22 (owner decision, beid#627).** Flat 2b was
+> adopted ([decision record](docs/decisions/issue-627-flat-2b.md)). The
+> ratified palette direction is superseded (§5), and the type ramp
+> PROPOSAL is superseded by Flat 2b's bundled families (§6). CTA sentence
+> case is still `PROPOSAL` (#24; Open item 1). The tone thesis, the four
+> motifs and the Japanese term decision were not overturned, although the
+> locale set has since narrowed to `en` only (§15).
+
+**Flat 2b (2026-09-22).** Where this document says "Superseded
+2026-09-22", the old rule is quoted verbatim with its provenance and the
+new rule follows. Every such block cites
+[`docs/decisions/issue-627-flat-2b.md`](docs/decisions/issue-627-flat-2b.md)
+(below: "D-627"), which also holds the numbered **Open items** referenced
+throughout.
+
 **Platform scope — open decision (beid#339).** Whether this contract binds
 Android as written, or iOS is source-of-truth and Android follows/adapts,
 is an owner decision that has **not** been made yet, and it is **not**
@@ -51,16 +66,108 @@ weight iOS is — that weighting is exactly the open decision above.
 > names concrete iOS files, so each row gets its own Android counterpart
 > immediately after it (verified against current Android source, not by
 > analogy).
+>
+> **Flat 2b (2026-09-22):** the Flat 2b authority below binds iOS now
+> (owner: iOS first). Android's theme files still implement the superseded
+> values; that is not a violation until an Android follow-up is scheduled,
+> and as of 2026-09-22 no Android Flat 2b issue exists. The bindingness
+> question in `docs/decisions/issue-339-design-md-android-scope.md` is not
+> decided by this change.
 
 DESIGN.md documents **rules**; repo artifacts hold **values**.
 
+**Flat 2b is the design authority (owner decision 2026-09-22, beid#626 /
+beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
+`xf2uFHceIYg0h0gJndUkmI` ("Beid - Native"):
+
+- **Flat 2b — Library** (node `189-2`) is the authority for **values**:
+  the color variable collection `Flat 2b / Color`, the text styles, and
+  the components.
+- **Flat 2b — Screens** (node `183-2`) is the authority for **layouts**
+  (the spec lists 18 screens; 22 frames at the 2026-09-22 read, below).
+- "Minimal v4" and the Liquid Glass-era "Fixed" page are historical input
+  only.
+- The product name is **beid**. "SenseProof" on the Flat 2b board and in
+  its spec is the designer's mistake, not a rename (owner, 2026-09-22).
+
 | Artifact | Canonical for |
 | --- | --- |
-| `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/size/font/motion tokens and artwork generators |
-| `ios/Beid/DesignSystem/Colors.xcassets` | Adaptive (light + dark) color values |
+| Figma "Flat 2b — Library" (`189-2`) | Design values: colors, text styles, components |
+| Figma "Flat 2b — Screens" (`183-2`) | Screen layouts |
+| `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/size/font/motion tokens and artwork generators — what ships, and the only place code reads values |
+| `ios/Beid/DesignSystem/Colors.xcassets` | Color values (adaptive light + dark today; single appearance after #632) |
 | `.swiftlint.yml` (repo root) | Enforcement rules for banned raw values |
 | DESIGN.md (this file) | Semantics, usage rules, tone, review criteria |
-| Figma "Minimal v4" board | Historical visual input for screen layouts; ratified redesign specs and current components supersede it where they differ |
+| Figma "Minimal v4" board | Historical visual input only (superseded by Flat 2b, 2026-09-22) |
+
+**Library → repository mapping.** DS token and component *names* are not
+decided here: §4's rule (names describe role, not appearance) still
+applies, so Library names such as `semantic/red` do not become `DS` names
+verbatim.
+
+| Library | Repository home | Decided in |
+| --- | --- | --- |
+| Color collection `Flat 2b / Color` (13 variables, §5) | `DS.Color` + `Colors.xcassets`; also the fate of the 8 old color tokens with no Flat 2b counterpart | #628 |
+| Text styles (Display / Title / Body / Label Mono, §6) | `DS.Font` + bundled font files | #629 |
+| `Button/Primary` | SwiftUI primary-button component (replaces the §10 CTA pattern) | not assigned to an issue yet (none of #628–#644 names it) |
+| `Row/List`, `Row/KeyValue`, `Label/Section`, `Block/Empty` | SwiftUI row / key-value / section-label / empty-block components | not assigned to an issue yet (none of #628–#644 names it) |
+| `Bar/Nav` | Text-only navigation row | #631 |
+| `Sigil/Mini` | The mini form of the Sigil generator | #633 |
+
+Not components in the Library (raw nodes, spec §7): the sensing graph,
+the window bar, the timeline bar, the stacked bar chart, the black
+now-sensing card, the session row and the Account sheet. Their homes are
+decided by #634 (graph, window bar), #635 (card), #639/#640 (timeline,
+chart, session row) and #642 (sheet).
+
+**What was read, and when.** Figma is not versioned in this repository,
+so a later disagreement must be traceable to a Figma edit rather than
+argued from memory. The file was read on **2026-09-22** through the
+Figma API (`get_metadata` / `get_variable_defs`) while this change was
+prepared:
+
+- File key `xf2uFHceIYg0h0gJndUkmI`; "Flat 2b — Library" node `189-2`;
+  "Flat 2b — Screens" node `183-2`.
+- Library components (7): `Button/Primary` (Size=Large 354×56,
+  Size=Small 140×52), `Row/List`, `Row/KeyValue`, `Block/Empty`,
+  `Label/Section`, `Bar/Nav`, `Sigil/Mini`.
+- Color variables: all 13 read directly; they match spec §3.1 exactly
+  (listed in §5).
+- Text styles observed under "Flat 2b/": Display/60, Display/46,
+  Display/Number 40, Display/Address 34, Title/19, Title/17, Title/16,
+  Title/15, Body/15, Body/13, Label/Mono 11, Label/Mono 10, Label/Mono 10
+  tight, Label/Mono 9, Label/Mono 11 time. Families and weights match spec
+  §3.2 (Bricolage Grotesque ExtraBold 800, DM Sans Bold 700 and Regular
+  400, DM Mono Medium 500). Letter spacing matches (Mono 8, Mono 9 and 10
+  tight 6, Mono 11 time 0; Display −2 / −1.5 / −1). **Not observed** in
+  the frames read: Display/52 and Label/Mono 13 value; they are in the
+  spec only. Line heights are not stated beyond the spec (the API reports
+  mixed units).
+- Screens: 22 top-level frames at read time, not 18 — the spec's 18 plus
+  four under the heading "メニュー整理で追加した画面" (screens added in a
+  menu reorganization): 04c Events — Clock warning, 05c Sensing — Signal
+  Lost, 13 Enter Event Code, 14 Venue (iOS). Their existence does not
+  settle #644.
+- The live copy already differs from the spec copy in places. Both are
+  recorded; neither is chosen here:
+  - 06: the frame is named "06 Sensing — Sealed" and reads "SEALED · 6
+    WINDOWS" / "Proof sealed · 10:00 – 10:30" (spec: "VERIFIED · 6
+    WINDOWS").
+  - 07: reads "SEALED · VERIFYING" (spec: "VERIFIED ON-CHAIN").
+  - 09: still reads "TOKEN ID" and a STATUS value "Verified on-chain".
+  - 10 Account Sheet: rows Bluetooth / Enter event code / How sensing
+    works / What we send, a "VENUE · ORGANIZER" group (Broadcast this
+    venue, Serve signed proofs), then Disconnect wallet, and a footer
+    "SENSEPROOF 1.0 · 4C99036" (the spec has 3 rows).
+  - 01 Welcome and 10's footer still show "SENSEPROOF" (the product name
+    is beid; see above).
+- The values in §5/§6 are unaffected: the Library values match the spec.
+
+The spec's own open questions (spec §10: window length, peer cap, the
+Rejected report state, AVG SIGNAL display, the Account address typeface,
+dark mode) are cross-referenced as **Open item 7** in D-627, owned by
+#626 and the screen issues. None is decided here. If a Rejected state is
+ever shown as red text on `bg`, it fails AA (3.41:1, §5).
 
 **Android counterparts** (verified against
 `android/app/src/main/kotlin/org/levarac/beid/ui/theme/` and
@@ -87,13 +194,21 @@ DESIGN.md documents **rules**; repo artifacts hold **values**.
   board immediately below); no Android-specific visual input exists in
   this document today.
 
-Note on the Figma board: the mock (branded "SenseProof", an earlier name)
-anchors a light minimal look with a blue, Bluetooth-centric accent. This
-document's palette (§5) deviates from that blue deliberately; Ken resolved
-the tension **against** blue on 2026-07-10 (deep ink + quiet teal + violet
-seal adopted). Figma remains historical visual input, not authority for the
-current flow: ratified `docs/specs/` redesigns and the component/screen
-inventory in §§10–11 govern when they differ. Its colors are not tokens.
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** Flat 2b replaces this
+> note: the Library and Screens nodes above are now the authority, not
+> historical input. "SenseProof" was never an earlier product name; it is
+> the designer's mistake. Previously (authored in `14ebd53`, 2026-07-10,
+> with the "historical visual input, not authority" wording from `b65d5c9`,
+> 2026-08-08, both NAOE Kenichi; kept for history):
+>
+> Note on the Figma board: the mock (branded "SenseProof", an earlier name)
+> anchors a light minimal look with a blue, Bluetooth-centric accent. This
+> document's palette (§5) deviates from that blue deliberately; Ken resolved
+> the tension **against** blue on 2026-07-10 (deep ink + quiet teal + violet
+> seal adopted). Figma remains historical visual input, not authority for the
+> current flow: ratified `docs/specs/` redesigns and the component/screen
+> inventory in §§10–11 govern when they differ. Its colors are not tokens.
 
 > **Platform scope:** iOS-only as written. This note is entirely about an
 > iOS-only historical mock (SwiftUI-era naming, an iOS palette resolution);
@@ -102,11 +217,28 @@ inventory in §§10–11 govern when they differ. Its colors are not tokens.
 > whether bringing Android into this document's scope changes that issue's
 > reach.
 
-- MUST: When this document and `Tokens.swift` disagree on a value, the code
-  is right and this document has drifted — fix the document, and treat the
-  drift as a bug. **[Android counterpart: the same principle, against
-  Android's token homes — `Color.kt`/`Spacing.kt`/`Type.kt` — when this
-  document and those files disagree.]**
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** `Tokens.swift` keeps
+> the pre-Flat 2b values until #628 lands, so this rule cannot stand
+> unchanged. Previously (initial contract, `14ebd53`, NAOE Kenichi,
+> 2026-07-10; structural per §C):
+>
+> - MUST: When this document and `Tokens.swift` disagree on a value, the code
+>   is right and this document has drifted — fix the document, and treat the
+>   drift as a bug. **[Android counterpart: the same principle, against
+>   Android's token homes — `Color.kt`/`Spacing.kt`/`Type.kt` — when this
+>   document and those files disagree.]**
+
+- MUST (transition): Until #628, #629, #630, #631 and #632 have landed,
+  code that still carries superseded values or components is migration
+  debt tracked in those issues, not evidence that this document drifted.
+- MUST (steady state, confirmed 2026-09-22): The Flat 2b Library is the
+  design authority for values. `Tokens.swift` is canonical for what ships
+  and is the only place code reads values. A mismatch between the Library
+  and `Tokens.swift` after the migration is a defect to file as an issue,
+  not something resolved automatically in either direction. This document
+  holds no values of its own, so a mismatch between this document and
+  `Tokens.swift` is still fixed in the document.
 - MUST: Token excerpts in this document are illustrative; never copy values
   from prose into code. **[Platform-neutral as a principle; applies
   identically once Android values are cited in this document.]**
@@ -142,6 +274,13 @@ Beid MUST NOT feel like:
 
 Wallet is optional (`OnboardingMode.guestFirst` exists). The UI MUST read
 fully coherent to a user who never connects a wallet.
+
+> **Unresolved conflict, recorded 2026-09-22 (Open item 2,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The rule above is
+> unchanged and still binds. The Flat 2b spec says login is WalletConnect
+> only, and 01 Welcome has a single Connect Wallet CTA. This is a sixth
+> MUST conflict that the 2026-09-22 owner decision did not name; it goes
+> to the owner and is not resolved here (#642, #643, #644).
 
 ## 2. Non-Negotiables
 
@@ -200,27 +339,43 @@ by grep alone.
    below Android's own 48dp platform minimum, not just below a
    not-yet-ported iOS number. Flagged here as a discovered fact, not
    fixed — out of scope for this docs-only change.]**
+   *Flat 2b note (2026-09-22): unchanged, and it binds the new text-only
+   controls (`← EVENTS`, `CLOSE`, `COPY`, …) — an 11pt label still needs a
+   44×44pt hit region (§12, #631).*
 6. MUST: All text uses Dynamic Type-compatible fonts (every `DS.Font.*` role
    is built on text styles, not fixed sizes). **[Android counterpart: every
    `BeidTypography` role is a Material3 `TextStyle` reached via
    `MaterialTheme.typography.*`, which scales with the user's Android font
    size setting the same way Dynamic Type scales with iOS's — see
    `Type.kt`'s own role-mapping table.]**
-7. MUST: Every screen renders correctly in light and dark mode; all
-   `DS.Color.*` tokens are adaptive asset colors. **[Android counterpart:
-   the *outcome* (every screen correct in both modes) is platform-neutral;
-   the *mechanism* differs — Android has no adaptive asset-catalog
-   equivalent (see §0's new note above), so "adaptive asset colors" as
-   written does not apply verbatim. Android's actual mechanism is
-   `BeidAppTheme`'s `if (darkTheme)` branch over `LightBeidColors`/
-   `DarkBeidColors` (`ui/theme/Theme.kt`).]**
+7. MUST: Every screen renders correctly in the single Flat 2b appearance,
+   whatever the OS dark-mode setting is; the app does not follow it (§14,
+   #632).
+
+   > **Superseded 2026-09-22 (owner decision, beid#627,
+   > [D-627](docs/decisions/issue-627-flat-2b.md)).** Previously (initial
+   > contract, `14ebd53`, NAOE Kenichi, 2026-07-10; structural per §C):
+   >
+   > 7. MUST: Every screen renders correctly in light and dark mode; all
+   >    `DS.Color.*` tokens are adaptive asset colors. **[Android counterpart:
+   >    the *outcome* (every screen correct in both modes) is platform-neutral;
+   >    the *mechanism* differs — Android has no adaptive asset-catalog
+   >    equivalent (see §0's new note above), so "adaptive asset colors" as
+   >    written does not apply verbatim. Android's actual mechanism is
+   >    `BeidAppTheme`'s `if (darkTheme)` branch over `LightBeidColors`/
+   >    `DarkBeidColors` (`ui/theme/Theme.kt`).]**
 8. MUST: Icon-only buttons have `.accessibilityLabel`. **[Android
    counterpart: `contentDescription` on the `Icon`/`IconButton`, e.g. the
    analogue of `CollectionHomeView`'s "person.crop.circle" account button
    needing "Account" as its accessibility label (§13).]**
+   *Flat 2b note (2026-09-22): under Flat 2b there are no icon-only
+   controls, so the labeling duty moves to text controls whose visible
+   text reads badly aloud (e.g. "←") — see §12 and §13.*
 9. MUST: State is never conveyed by color alone (verified/warning states pair
    color with a symbol and/or text). **[Platform-neutral principle;
    Android's `BeidStatusPill` already follows it — see §10.]**
+   *Flat 2b note (2026-09-22): unchanged, and it binds the semantic status
+   dots — every red/amber/green dot is paired with a text label (§5).*
 10. MUST: Standard SwiftUI containers first — `NavigationStack`, `TabView`,
     `.sheet`, `.fullScreenCover`, `.alert`, `.confirmationDialog` — before
     any custom chrome. **[iOS-specific mechanism — Android counterpart:
@@ -233,6 +388,9 @@ by grep alone.
 11. FORBIDDEN: Decorative `Image(systemName:)` larger than 32 pt (see §12).
     **[iOS-specific mechanism — Android counterpart: the same 32pt/32dp cap
     on a decorative `Icon`/`ImageVector` — see §12's fuller treatment.]**
+    *Flat 2b note (2026-09-22): the cap is moot under Flat 2b's no-icons
+    rule (§12, #631); symbols still in code until #631 lands remain bound
+    by it.*
 12. MUST: Any deviation from this document links a decision record in the PR
     (`DesignException: <link or rationale>`). **[Platform-neutral process
     rule; not tied to any iOS API.]**
@@ -290,6 +448,16 @@ button string is `"Join event"` (`event_join_button`,
 `strings.xml`), not `"Sense Event"` — the two platforms do not currently
 share this grandfathered string; see #24's treatment in
 `docs/decisions/issue-339-design-md-android-scope.md`.]**
+
+> **Annotation 2026-09-22 (Flat 2b, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** In the pair above, the
+> `encounter-field-empty` asset, `DS.Color.surfaceCanvas` and the icon
+> DON'T are superseded by 04b's dashed empty block (`NO EVENTS YET`; §8,
+> §12; #635). The rest of the pair (specific title and body, no generic
+> "No data", no system blue, no wallet/crypto iconography) still holds.
+> The four motifs themselves are unchanged. **Open item 6:** the Flat 2b
+> sensing graph's concentric rings sit next to Encounter Field's "avoid
+> radar/sonar clichés"; that is open, not settled (#634).
 
 Voice registers by moment:
 
@@ -375,51 +543,150 @@ Rules:
 > pair below **except** `DS.Color.statusCaution`, which has **no Android
 > counterpart today** — it is simply absent from `BeidColorScheme`, not
 > renamed or substituted.
+>
+> **Flat 2b (2026-09-22):** the Flat 2b palette below binds iOS now (owner:
+> iOS first). The Android statements above describe today's Android code,
+> which still implements the superseded palette; that is not a violation
+> until an Android follow-up is scheduled (none exists as of 2026-09-22).
 
-Direction ratified (Ken, 2026-07-10): deep ink background + quiet teal
-(`#18C7A7` family) + violet proof seal — the Figma Minimal v4 blue is
-resolved **against**. Exact secondary hex values (surfaces, text, hairline,
-`actionPrimary`, dark variants) remain
-`PROPOSAL — Ken ratification pending`; roles and structure are not pending.
+**Flat 2b palette (owner decision 2026-09-22, beid#627,
+[D-627](docs/decisions/issue-627-flat-2b.md)).** Principles (spec §2):
 
-| Token | Light | Dark | Role | Allowed use | Forbidden use |
+- **Black is "what is happening now"** — a state, not a theme. Sensing is
+  full-screen black; on Home only the in-progress event is a black card;
+  the Account sheet is black as the layer being operated.
+- **Black, white and grays only**, plus **three semantic colors, each with
+  one meaning**: red = destructive / off, amber = verifying / pending,
+  green = active / on.
+- **No per-event colors.** An event's identity is its Sigil's shape (§12,
+  #633), never a hue.
+
+Library variables (collection `Flat 2b / Color`). Hex values are
+illustrative (§0: never copy values from prose into code). DS token names
+are decided in #628.
+
+| Library variable | Hex | Role | Allowed use | Forbidden use | DS token |
 | --- | --- | --- | --- | --- | --- |
-| `DS.Color.surfaceCanvas` | `#F7F4EE` | `#111315` | Root background | Screen roots, scroll backgrounds | Buttons, icons |
-| `DS.Color.surfaceRaised` | `#FFFFFF` | `#1B1E20` | Cards, sheets | Proof cards, event cards, sheet surfaces | Full-screen backgrounds |
-| `DS.Color.textPrimary` | `#1A1C1E` | `#ECEDEE` | Primary text | Titles, body | Decorative fills |
-| `DS.Color.textSecondary` | `#5C6165` | `#9BA1A6` | Supporting text | Subtitles, metadata | Primary CTAs |
-| `DS.Color.actionPrimary` | `#2A2E33` | `#E8EAEC` | Neutral primary action | CTA tint on screens with no motif accent; app-level accent | Motif moments (sensing/ceremony/recovery) |
-| `DS.Color.signalActive` | `#18C7A7` | `#62E8D0` | Live sensing signal | Sensing pulse, event-found state, one key accent per sensing screen | Body text, large fills |
-| `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
-| `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Recording/proof entrance, seal artwork, proof accents | Generic links, nav tint |
-| `DS.Color.labelOnWarning` | `#1A1C1E` | `#111315` | CTA label on `signalWarning` fill | Prominent-button labels on recovery screens | Anything except labels sitting on a `signalWarning` fill |
-| `DS.Color.labelOnSeal` | `#FFFFFF` | `#111315` | CTA label on `proofSeal` fill | Prominent-button labels at ceremony moments | Anything except labels sitting on a `proofSeal` fill |
-| `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
-| `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView` signature controls) | BLE signal issues (use `signalWarning` instead) |
-| `DS.Color.statusOn` | `#1E7E34` | `#30D158` | Binary on/off status, "on" | Bluetooth-active badge (`AccountSheetView`) | BLE signal quality (use `signalWarning`), wallet-signature status (use `statusCaution`), sensing-screen accent (use `signalActive`) |
-| `DS.Color.statusOff` | `#6B7075` | `#83898F` | Binary on/off status, "off" | Bluetooth-off badge (`AccountSheetView`) | Same as `statusOn`'s forbidden uses — this pair is for a neutral toggle state only, not an alarm |
+| `ink` | `#0B0B0F` | Ink; the "now" ground | Text, primary button fill, black-screen ground, Sigil | Decorative fills unrelated to "now" | named in #628 |
+| `bg` | `#FFFFFF` | Page ground | Screen ground; text and Sigil on `ink` | — | named in #628 |
+| `sub` | `#6E6E78` | Secondary text on `bg` | Secondary text, section labels | Primary CTAs | named in #628 |
+| `line` | `#ECECF1` | Hairline | 1px row and list dividers | Text | named in #628 |
+| `line-dashed` | `#C9C9CF` | Empty-state frame | Dashed 1px empty-block frame | Text | named in #628 |
+| `tile` | `#F2F2F4` | Gray tile | Timeline track, gray tiles | Text | named in #628 |
+| `chart-muted` | `#D9D9DE` | Chart "detected" | "Detected" bars in charts | Text | named in #628 |
+| `on-ink/sub` | `#8E8E96` | Secondary text on `ink` | Secondary text on black | Text on `bg` | named in #628 |
+| `on-ink/line` | `#2A2A31` | Hairline on `ink` | Dividers, graph rings, future-window bars on black | Text | named in #628 |
+| `on-ink/idle` | `#5C5C66` | Idle node on `ink` | Detected-only nodes on black | Text | named in #628 |
+| `semantic/red` | `#FF453A` | Destructive / off | Disconnect wallet; Bluetooth OFF dot | Any other meaning; text on `bg` | named in #628 |
+| `semantic/amber` | `#FF9F0A` | Verifying / pending | Report VERIFYING dot | Any other meaning; text on `bg` | named in #628 |
+| `semantic/green` | `#30D158` | Active / on | Bluetooth ACTIVE dot | Any other meaning; text on `bg` | named in #628 |
+
+Contrast, **measured** (WCAG 2.x relative luminance, 2026-09-22; spec §9's
+two stated figures are wrong — see D-627):
+
+| Pair | Ratio | | Pair | Ratio |
+| --- | --- | --- | --- | --- |
+| `ink` on `bg` | 19.64:1 | | `semantic/red` on `ink` | 5.77:1 |
+| `sub` on `bg` | 5.04:1 | | `semantic/amber` on `ink` | 9.56:1 |
+| `sub` on `tile` | 4.51:1 | | `semantic/green` on `ink` | 9.72:1 |
+| `on-ink/sub` on `ink` | 6.04:1 | | `semantic/red` on `bg` | 3.41:1 |
+| `ink` on `tile` | 17.57:1 | | `semantic/amber` on `bg` | 2.06:1 |
+| | | | `semantic/green` on `bg` | 2.02:1 |
 
 Rules:
 
-- MUST: Every color is an adaptive asset colorset (light + dark) exposed
-  through `DS.Color.*`. High-contrast variants SHOULD be added to the same
-  colorsets when the palette is ratified. **[iOS-only mechanism as
-  written — Android has no colorset to add to (§0). Android counterpart:
-  every color is a `*Light`/`*Dark` pair in `BeidPalette`, exposed through
-  `BeidTheme.colors.*`; a future high-contrast pass would add variant
-  fields to `BeidColorScheme` rather than a colorset.]**
-- MUST: Exactly **one** motif accent per screen, mapped by moment:
-  `signalActive` on sensing screens (`SensingView`, `EventFoundView`),
-  `proofSeal` on `RecordingView` and proof artwork, `signalWarning` on
-  recovery screens (`SignalLostView`, `BluetoothOffView`). Screens outside these moments
-  (onboarding, home, account) have **no** motif accent — their CTAs and
-  controls tint with `DS.Color.actionPrimary`. **[The one-accent-per-screen
-  principle is platform-neutral; the named views are iOS's current screen
-  graph, not Android's — see §11's Android notes. Verified consistent with
-  the principle: Android's `BluetoothOffScreen` passes `signalWarning`/
-  `labelOnWarning` explicitly to every warning-accented element on that
-  screen (`BluetoothOffScreen.kt`'s own kdoc explains this is because
-  Compose has no ambient `.tint()` to inherit from, unlike SwiftUI).]**
+- MUST: Only the Library colors above, through `DS.Color.*` once #628 has
+  named them. No per-event or per-proof hue.
+- MUST: A semantic color is used only for its one meaning.
+- MUST (forced by §13's AA MUST, which is unchanged): semantic colors are
+  **indicators**. A semantic color may be **text only on `ink`**, where it
+  passes AA (e.g. "Disconnect wallet" in red on the black Account sheet).
+  On `bg` it is a non-text indicator — a dot — always paired with a text
+  label (§2 rule 9). Amber and green dots on `bg` are also under 3:1, so
+  the paired text carries the meaning.
+- MUST: The primary CTA is an `ink` fill with a `bg` label (§10,
+  `Button/Primary`).
+- `sub` on `tile` passes AA with almost no margin (4.51:1); a change to
+  either value puts §13's AA MUST at risk.
+- Open item 4 (D-627): `chart-muted` bars on `bg` (1.41:1) and
+  `on-ink/idle` nodes on `ink` (2.97:1) are under WCAG 1.4.11's 3:1 for
+  non-text. Recorded; no new rule (#634, #640).
+
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The ratified palette
+> direction and the token table below are replaced by the Flat 2b palette
+> above. The direction was added in `8076f04` (NAOE Kenichi, 2026-07-10)
+> and has an explicit §C "Ken ratification" row (2026-07-10); the table's
+> structure dates from the initial contract (`14ebd53`) and its secondary
+> hexes stayed `PROPOSAL`. Overturned on the owner's authority without
+> Ken's sign-off; Ken is to be informed afterwards. The table still
+> describes today's `Tokens.swift`/`Colors.xcassets` and is migration debt
+> until #628. Previously:
+>
+> Direction ratified (Ken, 2026-07-10): deep ink background + quiet teal
+> (`#18C7A7` family) + violet proof seal — the Figma Minimal v4 blue is
+> resolved **against**. Exact secondary hex values (surfaces, text, hairline,
+> `actionPrimary`, dark variants) remain
+> `PROPOSAL — Ken ratification pending`; roles and structure are not pending.
+>
+> | Token | Light | Dark | Role | Allowed use | Forbidden use |
+> | --- | --- | --- | --- | --- | --- |
+> | `DS.Color.surfaceCanvas` | `#F7F4EE` | `#111315` | Root background | Screen roots, scroll backgrounds | Buttons, icons |
+> | `DS.Color.surfaceRaised` | `#FFFFFF` | `#1B1E20` | Cards, sheets | Proof cards, event cards, sheet surfaces | Full-screen backgrounds |
+> | `DS.Color.textPrimary` | `#1A1C1E` | `#ECEDEE` | Primary text | Titles, body | Decorative fills |
+> | `DS.Color.textSecondary` | `#5C6165` | `#9BA1A6` | Supporting text | Subtitles, metadata | Primary CTAs |
+> | `DS.Color.actionPrimary` | `#2A2E33` | `#E8EAEC` | Neutral primary action | CTA tint on screens with no motif accent; app-level accent | Motif moments (sensing/ceremony/recovery) |
+> | `DS.Color.signalActive` | `#18C7A7` | `#62E8D0` | Live sensing signal | Sensing pulse, event-found state, one key accent per sensing screen | Body text, large fills |
+> | `DS.Color.signalWarning` | `#C7841A` | `#E8B562` | Degraded/lost signal | `SignalLostView`, `BluetoothOffView` accents | Errors that aren't signal-related |
+> | `DS.Color.proofSeal` | `#6E5AEF` | `#9D8CFF` | Sealed proof artifacts | Recording/proof entrance, seal artwork, proof accents | Generic links, nav tint |
+> | `DS.Color.labelOnWarning` | `#1A1C1E` | `#111315` | CTA label on `signalWarning` fill | Prominent-button labels on recovery screens | Anything except labels sitting on a `signalWarning` fill |
+> | `DS.Color.labelOnSeal` | `#FFFFFF` | `#111315` | CTA label on `proofSeal` fill | Prominent-button labels at ceremony moments | Anything except labels sitting on a `proofSeal` fill |
+> | `DS.Color.strokeHairline` | `#E3DFD6` | `#2A2E31` | Hairlines | Dividers, card strokes | Text |
+> | `DS.Color.statusCaution` | `#B23A2E` | `#E2897C` | Non-signal caution/error state | Declined/timed-out/failed wallet-signature status (`ItemDetailView` signature controls) | BLE signal issues (use `signalWarning` instead) |
+> | `DS.Color.statusOn` | `#1E7E34` | `#30D158` | Binary on/off status, "on" | Bluetooth-active badge (`AccountSheetView`) | BLE signal quality (use `signalWarning`), wallet-signature status (use `statusCaution`), sensing-screen accent (use `signalActive`) |
+> | `DS.Color.statusOff` | `#6B7075` | `#83898F` | Binary on/off status, "off" | Bluetooth-off badge (`AccountSheetView`) | Same as `statusOn`'s forbidden uses — this pair is for a neutral toggle state only, not an alarm |
+
+- MUST: Colors are single-appearance values (§14); the app does not follow
+  the OS dark-mode setting. How the dark variants are retired is #632's
+  choice.
+
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** Previously (initial
+> contract, `14ebd53`, NAOE Kenichi, 2026-07-10; structural per §C):
+>
+> - MUST: Every color is an adaptive asset colorset (light + dark) exposed
+>   through `DS.Color.*`. High-contrast variants SHOULD be added to the same
+>   colorsets when the palette is ratified. **[iOS-only mechanism as
+>   written — Android has no colorset to add to (§0). Android counterpart:
+>   every color is a `*Light`/`*Dark` pair in `BeidPalette`, exposed through
+>   `BeidTheme.colors.*`; a future high-contrast pass would add variant
+>   fields to `BeidColorScheme` rather than a colorset.]**
+
+- Flat 2b has no motif accents: there is one ink, and the three semantic
+  colors each carry one meaning (above).
+
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** Previously (revision
+> round 1, `79cd005`, NAOE Kenichi, 2026-07-10; §C status "Adopted
+> (structural; PROPOSAL tags unchanged)"). Today's code still applies this
+> map; it is migration debt until #628:
+>
+> - MUST: Exactly **one** motif accent per screen, mapped by moment:
+>   `signalActive` on sensing screens (`SensingView`, `EventFoundView`),
+>   `proofSeal` on `RecordingView` and proof artwork, `signalWarning` on
+>   recovery screens (`SignalLostView`, `BluetoothOffView`). Screens outside these moments
+>   (onboarding, home, account) have **no** motif accent — their CTAs and
+>   controls tint with `DS.Color.actionPrimary`. **[The one-accent-per-screen
+>   principle is platform-neutral; the named views are iOS's current screen
+>   graph, not Android's — see §11's Android notes. Verified consistent with
+>   the principle: Android's `BluetoothOffScreen` passes `signalWarning`/
+>   `labelOnWarning` explicitly to every warning-accented element on that
+>   screen (`BluetoothOffScreen.kt`'s own kdoc explains this is because
+>   Compose has no ambient `.tint()` to inherit from, unlike SwiftUI).]**
+
+Rules carried over from before Flat 2b (still in force; the token names
+they cite are today's, until #628):
+
 - MUST NOT: System default blue as an *implicit fallback* — every tintable
   control gets an explicit `DS.Color.*` tint, and the app-level accent is
   `actionPrimary`. FORBIDDEN: `.tint(.blue)` (a retired scaffold pattern,
@@ -447,17 +714,35 @@ Rules:
   `contentColor` as non-defaulted parameters, for the same "no default
   tint" reason stated in its own kdoc — verified consistent with this rule
   today.]**
-- The per-proof generated gradient is a *data-driven* artwork generator,
-  not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
-  its canonical home and the only sanctioned source of `Color(hue:)`.
-  `ProofCardView` and `ItemDetailView` call that generator directly; a local
-  copy of the same math would reintroduce the retired scaffold debt.
-  **[iOS-only as written today: no artwork-generator equivalent exists
-  under `ui/theme/`/`ui/designsystem/` — verified no `hue`/gradient
-  generator anywhere in `android/app/src/main/kotlin`. This is a missing
-  mechanism, not a renamed one; §10's `ProofCardView`/`ItemDetailView`
-  entries have no Android screen to point at yet either (no Android
-  `CollectionHomeView`/`ItemDetailView`, per §11).]**
+  *Flat 2b note (2026-09-22): the principle (explicit label color, never
+  the style default) stands. Under Flat 2b the only primary-CTA pairing is
+  `ink` fill → `bg` label; the `proofSeal`/`signalWarning`/`signalActive`
+  pairings describe today's code and are migration debt until #628. "In
+  both modes" now means the single appearance (§14).*
+- MUST: A proof's appearance is its **Sigil**, drawn deterministically
+  from observation data, with no image assets (spec §5; #633). Same data,
+  same Sigil.
+- Migration debt: until #633 lands the Sigil,
+  `DS.Artwork.proofCardGradient(seed:)` stays in `Tokens.swift` as the only
+  home of `Color(hue:)`. It MUST NOT be extended, copied, or given new call
+  sites; #633 removes it once the Sigil works.
+
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** Previously (revision
+> round 1, `79cd005`, NAOE Kenichi, 2026-07-10; §C status "Adopted
+> (structural; PROPOSAL tags unchanged)"):
+>
+> - The per-proof generated gradient is a *data-driven* artwork generator,
+>   not a token: `DS.Artwork.proofCardGradient(seed:)` in `Tokens.swift` is
+>   its canonical home and the only sanctioned source of `Color(hue:)`.
+>   `ProofCardView` and `ItemDetailView` call that generator directly; a local
+>   copy of the same math would reintroduce the retired scaffold debt.
+>   **[iOS-only as written today: no artwork-generator equivalent exists
+>   under `ui/theme/`/`ui/designsystem/` — verified no `hue`/gradient
+>   generator anywhere in `android/app/src/main/kotlin`. This is a missing
+>   mechanism, not a renamed one; §10's `ProofCardView`/`ItemDetailView`
+>   entries have no Android screen to point at yet either (no Android
+>   `CollectionHomeView`/`ItemDetailView`, per §11).]**
 
 ## 6. Typography
 
@@ -465,9 +750,70 @@ Rules:
 > The ramp's *roles* and constraints are platform-neutral; `DS.Font`
 > itself is an iOS namespace. `ui/theme/Type.kt`'s own kdoc already states
 > a role-for-role Material3 mapping, verified below.
+>
+> **Flat 2b (2026-09-22):** the Flat 2b ramp binds iOS now. Android's
+> `BeidTypography` (system fonts) implements the superseded ramp; not a
+> violation until an Android follow-up is scheduled (none exists as of
+> 2026-09-22).
 
-`PROPOSAL — Ken ratification pending` (ramp choice: system SF Pro + SF Mono
-for ledger traces; no custom brand font in this phase)
+**Flat 2b type (owner decision 2026-09-22, beid#627,
+[D-627](docs/decisions/issue-627-flat-2b.md)).** Three families, all
+Google Fonts under the SIL Open Font License, bundled with the app
+(#629):
+
+- **Bricolage Grotesque ExtraBold** — display (titles, numbers, the
+  Account address).
+- **DM Sans** Bold / Regular — titles and body.
+- **DM Mono** Medium — labels.
+
+Ramp (Library text styles "Flat 2b/…"; sizes are **base sizes at the
+default content size**; see the Dynamic Type rules below). Values from
+spec §3.2; §0 records which styles were observed in Figma.
+
+| Library style | Family | Base size | Tracking | Line height | Role |
+| --- | --- | --- | --- | --- | --- |
+| Display/60 | Bricolage Grotesque ExtraBold | 60 | −2% | 100% | Home title "Events" |
+| Display/52 | 〃 | 52 | −2% | 100% | Onboarding titles (spec only; not observed in Figma, §0) |
+| Display/46 | 〃 | 46 | −1.5% | 100% | Screen titles (event name, Session 1, Report #2, Proof collected) |
+| Display/Number 40 | 〃 | 40 | −1% | auto | Sensing figures |
+| Display/Address 34 | 〃 | 34 | −1% | auto | Account sheet address (typeface open: spec §10-5, #642) |
+| Title/19 · 17 · 16 · 15 | DM Sans Bold | 19–15 | 0 | auto | Row titles, buttons, key-value values |
+| Body/15 · 13 | DM Sans Regular | 15 / 13 | 0 | 140% | Body copy |
+| Label/Mono 11 · 10 · 9 | DM Mono Medium | 11 / 10 / 9 | +8% (9: +6%) | auto | **Uppercase.** Section labels, nav, meta, status |
+| Label/Mono 10 tight | DM Mono Medium | 10 | +6% | auto | In-row meta (IDs, session numbers) |
+| Label/Mono 11 time · 13 value | DM Mono Medium | 11 / 13 | 0 | auto | Times, addresses, ID values (13 value: spec only, §0) |
+
+Flat 2b rules:
+
+- MUST: Every Flat 2b style is defined in `DS.Font` with
+  `Font.custom(_:size:relativeTo:)`, so the base size scales with a text
+  style. #629 picks the text style for each role. `Font.custom` stays
+  inside `DesignSystem/` (§2 rule 2).
+- MUST: Mono labels are uppercase (spec §3.2). Whether buttons are too is
+  open — §15, #24, Open item 1 (D-627).
+- Tabular figures: the scope is decided in #629.
+- **Language (owner decision 2026-09-22, settled item B in D-627):** the
+  UI is English-only, so the three families having no Japanese glyphs is
+  not a gap. This matches the existing locale policy — target locales are
+  `en` only since the owner decision of 2026-08-21
+  (`docs/localization-process.md`), and `ios/Beid/Localizable.xcstrings`
+  holds `en` only. It is not a new policy, and it does not relax §15's
+  String Catalog MUST.
+- The Dynamic Type and AX3 MUSTs below are unchanged and bind the bundled
+  fonts. Flat 2b's row and button heights (spec §3.3: list row 92, KV 44,
+  session 48, report 60, proof 72, primary button 56) are **minimum**
+  heights, because fixed-height containers around text remain FORBIDDEN.
+
+> **Superseded 2026-09-22 (a PROPOSAL, not an overturned rule;
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The ramp line below was
+> never ratified; Flat 2b replaces it. Previously (initial contract,
+> `14ebd53`, NAOE Kenichi, 2026-07-10):
+>
+> `PROPOSAL — Ken ratification pending` (ramp choice: system SF Pro + SF Mono
+> for ledger traces; no custom brand font in this phase)
+
+Current code (migration debt until #629 — the table describes today's
+`DS.Font`, not the Flat 2b target):
 
 Ramp (all Dynamic Type text styles, defined in `DS.Font`):
 
@@ -526,6 +872,11 @@ Rules:
 4 pt base scale in `DS.Space`: `xs 4 / s 8 / m 16 / l 24 / xl 32 / xxl 48`,
 plus `DS.Space.pageMargin` (32) for full-width content and bottom CTAs.
 
+> **Flat 2b note (2026-09-22, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)):** Flat 2b sets the page
+> margin to 24 (content width 354 on a 402-wide screen). The value above
+> is today's code; #628 changes it.
+
 - MUST: All padding/spacing values come from `DS.Space.*` (exceptions: `0`, `1`).
   **[Android counterpart: `BeidSpacing.*` — see §2 rule 3.]**
 - MUST: On state screens in compact width, full-width primary CTAs sit at
@@ -564,6 +915,34 @@ plus `DS.Space.pageMargin` (32) for full-width content and bottom CTAs.
 > are iOS-only as written (Android has no Liquid Glass API at all — see
 > §8a's own tag below and `ui/designsystem/BeidSurface.kt`'s kdoc, which
 > states this directly in the code).
+>
+> **Flat 2b (2026-09-22):** the Flat 2b surface rules below bind iOS now.
+> Android's `beidSurface` (matte `surfaceRaised` + hairline) is already
+> glass-free; its values are the superseded palette, not a violation until
+> an Android follow-up is scheduled (none exists as of 2026-09-22).
+
+**Flat 2b surfaces (owner decision 2026-09-22, beid#627,
+[D-627](docs/decisions/issue-627-flat-2b.md); implementation #630):**
+
+- FORBIDDEN: glass (`glassEffect`, glass button styles,
+  `GlassEffectContainer`), system materials, blur, shadows, and
+  gradients on any surface the app draws. OS-drawn chrome the app does
+  not draw itself (system alerts and confirmation dialogs, the keyboard,
+  permission dialogs) is outside this rule, as in §12, so §2 rule 10's
+  standard containers stay usable. The Account sheet's background is not
+  in that carve-out: Flat 2b draws it in `ink`, so it is app-drawn.
+- MUST: Separation comes from 1px `line` hairlines and whitespace. The
+  hairline sits on the **top** edge of each row; a list adds one extra
+  bottom hairline after its last row. On `ink`, hairlines use
+  `on-ink/line`.
+- MUST: The empty state is a dashed 1px `line-dashed` frame, radius 16,
+  with 40pt vertical padding (`Block/Empty`).
+- The now-sensing card on Home is an `ink` card, radius 20 (#635). The
+  primary button is a pill (`Button/Primary`). The Account sheet uses the
+  OS sheet (drawn with a 36 top radius in Figma; #642). Screen corners
+  belong to the OS.
+- Radius values are set in #628. Rounded rectangles keep
+  `style: .continuous`; Flat 2b does not contradict it.
 
 Radii in `DS.Radius`: `control 12 / card 16 / seal 28 / pill 999`. All
 rounded rectangles use `style: .continuous`.
@@ -593,25 +972,39 @@ difference, not just an API rename.**]**
   (`BeidSurface.kt`) is exactly `surfaceRaised` background + 1dp
   `strokeHairline` border — no shadow API used anywhere in
   `ui/designsystem/`.]**
-- Materials: the deployment target is iOS 17, so iOS 26 Liquid Glass APIs
-  (e.g. `glassEffect`) are usable only behind availability gates
-  (`if #available(iOS 26, *)`), never unguarded. Standard SwiftUI
-  controls/navigation adopt the new system appearance automatically when
-  the app is rebuilt with the iOS 26 SDK — prefer that free adoption. For
-  pre-26 fallback and overlay chrome, use system materials
-  (`.ultraThinMaterial` etc.). **[iOS-only as written: an iOS deployment-
-  target/availability-gating concern with no Android analog. Android's
-  `beidSurface` has no OS-version branch at all — its own kdoc states it
-  is "the fallback path alone, always applied" (`BeidSurface.kt`).]**
-- MUST: Custom `glassEffect` use requires explicit design approval
-  (a `DesignException` link). Glass is a functional layer for controls and
-  navigation, not content decoration — proof/ceremony artwork is content
-  and does not get glass by default. No glass-on-glass nesting. **[iOS-only
-  as written: `glassEffect` does not exist on Android; there is no glass
-  layer to require approval for or to nest.]**
-- FORBIDDEN: Faking glass with arbitrary blur rectangles. **[iOS-only as
-  written: Android has no glass effect to fake — not applicable, not a
-  named counterpart.]**
+  *Flat 2b note (2026-09-22): "material" no longer qualifies; elevation is
+  hairline and whitespace only, and shadows are FORBIDDEN (above).*
+
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** No glass, no materials,
+> no blur (above). #630 removes the code. The iOS 26 availability gates
+> that exist only for glass become unnecessary; the deployment target
+> stays iOS 17 (`ios/project.yml` — a fact, not a decision made here).
+> Provenance: the "Materials:" bullet and the `glassEffect` MUST were added
+> in revision round 1 (`79cd005`, NAOE Kenichi, 2026-07-10; §C "Adopted
+> (structural; PROPOSAL tags unchanged)"); the blur FORBIDDEN is from the
+> initial contract (`14ebd53`, 2026-07-10) and survives in stricter form
+> as "no blur at all". Previously:
+>
+> - Materials: the deployment target is iOS 17, so iOS 26 Liquid Glass APIs
+>   (e.g. `glassEffect`) are usable only behind availability gates
+>   (`if #available(iOS 26, *)`), never unguarded. Standard SwiftUI
+>   controls/navigation adopt the new system appearance automatically when
+>   the app is rebuilt with the iOS 26 SDK — prefer that free adoption. For
+>   pre-26 fallback and overlay chrome, use system materials
+>   (`.ultraThinMaterial` etc.). **[iOS-only as written: an iOS deployment-
+>   target/availability-gating concern with no Android analog. Android's
+>   `beidSurface` has no OS-version branch at all — its own kdoc states it
+>   is "the fallback path alone, always applied" (`BeidSurface.kt`).]**
+> - MUST: Custom `glassEffect` use requires explicit design approval
+>   (a `DesignException` link). Glass is a functional layer for controls and
+>   navigation, not content decoration — proof/ceremony artwork is content
+>   and does not get glass by default. No glass-on-glass nesting. **[iOS-only
+>   as written: `glassEffect` does not exist on Android; there is no glass
+>   layer to require approval for or to nest.]**
+> - FORBIDDEN: Faking glass with arbitrary blur rectangles. **[iOS-only as
+>   written: Android has no glass effect to fake — not applicable, not a
+>   named counterpart.]**
 
 ### 8a. Liquid Glass materials (design-approved surface, DesignException: this section)
 
@@ -625,65 +1018,82 @@ difference, not just an API rename.**]**
 > applied." Android's matte/hairline surface treatment is §8's material
 > rule (already covered there), not a renamed instance of anything in this
 > subsection — nothing below needs or gets an Android counterpart tag.
+>
+> **Flat 2b (2026-09-22):** this whole subsection is superseded (below);
+> Android was never bound by it.
 
-Beid expresses Liquid Glass through the quiet-field-instrument register, not
-against it: glass is restrained, matte-adjacent, and reserved for chrome —
-never a decorative flourish layered onto content or artwork.
-
-- **The one sanctioned mechanism**: `View.beidSurface(interactive:cornerRadius:fallback:)`
-  in `ios/Beid/DesignSystem.swift`. On iOS 26+ it applies `.glassEffect`
-  (regular, `.interactive()` only when the surface is genuinely tappable);
-  below iOS 26 it falls back to a system `Material` plus a
-  `DS.Color.strokeHairline` stroke. This modifier owns the entire surface
-  fill — call sites MUST NOT pair it with a separate
-  `.background(material:)`/`.background(color:)`. (A real instance of this
-  bug shipped in the original `beidGlass` helper: `BeidPanel` and
-  `ProofCardView` both painted `.background(.regularMaterial, in: …)`
-  *underneath* `.glassEffect(...)`, stacking two materials on iOS 26 — the
-  exact glass-on-glass nesting this document forbids. Fixed by folding the
-  fallback material into `beidSurface` itself, so glass and material are
-  mutually exclusive by construction, not by call-site discipline.)
-- **Where glass applies** (functional chrome, per the existing §8 rule):
-  `BeidGlyph` (icon roundels), `BeidPanel` (metadata/status card
-  backgrounds), `ProofCardView` (interactive grid cards — `interactive:
-  true`, since tapping opens the detail screen), `BeidPrimaryButton`
-  (`.buttonStyle(.glassProminent)`) and `BeidSecondaryButton`
-  (`.buttonStyle(.glass)`), `BeidBulletRow`'s icon roundel.
-- **Where glass does not apply**: `DS.Color.surfaceCanvas` screen
-  backgrounds (a root background is structural, not a floating control —
-  glassing it would remove the "matte and physical" ground everything else
-  sits on); proof/ceremony artwork (`DS.Artwork.proofCardGradient`, seal
-  moments) — content, per the existing §8 rule, not chrome; `AccountSheetView`'s
-  `List` rows (§2.10: standard containers first; a system `List` already
-  gets the platform's own Liquid Glass row treatment on iOS 26 for free —
-  wrapping rows in `beidSurface` on top of that would itself be
-  glass-on-glass); the `WalletConnectPairingView` QR code surface and the
-  `EventCodeEntryView` text-field container, which stay `surfaceRaised` +
-  hairline — a scan target and a text-entry field are read, not tapped as
-  chrome, so matte legibility wins over glass.
-- **Grouping**: `BeidGlassGroup` (also in `DesignSystem.swift`) wraps
-  `GlassEffectContainer` on iOS 26+ (plain passthrough below it). Use it
-  around any cluster of `beidSurface`-backed views that sit close together
-  on one screen, so iOS 26 can blend/merge them in one render pass instead
-  of compositing each independently — `BeidScreen` wraps its whole
-  content+footer stack (covers every state-screen pattern: glyph header +
-  panel + CTA), `CollectionHomeView` wraps the proof-card grid,
-  `ItemDetailView` wraps its three stacked panels. Do not wrap views that
-  are far apart or on different screens; that defeats the container's
-  purpose per the upstream guidance.
-- **Deployment target**: stays iOS 17 (`ios/project.yml`); every Liquid
-  Glass call site is gated behind `#available(iOS 26, *)` with a real
-  fallback, never unguarded. Ken's "ふんだんに" (generously) directive is
-  read as *thorough adoption of the sanctioned surface pattern across every
-  eligible chrome element*, not as raising the minimum OS — beid's existing
-  users on iOS 17–25 get an equivalent matte-material look (the pre-26
-  fallback path in `beidSurface` now draws its hairline stroke from
-  `DS.Color.strokeHairline` instead of the previous `.separator.opacity`,
-  a deliberate token-correctness fix, not a value-preserving no-op); iOS 26
-  users get glass. No `DesignException` is
-  needed for staying on iOS 17; raising the deployment target is a
-  business decision (device-support cutoff) outside this design pass's
-  scope.
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** All of §8a is replaced
+> by §8's Flat 2b surface rules: no glass, no materials, no blur. #630
+> removes `beidSurface`'s glass path, the glass button styles and
+> `BeidGlassGroup`; until then the code below is migration debt. The iOS 26
+> availability gates exist only for glass and become unnecessary; the
+> deployment target stays iOS 17 (a fact about `ios/project.yml`, not a
+> decision made here). Provenance: added in `0d6394f` (NAOE Kenichi,
+> **2026-07-22**, PR #49), with its own `DesignException: this section` in
+> the heading; §C has no row for it. Ken's "ふんだんに" (generously)
+> directive, quoted below, is retired with it. Overturned on the owner's
+> authority without Ken's sign-off; Ken is to be informed afterwards.
+> Previously (verbatim):
+>
+> Beid expresses Liquid Glass through the quiet-field-instrument register, not
+> against it: glass is restrained, matte-adjacent, and reserved for chrome —
+> never a decorative flourish layered onto content or artwork.
+>
+> - **The one sanctioned mechanism**: `View.beidSurface(interactive:cornerRadius:fallback:)`
+>   in `ios/Beid/DesignSystem.swift`. On iOS 26+ it applies `.glassEffect`
+>   (regular, `.interactive()` only when the surface is genuinely tappable);
+>   below iOS 26 it falls back to a system `Material` plus a
+>   `DS.Color.strokeHairline` stroke. This modifier owns the entire surface
+>   fill — call sites MUST NOT pair it with a separate
+>   `.background(material:)`/`.background(color:)`. (A real instance of this
+>   bug shipped in the original `beidGlass` helper: `BeidPanel` and
+>   `ProofCardView` both painted `.background(.regularMaterial, in: …)`
+>   *underneath* `.glassEffect(...)`, stacking two materials on iOS 26 — the
+>   exact glass-on-glass nesting this document forbids. Fixed by folding the
+>   fallback material into `beidSurface` itself, so glass and material are
+>   mutually exclusive by construction, not by call-site discipline.)
+> - **Where glass applies** (functional chrome, per the existing §8 rule):
+>   `BeidGlyph` (icon roundels), `BeidPanel` (metadata/status card
+>   backgrounds), `ProofCardView` (interactive grid cards — `interactive:
+>   true`, since tapping opens the detail screen), `BeidPrimaryButton`
+>   (`.buttonStyle(.glassProminent)`) and `BeidSecondaryButton`
+>   (`.buttonStyle(.glass)`), `BeidBulletRow`'s icon roundel.
+> - **Where glass does not apply**: `DS.Color.surfaceCanvas` screen
+>   backgrounds (a root background is structural, not a floating control —
+>   glassing it would remove the "matte and physical" ground everything else
+>   sits on); proof/ceremony artwork (`DS.Artwork.proofCardGradient`, seal
+>   moments) — content, per the existing §8 rule, not chrome; `AccountSheetView`'s
+>   `List` rows (§2.10: standard containers first; a system `List` already
+>   gets the platform's own Liquid Glass row treatment on iOS 26 for free —
+>   wrapping rows in `beidSurface` on top of that would itself be
+>   glass-on-glass); the `WalletConnectPairingView` QR code surface and the
+>   `EventCodeEntryView` text-field container, which stay `surfaceRaised` +
+>   hairline — a scan target and a text-entry field are read, not tapped as
+>   chrome, so matte legibility wins over glass.
+> - **Grouping**: `BeidGlassGroup` (also in `DesignSystem.swift`) wraps
+>   `GlassEffectContainer` on iOS 26+ (plain passthrough below it). Use it
+>   around any cluster of `beidSurface`-backed views that sit close together
+>   on one screen, so iOS 26 can blend/merge them in one render pass instead
+>   of compositing each independently — `BeidScreen` wraps its whole
+>   content+footer stack (covers every state-screen pattern: glyph header +
+>   panel + CTA), `CollectionHomeView` wraps the proof-card grid,
+>   `ItemDetailView` wraps its three stacked panels. Do not wrap views that
+>   are far apart or on different screens; that defeats the container's
+>   purpose per the upstream guidance.
+> - **Deployment target**: stays iOS 17 (`ios/project.yml`); every Liquid
+>   Glass call site is gated behind `#available(iOS 26, *)` with a real
+>   fallback, never unguarded. Ken's "ふんだんに" (generously) directive is
+>   read as *thorough adoption of the sanctioned surface pattern across every
+>   eligible chrome element*, not as raising the minimum OS — beid's existing
+>   users on iOS 17–25 get an equivalent matte-material look (the pre-26
+>   fallback path in `beidSurface` now draws its hairline stroke from
+>   `DS.Color.strokeHairline` instead of the previous `.separator.opacity`,
+>   a deliberate token-correctness fix, not a value-preserving no-op); iOS 26
+>   users get glass. No `DesignException` is
+>   needed for staying on iOS 17; raising the deployment target is a
+>   business decision (device-support cutoff) outside this design pass's
+>   scope.
 
 ## 9. Motion and Haptics
 
@@ -761,6 +1171,15 @@ Rules:
 
 Real components in this codebase. Each entry is the contract for reuse.
 
+> **Flat 2b annotation (2026-09-22, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The entries below
+> describe **today's code** and stay accurate until the implementing issues
+> land. Where an entry names glass/`beidSurface` (#630), the per-proof
+> gradient (#633), a close (X) or other icon (#631), or the motif accents
+> `signalActive`/`signalWarning`/`proofSeal` (#628), that part is migration
+> debt against §5/§8/§12, not precedent for new work. Flat 2b's Library
+> components (§0) replace these as the implementing issues land.
+
 ### Component: ProofCardView
 
 > **Platform scope:** iOS-only as written — no Android counterpart exists.
@@ -790,6 +1209,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   badge; it MUST pair color with a symbol per §2.9.
 - Accessibility: entire card one element; label "Proof of {eventName},
   {date}".
+- *Flat 2b (2026-09-22): the gradient avatar and `beidSurface` are
+  migration debt (#633, #630); the home becomes an event list (#635).*
 
 ### Component: ScanFlowView (phase container)
 
@@ -809,6 +1230,10 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Rules: phase transitions animate with `DS.Motion.standard`; a trailing
   close (X) button is always reachable in the toolbar; each phase view owns
   its content but not its chrome.
+- *Flat 2b (2026-09-22): the close (X) is superseded — the exit becomes
+  the monospaced text control `CLOSE` (and `DONE` when finished), with a
+  44×44pt hit region (§12, #631, #636). The "always reachable exit" rule
+  itself stands.*
 
 ### Component: Sensing pulse (in SensingView)
 
@@ -822,6 +1247,9 @@ Real components in this codebase. Each entry is the contract for reuse.
 - Rules: the only permitted `repeatForever` animation; MUST degrade under
   Reduce Motion (§9); center symbol needs `.accessibilityHidden(true)` with
   the state conveyed by the title text.
+- *Flat 2b (2026-09-22): `signalActive` is migration debt (#628); the
+  pulse is replaced by the sensing graph (#634), which carries a VoiceOver
+  summary (§13).*
 
 ### Component: BeidStatusPill
 
@@ -871,6 +1299,9 @@ Real components in this codebase. Each entry is the contract for reuse.
   node (the Compose equivalent of `.accessibilityHidden(true)` — verified
   no `.semantics {}` on the dot in `BeidStatusPill.kt`); the label is a
   plain, unmerged `Text`.]**
+- *Flat 2b (2026-09-22): the dot colors and `beidSurface` are migration
+  debt (#628, #630). Under Flat 2b a status dot uses a semantic color for
+  its one meaning, always beside its text label (§5).*
 
 ### Component: BeidBulletRow
 
@@ -909,6 +1340,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   the title/subtitle text already carries the meaning). **[Android
   counterpart: the `Icon` carries no `contentDescription`
   (`contentDescription = null`) — verified.]**
+- *Flat 2b (2026-09-22): the icon roundel is superseded (§12, #631, #643);
+  02 Enable Bluetooth uses numbered text promises instead.*
 
 ### Component: BeidNumberedStepList
 
@@ -949,6 +1382,8 @@ Real components in this codebase. Each entry is the contract for reuse.
   counterpart: `Modifier.semantics(mergeDescendants = true) {}` on each row
   — verified, the direct Compose equivalent of
   `.accessibilityElement(children: .combine)`.]**
+- *Flat 2b (2026-09-22): the tint-following badge fill is migration debt
+  (§5 accent map superseded; #628, #643).*
 
 ### Component: State screen (pattern shared by 01/02/03/06d)
 
@@ -1008,6 +1443,18 @@ Real components in this codebase. Each entry is the contract for reuse.
   "Verified" — deliberately NOT derived from `Proof.signatureState`.
   "On-chain"/protocol-verification language is FORBIDDEN on this row (§15)
   — there is no such backing claim.
+
+  > **Annotation 2026-09-22 (beid#627).** The two sentences above about a
+  > fixed "Verified" are stale. Since PR #246 (merged 2026-08-20; #240,
+  > `DECISIONS.md` 2026-08-20) the Status row shows "Recorded on device"
+  > (the shared `status.recordedOnDevice` string also used by
+  > `TransparencyView`), still unconditional and still not derived from
+  > `Proof.signatureState` (`ItemDetailView.swift`, `statusRow`, verified
+  > 2026-09-22). The glyph and `proofSeal` color are unchanged in code
+  > until #631/#628. The owner decision of 2026-09-22 (settled item A in
+  > [D-627](docs/decisions/issue-627-flat-2b.md)) confirms the rule:
+  > "Verified" may be shown only after a third party has verified. The
+  > "on-chain" prohibition in the sentence above stands.
 - Header: above this panel, a centered `DS.Artwork.proofCardGradient(seed:)`
   avatar (`DS.Size.itemDetailArtwork`, in a non-interactive
   `.beidSurface(cornerRadius: DS.Radius.seal)` container) replaces the
@@ -1015,6 +1462,12 @@ Real components in this codebase. Each entry is the contract for reuse.
   (`DS.Font.sectionTitle`, centered) and a medium-style, date-only caption
   (`DS.Color.textSecondary`, centered — no venue/time, matching
   `ProofCardView`'s date formatting) follow.
+
+  > **Annotation 2026-09-22 (beid#627).** The gradient header, the
+  > `beidSurface` container, the `checkmark.circle.fill` glyph and
+  > `proofSeal` are migration debt (#633, #630, #631, #628). 09 Proof
+  > Detail is rebuilt in #638; its Figma STATUS value ("Verified on-chain")
+  > and "TOKEN ID" row are not authorized (§15).
 
 ### Pattern: Primary CTA button
 
@@ -1043,6 +1496,10 @@ Real components in this codebase. Each entry is the contract for reuse.
   default tint" rule, enforced the same way `BeidNumberedStepList` enforces
   it (by requiring the caller to pass it, since Compose has no ambient
   tint to fall back to).]**
+- *Flat 2b (2026-09-22): the accent-map tint is superseded. The Flat 2b
+  primary button is `Button/Primary`: an `ink` pill with a `bg` label, one
+  per screen, 0.8 opacity when pressed (spec §7; §5, #628). Capitalization
+  of its label is open (§15, #24).*
 
 ## 11. Screen Patterns
 
@@ -1118,6 +1575,12 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   auto-discovery card list. This is a concrete case of Android currently
   being ahead of iOS on the entry flow, not behind it; this document does
   not take a position on whether or how that gets reconciled.]**
+  *Flat 2b annotation (2026-09-22, beid#627,
+  [D-627](docs/decisions/issue-627-flat-2b.md)): the "trailing close (X)
+  button" is superseded by the monospaced text control `CLOSE` (§12,
+  #631, #636); the modal session with a clear exit stands. The bullets in
+  this section describe today's screens; the Flat 2b screens replace them
+  through #635–#644.*
 - **Detail (08)**: push via `navigationDestination(item:)` from the grid.
   **[Android counterpart: `Screen.RecordDetail` is a parameterized
   Compose-Navigation route (`"records/{recordId}"`), pushed from
@@ -1207,69 +1670,119 @@ visual language).
 > drawable/illustration assets exist under `android/app/src/main/res` —
 > current facts, not a permanent state; do not restate them without
 > re-checking.
+>
+> **Flat 2b (2026-09-22):** the no-icons rule below binds iOS now. The
+> parity principle above describes the superseded policy; Android is not
+> in violation until an Android follow-up is scheduled (none exists as of
+> 2026-09-22).
 
-Policy split:
+**Flat 2b: no icons (owner decision 2026-09-22, beid#627,
+[D-627](docs/decisions/issue-627-flat-2b.md); implementation #631).**
 
-| SF Symbols (keep) | Custom assets (required) |
-| --- | --- |
-| System actions: close, back, share, settings, person/account | Proof seals, encounter/sensing artwork, empty states |
-| Toolbar and tab affordances | Ceremony moments (`RecordingView` entrance seal) |
-| Small inline symbols beside text (≤ 32 pt) | Any brand moment that lacks suitable custom artwork |
+- MUST: The app draws no icons. Controls are monospaced uppercase text in
+  DM Mono (§6): `← EVENTS`, `CLOSE`, `DONE`, `COPY`, `OPEN →`.
+- The only exception is the OS status bar. OS-drawn chrome the app does
+  not draw itself (system alerts and confirmation dialogs, the keyboard,
+  permission dialogs) is outside this rule. There are no other
+  exceptions.
+- MUST: Every text control meets §2 rule 5's 44×44pt hit region; an 11pt
+  label needs its hit region widened.
+- MUST: A text control whose visible text reads badly aloud (e.g. "←")
+  carries a VoiceOver label. This applies §13's existing VoiceOver MUST;
+  it is not a new rule.
+- Status dots are shapes paired with text (§5, §2 rule 9), not icons.
+- Illustrations are gone. The Welcome hero is a line-drawn Sigil from
+  sample data (#633, #643); empty states use the dashed `Block/Empty`
+  (§8). A proof's artwork is its Sigil (§5).
+- **SHARE is not part of this contract** (owner decision 2026-09-22,
+  settled item C in D-627). The 2026-07-28 rejection (§C, Item Detail
+  reskin row: "no share action exists in the app") stands; no share
+  feature exists. #631 and #638 remove SHARE from 09 Proof Detail's nav
+  row.
+- **Open item 5 (D-627):** whether the `NavigationStack` back button is
+  replaced by `← PARENT` text is open (#631); it touches §2 rule 10
+  (standard containers first).
+- Until #631 lands, SF Symbols and the four illustration assets still in
+  code are migration debt. The two accessibility MUSTs quoted below
+  ("Decorative images use `.accessibilityHidden(true)`" and "Symbols
+  paired with text scale with Dynamic Type") keep applying to any image or
+  glyph that remains.
 
-**[Android counterpart column: system actions/toolbar/small-inline (≤32dp)
-→ Material Icons/Material Symbols vector set. Proof seals/encounter
-artwork/empty states/ceremony moments → custom vector assets under
-`android/app/src/main/res` (no asset pipeline decision recorded for
-Android yet — track that decision where it lands, not in this table).]**
-
-- FORBIDDEN: Decorative `Image(systemName:)` larger than 32 pt. There are no
-  known current violations: hero headers route through `BeidGlyph`, whose
-  default 72 pt container renders a 27.36 pt system-symbol fallback, and
-  available brand moments use custom assets. Treat this as a continuing cap,
-  not permission to grow the fallback. **[Android counterpart: the same
-  32dp cap on a decorative `Icon`/`ImageVector`. `BeidGlyph`
-  (`ui/designsystem/BeidGlyph.kt`) already sizes its icon at `size * 0.38f`
-  of the container — the same proportional-fallback shape iOS's `BeidGlyph`
-  uses — so a future icon dependency landing there inherits the cap by
-  construction, not by a new rule.]**
-- Two distinct custom-asset pipelines — do not mix them:
-  1. **Illustrations** (proof artwork, empty states, sensing scenes):
-     vector assets in `Illustrations.xcassets`, rendering `Original`, with
-     light/dark variants when colors are embedded.
-  2. **Custom symbols** (small reusable glyphs that behave like SF
-     Symbols): authored from an SF Symbols app template as SVG symbol
-     sets, validated in the SF Symbols app, added to the asset catalog —
-     this preserves weights, scales, text alignment, and accessibility
-     behavior. Single-color template glyphs are tinted only via
-     `DS.Color.*`. **[iOS-specific mechanism — no Android counterpart
-     pipeline exists yet. Android's nearest structural equivalents would
-     be vector drawables (`res/drawable/*.xml`) for illustrations and
-     `ImageVector`s for custom symbols, but neither pipeline has been
-     decided or built as of this writing — naming the eventual mechanism
-     is out of this document's job (see beid#338).]**
-- Temporary path when a required asset does not yet exist: a new surface
-  that *needs* a brand moment MAY ship with a placeholder (small SF Symbol
-  ≤ 32 pt or plain layout) plus a `TODO(asset): <asset-name>` comment and a
-  checklist note. Remove that TODO when the named asset lands; never use an
-  oversized decorative SF Symbol. **[Platform-neutral principle; Android's
-  actual current placeholder path is "plain layout" (no icon at all) —
-  `WelcomeScreen`/`BluetoothPermissionScreen`/`BluetoothOffScreen` all take
-  this branch today, per their own kdoc, rather than a small placeholder
-  icon, since no icon dependency exists to draw even a placeholder from.]**
-- MUST: Decorative images use `.accessibilityHidden(true)`. **[Android
-  counterpart: no semantics node on the decorative `Icon` — verified
-  `BeidGlyph.kt` already omits `contentDescription`.]**
-- MUST: Symbols paired with text scale with Dynamic Type (`@ScaledMetric`
-  or font-relative sizing). **[Android counterpart: font-relative sizing
-  via `.sp`-based or `TextUnit`-relative dimensions, the Compose analogue
-  of `@ScaledMetric` — not yet exercised on Android since no such symbol
-  exists in production today.]**
-- Asset naming: kebab-case, motif-prefixed — e.g. `encounter-field-empty`,
-  `encounter-field-pulse`, `proof-seal-mark`. **[Platform-neutral naming
-  convention; would apply verbatim to Android drawable resource names once
-  they exist, modulo Android resource-name rules (lowercase, underscores
-  instead of hyphens — Android resource identifiers cannot contain a
-  hyphen), e.g. `encounter_field_empty`.]**
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The SF Symbols /
+> custom-assets policy, the 32pt decorative-symbol FORBIDDEN, the two
+> custom-asset pipelines and the `TODO(asset)` placeholder path are
+> replaced by the no-icons rule above. Provenance: the policy table, the
+> 32pt FORBIDDEN, the two accessibility MUSTs and the asset naming rule are
+> from the initial contract (`14ebd53`, NAOE Kenichi, 2026-07-10;
+> structural per §C); the pipeline split is from revision round 1
+> (`79cd005`, 2026-07-10, "illustrations/custom-symbol split"); the
+> `TODO(asset)` path is from `b65d5c9` (NAOE Kenichi, 2026-08-08, PR
+> #153). Overturned on the owner's authority without Ken's sign-off; Ken
+> is to be informed afterwards. Previously (verbatim):
+>
+> Policy split:
+>
+> | SF Symbols (keep) | Custom assets (required) |
+> | --- | --- |
+> | System actions: close, back, share, settings, person/account | Proof seals, encounter/sensing artwork, empty states |
+> | Toolbar and tab affordances | Ceremony moments (`RecordingView` entrance seal) |
+> | Small inline symbols beside text (≤ 32 pt) | Any brand moment that lacks suitable custom artwork |
+>
+> **[Android counterpart column: system actions/toolbar/small-inline (≤32dp)
+> → Material Icons/Material Symbols vector set. Proof seals/encounter
+> artwork/empty states/ceremony moments → custom vector assets under
+> `android/app/src/main/res` (no asset pipeline decision recorded for
+> Android yet — track that decision where it lands, not in this table).]**
+>
+> - FORBIDDEN: Decorative `Image(systemName:)` larger than 32 pt. There are no
+>   known current violations: hero headers route through `BeidGlyph`, whose
+>   default 72 pt container renders a 27.36 pt system-symbol fallback, and
+>   available brand moments use custom assets. Treat this as a continuing cap,
+>   not permission to grow the fallback. **[Android counterpart: the same
+>   32dp cap on a decorative `Icon`/`ImageVector`. `BeidGlyph`
+>   (`ui/designsystem/BeidGlyph.kt`) already sizes its icon at `size * 0.38f`
+>   of the container — the same proportional-fallback shape iOS's `BeidGlyph`
+>   uses — so a future icon dependency landing there inherits the cap by
+>   construction, not by a new rule.]**
+> - Two distinct custom-asset pipelines — do not mix them:
+>   1. **Illustrations** (proof artwork, empty states, sensing scenes):
+>      vector assets in `Illustrations.xcassets`, rendering `Original`, with
+>      light/dark variants when colors are embedded.
+>   2. **Custom symbols** (small reusable glyphs that behave like SF
+>      Symbols): authored from an SF Symbols app template as SVG symbol
+>      sets, validated in the SF Symbols app, added to the asset catalog —
+>      this preserves weights, scales, text alignment, and accessibility
+>      behavior. Single-color template glyphs are tinted only via
+>      `DS.Color.*`. **[iOS-specific mechanism — no Android counterpart
+>      pipeline exists yet. Android's nearest structural equivalents would
+>      be vector drawables (`res/drawable/*.xml`) for illustrations and
+>      `ImageVector`s for custom symbols, but neither pipeline has been
+>      decided or built as of this writing — naming the eventual mechanism
+>      is out of this document's job (see beid#338).]**
+> - Temporary path when a required asset does not yet exist: a new surface
+>   that *needs* a brand moment MAY ship with a placeholder (small SF Symbol
+>   ≤ 32 pt or plain layout) plus a `TODO(asset): <asset-name>` comment and a
+>   checklist note. Remove that TODO when the named asset lands; never use an
+>   oversized decorative SF Symbol. **[Platform-neutral principle; Android's
+>   actual current placeholder path is "plain layout" (no icon at all) —
+>   `WelcomeScreen`/`BluetoothPermissionScreen`/`BluetoothOffScreen` all take
+>   this branch today, per their own kdoc, rather than a small placeholder
+>   icon, since no icon dependency exists to draw even a placeholder from.]**
+> - MUST: Decorative images use `.accessibilityHidden(true)`. **[Android
+>   counterpart: no semantics node on the decorative `Icon` — verified
+>   `BeidGlyph.kt` already omits `contentDescription`.]**
+> - MUST: Symbols paired with text scale with Dynamic Type (`@ScaledMetric`
+>   or font-relative sizing). **[Android counterpart: font-relative sizing
+>   via `.sp`-based or `TextUnit`-relative dimensions, the Compose analogue
+>   of `@ScaledMetric` — not yet exercised on Android since no such symbol
+>   exists in production today.]**
+> - Asset naming: kebab-case, motif-prefixed — e.g. `encounter-field-empty`,
+>   `encounter-field-pulse`, `proof-seal-mark`. **[Platform-neutral naming
+>   convention; would apply verbatim to Android drawable resource names once
+>   they exist, modulo Android resource-name rules (lowercase, underscores
+>   instead of hyphens — Android resource identifiers cannot contain a
+>   hyphen), e.g. `encounter_field_empty`.]**
 
 ## 13. Accessibility
 
@@ -1278,8 +1791,33 @@ Android yet — track that decision where it lands, not in this table).]**
 > gap. No independent Android accessibility audit (TalkBack pass) was run
 > for this document — the notes below are source-level, same limitation
 > as everywhere else in this pass.
+>
+> **Flat 2b (2026-09-22):** the requirements below are unchanged and bind
+> Flat 2b on iOS now; only the annotations are new.
 
 Acceptance criteria for every component and screen, not post-hoc QA:
+
+> **Flat 2b annotations (2026-09-22, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The requirements in
+> this section are unchanged. Read them as follows under Flat 2b:
+>
+> - "In both appearances" and "verify against `surfaceCanvas` *and*
+>   `surfaceRaised`" now mean the single appearance (§14) and the Flat 2b
+>   backgrounds: `bg`, `tile` and `ink`. Measured ratios are in §5.
+> - The icon-only account-button example ("`CollectionHomeView`'s
+>   "person.crop.circle" account button MUST carry "Account"") is
+>   superseded: the account entry becomes the address text (#631, #642).
+>   The labeling MUST itself stands and now covers text controls that read
+>   badly aloud (§12).
+> - Reduce Transparency has no materials left to degrade once #630 lands
+>   (§8).
+> - Flat 2b's own accessibility ask is adopted as part of the contract
+>   (spec §9): graphs and Sigils carry information, not decoration, so
+>   each carries a VoiceOver summary (for example, "7 mutual, 13 detected,
+>   window 6"; #633, #634, #640).
+> - Open item 4 (D-627): non-text contrast under WCAG 1.4.11 is not
+>   covered by this section today, which covers text; recorded, no new
+>   rule.
 
 - MUST: Contrast ≥ WCAG AA for text against its actual background in both
   appearances (verify against `surfaceCanvas` *and* `surfaceRaised`).
@@ -1328,37 +1866,72 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 > per bullet; the underlying "every screen correct in both modes, previews
 > prove it, forced overrides only in previews" principle is
 > platform-neutral.
+>
+> **Flat 2b (2026-09-22):** single appearance binds iOS now. Android's
+> `BeidAppTheme` still follows `isSystemInDarkTheme()`; that is not a
+> violation until an Android follow-up is scheduled (none exists as of
+> 2026-09-22).
 
-- MUST: Every `DS.Color` token has a dark variant (already true in
-  `Colors.xcassets`); no view opts out of dark mode. **[Android
-  counterpart: every `BeidColorScheme` field has a `*Light`/`*Dark` pair in
-  `BeidPalette` (verified — all thirteen fields present in both, except
-  `statusCaution`, which has neither, per §5's note); no screen opts out of
-  `BeidAppTheme`.]**
-- MUST: PRs adding UI include light *and* dark previews
-  (`.preferredColorScheme` variants in `#Preview`). **[Android counterpart:
-  `@Preview` supports a `uiMode = UI_MODE_NIGHT_YES` parameter for the same
-  purpose. Verified gap: all seven current `@Preview` functions under
-  `ui/screens/` render light-mode only — none passes a night-mode
-  `uiMode` — so this rule does not currently hold on Android. Named as a
-  fact, not fixed here.]**
-- MUST: The proof-card generated gradient remains legible against both
-  canvas values; card text sits on `surfaceRaised`, never directly on the
-  gradient. **[iOS-only as written for now: no Android proof card or
-  gradient generator exists (§5, §10) — nothing to check yet.]**
+**Flat 2b: single appearance (owner decision 2026-09-22, beid#627,
+[D-627](docs/decisions/issue-627-flat-2b.md); implementation #632).**
+
+- MUST: The app has one appearance and does not follow the OS dark-mode
+  setting. A device in dark mode shows the same intended design.
+- Black is a **state, not a theme**: a screen is black because something
+  is happening now (sensing, the in-progress event card, the Account
+  sheet as the layer being operated — §5).
+- A dark mode would be considered only if it is ever needed (spec §10-6);
+  it is not planned.
+- #632 chooses the mechanism (Info.plist, removing the dark variants, or
+  another). This document does not choose it. Retiring the FORBIDDEN
+  quoted below is what makes #632 implementable.
+- MUST: Previews show the single appearance; light *and* dark preview
+  pairs are no longer required. Until #632 lands, the existing
+  `.preferredColorScheme` preview variants are migration debt.
+
+Kept unchanged:
+
 - SHOULD: High-contrast colorset variants are added at palette ratification;
   until then, high-contrast rendering falls back to the base values and
   must at minimum not lose information. **[Android counterpart: the same
   fallback principle against `BeidPalette`; no high-contrast variant
   mechanism exists in `BeidColorScheme` today, matching iOS's own
   not-yet-added state — not a platform gap, a shared one.]**
-- FORBIDDEN: `.colorScheme(.dark)` / `.preferredColorScheme` forced in
-  production views (previews only). **[Android counterpart: forcing
-  `BeidAppTheme(darkTheme = true/false)` instead of the default
-  `isSystemInDarkTheme()` in a production screen call site would be the
-  equivalent violation — verified no screen does this; `darkTheme`'s
-  default is used everywhere `BeidAppTheme` is called in `@Preview`
-  functions and (by omission) at the real app root.]**
+
+> **Superseded 2026-09-22 (owner decision, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The dark-variant MUST,
+> the light+dark previews MUST, the gradient-legibility MUST and the
+> FORBIDDEN on forcing an appearance in production are replaced by the
+> single-appearance rules above. The gradient itself is superseded by the
+> Sigil (§5, #633). Provenance: all four are from the initial contract
+> (`14ebd53`, NAOE Kenichi, 2026-07-10; §C dates it 2026-07-09;
+> structural). Overturned on the owner's authority without Ken's sign-off;
+> Ken is to be informed afterwards. Previously (verbatim):
+>
+> - MUST: Every `DS.Color` token has a dark variant (already true in
+>   `Colors.xcassets`); no view opts out of dark mode. **[Android
+>   counterpart: every `BeidColorScheme` field has a `*Light`/`*Dark` pair in
+>   `BeidPalette` (verified — all thirteen fields present in both, except
+>   `statusCaution`, which has neither, per §5's note); no screen opts out of
+>   `BeidAppTheme`.]**
+> - MUST: PRs adding UI include light *and* dark previews
+>   (`.preferredColorScheme` variants in `#Preview`). **[Android counterpart:
+>   `@Preview` supports a `uiMode = UI_MODE_NIGHT_YES` parameter for the same
+>   purpose. Verified gap: all seven current `@Preview` functions under
+>   `ui/screens/` render light-mode only — none passes a night-mode
+>   `uiMode` — so this rule does not currently hold on Android. Named as a
+>   fact, not fixed here.]**
+> - MUST: The proof-card generated gradient remains legible against both
+>   canvas values; card text sits on `surfaceRaised`, never directly on the
+>   gradient. **[iOS-only as written for now: no Android proof card or
+>   gradient generator exists (§5, §10) — nothing to check yet.]**
+> - FORBIDDEN: `.colorScheme(.dark)` / `.preferredColorScheme` forced in
+>   production views (previews only). **[Android counterpart: forcing
+>   `BeidAppTheme(darkTheme = true/false)` instead of the default
+>   `isSystemInDarkTheme()` in a production screen call site would be the
+>   equivalent violation — verified no screen does this; `darkTheme`'s
+>   default is used everywhere `BeidAppTheme` is called in `@Preview`
+>   functions and (by omission) at the real app root.]**
 
 ## 15. Copywriting Voice
 
@@ -1373,11 +1946,26 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 > Localization Process section records further changes since) — see
 > AGENTS.md's Localization Process section for the current locale set
 > rather than treating any list repeated here as current.
+>
+> **Flat 2b (2026-09-22):** every rule in this section stays, including
+> the forbidden vocabulary; this change only adds annotations. They bind
+> iOS copy now and Android's copy as before.
 
 Language model (Ken decision, 2026-07-10): the app's primary language is
 **English**, localized via String Catalogs to the confirmed locale set
 `en` (source) + `ja`, `zh-Hans`, `es`, `fr` — the full localization process
 lives in `AGENTS.md`.
+
+> **Annotation 2026-09-22 (beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** The sentence above is
+> stale and kept for history: "Language model (Ken decision, 2026-07-10):
+> the app's primary language is **English**, localized via String Catalogs
+> to the confirmed locale set `en` (source) + `ja`, `zh-Hans`, `es`, `fr`".
+> Target locales have been `en` only since the owner decision of 2026-08-21
+> (`docs/localization-process.md`), and the owner decision of 2026-09-22
+> confirms English-only for the Flat 2b UI (settled item B in D-627). The
+> String Catalog MUST below is unchanged: the localization mechanism stays
+> in place, so no string may bypass the catalog.
 
 - MUST: All copy is authored in English as the source language; the voice,
   vocabulary, and forbidden-term rules below are defined against English.
@@ -1421,6 +2009,11 @@ lives in `AGENTS.md`.
   `en`-only per AGENTS.md) — this term mapping has no current Android
   application, not a missing port.]**
 
+  > **Annotation 2026-09-22 (beid#627).** Stale while the target locale
+  > set is `en` only (2026-08-21; confirmed for Flat 2b 2026-09-22). Kept
+  > verbatim for history and for any future widening of the locale set;
+  > the term choice itself was not overturned.
+
 - Vocabulary: "proof", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A proof is **collected** or **sealed**, never "minted",
   "dropped", or "claimed". **[Platform-neutral; Android's actual strings
@@ -1432,6 +2025,21 @@ lives in `AGENTS.md`.
   ("sign your proofs"), not what protocol it speaks. **[Platform-neutral;
   no violation found in current Android `strings.xml` (grepped for each
   forbidden term).]**
+- *Flat 2b annotation (2026-09-22,
+  [D-627](docs/decisions/issue-627-flat-2b.md)): §15 stays, so these Flat 2b
+  strings are **not authorized**:*
+  - *"VERIFIED" / "VERIFIED · 6 WINDOWS" (06) / "VERIFIED ON-CHAIN" (07) /
+    a STATUS row reading Verified or "Verified on-chain" (09). Owner
+    decision 2026-09-22 (settled item A): **"Verified" may be shown only
+    after a third party has verified** — the stance of #144/#240
+    (`DECISIONS.md` 2026-08-20) stands. "On-chain" is also forbidden above
+    on its own. The screen issues choose replacement wording (#636, #637,
+    #638).*
+  - *"TOKEN ID" (09): "token" is forbidden above (#638).*
+  - *"CONNECTED VIA WALLETCONNECT" (10): wallet copy says what the wallet
+    does, not what protocol it speaks (#642).*
+  - *Open item 3 (D-627) tracks these; the live Figma copy already differs
+    from the spec in places (§0) and neither is authorized by that alone.*
 - Trust model: beid's whitepaper trust model is a pragmatic compromise and
   the product says so plainly where relevant — settings/about copy states
   what is and isn't cryptographically guaranteed, upfront, in one sentence.
@@ -1452,6 +2060,14 @@ lives in `AGENTS.md`.
   event", "Enter event code") exactly the way #24 describes for iOS — this
   is not a new problem Android introduces, it is the same undecided rule
   producing the same mixing pattern on both platforms independently.]**
+- *Flat 2b annotation (2026-09-22,
+  [D-627](docs/decisions/issue-627-flat-2b.md)): mono labels (DM Mono, §6)
+  are **uppercase** by spec; that part of Flat 2b is adopted. Buttons stay
+  under the sentence-case `PROPOSAL` above, which is still open (#24).
+  **Open item 1:** the nav text controls (`← EVENTS`, `CLOSE`) are both
+  labels and controls, so the two rules meet there; also undecided is
+  whether uppercase lives in the English source strings or in a style
+  transform. Not settled here.*
 - Error formula: what happened + why + one action. Model:
   "beid lost the connection to {event}. Move closer and we'll pick it back
   up automatically." + "Try Again". **[Platform-neutral principle; Android
@@ -1482,6 +2098,15 @@ lives in `AGENTS.md`.
 > Symbols"/TODO(asset) → §12's Android note, §15 → its own per-bullet
 > notes above. Use an Android PR's own checklist by substituting those
 > named counterparts, not by pasting the iOS-worded block unchanged.
+>
+> **Flat 2b (2026-09-22, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)):** the checklist was updated
+> for Flat 2b on iOS. The "SF Symbols" mechanism named above is superseded
+> by §12's no-icons rule, and "light and dark" by §14's single appearance;
+> Android PRs keep substituting their own counterparts, and Android's
+> superseded palette is not a violation until an Android follow-up is
+> scheduled. The pre-Flat 2b checklist is at `git show 25dec6b:DESIGN.md`
+> (lines 1488-1502).
 
 Copy-paste this into every UI PR description and check each item:
 
@@ -1490,14 +2115,17 @@ Copy-paste this into every UI PR description and check each item:
 
 - [ ] No hardcoded colors, fonts, spacing, radii, or durations in Views (DS.* only).
 - [ ] `scripts/lint.sh` passes. ("Passes" = zero violations beyond the checked-in baseline template `lint/baseline.template.json`. I did NOT regenerate the template to absorb new violations; if I migrated a scaffold file I regenerated it to shrink and said so in the PR.)
-- [ ] All icon-only buttons have accessibility labels.
-- [ ] All interactive targets are ≥ 44×44 pt.
-- [ ] Light and dark previews attached (screenshots or #Preview variants).
-- [ ] Dynamic Type checked at AX3 or larger — no clipped text.
-- [ ] Empty/error/loading states implemented for new surfaces.
-- [ ] No decorative SF Symbols > 32 pt; custom asset used or a TODO(asset) filed.
+- [ ] No icons: controls are monospaced text; the OS status bar is the only exception (§12).
+- [ ] Text controls whose visible text reads badly aloud (e.g. "←") have accessibility labels.
+- [ ] All interactive targets, including text controls, are ≥ 44×44 pt.
+- [ ] No glass, material, blur, shadow, or gradient (§8).
+- [ ] Semantic colors (red/amber/green) only for their one meaning, and as text only where AA passes (on ink) (§5).
+- [ ] Single-appearance previews attached (screenshots or #Preview); the app does not follow OS dark mode (§14).
+- [ ] Dynamic Type checked at AX3 or larger with the bundled fonts — no clipped text; row/button heights are minimums.
+- [ ] Graphs and Sigils carry a VoiceOver summary (§13).
+- [ ] Empty/error/loading states implemented for new surfaces (empty = dashed block, §8).
 - [ ] State is never conveyed by color alone.
-- [ ] Copy follows §15 (English source, String Catalog, vocabulary, no web3 jargon, error formula).
+- [ ] Copy follows §15 (English source, String Catalog, vocabulary, no web3 jargon, error formula; no unauthorized Flat 2b strings).
 - [ ] Any deviation carries `DesignException: <rationale or link>`.
 ```
 
@@ -1534,6 +2162,14 @@ Enforcement layers:
    literals, decorative-symbol size (§12), the one-accent map (§5), hit
    targets, and Dynamic Type behavior. An honest 80% lint layer plus
    review beats a broken 100% regex.
+
+   *Flat 2b note (2026-09-22): the lint layer does **not** cover the Flat
+   2b rules. `.swiftlint.yml` does not ban `glassEffect`,
+   `Image(systemName:)` or `preferredColorScheme` today (checked
+   2026-09-22), so no-glass, no-icons and single-appearance are
+   review-level until a lint rule lands. Any such rule belongs to #628,
+   #630, #631 or #632, not to this document. (The decorative-symbol size
+   and one-accent map named above are superseded, §12 and §5.)*
 2. **Review-level**: the checklist above.
 3. **Exception process**: a PR that must deviate states
    `DesignException: <reason>` in its description and links the decision;
@@ -1585,6 +2221,12 @@ to.]**
 > document does not yet state for Android — the notes below are this
 > pass's inventory, not a commitment to keep a parallel table current
 > going forward.
+
+> **Migration debt (2026-09-22, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** This table describes
+> today's `Tokens.swift` and stays true of the code until #628 (colors,
+> space, radius, sizes), #629 (fonts) and #633 (artwork) land. Its values
+> are not the Flat 2b targets (§5, §6, §7) and are not rewritten here.
 
 | Token | Swift | Value | Role |
 | --- | --- | --- | --- |
@@ -1655,6 +2297,12 @@ sets, each with light and dark variants:
 The image-set directories and the four `assetImage:` call sites are the
 inventory evidence. Naming remains governed by §12.
 
+> **Migration debt (2026-09-22, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** These four assets and
+> their dark variants stay in the code until #631/#632/#633/#643 replace
+> them (Sigil hero, dashed empty block, sensing graph). Flat 2b has no image
+> assets (§12); this inventory describes today's code.
+
 ### C. Decision log
 
 > **Platform scope:** iOS-only as written — every entry below records an
@@ -1663,6 +2311,10 @@ inventory evidence. Naming remains governed by §12.
 > `docs/decisions/issue-339-design-md-android-scope.md` and, once the
 > owner decides, in `DECISIONS.md` per this repository's normal process —
 > not invented here as a new log entry ahead of that decision.
+>
+> **2026-09-22 rows:** the Flat 2b rows bind iOS first (owner decision);
+> the full record, with verbatim old rules and provenance, is
+> [`docs/decisions/issue-627-flat-2b.md`](docs/decisions/issue-627-flat-2b.md).
 
 | Date | Decision | Status |
 | --- | --- | --- |
@@ -1679,6 +2331,14 @@ inventory evidence. Naming remains governed by §12.
 | 2026-07-28 | Collection Home reskin (Figma `104:300`, `docs/specs/collection-redesign.md`) adds `DS.Size.proofCardArtwork` (76 pt) and wires the previously-unused `DS.Artwork.proofCardGradient(seed:)` into `ProofCardView` as a centered circular avatar, replacing the seal icon/checkmark/divider/Peers-verified row (peers count stays on `ItemDetailView`). Bottom "Sense Event" CTA becomes icon-only once proofs exist (labeled CTA retained on the 04b empty state per §3's first-run-discoverability rule); the existing localized "Sense Event" string is retained as the icon button's `.accessibilityLabel`, not removed. `CollectionHomeView`'s empty-state icon fixed to the 32 pt cap (see §12) | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 | 2026-07-28 | Item Detail reskin (Figma `104:407`, `docs/specs/itemdetail-redesign.md`) adds `DS.Size.itemDetailArtwork` (190 pt) and reuses `DS.Artwork.proofCardGradient(seed:)` in `ItemDetailView` at detail scale, replacing the former seal-glyph + "Verified"-label header. The Method/Peers-verified/Status panel drops its plain "Proof" section title and pairs the Status row with a `checkmark.circle.fill` glyph; Status stays a fixed, unconditional "Verified" deliberately decoupled from `Proof.signatureState` (that state has its own distinct readout in `ProofSignatureControlsView` directly below), and Figma's "on-chain" qualifier is dropped as unmodeled and forbidden copy (§15). Figma's venue text ("Tokyo Big Sight") is not rendered — no backing `Proof` field — and the date caption drops to date-only (medium style, no time), matching `ProofCardView`. Figma's custom back/share nav pills are not adopted (standard back button kept; no share action exists in the app). `ProofSignatureControlsView`/`ProofSignatureState`/`Proof`/`ProofStore` are untouched — reskin is display-chrome only, pending Option C. **Superseded (2026-08-11):** Option C landed (gh#88), and the provisional signing path this row names (`ProofSignatureControlsView`) was removed per gh#196 — see the 2026-08-11 row below | Adopted (no new PROPOSAL tag — reuses existing ratified tokens/artwork generator, no new color) |
 | 2026-08-11 | AttendanceProof/v1 manual signing path removed (`docs/specs/attendance-proof-v1-removal.md`, gh#196): `ProofSignatureControlsView` (and its call site in `ItemDetailView`, and `AppCoordinator.signProof(_:)`) deleted outright. `Proof.signatureState`, `ProofSignatureState`, `SignatureRecord`, and `SignaturePayload` are kept as-is (Codable-compatibility for historical local data, per `DECISIONS.md`'s 2026-08-09 schema-migration ruling) — they simply never transition again. Item Detail gains no replacement control; the Barnard-conformant binding model (gh#88) is the real protocol-level self-proof mechanism now, surfaced during the connect+binding interstitial, not on this screen | Adopted |
+| 2026-09-22 | **Flat 2b adopted** as the design authority (beid#626/#627, [D-627](docs/decisions/issue-627-flat-2b.md)): Figma Library `189-2` for values, Screens `183-2` for layouts; Minimal v4 and the Liquid Glass-era Fixed page become historical. §0's "the code is right, fix the document" MUST is replaced by a transition clause (#628–#632) and a steady-state rule (Library = design authority for values; `Tokens.swift` = what ships; Library-vs-code mismatch is a defect to file). Product name stays beid ("SenseProof" is the designer's mistake) | Adopted — owner decision 2026-09-22 without Ken's sign-off; Ken to be informed afterwards |
+| 2026-09-22 | §5 palette overturned: the ratified direction (deep ink + teal + violet; `8076f04`, §C Ken-ratification row 2026-07-10), the token table, and the one-motif-accent MUST (`79cd005`) → black/white/grays + red/amber/green semantic colors, no per-event colors (#628) | Adopted — owner decision 2026-09-22 without Ken's sign-off; Ken to be informed afterwards |
+| 2026-09-22 | §8/§8a Liquid Glass overturned: the `glassEffect` MUST and Materials bullet (`79cd005`), the blur FORBIDDEN (`14ebd53`), and all of §8a including "ふんだんに" (`0d6394f`, 2026-07-22, PR #49) → no glass, materials, blur, shadows or gradients; hairlines and whitespace (#630) | Adopted — owner decision 2026-09-22 without Ken's sign-off; Ken to be informed afterwards |
+| 2026-09-22 | Per-proof gradient overturned as the sanctioned artwork (§5 `79cd005`; §10 `0787306`, 2026-07-28; §14 `14ebd53`) → the Sigil, generated from observation data (#633); `proofCardGradient` is migration debt until then | Adopted — owner decision 2026-09-22 without Ken's sign-off; Ken to be informed afterwards |
+| 2026-09-22 | Icons overturned: §12's SF Symbols/custom-assets policy, 32pt cap, asset pipelines and `TODO(asset)` path (`14ebd53`, `79cd005`, `b65d5c9`); §10/§11 close (X) (`88a5beb`, 2026-07-27); §13's icon-only account-button example → no icons, monospaced text controls, OS status bar only (#631) | Adopted — owner decision 2026-09-22 without Ken's sign-off; Ken to be informed afterwards |
+| 2026-09-22 | Dark mode overturned: §2 rule 7, §5's adaptive-colorset MUST, §14's dark-variant, light+dark-preview and gradient-legibility MUSTs and the FORBIDDEN on forcing an appearance in production (all `14ebd53`) → single appearance; black is state, not theme (#632 picks the mechanism) | Adopted — owner decision 2026-09-22 without Ken's sign-off; Ken to be informed afterwards |
+| 2026-09-22 | §6 SF Pro ramp `PROPOSAL` (`14ebd53`, never ratified) superseded by Bricolage Grotesque / DM Sans / DM Mono, bundled (#629). Recorded as a superseded proposal, not an overturned rule | Superseded proposal — owner decision 2026-09-22 |
+| 2026-09-22 | Settled by the owner (relayed by the PM): (A) "Verified" only after third-party verification — #144/#240 stance stands, Flat 2b's VERIFIED strings not authorized (#636/#637/#638); (B) English-only UI, consistent with the 2026-08-21 `en`-only locale policy, String Catalog MUST unchanged; (C) SHARE is not built — the 2026-07-28 rejection stands (#631/#638) | Adopted — owner decision 2026-09-22 |
 
 ### D. Deprecated patterns
 
@@ -1691,6 +2351,13 @@ Patterns new code must not introduce: `.tint(.blue)` as brand accent,
 oversized decorative SF Symbols, `.font(.system(size:))` in Views, raw
 padding literals, and `Color(hue:)` outside the designated artwork
 generator.
+
+*Flat 2b annotation (2026-09-22,
+[D-627](docs/decisions/issue-627-flat-2b.md)): under Flat 2b new code also
+must not introduce any SF Symbol or icon (§12), glass/material/blur/shadow/
+gradient (§8), per-event hues (§5), or a forced dark variant (§14). The
+"designated artwork generator" is migration debt until #633, and may not be
+extended.*
 
 **[Android counterpart: a default Material3 blue as brand accent (verified
 not present — `Theme.kt` wires `actionPrimary` explicitly, §5); oversized

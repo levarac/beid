@@ -146,7 +146,7 @@ fun EventJoinScreen(
         onResumeSensing = viewModel::resumeSensing,
         onStartWalletBinding = onStartWalletBinding,
         onRetryClockPreflight = viewModel::retryClockPreflight,
-        showEntranceCeremony = !viewModel.recordingCeremonyShown,
+        showEntranceCeremony = !uiState.recordingCeremonyShown,
         onCeremonyFinished = viewModel::markRecordingCeremonyShown,
     )
 }
@@ -261,16 +261,17 @@ fun EventJoinContent(
                     onOpenManualEventCode = onOpenManualEventCode,
                 )
                 if (sessionState !is EventJoinUiState.Idle) {
-                    val currentStatus = statusText(sessionState)
-                    Text(
-                        text = currentStatus,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = BeidTheme.colors.textSecondary,
-                        modifier = Modifier.semantics {
-                            stateDescription = currentStatus
-                            liveRegion = LiveRegionMode.Polite
-                        },
-                    )
+                    statusText(sessionState)?.let { currentStatus ->
+                        Text(
+                            text = currentStatus,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = BeidTheme.colors.textSecondary,
+                            modifier = Modifier.semantics {
+                                stateDescription = currentStatus
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                        )
+                    }
                 }
                 if (sessionState is EventJoinUiState.PermissionDenied) {
                     BeidPrimaryButton(
@@ -383,7 +384,9 @@ fun ManualEventCodeContent(
                 }
             }
             if (state.sessionState is EventJoinUiState.OwnerKeyUnavailable) {
-                Text(statusText(state.sessionState), color = BeidTheme.colors.textPrimary)
+                statusText(state.sessionState)?.let { status ->
+                    Text(status, color = BeidTheme.colors.textPrimary)
+                }
             }
             // beid#463. A canonical open code is 64 hex characters, which the
             // issue rules out hand-entering as a route that does not exist in
@@ -517,7 +520,10 @@ private fun NearbyEventCards(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs),
+                    ) {
                         Text(
                             text = stringResource(R.string.event_join_beacon_name_label),
                             style = MaterialTheme.typography.labelSmall,
@@ -587,20 +593,16 @@ private fun NearbyEventCards(
             }
         }
         if (searchOutcome == NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED) {
-            BeidPanel {
-                Text(
-                    stringResource(R.string.event_join_rescue_prompt),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = BeidTheme.colors.textSecondary,
-                )
-                BeidSecondaryButton(
-                    text = stringResource(R.string.event_join_rescue_enter_code),
-                    contentColor = BeidTheme.colors.textPrimary,
-                    borderColor = BeidTheme.colors.textSecondary,
-                    onClick = onOpenManualEventCode,
-                    modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
-                )
-            }
+            // Candidates and the "nothing found" panel are mutually exclusive.
+            // Keep the manual-code escape hatch for an unjoinable candidate,
+            // without presenting the contradictory empty-state copy.
+            BeidSecondaryButton(
+                text = stringResource(R.string.event_join_rescue_enter_code),
+                contentColor = BeidTheme.colors.textPrimary,
+                borderColor = BeidTheme.colors.textSecondary,
+                onClick = onOpenManualEventCode,
+                modifier = Modifier.testTag(EventJoinScreenTestTags.RESCUE_ENTRY_BUTTON),
+            )
         }
 
         if (omitted) {
@@ -635,25 +637,19 @@ fun EventJoinRoute(
 }
 
 @Composable
-private fun statusText(state: EventJoinUiState): String = when (state) {
+private fun statusText(state: EventJoinUiState): String? = when (state) {
     is EventJoinUiState.Idle -> stringResource(R.string.event_join_status_idle)
     is EventJoinUiState.RequestingPermission -> stringResource(R.string.event_join_status_requesting_permission)
     is EventJoinUiState.VerifyingRegistry -> stringResource(R.string.event_join_status_verifying_registry)
-    is EventJoinUiState.Sensing -> phaseStatusText(state.phase)
+    // Sensing owns the entire body through ScanFlowScreen; it has no status
+    // line in the event-discovery body.
+    is EventJoinUiState.Sensing -> null
     is EventJoinUiState.OwnerKeyUnavailable -> stringResource(R.string.event_join_owner_key_unavailable)
     is EventJoinUiState.PermissionDenied -> stringResource(R.string.event_join_status_permission_denied)
     // Same copy as the field-level message, reached through the same shared
     // reason, so the status line and the inline error cannot say two different
     // things about one refusal.
     is EventJoinUiState.JoinFailed -> EventJoinFieldError.JoinFailed(state.reason).message()
-}
-
-@Composable
-private fun phaseStatusText(phase: ScanPhase): String = when (phase) {
-    ScanPhase.Idle, ScanPhase.Sensing -> stringResource(R.string.event_join_status_sensing)
-    is ScanPhase.EventFound -> stringResource(R.string.event_join_status_event_found)
-    is ScanPhase.Recording -> stringResource(R.string.event_join_status_recording)
-    is ScanPhase.SignalLost -> stringResource(R.string.event_join_status_signal_lost)
 }
 
 @Composable

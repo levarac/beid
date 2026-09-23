@@ -22,7 +22,7 @@ offline() {
 }
 test_phase() {
     local name=$1 method=$2 log="$log_dir/$1.log"
-    adb shell am instrument -w -e class "org.levarac.beid.persistence.Dispatch52PersistenceInstrumentationTest#$method" "$test_runner" >"$log" 2>&1
+    adb shell am instrument -w -e dispatch52TargetPackage "$app" -e class "org.levarac.beid.persistence.Dispatch52PersistenceInstrumentationTest#$method" "$test_runner" >"$log" 2>&1
     if ! rg -q 'OK \([1-9][0-9]* test' "$log" || rg -q 'FAILURES!!!|Error in |There was [1-9]' "$log"; then
         tail -n 30 "$log" >&2
         return 1

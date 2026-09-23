@@ -422,7 +422,7 @@ scp /tmp/beid-lab-cli.tgz altair:~/
 # On the remote Mac
 tar -xzf ~/beid-lab-cli.tgz
 codesign --force --sign "$CODESIGN_IDENTITY" \
-    --identifier org.levarac.beid.LabCli ~/BeidLabCli.app
+    --identifier org.levarac.beid.lab-cli ~/BeidLabCli.app
 
 # Approve the one-time Bluetooth prompt once, at that machine's desktop
 # session. Then:

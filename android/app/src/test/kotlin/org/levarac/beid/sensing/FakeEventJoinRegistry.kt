@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import org.levarac.beid.shared.jointestsupport.createEventDefinitionResolutionForTesting
+import org.levarac.beid.shared.jointestsupport.createFailedEventDefinitionResolutionForTesting
 import org.levarac.parallax.registry.EventDefinitionResolution
 import org.levarac.parallax.registry.EventJoinMode
 
@@ -21,10 +22,10 @@ import org.levarac.parallax.registry.EventJoinMode
  * factory (`createEventDefinitionResolutionForTesting`) and this fake now uses
  * it for [Answer.DEFINITION_NOT_ELIGIBLE].
  *
- * Still out of reach here, and deliberately: a read whose resolution reports
- * `isSuccess == false`. The adapter filters those to null before the gate sees
- * them, which is the contract both platforms rely on, so answering null is the
- * shape production actually produces.
+ * A failed read is built with the shared test factory and then filtered to the
+ * nullable seam, mirroring [RegistryClientEventJoinRegistry]. The fake thus
+ * exercises the same non-null resolution shape production delivers before the
+ * adapter applies its safety filter.
  *
  * A test that wants a *successful* join still reaches it by walking the real
  * promotion path into a registry-verified candidate, which is a stronger thing
@@ -88,7 +89,14 @@ internal class FakeEventJoinRegistry(
         definitionRequests += 1
         when (answer) {
             Answer.HOLDS -> heldDefinition = completion
-            Answer.LOOKUP_FAILS, Answer.DEFINITION_FAILS -> completion(null, errorCode)
+            Answer.LOOKUP_FAILS -> completion(null, errorCode)
+            Answer.DEFINITION_FAILS -> {
+                val resolution = createFailedEventDefinitionResolutionForTesting(
+                    errorCode = errorCode,
+                    errorMessage = "fake definition read failed",
+                )
+                completion(resolution.takeIf { it.isSuccess }, resolution.errorCode)
+            }
             Answer.DEFINITION_NOT_ELIGIBLE -> completion(ineligibleResolution(useTimeEpochSeconds), null)
         }
     }

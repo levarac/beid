@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">beid</string>
-
     <!-- Screen 01: Welcome (mirrors iOS's WelcomeView). -->
     <string name="welcome_title">beid</string>
     <string name="welcome_subtitle">Prove you were there. Automatically.</string>
@@ -26,6 +25,12 @@
     <string name="bluetooth_off_step_switch_on">Switch it on</string>
     <string name="bluetooth_off_open_settings_button">Open Settings</string>
     <string name="bluetooth_off_turned_on_button">I\'ve turned it on</string>
+
+    <!-- Screen 04: Bluetooth permission denied recovery. -->
+    <string name="bluetooth_denied_title">Bluetooth permission required</string>
+    <string name="bluetooth_denied_message">This feature requires Bluetooth permission.</string>
+    <string name="bluetooth_denied_open_settings_button">Open Settings</string>
+    <string name="bluetooth_denied_check_again_button">I\'ve granted it</string>
 
     <string name="event_join_title">Join an event</string>
     <string name="event_join_account_action">Open account</string>
@@ -89,7 +94,6 @@
     <string name="event_join_join_affordance">Join this event</string>
 
     <!-- Peer first detected but not yet confirmed as a real event (below the confirm threshold). -->
-    <string name="event_join_status_event_found">Event found — waiting to confirm…</string>
     <string name="event_join_status_recording">Recording</string>
     <!-- "Signal lost" here is our own manual/simulated trigger, not a real Bluetooth radio outage. -->
     <string name="event_join_status_signal_lost">Signal lost — recording paused</string>
@@ -140,6 +144,7 @@
     <string name="account_leave_event_button">Leave Event</string>
     <!-- Nav row on the Account screen (mirrors iOS's AccountSheetView "Past Events" row) that opens the Records screen. -->
     <string name="account_records_button">Records</string>
+    <string name="account_venue_broadcast_button">Venue broadcast</string>
     <!-- %1$s is the build version, e.g. "1.0.0 (1234+1000000091)". Not copy: do not translate the value. -->
     <string name="account_version_label">Version %1$s</string>
 

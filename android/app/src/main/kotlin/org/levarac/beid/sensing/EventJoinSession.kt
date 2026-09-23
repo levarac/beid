@@ -84,6 +84,9 @@ enum class NearbyEventCardVerification {
 interface EventJoinSession {
     val state: StateFlow<EventJoinUiState>
 
+    /** The latest native permission answer used by onboarding navigation. */
+    val bluetoothPermissionState: BluetoothPermissionState
+
     /** Every nearby candidate is displayable; only cards with an Event ID are joinable. */
     val nearbyEventCards: StateFlow<List<NearbyEventCard>>
 
@@ -137,15 +140,11 @@ interface EventJoinSession {
      * "Allow Bluetooth" CTA (`BluetoothPermissionScreen`) actually produces
      * the OS prompt its copy promises, instead of being purely cosmetic.
      *
-     * Deliberately does not branch on the resulting `BarnardPermissionResult`
-     * granted/denied content: onboarding routing after this call is
-     * radio-power-only ([BluetoothRadioMonitor.isOn]), mirroring iOS's
-     * `evaluateBluetoothState()`, which likewise never consults permission
-     * grant/denial when deciding where to route. A denied-permission
-     * onboarding state is out of scope here; `EventJoinUiState.PermissionDenied`
-     * on the join screen already covers a hard denial reached later.
+     * The callback receives the real runtime result. A failed request remains
+     * [BluetoothPermissionState.NotDetermined], so onboarding does not advance
+     * until the OS or Barnard reports a user-visible answer.
      */
-    fun requestBluetoothPermission(onComplete: () -> Unit)
+    fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit)
 
     /**
      * Manual trigger for `RECORDING -> SIGNAL_LOST` (beid#120) — Android has

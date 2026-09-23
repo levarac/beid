@@ -15,10 +15,12 @@ import java.util.UUID
 import org.levarac.beid.onboarding.OnboardingPreferences
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
+import org.levarac.beid.sensing.BluetoothPermissionState
 import org.levarac.beid.sensing.BluetoothRadioMonitor
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.WalletConnectorState
 import org.levarac.beid.ui.screens.AccountRoute
+import org.levarac.beid.ui.screens.BluetoothDeniedScreen
 import org.levarac.beid.ui.screens.BluetoothOffScreen
 import org.levarac.beid.ui.screens.BluetoothPermissionScreen
 import org.levarac.beid.ui.screens.EventJoinRoute
@@ -27,11 +29,12 @@ import org.levarac.beid.ui.screens.RecordDetailRoute
 import org.levarac.beid.ui.screens.RecordsRoute
 import org.levarac.beid.ui.screens.TodaySummaryRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
+import org.levarac.beid.venue.VenueActivity
 
 /**
  * Root navigation scaffold — the Compose-Navigation equivalent of iOS's
  * `RootView` + `AppCoordinator`. Onboarding (Welcome → BluetoothPermission →
- * Home/BluetoothOff) mirrors `AppCoordinator`'s guestFirst path
+ * Home/BluetoothOff/BluetoothDenied) mirrors `AppCoordinator`'s guestFirst path
  * (`beginOnboarding()` → `requestBluetoothPermission()` →
  * `evaluateBluetoothState()`); [Screen.EventJoin] stands in for "Home".
  *
@@ -56,8 +59,24 @@ fun AppNavHost(
     val startDestination = remember {
         when {
             !onboardingPreferences.hasCompletedOnboarding -> Screen.Welcome.route
+            session.bluetoothPermissionState == BluetoothPermissionState.Denied -> Screen.BluetoothDenied.route
             !radioMonitor.isOn -> Screen.BluetoothOff.route
             else -> Screen.EventJoin.route
+        }
+    }
+
+    val handleBluetoothPermissionResult: (BluetoothPermissionState) -> Unit = { permissionState ->
+        when (permissionState) {
+            BluetoothPermissionState.Denied -> {
+                onboardingPreferences.hasCompletedOnboarding = true
+                navigateClearingOnboarding(navController, Screen.BluetoothDenied.route)
+            }
+            BluetoothPermissionState.NotDetermined -> Unit
+            BluetoothPermissionState.Granted -> {
+                onboardingPreferences.hasCompletedOnboarding = true
+                val next = if (radioMonitor.isOn) Screen.EventJoin.route else Screen.BluetoothOff.route
+                navigateClearingOnboarding(navController, next)
+            }
         }
     }
 
@@ -71,11 +90,16 @@ fun AppNavHost(
         composable(Screen.BluetoothPermission.route) {
             BluetoothPermissionScreen(
                 onAllowBluetooth = {
-                    session.requestBluetoothPermission {
-                        onboardingPreferences.hasCompletedOnboarding = true
-                        val next = if (radioMonitor.isOn) Screen.EventJoin.route else Screen.BluetoothOff.route
-                        navigateClearingOnboarding(navController, next)
-                    }
+                    session.requestBluetoothPermission(handleBluetoothPermissionResult)
+                },
+            )
+        }
+
+        composable(Screen.BluetoothDenied.route) {
+            BluetoothDeniedScreen(
+                onOpenSettings = { session.openAppSettings() },
+                onCheckAgain = {
+                    session.requestBluetoothPermission(handleBluetoothPermissionResult)
                 },
             )
         }
@@ -114,6 +138,7 @@ fun AppNavHost(
                 onOpenRecords = { navController.navigate(Screen.Records.route) },
                 onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
                 walletState = walletState,
+                onOpenVenue = { context.startActivity(VenueActivity.createIntent(context)) },
             )
         }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import org.levarac.barnard.BarnardIdentity
 import org.levarac.barnard.BarnardRecoverableSignature
 import org.levarac.barnard.WalletBindingVerification
+import org.levarac.barnard.WalletSignatureClassification
 
 /**
  * App-owned, lossless copy of Barnard's recoverable signature components.
@@ -89,6 +90,10 @@ interface SensingCryptography {
         ownerPublicKey: ByteArray,
         acknowledgement: SensingRecoverableSignature,
     ): WalletBindingVerification = WalletBindingVerification.VALID
+
+    fun classifyWalletSignature(walletSignature: ByteArray): WalletSignatureClassification =
+        if (walletSignature.size == 65) WalletSignatureClassification.VALID_EOA_SHAPE
+        else WalletSignatureClassification.INVALID
 }
 
 /**
@@ -169,4 +174,7 @@ class BarnardSensingCryptography internal constructor(
             v = acknowledgement.v,
         ),
     )
+
+    override fun classifyWalletSignature(walletSignature: ByteArray): WalletSignatureClassification =
+        identity.classifyWalletSignature(walletSignature)
 }
