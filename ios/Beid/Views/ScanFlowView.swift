@@ -45,6 +45,7 @@ struct ScanFlowView: View {
         .animation(DS.Motion.screenTransition, value: sensing.phase)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(proofCollectedForDisplay == nil ? .visible : .hidden, for: .navigationBar)
         .toolbarBackground(
           usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas,
           for: .navigationBar
@@ -52,13 +53,8 @@ struct ScanFlowView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(usesInkGround ? .dark : .light, for: .navigationBar)
         .toolbar {
-          ToolbarItem(placement: .topBarLeading) {
-            if let collected = proofCollectedForDisplay {
-              Text("Record ID \(collected.shortRecordID)")
-                .beidTextStyle(DS.Font.Library.labelMono11)
-                .foregroundStyle(DS.Color.textSecondary)
-                .accessibilityLabel("Record ID \(collected.recordID.uuidString)")
-            } else {
+          if proofCollectedForDisplay == nil {
+            ToolbarItem(placement: .topBarLeading) {
               HStack(spacing: DS.Space.s) {
                 Circle()
                   .fill(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
@@ -73,40 +69,36 @@ struct ScanFlowView: View {
               .fixedSize(horizontal: true, vertical: false)
               .accessibilityElement(children: .combine)
             }
-          }
-          // #631 / 2026-09-25: suppress iOS 26's item glass; #630 removed
-          // branches that added glass, not this branch that removes it.
-          .beidWithoutSharedBackground()
-          ToolbarItem(placement: .topBarTrailing) {
-            if proofCollectedForDisplay != nil {
-              Text("Sealed")
-                .beidTextStyle(DS.Font.Library.labelMono11)
-                .foregroundStyle(DS.Color.textPrimary)
-            } else if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
-              BeidTextControl(
-                "Done",
-                labelColor: DS.Color.textSecondaryOnInk,
-                accessibilityLabel: "Done"
-              ) {
-                if coordinator.sealedSnapshot != nil {
-                  coordinator.doneWithSealedRecord()
-                } else {
-                  coordinator.finishScan()
+            // #631 / 2026-09-25: suppress iOS 26's item glass; #630 removed
+            // branches that added glass, not this branch that removes it.
+            .beidWithoutSharedBackground()
+            ToolbarItem(placement: .topBarTrailing) {
+              if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
+                BeidTextControl(
+                  "Done",
+                  labelColor: DS.Color.textSecondaryOnInk,
+                  accessibilityLabel: "Done"
+                ) {
+                  if coordinator.sealedSnapshot != nil {
+                    coordinator.doneWithSealedRecord()
+                  } else {
+                    coordinator.finishScan()
+                  }
+                }
+              } else if coordinator.stopConfirmSnapshot == nil && !isStopConfirmScreenshotFixture {
+                BeidTextControl(
+                  "Close",
+                  labelColor: usesInkGround ? DS.Color.textSecondaryOnInk : DS.Color.textPrimary,
+                  accessibilityLabel: "Close"
+                ) {
+                  restoreBindingSheetAfterKeepSensing = bindingSheetPresented
+                  bindingSheetPresented = false
+                  coordinator.requestScanClose()
                 }
               }
-            } else if coordinator.stopConfirmSnapshot == nil && !isStopConfirmScreenshotFixture {
-              BeidTextControl(
-                "Close",
-                labelColor: usesInkGround ? DS.Color.textSecondaryOnInk : DS.Color.textPrimary,
-                accessibilityLabel: "Close"
-              ) {
-                restoreBindingSheetAfterKeepSensing = bindingSheetPresented
-                bindingSheetPresented = false
-                coordinator.requestScanClose()
-              }
             }
+            .beidWithoutSharedBackground()
           }
-          .beidWithoutSharedBackground()
         }
     }
     .sheet(isPresented: $bindingSheetPresented) {

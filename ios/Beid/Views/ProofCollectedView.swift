@@ -64,6 +64,22 @@ struct ProofCollectedView: View {
     GeometryReader { geometry in
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
+          HStack(alignment: .top, spacing: DS.Space.m) {
+            Text(verbatim: "RECORD ID \(snapshot.shortRecordID)")
+              .beidTextStyle(DS.Font.Library.labelMono11)
+              .foregroundStyle(DS.Color.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+              .accessibilityLabel("Record ID \(snapshot.recordID.uuidString)")
+              .accessibilityIdentifier("proof-collected.record-id")
+            Spacer(minLength: DS.Space.s)
+            Text(verbatim: "SEALED")
+              .beidTextStyle(DS.Font.Library.labelMono11)
+              .foregroundStyle(DS.Color.textPrimary)
+              .fixedSize(horizontal: true, vertical: false)
+              .accessibilityIdentifier("proof-collected.status")
+          }
+          .frame(maxWidth: .infinity)
+
           RecordSigilSlot(recordID: snapshot.recordID, size: 290, ground: .canvas)
             .frame(maxWidth: .infinity)
             .padding(.top, DS.Space.m)
