@@ -193,6 +193,11 @@ targets:
           - "-lecies"
       configs:
         Release:
+          # Demo branch only: two iPhones can confirm with one nearby peer
+          # and submit ObservationV1. Do not merge into main without the
+          # App Store privacy-label review in docs/app-store/privacy-labels.md.
+          BEID_REPORT_SUBMISSION_ENABLED: "YES"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BEID_TWO_IPHONE_DEMO"
           # Runner-only indirection: empty under Xcode Cloud, explicit in GHA.
           PROVISIONING_PROFILE_SPECIFIER: "$(BEID_PROVISIONING_PROFILE)"
   BeidMetaMaskSupport:
@@ -303,6 +308,9 @@ targets:
       base:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
+      configs:
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BEID_TWO_IPHONE_DEMO"
   BeidUITests:
     type: bundle.ui-testing
     platform: iOS

@@ -17,7 +17,11 @@ import XCTest
 /// correct for those tests' purposes but does not serve as mutation evidence
 /// for this wiring.
 final class BeidConfigThresholdTests: XCTestCase {
-  func testEventConfirmThresholdIsThree() {
+  func testEventConfirmThresholdMatchesBuildPolicy() {
+    #if BEID_TWO_IPHONE_DEMO
+    XCTAssertEqual(BeidConfig.eventConfirmThreshold, 1)
+    #else
     XCTAssertEqual(BeidConfig.eventConfirmThreshold, 3)
+    #endif
   }
 }

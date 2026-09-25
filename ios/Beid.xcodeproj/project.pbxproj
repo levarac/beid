@@ -1925,6 +1925,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid.BeidTests;
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) BEID_TWO_IPHONE_DEMO";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Beid.app/Beid";
@@ -2076,7 +2077,7 @@
 				BEID_EVENT_DEFINITION_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}";
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";
 				BEID_EVENT_REGISTRY_READER_ADDRESS = 0xd4852f8526A1555A1b2C34145f0eCDA412a53c51;
-				BEID_REPORT_SUBMISSION_ENABLED = NO;
+				BEID_REPORT_SUBMISSION_ENABLED = YES;
 				BEID_VENUE_BUNDLE_URL_TEMPLATE = "";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
@@ -2100,6 +2101,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = org.levarac.beid;
 				PROVISIONING_PROFILE_SPECIFIER = "$(BEID_PROVISIONING_PROFILE)";
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) BEID_TWO_IPHONE_DEMO";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

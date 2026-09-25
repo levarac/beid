@@ -23,11 +23,12 @@ enum BeidConfig {
   /// those three words survived: the app cannot tell whether a peer sensed it
   /// back, and this counts devices rather than observations (beid#154).
   ///
-  /// The base value (`3`) now comes from
+  /// The normal base value (`3`) comes from
   /// `BeidSharedKit.sensing.defaultEventConfirmThreshold` (beid#231 item 3) —
   /// see that constant's doc comment for its provenance and what it does not
   /// settle. This property still owns the DEBUG-only overrides below, which
-  /// wrap the shared value rather than replace it.
+  /// wrap the shared value rather than replace it. The Release-only
+  /// `BEID_TWO_IPHONE_DEMO` configuration uses one peer on this demo branch.
   #if DEBUG
   /// Test-only override, checked ahead of the `-beid-threshold-override`
   /// launch argument below. Exists because some threshold values (e.g. `1`,
@@ -54,7 +55,11 @@ enum BeidConfig {
       return override
     }
     #endif
+    #if BEID_TWO_IPHONE_DEMO
+    return 1
+    #else
     return Int(BeidSharedKit.sensing.defaultEventConfirmThreshold)
+    #endif
   }
 
   // MARK: - Radar node signal strength (beid#652)
