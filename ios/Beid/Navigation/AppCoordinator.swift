@@ -222,7 +222,7 @@ final class AppCoordinator: ObservableObject {
     #endif
   }
 
-  /// Screens 08/08c use real Proof grouping and the shared aggregate codec.
+  /// Screens 08/08c/11 use real Proof grouping and the shared aggregate codec.
   /// Their submission metadata lives at an isolated temporary URL, so a
   /// synthetic PREPARED fixture cannot be read or sent by a normal launch.
   private func seedEventDetailFrameForUITesting() {
@@ -231,7 +231,8 @@ final class AppCoordinator: ObservableObject {
     guard arguments.contains("-beid-ui-test") else { return }
     let hasReport = arguments.contains("-beid-event-detail-frame-08")
     let noReports = arguments.contains("-beid-event-detail-frame-08c")
-    guard hasReport || noReports else { return }
+    let observationDetail = arguments.contains("-beid-observation-frame-11")
+    guard hasReport || noReports || observationDetail else { return }
 
     let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent(
       "beid-event-detail-reports-\(UUID().uuidString).json"
@@ -249,9 +250,14 @@ final class AppCoordinator: ObservableObject {
         peersVerified: 0, eventCode: eventCode
       )
       proofStore.add(proof)
-      // 08c deliberately omits one snapshot so unavailable measurements
-      // remain a directly testable display state.
-      if hasReport || index < 2 {
+      // 08c and 11 deliberately omit one snapshot so the single unavailable
+      // state is testable. The 11 fixture's first session has six sparse,
+      // measured-count windows; no signed/report artifact is made for it.
+      if observationDetail && index == 0 {
+        sensingCoordinator.injectObservationDetailSnapshotForUITesting(
+          proofId: proof.id, firstWindowIndex: Int64(start / 900)
+        )
+      } else if hasReport || index < 2 {
         sensingCoordinator.injectEventDetailSnapshotForUITesting(
           proofId: proof.id, deviceCount: deviceCounts[index], windowIndex: Int64(start / 900)
         )

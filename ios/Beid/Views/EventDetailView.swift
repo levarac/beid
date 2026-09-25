@@ -122,22 +122,34 @@ struct EventDetailView: View {
 
   private func sessionRow(index: Int, proof: Proof) -> some View {
     let aggregate = sensing.sessionAggregateSnapshot(forProofId: proof.id)
-    return VStack(alignment: .leading, spacing: DS.Space.xs) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(sessionTitle(index))
-          .beidTextStyle(DS.Font.Library.title15)
-          .foregroundStyle(DS.Color.textPrimary)
-        Spacer(minLength: DS.Space.s)
-        Text(proof.date.formatted(date: .omitted, time: .shortened))
-          .beidTextStyle(DS.Font.Library.labelMono11Time)
-          .foregroundStyle(DS.Color.textPrimary)
+    return NavigationLink {
+      ObservationDetailView(proof: proof, sessionNumber: index, aggregate: aggregate)
+    } label: {
+      VStack(alignment: .leading, spacing: DS.Space.xs) {
+        HStack(alignment: .firstTextBaseline) {
+          Text(sessionTitle(index))
+            .beidTextStyle(DS.Font.Library.title15)
+            .foregroundStyle(DS.Color.textPrimary)
+          Spacer(minLength: DS.Space.s)
+          Text(proof.date.formatted(date: .omitted, time: .shortened))
+            .beidTextStyle(DS.Font.Library.labelMono11Time)
+            .foregroundStyle(DS.Color.textPrimary)
+        }
+        Text(sessionMeasurements(aggregate))
+          .beidTextStyle(DS.Font.Library.labelMono10Tight)
+          .foregroundStyle(DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
-      Text(sessionMeasurements(aggregate))
-        .beidTextStyle(DS.Font.Library.labelMono10Tight)
-        .foregroundStyle(DS.Color.textSecondary)
-        .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: .infinity, minHeight: DS.Size.sessionRowMinHeight, alignment: .leading)
+      .contentShape(Rectangle())
     }
-    .frame(maxWidth: .infinity, minHeight: DS.Size.sessionRowMinHeight, alignment: .leading)
+    .buttonStyle(.plain)
+    .accessibilityLabel(String(
+      localized: "observationDetail.openSession",
+      defaultValue: "Open observations for session \(index)",
+      comment: "VoiceOver label for an Event Detail session row that opens this recording session's observations."
+    ))
+    .accessibilityIdentifier("event-detail.observation.\(index)")
   }
 
   private func sessionTitle(_ index: Int) -> String {
@@ -316,7 +328,11 @@ struct EventDetailView: View {
           ItemDetailView(proof: proof)
         } label: {
           HStack(spacing: DS.Space.m) {
-            EventDetailRecordSigilSlot()
+            RecordSigilSlot(
+              recordID: proof.id,
+              size: DS.Size.proofRowMinHeight - DS.Space.l,
+              ground: .canvas
+            )
             VStack(alignment: .leading, spacing: DS.Space.xs) {
               Text(proofTitle(index + 1))
                 .beidTextStyle(DS.Font.Library.title15)
@@ -386,17 +402,5 @@ struct EventDetailView: View {
     Rectangle()
       .fill(DS.Color.strokeHairline)
       .frame(height: DS.Size.hairline)
-  }
-}
-
-/// TODO(#653, Stream C): replace with the shared RecordSigilSlot component
-/// when that component lands. This neutral ring contains no inferred peer or
-/// mutual-link pattern from Figma sample data.
-private struct EventDetailRecordSigilSlot: View {
-  var body: some View {
-    Circle()
-      .strokeBorder(DS.Color.strokeHairline, lineWidth: DS.Size.hairline)
-      .frame(width: DS.Size.proofRowMinHeight - DS.Space.l, height: DS.Size.proofRowMinHeight - DS.Space.l)
-      .accessibilityHidden(true)
   }
 }

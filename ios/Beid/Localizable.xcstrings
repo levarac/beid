@@ -1,6 +1,83 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "PEERS PER OBSERVED WINDOW": {
+      "comment": "Heading for the Observation Detail bar chart. Each bar is a window with at least one recorded observation; gaps are not zero-filled.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PEERS PER OBSERVED WINDOW"
+          }
+        }
+      }
+    },
+    "SENSING DATA": {
+      "comment": "Section heading for measured values from one stored sensing session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SENSING DATA"
+          }
+        }
+      }
+    },
+    "PEERS OBSERVED": {
+      "comment": "Number of distinct per-event display IDs observed in one stored session; this does not mean mutual confirmation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PEERS OBSERVED"
+          }
+        }
+      }
+    },
+    "WINDOWS": {
+      "comment": "Number of windows containing recorded observations in this session, not elapsed time windows.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WINDOWS"
+          }
+        }
+      }
+    },
+    "observationDetail.openSession": {
+      "comment": "VoiceOver label for an Event Detail session row that opens that session's Observation Detail.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open observations for session %lld"
+          }
+        }
+      }
+    },
+    "observationDetail.chart.window": {
+      "comment": "VoiceOver label for one chart bar: ordinal observed window and distinct within-window peer count, not a mutual count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observed window %1$lld; peer count %2$lld"
+          }
+        }
+      }
+    },
+    "observationDetail.chart.windowAfterGap": {
+      "comment": "VoiceOver label for a chart bar after unobserved ENIN windows. The gap means no observation was recorded, not measured zero peers.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observed window %1$lld; peer count %2$lld; preceding unobserved window count %3$lld"
+          }
+        }
+      }
+    },
     "home.header.counts": {
       "comment": "Collection Home header: independently pluralized distinct event count, including the active event, and total stored Proof record count.",
       "localizations": {
