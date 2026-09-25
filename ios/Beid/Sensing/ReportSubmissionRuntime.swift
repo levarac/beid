@@ -186,6 +186,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     bundle: Bundle = .main,
     eventSigningCryptography: any SensingCryptography,
     definitionProvider: (any EventDefinitionContextProvider)? = nil,
+    store: ReportSubmissionStore? = nil,
     fileURL: URL? = nil,
     allowInsecureLoopbackForTests: Bool = false
   ) -> ReportSubmissionRuntime? {
@@ -194,7 +195,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     return ReportSubmissionRuntime(
       eventSigningCryptography: eventSigningCryptography,
       definitionProvider: definitionProvider,
-      store: ReportSubmissionStore(fileURL: fileURL),
+      store: store ?? ReportSubmissionStore(fileURL: fileURL),
       client: ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionClient(),
       allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
     )
