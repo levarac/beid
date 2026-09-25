@@ -181,8 +181,8 @@ struct ScanFlowView: View {
       return true
     }
     switch sensing.phase {
-    case .eventFound, .recording: true
-    case .idle, .sensing, .signalLost: false
+    case .eventFound, .recording: return true
+    case .idle, .sensing, .signalLost: return false
     }
   }
 
