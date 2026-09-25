@@ -34,16 +34,16 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "bluetooth-permission-\(orientation)")
 
     app.buttons["Allow Bluetooth"].tap()
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-empty-\(orientation)")
 
-    app.buttons["Account"].tap()
-    XCTAssertTrue(app.staticTexts["Account"].waitForExistence(timeout: 5))
+    app.buttons["home.account"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "account-\(orientation)")
     app.buttons["Done"].tap()
 
-    let resumedSenseEvent = app.buttons["Sense Event"]
+    let resumedSenseEvent = app.buttons["home.scan"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
     XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
@@ -215,7 +215,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
     XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
@@ -249,7 +249,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     assertProofCollectedHeader()
     app.buttons["View collection"].tap()
 
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 
   /// Opens the DemoEvent proof `navigateToCollectionWithProof` just left on

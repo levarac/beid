@@ -529,6 +529,7 @@ struct SensingSessionSurface: View {
     TimelineView(.periodic(from: .now, by: 1)) { timeline in
       let now = sensing.sensingPresentationNow(timeline.date)
       GeometryReader { geometry in
+        let contentWidth = max(0, geometry.size.width - 2 * DS.Space.pageMargin)
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             if presentation == .steady {
@@ -549,17 +550,19 @@ struct SensingSessionSurface: View {
               mutualDeviceCount: Int(sensing.sessionAggregate?.mutualDeviceCount ?? 0),
               observedWindowCount: observedWindowCount ?? 0,
               showsEdges: presentation.showsEdges,
-              size: min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin)
+              size: max(0, min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin))
             )
-            .frame(maxWidth: .infinity)
+            // Keep the measured radar centered without widening the inset content.
+            .frame(width: contentWidth)
             .padding(.top, DS.Space.m)
 
             SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
+              .frame(width: contentWidth)
               .padding(.top, DS.Space.l)
 
             Rectangle()
               .fill(DS.Color.strokeHairlineOnInk)
-              .frame(height: DS.Size.hairline)
+              .frame(width: contentWidth, height: DS.Size.hairline)
               .padding(.top, DS.Space.l)
 
             metrics(at: now)
@@ -727,12 +730,13 @@ struct SensingWindowBars: View {
   var body: some View {
     VStack(spacing: DS.Space.s) {
       GeometryReader { geometry in
-        HStack(alignment: .bottom, spacing: DS.Space.s) {
+        let barGap: CGFloat = 6
+        HStack(alignment: .bottom, spacing: barGap) {
           ForEach(0..<6, id: \.self) { index in
             Rectangle()
               .fill(color(at: index))
               .frame(
-                width: (geometry.size.width - DS.Space.s * 5) / 6,
+                width: max(0, (geometry.size.width - barGap * 5) / 6),
                 height: height(at: index)
               )
           }
