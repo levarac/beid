@@ -285,6 +285,7 @@ enum ScanFlowContent {
     }
   }
 
+  @MainActor
   @ViewBuilder
   static func view(
     phase: ScanPhase,
@@ -353,6 +354,7 @@ enum ScanFlowContent {
   }
 
   #if DEBUG
+  @MainActor
   @ViewBuilder
   private static func screenshotView(
     fixture: SensingScreenshotFixture,
