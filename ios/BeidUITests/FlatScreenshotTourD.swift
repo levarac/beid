@@ -36,9 +36,14 @@ final class FlatScreenshotTourD: XCTestCase {
     }
     XCTAssertTrue(disconnect.isHittable)
     disconnect.tap()
-    XCTAssertTrue(app.staticTexts["Disconnect wallet?"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.buttons["account.disconnect.cancel"].exists)
+    let title = app.staticTexts["Disconnect wallet?"]
+    _ = title.waitForExistence(timeout: 5)
     attachScreenshot("10d")
+    XCTAssertTrue(title.exists)
+    let keepConnected = app.buttons["Keep connected"]
+    XCTAssertTrue(keepConnected.waitForExistence(timeout: 5))
+    XCTAssertGreaterThanOrEqual(keepConnected.frame.height, 44)
+    XCTAssertGreaterThanOrEqual(app.buttons["Disconnect"].frame.height, 44)
   }
 
   func testShot_10e_Copied() {

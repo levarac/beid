@@ -5,8 +5,8 @@ import SwiftUI
 import UIKit
 
 /// Flat 2b screen 10: Account sheet and its Bluetooth, copy and disconnect
-/// states. Wallet connection and Account Join remain optional routes; #647
-/// and #655 still own their respective destination and exit changes.
+/// states. DECISIONS 2026-09-26 keeps optional wallet/Account Join and leaves
+/// Venue device placement to #647; Account Leave stays until #655 lands.
 struct AccountSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.dismiss) private var dismiss
@@ -62,8 +62,8 @@ struct AccountSheetView: View {
             .buttonStyle(.plain)
             .disabled(coordinator.walletAddress == nil)
           }
-          // Provisional extra row: Past Events is still the only rejoin path.
-          // Its gap keeps this extra route below the three Figma menu rows.
+          // DECISIONS 2026-09-26: keep the sole Past Events/rejoin path as an
+          // extra Account row below the three Figma menu rows.
           AccountSheetRow(topGap: DS.Space.xxl) {
             Button {
               showPastEvents = true
@@ -93,21 +93,24 @@ struct AccountSheetView: View {
       .scrollContentBackground(.hidden)
       .background(DS.Color.textPrimary)
       .foregroundStyle(DS.Color.actionInverse)
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbarBackground(DS.Color.textPrimary, for: .navigationBar)
-      .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
-      .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          // Approved accessible dismissal; Figma 10 shows only a grabber.
-          BeidTextControl("Done", labelColor: DS.Color.actionInverse) { dismiss() }
-        }
-        .beidWithoutSharedBackground()
+      // The root sheet has no navigation bar in Figma. Hiding it removes its
+      // ~44pt content offset; pushed destinations restore the stock back bar.
+      .toolbar(.hidden, for: .navigationBar)
+      .overlay(alignment: .topTrailing) {
+        // DECISIONS 2026-09-26: retain an accessible Done dismissal even
+        // though Figma 10 shows only the grabber. The overlay uses no space.
+        BeidTextControl(
+          "Done",
+          labelColor: DS.Color.actionInverse,
+          accessibilityLabel: "Done"
+        ) { dismiss() }
+        .padding(.trailing, DS.Space.m)
+        .padding(.top, DS.Space.s)
       }
       .safeAreaInset(edge: .bottom) {
         if !showDisconnectConfirmation {
-          // Provisional footer: preserve the complete git-height and store-build
-          // value (#491); Figma's shortened hash and ABOUT have no adopted path.
+          // DECISIONS 2026-09-26: keep beid and AppVersion's complete build
+          // value (#491); the Figma ABOUT route has no adopted destination.
           Text(verbatim: "beid \(AppVersion.displayString())")
             .beidTextStyle(DS.Font.Library.labelMono9)
             .foregroundStyle(DS.Color.textSecondaryOnInk)
@@ -117,8 +120,16 @@ struct AccountSheetView: View {
             .background(DS.Color.textPrimary)
         }
       }
+      .overlay(alignment: .bottom) {
+        if showDisconnectConfirmation {
+          disconnectConfirmationActions
+            .padding(.horizontal, DS.Space.pageMargin)
+            .padding(.bottom, DS.Space.l)
+        }
+      }
       .navigationDestination(isPresented: $showOrganizerTools) {
         AccountOrganizerToolsView()
+          .toolbar(.visible, for: .navigationBar)
       }
       .navigationDestination(isPresented: $showPastEvents) {
         PastEventsView(
@@ -130,6 +141,7 @@ struct AccountSheetView: View {
             }
           }
         )
+        .toolbar(.visible, for: .navigationBar)
       }
     }
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
@@ -168,7 +180,7 @@ struct AccountSheetView: View {
           .beidTextStyle(DS.Font.Library.labelMono10)
           .foregroundStyle(DS.Color.textSecondaryOnInk)
         HStack(spacing: DS.Space.s) {
-          // Provisional #642 typeface: Figma node 208:46 uses Display/Address 34.
+          // DECISIONS 2026-09-26: use Figma's Display/Address 34 typeface.
           Text(verbatim: truncated(address))
             .beidTextStyle(DS.Font.Library.displayAddress34)
             .foregroundStyle(DS.Color.actionInverse)
@@ -202,8 +214,8 @@ struct AccountSheetView: View {
       }
       .padding(.top, DS.Space.xs)
     } else {
-      // Wallet is optional by owner decision. Keep voluntary connection and
-      // reconnection available even though Figma 10 shows only a connected wallet.
+      // DECISIONS 2026-09-26: wallet is optional, so keep voluntary connect
+      // and reconnect here although Figma 10 only depicts a connected wallet.
       Button {
         BeidDesign.haptic()
         coordinator.connectWalletFromAccountSheet()
@@ -220,8 +232,8 @@ struct AccountSheetView: View {
   }
 
   private var walletHeader: String {
-    // Provisional truthful provider copy: MetaMask is the connected wallet;
-    // Figma's WalletConnect protocol wording remains unresolved (#642).
+    // DECISIONS 2026-09-26: name the actual MetaMask connector rather than
+    // Figma's WalletConnect protocol wording.
     String(
       localized: "account.wallet.header",
       defaultValue: "Wallet · Connected via \(connectorDisplayName)",
@@ -248,7 +260,13 @@ struct AccountSheetView: View {
       .beidTextStyle(DS.Font.Library.body15)
       .foregroundStyle(DS.Color.textSecondaryOnInk)
       .padding(.top, DS.Space.s)
+    }
+    .padding(.top, DS.Space.m)
+    .accessibilityIdentifier("account.disconnect.confirmation")
+  }
 
+  private var disconnectConfirmationActions: some View {
+    VStack(spacing: DS.Space.s) {
       Button(role: .destructive) {
         BeidDesign.haptic(.medium)
         coordinator.disconnectWallet()
@@ -259,22 +277,19 @@ struct AccountSheetView: View {
           .foregroundStyle(DS.Color.labelOnActionInverse)
           .frame(maxWidth: .infinity, minHeight: DS.Size.primaryButtonMinHeight)
           .background(DS.Color.actionInverse, in: Capsule())
+          .contentShape(Capsule())
       }
       .buttonStyle(.plain)
-      .padding(.top, DS.Space.xxl)
 
-      HStack {
-        Spacer()
-        BeidTextControl("Keep connected", labelColor: DS.Color.actionInverse) {
-          showDisconnectConfirmation = false
-        }
-        .accessibilityIdentifier("account.disconnect.cancel")
-        Spacer()
+      BeidTextControl(
+        "Keep connected",
+        labelColor: DS.Color.actionInverse,
+        accessibilityLabel: "Keep connected"
+      ) {
+        showDisconnectConfirmation = false
       }
-      .padding(.top, DS.Space.s)
     }
-    .padding(.top, DS.Space.m)
-    .accessibilityIdentifier("account.disconnect.confirmation")
+    .frame(maxWidth: .infinity)
   }
 
   private var relayNoteText: String {
@@ -436,9 +451,8 @@ private struct AccountBluetoothRow: View {
         .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
       }
 
-      // Provisional #642 Q2 / #644 placement. This phone may relay another
-      // event's details, so the note stays visible below Bluetooth. It makes
-      // this row taller than Figma 10 and moves the rows below it down.
+      // DECISIONS 2026-09-26 (#642 Q2 / #644): keep relay disclosure visible
+      // below Bluetooth. This adds row height and moves later rows down.
       Text(verbatim: relayNote)
         .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondaryOnInk)
