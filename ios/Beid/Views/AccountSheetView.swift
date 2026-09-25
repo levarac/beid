@@ -382,9 +382,9 @@ private struct AccountTextControl: View {
   }
 }
 
-/// Measured screen-10 row geometry: 24pt side insets, 52pt menu rows and a
-/// hairline on the ink sheet. Keeping this local lets #642 tune the Figma
-/// comparison without changing the shared List or design-system defaults.
+/// Measured screen-10 row geometry: 16pt row insets plus the system sheet's
+/// 8pt side inset place content 24pt from the screen edge. Menu rows are
+/// 52pt with a hairline; this stays local to Account.
 private struct AccountSheetRow<Content: View>: View {
   let minHeight: CGFloat
   let topGap: CGFloat
@@ -427,9 +427,9 @@ private struct AccountSheetRow<Content: View>: View {
     }
     .listRowInsets(EdgeInsets(
       top: 0,
-      leading: DS.Space.pageMargin,
+      leading: DS.Space.m,
       bottom: 0,
-      trailing: DS.Space.pageMargin
+      trailing: DS.Space.m
     ))
     .listRowBackground(DS.Color.textPrimary)
     .listRowSeparator(.hidden)
