@@ -99,7 +99,10 @@ final class AppCoordinator: ObservableObject {
       // UI tests run without a real CoreBluetooth daemon. Keep their existing
       // onboarding contract deterministic while production and normal Debug
       // launches continue to wait for the real authorization callback.
-      self.permissionEvaluation = { .granted }
+      let bluetoothOffFixture = ProcessInfo.processInfo.arguments.contains(
+        "-beid-bluetooth-off-fixture"
+      )
+      self.permissionEvaluation = { bluetoothOffFixture ? .poweredOff : .granted }
     } else {
       self.permissionEvaluation = permissionEvaluation
     }

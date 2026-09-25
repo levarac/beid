@@ -229,6 +229,17 @@ left open. They are also recorded in `DECISIONS.md` (2026-09-22,
   (standard containers first) wins at this site. The mismatch with the
   Flat 2b frames is accepted and goes to the designer as a question.
 
+## Settled on 2026-09-26 (owner decision, relayed by the PM)
+
+- **E. Wallet is optional (former Open item 2).** This supersedes the
+  2026-09-22 direction to require WalletConnect at login. `DESIGN.md` §1's requirement that the UI
+  remain coherent without a connected wallet stays binding. Welcome keeps
+  the truthful **Get Started** CTA and the existing guest-first route to
+  Bluetooth setup. The Figma **Connect Wallet** CTA and **BY CONNECTING**
+  terms footer do not describe that route, so neither is adopted for 01.
+  Existing optional wallet and skip-wallet paths remain available. #649 is
+  closed as not planned. This settles the former sixth MUST conflict below.
+
 ## The preserved rules
 
 Unchanged by this decision:
@@ -272,43 +283,39 @@ unchanged, because `Tokens.swift` keeps the old values until #628 lands.
 
 ## Open items
 
-Each item names the issue that owns it. `DESIGN.md` references them as
-"Open item N (issue-627-flat-2b.md)" where each one bites.
+Numbers are preserved for cross-references in `DESIGN.md`. Former item 2
+was settled on 2026-09-26 (item E above), and former item 5 (back
+navigation) was settled on 2026-09-25 (item D above). The remaining
+numbered items are open and name their owning issues.
 
-1. **Button capitalization.** Mono labels are uppercase by spec, but §15's
+- **Open item 1 — Button capitalization.** Mono labels are uppercase by spec, but §15's
    sentence case for buttons is still a PROPOSAL and #24 is open. The nav
    text controls are both labels and controls. Also undecided: whether
    the uppercase lives in the English source strings or in a style
    transform (it matters for keeping the source strings consistent).
    Owner: #24 (with #629, #631).
-2. **§1's wallet-optional MUST vs the spec — a sixth MUST conflict.**
-   §1: "The UI MUST read fully coherent to a user who never connects a
-   wallet." The spec says login is WalletConnect only, and 01 Welcome has
-   a single Connect Wallet CTA. The 2026-09-22 owner decision did not name
-   this conflict. It is still unresolved and goes to the owner; §1's text
-   is unchanged and still binds. Owners: #642, #643, #644.
-3. **§15's forbidden vocabulary in Flat 2b copy.** §15 stays, so these
+- **Open item 3 — §15's forbidden vocabulary in Flat 2b copy.** §15 stays, so these
    strings are **not authorized**: "ON-CHAIN" (spec 07; the live 09 STATUS
    value "Verified on-chain" is also governed by settled item A), "TOKEN
    ID" (09, spec and live), and "CONNECTED VIA WALLETCONNECT" (10; §15:
    say what the wallet does, not the protocol). This conflict goes to the
    owner; it is not softened here. Owners: #637, #638, #642.
-4. **Non-text contrast.** `chart-muted` bars on `bg` (1.41:1) and
+- **Open item 4 — Non-text contrast.** `chart-muted` bars on `bg` (1.41:1) and
    `on-ink/idle` nodes on `ink` (2.97:1) are under WCAG 1.4.11's 3:1 for
    graphical objects. §13 today covers text only. Recorded; no new rule.
    Owners: #634, #640.
-6. **Encounter Field's "avoid radar/sonar clichés" (§3) vs the Flat 2b
+- **Open item 6 — Encounter Field's "avoid radar/sonar clichés" (§3) vs the Flat 2b
    sensing graph's concentric rings.** Not settled here. Owner: #634.
-7. **The spec's own open items** (spec §10): window length, peer cap, the
+- **Open item 7 — The spec's own open items** (spec §10): window length, peer cap, the
    Rejected report state, AVG SIGNAL display, the Account address
    typeface, dark mode. Cross-reference only; owner #626 (and #633, #634,
    #639, #640, #642 per item). If a Rejected state is ever shown as red
    text on `bg`, it fails AA (3.41:1); on `ink` it passes (5.77:1).
 
 "Japanese text", "VERIFIED wording" and "SHARE" were settled on
-2026-09-22; back navigation was settled on 2026-09-25. They are recorded
-above, not here. The §0 steady-state rule was confirmed on 2026-09-22
-and is not open.
+2026-09-22; back navigation was settled on 2026-09-25; the wallet choice
+was settled on 2026-09-26. They are recorded above, not open. The §0
+steady-state rule was confirmed on 2026-09-22 and is not open.
 
 ## Corrections to the spec's contrast figures
 
