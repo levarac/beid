@@ -22,6 +22,56 @@ final class FlatScreenshotTourC: XCTestCase {
   func testShot_07_ProofCollected() { capture("07") }
   func testShot_09_ProofDetail() { capture("09") }
 
+  func testShot_11_ObservationDetail() {
+    let app = launchObservationFixture()
+    let row = app.buttons["event-detail.observation.1"]
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    if !row.isHittable { app.swipeUp() }
+    row.tap()
+    XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["PEERS PER OBSERVED WINDOW"].exists)
+    XCTAssertTrue(app.staticTexts["23"].exists)
+    XCTAssertTrue(app.staticTexts["6"].exists)
+    XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
+    XCTAssertFalse(app.staticTexts["AVG SIGNAL"].exists)
+    XCTAssertFalse(app.staticTexts["INCLUDED IN REPORTS"].exists)
+
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "11"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
+  func testObservationDetailWithMissingSnapshotShowsOneUnavailableState() {
+    let app = launchObservationFixture()
+    let row = app.buttons["event-detail.observation.3"]
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    if !row.isHittable { app.swipeUp() }
+    row.tap()
+    XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["observation-detail.unavailable"].exists)
+    XCTAssertFalse(app.staticTexts["PEERS PER OBSERVED WINDOW"].exists)
+    XCTAssertFalse(app.staticTexts["PEERS OBSERVED"].exists)
+  }
+
+  private func launchObservationFixture() -> XCUIApplication {
+    let app = XCUIApplication()
+    app.launchArguments = ["-beid-ui-test", "-beid-observation-frame-11"]
+    app.launch()
+    let getStarted = app.buttons["Get Started"]
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+    getStarted.tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
+    allowBluetooth.tap()
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 10))
+    let event = app.buttons["home.past-event.ETHTOKYO2026"]
+    XCTAssertTrue(event.waitForExistence(timeout: 10))
+    event.tap()
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    return app
+  }
+
   private func capture(_ code: String, file: StaticString = #filePath, line: UInt = #line) {
     let app = XCUIApplication()
     app.launchArguments = ["-beid-ui-test", "-beid-sensing-shot", code]
