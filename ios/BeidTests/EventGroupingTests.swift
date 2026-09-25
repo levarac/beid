@@ -11,6 +11,50 @@ import XCTest
 /// harness — see `ParticipationSummaryDataTests` for the same
 /// data-layer-only precedent).
 final class EventGroupingTests: XCTestCase {
+  func testHomeGroupsSortByDateAndHideEverySessionOfActiveEvent() {
+    let earlierActive = Proof(
+      eventName: "Active event", date: Date(timeIntervalSince1970: 100),
+      peersVerified: 1, eventCode: "ACTIVE"
+    )
+    let latestActive = Proof(
+      eventName: "Active event", date: Date(timeIntervalSince1970: 400),
+      peersVerified: 2, eventCode: "active"
+    )
+    let older = Proof(
+      eventName: "Older event", date: Date(timeIntervalSince1970: 200),
+      peersVerified: 1, eventCode: "OLDER"
+    )
+    let newer = Proof(
+      eventName: "Newer event", date: Date(timeIntervalSince1970: 300),
+      peersVerified: 1, eventCode: "NEWER"
+    )
+    // Storage order can differ from dates, for example after import or a
+    // device-clock correction. The active event already has two Proofs.
+    let stored = [older, earlierActive, newer, latestActive]
+
+    let whileActive = EventGrouping.homeGroups(from: stored, activeEventCode: " active ")
+    XCTAssertEqual(whileActive.map { $0[0].eventName }, ["Newer event", "Older event"])
+
+    let afterClose = EventGrouping.homeGroups(from: stored, activeEventCode: nil)
+    XCTAssertEqual(afterClose.map { $0[0].eventName }, ["Active event", "Newer event", "Older event"])
+    XCTAssertEqual(afterClose[0].map(\.id), [latestActive.id, earlierActive.id])
+  }
+
+  func testHomeGroupsKeepLegacyProofsSeparate() {
+    let first = Proof(
+      eventName: "Legacy A", date: Date(timeIntervalSince1970: 100),
+      peersVerified: 1, eventCode: nil
+    )
+    let second = Proof(
+      eventName: "Legacy B", date: Date(timeIntervalSince1970: 200),
+      peersVerified: 1, eventCode: nil
+    )
+
+    let groups = EventGrouping.homeGroups(from: [first, second], activeEventCode: "ACTIVE")
+
+    XCTAssertEqual(groups.map { $0.map(\.id) }, [[second.id], [first.id]])
+  }
+
   // MARK: - groups(from:)
 
   func testGroupsOrdersByFirstAppearanceAndPreservesNewestFirstWithinGroup() {

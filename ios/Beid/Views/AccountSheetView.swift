@@ -4,128 +4,153 @@
 import SwiftUI
 import UIKit
 
-/// Screen 09: Account sheet — wallet address, Bluetooth status, disconnect.
-/// In `.guestFirst` onboarding, the wallet may not be connected yet; this
-/// sheet is where that stubbed connection happens.
+/// Flat 2b screen 10: Account sheet and its Bluetooth, copy and disconnect
+/// states. DECISIONS 2026-09-26 keeps optional wallet/Account Join and leaves
+/// Venue device placement to #647; Account Leave stays until #655 lands.
 struct AccountSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.dismiss) private var dismiss
+  @State private var showOrganizerTools = false
+  @State private var showPastEvents = false
+  @State private var showDisconnectConfirmation = false
+  @State private var copied = false
 
   var body: some View {
     NavigationStack {
       List {
-        Section("Wallet") {
-          if let address = coordinator.walletAddress {
-            HStack(spacing: DS.Space.m) {
-              VStack(alignment: .leading, spacing: DS.Space.xs) {
-                Text(truncated(address))
-                  .font(DS.Font.ledgerMono)
-                  .foregroundStyle(DS.Color.textPrimary)
-                Text(connectedViaText)
-                  .font(DS.Font.supporting)
-                  .foregroundStyle(DS.Color.textSecondary)
-              }
-              Spacer()
-              BeidTextControl("Copy", accessibilityLabel: "Copy address") {
-                UIPasteboard.general.string = coordinator.walletAddress
-              }
-            }
-          } else {
+        // With the taller detent and top space for Done, this 116pt wallet
+        // row places its divider near Figma's y=540 without moving the text.
+        AccountSheetRow(
+          minHeight: DS.Space.xxl * 2 + DS.Space.m + DS.Space.xs,
+          hasDivider: !showDisconnectConfirmation
+        ) {
+          walletContent
+        }
+        if showDisconnectConfirmation {
+          AccountSheetRow(hasDivider: false) {
+            disconnectConfirmation
+          }
+        } else {
+          AccountSheetRow {
+            AccountBluetoothRow(monitor: coordinator.bluetoothMonitor, relayNote: relayNoteText)
+          }
+          AccountSheetRow {
             Button {
-              BeidDesign.haptic()
-              coordinator.connectWalletFromAccountSheet()
+              showOrganizerTools = true
             } label: {
-              Text("Connect Wallet")
+              HStack {
+                Text("Organizer tools")
+                  .beidTextStyle(DS.Font.Library.title17)
+                Spacer()
+                Text(verbatim: "→")
+                  .beidTextStyle(DS.Font.Library.labelMono11)
+                  .accessibilityHidden(true)
+              }
+              .foregroundStyle(DS.Color.actionInverse)
+              .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+              .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Organizer tools")
           }
-        }
-
-        Section {
-          HStack(spacing: DS.Space.m) {
-            Text("Bluetooth")
-            Spacer()
-            HStack(spacing: DS.Space.xs) {
-              Circle()
-                .fill(bluetoothStatusColor)
-                .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
-                .accessibilityHidden(true)
-              Text(bluetoothStatusText)
-                .font(DS.Font.supporting)
-                .fontWeight(.semibold)
-                .foregroundStyle(DS.Color.textPrimary)
+          AccountSheetRow(topGap: DS.Space.m + DS.Space.xs) {
+            Button(role: .destructive) {
+              showDisconnectConfirmation = true
+            } label: {
+              Text("Disconnect wallet")
+                .beidTextStyle(DS.Font.Library.title17)
+                .foregroundStyle(DS.Color.statusOff)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(coordinator.walletAddress == nil)
           }
-        } footer: {
-          // Relay is on whenever this phone is sensing at an event it joined
-          // (beid#367). It belongs on screen rather than hidden, because the
-          // phone is transmitting on someone else's behalf.
-          Text(relayNoteText)
-            .font(DS.Font.supporting)
-            .foregroundStyle(DS.Color.textSecondary)
-        }
-
-        // One venue entry, not two (beid#597). What a venue operator has is a
-        // pack for an event; whether the bytes inside it are signed is how the
-        // feature works, not a choice to put in front of them. The unsigned v1
-        // row (gh#138) is withdrawn from this sheet rather than deleted:
-        // `VenueDeviceOrganizerView` and its view model are untouched, so
-        // restoring it is one NavigationLink if dispatch#4 decides it ships.
-        //
-        // `canonicalEventIdHex` and `bundleURLTemplate` are no longer passed.
-        // They fed the operator-endpoint path, whose only caller was the old
-        // screen's Supply button; a link now names its own bundle URL. The view
-        // model still accepts both, because tests construct it that way to
-        // exercise `supplyConfigured`, but wiring them from here would be
-        // dead configuration that reads as live.
-        Section {
-          NavigationLink {
-            VenueSignedServingView(viewModel: VenueSignedServingViewModel(
-              verifier: ProductionVenueBundleVerifier(registryClient: RegistryDependencies.createClient()),
-              broadcasting: BarnardVenueSignedContainerBroadcasting(),
-              acquisition: VenueArtifactAcquisition(),
-              store: VenuePublicArtifactStore(),
-              clock: { VenueDeviceClock.read() }
-            ))
-          } label: {
-            Text("Venue broadcast")
+          // DECISIONS 2026-09-26: keep the sole Past Events/rejoin path as an
+          // extra Account row below the three Figma menu rows.
+          AccountSheetRow(topGap: DS.Space.xxl) {
+            Button {
+              showPastEvents = true
+            } label: {
+              HStack {
+                Text(pastEventsLabel)
+                  .beidTextStyle(DS.Font.Library.title17)
+                Spacer()
+                Text(verbatim: "→")
+                  .beidTextStyle(DS.Font.Library.labelMono11)
+                  .accessibilityHidden(true)
+              }
+              .foregroundStyle(DS.Color.actionInverse)
+              .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Past Events")
           }
-        }
-
-        Section {
-          Button(role: .destructive) {
-            BeidDesign.haptic(.medium)
-            coordinator.disconnectWallet()
-          } label: {
-            Text("Disconnect Wallet")
-          }
-          .disabled(coordinator.walletAddress == nil)
-        }
-
-        EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
-
-        // beid#491: the build position, in the same shape as Android's row.
-        // Two builds showing the same height came from the same commit, which
-        // is what lets a tester report about iOS and one about Android be
-        // matched up.
-        Section {
-          LabeledContent {
-            Text(verbatim: AppVersion.displayString())
-              .foregroundStyle(DS.Color.textSecondary)
-              .accessibilityIdentifier("account.version.value")
-          } label: {
-            Text("Version")
-          }
+          // Account Join stays with the owner decision that wallet is optional.
+          // Leave stays until #655 supplies stop-and-finalize elsewhere.
+          EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
         }
       }
+      .id(showDisconnectConfirmation)
+      .listStyle(.plain)
+      // A taller detent restores Figma's y=400 top. This top margin keeps
+      // the measured wallet/address block aligned while giving Done its own
+      // space above Copy.
+      .contentMargins(.top, DS.Space.l + DS.Space.xs, for: .scrollContent)
       .scrollContentBackground(.hidden)
-      .background(DS.Color.surfaceCanvas)
-      .navigationTitle("Account")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Done") { dismiss() }
+      .background(DS.Color.textPrimary)
+      .foregroundStyle(DS.Color.actionInverse)
+      // The root sheet has no navigation bar in Figma. Hiding it removes its
+      // ~44pt content offset; pushed destinations restore the stock back bar.
+      .toolbar(.hidden, for: .navigationBar)
+      .overlay(alignment: .topTrailing) {
+        // DECISIONS 2026-09-26: retain an accessible Done dismissal even
+        // though Figma 10 shows only the grabber. The overlay uses no space.
+        AccountTextControl(
+          "Done",
+          labelColor: DS.Color.actionInverse,
+          accessibilityLabel: "Done"
+        ) { dismiss() }
+        .padding(.trailing, DS.Space.m)
+        .padding(.top, DS.Space.s)
+      }
+      .safeAreaInset(edge: .bottom) {
+        if !showDisconnectConfirmation {
+          // DECISIONS 2026-09-26: keep beid and AppVersion's complete build
+          // value (#491); the Figma ABOUT route has no adopted destination.
+          Text(verbatim: "beid \(AppVersion.displayString())")
+            .beidTextStyle(DS.Font.Library.labelMono9)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .accessibilityIdentifier("account.version.value")
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, DS.Space.s)
+            .background(DS.Color.textPrimary)
         }
-        .beidWithoutSharedBackground()
+      }
+      .overlay(alignment: .bottom) {
+        if showDisconnectConfirmation {
+          disconnectConfirmationActions
+            .padding(.horizontal, DS.Space.pageMargin)
+            .padding(.bottom, DS.Space.l)
+        }
+      }
+      .navigationDestination(isPresented: $showOrganizerTools) {
+        AccountOrganizerToolsView()
+          .toolbar(.visible, for: .navigationBar)
+      }
+      .navigationDestination(isPresented: $showPastEvents) {
+        PastEventsView(
+          sensingCoordinator: coordinator.sensingCoordinator,
+          proofStore: coordinator.proofStore,
+          onRejoin: { code in
+            Task { @MainActor in
+              await coordinator.rejoinPastEventResolvingCanonicalId(code: code)
+            }
+          }
+        )
+        .toolbar(.visible, for: .navigationBar)
       }
     }
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
@@ -156,12 +181,127 @@ struct AccountSheetView: View {
     }
   }
 
-  private var bluetoothStatusColor: Color {
-    coordinator.bluetoothMonitor.isPoweredOff ? DS.Color.statusOff : DS.Color.statusOn
+  @ViewBuilder
+  private var walletContent: some View {
+    if let address = coordinator.walletAddress {
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        Text(walletHeader)
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+        HStack(spacing: DS.Space.s) {
+          // DECISIONS 2026-09-26: use Figma's Display/Address 34 typeface.
+          Text(verbatim: truncated(address))
+            .beidTextStyle(DS.Font.Library.displayAddress34)
+            .foregroundStyle(DS.Color.actionInverse)
+            .accessibilityLabel(Text(verbatim: address))
+            .layoutPriority(1)
+          Spacer(minLength: 0)
+          if copied {
+            Button {
+              UIPasteboard.general.string = address
+            } label: {
+              HStack(spacing: DS.Space.xs) {
+                Circle()
+                  .fill(DS.Color.statusOn)
+                  .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+                  .accessibilityHidden(true)
+                BeidTextControlLabel("Copied", labelColor: DS.Color.actionInverse)
+              }
+              .frame(
+                minWidth: AccountSheetHitTarget.minimum,
+                minHeight: AccountSheetHitTarget.minimum
+              )
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Copied address")
+            .accessibilityIdentifier("account.copy.feedback")
+          } else {
+            AccountTextControl("Copy", labelColor: DS.Color.actionInverse, accessibilityLabel: "Copy address") {
+              UIPasteboard.general.string = address
+              copied = true
+            }
+          }
+        }
+      }
+      .padding(.top, DS.Space.xs)
+    } else {
+      // DECISIONS 2026-09-26: wallet is optional, so keep voluntary connect
+      // and reconnect here although Figma 10 only depicts a connected wallet.
+      Button {
+        BeidDesign.haptic()
+        coordinator.connectWalletFromAccountSheet()
+      } label: {
+        Text("Connect Wallet")
+          .beidTextStyle(DS.Font.Library.title17)
+          .foregroundStyle(DS.Color.actionInverse)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(minHeight: DS.Size.minHitTarget)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+    }
   }
 
-  private var bluetoothStatusText: LocalizedStringKey {
-    coordinator.bluetoothMonitor.isPoweredOff ? "Off" : "Active"
+  private var walletHeader: String {
+    // DECISIONS 2026-09-26: name the actual MetaMask connector rather than
+    // Figma's WalletConnect protocol wording.
+    String(
+      localized: "account.wallet.header",
+      defaultValue: "Wallet · Connected via \(connectorDisplayName)",
+      comment: "Account sheet label naming the connected wallet provider."
+    )
+  }
+
+  private var pastEventsLabel: String {
+    String(
+      localized: "account.pastEvents.label",
+      defaultValue: "Past Events",
+      comment: "Account row opening previously joined events, including the rejoin action."
+    )
+  }
+
+  private var disconnectConfirmation: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text("Disconnect wallet?")
+        .beidTextStyle(DS.Font.Library.title19)
+        .foregroundStyle(DS.Color.actionInverse)
+      Text(
+        "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime."
+      )
+      .beidTextStyle(DS.Font.Library.body15)
+      .foregroundStyle(DS.Color.textSecondaryOnInk)
+      .padding(.top, DS.Space.s)
+    }
+    .padding(.top, DS.Space.m)
+    .accessibilityIdentifier("account.disconnect.confirmation")
+  }
+
+  private var disconnectConfirmationActions: some View {
+    VStack(spacing: DS.Space.s) {
+      Button(role: .destructive) {
+        BeidDesign.haptic(.medium)
+        coordinator.disconnectWallet()
+        showDisconnectConfirmation = false
+      } label: {
+        Text("Disconnect")
+          .beidTextStyle(DS.Font.Library.title16)
+          .foregroundStyle(DS.Color.labelOnActionInverse)
+          .frame(maxWidth: .infinity, minHeight: DS.Size.primaryButtonMinHeight)
+          .background(DS.Color.actionInverse, in: Capsule())
+          .contentShape(Capsule())
+      }
+      .buttonStyle(.plain)
+
+      AccountTextControl(
+        "Keep connected",
+        labelColor: DS.Color.actionInverse,
+        accessibilityLabel: "Keep connected"
+      ) {
+        showDisconnectConfirmation = false
+      }
+    }
+    .frame(maxWidth: .infinity)
   }
 
   private var relayNoteText: String {
@@ -172,13 +312,6 @@ struct AccountSheetView: View {
         While this phone is at an event, beid can pass the event's details on to phones \
         nearby, so people across the venue can still find it.
         """
-    )
-  }
-
-  private var connectedViaText: String {
-    String(
-      localized: "account.wallet.connectedVia",
-      defaultValue: "Connected via \(connectorDisplayName)"
     )
   }
 
@@ -205,7 +338,218 @@ struct AccountSheetView: View {
     guard address.count > 10 else { return address }
     let prefix = address.prefix(6)
     let suffix = address.suffix(4)
-    return "\(prefix)...\(suffix)"
+    return "\(prefix)…\(suffix)"
+  }
+}
+
+private enum AccountSheetHitTarget {
+  // PM build #2: 44pt source size became 42.25pt in the native sheet's
+  // XCTest frame. A 48pt label keeps its rendered button frame above 44pt.
+  static let minimum = DS.Size.minHitTarget + DS.Space.xs
+}
+
+/// Account-local BeidTextControl label/button with a larger label hit region.
+/// Keeping the minimum inside the Button label enlarges its real hit target,
+/// rather than only the outer SwiftUI layout frame.
+private struct AccountTextControl: View {
+  let title: LocalizedStringKey
+  let labelColor: Color
+  let accessibilityLabel: LocalizedStringKey
+  let action: () -> Void
+
+  init(
+    _ title: LocalizedStringKey,
+    labelColor: Color,
+    accessibilityLabel: LocalizedStringKey,
+    action: @escaping () -> Void
+  ) {
+    self.title = title
+    self.labelColor = labelColor
+    self.accessibilityLabel = accessibilityLabel
+    self.action = action
+  }
+
+  var body: some View {
+    Button {
+      BeidDesign.haptic()
+      action()
+    } label: {
+      BeidTextControlLabel(title, labelColor: labelColor, accessibilityLabel: accessibilityLabel)
+        .frame(minWidth: AccountSheetHitTarget.minimum, minHeight: AccountSheetHitTarget.minimum)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+/// Measured screen-10 row geometry: 16pt row insets plus the system sheet's
+/// 8pt side inset place content 24pt from the screen edge. Menu rows are
+/// 52pt with a hairline; this stays local to Account.
+private struct AccountSheetRow<Content: View>: View {
+  let minHeight: CGFloat
+  let topGap: CGFloat
+  let hasDivider: Bool
+  let content: Content
+
+  init(
+    minHeight: CGFloat = DS.Size.sessionRowMinHeight + DS.Space.xs,
+    topGap: CGFloat = 0,
+    hasDivider: Bool = true,
+    @ViewBuilder content: () -> Content
+  ) {
+    self.minHeight = minHeight
+    self.topGap = topGap
+    self.hasDivider = hasDivider
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      if topGap > 0 {
+        DS.Color.textPrimary.frame(height: topGap)
+          .overlay(alignment: .bottom) {
+            Rectangle()
+              .fill(DS.Color.strokeHairlineOnInk)
+              .frame(height: DS.Size.hairline)
+          }
+      }
+      content
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: minHeight, alignment: .leading)
+    }
+    .background(DS.Color.textPrimary)
+    .overlay(alignment: .bottom) {
+      if hasDivider {
+        Rectangle()
+          .fill(DS.Color.strokeHairlineOnInk)
+          .frame(height: DS.Size.hairline)
+      }
+    }
+    .listRowInsets(EdgeInsets(
+      top: 0,
+      leading: DS.Space.m,
+      bottom: 0,
+      trailing: DS.Space.m
+    ))
+    .listRowBackground(DS.Color.textPrimary)
+    .listRowSeparator(.hidden)
+  }
+}
+
+/// Observes the radio independently of AppCoordinator's published state, so
+/// turning Bluetooth off while Account is open refreshes its status promptly.
+private struct AccountBluetoothRow: View {
+  @ObservedObject var monitor: BluetoothMonitor
+  let relayNote: String
+
+  private var isOff: Bool {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-account-bluetooth-off-fixture")
+    {
+      return true
+    }
+    #endif
+    return monitor.isPoweredOff
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      if isOff {
+        Button {
+          UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+        } label: {
+          HStack(spacing: DS.Space.s) {
+            Text("Bluetooth")
+              .beidTextStyle(DS.Font.Library.title17)
+            Spacer()
+            Circle()
+              .fill(DS.Color.statusOff)
+              .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+              .accessibilityHidden(true)
+            BeidTextControlLabel(
+              "Off · Fix",
+              glyph: .trailing("→", announcing: "Open Bluetooth Settings"),
+              labelColor: DS.Color.actionInverse
+            )
+          }
+          .foregroundStyle(DS.Color.actionInverse)
+          .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open Bluetooth Settings")
+        .accessibilityIdentifier("account.bluetooth.status")
+
+        Text("Sensing is paused until Bluetooth is on. Tap to open Settings.")
+          .beidTextStyle(DS.Font.Library.body13)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+      } else {
+        HStack(spacing: DS.Space.s) {
+          Text("Bluetooth")
+            .beidTextStyle(DS.Font.Library.title17)
+          Spacer()
+          Circle()
+            .fill(DS.Color.statusOn)
+            .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+            .accessibilityHidden(true)
+          Text("Active")
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .accessibilityIdentifier("account.bluetooth.status")
+        }
+        .foregroundStyle(DS.Color.actionInverse)
+        .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+      }
+
+      // DECISIONS 2026-09-26 (#642 Q2 / #644): keep relay disclosure visible
+      // below Bluetooth. This adds row height and moves later rows down.
+      Text(verbatim: relayNote)
+        .beidTextStyle(DS.Font.Library.body13)
+        .foregroundStyle(DS.Color.textSecondaryOnInk)
+        .padding(.bottom, DS.Space.s)
+    }
+  }
+}
+
+/// #647 owns the full Organizer tools surface. Until it lands, this narrow
+/// route preserves the sole production entrance to Venue broadcast (#597)
+/// without restoring the withdrawn Venue device path.
+private struct AccountOrganizerToolsView: View {
+  @State private var showVenueBroadcast = false
+
+  var body: some View {
+    List {
+      Button {
+        showVenueBroadcast = true
+      } label: {
+        HStack {
+          Text("Venue broadcast")
+          Spacer()
+          Text(verbatim: "→")
+            .accessibilityHidden(true)
+        }
+        .frame(minHeight: DS.Size.minHitTarget)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Venue broadcast")
+    }
+    .navigationDestination(isPresented: $showVenueBroadcast) {
+        VenueSignedServingView(viewModel: VenueSignedServingViewModel(
+          verifier: ProductionVenueBundleVerifier(registryClient: RegistryDependencies.createClient()),
+          broadcasting: BarnardVenueSignedContainerBroadcasting(),
+          acquisition: VenueArtifactAcquisition(),
+          store: VenuePublicArtifactStore(),
+          clock: { VenueDeviceClock.read() }
+        ))
+    }
+    .navigationTitle("Organizer tools")
+    .scrollContentBackground(.hidden)
+    .background(DS.Color.surfaceCanvas)
+    .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
+    .toolbarColorScheme(.light, for: .navigationBar)
   }
 }
 
@@ -283,7 +627,7 @@ private struct EventCodeEntrySheetView: View {
   }
 }
 
-/// "Join Event" / "Leave Event" sections for `AccountSheetView`. `AppCoordinator`
+/// "Join Event" and interim "Leave Event" rows for `AccountSheetView`. `AppCoordinator`
 /// holds `sensingCoordinator` as a plain `let` and does not re-publish its
 /// `@Published` state, so `AccountSheetView` (which observes only
 /// `AppCoordinator`) never invalidates when `joinedEventCode` changes on
@@ -297,39 +641,35 @@ private struct EventMembershipSections: View {
 
   var body: some View {
     Group {
-      Section {
+      AccountSheetRow {
         Button {
           BeidDesign.haptic()
           coordinator.openEventCodeEntryFromAccountSheet()
         } label: {
           Text(joinEventLabel)
+            .beidTextStyle(DS.Font.Library.title17)
+            .foregroundStyle(DS.Color.actionInverse)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(sensingCoordinator.joinedEventCode != nil)
       }
 
-      Section {
-        NavigationLink {
-          PastEventsView(
-            sensingCoordinator: sensingCoordinator,
-            proofStore: coordinator.proofStore,
-            onRejoin: { code in
-              Task { @MainActor in
-                await coordinator.rejoinPastEventResolvingCanonicalId(code: code)
-              }
-            }
-          )
-        } label: {
-          Text(pastEventsLabel)
-        }
-      }
-
-      Section {
+      AccountSheetRow {
         Button(role: .destructive) {
           BeidDesign.haptic(.medium)
           coordinator.leaveEvent()
         } label: {
           Text("Leave Event")
+            .beidTextStyle(DS.Font.Library.title17)
+            .foregroundStyle(DS.Color.statusOff)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(sensingCoordinator.joinedEventCode == nil)
       }
     }
@@ -343,13 +683,6 @@ private struct EventMembershipSections: View {
     )
   }
 
-  private var pastEventsLabel: String {
-    String(
-      localized: "account.pastEvents.label",
-      defaultValue: "Past Events",
-      comment: "Menu row in the Account sheet that opens the list of previously joined events (beid#230), for rejoining one without retyping its code."
-    )
-  }
 }
 
 #Preview("No wallet") {

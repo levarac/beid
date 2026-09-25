@@ -25,7 +25,7 @@ final class BeidBackNavigationUITests: XCTestCase {
 
     swipeFromLeadingEdge()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(
       senseEvent.waitForExistence(timeout: 5),
       "the leading-edge swipe did not pop Proof Detail back to Collection"
@@ -41,7 +41,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     swipeFromLeadingEdge()
 
     XCTAssertEqual(app.state, .runningForeground, "the app did not survive a swipe on the root screen")
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 
   // MARK: - Gesture
@@ -88,7 +88,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
     XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
@@ -102,7 +102,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     reachRecordingScreen()
     app.buttons["Close"].tap()
 
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 
   /// Pushes Proof Detail for the DemoEvent proof left on Collection.

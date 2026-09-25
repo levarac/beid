@@ -40,7 +40,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testBindingSheetAutoPresentsOnRecordingAndDoesNotReopenAfterDismissal() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["home.scan"].tap()
 
     // Reaching `.recording` fires `beginRecording`, which sets
     // `bindingState = .pendingConnect(event)` fresh from `.none`
@@ -124,7 +124,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// sheet onto a live `RecordingView` (confirmed by
   /// `"Simulate Signal Lost"` being present — the same identifier
   /// `BeidIPadLayoutTests.swift` already uses to detect being on that
-  /// screen), then `Close` reaches Collection Home (`"Sense Event"`
+  /// screen), then `Close` reaches Collection Home (`home.scan`
   /// hittable). Ruling: beid#224 is not a defect. The auto-present binding
   /// sheet ships as-is, on `.sheet` — no chrome change, no fallback, no
   /// fifth structural fix. This test's job is to protect that recovery
@@ -150,7 +150,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["home.scan"].tap()
 
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
@@ -208,14 +208,14 @@ final class RecordingBindingSheetUITests: XCTestCase {
     let cancelStillGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: cancelButton)
     let senseEventHittable = expectation(
       for: NSPredicate(format: "isHittable == true"),
-      evaluatedWith: app.buttons["Sense Event"]
+      evaluatedWith: app.buttons["home.scan"]
     )
     wait(for: [closeGone, cancelStillGone, senseEventHittable], timeout: 8)
 
     XCTAssertFalse(closeButton.exists, "Close should dismiss the scan flow")
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not remain presented")
     XCTAssertTrue(
-      app.buttons["Sense Event"].isHittable,
+      app.buttons["home.scan"].isHittable,
       "The final real Close tap must reach Collection Home"
     )
   }
@@ -233,6 +233,6 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 }
