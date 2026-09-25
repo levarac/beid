@@ -55,9 +55,19 @@ struct ProofDetailPresentation {
         comment: "Proof Detail WITH value for an event with multiple recording sessions. The participation summary below lists each session separately; never show one session's counts as event-wide."
       )
     } else if let deviceCount, let windowCount {
+      let peers = String(
+        localized: "proofDetail.with.peers",
+        defaultValue: "^[\(deviceCount) peers](inflect: true)",
+        comment: "Number of distinct nearby devices in this Proof's session aggregate; this does not imply mutual confirmation."
+      )
+      let windows = String(
+        localized: "proofDetail.with.windows",
+        defaultValue: "^[\(windowCount) windows](inflect: true)",
+        comment: "Number of observed time windows in this Proof's session aggregate."
+      )
       withValue = String(
         localized: "proofDetail.with.counts",
-        defaultValue: "^[\(deviceCount) peers](inflect: true) · ^[\(windowCount) windows](inflect: true)",
+        defaultValue: "\(peers) · \(windows)",
         comment: "Proof Detail WITH value for one session. Device count and observed window count come from this Proof's durable aggregate snapshot, not an event-wide sum."
       )
     } else {

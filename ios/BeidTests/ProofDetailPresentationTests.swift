@@ -47,6 +47,18 @@ final class ProofDetailPresentationTests: XCTestCase {
     XCTAssertFalse(multipleSessions.withValue.contains("15"))
   }
 
+  func testWithValueUsesSingularAndZeroPluralForms() {
+    let singular = makePresentation(
+      selfProof: true, binding: false, devices: 1, windows: 1
+    )
+    XCTAssertEqual(singular.withValue, "1 peer · 1 window")
+
+    let zero = makePresentation(
+      selfProof: true, binding: false, devices: 0, windows: 0
+    )
+    XCTAssertEqual(zero.withValue, "0 peers · 0 windows")
+  }
+
   func testRecordIDShorthandHasAFixedLiteralVectorOnBothScreens() {
     let id = UUID(uuidString: "9C410000-0000-4000-8000-00000000E2A7")!
     XCTAssertEqual(RecordIDDisplay.abbreviated(id), "9c41…e2a7")

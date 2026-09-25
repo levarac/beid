@@ -1406,7 +1406,36 @@
       }
     },
     "proofDetail.with.counts": {
-      "comment": "Proof Detail WITH value for one session. Device count and observed window count come from this Proof's durable aggregate snapshot, not an event-wide sum."
+      "comment": "Proof Detail WITH value for one session. Device count and observed window count come from this Proof's durable aggregate snapshot, not an event-wide sum.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ · %2$@" } }
+      }
+    },
+    "proofDetail.with.peers": {
+      "comment": "Number of distinct nearby devices in this Proof's session aggregate; this does not imply mutual confirmation.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": { "stringUnit": { "state": "translated", "value": "%lld peer" } },
+              "other": { "stringUnit": { "state": "translated", "value": "%lld peers" } }
+            }
+          }
+        }
+      }
+    },
+    "proofDetail.with.windows": {
+      "comment": "Number of observed time windows in this Proof's session aggregate.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": { "stringUnit": { "state": "translated", "value": "%lld window" } },
+              "other": { "stringUnit": { "state": "translated", "value": "%lld windows" } }
+            }
+          }
+        }
+      }
     },
     "proofDetail.value.unavailable": {
       "comment": "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero.",
