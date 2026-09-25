@@ -140,7 +140,10 @@ struct EventCodeEntryView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Paste event code")
+        // Clear text case for the spoken label. The inner Text's mono style
+        // reapplies uppercase only to the visible PASTE.
+        .textCase(nil)
+        .accessibilityLabel(Text("Paste event code"))
       }
       .frame(minHeight: 44)
 
