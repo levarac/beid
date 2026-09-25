@@ -12,6 +12,10 @@
 	<string>$(BEID_EVENT_DEFINITION_URL_TEMPLATE)</string>
 	<key>BeidEventKeySetURLTemplate</key>
 	<string>$(BEID_EVENT_KEY_SET_URL_TEMPLATE)</string>
+	<key>BeidEventKeySignClaimCallbackURL</key>
+	<string>$(BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL)</string>
+	<key>BeidEventKeySignPersonhoodCallbackURL</key>
+	<string>$(BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL)</string>
 	<key>BeidEventRegistryReaderAddress</key>
 	<string>$(BEID_EVENT_REGISTRY_READER_ADDRESS)</string>
 	<key>BeidReportSubmissionEnabled</key>
