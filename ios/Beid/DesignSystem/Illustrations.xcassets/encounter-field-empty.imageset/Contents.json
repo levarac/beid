@@ -3,16 +3,6 @@
     {
       "filename" : "encounter-field-empty.svg",
       "idiom" : "universal"
-    },
-    {
-      "appearances" : [
-        {
-          "appearance" : "luminosity",
-          "value" : "dark"
-        }
-      ],
-      "filename" : "encounter-field-empty-dark.svg",
-      "idiom" : "universal"
     }
   ],
   "info" : {

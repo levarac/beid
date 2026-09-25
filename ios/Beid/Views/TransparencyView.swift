@@ -323,19 +323,6 @@ private struct TierRow: View {
   }
 }
 
-#Preview("Recorded, live (Dark)") {
-  NavigationStack {
-    TransparencyView(
-      eventName: "ETHGlobal Tokyo",
-      hasJoined: true,
-      recordedOnDeviceCount: 5,
-      excludedWindowCount: 1,
-      submissionState: nil
-    )
-  }
-  .preferredColorScheme(.dark)
-}
-
 #Preview("Legacy proof, no eventCode") {
   NavigationStack {
     TransparencyView(

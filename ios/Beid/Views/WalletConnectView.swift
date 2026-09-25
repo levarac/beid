@@ -445,12 +445,6 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
   WalletConnectView().environmentObject(AppCoordinator())
 }
 
-#Preview("Dark") {
-  WalletConnectView()
-    .environmentObject(AppCoordinator())
-    .preferredColorScheme(.dark)
-}
-
 #if DEBUG
 #Preview("Connecting") {
   WalletConnectPairingView(

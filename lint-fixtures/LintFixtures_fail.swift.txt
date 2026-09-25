@@ -29,6 +29,13 @@ struct LintFixturesFail: View {
     }
     .background(Color(.systemBackground)) // FAIL no_hardcoded_swiftui_color
     .tint(.blue) // FAIL no_hardcoded_swiftui_color
+    .preferredColorScheme(.dark) // FAIL no_appearance_override
+    .colorScheme(.dark) // FAIL no_appearance_override
+    .environment(\.colorScheme, .dark) // FAIL no_appearance_override
+  }
+
+  func forceDark(_ window: UIWindow) {
+    window.overrideUserInterfaceStyle = .dark // FAIL no_appearance_override
   }
 }
 

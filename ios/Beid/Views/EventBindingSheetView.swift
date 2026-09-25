@@ -488,15 +488,6 @@ struct EventBindingSheetView: View {
     .task { await coordinator.sensingCoordinator.waitForDemoSequenceToFinish() }
 }
 
-#Preview("Connect (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.sensingCoordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
-  return EventBindingSheetView(sensing: coordinator.sensingCoordinator)
-    .environmentObject(coordinator)
-    .task { await coordinator.sensingCoordinator.waitForDemoSequenceToFinish() }
-    .preferredColorScheme(.dark)
-}
-
 #if DEBUG
 #Preview("Already connected") {
   let coordinator = AppCoordinator()
@@ -511,21 +502,5 @@ struct EventBindingSheetView: View {
   return EventBindingSheetView(sensing: coordinator.sensingCoordinator)
     .environmentObject(coordinator)
     .task { await coordinator.sensingCoordinator.waitForDemoSequenceToFinish() }
-}
-
-#Preview("Already connected (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.recordWalletConnection(
-    address: LiveWalletAddress.fromConnectorResult(
-      address: "0x1234567890abcdef1234567890abcdef12345678",
-      chainId: "eip155:1"
-    ),
-    connector: DemoWalletConnector.shared
-  )
-  coordinator.sensingCoordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
-  return EventBindingSheetView(sensing: coordinator.sensingCoordinator)
-    .environmentObject(coordinator)
-    .task { await coordinator.sensingCoordinator.waitForDemoSequenceToFinish() }
-    .preferredColorScheme(.dark)
 }
 #endif

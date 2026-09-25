@@ -190,13 +190,6 @@ struct RecordingView: View {
     .environmentObject(coordinator)
 }
 
-#Preview("Entrance ceremony (Dark)") {
-  let coordinator = AppCoordinator()
-  return RecordingView(sensing: coordinator.sensingCoordinator, event: .demoSample, peersVerified: 3)
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
-}
-
 // Steady-state previews pre-consume the ceremony flag directly (rather than
 // relying on the view's own timer) so the snapshot is deterministic: this
 // is what a `RecordingView` created *after* the ceremony already played
@@ -208,14 +201,6 @@ struct RecordingView: View {
   coordinator.sensingCoordinator.markRecordingCeremonyShown()
   return RecordingView(sensing: coordinator.sensingCoordinator, event: .demoSample, peersVerified: 9)
     .environmentObject(coordinator)
-}
-
-#Preview("Steady state (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.sensingCoordinator.markRecordingCeremonyShown()
-  return RecordingView(sensing: coordinator.sensingCoordinator, event: .demoSample, peersVerified: 9)
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
 }
 
 /// Demonstrates the ceremony-shows-once contract (§5.5, §8) end to end

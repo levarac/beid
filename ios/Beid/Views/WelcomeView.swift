@@ -30,9 +30,3 @@ struct WelcomeView: View {
 #Preview {
   WelcomeView().environmentObject(AppCoordinator())
 }
-
-#Preview("Dark") {
-  WelcomeView()
-    .environmentObject(AppCoordinator())
-    .preferredColorScheme(.dark)
-}

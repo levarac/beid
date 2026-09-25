@@ -137,3 +137,19 @@ custom_rules:
       - parameter
       - typeidentifier
     regex: '\.glassEffect\s*\(|\bGlassEffectContainer\b|\.buttonStyle\(\s*\.(glass|glassProminent)\b|\bGlass(Prominent)?ButtonStyle\b|\bMaterial\b|\.(ultraThin|thin|regular|thick|ultraThick)Material\b|\.bar\b'
+  # Single appearance (DESIGN.md §14, #632): nothing sets a second
+  # appearance, in previews or production. Bar-scoped
+  # `.toolbarColorScheme(...)` is not matched (§14 allows it on ink screens).
+  no_appearance_override:
+    included: "ios/Beid/.*\\.swift"
+    name: "No appearance override"
+    message: "The app has one appearance (DESIGN.md §14): no preferredColorScheme, colorScheme(_:), environment(\\.colorScheme, ...) or overrideUserInterfaceStyle. Ink screens use bar-scoped toolbarColorScheme."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\.preferredColorScheme\s*\(|\.colorScheme\s*\(|\\\.colorScheme\s*,|\boverrideUserInterfaceStyle\b'

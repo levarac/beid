@@ -133,12 +133,3 @@ struct PastEventsView: View {
     PastEventsView(sensingCoordinator: SensingCoordinator(), proofStore: proofStore, onRejoin: { _ in })
   }
 }
-
-#Preview("Dark") {
-  let proofStore = ProofStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("preview-past-events-dark-\(UUID().uuidString).json"))
-  proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3, eventCode: "ETHTOKYO2026"))
-  return NavigationStack {
-    PastEventsView(sensingCoordinator: SensingCoordinator(), proofStore: proofStore, onRejoin: { _ in })
-  }
-  .preferredColorScheme(.dark)
-}

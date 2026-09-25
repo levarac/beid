@@ -503,10 +503,3 @@ struct SensingView: View {
   return SensingView(sensing: coordinator.sensingCoordinator)
     .environmentObject(coordinator)
 }
-
-#Preview("Dark") {
-  let coordinator = AppCoordinator()
-  return SensingView(sensing: coordinator.sensingCoordinator)
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
-}

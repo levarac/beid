@@ -168,14 +168,3 @@ struct EventIdentityVerificationRow: View {
   }
   .padding()
 }
-
-#Preview("Verification statuses (Dark)") {
-  VStack(alignment: .leading, spacing: DS.Space.m) {
-    EventIdentityVerificationRow(status: .checking)
-    EventIdentityVerificationRow(status: .verified)
-    EventIdentityVerificationRow(status: .unavailable)
-    EventIdentityVerificationRow(status: .notFound)
-  }
-  .padding()
-  .preferredColorScheme(.dark)
-}
