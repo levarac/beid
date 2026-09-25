@@ -32,6 +32,7 @@ final class FlatScreenshotTourA: XCTestCase {
 
   func testShot_13_EnterEventCode() {
     openAccountEventCodeEntry(frame: "-beid-shot-13")
+    keepScreenshot(named: "13 Enter Event Code")
 
     let field = app.textFields["Event code"]
     XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -40,11 +41,11 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(app.buttons["Cancel"].exists)
     XCTAssertTrue(app.buttons["Paste event code"].exists)
     XCTAssertTrue(app.buttons["Join Event"].exists)
-    keepScreenshot(named: "13 Enter Event Code")
   }
 
   func testShot_13b_Error() {
     openAccountEventCodeEntry(frame: "-beid-shot-13b")
+    keepScreenshot(named: "13b Enter Event Code Error")
 
     let field = app.textFields["Event code"]
     XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -58,10 +59,9 @@ final class FlatScreenshotTourA: XCTestCase {
     )
     XCTAssertFalse(app.keyboards.firstMatch.exists)
     XCTAssertTrue(app.buttons["Cancel"].exists)
-    keepScreenshot(named: "13b Enter Event Code Error")
   }
 
-  /// Follow the actual Account sheet route so the stock Cancel toolbar item
+  /// Follow the actual Account sheet route so the Cancel toolbar item
   /// and nested-sheet presentation are part of each captured frame.
   private func openAccountEventCodeEntry(frame: String) {
     app.launchArguments = ["-beid-ui-test", frame]
@@ -85,7 +85,7 @@ final class FlatScreenshotTourA: XCTestCase {
     }
     XCTAssertTrue(joinEvent.exists, "Account's Join Event row was not reachable")
     joinEvent.tap()
-    XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
   }
 
   private func keepScreenshot(named name: String) {

@@ -635,7 +635,7 @@ private struct EventCodeEntrySheetView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel", role: .cancel) {
+            BeidTextControl("Cancel", accessibilityLabel: "Cancel", role: .cancel) {
               // Direct property write, not through AccountSheetView's
               // custom cancelling `Binding` — cancel synchronously here too
               // (beid#258 P1-1 round-3 fix).
