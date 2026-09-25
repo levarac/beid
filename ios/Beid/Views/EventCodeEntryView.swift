@@ -144,6 +144,7 @@ struct EventCodeEntryView: View {
         // reapplies uppercase only to the visible PASTE.
         .textCase(nil)
         .accessibilityLabel(Text("Paste event code"))
+        .accessibilityIdentifier("eventCode.paste")
       }
       .frame(minHeight: 44)
 

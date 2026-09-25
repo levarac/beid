@@ -33,13 +33,19 @@ final class FlatScreenshotTourA: XCTestCase {
   func testShot_13_EnterEventCode() {
     openAccountEventCodeEntry(frame: "-beid-shot-13")
     keepScreenshot(named: "13 Enter Event Code")
+    let accessibilityTree = XCTAttachment(string: app.debugDescription)
+    accessibilityTree.name = "13 accessibility tree"
+    accessibilityTree.lifetime = .keepAlways
+    add(accessibilityTree)
 
     let field = app.textFields["Event code"]
     XCTAssertTrue(field.waitForExistence(timeout: 5))
     XCTAssertEqual(field.value as? String, "ETH-TOKYO-26")
     XCTAssertFalse(app.keyboards.firstMatch.exists)
     XCTAssertTrue(app.buttons["Cancel"].exists)
-    XCTAssertTrue(app.buttons["Paste event code"].exists)
+    let paste = app.buttons["eventCode.paste"]
+    XCTAssertTrue(paste.exists)
+    XCTAssertEqual(paste.label, "Paste event code")
     XCTAssertTrue(app.buttons["Join Event"].exists)
   }
 
