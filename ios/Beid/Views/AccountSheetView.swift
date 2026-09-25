@@ -54,7 +54,7 @@ extension View {
 
 /// Flat 2b screen 10: Account sheet and its Bluetooth, copy and disconnect
 /// states. DECISIONS 2026-09-26 keeps optional wallet/Account Join and leaves
-/// Venue device placement to #647; Account Leave stays until #655 lands.
+/// Venue device placement to #647; DECISIONS 2026-09-23 removes Account Leave.
 struct AccountSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.dismiss) private var dismiss
@@ -141,7 +141,7 @@ struct AccountSheetView: View {
             .accessibilityLabel("Past Events")
           }
           // Account Join stays with the owner decision that wallet is optional.
-          // Leave stays until #655 supplies stop-and-finalize elsewhere.
+          // Sensing ends through Home Stop or the scan cover's CLOSE.
           EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
         }
       }
@@ -650,51 +650,29 @@ private struct EventCodeEntrySheetView: View {
   }
 }
 
-/// "Join Event" and interim "Leave Event" rows for `AccountSheetView`. `AppCoordinator`
-/// holds `sensingCoordinator` as a plain `let` and does not re-publish its
-/// `@Published` state, so `AccountSheetView` (which observes only
-/// `AppCoordinator`) never invalidates when `joinedEventCode` changes on
-/// `SensingCoordinator`. Observing `SensingCoordinator` directly here — the
-/// same pattern `VenueDeviceOrganizerView` already uses — fixes that without
-/// making `AppCoordinator` republish all of `SensingCoordinator`'s frequent
-/// sensing-state updates.
+/// "Join Event" row for `AccountSheetView`. `AppCoordinator` holds its
+/// sensing coordinator as a plain `let` and does not re-publish changes to
+/// `joinedEventCode`. Observe it here so the row disables as soon as a manual
+/// join succeeds, without republishing frequent sensing updates from AppCoordinator.
 private struct EventMembershipSections: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensingCoordinator: SensingCoordinator
 
   var body: some View {
-    Group {
-      AccountSheetRow {
-        Button {
-          BeidDesign.haptic()
-          coordinator.openEventCodeEntryFromAccountSheet()
-        } label: {
-          Text(joinEventLabel)
-            .beidTextStyle(DS.Font.Library.title17)
-            .foregroundStyle(DS.Color.actionInverse)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(sensingCoordinator.joinedEventCode != nil)
+    AccountSheetRow {
+      Button {
+        BeidDesign.haptic()
+        coordinator.openEventCodeEntryFromAccountSheet()
+      } label: {
+        Text(joinEventLabel)
+          .beidTextStyle(DS.Font.Library.title17)
+          .foregroundStyle(DS.Color.actionInverse)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+          .contentShape(Rectangle())
       }
-
-      AccountSheetRow {
-        Button(role: .destructive) {
-          BeidDesign.haptic(.medium)
-          coordinator.leaveEvent()
-        } label: {
-          Text("Leave Event")
-            .beidTextStyle(DS.Font.Library.title17)
-            .foregroundStyle(DS.Color.statusOff)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(sensingCoordinator.joinedEventCode == nil)
-      }
+      .buttonStyle(.plain)
+      .disabled(sensingCoordinator.joinedEventCode != nil)
     }
   }
 

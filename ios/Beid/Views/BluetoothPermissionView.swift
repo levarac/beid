@@ -43,7 +43,7 @@ struct BluetoothPermissionView: View {
           .foregroundStyle(DS.Color.textSecondary)
           .frame(maxWidth: .infinity)
 
-        FlatOnboardingPrimaryButton("Allow Bluetooth") {
+        BeidPrimaryButton("Allow Bluetooth") {
           coordinator.requestBluetoothPermission()
         }
       }

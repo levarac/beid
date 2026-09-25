@@ -47,7 +47,7 @@ struct WelcomeView: View {
         // connecting/terms footer is false for this guest-first route.
       }
     } footer: {
-      FlatOnboardingPrimaryButton("Get Started") {
+      BeidPrimaryButton("Get Started") {
         coordinator.beginOnboarding()
       }
     }

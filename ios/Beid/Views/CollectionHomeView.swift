@@ -558,6 +558,7 @@ private struct HomeEventCodeEntrySheet: View {
 /// sheet closes (beid#200). This is a separate observed view because
 /// `AppCoordinator` intentionally does not republish nested sensing state.
 private struct ContinuousSensingStatus: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensing: SensingCoordinator
 
   var body: some View {
@@ -572,7 +573,7 @@ private struct ContinuousSensingStatus: View {
           Spacer(minLength: DS.Space.s)
 
           BeidTextControl("Stop sensing") {
-            sensing.stopSensing()
+            coordinator.requestHomeStopSensing()
           }
           .accessibilityIdentifier("collection.stop-sensing")
         }
