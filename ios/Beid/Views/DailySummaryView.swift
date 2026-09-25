@@ -108,10 +108,6 @@ struct DailySummaryView: View {
           .foregroundStyle(DS.Color.textSecondary)
       }
       Spacer(minLength: DS.Space.s)
-      Image(systemName: "chevron.right")
-        .font(DS.Font.meta)
-        .foregroundStyle(DS.Color.textSecondary)
-        .accessibilityHidden(true)
     }
     .frame(minHeight: DS.Size.minHitTarget)
   }

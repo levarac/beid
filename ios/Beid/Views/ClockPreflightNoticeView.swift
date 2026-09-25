@@ -59,17 +59,12 @@ struct ClockPreflightNotice: View {
     if let presentation = ClockPreflightPresentation.forStateKey(stateKey) {
       BeidPanel {
         VStack(alignment: .leading, spacing: DS.Space.s) {
-          HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
-            Image(systemName: "clock.badge.exclamationmark")
-              .foregroundStyle(DS.Color.textPrimary)
-              .accessibilityHidden(true)
-            Text(presentation.title)
-              .font(DS.Font.cardTitle)
-              .foregroundStyle(DS.Color.textPrimary)
-              .fixedSize(horizontal: false, vertical: true)
-              .accessibilityAddTraits(.isHeader)
-              .accessibilityIdentifier(presentation.statusAccessibilityIdentifier)
-          }
+          Text(presentation.title)
+            .font(DS.Font.cardTitle)
+            .foregroundStyle(DS.Color.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier(presentation.statusAccessibilityIdentifier)
           Text(presentation.message)
             .font(DS.Font.supporting)
             .foregroundStyle(DS.Color.textSecondary)
@@ -78,9 +73,10 @@ struct ClockPreflightNotice: View {
             BeidDesign.haptic()
             onRetry()
           } label: {
-            Label("Check again", systemImage: "arrow.clockwise")
+            Text("Check again")
               .font(DS.Font.meta.weight(.semibold))
               .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget, alignment: .leading)
+              .contentShape(Rectangle())
           }
           .buttonStyle(.borderless)
           .tint(DS.Color.actionPrimary)

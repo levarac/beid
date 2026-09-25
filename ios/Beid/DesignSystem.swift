@@ -44,94 +44,49 @@ struct BeidScreen<Content: View, Footer: View>: View {
 }
 
 struct BeidHeroHeader: View {
-  let systemImage: String
-  /// Original SVG artwork asset name (DesignSystem/Illustrations.xcassets). Takes
-  /// precedence over `systemImage` when set — see DESIGN.md §12 custom-asset policy.
-  var assetImage: String?
   let title: LocalizedStringKey
   let subtitle: LocalizedStringKey?
-  let tint: Color
 
   init(
-    systemImage: String,
-    assetImage: String? = nil,
     title: LocalizedStringKey,
-    subtitle: LocalizedStringKey? = nil,
-    tint: Color = .accentColor
+    subtitle: LocalizedStringKey? = nil
   ) {
-    self.systemImage = systemImage
-    self.assetImage = assetImage
     self.title = title
     self.subtitle = subtitle
-    self.tint = tint
   }
 
   var body: some View {
-    VStack(spacing: DS.Space.m) {
-      BeidGlyph(systemImage: systemImage, assetImage: assetImage, tint: tint)
+    VStack(spacing: DS.Space.s) {
+      Text(title)
+        .font(DS.Font.screenTitle)
+        .multilineTextAlignment(.center)
+        .lineLimit(2)
+        .minimumScaleFactor(0.82)
 
-      VStack(spacing: DS.Space.s) {
-        Text(title)
-          .font(DS.Font.screenTitle)
+      if let subtitle {
+        Text(subtitle)
+          .font(DS.Font.body)
+          .foregroundStyle(DS.Color.textSecondary)
           .multilineTextAlignment(.center)
-          .lineLimit(2)
-          .minimumScaleFactor(0.82)
-
-        if let subtitle {
-          Text(subtitle)
-            .font(DS.Font.body)
-            .foregroundStyle(DS.Color.textSecondary)
-            .multilineTextAlignment(.center)
-            .lineSpacing(2)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+          .lineSpacing(2)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
     .frame(maxWidth: .infinity)
   }
 }
 
-struct BeidGlyph: View {
-  let systemImage: String
-  /// Original SVG artwork asset name. Takes precedence over `systemImage` when set.
-  var assetImage: String?
-  let tint: Color
-  var size: CGFloat = 72
-
-  var body: some View {
-    Group {
-      if let assetImage {
-        Image(assetImage)
-          .resizable()
-          .scaledToFit()
-          .padding(size * 0.16)
-      } else {
-        Image(systemName: systemImage)
-          .font(.system(size: size * 0.38, weight: .semibold))
-          .foregroundStyle(tint)
-          .symbolRenderingMode(.hierarchical)
-      }
-    }
-    .frame(width: size, height: size)
-    .beidSurface(cornerRadius: DS.Radius.glyph)
-    .accessibilityHidden(true)
-  }
-}
-
 struct BeidPrimaryButton: View {
   let title: LocalizedStringKey
-  let systemImage: String?
   let labelColor: Color
   let action: () -> Void
 
   init(
     _ title: LocalizedStringKey,
-    systemImage: String? = nil,
     labelColor: Color = DS.Color.labelOnActionPrimary,
     action: @escaping () -> Void
   ) {
     self.title = title
-    self.systemImage = systemImage
     self.labelColor = labelColor
     self.action = action
   }
@@ -144,20 +99,15 @@ struct BeidPrimaryButton: View {
   }
 
   private func label() -> some View {
-    HStack(spacing: DS.Space.s) {
-      if let systemImage {
-        Image(systemName: systemImage)
-      }
-      Text(title)
-    }
-    .font(DS.Font.cta)
-    // The label color is set explicitly rather than left to the prominent
-    // style's default: DESIGN.md §5 pairs every fill with an on-fill label
-    // token. The default fits the actionPrimary fill; a call site with an
-    // actionInverse fill passes labelOnActionInverse.
-    .foregroundStyle(labelColor)
-    .frame(maxWidth: .infinity)
-    .frame(minHeight: 52)
+    Text(title)
+      .font(DS.Font.cta)
+      // The label color is set explicitly rather than left to the prominent
+      // style's default: DESIGN.md §5 pairs every fill with an on-fill label
+      // token. The default fits the actionPrimary fill; a call site with an
+      // actionInverse fill passes labelOnActionInverse.
+      .foregroundStyle(labelColor)
+      .frame(maxWidth: .infinity)
+      .frame(minHeight: 52)
   }
 
   private func performAction() {
@@ -188,24 +138,15 @@ struct BeidSecondaryButton: View {
   }
 }
 
-/// One benefit/permission bullet: an icon roundel plus a title, and
-/// optionally a second, smaller supporting sentence (screen 02's three
-/// Bluetooth benefits — DESIGN.md §10). Omit `subtitle` for a title-only row.
+/// One benefit/permission bullet: a title and optionally a second, smaller
+/// supporting sentence (screen 02's three Bluetooth benefits — DESIGN.md §10).
+/// Omit `subtitle` for a title-only row.
 struct BeidBulletRow: View {
-  let systemImage: String
   let title: LocalizedStringKey
   var subtitle: LocalizedStringKey?
 
   var body: some View {
     HStack(alignment: subtitle == nil ? .center : .top, spacing: DS.Space.s) {
-      Image(systemName: systemImage)
-        .font(DS.Font.cardTitle)
-        .foregroundStyle(.tint)
-        .symbolRenderingMode(.hierarchical)
-        .frame(width: DS.Size.bulletIcon, height: DS.Size.bulletIcon)
-        .beidSurface(cornerRadius: DS.Radius.control)
-        .accessibilityHidden(true)
-
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         Text(title)
           .font(DS.Font.cardTitle)
@@ -321,29 +262,19 @@ struct BeidPanel<Content: View>: View {
 }
 
 struct BeidStatusLayout<Accessory: View, Footer: View>: View {
-  let systemImage: String
-  /// Original SVG artwork asset name. Takes precedence over `systemImage` when set.
-  var assetImage: String?
   let title: LocalizedStringKey
   let message: LocalizedStringKey
-  let tint: Color
   let accessory: Accessory
   let footer: Footer
 
   init(
-    systemImage: String,
-    assetImage: String? = nil,
     title: LocalizedStringKey,
     message: LocalizedStringKey,
-    tint: Color = .accentColor,
     @ViewBuilder accessory: () -> Accessory = { EmptyView() },
     @ViewBuilder footer: () -> Footer = { EmptyView() }
   ) {
-    self.systemImage = systemImage
-    self.assetImage = assetImage
     self.title = title
     self.message = message
-    self.tint = tint
     self.accessory = accessory()
     self.footer = footer()
   }
@@ -351,7 +282,7 @@ struct BeidStatusLayout<Accessory: View, Footer: View>: View {
   var body: some View {
     BeidScreen {
       VStack(spacing: DS.Space.l) {
-        BeidHeroHeader(systemImage: systemImage, assetImage: assetImage, title: title, subtitle: message, tint: tint)
+        BeidHeroHeader(title: title, subtitle: message)
         accessory
       }
     } footer: {
@@ -424,6 +355,22 @@ struct BeidEmptyBlock<Content: View>: View {
             style: StrokeStyle(lineWidth: DS.Size.hairline, dash: [DS.Size.emptyBlockDash, DS.Size.emptyBlockDash])
           )
       }
+  }
+}
+
+extension ToolbarContent {
+  /// Removes the iOS 26 per-item glass from explicit toolbar content.
+  /// #630 removed branches that ADDED iOS 26 glass and made versions differ;
+  /// the owner approved this #631 branch because it REMOVES glass that exists
+  /// only on iOS 26, keeping explicit items consistent across OS versions.
+  /// The system-created navigation back item remains OS-owned.
+  @ToolbarContentBuilder
+  func beidWithoutSharedBackground() -> some ToolbarContent {
+    if #available(iOS 26, *) {
+      self.sharedBackgroundVisibility(.hidden)
+    } else {
+      self
+    }
   }
 }
 

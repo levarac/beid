@@ -82,23 +82,17 @@ struct CollectionHomeView: View {
       .navigationBarTitleDisplayMode(.large)
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
-          Button {
-            BeidDesign.haptic()
+          BeidTextControl("collection.dailySummaryButton", accessibilityLabel: "collection.dailySummaryButton") {
             coordinator.dailySummaryPresented = true
-          } label: {
-            Image(systemName: "calendar")
           }
-          .accessibilityLabel(dailySummaryAccessibilityLabelText)
         }
+        .beidWithoutSharedBackground()
         ToolbarItem(placement: .topBarTrailing) {
-          Button {
-            BeidDesign.haptic()
+          BeidTextControl("Account", accessibilityLabel: "Account") {
             coordinator.accountSheetPresented = true
-          } label: {
-            Image(systemName: "person.crop.circle")
           }
-          .accessibilityLabel("Account")
         }
+        .beidWithoutSharedBackground()
       }
       .safeAreaInset(edge: .bottom) {
         BeidAdaptiveContent {
@@ -131,42 +125,19 @@ struct CollectionHomeView: View {
     }
   }
 
-  /// Icon-only once proofs exist (dense grid, per the approved 04 redesign);
-  /// the empty state keeps a labeled CTA for first-run discoverability
-  /// (DESIGN.md §3) — same `startScan()` action and localized "Sense Event"
-  /// string either way, only the visible label differs.
+  /// The empty state keeps the primary CTA. Once proofs exist, the same
+  /// action stays available as a text control in the bottom bar.
   @ViewBuilder
   private var scanButton: some View {
     if coordinator.proofStore.proofs.isEmpty {
-      BeidPrimaryButton("Sense Event", systemImage: "dot.radiowaves.left.and.right") {
+      BeidPrimaryButton("Sense Event") {
         coordinator.startScan()
       }
     } else {
-      Button(action: startScan, label: scanIcon)
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.circle)
-        .accessibilityLabel("Sense Event")
+      BeidTextControl("Sense Event", accessibilityLabel: "Sense Event") {
+        coordinator.startScan()
+      }
     }
-  }
-
-  private func scanIcon() -> some View {
-    Image(systemName: "dot.radiowaves.left.and.right")
-      .font(DS.Font.cta)
-      .foregroundStyle(DS.Color.surfaceCanvas)
-      .frame(width: DS.Size.minHitTarget, height: DS.Size.minHitTarget)
-  }
-
-  private func startScan() {
-    BeidDesign.haptic()
-    coordinator.startScan()
-  }
-
-  private var dailySummaryAccessibilityLabelText: String {
-    String(
-      localized: "collection.dailySummaryButton",
-      defaultValue: "Today",
-      comment: "Accessibility label for the calendar-icon toolbar button on Collection Home that opens the Daily Summary screen (gh#291) — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's own navigation title, since this button's only purpose is opening that screen."
-    )
   }
 
   private var proofCountText: String {
@@ -182,8 +153,6 @@ struct CollectionHomeView: View {
       Spacer()
       BeidEmptyBlock {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-          // TODO(asset): encounter-field-empty
-          BeidGlyph(systemImage: "tray", assetImage: "encounter-field-empty", tint: .secondary, size: 32)
           Text("No proofs yet")
             .font(DS.Font.sectionTitle)
           Text("Start sensing at an event to collect your first proof.")
@@ -207,7 +176,7 @@ private struct ContinuousSensingStatus: View {
     if isSensing {
       BeidPanel {
         HStack(spacing: DS.Space.m) {
-          Label("Sensing continues in background", systemImage: "dot.radiowaves.left.and.right")
+          Text("Sensing continues in background")
             .font(DS.Font.supporting)
             .foregroundStyle(DS.Color.textPrimary)
             .accessibilityIdentifier("collection.continuous-sensing")

@@ -52,14 +52,9 @@ struct VenueDeviceOrganizerView: View {
         .disabled(viewModel.isBroadcasting)
 
         if let validationError = viewModel.validationError {
-          HStack(alignment: .top, spacing: DS.Space.s) {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .foregroundStyle(DS.Color.textPrimary)
-              .accessibilityHidden(true)
-            Text(message(for: validationError))
-              .font(DS.Font.supporting)
-              .foregroundStyle(DS.Color.textPrimary)
-          }
+          Text(message(for: validationError))
+            .font(DS.Font.supporting)
+            .foregroundStyle(DS.Color.textPrimary)
         }
       } header: {
         Text("Assignment")

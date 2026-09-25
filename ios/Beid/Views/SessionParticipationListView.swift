@@ -87,10 +87,6 @@ struct SessionParticipationListView: View {
           .foregroundStyle(DS.Color.textPrimary)
         Spacer(minLength: DS.Space.m)
         trailingValue
-        Image(systemName: "chevron.right")
-          .font(DS.Font.meta)
-          .foregroundStyle(DS.Color.textSecondary)
-          .accessibilityHidden(true)
       }
       .frame(minHeight: DS.Size.minHitTarget)
     }

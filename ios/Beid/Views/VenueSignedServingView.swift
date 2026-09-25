@@ -104,6 +104,7 @@ struct VenueSignedServingView: View {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel") { isScanning = false }
           }
+          .beidWithoutSharedBackground()
         }
       }
     }

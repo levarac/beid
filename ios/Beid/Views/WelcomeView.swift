@@ -14,13 +14,11 @@ struct WelcomeView: View {
   var body: some View {
     BeidScreen {
       BeidHeroHeader(
-        systemImage: "checkmark.seal.fill",
-        assetImage: "welcome-mark",
         title: "beid",
         subtitle: "Prove you were there. Automatically."
       )
     } footer: {
-      BeidPrimaryButton("Get Started", systemImage: "arrow.right") {
+      BeidPrimaryButton("Get Started") {
         coordinator.beginOnboarding()
       }
     }

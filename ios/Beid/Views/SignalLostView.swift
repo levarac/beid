@@ -24,7 +24,6 @@ struct SignalLostView: View {
 
   var body: some View {
     BeidStatusLayout(
-      systemImage: "exclamationmark.triangle.fill",
       title: "Signal Lost",
       message: "beid lost the connection to \(event.name). Move closer and we'll pick it back up automatically.",
       accessory: {
@@ -48,14 +47,13 @@ struct SignalLostView: View {
       // SignalLostView to always offer it), but the handler it calls
       // resumes the same session in place — never `startSensing`, which
       // would discard `peersVerified` and re-create the `Proof` (§5.4).
-      BeidPrimaryButton("Try Again", systemImage: "arrow.clockwise") {
+      BeidPrimaryButton("Try Again") {
         coordinator.sensingCoordinator.resumeSensing()
       }
       }
     )
-    // Recovery screen: header glyph + "Try Again" take the actionPrimary
-    // tint — Flat 2b has one ink and no per-screen motif accents
-    // (DESIGN.md §5).
+    // Recovery screen: "Try Again" takes the actionPrimary tint — Flat 2b
+    // has one ink and no per-screen motif accents (DESIGN.md §5).
     .tint(DS.Color.actionPrimary)
   }
 }

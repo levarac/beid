@@ -17,48 +17,32 @@ struct AccountSheetView: View {
         Section("Wallet") {
           if let address = coordinator.walletAddress {
             HStack(spacing: DS.Space.m) {
-              Label {
-                VStack(alignment: .leading, spacing: DS.Space.xs) {
-                  Text(truncated(address))
-                    .font(DS.Font.ledgerMono)
-                    .foregroundStyle(DS.Color.textPrimary)
-                  Text(connectedViaText)
-                    .font(DS.Font.supporting)
-                    .foregroundStyle(DS.Color.textSecondary)
-                }
-              } icon: {
-                Image(systemName: "wallet.pass")
+              VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text(truncated(address))
+                  .font(DS.Font.ledgerMono)
+                  .foregroundStyle(DS.Color.textPrimary)
+                Text(connectedViaText)
+                  .font(DS.Font.supporting)
+                  .foregroundStyle(DS.Color.textSecondary)
               }
               Spacer()
-              Button {
+              BeidTextControl("Copy", accessibilityLabel: "Copy address") {
                 UIPasteboard.general.string = coordinator.walletAddress
-                BeidDesign.haptic()
-              } label: {
-                Image(systemName: "doc.on.doc")
-                  .foregroundStyle(DS.Color.actionPrimary)
               }
-              .buttonStyle(.borderless)
-              .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
-              .accessibilityLabel(
-                Text(
-                  "Copy address",
-                  comment: "Button: copies the connected wallet address to the clipboard, not a noun."
-                )
-              )
             }
           } else {
             Button {
               BeidDesign.haptic()
               coordinator.connectWalletFromAccountSheet()
             } label: {
-              Label("Connect Wallet", systemImage: "wallet.pass")
+              Text("Connect Wallet")
             }
           }
         }
 
         Section {
           HStack(spacing: DS.Space.m) {
-            Label("Bluetooth", systemImage: "dot.radiowaves.left.and.right")
+            Text("Bluetooth")
             Spacer()
             HStack(spacing: DS.Space.xs) {
               Circle()
@@ -103,7 +87,7 @@ struct AccountSheetView: View {
               clock: { VenueDeviceClock.read() }
             ))
           } label: {
-            Label("Venue broadcast", systemImage: "antenna.radiowaves.left.and.right")
+            Text("Venue broadcast")
           }
         }
 
@@ -112,7 +96,7 @@ struct AccountSheetView: View {
             BeidDesign.haptic(.medium)
             coordinator.disconnectWallet()
           } label: {
-            Label("Disconnect Wallet", systemImage: "rectangle.portrait.and.arrow.right")
+            Text("Disconnect Wallet")
           }
           .disabled(coordinator.walletAddress == nil)
         }
@@ -141,6 +125,7 @@ struct AccountSheetView: View {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") { dismiss() }
         }
+        .beidWithoutSharedBackground()
       }
     }
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
@@ -257,6 +242,7 @@ private struct WalletConnectSheetView: View {
             coordinator.walletConnectSheetPresented = false
           }
         }
+        .beidWithoutSharedBackground()
       }
     }
     // Sheets don't inherit the presenter's .tint (unlike push navigation),
@@ -290,6 +276,7 @@ private struct EventCodeEntrySheetView: View {
               coordinator.eventCodeEntrySheetPresented = false
             }
           }
+          .beidWithoutSharedBackground()
         }
     }
     .tint(DS.Color.actionPrimary)
@@ -315,7 +302,7 @@ private struct EventMembershipSections: View {
           BeidDesign.haptic()
           coordinator.openEventCodeEntryFromAccountSheet()
         } label: {
-          Label { Text(joinEventLabel) } icon: { Image(systemName: "number") }
+          Text(joinEventLabel)
         }
         .disabled(sensingCoordinator.joinedEventCode != nil)
       }
@@ -332,7 +319,7 @@ private struct EventMembershipSections: View {
             }
           )
         } label: {
-          Label { Text(pastEventsLabel) } icon: { Image(systemName: "clock.arrow.circlepath") }
+          Text(pastEventsLabel)
         }
       }
 
@@ -341,7 +328,7 @@ private struct EventMembershipSections: View {
           BeidDesign.haptic(.medium)
           coordinator.leaveEvent()
         } label: {
-          Label("Leave Event", systemImage: "rectangle.portrait.and.arrow.right")
+          Text("Leave Event")
         }
         .disabled(sensingCoordinator.joinedEventCode == nil)
       }

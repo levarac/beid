@@ -215,7 +215,7 @@ struct TransparencyView: View {
 
   /// Trailing value on the "Sent" row once available. Deliberately the same
   /// word as that row's own label (beid#292) — DESIGN.md §2.9 requires the
-  /// icon shape and the trailing text to change together, and there is no
+  /// trailing text to describe the status, and there is no
   /// separate status word for "a report was sent"; a distinct explicit key
   /// from the row's label so translators can adjust either independently.
   private var sentValueText: String {
@@ -249,11 +249,10 @@ struct TransparencyView: View {
   }
 }
 
-/// One participation-record or verified-proof sub-state row: an icon +
+/// One participation-record or verified-proof sub-state row: an
 /// optional label on the leading side, and either a live value or an
 /// honest "Not yet available" on the trailing side. Never conveys state by
-/// color alone (DESIGN.md §2.9) — the icon shape (`checkmark.circle.fill`
-/// vs. outlined `circle`) and the trailing text both change together.
+/// color alone (DESIGN.md §2.9) — the trailing text names the state.
 private struct TierRow: View {
   var label: Text?
   let isAvailable: Bool
@@ -261,10 +260,6 @@ private struct TierRow: View {
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
-      Image(systemName: isAvailable ? "checkmark.circle.fill" : "circle")
-        .foregroundStyle(isAvailable ? DS.Color.textPrimary : DS.Color.textSecondary)
-        .accessibilityHidden(true)
-
       if let label {
         label
           .font(DS.Font.supporting)
