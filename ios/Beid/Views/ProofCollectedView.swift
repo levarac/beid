@@ -66,18 +66,21 @@ struct ProofCollectedView: View {
         VStack(alignment: .leading, spacing: 0) {
           HStack(alignment: .top, spacing: DS.Space.m) {
             Text(verbatim: "RECORD ID \(snapshot.shortRecordID)")
-              .beidTextStyle(DS.Font.Library.labelMono11)
+              // This child carries a value. Override the row's uppercase
+              // label style so its VoiceOver text and future mixed-case
+              // shorthand keep their exact spelling.
+              .textCase(nil)
               .foregroundStyle(DS.Color.textSecondary)
               .fixedSize(horizontal: false, vertical: true)
-              .accessibilityLabel("Record ID \(snapshot.recordID.uuidString)")
+              .accessibilityLabel(Text(verbatim: "Record ID \(snapshot.recordID.uuidString)"))
               .accessibilityIdentifier("proof-collected.record-id")
             Spacer(minLength: DS.Space.s)
             Text(verbatim: "SEALED")
-              .beidTextStyle(DS.Font.Library.labelMono11)
               .foregroundStyle(DS.Color.textPrimary)
               .fixedSize(horizontal: true, vertical: false)
               .accessibilityIdentifier("proof-collected.status")
           }
+          .beidTextStyle(DS.Font.Library.labelMono11)
           .frame(maxWidth: .infinity)
 
           RecordSigilSlot(recordID: snapshot.recordID, size: 290, ground: .canvas)
