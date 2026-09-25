@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import BarnardCore
+import BeidSharedKit
 import CryptoKit
 import Foundation
 import os
