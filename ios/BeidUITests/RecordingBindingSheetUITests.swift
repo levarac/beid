@@ -10,8 +10,8 @@ import XCTest
 /// `testBindingSheetAutoPresentsOnRecordingAndDoesNotReopenAfterDismissal`
 /// guards the auto-present invariant: the sheet must present automatically
 /// once `.recording` begins (chained through `bindingState` going fresh
-/// `.none` → `.pendingConnect`, then `RecordingView`'s entrance ceremony
-/// finishing), not only on the next scenePhase foreground transition — a
+/// `.none` → `.pendingConnect`, then `RecordingView` mounting), not only on
+/// the next scenePhase foreground transition — a
 /// session that never backgrounds the app (e.g. this whole DemoEvent
 /// walkthrough) previously never saw it. It also guards against a
 /// regression this fix could introduce if written wrong: dismissing the
@@ -29,7 +29,7 @@ import XCTest
 /// then `Close`. On iPad, the same tap lands on the form sheet's visible
 /// backdrop and genuinely dismisses the binding sheet, recovering in one
 /// fewer tap. Both device classes converge on the same end state —
-/// Collection Home, deterministically reachable — by different real paths.
+/// stop confirmation, 06, 07, then Collection Home — by different real paths.
 final class RecordingBindingSheetUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -40,18 +40,15 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testBindingSheetAutoPresentsOnRecordingAndDoesNotReopenAfterDismissal() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["home.scan"].tap()
 
     // Reaching `.recording` fires `beginRecording`, which sets
     // `bindingState = .pendingConnect(event)` fresh from `.none`
     // (`resetSessionState()` at the `.eventFound` transition put it there
     // moments earlier). `ScanFlowView` no longer presents directly off that
-    // — it chains presentation to `sensing.entranceCeremonyFinished`
-    // instead (sequenced after the ceremony, not racing its animation —
-    // see `ScanFlowView`'s doc comment on that `.onChange`), so this must
-    // wait out `RecordingView`'s ~2s entrance-ceremony dwell on top of the
-    // ~2s demo step delay before the sheet appears; the generous timeout
-    // reflects that, not test flakiness.
+    // — it chains presentation to `sensing.recordingSurfaceReady` instead,
+    // after RecordingView mounts. The timeout covers the demo step delay and
+    // sheet presentation.
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(
       cancelButton.waitForExistence(timeout: 15),
@@ -81,6 +78,25 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not reopen itself after being dismissed")
   }
 
+  func testKeepSensingReturnsToLiveRecordingAfterBindingWasDeclined() {
+    launchAndReachSenseEventScreen()
+    app.buttons["home.scan"].tap()
+
+    let cancelButton = app.buttons["Cancel"]
+    XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
+    cancelButton.tap()
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+
+    app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Keep sensing"].tap()
+
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Close"].exists)
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
+    XCTAssertFalse(cancelButton.exists, "an explicitly declined binding sheet must stay declined")
+  }
+
   /// Regression test for beid#224: a mistimed tap on `ScanFlowView`'s own
   /// "Close" toolbar button, landing in the narrow window right as the
   /// auto-presented binding sheet begins animating in, must not strand the
@@ -94,9 +110,9 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// 2. Add sequencing: Close dismisses the sheet first and defers
   ///    `finishScan()` to the sheet's `onDismiss`; presentation itself
   ///    chained to `RecordingView`'s entrance-ceremony finishing rather
-  ///    than directly to `bindingState` (both still present in
-  ///    `ScanFlowView.swift`/`SensingCoordinator.swift`/`RecordingView.swift`
-  ///    today) — still insufficient, identical failure signature.
+  ///    than directly to `bindingState` — still insufficient, identical
+  ///    failure signature. #637 later removed that ceremony while retaining
+  ///    the sheet's sequencing after RecordingView mounts.
   /// 3. Restructure `EventBindingSheetView`'s presentation to be a sibling
   ///    of `ScanFlowView`'s `.fullScreenCover` (owned by `AppCoordinator`,
   ///    presented from `RootView`) instead of nested inside it — this
@@ -124,8 +140,10 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// sheet onto a live `RecordingView` (confirmed by
   /// `"Simulate Signal Lost"` being present — the same identifier
   /// `BeidIPadLayoutTests.swift` already uses to detect being on that
-  /// screen), then `Close` reaches Collection Home (`"Sense Event"`
-  /// hittable). Ruling: beid#224 is not a defect. The auto-present binding
+  /// screen), then `Close` reaches Stop confirmation, whose stop action
+  /// reaches the sealed screen; DONE advances to 07, and View collection
+  /// returns to Collection Home.
+  /// Ruling: beid#224 is not a defect. The auto-present binding
   /// sheet ships as-is, on `.sheet` — no chrome change, no fallback, no
   /// fifth structural fix. This test's job is to protect that recovery
   /// invariant going forward, not to chase a lockup that doesn't exist.
@@ -150,7 +168,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["home.scan"].tap()
 
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
@@ -182,8 +200,8 @@ final class RecordingBindingSheetUITests: XCTestCase {
       )
 
       // The binding sheet is already gone, so this real tap reaches
-      // ScanFlowView's own toolbar Close button directly — the same final
-      // destination the iPhone branch below reaches in two taps instead.
+      // ScanFlowView's own toolbar Close button directly — the same stop
+      // confirmation the iPhone branch below reaches in two taps instead.
       closeButton.tap()
     } else {
       // The raced tap is a no-op, not damage: it must not tear down or
@@ -206,17 +224,20 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
     let closeGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: closeButton)
     let cancelStillGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: cancelButton)
-    let senseEventHittable = expectation(
-      for: NSPredicate(format: "isHittable == true"),
-      evaluatedWith: app.buttons["Sense Event"]
-    )
-    wait(for: [closeGone, cancelStillGone, senseEventHittable], timeout: 8)
+    wait(for: [closeGone, cancelStillGone], timeout: 8)
 
-    XCTAssertFalse(closeButton.exists, "Close should dismiss the scan flow")
+    XCTAssertFalse(closeButton.exists, "Close should lead to stop confirmation")
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not remain presented")
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    app.buttons["View collection"].tap()
+    let homeScan = app.buttons["home.scan"]
     XCTAssertTrue(
-      app.buttons["Sense Event"].isHittable,
-      "The final real Close tap must reach Collection Home"
+      homeScan.waitForExistence(timeout: 5) && homeScan.isHittable,
+      "The confirmed stop, DONE, and View collection must reach Collection Home"
     )
   }
 
@@ -233,6 +254,6 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 }

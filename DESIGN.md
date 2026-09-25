@@ -282,12 +282,10 @@ Beid MUST NOT feel like:
 Wallet is optional (`OnboardingMode.guestFirst` exists). The UI MUST read
 fully coherent to a user who never connects a wallet.
 
-> **Unresolved conflict, recorded 2026-09-22 (Open item 2,
-> [D-627](docs/decisions/issue-627-flat-2b.md)).** The rule above is
-> unchanged and still binds. The Flat 2b spec says login is WalletConnect
-> only, and 01 Welcome has a single Connect Wallet CTA. This is a sixth
-> MUST conflict that the 2026-09-22 owner decision did not name; it goes
-> to the owner and is not resolved here (#642, #643, #644).
+> **Owner resolution, 2026-09-26 (Open item 2,
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** Wallet-optional
+> onboarding is settled. The MUST above remains binding: 01 Welcome uses
+> the guest-first Get Started route, and wallet connection is optional.
 
 ## 2. Non-Negotiables
 
@@ -691,7 +689,9 @@ Rules:
   either value puts §13's AA MUST at risk.
 - Open item 4 (D-627): `chart-muted` bars on `bg` (1.41:1) and
   `on-ink/idle` nodes on `ink` (2.97:1) are under WCAG 1.4.11's 3:1 for
-  non-text. Recorded; no new rule (#634, #640).
+  non-text. Frame 11 locally blends `textSecondary` at 75% on white
+  (approximately `#92929A`, 3.09:1) for observed bars; the shared
+  `chart-muted` token and the radar styling remain unchanged (#634, #640).
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** The ratified palette
@@ -859,7 +859,9 @@ Google Fonts under the SIL Open Font License, bundled with the app
 (#629):
 
 - **Bricolage Grotesque ExtraBold** — display (titles, numbers, the
-  Account address).
+  Account address). Each bundled static Display cut uses `opsz` equal to its
+  base size (60 / 52 / 46 / 40 / 34), matching the rendered Figma widths
+  (#643, 2026-09-26). The earlier opsz-14 assumption for Display was wrong.
 - **DM Sans** Bold / Regular — titles and body.
 - **DM Mono** Medium — labels.
 
@@ -996,33 +998,30 @@ that #629 does not re-author. A mono meta role belongs with the screen
 issues.
 
 **TRANSITIONAL GAP (#629, 2026-09-23).** A role token is a
-`SwiftUI.Font`, so a plain `.font(DS.Font.body)` call site — which is every
-call site today — gets **family, size, Dynamic Type and tabular figures,
+`SwiftUI.Font`, so a plain `.font(DS.Font.body)` call site — still used by
+legacy screens — gets **family, size, Dynamic Type and tabular figures,
 and none of tracking, line height or case**. Those three reach a view only
 through `beidTextStyle(_:)`, the full-style modifier in `Tokens.swift`,
 which the screen issues adopt. Concretely: `screenTitle`'s −1.5% tracking
-and Body's 140% line height are **not** applied at today's call sites, and
-no mono label is uppercased today because no role points at one. This is a
-known, named gap, not a claim that the ramp is fully wired.
+and Body's 140% line height are **not** applied at plain-font call sites.
+Screens using `beidTextStyle(_:)`, including onboarding, receive those full
+settings. No mono label role exists yet. This is a known, named gap, not a
+claim that the ramp is fully wired.
 
-**Display 100% line-height gap (#629, 2026-09-23).** Display/60 · 52 · 46
+**Display 100% line height (#661, 2026-09-26).** Display/60 · 52 · 46
 ask for a 100% line height, but Bricolage Grotesque's own line height is
 1.2 em (hhea 930/−270 over 1000 upem), so 100% needs *negative* extra
-spacing. SwiftUI's only line-height control on this deployment target
-(iOS 17) is `View.lineSpacing(_:)`, which writes
+spacing. On iOS 26+, `beidTextStyle(_:)` uses
+`View.lineHeight(.exact(points:))` at the Dynamic Type-scaled point size,
+matching the Library's 100% Display line box. On iOS 17–25, SwiftUI's
+available line-height control is `View.lineSpacing(_:)`, which writes
 `EnvironmentValues.lineSpacing` and is additive; UIKit documents the
 underlying `NSParagraphStyle.lineSpacing` as "always nonnegative"
-(`NSParagraphStyle.h`, iPhoneSimulator27.0 SDK). A real line-height API
-exists — `View.lineHeight(_:)` taking `AttributedString.LineHeight`, in
-`SwiftUICore.swiftinterface` — but it is `@available(iOS 26.0, *)`, above
-the iOS 17 deployment target. So the Library value stays 1.0 in
-`DS.Font.Library` (it is the Library's value) and
-`DS.Font.Style.lineSpacing(atPointSize:)` clamps at 0: **a line height
-below the face's own is not applied, and Display renders at Bricolage's
-1.2 em.** Nothing is faked and §6's table is not rewritten to match what
-SwiftUI can do. Closing it needs either an owner decision to raise the
-deployment target or an OS-version-conditional path; neither is taken here.
-Tracked as **#661**, which owns that choice — not #629.
+(`NSParagraphStyle.h`, iPhoneSimulator27.0 SDK). The Library value remains
+1.0 in `DS.Font.Library`, while `DS.Font.Style.lineSpacing(atPointSize:)`
+clamps at 0 on those older systems: **Display still renders at Bricolage's
+1.2 em on iOS 17–25.** #661 closes the iOS 26+ gap without claiming
+older systems match.
 
 > **Superseded by #629 (2026-09-23).** The table below described the SF Pro
 > ramp that `DS.Font` carried until #629 replaced it, and is kept for
@@ -1409,10 +1408,11 @@ damping and response (`DS.Motion`), not fixed-duration curves.
 | `DS.Motion.entrance` | spring, response 0.5, damping 0.85 | Content entering (event card in `EventFoundView`) |
 | `DS.Motion.proofResolve` | spring, response 0.6, damping 0.8 | Proof seal ceremony |
 | `DS.Motion.sensingPulsePeriod` | 1.8 s | One radar pulse cycle in `SensingView` |
-| `DS.Motion.screenTransition` | spring, response 0.36, damping 0.88 | Root screen switches (`RootView`) and scan-flow phase switches (`ScanFlowView`) |
+| `DS.Motion.screenTransition` | spring, response 0.36, damping 1.0 | Root screen switches (`RootView`) and scan-flow phase switches (`ScanFlowView`) |
 
 `DS.Motion.screenTransition` is `BeidDesign.Animation.soft` moved into
-`DS` unchanged by #628 (2026-09-23), and `BeidDesign.Animation.entrance`,
+`DS` unchanged by #628 (2026-09-23); #657 later corrected its damping to
+1.0. `BeidDesign.Animation.entrance`,
 which was an alias of `DS.Motion.entrance`, is gone; its call site uses
 `DS.Motion.entrance` directly (§7's token-fold note).
 
@@ -2697,21 +2697,29 @@ to.]**
 | `size.row.list.minHeight` | `DS.Size.listRowMinHeight` | 92 pt | `Row/List` minimum height |
 | `size.row.keyValue.minHeight` | `DS.Size.keyValueRowMinHeight` | 44 pt | `Row/KeyValue` minimum height |
 | `size.row.session.minHeight` | `DS.Size.sessionRowMinHeight` | 48 pt | Session row minimum height |
+| `size.observation.chart` | `DS.Size.observationChartWidth` / `observationChartHeight` | 354 × 90 pt | Frame 11 observed-window plot |
+| `size.observation.chart.bars` | `DS.Size.observationChartBarWidth` / `observationChartBarGap` / `observationChartMaxBarHeight` | 54 / 6 / 78 pt | Six measured bars across the 354 pt plot; sparse windows are not filled |
 | `size.row.report.minHeight` | `DS.Size.reportRowMinHeight` | 60 pt | Report row minimum height |
 | `size.row.proof.minHeight` | `DS.Size.proofRowMinHeight` | 72 pt | Proof row minimum height |
 | `size.button.primary.minHeight` | `DS.Size.primaryButtonMinHeight` | 56 pt | `Button/Primary` Size=Large minimum height |
 | `size.button.primary.compact.minHeight` | `DS.Size.compactPrimaryButtonMinHeight` | 52 pt | `Button/Primary` Size=Small minimum height |
 | `size.button.primary.compact.width` | `DS.Size.compactPrimaryButtonWidth` | 140 pt | `Button/Primary` Size=Small width (Home's Scan) |
 | `size.step.badge` | `DS.Size.stepBadge` | 28 pt | `BeidNumberedStepList` index badge (from `BeidDesign`) |
-| `size.radar.field` | `DS.Size.radarField` | 210 pt | Sensing radar frame (`SensingView`) |
-| `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center diameter (`SensingView`); survives #631; #634 owns the final radar |
+| `size.radar.field` | `DS.Size.radarField` | 362 pt | Flat 2b 05 sensing graph frame; also read by the interim `SensingView` pulse until integration |
+| `size.radar.rings` | `DS.Size.radarRingInner` / `radarRingMiddle` / `radarRingOuter` | 133.22 / 233.12 / 333.04 pt | Three circle path diameters measured from the 05 graph SVG |
+| `size.radar.core` | `DS.Size.radarCore` | 38 pt | White centre disc in the 05 sensing graph |
+| `size.radar.coreSeparation` | `DS.Size.radarCoreSeparation` | 48 pt | Ink separation around the white centre disc |
+| `size.radar.centerDot` | `DS.Size.radarCenterDot` | 8 pt | Ink dot at the centre of the white disc |
+| `size.radar.detectedNode` | `DS.Size.radarDetectedNode` / `radarDetectedNodeStroke` | 8 / 1.5 pt | Detected-only node diameter and idle outline width |
+| `size.sensing.sealedSigil` | `DS.Size.sensingSealedSigil` | 300 pt | Frame 06 Sensing — Sealed artwork slot (Figma node `184:65`); its neutral ring remains until #653 supplies production history |
+| `size.proofDetail.sigil` | `DS.Size.proofDetailSigil` | 200 pt | Frame 09 Proof Detail artwork slot (Figma node `204:36`); the approved neutral `RecordSigilSlot` ring occupies this footprint |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
-| `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
+| `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | Legacy gradient-avatar diameter; no longer used by `ItemDetailView` after frame 09 |
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |
 | `type.section.title` | `DS.Font.sectionTitle` | `Library.title19` — DM Sans Bold 19 / `.title3` | State and section titles |
 | `type.ledger.mono` | `DS.Font.ledgerMono` | `Library.labelMono13Value` — DM Mono Medium 13 / `.footnote` | Addresses, hashes, proof IDs |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
-| `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/0.88 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
+| `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/1.0 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
 
 (Full set: 17 color tokens, 8 space, 7 radius, 18 size, 4 layout, 8 font
 roles over 17 `DS.Font.Library` styles (§6; #629 removed `ceremonyTitle`,

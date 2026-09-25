@@ -30,6 +30,23 @@ enum EventGrouping {
     return order.map { groups[$0]! }
   }
 
+  /// Home's one-row-per-event list is ordered by the recorded date, rather
+  /// than relying on file/insertion order. A Proof created when recording
+  /// begins is already in the store, so the active event's entire group must
+  /// leave PAST until that session ends. Older sessions of the same event
+  /// cannot appear beside its active card either.
+  static func homeGroups(from proofs: [Proof], activeEventCode: String?) -> [[Proof]] {
+    let dated = proofs.enumerated().sorted { left, right in
+      if left.element.date == right.element.date { return left.offset < right.offset }
+      return left.element.date > right.element.date
+    }.map(\.element)
+    let activeKey = activeEventCode.flatMap { normalizedKey(for: $0) }
+    return groups(from: dated).filter { group in
+      guard let activeKey else { return true }
+      return normalizedKey(for: group[0].eventCode) != activeKey
+    }
+  }
+
   /// The single group containing `proof`, scoped without a full grouping
   /// pass over `proofs` (§2). `nil`-`eventCode` proofs short-circuit to a
   /// singleton `[proof]`, matching `groups(from:)`'s singleton rule above.

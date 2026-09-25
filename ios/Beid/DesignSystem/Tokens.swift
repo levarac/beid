@@ -119,14 +119,29 @@ enum DS {
     static let minHitTarget: CGFloat = 44
     /// `BeidStatusPill` indicator dot diameter.
     static let statusDot: CGFloat = 8
-    /// Sensing radar field — width/height of the concentric-ring frame in `SensingView`.
-    static let radarField: CGFloat = 210
-    /// Sensing radar center diameter in `SensingView`.
-    static let radarCore: CGFloat = 86
+    /// Flat 2b 05 Sensing radar field, 362 pt in the Figma frame.
+    static let radarField: CGFloat = 362
+    /// Flat 2b 05 graph ring path diameters, measured from the 362 pt SVG.
+    static let radarRingInner: CGFloat = 133.22
+    static let radarRingMiddle: CGFloat = 233.12
+    static let radarRingOuter: CGFloat = 333.04
+    /// White centre disc in the Flat 2b 05 radar.
+    static let radarCore: CGFloat = 38
+    /// Ink separation disc around the white centre, covering incoming edges.
+    static let radarCoreSeparation: CGFloat = 48
+    /// Ink dot in the centre of the white disc.
+    static let radarCenterDot: CGFloat = 8
+    /// Detected-only node and its idle outline in the Flat 2b 05 graph.
+    static let radarDetectedNode: CGFloat = 8
+    static let radarDetectedNodeStroke: CGFloat = 1.5
+    /// Flat 2b 06 Sensing — Sealed Sigil frame (node 184:65).
+    static let sensingSealedSigil: CGFloat = 300
+    /// Flat 2b 09 Proof Detail artwork slot (node 204:36).
+    static let proofDetailSigil: CGFloat = 200
     /// `ProofCardView`'s circular per-proof gradient avatar diameter.
     static let proofCardArtwork: CGFloat = 76
-    /// `ItemDetailView`'s circular per-proof gradient avatar diameter —
-    /// the same artwork generator as `proofCardArtwork`, at detail scale.
+    /// Legacy detail gradient-avatar diameter, superseded by
+    /// `proofDetailSigil` in frame 09.
     static let itemDetailArtwork: CGFloat = 190
     /// The 1 pt rule: hairline dividers and the empty block's dashed frame.
     static let hairline: CGFloat = 1
@@ -139,6 +154,13 @@ enum DS {
     static let keyValueRowMinHeight: CGFloat = 44
     /// Session row minimum height.
     static let sessionRowMinHeight: CGFloat = 48
+    /// Flat 2b 11 observed-window chart: six 54 pt columns with 6 pt gaps
+    /// fill the 354 pt page width in the 402 pt Figma frame.
+    static let observationChartWidth: CGFloat = 354
+    static let observationChartHeight: CGFloat = 90
+    static let observationChartMaxBarHeight: CGFloat = 78
+    static let observationChartBarWidth: CGFloat = 54
+    static let observationChartBarGap: CGFloat = 6
     /// Report row minimum height.
     static let reportRowMinHeight: CGFloat = 60
     /// Proof row minimum height.
@@ -146,6 +168,10 @@ enum DS {
     /// `Button/Primary` Size=Large minimum height. Its width is the full
     /// content width at `Space.pageMargin`, so it has no width token.
     static let primaryButtonMinHeight: CGFloat = 56
+    /// Flat 2b 14d camera framing guide; the camera remains a live system view.
+    static let venueScannerGuide: CGFloat = 260
+    /// Flat 2b 14d scanner guide stroke.
+    static let venueScannerGuideStroke: CGFloat = 2
     /// `Button/Primary` Size=Small minimum height (Home's Scan).
     static let compactPrimaryButtonMinHeight: CGFloat = 52
     /// `Button/Primary` Size=Small width (Home's Scan).
@@ -167,6 +193,37 @@ enum DS {
     static let regularGridCardMinimumWidth: CGFloat = 260
     /// Minimum proof-card width for compact-width collection grids.
     static let compactGridCardMinimumWidth: CGFloat = 150
+  }
+
+  /// Measured against the 402 × 874 Flat 2b onboarding exports (nodes
+  /// 183:398, 183:572, 183:595). The page scrolls when Dynamic Type needs
+  /// more room; these are default-size anchors, not fixed text heights.
+  enum Onboarding {
+    static let eyebrowY: CGFloat = 72
+    static let titleGap: CGFloat = 16
+    static let titleToBodyGap: CGFloat = 22
+    static let welcomeHeroGap: CGFloat = 54
+    static let welcomeHeroSize: CGFloat = 250
+    static let welcomeTitleGap: CGFloat = 46
+    static let welcomeBodyGap: CGFloat = 20
+    static let welcomeBodyWidth: CGFloat = 308
+    static let permissionStepsGap: CGFloat = 39
+    static let recoveryStepsGap: CGFloat = 60
+    static let benefitRowHeight: CGFloat = 104
+    static let recoveryRowHeight: CGFloat = 64
+    static let benefitRowTop: CGFloat = 16
+    static let recoveryRowTop: CGFloat = 18
+    static let rowNumberWidth: CGFloat = 48
+    /// Figma 02's numbered-row copy occupies about 233–238 pt, even though
+    /// the space to the page edge is wider.
+    static let benefitDetailWidth: CGFloat = 238
+    static let noteToButtonGap: CGFloat = 16
+    static let recoveryActionGap: CGFloat = 8
+    /// Places Figma 03's two actions below the common onboarding footer.
+    static let recoveryFooterDrop: CGFloat = 18
+    static let footerBottom: CGFloat = 6
+    static let statusDot: CGFloat = 7
+    static let statusLabelGap: CGFloat = 7
   }
 
   // MARK: - Font
@@ -247,10 +304,9 @@ enum DS {
       /// and — deliberately — whenever the requested line height is below
       /// the face's own: `lineSpacing` is additive and
       /// `NSParagraphStyle.lineSpacing` "is always nonnegative", so there is
-      /// no supported way to tighten a line box on this deployment target.
-      /// Display/60 · 52 · 46 ask for 100% against Bricolage's 1.2 em face
-      /// and therefore land on the face's line height, not the Library's —
-      /// see §6's line-height gap.
+      /// no supported way to tighten a line box on iOS 17–25. On iOS 26+,
+      /// the full-style modifier uses `lineHeight(.exact(points:))` for
+      /// Display's 100% line height instead — see §6 and #661.
       func lineSpacing(atPointSize pointSize: CGFloat) -> CGFloat {
         guard
           let lineHeight,
@@ -288,24 +344,23 @@ enum DS {
     /// survive AX3 would not take. The curve and the style's own size
     /// progression are different things; do not derive one from the other.
     enum Library {
-      private static let displayFace = "BricolageGrotesque-ExtraBold"
       private static let titleFace = "DMSans-Bold"
       private static let bodyFace = "DMSans-Regular"
       private static let monoFace = "DMMono-Medium"
 
       /// `Display/60` — Home title "Events".
       static let display60 = Style(
-        postScriptName: displayFace, size: 60, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display60ExtraBold", size: 60, textStyle: .largeTitle,
         tracking: -0.02, lineHeight: 1.0
       )
       /// `Display/52` — onboarding titles.
       static let display52 = Style(
-        postScriptName: displayFace, size: 52, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display52ExtraBold", size: 52, textStyle: .largeTitle,
         tracking: -0.02, lineHeight: 1.0
       )
       /// `Display/46` — screen titles (event name, Session 1, Report #2).
       static let display46 = Style(
-        postScriptName: displayFace, size: 46, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display46ExtraBold", size: 46, textStyle: .largeTitle,
         tracking: -0.015, lineHeight: 1.0
       )
       /// `Display/Number 40` — sensing figures. The only style with
@@ -314,13 +369,13 @@ enum DS {
       /// jitter sideways as it counts. DM Mono needs no such setting — it
       /// is already monospaced.
       static let displayNumber40 = Style(
-        postScriptName: displayFace, size: 40, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display40ExtraBold", size: 40, textStyle: .largeTitle,
         tracking: -0.01, usesMonospacedDigits: true
       )
       /// `Display/Address 34` — the Account sheet address (typeface still
       /// open: spec §10-5, #642).
       static let displayAddress34 = Style(
-        postScriptName: displayFace, size: 34, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display34ExtraBold", size: 34, textStyle: .largeTitle,
         tracking: -0.01
       )
       /// `Title/19` — section and state titles.
@@ -420,7 +475,7 @@ enum DS {
     /// Content entering the screen (e.g. event card slide-in on EventFoundView).
     static let entrance = Animation.spring(response: 0.5, dampingFraction: 0.85)
     /// Transition between top-level screens (RootView, ScanFlowView).
-    static let screenTransition = Animation.spring(response: 0.36, dampingFraction: 0.88)
+    static let screenTransition = Animation.spring(response: 0.36, dampingFraction: 1.0)
     /// The proof seal/resolve ceremony (RecordingView's one-time entrance
     /// ceremony fading into its steady state).
     static let proofResolve = Animation.spring(response: 0.6, dampingFraction: 0.8)
@@ -470,9 +525,8 @@ extension View {
   /// settings above. Prefer this modifier when a screen is being built to
   /// the Library.
   ///
-  /// Line height is applied as `lineSpacing`, which is additive, so a
-  /// Library line height *below* the face's own is not applied — see
-  /// `DS.Font.Style.lineSpacing(atPointSize:)` and §6's line-height gap.
+  /// Line height uses additive `lineSpacing` on iOS 17–25. On iOS 26+,
+  /// Display's 100% line height uses the exact-height API — see #661.
   /// Tracking and line height scale with Dynamic Type: both are computed
   /// at the scaled point size, not the base size.
   func beidTextStyle(_ style: DS.Font.Style) -> some View {
@@ -496,10 +550,18 @@ private struct BeidTextStyleModifier: ViewModifier {
   }
 
   func body(content: Content) -> some View {
-    content
+    let styled = content
       .font(style.font)
       .tracking(style.tracking(atPointSize: scaledSize))
       .lineSpacing(style.lineSpacing(atPointSize: scaledSize))
       .textCase(style.isUppercase ? .uppercase : nil)
+
+    if #available(iOS 26.0, *), style.lineHeight == 1.0 {
+      // #661: align Display to the spec where iOS allows exact line height,
+      // unlike the iOS 26 glass branches removed by #630.
+      styled.lineHeight(.exact(points: scaledSize))
+    } else {
+      styled
+    }
   }
 }

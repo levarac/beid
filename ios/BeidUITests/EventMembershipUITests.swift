@@ -3,13 +3,9 @@
 
 import XCTest
 
-/// Regression test for the Account sheet's Join/Leave Event re-render defect
-/// (gh#101): `AccountSheetView` observes only `AppCoordinator`, and
-/// `AppCoordinator` does not re-publish `SensingCoordinator`'s `@Published
-/// joinedEventCode`, so before the fix the Join/Leave controls went stale
-/// after `leaveEvent()` cleared the code — Leave Event stayed enabled and
-/// Join Event stayed disabled until the sheet was fully dismissed and
-/// reopened.
+/// Regression coverage for Account's Join Event re-render (gh#101).
+/// AppCoordinator does not republish the joined code, so the row must observe
+/// SensingCoordinator and disable while the same Account sheet stays open.
 final class EventMembershipUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -17,16 +13,16 @@ final class EventMembershipUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testJoinEventRowReenablesAfterLeavingEvent() {
+  func testJoinEventRowDisablesImmediatelyAfterJoining() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
 
-    app.buttons["Account"].tap()
+    app.buttons["home.account"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
 
     // Lower rows can exist in the accessibility tree while sitting behind
@@ -50,26 +46,20 @@ final class EventMembershipUITests: XCTestCase {
     // collision with the Account-sheet row while both could be in the tree.
     codeField.typeText("ETHTOKYO2026\n")
 
-    // Back on the Account sheet: the nested sheet dismissed on success.
-    scrollUntilTappable(app.buttons["Leave Event"], in: list)
-    let leaveEventRow = app.buttons["Leave Event"]
-    XCTAssertTrue(isUnobstructed(leaveEventRow, in: list))
-    XCTAssertTrue(leaveEventRow.isEnabled, "Leave Event should be enabled once an event is joined")
+    // Wait for the asynchronous join to dismiss its nested sheet, leaving
+    // this same Account sheet open. Only EventMembershipSections observes
+    // the joined code directly, so disabling here protects its re-render.
+    let codeSheetGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: codeField)
+    wait(for: [codeSheetGone], timeout: 15)
+    let joinDisabled = expectation(for: NSPredicate(format: "isEnabled == false"), evaluatedWith: joinEventRow)
+    wait(for: [joinDisabled], timeout: 5)
+    XCTAssertFalse(app.buttons["Leave Event"].exists)
     XCTAssertFalse(
-      app.buttons["Join Event"].isEnabled,
-      "Join Event should be disabled while an event is already joined"
+      joinEventRow.isEnabled,
+      "Join Event should disable immediately when the current session joins"
     )
-
-    leaveEventRow.tap()
-
-    // The regression assertion: pre-fix, AccountSheetView never invalidates
-    // when SensingCoordinator.joinedEventCode changes, so this stays
-    // disabled. Post-fix it re-enables immediately.
-    scrollUntilTappable(app.buttons["Join Event"], in: list)
-    XCTAssertTrue(
-      app.buttons["Join Event"].isEnabled,
-      "Join Event should re-enable immediately after leaving the event"
-    )
+    app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 
   /// An offscreen List row may already `exist`, so require its full frame to

@@ -4,9 +4,57 @@
 import SwiftUI
 import UIKit
 
+private enum AccountSheetDetent {
+  static let compact: PresentationDetent = .fraction(0.575)
+}
+
+/// Destinations request the large Account sheet while they are in its stack.
+/// Separate keys let future Account routes (About sensing / What we send)
+/// register without coupling their navigation state to Organizer tools.
+@MainActor
+final class AccountLargeDetentRequests: ObservableObject {
+  enum Destination: Hashable {
+    case organizerTools
+    case venueBroadcast
+    case aboutSensing
+    case whatWeSend
+  }
+
+  @Published private(set) var active: Set<Destination> = []
+
+  func set(_ destination: Destination, active isActive: Bool) {
+    var updated = active
+    if isActive {
+      updated.insert(destination)
+    } else {
+      updated.remove(destination)
+    }
+    if updated != active { active = updated }
+  }
+}
+
+/// Add one line to an Account destination, including a nested destination,
+/// to hold the sheet at its large detent for that view's visible lifetime.
+private struct AccountLargeDetentModifier: ViewModifier {
+  @EnvironmentObject private var requests: AccountLargeDetentRequests
+  let destination: AccountLargeDetentRequests.Destination
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear { requests.set(destination, active: true) }
+      .onDisappear { requests.set(destination, active: false) }
+  }
+}
+
+extension View {
+  func accountLargeDetent(_ destination: AccountLargeDetentRequests.Destination) -> some View {
+    modifier(AccountLargeDetentModifier(destination: destination))
+  }
+}
+
 /// Flat 2b screen 10: Account sheet and its Bluetooth, copy and disconnect
 /// states. DECISIONS 2026-09-26 keeps optional wallet/Account Join and leaves
-/// Venue device placement to #647; Account Leave stays until #655 lands.
+/// Venue device placement to #647; DECISIONS 2026-09-23 removes Account Leave.
 struct AccountSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.dismiss) private var dismiss
@@ -15,6 +63,8 @@ struct AccountSheetView: View {
   @State private var showAboutSensing = false
   @State private var showDisconnectConfirmation = false
   @State private var copied = false
+  @StateObject private var largeDetentRequests = AccountLargeDetentRequests()
+  @State private var selectedDetent: PresentationDetent = AccountSheetDetent.compact
 
   var body: some View {
     NavigationStack {
@@ -37,6 +87,8 @@ struct AccountSheetView: View {
           }
           AccountSheetRow {
             Button {
+              largeDetentRequests.set(.organizerTools, active: true)
+              selectedDetent = .large
               showOrganizerTools = true
             } label: {
               HStack {
@@ -109,7 +161,7 @@ struct AccountSheetView: View {
             .accessibilityLabel("About sensing")
           }
           // Account Join stays with the owner decision that wallet is optional.
-          // Leave stays until #655 supplies stop-and-finalize elsewhere.
+          // Sensing ends through Home Stop or the scan cover's CLOSE.
           EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
         }
       }
@@ -157,8 +209,11 @@ struct AccountSheetView: View {
         }
       }
       .navigationDestination(isPresented: $showOrganizerTools) {
-        AccountOrganizerToolsView()
+        OrganizerToolsView()
           .toolbar(.visible, for: .navigationBar)
+      }
+      .onChange(of: showOrganizerTools) { _, isShown in
+        largeDetentRequests.set(.organizerTools, active: isShown)
       }
       .navigationDestination(isPresented: $showPastEvents) {
         PastEventsView(
@@ -175,6 +230,14 @@ struct AccountSheetView: View {
       .navigationDestination(isPresented: $showAboutSensing) {
         AboutSensingView()
       }
+    }
+    .environmentObject(largeDetentRequests)
+    .presentationDetents(
+      largeDetentRequests.active.isEmpty ? [AccountSheetDetent.compact] : [.large],
+      selection: $selectedDetent
+    )
+    .onChange(of: largeDetentRequests.active) { _, active in
+      selectedDetent = active.isEmpty ? AccountSheetDetent.compact : .large
     }
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()
@@ -536,46 +599,6 @@ private struct AccountBluetoothRow: View {
   }
 }
 
-/// #647 owns the full Organizer tools surface. Until it lands, this narrow
-/// route preserves the sole production entrance to Venue broadcast (#597)
-/// without restoring the withdrawn Venue device path.
-private struct AccountOrganizerToolsView: View {
-  @State private var showVenueBroadcast = false
-
-  var body: some View {
-    List {
-      Button {
-        showVenueBroadcast = true
-      } label: {
-        HStack {
-          Text("Venue broadcast")
-          Spacer()
-          Text(verbatim: "→")
-            .accessibilityHidden(true)
-        }
-        .frame(minHeight: DS.Size.minHitTarget)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Venue broadcast")
-    }
-    .navigationDestination(isPresented: $showVenueBroadcast) {
-        VenueSignedServingView(viewModel: VenueSignedServingViewModel(
-          verifier: ProductionVenueBundleVerifier(registryClient: RegistryDependencies.createClient()),
-          broadcasting: BarnardVenueSignedContainerBroadcasting(),
-          acquisition: VenueArtifactAcquisition(),
-          store: VenuePublicArtifactStore(),
-          clock: { VenueDeviceClock.read() }
-        ))
-    }
-    .navigationTitle("Organizer tools")
-    .scrollContentBackground(.hidden)
-    .background(DS.Color.surfaceCanvas)
-    .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
-    .toolbarColorScheme(.light, for: .navigationBar)
-  }
-}
-
 /// Sheet wrapper around `WalletConnectPairingView` for the Account sheet's
 /// "Connect Wallet" action. Unlike `WalletConnectView` (onboarding), success
 /// here just sets `walletAddress` and dismisses — it does not advance
@@ -635,7 +658,7 @@ private struct EventCodeEntrySheetView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel", role: .cancel) {
+            BeidTextControl("Cancel", accessibilityLabel: "Cancel", role: .cancel) {
               // Direct property write, not through AccountSheetView's
               // custom cancelling `Binding` — cancel synchronously here too
               // (beid#258 P1-1 round-3 fix).
@@ -650,51 +673,29 @@ private struct EventCodeEntrySheetView: View {
   }
 }
 
-/// "Join Event" and interim "Leave Event" rows for `AccountSheetView`. `AppCoordinator`
-/// holds `sensingCoordinator` as a plain `let` and does not re-publish its
-/// `@Published` state, so `AccountSheetView` (which observes only
-/// `AppCoordinator`) never invalidates when `joinedEventCode` changes on
-/// `SensingCoordinator`. Observing `SensingCoordinator` directly here — the
-/// same pattern `VenueDeviceOrganizerView` already uses — fixes that without
-/// making `AppCoordinator` republish all of `SensingCoordinator`'s frequent
-/// sensing-state updates.
+/// "Join Event" row for `AccountSheetView`. `AppCoordinator` holds its
+/// sensing coordinator as a plain `let` and does not re-publish changes to
+/// `joinedEventCode`. Observe it here so the row disables as soon as a manual
+/// join succeeds, without republishing frequent sensing updates from AppCoordinator.
 private struct EventMembershipSections: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensingCoordinator: SensingCoordinator
 
   var body: some View {
-    Group {
-      AccountSheetRow {
-        Button {
-          BeidDesign.haptic()
-          coordinator.openEventCodeEntryFromAccountSheet()
-        } label: {
-          Text(joinEventLabel)
-            .beidTextStyle(DS.Font.Library.title17)
-            .foregroundStyle(DS.Color.actionInverse)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(sensingCoordinator.joinedEventCode != nil)
+    AccountSheetRow {
+      Button {
+        BeidDesign.haptic()
+        coordinator.openEventCodeEntryFromAccountSheet()
+      } label: {
+        Text(joinEventLabel)
+          .beidTextStyle(DS.Font.Library.title17)
+          .foregroundStyle(DS.Color.actionInverse)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+          .contentShape(Rectangle())
       }
-
-      AccountSheetRow {
-        Button(role: .destructive) {
-          BeidDesign.haptic(.medium)
-          coordinator.leaveEvent()
-        } label: {
-          Text("Leave Event")
-            .beidTextStyle(DS.Font.Library.title17)
-            .foregroundStyle(DS.Color.statusOff)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(sensingCoordinator.joinedEventCode == nil)
-      }
+      .buttonStyle(.plain)
+      .disabled(sensingCoordinator.joinedEventCode != nil)
     }
   }
 

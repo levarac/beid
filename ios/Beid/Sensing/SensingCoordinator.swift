@@ -198,6 +198,30 @@ enum OwnerKeyOperationFailure: Identifiable, Equatable {
   var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used for proofs. Proof-key operations are paused. Try again when your device is available.") }
 }
 
+#if DEBUG
+/// Screenshot-only screen selection. Requires both launch arguments; no
+/// Release build can select one, and none is written to persistent state.
+enum SensingScreenshotFixture: String {
+  case sensing = "05"
+  case detecting = "05a"
+  case detectingLong = "05a2"
+  case detectingFirstTime = "05a3"
+  case cantJoin = "05d"
+  case stopConfirm = "05e"
+  case sealed = "06"
+  case proofCollected = "07"
+
+  static var selected: SensingScreenshotFixture? {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+      let flagIndex = arguments.firstIndex(of: "-beid-sensing-shot"),
+      arguments.indices.contains(flagIndex + 1)
+    else { return nil }
+    return SensingScreenshotFixture(rawValue: arguments[flagIndex + 1])
+  }
+}
+#endif
+
 /// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
 /// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
 /// state machine. The facade — not `BarnardIdentity` directly — is what this
@@ -241,26 +265,9 @@ final class SensingCoordinator: ObservableObject {
   /// `RegistryVerifiedJoinContext`. This display/session field is never itself
   /// authority for joining.
   @Published private(set) var joinedCanonicalEventIdHex: String?
-  /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
-  /// played for the current session. Lives here rather than as view-local
-  /// `@State` because `.recording` can be interrupted by `.signalLost` and
-  /// resumed (`resumeSensing()`), which recreates `RecordingView` — a flag
-  /// on the view itself would incorrectly replay the ceremony after every
-  /// resume. Reset alongside the rest of per-session state in
-  /// `resetSessionState()`.
-  @Published private(set) var recordingCeremonyShown = false
-  /// Whether `RecordingView`'s one-time entrance ceremony has finished
-  /// dwelling (or never needed to run at all — see
-  /// `markEntranceCeremonyFinished()`'s own doc comment) for the current
-  /// session. `ScanFlowView` (beid#222) chains the wallet-binding sheet's
-  /// auto-presentation to this rather than directly to `bindingState`
-  /// becoming `.pendingConnect`, so the ceremony and the binding prompt are
-  /// sequenced one after the other per §5.5, instead of the sheet's
-  /// presentation animation starting on top of the ceremony's — which also
-  /// closed a presentation-transaction race where a same-tick Close tap
-  /// left both the scan flow and the sheet stuck on screen. Reset alongside
-  /// the rest of per-session state in `resetSessionState()`.
-  @Published private(set) var entranceCeremonyFinished = false
+  /// The recording surface has mounted. Binding sheet auto-presentation waits
+  /// for this signal so its animation does not race the recording transition.
+  @Published private(set) var recordingSurfaceReady = false
   /// Distinct devices observed so far this session — the value carried as
   /// `peersVerified` into `.recording` and the stored `Proof`, and so the
   /// number that ends up inside a signed artifact.
@@ -303,6 +310,104 @@ final class SensingCoordinator: ObservableObject {
   /// every new observation (#109's "no subscription API, caller recomputes"
   /// contract — see `AggregationRuntime.sessionAggregate`).
   @Published private(set) var sessionAggregate: BeidSharedKit.aggregation.SessionAggregate?
+  /// First Barnard detection timestamp for this session. Presentation only:
+  /// it never enters a record, signature, or submission. A direct test/demo
+  /// detection without a timestamp leaves this nil instead of inventing one.
+  @Published private(set) var firstSightingAt: Date?
+  /// Stable display IDs actually resolved during this live session. The radar
+  /// needs the IDs even before a usable RSSI arrives; neither this set nor
+  /// signal strength is persisted. All peers remain detected-only until a
+  /// reciprocal observation source exists (DECISIONS 2026-09-26).
+  @Published private(set) var detectedDisplayIDs: Set<String> = []
+  /// Read-only linkage to the Proof created at the recording threshold.
+  /// A phase alone cannot establish that a durable Proof actually exists.
+  var currentProofID: UUID? { activeProofId }
+
+  /// Uses the live wall clock for display. A guarded screenshot fixture may
+  /// substitute a fixed instant so elapsed copy cannot race capture.
+  func sensingPresentationNow(_ liveNow: Date) -> Date {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"), let sensingScreenshotNow {
+      return sensingScreenshotNow
+    }
+    #endif
+    return liveNow
+  }
+
+  #if DEBUG
+  private var sensingScreenshotNow: Date?
+  private(set) var sensingScreenshotFixture: SensingScreenshotFixture?
+  private(set) var sensingScreenshotEvent: EventSession?
+
+  /// Deliberate UI-test fixture for the Figma screenshot tour. It injects
+  /// synthetic observations into the in-memory display aggregate only; no
+  /// Barnard, ledger, signature, proof store, or network path runs. Each
+  /// sample signal is display-only. Production uses Barnard timestamps and
+  /// actual RSSI and never calls this method.
+  @discardableResult
+  func injectSensingScreenshotFixture() -> Bool {
+    guard let fixture = SensingScreenshotFixture.selected else { return false }
+    resetSessionState()
+    sensingScreenshotFixture = fixture
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    let start = calendar.date(from: DateComponents(
+      year: 2026, month: 9, day: 26, hour: 10, minute: 0
+    )) ?? Date(timeIntervalSince1970: 1_800_000_000)
+    let elapsedSeconds: TimeInterval
+    switch fixture {
+    case .sensing, .stopConfirm: elapsedSeconds = 25 * 60
+    case .detecting: elapsedSeconds = 10
+    case .detectingFirstTime: elapsedSeconds = 2 * 60
+    case .detectingLong: elapsedSeconds = 24
+    case .cantJoin: elapsedSeconds = 0
+    case .sealed, .proofCollected: elapsedSeconds = 30 * 60
+    }
+    firstSightingAt = fixture == .cantJoin || fixture == .proofCollected ? nil : start
+    sensingScreenshotNow = start.addingTimeInterval(elapsedSeconds)
+
+    if fixture != .cantJoin && fixture != .proofCollected {
+      let peerCounts = fixture == .sensing || fixture == .stopConfirm || fixture == .sealed
+        ? [1, 4, 6, 9, 8, 13]
+        : [5]
+      for (window, peerCount) in peerCounts.enumerated() {
+        for peer in 0..<peerCount {
+          let displayID = String(format: "%08x", peer + 1)
+          _ = recordDeviceIdentity(
+            enin: 6_000_000 + window,
+            rpid: "tour-rpid-\(window)-\(peer)",
+            detectedDisplayId: displayID
+          )
+          // Screen capture has no radio; these illustrative negative
+          // values only place fixture nodes across the field. They cannot
+          // enter a record and are never used by the production path.
+          nodeSignalStrengths[displayID] = .measured(dBm: Double(-45 - peer * 3))
+        }
+      }
+    }
+
+    let event = EventSession(
+      id: "ETH-TOKYO-26",
+      name: "ETH Tokyo 2026",
+      venue: "Tokyo Big Sight",
+      identityVerification: fixture == .cantJoin ? .verified : .notChecked
+    )
+    sensingScreenshotEvent = event
+    switch fixture {
+    case .sensing, .stopConfirm, .sealed:
+      recordingSurfaceReady = true
+      phase = .recording(event: event, peersVerified: devicesVerified)
+    case .proofCollected:
+      phase = .idle
+    case .detecting, .detectingLong, .detectingFirstTime:
+      phase = .eventFound(event)
+    case .cantJoin:
+      phase = .sensing
+    }
+    return true
+  }
+  #endif
   /// Distinct proximity identifiers observed this session that never arrived
   /// with a `detectedDisplayId`, and so could not be attributed to a device.
   ///
@@ -439,6 +544,83 @@ final class SensingCoordinator: ObservableObject {
   func sessionAggregateSnapshot(forProofId proofId: UUID) -> BeidSharedKit.aggregation.SessionAggregate? {
     sessionAggregateSnapshotStore.snapshot(proofId: proofId)
   }
+
+  /// Read-only presentation lookups. The stores remain the sole owners of
+  /// these durable artifacts; neither a Proof signature state nor a connected
+  /// wallet substitutes for a matching record.
+  func selfProofRecord(forProofId proofId: UUID) -> SelfProofRecord? {
+    selfProofStore.record(forProofId: proofId)
+  }
+
+  func bindingRecord(forProofId proofId: UUID) -> BindingRecord? {
+    bindingRecordStore.record(forProofId: proofId)
+  }
+
+  #if DEBUG
+  /// Uses the production shared reducer and snapshot store for screenshot
+  /// fixtures. The initializer below routes these two frames to an isolated
+  /// temporary snapshot file, never the participant's normal store.
+  func injectEventDetailSnapshotForUITesting(proofId: UUID, deviceCount: Int, windowIndex: Int64) {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+          arguments.contains("-beid-event-detail-frame-08") ||
+          arguments.contains("-beid-event-detail-frame-08c") ||
+          arguments.contains("-beid-observation-frame-11") else { return }
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    for index in 0..<deviceCount {
+      _ = BeidSharedKit.aggregation.addAggregationObservation(
+        input: input, windowIndex: windowIndex + Int64(index % 3),
+        peerKey: "fixture-peer-\(proofId)-\(index)",
+        displayId: "fixture-device-\(index)", mutual: false
+      )
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input, windowsPerBand: 4
+    )
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      assertionFailure("Unable to persist isolated Event Detail aggregate fixture: \(error)")
+    }
+  }
+
+  /// Six observed rows, with one unobserved ENIN gap, for frame 11. The
+  /// isolated screenshot snapshot store is the only output; this never
+  /// enters Barnard, ProofStore, signing, or report submission.
+  func injectObservationDetailSnapshotForUITesting(
+    proofId: UUID,
+    firstWindowIndex: Int64
+  ) {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+          arguments.contains("-beid-observation-frame-11") else { return }
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    let offsets: [Int64] = [0, 1, 2, 4, 5, 6]
+    let peersByWindow: [[Int]] = [
+      Array(0..<4), Array(4..<12), Array(12..<23),
+      Array(0..<19), Array(0..<16), Array(0..<13)
+    ]
+    for (position, peers) in peersByWindow.enumerated() {
+      for peer in peers {
+        _ = BeidSharedKit.aggregation.addAggregationObservation(
+          input: input,
+          windowIndex: firstWindowIndex + offsets[position],
+          peerKey: "fixture-rpid-\(proofId)-\(position)-\(peer)",
+          displayId: "fixture-device-\(peer)",
+          mutual: false
+        )
+      }
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input, windowsPerBand: 1
+    )
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      assertionFailure("Unable to persist isolated Observation Detail aggregate fixture: \(error)")
+    }
+  }
+  #endif
 
   /// Field diagnostics for the counting split (beid#154). `os.Logger` rather
   /// than `print` on purpose: these lines have to be readable from a real
@@ -621,7 +803,7 @@ final class SensingCoordinator: ObservableObject {
   /// why the whole raw detection is queued rather than only its
   /// store-touching calls.
   private var queuedDetectionsWhileLoading:
-    [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?)] = []
+    [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?, observedAt: Date?)] = []
   /// Decision 1's background load/reconcile task (`beginLedgerLoad(...)`).
   /// Held so tests can deterministically await it
   /// (`waitForLedgerLoadToFinish()`), mirroring `demoTask`/
@@ -966,7 +1148,8 @@ final class SensingCoordinator: ObservableObject {
 
   convenience init(
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
-      RegistryDependencies.createClient()
+      RegistryDependencies.createClient(),
+    reportSubmissionStore: ReportSubmissionStore? = nil
   ) {
     let sensingCryptography = BarnardSensingCryptography()
     let allowInsecureLoopbackForTests: Bool
@@ -977,15 +1160,29 @@ final class SensingCoordinator: ObservableObject {
     #else
     allowInsecureLoopbackForTests = false
     #endif
+    let isEventDetailFixture: Bool
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    isEventDetailFixture = arguments.contains("-beid-ui-test") &&
+      (arguments.contains("-beid-event-detail-frame-08") ||
+        arguments.contains("-beid-event-detail-frame-08c") ||
+        arguments.contains("-beid-observation-frame-11"))
+    #else
+    isEventDetailFixture = false
+    #endif
+    let eventDetailSnapshotFileURL = isEventDetailFixture
+      ? FileManager.default.temporaryDirectory.appendingPathComponent(
+        "beid-event-detail-snapshots-\(UUID().uuidString).json"
+      ) : nil
     self.init(
       windowReportFileURL: nil,
       selfProofFileURL: nil,
       selfProofCheckpointFileURL: nil,
       bindingRecordFileURL: nil,
-      sessionAggregateSnapshotFileURL: nil,
+      sessionAggregateSnapshotFileURL: eventDetailSnapshotFileURL,
       unsentWindowLedgerFileURL: nil,
       sensingCryptography: sensingCryptography,
-      reportSubmissionRuntime: ReportSubmissionRuntime.makeIfEnabled(
+      reportSubmissionRuntime: isEventDetailFixture ? nil : ReportSubmissionRuntime.makeIfEnabled(
         eventSigningCryptography: sensingCryptography,
         definitionProvider: registryClient.map {
           RegistryEventDefinitionContextProvider(
@@ -993,6 +1190,7 @@ final class SensingCoordinator: ObservableObject {
             allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
           )
         },
+        store: reportSubmissionStore,
         allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
       ),
       eventIdentityVerificationSource: registryClient.map {
@@ -1425,7 +1623,8 @@ final class SensingCoordinator: ObservableObject {
         enin: detection.enin,
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
-        reporterRpid: detection.reporterRpid
+        reporterRpid: detection.reporterRpid,
+        observedAt: detection.timestamp
       )
       // A SIBLING call, deliberately — not an extra argument to
       // `handleDetection` above (beid#652). A detection carries an `rssi`
@@ -1516,7 +1715,8 @@ final class SensingCoordinator: ObservableObject {
     enin: Int,
     rpid: String,
     detectedDisplayId: String?,
-    reporterRpid: String? = nil
+    reporterRpid: String? = nil,
+    observedAt: Date? = nil
   ) {
     // beid#134 Decision 1: while the background load is still recovering
     // stores, queue the whole raw detection instead of processing it —
@@ -1531,7 +1731,8 @@ final class SensingCoordinator: ObservableObject {
           enin: enin,
           rpid: rpid,
           detectedDisplayId: detectedDisplayId,
-          reporterRpid: reporterRpid
+          reporterRpid: reporterRpid,
+          observedAt: observedAt
         )
       )
       return
@@ -1564,6 +1765,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .eventFound(let session):
       observe(
         enin: enin,
@@ -1572,6 +1774,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .recording(let session, _):
       observe(
         enin: enin,
@@ -1580,6 +1783,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .idle, .signalLost:
       // `.signalLost` is frozen — real signal-loss *detection* doesn't
       // exist yet (only the demo-only manual trigger does), so this branch
@@ -1591,6 +1795,11 @@ final class SensingCoordinator: ObservableObject {
       // two phases as "ignored") is not duplicated here.
       break
     }
+  }
+
+  private func rememberFirstSighting(at timestamp: Date?) {
+    guard firstSightingAt == nil, let timestamp else { return }
+    firstSightingAt = timestamp
   }
 
   /// Records the detection against the running device count and window, then
@@ -1914,6 +2123,10 @@ final class SensingCoordinator: ObservableObject {
     // Android's `ScanDeviceAccounting.record` applies, not a native
     // `.lowercased()` check owned here.
     let displayId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(detectedDisplayId: detectedDisplayId)
+
+    if let displayId, !detectedDisplayIDs.contains(displayId) {
+      detectedDisplayIDs.insert(displayId)
+    }
 
     if displayId == nil {
       if rpidsAwaitingDisplayId.insert(rpid).inserted {
@@ -2613,23 +2826,9 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Marks the one-time entrance ceremony consumed so it never replays —
-  /// called once by `RecordingView` the first time it appears for this
-  /// session (including across a `resumeSensing()` cycle, since this flag
-  /// outlives the view instance).
-  func markRecordingCeremonyShown() {
-    recordingCeremonyShown = true
-  }
-
-  /// Marks the entrance ceremony's on-screen dwell as over — called by
-  /// `RecordingView` either once its 2-second "Proof Collected" dwell
-  /// timer completes, or immediately if there was no ceremony to show at
-  /// all this time (`recordingCeremonyShown` already `true`, e.g. after a
-  /// `resumeSensing()` cycle). Both paths converge here because
-  /// `ScanFlowView` only cares whether the ceremony is done occupying the
-  /// screen, not which of the two reasons made that true right now.
-  func markEntranceCeremonyFinished() {
-    entranceCeremonyFinished = true
+  /// Called by RecordingView after its first render in this session.
+  func markRecordingSurfaceReady() {
+    recordingSurfaceReady = true
   }
 
   @discardableResult
@@ -2661,6 +2860,13 @@ final class SensingCoordinator: ObservableObject {
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
     sessionAggregate = nil
+    firstSightingAt = nil
+    detectedDisplayIDs = []
+    #if DEBUG
+    sensingScreenshotNow = nil
+    sensingScreenshotFixture = nil
+    sensingScreenshotEvent = nil
+    #endif
     demoDeviceSequence = 0
     rpidsAwaitingDisplayId = []
     devicesVerified = 0
@@ -2702,8 +2908,7 @@ final class SensingCoordinator: ObservableObject {
     activeProofId = nil
     pendingBindingMessage = nil
     bindingState = .none
-    recordingCeremonyShown = false
-    entranceCeremonyFinished = false
+    recordingSurfaceReady = false
   }
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
@@ -2757,6 +2962,34 @@ final class SensingCoordinator: ObservableObject {
     guard ProcessInfo.processInfo.arguments.contains("-beid-continuous-sensing-fixture") else {
       return
     }
+    isScanning = true
+    isAdvertising = true
+  }
+
+  /// Makes the Home frame fixture exercise the same phase and transport
+  /// properties that a real recording publishes. It never starts Barnard or
+  /// creates a Proof; AppCoordinator seeds the latter separately to verify
+  /// that the active group's stored Proof does not also appear under PAST.
+  func injectHomeRecordingForUITesting() {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04")
+    else { return }
+    let event = EventSession(id: "ACTIVE-EVENT", name: "ETH Tokyo 2026", venue: nil)
+    let fixtureAggregation = AggregationRuntime()
+    for window in 1...6 {
+      for peer in 1...7 {
+        fixtureAggregation.recordObservation(
+          windowIndex: window,
+          peerKey: "fixture-rpid-\(window)-\(peer)",
+          displayId: "fixture-device-\(peer)"
+        )
+      }
+    }
+    let aggregate = fixtureAggregation.sessionAggregate
+    sessionAggregate = aggregate
+    devicesVerified = Int(aggregate.deviceCount)
+    phase = .recording(event: event, peersVerified: devicesVerified)
     isScanning = true
     isAdvertising = true
   }
@@ -4712,7 +4945,8 @@ final class SensingCoordinator: ObservableObject {
         enin: detection.enin,
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
-        reporterRpid: detection.reporterRpid
+        reporterRpid: detection.reporterRpid,
+        observedAt: detection.observedAt
       )
     }
   }

@@ -2,30 +2,29 @@
 // Use of this source code is governed by a BSD-style license.
 
 import SwiftUI
+import UIKit
 
-/// Wallet-optional fallback reached from `WalletConnectView`'s secondary
-/// action: joins an event by manually entered code (calling the Barnard
-/// SDK's `BarnardEngine.joinEvent` via `SensingCoordinator`) instead
-/// of connecting a wallet, then continues onboarding exactly where
-/// `completeWalletConnect()` does.
+/// Manual entry shared by wallet-optional onboarding, Account, and scan rescue.
 struct EventCodeEntryView: View {
-  /// Where this view is being presented from, and therefore which
-  /// coordinator call `submit()` makes and whether the wallet-connect
-  /// secondary action applies. `.onboarding` reproduces the view's original
-  /// (and only, pre-#101-fix) behavior exactly.
+  /// Screen 13/13b's measured offsets in the 402 × 874 Figma frames.
+  private enum Layout {
+    static let rootTitleTop: CGFloat = 40
+    static let pushedTitleTop: CGFloat = 6
+    static let subtitleTop: CGFloat = 22
+    static let fieldTop: CGFloat = 34
+    static let fieldLabelOverlap: CGFloat = -8
+    static let noteTop: CGFloat = 12
+    static let detailTop: CGFloat = 9
+    static let errorDotGap: CGFloat = 7
+    static let footerBottom: CGFloat = 6
+  }
+
   enum Mode: Equatable {
-    /// Reached via `WalletConnectView`'s secondary action during onboarding.
-    /// `submit()` calls `coordinator.joinEvent(code:)`, which advances
-    /// `screen` to `.bluetoothPermission` on success. The "Connect wallet
-    /// instead" secondary button is shown.
     case onboarding
-    /// Reached via the Account sheet's "Join Event" action, for a user
-    /// already past onboarding. `submit()` calls
-    /// `coordinator.joinEventFromAccountSheet(code:)`, which dismisses the
-    /// sheet on success without touching `screen`. The secondary button is
-    /// not shown — the presenting sheet's own Cancel toolbar button is the
-    /// escape hatch instead.
     case accountSheet
+    /// Reached from the 04b Home empty state. Shares the existing post-
+    /// onboarding join behavior, but dismisses Home's own sheet on success.
+    case home
     /// Pushed inside `ScanFlowView` as the rescue route when nearby discovery
     /// finds no joinable card. Success keeps the full-screen flow presented,
     /// starts sensing through the existing operator-lookup gate, and pops this
@@ -37,88 +36,186 @@ struct EventCodeEntryView: View {
   @Environment(\.dismiss) private var dismiss
   @State private var code: String
   @State private var errorMessage: LocalizedStringKey?
+  @State private var errorKind: EventCodeJoinError?
   @FocusState private var codeFieldFocused: Bool
+  @ScaledMetric(relativeTo: .largeTitle) private var fieldMinHeight: CGFloat = 52
   private let mode: Mode
 
-  /// `code`/`errorMessage` defaults reproduce the view's normal empty
-  /// starting state; the parameters exist so previews can seed the error
-  /// state without faking a `submit()` tap. `mode` defaults to `.onboarding`
-  /// so the existing onboarding call site needs no change.
   init(code: String = "", errorMessage: LocalizedStringKey? = nil, mode: Mode = .onboarding) {
+    #if DEBUG
+    // Both launch arguments are required; normal launches never see samples.
+    let fixture = AppCoordinator.eventCodeScreenshotFixture
+    _code = State(initialValue: fixture?.code ?? code)
+    _errorMessage = State(initialValue: fixture?.hasError == true
+      ? "beid couldn't join that event. Check the code and try again."
+      : errorMessage)
+    _errorKind = State(initialValue: fixture?.hasError == true || errorMessage != nil
+      ? .joinFailed : nil)
+    #else
     _code = State(initialValue: code)
     _errorMessage = State(initialValue: errorMessage)
+    _errorKind = State(initialValue: errorMessage == nil ? nil : .joinFailed)
+    #endif
     self.mode = mode
   }
 
-  var body: some View {
-    BeidAdaptiveContent {
-      VStack(spacing: DS.Space.l) {
-        Spacer()
-
-        BeidHeroHeader(
-          title: "Enter Event Code",
-          subtitle: "Ask the event organizer for the code. This joins the event directly, without connecting a wallet."
-        )
-
-        BeidPanel {
-          VStack(alignment: .leading, spacing: DS.Space.s) {
-            TextField("Event code", text: $code, prompt: Text("e.g. ETHTOKYO2026"))
-              .font(DS.Font.body)
-              .foregroundStyle(DS.Color.textPrimary)
-              .textInputAutocapitalization(.characters)
-              .autocorrectionDisabled()
-              .submitLabel(.join)
-              .focused($codeFieldFocused)
-              .tint(DS.Color.actionPrimary)
-              .accessibilityIdentifier("Event code")
-              .padding(DS.Space.m)
-              .background(
-                RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous)
-                  .fill(DS.Color.surfaceCanvas)
-              )
-              .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.control, style: .continuous)
-                  .strokeBorder(DS.Color.strokeHairline, lineWidth: 1)
-              )
-              .onSubmit(submit)
-              .onChange(of: code) { _, _ in errorMessage = nil }
-
-            if let errorMessage {
-              Text(errorMessage)
-                .font(DS.Font.supporting)
-                .foregroundStyle(DS.Color.textPrimary)
-            }
-          }
-        }
-
-        Spacer()
-
-        VStack(spacing: DS.Space.s) {
-          BeidPrimaryButton("Join Event", action: submit)
-            .tint(DS.Color.actionPrimary)
-
-          if mode == .onboarding {
-            BeidSecondaryButton(title: "Connect wallet instead") {
-              coordinator.returnToWalletConnect()
-            }
-            .tint(DS.Color.actionPrimary)
-          }
-        }
-        .padding(.horizontal, DS.Space.pageMargin)
-        .padding(.bottom, DS.Space.xl)
-      }
-    }
-    .onAppear { codeFieldFocused = true }
+  private var isScreenshotFixture: Bool {
+    #if DEBUG
+    AppCoordinator.eventCodeScreenshotFixture != nil
+    #else
+    false
+    #endif
   }
 
-  /// Resolves a canonical Event ID for the typed code (beid#258 P1-1 —
-  /// best-effort, bounded by the lookup's own timeout, never blocks on an
-  /// unbounded hang) before joining, so the normal manual-entry path
-  /// carries a lookup-derived ID instead of always joining with `nil`.
-  /// `code` is captured once into `submittedCode` before the `Task` starts:
-  /// `AppCoordinator`'s composed methods take it as a plain value and never
-  /// re-read this view's live `@State`, but capturing it here too keeps that
-  /// guarantee visible at the call site rather than relying on it silently.
+  var body: some View {
+    ZStack {
+      DS.Color.surfaceCanvas.ignoresSafeArea()
+
+      BeidAdaptiveContent {
+        VStack(spacing: 0) {
+          ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+              title
+
+              Text("Only needed if an event didn’t appear automatically. Ask the organizer for the code.")
+                .beidTextStyle(DS.Font.Library.body15)
+                .foregroundStyle(DS.Color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Layout.subtitleTop)
+
+              codeEntry
+                .padding(.top, Layout.fieldTop)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, mode == .onboarding ? Layout.rootTitleTop : Layout.pushedTitleTop)
+            .padding(.horizontal, DS.Space.pageMargin)
+          }
+          .scrollDismissesKeyboard(.interactively)
+
+          VStack(spacing: DS.Space.s) {
+            EventCodeJoinButton(action: submit)
+
+            if mode == .onboarding && !isScreenshotFixture {
+              BeidSecondaryButton(title: "Connect wallet instead") {
+                coordinator.returnToWalletConnect()
+              }
+              .tint(DS.Color.actionPrimary)
+            }
+          }
+          .padding(.horizontal, DS.Space.pageMargin)
+          .padding(.bottom, Layout.footerBottom)
+        }
+      }
+    }
+    .onAppear { codeFieldFocused = !isScreenshotFixture }
+  }
+
+  private var title: some View {
+    Text("Enter\nevent code")
+      .beidTextStyle(DS.Font.Library.display52)
+      .foregroundStyle(DS.Color.textPrimary)
+      .fixedSize(horizontal: false, vertical: true)
+      .accessibilityIdentifier("eventCode.title")
+  }
+
+  private var codeEntry: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: 0) {
+        Text("Event code")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondary)
+
+        Spacer()
+
+        Button {
+          BeidDesign.haptic()
+          if let pastedCode = UIPasteboard.general.string {
+            code = pastedCode
+          }
+        } label: {
+          Text(verbatim: "PASTE")
+            // This literal is already uppercase; keep the mono style's text
+            // case from uppercasing the spoken label.
+            .textCase(nil)
+            .beidTextStyle(DS.Font.Library.labelMono10)
+            .foregroundStyle(DS.Color.textPrimary)
+            .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+            .contentShape(Rectangle())
+            .accessibilityLabel(Text(verbatim: String(localized: "Paste event code")))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("eventCode.paste")
+      }
+      .frame(minHeight: 44)
+
+      TextField("Event code", text: $code, prompt: Text("e.g. ETHTOKYO2026"))
+        .beidTextStyle(DS.Font.Library.displayAddress34)
+        .foregroundStyle(DS.Color.textPrimary)
+        .textInputAutocapitalization(.characters)
+        .autocorrectionDisabled()
+        .submitLabel(.join)
+        .focused($codeFieldFocused)
+        .tint(DS.Color.textPrimary)
+        .accessibilityIdentifier("Event code")
+        .frame(minHeight: fieldMinHeight)
+        .overlay(alignment: .leading) {
+          if isScreenshotFixture {
+            // Figma shows a caret without a keyboard. Ordinary entry focuses.
+            Rectangle()
+              .fill(DS.Color.textPrimary)
+              .frame(width: 2, height: 40)
+              .offset(x: 240)
+              .allowsHitTesting(false)
+              .accessibilityHidden(true)
+          }
+        }
+        .onSubmit(submit)
+        .onChange(of: code) { _, _ in
+          errorMessage = nil
+          errorKind = nil
+        }
+        .padding(.top, Layout.fieldLabelOverlap)
+
+      Rectangle()
+        .fill(errorMessage == nil ? DS.Color.textPrimary : DS.Color.statusOff)
+        .frame(height: 2)
+
+      if let errorMessage {
+        // TODO(#648): A generic joinFailed cannot establish Figma's
+        // "CODE NOT RECOGNIZED". Show it only if a specific reason is exposed.
+        HStack(spacing: Layout.errorDotGap) {
+          Circle()
+            .fill(DS.Color.statusOff)
+            .frame(width: 7, height: 7)
+            .accessibilityHidden(true)
+          if errorKind == .emptyCode {
+            Text("Event code required")
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .foregroundStyle(DS.Color.textPrimary)
+          } else {
+            Text("COULD NOT JOIN EVENT")
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .foregroundStyle(DS.Color.textPrimary)
+          }
+        }
+        .padding(.top, Layout.noteTop)
+
+        Text(errorMessage)
+          .beidTextStyle(DS.Font.Library.body13)
+          .foregroundStyle(DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.top, Layout.detailTop)
+      } else {
+        Text("Codes are case-insensitive")
+          .beidTextStyle(DS.Font.Library.labelMono9)
+          .foregroundStyle(DS.Color.textSecondary)
+          .padding(.top, Layout.noteTop)
+      }
+    }
+  }
+
+  /// Capture the typed code before awaiting lookup. Superseded attempts must
+  /// never overwrite a newer attempt's error or navigation state.
   private func submit() {
     let submittedCode = code
     Task { @MainActor in
@@ -128,13 +225,13 @@ struct EventCodeEntryView: View {
         outcome = await coordinator.joinEventResolvingCanonicalId(code: submittedCode)
       case .accountSheet:
         outcome = await coordinator.joinEventFromAccountSheetResolvingCanonicalId(code: submittedCode)
+      case .home:
+        outcome = await coordinator.joinEventFromHomeResolvingCanonicalId(code: submittedCode)
       case .scanFlow:
         outcome = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: submittedCode)
       }
-      // `.superseded` must not touch `errorMessage` at all — a stale attempt
-      // resuming after a newer one (or a cancellation) started must never
-      // overwrite whatever the current attempt already showed.
       guard case .completed(let error) = outcome else { return }
+      errorKind = error
       errorMessage = message(for: error)
       if mode == .scanFlow, error == nil {
         dismiss()
@@ -142,19 +239,6 @@ struct EventCodeEntryView: View {
     }
   }
 
-  /// Copy per refusal reason. The reason is `shared/`'s decision; these
-  /// sentences are this host's, and they are deliberately the same English
-  /// Android already ships (`event_join_error_*` in `strings.xml`) so one
-  /// situation does not read as two different products.
-  ///
-  /// Before beid#472 every branch below was one sentence — "beid couldn't
-  /// join that event. Check the code and try again." — which told a
-  /// participant with no network to check a code that was correct.
-  ///
-  /// The `default` branch is load-bearing: a reason added in `shared/`
-  /// without this switch being updated falls to the generic sentence rather
-  /// than failing to build, and `eventJoinFailureReasonKey`'s doc says so
-  /// from the other side.
   private func message(for error: EventCodeJoinError?) -> LocalizedStringKey? {
     switch error {
     case nil:
@@ -164,6 +248,27 @@ struct EventCodeEntryView: View {
     case .joinFailed:
       return "beid couldn't join that event. Check the code and try again."
     }
+  }
+}
+
+/// Frame 13's full-width 56 pt ink capsule. Keep the current button case
+/// until #24 settles it; this view owns the shape while #643 is unmerged.
+private struct EventCodeJoinButton: View {
+  let action: () -> Void
+
+  var body: some View {
+    Button {
+      BeidDesign.haptic()
+      action()
+    } label: {
+      Text("Join Event")
+        .beidTextStyle(DS.Font.Library.title16)
+        .foregroundStyle(DS.Color.labelOnActionPrimary)
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .background(DS.Color.actionPrimary, in: Capsule())
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
   }
 }
 

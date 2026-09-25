@@ -8,8 +8,8 @@ import XCTest
 ///
 /// The decision keeps the standard back button and its swipe gesture across
 /// all 18 screens. These tests pin that gesture on the real navigation stack:
-/// a leading-edge swipe pops Proof Detail to Collection, while a swipe on the
-/// Collection root leaves navigation intact.
+/// leading-edge swipes pop Proof Detail through Event Detail to Collection,
+/// while a swipe on the Collection root leaves navigation intact.
 final class BeidBackNavigationUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -17,20 +17,23 @@ final class BeidBackNavigationUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  /// With the standard back button, a leading-edge drag pops Proof Detail
-  /// back to Collection.
+  /// A Proof pushed from Event Detail pops through both standard stack levels.
   func testLeadingEdgeSwipePopsProofDetailBackToCollection() {
     navigateToCollectionWithProof()
     openFirstProof()
 
     swipeFromLeadingEdge()
 
-    let senseEvent = app.buttons["Sense Event"]
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
+    swipeFromLeadingEdge()
+
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(
       senseEvent.waitForExistence(timeout: 5),
-      "the leading-edge swipe did not pop Proof Detail back to Collection"
+      "the second leading-edge swipe did not pop Event Detail back to Collection"
     )
-    XCTAssertFalse(app.staticTexts["Proof Detail"].exists)
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
   }
 
   /// A leading-edge drag on Collection leaves the current standard
@@ -41,7 +44,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     swipeFromLeadingEdge()
 
     XCTAssertEqual(app.state, .runningForeground, "the app did not survive a swipe on the root screen")
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 
   // MARK: - Gesture
@@ -77,9 +80,8 @@ final class BeidBackNavigationUITests: XCTestCase {
   // step for step. They are copied rather than shared because those are
   // `private` to that class; if the seeding route changes, both must change.
 
-  /// Joins the DemoEvent event and waits until `.recording` begins.
-  /// "Simulate Signal Lost" existing is the earliest reliable signal of that
-  /// — see the comment on `BeidIPadLayoutTests.capturePrimaryFlow`.
+  /// Joins the DemoEvent event, then declines the automatic binding sheet so
+  /// the live Recording controls are hittable.
   private func reachRecordingScreen() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
@@ -88,26 +90,45 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    dismissBindingSheetToReachLiveRecording()
+  }
+
+  private func dismissBindingSheetToReachLiveRecording() {
+    let cancel = app.buttons["Cancel"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
+    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
+    cancel.tap()
+    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Close"].isHittable, "Live recording Close must be tappable")
   }
 
   /// Ends that session, landing on Collection with the resulting proof.
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    app.buttons["View collection"].tap()
 
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 
   /// Pushes Proof Detail for the DemoEvent proof left on Collection.
   private func openFirstProof() {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    app.buttons["event-detail.proof.1"].tap()
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 }
