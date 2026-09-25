@@ -1406,10 +1406,11 @@ damping and response (`DS.Motion`), not fixed-duration curves.
 | `DS.Motion.entrance` | spring, response 0.5, damping 0.85 | Content entering (event card in `EventFoundView`) |
 | `DS.Motion.proofResolve` | spring, response 0.6, damping 0.8 | Proof seal ceremony |
 | `DS.Motion.sensingPulsePeriod` | 1.8 s | One radar pulse cycle in `SensingView` |
-| `DS.Motion.screenTransition` | spring, response 0.36, damping 0.88 | Root screen switches (`RootView`) and scan-flow phase switches (`ScanFlowView`) |
+| `DS.Motion.screenTransition` | spring, response 0.36, damping 1.0 | Root screen switches (`RootView`) and scan-flow phase switches (`ScanFlowView`) |
 
 `DS.Motion.screenTransition` is `BeidDesign.Animation.soft` moved into
-`DS` unchanged by #628 (2026-09-23), and `BeidDesign.Animation.entrance`,
+`DS` unchanged by #628 (2026-09-23); #657 later corrected its damping to
+1.0. `BeidDesign.Animation.entrance`,
 which was an alias of `DS.Motion.entrance`, is gone; its call site uses
 `DS.Motion.entrance` directly (§7's token-fold note).
 
@@ -2708,7 +2709,7 @@ to.]**
 | `type.section.title` | `DS.Font.sectionTitle` | `Library.title19` — DM Sans Bold 19 / `.title3` | State and section titles |
 | `type.ledger.mono` | `DS.Font.ledgerMono` | `Library.labelMono13Value` — DM Mono Medium 13 / `.footnote` | Addresses, hashes, proof IDs |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
-| `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/0.88 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
+| `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/1.0 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
 
 (Full set: 17 color tokens, 8 space, 7 radius, 18 size, 4 layout, 8 font
 roles over 17 `DS.Font.Library` styles (§6; #629 removed `ceremonyTitle`,

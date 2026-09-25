@@ -453,7 +453,7 @@ enum DS {
     /// Content entering the screen (e.g. event card slide-in on EventFoundView).
     static let entrance = Animation.spring(response: 0.5, dampingFraction: 0.85)
     /// Transition between top-level screens (RootView, ScanFlowView).
-    static let screenTransition = Animation.spring(response: 0.36, dampingFraction: 0.88)
+    static let screenTransition = Animation.spring(response: 0.36, dampingFraction: 1.0)
     /// The proof seal/resolve ceremony (RecordingView's one-time entrance
     /// ceremony fading into its steady state).
     static let proofResolve = Animation.spring(response: 0.6, dampingFraction: 0.8)

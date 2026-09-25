@@ -126,7 +126,16 @@ final class FlatScreenshotTourD: XCTestCase {
   }
 
   func testShot_14g_NotSaved() {
-    assertVenueFrame("14g", outcome: "Not saved")
+    openVenue(frame: "14g")
+    attachScreenshot("14g")
+    let warningTitle = app.staticTexts["NOT SAVED"]
+    let warningCopy = app.staticTexts["This pack could not be saved. It stays on this device only until the app closes."]
+    let stop = app.buttons["Stop broadcasting"]
+    XCTAssertTrue(warningTitle.isHittable)
+    XCTAssertTrue(warningCopy.isHittable)
+    XCTAssertLessThan(warningTitle.frame.maxY, warningCopy.frame.minY)
+    XCTAssertLessThan(warningCopy.frame.maxY, stop.frame.minY)
+    assertVenueControls()
   }
 
   private func assertVenueFrame(_ code: String, outcome: String) {
