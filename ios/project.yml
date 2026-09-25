@@ -95,15 +95,10 @@ targets:
               - beid
         LSApplicationQueriesSchemes:
           - metamask
-        # Flat 2b typefaces (beid#629), bundled from Beid/DesignSystem/Fonts
-        # with upstream file names. The static cuts are the Google Fonts named
-        # instances at opsz 14, which is what the Figma Library renders.
-        # Provenance lives here rather than in a README beside the files: the
-        # Beid and BeidLab targets source that whole tree, so a README there
-        # is copied into both app bundles as a resource.
-        #   BricolageGrotesque-ExtraBold.ttf  v1.001  ateliertriay/bricolage
-        #     @84745e5b96261ae5f8c6c856e262fe78d1d6efdd fonts/ttf/
-        #     sha256 20ca28c496aef07993031176c1a02da6959682abbc4cbf73776f83e63ef80c00
+        # Flat 2b typefaces (beid#629, #643), bundled from Beid/DesignSystem/Fonts.
+        # Each Bricolage Display cut uses opsz equal to its role's point size;
+        # source, instancing and naming are documented in Fonts/README.md.
+        # DM Sans remains at opsz 14; DM Mono remains its upstream static file.
         #   DMSans-Bold.ttf  v4.004  googlefonts/dm-fonts
         #     @4412393b7d2de9fe7a92064c2dce9b5af5d7fd26 Sans/fonts/ttf/
         #     sha256 6a6924b35d757e32b21d611733d5b9a7bb6234b07b75334b0e2d2359985b26ee
@@ -119,16 +114,19 @@ targets:
         # because resources are flattened to the bundle root, where three
         # files called OFL.txt collide. No Reserved Font Name is declared and
         # every face has fsType 0.
-        # opsz-14 check: hmtx advance widths against the pinned google/fonts
-        # variable font instantiated with fontTools.varLib.instancer, over the
-        # glyphs the two share. Bricolage (opsz 14, wght 800, wdth 100): 0 of
-        # 597 mismatch. DM Sans Bold (opsz 14, wght 700): 0 of 486. DM Sans
+        # DM Sans opsz-14 check: hmtx advance widths against the pinned
+        # google/fonts variable font instantiated with fontTools.varLib.instancer,
+        # over the glyphs the two share. DM Sans Bold (opsz 14, wght 700): 0 of 486. DM Sans
         # Regular (opsz 14, wght 400): 36 of 486, each exactly 1 unit with the
         # static wider; every other optical size is far worse (opsz 9: 373,
         # 12: 343, 18: 258, 24: 341). So the widths are rounding-close, not
         # equal.
         UIAppFonts:
-          - BricolageGrotesque-ExtraBold.ttf
+          - BricolageGrotesque-Display60ExtraBold.ttf
+          - BricolageGrotesque-Display52ExtraBold.ttf
+          - BricolageGrotesque-Display46ExtraBold.ttf
+          - BricolageGrotesque-Display40ExtraBold.ttf
+          - BricolageGrotesque-Display34ExtraBold.ttf
           - DMSans-Bold.ttf
           - DMSans-Regular.ttf
           - DMMono-Medium.ttf
@@ -243,7 +241,11 @@ targets:
         # files) as Beid. Without this key, Font.custom falls back to the
         # system font here with no error, so the Lab would not render Flat 2b.
         UIAppFonts:
-          - BricolageGrotesque-ExtraBold.ttf
+          - BricolageGrotesque-Display60ExtraBold.ttf
+          - BricolageGrotesque-Display52ExtraBold.ttf
+          - BricolageGrotesque-Display46ExtraBold.ttf
+          - BricolageGrotesque-Display40ExtraBold.ttf
+          - BricolageGrotesque-Display34ExtraBold.ttf
           - DMSans-Bold.ttf
           - DMSans-Regular.ttf
           - DMMono-Medium.ttf
