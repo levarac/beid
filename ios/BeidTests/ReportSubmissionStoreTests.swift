@@ -7,6 +7,62 @@ import XCTest
 
 @MainActor
 final class ReportSubmissionStoreTests: XCTestCase {
+  func testEventDetailReadsOnlyMatchingDurableSubmissionRecords() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-event-detail-submissions")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let target = makeRecord()
+    let other = ReportSubmissionRecord(
+      id: UUID(), eventCode: "OTHER", endpoint: target.endpoint,
+      receiptPublicKeyHex: target.receiptPublicKeyHex,
+      eventIdHex: target.eventIdHex,
+      eventDefinitionDigestHex: target.eventDefinitionDigestHex,
+      validFrom: target.validFrom, validUntil: target.validUntil,
+      signedObservationHex: target.signedObservationHex,
+      observationDigestHex: target.observationDigestHex
+    )
+    try store.add(other)
+    try store.add(target)
+
+    guard case .success(let records) = ReportSubmissionStore(fileURL: fileURL)
+      .eventRecords(forEventCode: " \(target.eventCode.lowercased()) ") else {
+      return XCTFail("expected matching durable Event Detail records")
+    }
+    XCTAssertEqual(records.map(\.id), [target.id])
+    XCTAssertEqual(records.first?.submissionState, .prepared)
+    guard case .success(let missing) = store.eventRecords(forEventCode: "UNRELATED") else {
+      return XCTFail("expected an empty result for an unrelated event")
+    }
+    XCTAssertTrue(missing.isEmpty)
+  }
+
+  func testEventDetailDoesNotTurnUnreadableSubmissionFileIntoNoReports() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-event-detail-submissions-unreadable")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    try Data("not-json".utf8).write(to: fileURL)
+
+    XCTAssertEqual(
+      ReportSubmissionStore(fileURL: fileURL).eventRecords(forEventCode: "EVENTA"),
+      .failure(.unreadableStore)
+    )
+  }
+
+  func testEventDetailDoesNotTurnInvalidStoredEventCodeIntoNoReports() throws {
+    let directory = try makeIsolatedDirectory(named: "beid-event-detail-invalid-code")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = ReportSubmissionStore(
+      fileURL: directory.appendingPathComponent("report-submissions.json")
+    )
+
+    XCTAssertEqual(
+      store.eventRecords(forEventCode: "   "),
+      .failure(.invalidEventCode)
+    )
+  }
+
+
   func testLabSocketTerminationDistinguishesExpectedSessionEndFromReceiveFailure() {
     XCTAssertEqual(
       LabSocketLifecycle.status(afterSnapshotDelivered: true, closeCode: .normalClosure),

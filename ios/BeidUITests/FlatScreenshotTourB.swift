@@ -44,6 +44,35 @@ final class FlatScreenshotTourB: XCTestCase {
     capture("04c")
   }
 
+  func testShot_08_EventDetail() {
+    launchHome(arguments: ["-beid-event-detail-frame-08"])
+    let event = app.buttons["home.past-event.ETHTOKYO2026"]
+    XCTAssertTrue(event.waitForExistence(timeout: 5))
+    event.tap()
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "prepared")).firstMatch.exists)
+    XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "receipt stored")).firstMatch.exists)
+    capture("08")
+
+    let proof = app.buttons["event-detail.proof.1"]
+    if !proof.isHittable { app.swipeUp() }
+    XCTAssertTrue(proof.waitForExistence(timeout: 5))
+    proof.tap()
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+  }
+
+  func testShot_08c_NoReports() {
+    launchHome(arguments: ["-beid-event-detail-frame-08c"])
+    let event = app.buttons["home.past-event.ETHTOKYO2026"]
+    XCTAssertTrue(event.waitForExistence(timeout: 5))
+    event.tap()
+    XCTAssertTrue(app.staticTexts["NO REPORTS YET"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "prepared")).firstMatch.exists)
+    XCTAssertTrue(app.staticTexts["Measurements unavailable"].exists)
+    XCTAssertTrue(app.buttons["event-detail.proof.1"].exists)
+    capture("08c")
+  }
+
   private func launchHome(arguments: [String]) {
     app.launchArguments = ["-beid-ui-test"] + arguments
     app.launch()

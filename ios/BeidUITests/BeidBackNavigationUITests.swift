@@ -8,8 +8,8 @@ import XCTest
 ///
 /// The decision keeps the standard back button and its swipe gesture across
 /// all 18 screens. These tests pin that gesture on the real navigation stack:
-/// a leading-edge swipe pops Proof Detail to Collection, while a swipe on the
-/// Collection root leaves navigation intact.
+/// leading-edge swipes pop Proof Detail through Event Detail to Collection,
+/// while a swipe on the Collection root leaves navigation intact.
 final class BeidBackNavigationUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -17,18 +17,21 @@ final class BeidBackNavigationUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  /// With the standard back button, a leading-edge drag pops Proof Detail
-  /// back to Collection.
+  /// A Proof pushed from Event Detail pops through both standard stack levels.
   func testLeadingEdgeSwipePopsProofDetailBackToCollection() {
     navigateToCollectionWithProof()
     openFirstProof()
 
     swipeFromLeadingEdge()
 
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
+    swipeFromLeadingEdge()
+
     let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(
       senseEvent.waitForExistence(timeout: 5),
-      "the leading-edge swipe did not pop Proof Detail back to Collection"
+      "the second leading-edge swipe did not pop Event Detail back to Collection"
     )
     XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
   }
@@ -124,6 +127,8 @@ final class BeidBackNavigationUITests: XCTestCase {
   /// Pushes Proof Detail for the DemoEvent proof left on Collection.
   private func openFirstProof() {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    app.buttons["event-detail.proof.1"].tap()
     XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 }

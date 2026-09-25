@@ -52,6 +52,8 @@ final class AppCoordinator: ObservableObject {
 
   let onboardingMode = OnboardingMode.current
   let proofStore: ProofStore
+  /// Only non-nil for isolated, Debug UI-test Event Detail frames.
+  private(set) var eventDetailSubmissionStore: ReportSubmissionStore?
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
   let bluetoothMonitor: BluetoothMonitor
@@ -135,6 +137,7 @@ final class AppCoordinator: ObservableObject {
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
       seedHomeFrameForUITesting()
+      seedEventDetailFrameForUITesting()
     }
     self.sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
@@ -215,6 +218,66 @@ final class AppCoordinator: ObservableObject {
     ))
     if isEvents {
       sensingCoordinator.injectHomeRecordingForUITesting()
+    }
+    #endif
+  }
+
+  /// Screens 08/08c use real Proof grouping and the shared aggregate codec.
+  /// Their submission metadata lives at an isolated temporary URL, so a
+  /// synthetic PREPARED fixture cannot be read or sent by a normal launch.
+  private func seedEventDetailFrameForUITesting() {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test") else { return }
+    let hasReport = arguments.contains("-beid-event-detail-frame-08")
+    let noReports = arguments.contains("-beid-event-detail-frame-08c")
+    guard hasReport || noReports else { return }
+
+    let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "beid-event-detail-reports-\(UUID().uuidString).json"
+    )
+    let reportStore = ReportSubmissionStore(fileURL: reportURL)
+    eventDetailSubmissionStore = reportStore
+
+    let eventCode = "ETHTOKYO2026"
+    let starts: [TimeInterval] = [1_774_486_920, 1_774_498_500, 1_774_510_200]
+    let deviceCounts = [23, 18, 31]
+    for (index, start) in starts.enumerated() {
+      let proof = Proof(
+        id: UUID(uuidString: "00000000-0000-4000-8000-00000000063\(index + 1)")!,
+        eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: start),
+        peersVerified: 0, eventCode: eventCode
+      )
+      proofStore.add(proof)
+      // 08c deliberately omits one snapshot so unavailable measurements
+      // remain a directly testable display state.
+      if hasReport || index < 2 {
+        sensingCoordinator.injectEventDetailSnapshotForUITesting(
+          proofId: proof.id, deviceCount: deviceCounts[index], windowIndex: Int64(start / 900)
+        )
+      }
+    }
+
+    if hasReport {
+      let record = ReportSubmissionRecord(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000639")!,
+        eventCode: eventCode,
+        endpoint: "https://example.invalid/observations",
+        receiptPublicKeyHex: String(repeating: "a", count: 64),
+        eventIdHex: String(repeating: "b", count: 64),
+        eventDefinitionDigestHex: String(repeating: "c", count: 64),
+        validFrom: nil,
+        validUntil: nil,
+        signedObservationHex: "d28440a04040",
+        observationDigestHex: String(repeating: "d", count: 64),
+        submissionState: .prepared,
+        createdAt: Date(timeIntervalSince1970: starts[0])
+      )
+      do {
+        try reportStore.add(record)
+      } catch {
+        assertionFailure("Unable to seed isolated Event Detail submission fixture: \(error)")
+      }
     }
     #endif
   }

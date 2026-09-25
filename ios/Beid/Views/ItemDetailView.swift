@@ -48,7 +48,7 @@ struct ProofDetailPresentation {
       signature = Self.unavailable
     }
     if sessionCount > 1 {
-      // A representative Proof is one session, never the entire event.
+      // A selected Proof is one session, never the entire event.
       withValue = String(
         localized: "proofDetail.with.multipleSessions",
         defaultValue: "See each session",
@@ -84,13 +84,15 @@ struct ProofDetailPresentation {
   }
 }
 
-/// Flat 2b frame 09, backed by the representative Proof's own durable data.
+/// Flat 2b frame 09, backed by the selected Proof's own durable data.
 /// The native NavigationStack owns the back button and interactive pop.
 struct ItemDetailView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   let proof: Proof
   var presentationOverride: ProofDetailPresentation? = nil
 
+  /// Event Detail can open any selected session's Proof; Daily Summary can
+  /// also pass one directly. Grouping informs the WITH value and summary route.
   private var groupSessions: [Proof] {
     EventGrouping.sessions(for: proof, in: coordinator.proofStore.proofs)
   }
