@@ -31,8 +31,11 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     XCTAssertTrue(indicator.waitForExistence(timeout: 5))
     let stopButton = app.buttons["collection.stop-sensing"]
     XCTAssertTrue(stopButton.exists)
+    XCTAssertTrue(stopButton.isHittable)
+    XCTAssertTrue(senseEvent.isHittable, "Scan stays available while sensing continues")
 
     stopButton.tap()
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists, "prejoin Home Stop needs no Proof confirmation")
     XCTAssertFalse(indicator.waitForExistence(timeout: 5))
     XCTAssertFalse(stopButton.exists)
   }
