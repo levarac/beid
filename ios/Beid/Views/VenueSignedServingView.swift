@@ -49,17 +49,27 @@ struct VenueSignedServingView: View {
     .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
     .toolbarColorScheme(.light, for: .navigationBar)
     .safeAreaInset(edge: .bottom) {
-      BeidPrimaryButton("Stop broadcasting") {
-        guard fixtureCode == nil else { return }
-        viewModel.stop()
-        venueLinkText = ""
-        requestTask?.cancel()
-        lifecycleTasks.cancelAll()
+      VStack(alignment: .leading, spacing: 0) {
+        if effectiveUnsavedArtifact {
+          outcome(
+            title: "Not saved",
+            message: "This pack could not be saved. It stays on this device only until the app closes.",
+            dotColor: DS.Color.statusPending
+          )
+          .padding(.bottom, DS.Space.m)
+        }
+        BeidPrimaryButton("Stop broadcasting") {
+          guard fixtureCode == nil else { return }
+          viewModel.stop()
+          venueLinkText = ""
+          requestTask?.cancel()
+          lifecycleTasks.cancelAll()
+        }
+        .accessibilityIdentifier("Stop broadcasting")
+        .padding(.top, DS.Space.s)
       }
-      .accessibilityIdentifier("Stop broadcasting")
-      .frame(maxWidth: DS.Layout.stateContentMaxWidth)
+      .frame(maxWidth: DS.Layout.stateContentMaxWidth, alignment: .leading)
       .padding(.horizontal, DS.Space.pageMargin)
-      .padding(.top, DS.Space.s)
       .padding(.bottom, DS.Space.l)
       .frame(maxWidth: .infinity)
       .background(DS.Color.surfaceCanvas)
@@ -274,14 +284,6 @@ struct VenueSignedServingView: View {
           requestTask?.cancel()
           requestTask = Task { await viewModel.restoreFromStorage() }
         }
-      }
-      if effectiveUnsavedArtifact {
-        outcome(
-          title: "Not saved",
-          message: "This pack could not be saved. It stays on this device only until the app closes.",
-          dotColor: DS.Color.statusPending
-        )
-          .padding(.top, DS.Space.s)
       }
       if effectiveRadio.state == .advertisingRequested {
         Text("The system has not confirmed it is on air.")
