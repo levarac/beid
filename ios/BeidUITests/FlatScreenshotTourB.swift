@@ -31,7 +31,7 @@ final class FlatScreenshotTourB: XCTestCase {
     XCTAssertTrue(app.staticTexts["NO EVENTS YET"].waitForExistence(timeout: 5))
     capture("04b")
     app.buttons["Enter event code"].tap()
-    XCTAssertTrue(app.staticTexts["Enter Event Code"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
     app.buttons["Cancel"].tap()
   }
 

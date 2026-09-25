@@ -3,8 +3,7 @@
 
 import XCTest
 
-/// Captures the three onboarding states for a frame-by-frame comparison with
-/// Flat 2b. Each state is reached through the production screen and action.
+/// Captures Flat 2b onboarding and event-code states through production navigation.
 final class FlatScreenshotTourA: XCTestCase {
   private let app = XCUIApplication()
 
@@ -31,6 +30,77 @@ final class FlatScreenshotTourA: XCTestCase {
     capture("03 Bluetooth Off")
   }
 
+  func testShot_13_EnterEventCode() {
+    openAccountEventCodeEntry(frame: "-beid-shot-13")
+    keepScreenshot(named: "13 Enter Event Code")
+    let accessibilityTree = XCTAttachment(string: app.debugDescription)
+    accessibilityTree.name = "13 accessibility tree"
+    accessibilityTree.lifetime = .keepAlways
+    add(accessibilityTree)
+
+    let field = app.textFields["Event code"]
+    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    XCTAssertEqual(field.value as? String, "ETH-TOKYO-26")
+    XCTAssertFalse(app.keyboards.firstMatch.exists)
+    XCTAssertTrue(app.buttons["Cancel"].exists)
+    let paste = app.buttons["eventCode.paste"]
+    XCTAssertTrue(paste.exists)
+    XCTAssertEqual(paste.label, "Paste event code")
+    XCTAssertTrue(app.buttons["Join Event"].exists)
+  }
+
+  func testShot_13b_Error() {
+    openAccountEventCodeEntry(frame: "-beid-shot-13b")
+    keepScreenshot(named: "13b Enter Event Code Error")
+
+    let field = app.textFields["Event code"]
+    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    XCTAssertEqual(field.value as? String, "ETH-TOKY0-26")
+    let errorLabel = app.staticTexts.matching(
+      NSPredicate(format: "label == %@", "COULD NOT JOIN EVENT")
+    ).firstMatch
+    XCTAssertTrue(errorLabel.exists)
+    XCTAssertTrue(
+      app.staticTexts["beid couldn't join that event. Check the code and try again."].exists
+    )
+    XCTAssertFalse(app.keyboards.firstMatch.exists)
+    XCTAssertTrue(app.buttons["Cancel"].exists)
+  }
+
+  /// Follow the actual Account sheet route so the Cancel toolbar item
+  /// and nested-sheet presentation are part of each captured frame.
+  private func openAccountEventCodeEntry(frame: String) {
+    app.launchArguments = ["-beid-ui-test", frame]
+    app.launch()
+
+    app.buttons["Get Started"].tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+    allowBluetooth.tap()
+
+    let account = app.buttons["home.account"]
+    XCTAssertTrue(account.waitForExistence(timeout: 5))
+    account.tap()
+
+    let joinEvent = app.buttons["Join Event"]
+    let list = app.collectionViews.firstMatch
+    var attempts = 0
+    while !joinEvent.exists && attempts < 6 {
+      list.swipeUp()
+      attempts += 1
+    }
+    XCTAssertTrue(joinEvent.exists, "Account's Join Event row was not reachable")
+    joinEvent.tap()
+    XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
+  }
+
+  private func keepScreenshot(named name: String) {
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
   private func launch(bluetoothOff: Bool = false) {
     app.launchArguments = ["-beid-ui-test"]
     if bluetoothOff {
@@ -47,9 +117,6 @@ final class FlatScreenshotTourA: XCTestCase {
   }
 
   private func capture(_ frameCode: String) {
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-    attachment.name = frameCode
-    attachment.lifetime = .keepAlways
-    add(attachment)
+    keepScreenshot(named: frameCode)
   }
 }
