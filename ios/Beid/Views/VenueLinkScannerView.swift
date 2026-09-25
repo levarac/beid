@@ -88,6 +88,7 @@ struct VenueScannerScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Cancel scan")
         .accessibilityIdentifier("Cancel scan")
         Spacer()
       }
@@ -95,18 +96,19 @@ struct VenueScannerScreen: View {
         Text("Scan QR code")
           .beidTextStyle(DS.Font.Library.labelMono11)
           .accessibilityAddTraits(.isHeader)
+          .accessibilityIdentifier("venue.scanner.title")
       }
       .frame(minHeight: DS.Size.primaryButtonMinHeight)
       .padding(.horizontal, DS.Space.pageMargin)
 
       ZStack {
         if isFixture {
-          DS.Color.surfaceTile
+          DS.Color.strokeHairlineOnInk
         } else {
           VenueLinkScannerView(onScan: onScan, onStartFailure: onStartFailure)
         }
         RoundedRectangle(cornerRadius: DS.Radius.nowCard)
-          .strokeBorder(DS.Color.actionInverse, lineWidth: DS.Size.hairline)
+          .strokeBorder(DS.Color.actionInverse, lineWidth: DS.Size.venueScannerGuideStroke)
           .frame(width: DS.Size.venueScannerGuide, height: DS.Size.venueScannerGuide)
           .accessibilityHidden(true)
       }
@@ -119,7 +121,6 @@ struct VenueScannerScreen: View {
     }
     .foregroundStyle(DS.Color.actionInverse)
     .background(DS.Color.textPrimary)
-    .accessibilityIdentifier("venue.scanner.screen")
   }
 }
 

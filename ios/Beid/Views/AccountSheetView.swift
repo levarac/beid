@@ -4,6 +4,54 @@
 import SwiftUI
 import UIKit
 
+private enum AccountSheetDetent {
+  static let compact: PresentationDetent = .fraction(0.575)
+}
+
+/// Destinations request the large Account sheet while they are in its stack.
+/// Separate keys let future Account routes (About sensing / What we send)
+/// register without coupling their navigation state to Organizer tools.
+@MainActor
+final class AccountLargeDetentRequests: ObservableObject {
+  enum Destination: Hashable {
+    case organizerTools
+    case venueBroadcast
+    case aboutSensing
+    case whatWeSend
+  }
+
+  @Published private(set) var active: Set<Destination> = []
+
+  func set(_ destination: Destination, active isActive: Bool) {
+    var updated = active
+    if isActive {
+      updated.insert(destination)
+    } else {
+      updated.remove(destination)
+    }
+    if updated != active { active = updated }
+  }
+}
+
+/// Add one line to an Account destination, including a nested destination,
+/// to hold the sheet at its large detent for that view's visible lifetime.
+private struct AccountLargeDetentModifier: ViewModifier {
+  @EnvironmentObject private var requests: AccountLargeDetentRequests
+  let destination: AccountLargeDetentRequests.Destination
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear { requests.set(destination, active: true) }
+      .onDisappear { requests.set(destination, active: false) }
+  }
+}
+
+extension View {
+  func accountLargeDetent(_ destination: AccountLargeDetentRequests.Destination) -> some View {
+    modifier(AccountLargeDetentModifier(destination: destination))
+  }
+}
+
 /// Flat 2b screen 10: Account sheet and its Bluetooth, copy and disconnect
 /// states. DECISIONS 2026-09-26 keeps optional wallet/Account Join and leaves
 /// Venue device placement to #647; Account Leave stays until #655 lands.
@@ -14,6 +62,8 @@ struct AccountSheetView: View {
   @State private var showPastEvents = false
   @State private var showDisconnectConfirmation = false
   @State private var copied = false
+  @StateObject private var largeDetentRequests = AccountLargeDetentRequests()
+  @State private var selectedDetent: PresentationDetent = AccountSheetDetent.compact
 
   var body: some View {
     NavigationStack {
@@ -36,6 +86,8 @@ struct AccountSheetView: View {
           }
           AccountSheetRow {
             Button {
+              largeDetentRequests.set(.organizerTools, active: true)
+              selectedDetent = .large
               showOrganizerTools = true
             } label: {
               HStack {
@@ -140,6 +192,9 @@ struct AccountSheetView: View {
         OrganizerToolsView()
           .toolbar(.visible, for: .navigationBar)
       }
+      .onChange(of: showOrganizerTools) { _, isShown in
+        largeDetentRequests.set(.organizerTools, active: isShown)
+      }
       .navigationDestination(isPresented: $showPastEvents) {
         PastEventsView(
           sensingCoordinator: coordinator.sensingCoordinator,
@@ -152,6 +207,14 @@ struct AccountSheetView: View {
         )
         .toolbar(.visible, for: .navigationBar)
       }
+    }
+    .environmentObject(largeDetentRequests)
+    .presentationDetents(
+      largeDetentRequests.active.isEmpty ? [AccountSheetDetent.compact] : [.large],
+      selection: $selectedDetent
+    )
+    .onChange(of: largeDetentRequests.active) { _, active in
+      selectedDetent = active.isEmpty ? AccountSheetDetent.compact : .large
     }
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()

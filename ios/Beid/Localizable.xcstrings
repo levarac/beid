@@ -1502,7 +1502,10 @@
     "Venue\nbroadcast": {
       "comment": "Two-line heading for the venue operator broadcast screen."
     },
-    "Organizer tools · iOS only": {}
+    "Organizer tools · iOS only": {},
+    "Cancel scan": {
+      "comment": "VoiceOver label for the scanner sheet Cancel control."
+    }
   },
   "version": "1.0"
 }

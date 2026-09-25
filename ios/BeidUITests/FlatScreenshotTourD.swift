@@ -84,8 +84,9 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14d_ScanQR() {
     openVenue(frame: "14d")
     app.buttons["Scan QR code"].tap()
-    _ = app.otherElements["venue.scanner.screen"].waitForExistence(timeout: 5)
+    _ = app.staticTexts["venue.scanner.title"].waitForExistence(timeout: 5)
     attachScreenshot("14d")
+    XCTAssertTrue(app.staticTexts["venue.scanner.title"].exists)
     assertMinimumHitTarget(app.buttons["Cancel scan"])
     XCTAssertTrue(app.staticTexts["Point at the organiser's QR code"].exists)
   }
@@ -151,7 +152,10 @@ final class FlatScreenshotTourD: XCTestCase {
   private func openVenue(frame: String) {
     openOrganizer(extraArguments: ["-beid-venue-frame", frame])
     app.buttons["organizer.venueBroadcast"].tap()
-    XCTAssertTrue(app.buttons["Scan QR code"].waitForExistence(timeout: 5))
+    let scan = app.buttons["Scan QR code"]
+    XCTAssertTrue(scan.waitForExistence(timeout: 5))
+    let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: scan)
+    XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
   }
 
   private func openAccount(extraArguments: [String] = []) {
