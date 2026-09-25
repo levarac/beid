@@ -689,7 +689,9 @@ Rules:
   either value puts §13's AA MUST at risk.
 - Open item 4 (D-627): `chart-muted` bars on `bg` (1.41:1) and
   `on-ink/idle` nodes on `ink` (2.97:1) are under WCAG 1.4.11's 3:1 for
-  non-text. Recorded; no new rule (#634, #640).
+  non-text. Frame 11 locally blends `textSecondary` at 75% on white
+  (approximately `#92929A`, 3.09:1) for observed bars; the shared
+  `chart-muted` token and the radar styling remain unchanged (#634, #640).
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** The ratified palette
@@ -2695,6 +2697,8 @@ to.]**
 | `size.row.list.minHeight` | `DS.Size.listRowMinHeight` | 92 pt | `Row/List` minimum height |
 | `size.row.keyValue.minHeight` | `DS.Size.keyValueRowMinHeight` | 44 pt | `Row/KeyValue` minimum height |
 | `size.row.session.minHeight` | `DS.Size.sessionRowMinHeight` | 48 pt | Session row minimum height |
+| `size.observation.chart` | `DS.Size.observationChartWidth` / `observationChartHeight` | 354 × 90 pt | Frame 11 observed-window plot |
+| `size.observation.chart.bars` | `DS.Size.observationChartBarWidth` / `observationChartBarGap` / `observationChartMaxBarHeight` | 54 / 6 / 78 pt | Six measured bars across the 354 pt plot; sparse windows are not filled |
 | `size.row.report.minHeight` | `DS.Size.reportRowMinHeight` | 60 pt | Report row minimum height |
 | `size.row.proof.minHeight` | `DS.Size.proofRowMinHeight` | 72 pt | Proof row minimum height |
 | `size.button.primary.minHeight` | `DS.Size.primaryButtonMinHeight` | 56 pt | `Button/Primary` Size=Large minimum height |

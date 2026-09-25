@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 import Darwin
+import BeidSharedKit
 import Foundation
 
 enum ReportSubmissionStoreError: Error {
@@ -256,6 +257,11 @@ final class ReportSubmissionStore: ObservableObject {
     case unreadable
   }
 
+  enum EventRecordsReadError: Error, Equatable {
+    case unreadableStore
+    case invalidEventCode
+  }
+
   init(fileURL: URL? = nil) {
     let resolvedFileURL = fileURL ?? Self.defaultFileURL()
     self.fileURL = resolvedFileURL
@@ -282,6 +288,25 @@ final class ReportSubmissionStore: ObservableObject {
         receiptStored: record.acceptanceReceiptHex != nil,
         terminalError: boundedLabTerminalError(record.terminalErrorCode)
       )
+    })
+  }
+
+  /// Read-only Event Detail projection. A failed load is unavailable, never
+  /// an authoritative empty report list. Normalize by the same shared event
+  /// code decision used by Proof grouping, including legacy Proof codes.
+  func eventRecords(forEventCode eventCode: String) -> Result<[ReportSubmissionRecord], EventRecordsReadError> {
+    guard loadError == nil else { return .failure(.unreadableStore) }
+    guard let key = BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: eventCode) else {
+      return .failure(.invalidEventCode)
+    }
+    let matching = records.filter {
+      BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: $0.eventCode) == key
+    }
+    return .success(matching.sorted { left, right in
+      if left.createdAt == right.createdAt {
+        return left.id.uuidString < right.id.uuidString
+      }
+      return left.createdAt < right.createdAt
     })
   }
 

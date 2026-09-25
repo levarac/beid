@@ -14,8 +14,8 @@ import SwiftUI
 ///
 /// Deliberately omits any Verified / public-scope row (beid#240 precedent —
 /// a state without backing must never be labeled "Verified"). Each record
-/// row instead pushes into the same `ItemDetailView` `CollectionHomeView`
-/// already uses (`coordinator.openProof`), which is where a participant
+/// row still pushes into `ItemDetailView` via `coordinator.openProof`, as
+/// Event Detail's per-session Proof rows do. That is where a participant
 /// already reaches `TransparencyView`/`ParticipationSummaryView` for that
 /// detail — this screen does not construct a second, day-scoped entry point
 /// into those two surfaces.

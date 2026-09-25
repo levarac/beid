@@ -24,13 +24,22 @@ private struct CollectionHomeContent: View {
   @ObservedObject var sensing: SensingCoordinator
   @State private var showsClockInstructions = false
   @State private var clockInstructionsForNetwork = false
+  @State private var selectedEvent: EventCard?
 
   /// One row per distinct event. The newest dated session drives title/date
-  /// and the existing detail route; every stored Proof remains session-level.
-  private struct EventCard: Identifiable {
+  /// and the Event Detail route; every stored Proof remains session-level.
+  private struct EventCard: Identifiable, Hashable {
     let id: UUID
     let representative: Proof
     let sessionCount: Int
+
+    static func == (lhs: EventCard, rhs: EventCard) -> Bool {
+      lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+      hasher.combine(id)
+    }
   }
 
   private var eventCards: [EventCard] {
@@ -150,6 +159,13 @@ private struct CollectionHomeContent: View {
         ItemDetailView(proof: proof)
           .toolbar(.visible, for: .navigationBar)
         #endif
+      }
+      .navigationDestination(item: $selectedEvent) { card in
+        EventDetailView(
+          representative: card.representative, sensing: sensing, proofStore: proofStore,
+          submissionStore: coordinator.eventDetailSubmissionStore
+        )
+          .toolbar(.visible, for: .navigationBar)
       }
       .alert(
         clockInstructionsTitle,
@@ -329,7 +345,7 @@ private struct CollectionHomeContent: View {
   private func pastEventRow(_ card: EventCard) -> some View {
     Button {
       BeidDesign.haptic()
-      coordinator.openProof(card.representative)
+      selectedEvent = card
     } label: {
       HStack(spacing: 0) {
         RecordSigilSlot(recordID: card.representative.id, size: 60, ground: .canvas)
@@ -356,6 +372,7 @@ private struct CollectionHomeContent: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel(pastEventAccessibilityLabel(card))
+    .accessibilityIdentifier("home.past-event.\(card.representative.eventCode ?? card.id.uuidString)")
   }
 
   private func pastSessionCaption(_ card: EventCard) -> String {
@@ -373,7 +390,7 @@ private struct CollectionHomeContent: View {
     return String(
       localized: "home.past.proofAction",
       defaultValue: "\(proofs) proofs →",
-      comment: "Trailing action on a past event row. Count is the number of stored Proof records in that event group; the arrow means open its newest proof detail."
+      comment: "Trailing action on a past event row. Count is the number of stored Proof records in that event group; the arrow opens Event Detail."
     )
   }
 

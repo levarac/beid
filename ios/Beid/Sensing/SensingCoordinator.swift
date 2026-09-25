@@ -556,6 +556,72 @@ final class SensingCoordinator: ObservableObject {
     bindingRecordStore.record(forProofId: proofId)
   }
 
+  #if DEBUG
+  /// Uses the production shared reducer and snapshot store for screenshot
+  /// fixtures. The initializer below routes these two frames to an isolated
+  /// temporary snapshot file, never the participant's normal store.
+  func injectEventDetailSnapshotForUITesting(proofId: UUID, deviceCount: Int, windowIndex: Int64) {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+          arguments.contains("-beid-event-detail-frame-08") ||
+          arguments.contains("-beid-event-detail-frame-08c") ||
+          arguments.contains("-beid-observation-frame-11") else { return }
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    for index in 0..<deviceCount {
+      _ = BeidSharedKit.aggregation.addAggregationObservation(
+        input: input, windowIndex: windowIndex + Int64(index % 3),
+        peerKey: "fixture-peer-\(proofId)-\(index)",
+        displayId: "fixture-device-\(index)", mutual: false
+      )
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input, windowsPerBand: 4
+    )
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      assertionFailure("Unable to persist isolated Event Detail aggregate fixture: \(error)")
+    }
+  }
+
+  /// Six observed rows, with one unobserved ENIN gap, for frame 11. The
+  /// isolated screenshot snapshot store is the only output; this never
+  /// enters Barnard, ProofStore, signing, or report submission.
+  func injectObservationDetailSnapshotForUITesting(
+    proofId: UUID,
+    firstWindowIndex: Int64
+  ) {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+          arguments.contains("-beid-observation-frame-11") else { return }
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    let offsets: [Int64] = [0, 1, 2, 4, 5, 6]
+    let peersByWindow: [[Int]] = [
+      Array(0..<4), Array(4..<12), Array(12..<23),
+      Array(0..<19), Array(0..<16), Array(0..<13)
+    ]
+    for (position, peers) in peersByWindow.enumerated() {
+      for peer in peers {
+        _ = BeidSharedKit.aggregation.addAggregationObservation(
+          input: input,
+          windowIndex: firstWindowIndex + offsets[position],
+          peerKey: "fixture-rpid-\(proofId)-\(position)-\(peer)",
+          displayId: "fixture-device-\(peer)",
+          mutual: false
+        )
+      }
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input, windowsPerBand: 1
+    )
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      assertionFailure("Unable to persist isolated Observation Detail aggregate fixture: \(error)")
+    }
+  }
+  #endif
+
   /// Field diagnostics for the counting split (beid#154). `os.Logger` rather
   /// than `print` on purpose: these lines have to be readable from a real
   /// device during a field run — Console.app, or a sysdiagnose collected after
@@ -1093,15 +1159,29 @@ final class SensingCoordinator: ObservableObject {
     #else
     allowInsecureLoopbackForTests = false
     #endif
+    let isEventDetailFixture: Bool
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    isEventDetailFixture = arguments.contains("-beid-ui-test") &&
+      (arguments.contains("-beid-event-detail-frame-08") ||
+        arguments.contains("-beid-event-detail-frame-08c") ||
+        arguments.contains("-beid-observation-frame-11"))
+    #else
+    isEventDetailFixture = false
+    #endif
+    let eventDetailSnapshotFileURL = isEventDetailFixture
+      ? FileManager.default.temporaryDirectory.appendingPathComponent(
+        "beid-event-detail-snapshots-\(UUID().uuidString).json"
+      ) : nil
     self.init(
       windowReportFileURL: nil,
       selfProofFileURL: nil,
       selfProofCheckpointFileURL: nil,
       bindingRecordFileURL: nil,
-      sessionAggregateSnapshotFileURL: nil,
+      sessionAggregateSnapshotFileURL: eventDetailSnapshotFileURL,
       unsentWindowLedgerFileURL: nil,
       sensingCryptography: sensingCryptography,
-      reportSubmissionRuntime: ReportSubmissionRuntime.makeIfEnabled(
+      reportSubmissionRuntime: isEventDetailFixture ? nil : ReportSubmissionRuntime.makeIfEnabled(
         eventSigningCryptography: sensingCryptography,
         definitionProvider: registryClient.map {
           RegistryEventDefinitionContextProvider(
