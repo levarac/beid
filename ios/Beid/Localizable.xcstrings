@@ -1,6 +1,21 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Bluetooth · off": {},
+    "Bluetooth\nis off": {},
+    "Enable\nBluetooth": {},
+    "I’ve turned it on": {
+      "comment": "Button: rechecks whether the user has switched Bluetooth back on."
+    },
+    "Proofs of presence, collected automatically while you are at an event. No codes, no taps.": {},
+    "Prove you\nwere there.": {},
+    "Setup · 1 / 1": {},
+    "V 1.0": {
+      "comment": "Version label in the Welcome screen header."
+    },
+    "You can change this anytime in Settings": {},
+    "beid can’t sense events or collect proofs while Bluetooth is off.": {},
+    "beid senses nearby events and people over Bluetooth Low Energy — that’s how it proves you were really there.": {},
     "%lld": {},
     "Account": {},
     "Active": {

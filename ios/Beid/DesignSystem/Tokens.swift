@@ -169,6 +169,32 @@ enum DS {
     static let compactGridCardMinimumWidth: CGFloat = 150
   }
 
+  /// Measured against the 402 × 874 Flat 2b onboarding exports (nodes
+  /// 183:398, 183:572, 183:595). The page scrolls when Dynamic Type needs
+  /// more room; these are default-size anchors, not fixed text heights.
+  enum Onboarding {
+    static let eyebrowY: CGFloat = 72
+    static let titleGap: CGFloat = 16
+    static let titleToBodyGap: CGFloat = 22
+    static let welcomeHeroGap: CGFloat = 54
+    static let welcomeHeroSize: CGFloat = 250
+    static let welcomeTitleGap: CGFloat = 46
+    static let welcomeBodyGap: CGFloat = 20
+    static let welcomeBodyWidth: CGFloat = 308
+    static let permissionStepsGap: CGFloat = 39
+    static let recoveryStepsGap: CGFloat = 60
+    static let benefitRowHeight: CGFloat = 104
+    static let recoveryRowHeight: CGFloat = 64
+    static let benefitRowTop: CGFloat = 16
+    static let recoveryRowTop: CGFloat = 18
+    static let rowNumberWidth: CGFloat = 48
+    static let noteToButtonGap: CGFloat = 16
+    static let recoveryActionGap: CGFloat = 8
+    static let footerBottom: CGFloat = 6
+    static let statusDot: CGFloat = 7
+    static let statusLabelGap: CGFloat = 7
+  }
+
   // MARK: - Font
   //
   // Two tiers (DESIGN.md §4), the same shape #628 gave `DS.Color`. Tier 1
