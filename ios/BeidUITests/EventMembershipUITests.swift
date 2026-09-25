@@ -27,12 +27,11 @@ final class EventMembershipUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
 
     app.buttons["Account"].tap()
-    XCTAssertTrue(app.staticTexts["Account"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
 
     // The Account sheet opens at the "Half screen" detent, and the List's
     // lower rows (including "Leave Event") aren't laid out into the
-    // accessibility tree until scrolled into view, so scroll the List down
-    // before looking for anything past "Venue Device".
+    // accessibility tree until scrolled into view, so scroll the List down.
     let list = app.collectionViews.firstMatch
     scrollUntilExists(app.buttons["Join Event"], in: list)
 

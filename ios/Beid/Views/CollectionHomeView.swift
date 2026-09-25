@@ -112,9 +112,7 @@ struct CollectionHomeView: View {
           // render system blue. Same fix as AccountSheetView's own
           // WalletConnectSheetView doc comment already describes.
           .tint(DS.Color.actionPrimary)
-          // Interim opaque background replacing the OS-default sheet glass;
-          // #642 takes it to ink together with the content.
-          .presentationBackground(DS.Color.surfaceCanvas)
+          .presentationBackground(DS.Color.textPrimary)
       }
       .navigationDestination(isPresented: $coordinator.dailySummaryPresented) {
         DailySummaryView()
