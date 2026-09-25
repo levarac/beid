@@ -119,6 +119,10 @@ struct AccountSheetView: View {
 
         EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
 
+        Section {
+          Link("Privacy Policy", destination: URL(string: "https://levarac.org/privacy")!)
+        }
+
         // beid#491: the build position, in the same shape as Android's row.
         // Two builds showing the same height came from the same commit, which
         // is what lets a tester report about iOS and one about Android be
