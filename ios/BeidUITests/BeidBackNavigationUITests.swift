@@ -30,7 +30,7 @@ final class BeidBackNavigationUITests: XCTestCase {
       senseEvent.waitForExistence(timeout: 5),
       "the leading-edge swipe did not pop Proof Detail back to Collection"
     )
-    XCTAssertFalse(app.staticTexts["Proof Detail"].exists)
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
   }
 
   /// A leading-edge drag on Collection leaves the current standard
@@ -124,6 +124,6 @@ final class BeidBackNavigationUITests: XCTestCase {
   /// Pushes Proof Detail for the DemoEvent proof left on Collection.
   private func openFirstProof() {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 }

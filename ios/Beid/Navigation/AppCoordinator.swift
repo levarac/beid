@@ -47,9 +47,19 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var liveWalletAddress: LiveWalletAddress?
   @Published var scanPresented = false
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
+  private enum ScanStopIntent {
+    case keepAutomaticTransport
+    case stopAutomaticTransport
+  }
+  private var pendingStopIntent: ScanStopIntent?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
   @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
+  #if DEBUG
+  /// Frame 09's display-only sample. It never enters ProofStore or a
+  /// signing/reporting store, and is set only by the UI-test launch gate.
+  private(set) var proofDetailScreenshotPresentation: ProofDetailPresentation?
+  #endif
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
@@ -93,6 +103,7 @@ final class AppCoordinator: ObservableObject {
   init(
     walletConnector: (any WalletConnector)? = nil,
     proofStore: ProofStore? = nil,
+    sensingCoordinator: SensingCoordinator? = nil,
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
@@ -100,7 +111,7 @@ final class AppCoordinator: ObservableObject {
   ) {
     let bluetoothMonitor = BluetoothMonitor()
     self.registryClient = registryClient
-    self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
+    self.sensingCoordinator = sensingCoordinator ?? SensingCoordinator(registryClient: registryClient)
     #if DEBUG
     let arguments = ProcessInfo.processInfo.arguments
     if arguments.contains("-beid-ui-test"), arguments.contains("-beid-home-frame-04c") {
@@ -155,7 +166,7 @@ final class AppCoordinator: ObservableObject {
       self.proofStore.resetForUITesting()
       seedHomeFrameForUITesting()
     }
-    sensingCoordinator.onProofCollected = { [weak self] proof in
+    self.sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
     }
     if hasCompletedOnboardingPersisted {
@@ -707,8 +718,34 @@ final class AppCoordinator: ObservableObject {
 
   func startScan() {
     stopConfirmSnapshot = nil
+    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
+    #if DEBUG
+    proofDetailScreenshotPresentation = nil
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      let shotIndex = arguments.firstIndex(of: "-beid-sensing-shot"),
+      arguments.indices.contains(shotIndex + 1),
+      arguments[shotIndex + 1] == "09"
+    {
+      proofDetailScreenshotPresentation = ProofDetailPresentation(
+        method: "Bluetooth Sensing",
+        hasSelfProof: true,
+        hasBinding: true,
+        deviceCount: 15,
+        windowCount: 6,
+        sessionCount: 1
+      )
+      selectedProof = Proof(
+        id: UUID(uuidString: "9C410000-0000-4000-8000-00000000E2A7")!,
+        eventName: "ETH Tokyo 2026",
+        date: Date(timeIntervalSince1970: 1_800_000_000),
+        peersVerified: 0
+      )
+      return
+    }
+    #endif
     scanPresented = true
     #if DEBUG
     if sensingCoordinator.injectSensingScreenshotFixture() {
@@ -761,27 +798,41 @@ final class AppCoordinator: ObservableObject {
     requestScanClose()
   }
 
-  private func resetAndDismissScan() {
+  private func resetAndDismissScan(intent: ScanStopIntent) {
     stopConfirmSnapshot = nil
+    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
-    sensingCoordinator.reset()
+    switch intent {
+    case .keepAutomaticTransport:
+      sensingCoordinator.reset()
+    case .stopAutomaticTransport:
+      sensingCoordinator.stopSensing()
+    }
   }
 
-  /// Stream B/D can call this same entry point as the scan toolbar, even if
-  /// the scan cover is not currently presented; a Proof opens it on 05e. A
-  /// confirmation is possible only when this session's Proof is actually in
-  /// ProofStore; prejoin CLOSE keeps the existing direct reset behavior.
+  /// Scan CLOSE preserves automatic operation after ending this session.
+  /// A stored Proof still passes through 05e before finalization.
   func requestScanClose() {
+    requestScanClose(intent: .keepAutomaticTransport)
+  }
+
+  /// Home Stop sensing uses the same Proof gate and 05e confirmation, but
+  /// stops automatic transport after confirmation or immediately prejoin.
+  func requestHomeStopSensing() {
+    requestScanClose(intent: .stopAutomaticTransport)
+  }
+
+  private func requestScanClose(intent: ScanStopIntent) {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
       stopConfirmSnapshot == nil else { return }
     guard let proofID = sensingCoordinator.currentProofID,
       proofStore.proof(withId: proofID) != nil
     else {
-      resetAndDismissScan()
+      resetAndDismissScan(intent: intent)
       return
     }
     let event: EventSession
@@ -789,28 +840,31 @@ final class AppCoordinator: ObservableObject {
     case .recording(let currentEvent, _), .signalLost(let currentEvent, _):
       event = currentEvent
     case .idle, .sensing, .eventFound:
-      resetAndDismissScan()
+      resetAndDismissScan(intent: intent)
       return
     }
     stopConfirmSnapshot = SensingStopConfirmSnapshot(
       proofID: proofID,
       event: event
     )
+    pendingStopIntent = intent
     scanPresented = true
   }
 
   func keepSensing() {
     stopConfirmSnapshot = nil
+    pendingStopIntent = nil
   }
 
-  /// The single CLOSE finalization entry. Clear the pending confirmation
-  /// before resetting so a repeated tap cannot finalize a second time.
-  /// `reset()` preserves automatic engine operation, unlike `stopSensing()`.
-  /// A nil return means no signed self-proof was produced; the existing
-  /// Proof remains kept, but we dismiss without claiming it was sealed.
+  /// The single confirmed finalization entry for Scan CLOSE and Home Stop.
+  /// Clear the pending confirmation before ending the session so a repeated
+  /// tap cannot finalize again. Scan keeps automatic transport; Home stops it.
+  /// A nil return keeps the Proof but dismisses without a sealed claim.
   func confirmStopSensing() {
-    guard let snapshot = stopConfirmSnapshot, let proofID = snapshot.proofID else { return }
+    guard let snapshot = stopConfirmSnapshot, let proofID = snapshot.proofID,
+      let intent = pendingStopIntent else { return }
     stopConfirmSnapshot = nil
+    pendingStopIntent = nil
     guard sensingCoordinator.currentProofID == proofID else {
       // A newer session may have taken this slot while 05e was open. Keep
       // that live session visible; only an externally reset session exits.
@@ -828,7 +882,13 @@ final class AppCoordinator: ObservableObject {
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
     let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
-    let selfProof = sensingCoordinator.reset()
+    let selfProof: SelfProofRecord?
+    switch intent {
+    case .keepAutomaticTransport:
+      selfProof = sensingCoordinator.reset()
+    case .stopAutomaticTransport:
+      selfProof = sensingCoordinator.stopSensing()
+    }
     guard selfProof?.proofId == proofID else {
       scanPresented = false
       return
@@ -870,6 +930,9 @@ final class AppCoordinator: ObservableObject {
   // MARK: - Item detail
 
   func openProof(_ proof: Proof) {
+    #if DEBUG
+    proofDetailScreenshotPresentation = nil
+    #endif
     selectedProof = proof
   }
 }

@@ -908,7 +908,7 @@
     "Status": {},
     "Stored": {},
     "status.recordedOnDevice": {
-      "comment": "Label shown when a proof's sensing data is known to be locally signed and stored on this device (not yet sent anywhere). Used in two places: (1) the Transparency screen's Participation record tier, where it's one of three rows (Sent / Included in published data are separate, always-unavailable rows below it); (2) the Proof Detail screen's Status row, where it replaced a prior unconditional \"Verified\" claim that had no backing model (beid#240, DECISIONS 2026-08-20) — the device only has its own signature, which shows \"this device recorded this,\" nothing more. Refers to on-device storage, not a video/audio recording.",
+      "comment": "Transparency Participation record tier: this device has locally signed and stored sensing data, not sent it anywhere. This is not a claim of third-party verification. Refers to on-device storage, not video or audio recording.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1279,7 +1279,7 @@
       }
     },
     "Verified proof": {
-      "comment": "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification (a status that would include a pending sub-state once it exists). Always shows \"Not yet available\" today because no verifier exists yet in the product. Distinct from the existing, always-true \"Verified\" status shown on the Proof Detail screen, which is about local BLE self-evidence, not third-party verification.",
+      "comment": "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification. Always shows \"Not yet available\" today because no verifier exists yet. Proof Detail's Sealed status means a matching local SelfProofRecord exists, not third-party verification.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1863,6 +1863,86 @@
             "value": "Stored source: %@"
           }
         }
+      }
+    },
+    "Attendance\nProof": {},
+    "METHOD": {},
+    "RECORD ID": {},
+    "STATUS": {},
+    "SIGNATURE": {},
+    "WITH": {},
+    "proofDetail.method.bluetooth": {
+      "comment": "Proof Detail method value for a Proof collected through Bluetooth sensing.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Bluetooth sensing" } }
+      }
+    },
+    "proofDetail.status.recorded": {
+      "comment": "Proof Detail status when a Proof is stored locally but no matching self-proof signature record exists. Do not imply sealing or third-party verification.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Recorded on device" } }
+      }
+    },
+    "proofDetail.signature.bound": {
+      "comment": "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Bound to wallet" } }
+      }
+    },
+    "proofDetail.signature.selfSigned": {
+      "comment": "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Self-signed on device" } }
+      }
+    },
+    "proofDetail.with.multipleSessions": {
+      "comment": "Proof Detail WITH value for an event with multiple recording sessions. The participation summary below lists each session separately; never show one session's counts as event-wide.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "See each session" } }
+      }
+    },
+    "proofDetail.with.counts": {
+      "comment": "Proof Detail WITH value for one session. Device count and observed window count come from this Proof's durable aggregate snapshot, not an event-wide sum.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@ · %2$@" } }
+      }
+    },
+    "proofDetail.with.peers": {
+      "comment": "Number of distinct nearby devices in this Proof's session aggregate; this does not imply mutual confirmation.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": { "stringUnit": { "state": "translated", "value": "%lld peer" } },
+              "other": { "stringUnit": { "state": "translated", "value": "%lld peers" } }
+            }
+          }
+        }
+      }
+    },
+    "proofDetail.with.windows": {
+      "comment": "Number of observed time windows in this Proof's session aggregate.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": { "stringUnit": { "state": "translated", "value": "%lld window" } },
+              "other": { "stringUnit": { "state": "translated", "value": "%lld windows" } }
+            }
+          }
+        }
+      }
+    },
+    "proofDetail.value.unavailable": {
+      "comment": "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not yet available" } }
+      }
+    },
+    "proofDetail.recordID.accessibility": {
+      "comment": "VoiceOver reads the complete Proof UUID even though the visible record ID is abbreviated.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Record ID %@" } }
       }
     },
     "venue.serving.servingUntil": {

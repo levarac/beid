@@ -140,8 +140,16 @@ private struct CollectionHomeContent: View {
           .toolbar(.visible, for: .navigationBar)
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
+        #if DEBUG
+        ItemDetailView(
+          proof: proof,
+          presentationOverride: coordinator.proofDetailScreenshotPresentation
+        )
+        .toolbar(.visible, for: .navigationBar)
+        #else
         ItemDetailView(proof: proof)
           .toolbar(.visible, for: .navigationBar)
+        #endif
       }
       .alert(
         clockInstructionsTitle,
@@ -533,6 +541,7 @@ private struct HomeEventCodeEntrySheet: View {
 /// sheet closes (beid#200). This is a separate observed view because
 /// `AppCoordinator` intentionally does not republish nested sensing state.
 private struct ContinuousSensingStatus: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensing: SensingCoordinator
 
   var body: some View {
@@ -547,7 +556,7 @@ private struct ContinuousSensingStatus: View {
           Spacer(minLength: DS.Space.s)
 
           BeidTextControl("Stop sensing") {
-            sensing.stopSensing()
+            coordinator.requestHomeStopSensing()
           }
           .accessibilityIdentifier("collection.stop-sensing")
         }
