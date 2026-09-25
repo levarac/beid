@@ -827,6 +827,17 @@
         }
       }
     },
+    "sigil.accessibilitySummary": {
+      "comment": "VoiceOver summary spoken in place of the Proof Sigil, the generated circular mark on a proof. It replaces the whole drawing, so it is the only thing a VoiceOver user gets — keep all three numbers. The first number counts nearby people's devices whose presence was mutual (both devices confirmed each other); the second counts devices this device merely detected, without that confirmation; the two never overlap and together they are every device drawn. The third is how many time windows the whole mark spans, not a position or an index into them — \"window\" is the unit of recorded time, roughly a few seconds each, and is not a GUI window. On current builds the first number is always 0, because mutual confirmation is not measurable on the device yet and this project deliberately shows 0 rather than guessing; translate it as a real count of zero, never as \"unknown\" or \"not available\".",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld mutual, %2$lld detected, window %3$lld"
+          }
+        }
+      }
+    },
     "Venue Device": {},
     "Venue Device (Signed)": {
       "comment": "Account-sheet row opening the signed venue-serving screen (gh#432), shown just below the plain \"Venue Device\" row. \"Signed\" distinguishes the cryptographically signed container this screen serves from the unsigned hint the older row broadcasts — it does not mean the device or the user is signed in."
