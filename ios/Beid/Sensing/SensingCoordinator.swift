@@ -3592,6 +3592,31 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
+  /// The event-key signing entry point's only view into sensing: which event
+  /// code this phone signs `eventIdHex`'s observations under (the current
+  /// session if it is that event, else the persisted canonical submissions),
+  /// and a display name when the session supplies one. `nil` when this phone
+  /// has no record of the event, so a page cannot make it derive keys for
+  /// events it never attended.
+  func eventKeySigningEvent(
+    forCanonicalEventIdHex eventIdHex: String
+  ) -> (eventCode: String, displayName: String?)? {
+    guard let wanted = eventIdHex.normalizedCanonicalEventIdHex else { return nil }
+    switch phase {
+    case .eventFound(let session), .recording(let session, _), .signalLost(let session, _):
+      if session.canonicalEventIdHex?.normalizedCanonicalEventIdHex == wanted {
+        return (session.id, session.name)
+      }
+    case .idle, .sensing:
+      break
+    }
+    guard let eventCode = reportSubmissionRuntime?.eventCode(forCanonicalEventIdHex: wanted) else { return nil }
+    return (eventCode, nil)
+  }
+
+  /// The same Barnard-backed key owner that signs this phone's observations.
+  var eventKeySigningCryptography: any SensingCryptography { sensingCryptography }
+
   /// Starts (or resumes) this attempt, moving to `.connecting` and
   /// returning the `0x`-prefixed hex the wallet's `personal_sign` must
   /// sign — the UTF-8 bytes of the literal `barnard-account-binding:v1`
