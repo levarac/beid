@@ -45,7 +45,7 @@ struct ProofCollectedSnapshot: Sendable {
   }
   #endif
 
-  var shortRecordID: String { String(recordID.uuidString.prefix(8)) }
+  var shortRecordID: String { RecordIDDisplay.abbreviated(recordID) }
 
   var withValue: String {
     let peers = "\(detectedPeerCount) \(detectedPeerCount == 1 ? "peer" : "peers")"

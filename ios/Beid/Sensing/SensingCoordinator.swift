@@ -545,6 +545,17 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregateSnapshotStore.snapshot(proofId: proofId)
   }
 
+  /// Read-only presentation lookups. The stores remain the sole owners of
+  /// these durable artifacts; neither a Proof signature state nor a connected
+  /// wallet substitutes for a matching record.
+  func selfProofRecord(forProofId proofId: UUID) -> SelfProofRecord? {
+    selfProofStore.record(forProofId: proofId)
+  }
+
+  func bindingRecord(forProofId proofId: UUID) -> BindingRecord? {
+    bindingRecordStore.record(forProofId: proofId)
+  }
+
   /// Field diagnostics for the counting split (beid#154). `os.Logger` rather
   /// than `print` on purpose: these lines have to be readable from a real
   /// device during a field run — Console.app, or a sysdiagnose collected after

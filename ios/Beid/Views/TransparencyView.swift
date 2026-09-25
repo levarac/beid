@@ -170,7 +170,7 @@ struct TransparencyView: View {
       VStack(alignment: .leading, spacing: DS.Space.m) {
         tierTitle(
           "Verified proof",
-          comment: "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification (a status that would include a pending sub-state once it exists). Always shows \"Not yet available\" today because no verifier exists yet in the product. Distinct from the Proof Detail screen's Status row, which shows \"Recorded on device\" (this screen's Participation record tier text above, reused verbatim — beid#240) rather than any claim about third-party verification."
+          comment: "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification. Always shows \"Not yet available\" today because no verifier exists yet. Proof Detail's Sealed status means a matching local SelfProofRecord exists, not third-party verification."
         )
         TierRow(label: nil, isAvailable: false, valueText: nil)
       }
@@ -183,15 +183,13 @@ struct TransparencyView: View {
       .foregroundStyle(DS.Color.textPrimary)
   }
 
-  /// Explicit shared key with `ItemDetailView.statusRow` (AGENTS.md's
-  /// reuse rule — the same English text now appears at a second call
-  /// site): key/defaultValue/comment must stay byte-identical at both
-  /// call sites so Xcode's String Catalog treats them as one entry.
+  /// This tier reports locally signed data. Proof Detail now uses a separate
+  /// status key for a stored Proof with no matching SelfProofRecord.
   private var recordedOnDeviceLabelText: String {
     String(
       localized: "status.recordedOnDevice",
       defaultValue: "Recorded on device",
-      comment: "Label shown when a proof's sensing data is known to be locally signed and stored on this device (not yet sent anywhere). Used in two places: (1) the Transparency screen's Participation record tier, where it's one of three rows (Sent / Included in published data are separate, always-unavailable rows below it); (2) the Proof Detail screen's Status row, where it replaced a prior unconditional \"Verified\" claim that had no backing model (beid#240, DECISIONS 2026-08-20) — the device only has its own signature, which shows \"this device recorded this,\" nothing more. Refers to on-device storage, not a video/audio recording."
+      comment: "Transparency Participation record tier: this device has locally signed and stored sensing data, not sent it anywhere. This is not a claim of third-party verification. Refers to on-device storage, not video or audio recording."
     )
   }
 

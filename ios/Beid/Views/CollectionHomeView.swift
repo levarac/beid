@@ -140,8 +140,16 @@ private struct CollectionHomeContent: View {
           .toolbar(.visible, for: .navigationBar)
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
+        #if DEBUG
+        ItemDetailView(
+          proof: proof,
+          presentationOverride: coordinator.proofDetailScreenshotPresentation
+        )
+        .toolbar(.visible, for: .navigationBar)
+        #else
         ItemDetailView(proof: proof)
           .toolbar(.visible, for: .navigationBar)
+        #endif
       }
       .alert(
         clockInstructionsTitle,
