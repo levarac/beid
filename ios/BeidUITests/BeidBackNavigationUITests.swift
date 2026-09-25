@@ -8,8 +8,8 @@ import XCTest
 ///
 /// The decision keeps the standard back button and its swipe gesture across
 /// all 18 screens. These tests pin that gesture on the real navigation stack:
-/// a leading-edge swipe pops Proof Detail to Collection, while a swipe on the
-/// Collection root leaves navigation intact.
+/// leading-edge swipes pop Proof Detail through Event Detail to Collection,
+/// while a swipe on the Collection root leaves navigation intact.
 final class BeidBackNavigationUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -25,15 +25,15 @@ final class BeidBackNavigationUITests: XCTestCase {
     swipeFromLeadingEdge()
 
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
-    XCTAssertFalse(app.staticTexts["Proof Detail"].exists)
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
     swipeFromLeadingEdge()
 
     let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(
       senseEvent.waitForExistence(timeout: 5),
-      "the leading-edge swipe did not pop Proof Detail back to Collection"
+      "the second leading-edge swipe did not pop Event Detail back to Collection"
     )
-    XCTAssertFalse(app.staticTexts["Proof Detail"].exists)
+    XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
   }
 
   /// A leading-edge drag on Collection leaves the current standard
@@ -129,6 +129,6 @@ final class BeidBackNavigationUITests: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 }

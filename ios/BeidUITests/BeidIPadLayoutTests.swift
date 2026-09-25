@@ -79,7 +79,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
     capture(named: "proof-detail-\(orientation)")
     app.navigationBars.buttons.firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
@@ -97,16 +97,16 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "signal-lost-\(orientation)")
   }
 
-  /// beid#240, DECISIONS 2026-08-20: Proof Detail's Status row must show
-  /// "Recorded on device" — the only claim the app can currently back —
-  /// never the unconditional "Verified" that used to render regardless of
-  /// any real signature/verification state.
-  func testProofDetailStatusRowShowsRecordedOnDevice() {
+  /// A finished DemoEvent creates a matching SelfProofRecord. That record
+  /// supports Sealed; no third-party verification or wallet binding follows.
+  func testProofDetailStatusReflectsStoredSelfProof() {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    XCTAssertTrue(app.staticTexts["Recorded on device"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Sealed"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Self-signed on device"].exists)
     XCTAssertFalse(app.staticTexts["Verified"].exists)
+    XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
   }
 
   /// beid#222, DECISIONS 2026-08-20: the Participation summary headline
@@ -262,7 +262,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 
   private func assertProofCollectedHeader() {

@@ -545,9 +545,15 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregateSnapshotStore.snapshot(proofId: proofId)
   }
 
-  /// Read-only lookup for a durable self-proof signature record belonging to this exact Proof.
+  /// Read-only presentation lookups. The stores remain the sole owners of
+  /// these durable artifacts; neither a Proof signature state nor a connected
+  /// wallet substitutes for a matching record.
   func selfProofRecord(forProofId proofId: UUID) -> SelfProofRecord? {
     selfProofStore.record(forProofId: proofId)
+  }
+
+  func bindingRecord(forProofId proofId: UUID) -> BindingRecord? {
+    bindingRecordStore.record(forProofId: proofId)
   }
 
   #if DEBUG

@@ -32,6 +32,11 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
   @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
+  #if DEBUG
+  /// Frame 09's display-only sample. It never enters ProofStore or a
+  /// signing/reporting store, and is set only by the UI-test launch gate.
+  private(set) var proofDetailScreenshotPresentation: ProofDetailPresentation?
+  #endif
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
@@ -742,6 +747,31 @@ final class AppCoordinator: ObservableObject {
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
+    #if DEBUG
+    proofDetailScreenshotPresentation = nil
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      let shotIndex = arguments.firstIndex(of: "-beid-sensing-shot"),
+      arguments.indices.contains(shotIndex + 1),
+      arguments[shotIndex + 1] == "09"
+    {
+      proofDetailScreenshotPresentation = ProofDetailPresentation(
+        method: "Bluetooth Sensing",
+        hasSelfProof: true,
+        hasBinding: true,
+        deviceCount: 15,
+        windowCount: 6,
+        sessionCount: 1
+      )
+      selectedProof = Proof(
+        id: UUID(uuidString: "9C410000-0000-4000-8000-00000000E2A7")!,
+        eventName: "ETH Tokyo 2026",
+        date: Date(timeIntervalSince1970: 1_800_000_000),
+        peersVerified: 0
+      )
+      return
+    }
+    #endif
     scanPresented = true
     #if DEBUG
     if sensingCoordinator.injectSensingScreenshotFixture() {
@@ -903,6 +933,9 @@ final class AppCoordinator: ObservableObject {
   // MARK: - Item detail
 
   func openProof(_ proof: Proof) {
+    #if DEBUG
+    proofDetailScreenshotPresentation = nil
+    #endif
     selectedProof = proof
   }
 }
