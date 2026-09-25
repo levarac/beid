@@ -90,16 +90,40 @@ private struct ContainmentProbe {
 
   /// Byte patterns a binary payload could carry the value as.
   ///
-  /// Deliberately NOT including the one- or two-byte two's-complement forms
-  /// (`0xB3`, `0xFFB3` for -77). RSSI fits in a single byte, so those are
-  /// real smuggling shapes — but a lone byte pattern collides by chance with
-  /// a 32-byte SHA-256 commitment often enough to make this suite flake, and
-  /// a suite that flakes gets deleted. The narrow forms are covered instead
-  /// by `testSignedWindowPayloadIsExactlyItsDeclaredInputsAndNothingElse`,
-  /// which reconstructs the signature payload byte for byte and so rejects
-  /// even one added byte.
+  /// **Binary shapes only. The text spellings are deliberately NOT here, and
+  /// must not be added back "for completeness" — that is the bug this comment
+  /// exists to prevent recurring.** They were here once and made this suite
+  /// flake (observed 2026-09-25). The reason is worth understanding before
+  /// touching this:
+  ///
+  /// `containsValueOccurrence` — which every text search goes through — skips
+  /// a match whose next character is another hex digit, because a `UUID`
+  /// renders as `A1B2C3D4-84FC-…` and literally contains `-84`. Feeding the
+  /// same text spellings through `containsByteSequence` re-checked them as
+  /// raw bytes with **no such guard**, so the guarded search passed and the
+  /// unguarded one failed on the same text. Reproduced deterministically: for
+  /// the id `A1B2C3D4-84FC-4E2A-9B31-0123456789AB`,
+  /// `containsValueOccurrence(of: "-84")` is `false` while
+  /// `containsByteSequence([0x2D, 0x38, 0x34])` is `true`. The colliding token
+  /// is random per run, which is why it passed locally and failed in review.
+  ///
+  /// The fix was to delete the duplicate rather than teach a second searcher
+  /// to be careful, because two guards are two things to keep correct. Nothing
+  /// is uncovered by this: `assertNoProbeText` already checks every text
+  /// spelling **and** its hex-encoded form, with the guard, and it is applied
+  /// beside every use of this property except the signature input — where
+  /// `testSignedWindowPayloadIsExactlyItsDeclaredInputsAndNothingElse`
+  /// reconstructs the payload byte for byte and so rejects a stray `-84` more
+  /// strictly than any search could.
+  ///
+  /// Also deliberately NOT including the one- or two-byte two's-complement
+  /// forms (`0xB3`, `0xFFB3` for -77). RSSI fits in a single byte, so those
+  /// are real smuggling shapes — but a lone byte pattern collides by chance
+  /// with a 32-byte SHA-256 commitment often enough to make this suite flake,
+  /// and a suite that flakes gets deleted. The narrow forms are covered
+  /// instead by the same byte-for-byte reconstruction test.
   var byteForms: [[UInt8]] {
-    var forms: [[UInt8]] = textForms.map { Array($0.utf8) }
+    var forms: [[UInt8]] = []
     let wide = Int64(dBm)
     let narrow = Int32(dBm)
     forms.append(withUnsafeBytes(of: wide.bigEndian) { Array($0) })
