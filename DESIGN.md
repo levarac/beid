@@ -857,7 +857,9 @@ Google Fonts under the SIL Open Font License, bundled with the app
 (#629):
 
 - **Bricolage Grotesque ExtraBold** — display (titles, numbers, the
-  Account address).
+  Account address). Each bundled static Display cut uses `opsz` equal to its
+  base size (60 / 52 / 46 / 40 / 34), matching the rendered Figma widths
+  (#643, 2026-09-26). The earlier opsz-14 assumption for Display was wrong.
 - **DM Sans** Bold / Regular — titles and body.
 - **DM Mono** Medium — labels.
 

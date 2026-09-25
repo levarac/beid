@@ -318,24 +318,23 @@ enum DS {
     /// survive AX3 would not take. The curve and the style's own size
     /// progression are different things; do not derive one from the other.
     enum Library {
-      private static let displayFace = "BricolageGrotesque-ExtraBold"
       private static let titleFace = "DMSans-Bold"
       private static let bodyFace = "DMSans-Regular"
       private static let monoFace = "DMMono-Medium"
 
       /// `Display/60` — Home title "Events".
       static let display60 = Style(
-        postScriptName: displayFace, size: 60, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display60ExtraBold", size: 60, textStyle: .largeTitle,
         tracking: -0.02, lineHeight: 1.0
       )
       /// `Display/52` — onboarding titles.
       static let display52 = Style(
-        postScriptName: displayFace, size: 52, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display52ExtraBold", size: 52, textStyle: .largeTitle,
         tracking: -0.02, lineHeight: 1.0
       )
       /// `Display/46` — screen titles (event name, Session 1, Report #2).
       static let display46 = Style(
-        postScriptName: displayFace, size: 46, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display46ExtraBold", size: 46, textStyle: .largeTitle,
         tracking: -0.015, lineHeight: 1.0
       )
       /// `Display/Number 40` — sensing figures. The only style with
@@ -344,13 +343,13 @@ enum DS {
       /// jitter sideways as it counts. DM Mono needs no such setting — it
       /// is already monospaced.
       static let displayNumber40 = Style(
-        postScriptName: displayFace, size: 40, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display40ExtraBold", size: 40, textStyle: .largeTitle,
         tracking: -0.01, usesMonospacedDigits: true
       )
       /// `Display/Address 34` — the Account sheet address (typeface still
       /// open: spec §10-5, #642).
       static let displayAddress34 = Style(
-        postScriptName: displayFace, size: 34, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display34ExtraBold", size: 34, textStyle: .largeTitle,
         tracking: -0.01
       )
       /// `Title/19` — section and state titles.
