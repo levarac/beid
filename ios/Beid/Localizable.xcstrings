@@ -220,6 +220,17 @@
         }
       }
     },
+    "home.empty.description": {
+      "comment": "Collection Home empty-state explanation. The English line break after show up matches the two-line design; other locales may wrap as needed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walk into an event — it will show up\nhere automatically."
+          }
+        }
+      }
+    },
     "Events": {
       "comment": "Title of the Collection Home screen.",
       "localizations": {

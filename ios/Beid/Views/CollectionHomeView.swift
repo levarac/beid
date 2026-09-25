@@ -89,14 +89,16 @@ private struct CollectionHomeContent: View {
                 }
               }
 
-              ContinuousSensingStatus(sensing: sensing)
-                .padding(.top, DS.Space.m)
-
               // #644 has not settled Today. Keep its real destination visible
-              // until an authorized navigation decision replaces it.
+              // until an authorized navigation decision replaces it. Follow
+              // the list's final rule with the same quiet text-control rhythm.
               BeidTextControl("collection.dailySummaryButton") {
                 coordinator.dailySummaryPresented = true
               }
+              .padding(.top, DS.Space.s)
+
+              ContinuousSensingStatus(sensing: sensing)
+                .padding(.top, DS.Space.m)
             }
             .padding(.horizontal, DS.Space.pageMargin)
             .padding(.top, DS.Space.s)
@@ -317,8 +319,9 @@ private struct CollectionHomeContent: View {
       BeidDesign.haptic()
       coordinator.openProof(card.representative)
     } label: {
-      HStack(spacing: DS.Space.m) {
+      HStack(spacing: 0) {
         RecordSigilSlot(size: 60, onInk: false)
+          .padding(.trailing, DS.Space.m)
         VStack(alignment: .leading, spacing: DS.Space.xs) {
           Text(verbatim: card.representative.eventName)
             .beidTextStyle(DS.Font.Library.title17)
@@ -329,10 +332,12 @@ private struct CollectionHomeContent: View {
             .foregroundStyle(DS.Color.textSecondary)
             .lineLimit(1)
         }
-        Spacer(minLength: DS.Space.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
         Text(pastProofAction(card))
           .beidTextStyle(DS.Font.Library.labelMono11Time)
           .foregroundStyle(DS.Color.textPrimary)
+          .fixedSize(horizontal: true, vertical: false)
+          .padding(.leading, DS.Space.s)
       }
       .frame(minHeight: DS.Size.listRowMinHeight)
       .contentShape(Rectangle())
@@ -407,7 +412,11 @@ private struct CollectionHomeContent: View {
           Text("NO EVENTS YET")
             .beidTextStyle(DS.Font.Library.labelMono10)
             .foregroundStyle(DS.Color.textPrimary)
-          Text("Walk into an event — it will show up here automatically.")
+          Text(String(
+            localized: "home.empty.description",
+            defaultValue: "Walk into an event — it will show up\nhere automatically.",
+            comment: "Collection Home empty-state explanation. The English line break after show up matches the two-line design; other locales may wrap as needed."
+          ))
             .beidTextStyle(DS.Font.Library.body13)
             .foregroundStyle(DS.Color.textSecondary)
             .multilineTextAlignment(.center)
