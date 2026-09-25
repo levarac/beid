@@ -53,34 +53,6 @@ struct FlatOnboardingPage<Content: View, Footer: View>: View {
   }
 }
 
-/// The Figma Button/Primary large shape, scoped to these three frames while
-/// the repository-wide button migration remains separate. It retains the
-/// current DM Sans sentence-case control copy decided for this issue.
-struct FlatOnboardingPrimaryButton: View {
-  let title: LocalizedStringKey
-  let action: () -> Void
-
-  init(_ title: LocalizedStringKey, action: @escaping () -> Void) {
-    self.title = title
-    self.action = action
-  }
-
-  var body: some View {
-    Button {
-      BeidDesign.haptic()
-      action()
-    } label: {
-      Text(title)
-        .beidTextStyle(DS.Font.Library.title16)
-        .foregroundStyle(DS.Color.labelOnActionPrimary)
-        .frame(maxWidth: .infinity, minHeight: DS.Size.primaryButtonMinHeight)
-        .background(DS.Color.actionPrimary, in: Capsule())
-        .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-  }
-}
-
 /// Figma's hairline-separated numbered instructions. The same row anatomy
 /// handles the permission benefits and Bluetooth-off recovery steps.
 struct FlatOnboardingSteps: View {
