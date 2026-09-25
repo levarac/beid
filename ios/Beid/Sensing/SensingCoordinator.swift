@@ -564,7 +564,8 @@ final class SensingCoordinator: ObservableObject {
     let arguments = ProcessInfo.processInfo.arguments
     guard arguments.contains("-beid-ui-test"),
           arguments.contains("-beid-event-detail-frame-08") ||
-          arguments.contains("-beid-event-detail-frame-08c") else { return }
+          arguments.contains("-beid-event-detail-frame-08c") ||
+          arguments.contains("-beid-observation-frame-11") else { return }
     let input = BeidSharedKit.aggregation.createAggregationObservationInput()
     for index in 0..<deviceCount {
       _ = BeidSharedKit.aggregation.addAggregationObservation(
@@ -580,6 +581,43 @@ final class SensingCoordinator: ObservableObject {
       try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
     } catch {
       assertionFailure("Unable to persist isolated Event Detail aggregate fixture: \(error)")
+    }
+  }
+
+  /// Six observed rows, with one unobserved ENIN gap, for frame 11. The
+  /// isolated screenshot snapshot store is the only output; this never
+  /// enters Barnard, ProofStore, signing, or report submission.
+  func injectObservationDetailSnapshotForUITesting(
+    proofId: UUID,
+    firstWindowIndex: Int64
+  ) {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+          arguments.contains("-beid-observation-frame-11") else { return }
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    let offsets: [Int64] = [0, 1, 2, 4, 5, 6]
+    let peersByWindow: [[Int]] = [
+      Array(0..<4), Array(4..<12), Array(12..<23),
+      Array(0..<19), Array(0..<16), Array(0..<13)
+    ]
+    for (position, peers) in peersByWindow.enumerated() {
+      for peer in peers {
+        _ = BeidSharedKit.aggregation.addAggregationObservation(
+          input: input,
+          windowIndex: firstWindowIndex + offsets[position],
+          peerKey: "fixture-rpid-\(proofId)-\(position)-\(peer)",
+          displayId: "fixture-device-\(peer)",
+          mutual: false
+        )
+      }
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input, windowsPerBand: 1
+    )
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      assertionFailure("Unable to persist isolated Observation Detail aggregate fixture: \(error)")
     }
   }
   #endif
@@ -1126,7 +1164,8 @@ final class SensingCoordinator: ObservableObject {
     let arguments = ProcessInfo.processInfo.arguments
     isEventDetailFixture = arguments.contains("-beid-ui-test") &&
       (arguments.contains("-beid-event-detail-frame-08") ||
-        arguments.contains("-beid-event-detail-frame-08c"))
+        arguments.contains("-beid-event-detail-frame-08c") ||
+        arguments.contains("-beid-observation-frame-11"))
     #else
     isEventDetailFixture = false
     #endif

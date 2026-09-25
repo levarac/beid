@@ -154,6 +154,13 @@ enum DS {
     static let keyValueRowMinHeight: CGFloat = 44
     /// Session row minimum height.
     static let sessionRowMinHeight: CGFloat = 48
+    /// Flat 2b 11 observed-window chart: six 54 pt columns with 6 pt gaps
+    /// fill the 354 pt page width in the 402 pt Figma frame.
+    static let observationChartWidth: CGFloat = 354
+    static let observationChartHeight: CGFloat = 90
+    static let observationChartMaxBarHeight: CGFloat = 78
+    static let observationChartBarWidth: CGFloat = 54
+    static let observationChartBarGap: CGFloat = 6
     /// Report row minimum height.
     static let reportRowMinHeight: CGFloat = 60
     /// Proof row minimum height.
