@@ -2011,7 +2011,7 @@
       }
     },
     "eventDetail.reports.count": {
-      "comment": "Count of stored canonical Observation submission records for this event.",
+      "comment": "Fixed-plural REPORTS section label and count of stored canonical Observation submission records for this event.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2027,7 +2027,7 @@
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "REPORT · %arg"
+                      "value": "REPORTS · %arg"
                     }
                   },
                   "other": {
@@ -2110,7 +2110,7 @@
       }
     },
     "eventDetail.proofs.count": {
-      "comment": "Count of stored recording Proofs in this event.",
+      "comment": "Fixed-plural PROOFS section label and count of stored recording Proofs in this event.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2126,7 +2126,7 @@
                   "one": {
                     "stringUnit": {
                       "state": "translated",
-                      "value": "PROOF · %arg"
+                      "value": "PROOFS · %arg"
                     }
                   },
                   "other": {
@@ -2154,12 +2154,34 @@
       }
     },
     "eventDetail.proof.accessibilityLabel": {
-      "comment": "VoiceOver label for a Proof row; no third-party verification outcome exists.",
+      "comment": "VoiceOver label for a Proof row; the state comes only from a matching self-proof signature record.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open proof for session %lld, verification unavailable"
+            "value": "Open proof for session %lld, %@"
+          }
+        }
+      }
+    },
+    "eventDetail.proof.state.sealed": {
+      "comment": "Proof row state when a self-proof signature record exists for this exact stored Proof.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SEALED"
+          }
+        }
+      }
+    },
+    "eventDetail.proof.state.recorded": {
+      "comment": "Proof row state when no self-proof signature record exists for this exact stored Proof.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED ON DEVICE"
           }
         }
       }

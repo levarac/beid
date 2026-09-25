@@ -40,13 +40,14 @@ struct EventDetailView: View {
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 220, alignment: .leading)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("event-detail.heading")
 
           Text(recordedDateCaption)
             .beidTextStyle(DS.Font.Library.labelMono10)
             .foregroundStyle(DS.Color.textSecondary)
-            .padding(.top, DS.Space.s)
+            .padding(.top, DS.Space.s + DS.Space.xs)
 
           observations
             .padding(.top, DS.Space.xl)
@@ -182,9 +183,6 @@ struct EventDetailView: View {
               reportRow(index: index + 1, record: record)
             }
             hairline
-            Text("Session association unavailable")
-              .beidTextStyle(DS.Font.Library.body13)
-              .foregroundStyle(DS.Color.textSecondary)
           }
         }
       } else {
@@ -312,6 +310,7 @@ struct EventDetailView: View {
         .foregroundStyle(DS.Color.textSecondary)
         .padding(.bottom, DS.Space.s)
       ForEach(Array(sessions.enumerated()), id: \.element.id) { index, proof in
+        let state = proofState(for: proof)
         hairline
         NavigationLink {
           ItemDetailView(proof: proof)
@@ -322,7 +321,7 @@ struct EventDetailView: View {
               Text(proofTitle(index + 1))
                 .beidTextStyle(DS.Font.Library.title15)
                 .foregroundStyle(DS.Color.textPrimary)
-              Text("VERIFICATION UNAVAILABLE")
+              Text(state)
                 .beidTextStyle(DS.Font.Library.labelMono10)
                 .foregroundStyle(DS.Color.textSecondary)
             }
@@ -336,7 +335,7 @@ struct EventDetailView: View {
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(proofAccessibilityLabel(index + 1))
+        .accessibilityLabel(proofAccessibilityLabel(index + 1, state: state))
         .accessibilityIdentifier("event-detail.proof.\(index + 1)")
       }
       hairline
@@ -360,11 +359,26 @@ struct EventDetailView: View {
     )
   }
 
-  private func proofAccessibilityLabel(_ index: Int) -> String {
+  private func proofState(for proof: Proof) -> String {
+    if sensing.selfProofRecord(forProofId: proof.id) != nil {
+      return String(
+        localized: "eventDetail.proof.state.sealed",
+        defaultValue: "SEALED",
+        comment: "Proof row state when a self-proof signature record exists for this exact stored Proof."
+      )
+    }
+    return String(
+      localized: "eventDetail.proof.state.recorded",
+      defaultValue: "RECORDED ON DEVICE",
+      comment: "Proof row state when no self-proof signature record exists for this exact stored Proof."
+    )
+  }
+
+  private func proofAccessibilityLabel(_ index: Int, state: String) -> String {
     String(
       localized: "eventDetail.proof.accessibilityLabel",
-      defaultValue: "Open proof for session \(index), verification unavailable",
-      comment: "VoiceOver label for a Proof row. The app has no third-party verification outcome."
+      defaultValue: "Open proof for session \(index), \(state)",
+      comment: "VoiceOver label for a Proof row. State comes only from a matching self-proof signature record."
     )
   }
 

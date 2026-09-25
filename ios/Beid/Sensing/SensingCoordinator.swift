@@ -440,6 +440,11 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregateSnapshotStore.snapshot(proofId: proofId)
   }
 
+  /// Read-only lookup for a durable self-proof signature record belonging to this exact Proof.
+  func selfProofRecord(forProofId proofId: UUID) -> SelfProofRecord? {
+    selfProofStore.record(forProofId: proofId)
+  }
+
   #if DEBUG
   /// Uses the production shared reducer and snapshot store for screenshot
   /// fixtures. The initializer below routes these two frames to an isolated
