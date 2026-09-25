@@ -39,7 +39,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "collection-empty-\(orientation)")
 
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.staticTexts["Account"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "account-\(orientation)")
     app.buttons["Done"].tap()
 

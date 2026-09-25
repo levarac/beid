@@ -106,6 +106,15 @@ final class AppCoordinator: ObservableObject {
     #else
     self.permissionEvaluation = permissionEvaluation
     #endif
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"),
+      ProcessInfo.processInfo.arguments.contains("-beid-account-connected-fixture")
+    {
+      // Display-only Account screenshot fixture. It cannot stand in for a
+      // live connector address on the binding path (beid#315).
+      walletAddress = "0x7aF31234567890abcdef1234567890abcdef9E2b"
+    }
+    #endif
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
       seedHomeFrameForUITesting()

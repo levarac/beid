@@ -122,16 +122,17 @@ private struct CollectionHomeContent: View {
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
           .environmentObject(coordinator)
-          .presentationDetents([.medium])
+          // PM build #2 measured the top at y≈437 versus Figma y=400. The
+          // larger detent lifts it while Account's top content margin keeps
+          // the already-aligned wallet block in place.
+          .presentationDetents([.fraction(0.575)])
           .presentationDragIndicator(.visible)
           // Sheets don't inherit the presenter's .tint (unlike push
           // navigation) — without this, the Done/Connect Wallet buttons
           // render system blue. Same fix as AccountSheetView's own
           // WalletConnectSheetView doc comment already describes.
           .tint(DS.Color.actionPrimary)
-          // Interim opaque background replacing the OS-default sheet glass;
-          // #642 takes it to ink together with the content.
-          .presentationBackground(DS.Color.surfaceCanvas)
+          .presentationBackground(DS.Color.textPrimary)
       }
       .sheet(isPresented: $coordinator.homeEventCodeSheetPresented) {
         HomeEventCodeEntrySheet()

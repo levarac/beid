@@ -1845,6 +1845,47 @@
           }
         }
       }
+    },
+    "Copied": {
+      "comment": "Feedback after the full wallet address has been copied."
+    },
+    "Copied address": {
+      "comment": "Accessibility label after copying the full wallet address."
+    },
+    "Disconnect": {
+      "comment": "Confirms disconnecting the wallet after the Account confirmation message."
+    },
+    "Disconnect wallet": {
+      "comment": "Destructive Account row that opens a confirmation before disconnecting the wallet."
+    },
+    "Disconnect wallet?": {
+      "comment": "Title of the wallet disconnection confirmation within the Account sheet."
+    },
+    "Keep connected": {
+      "comment": "Cancels wallet disconnection and returns to the Account sheet."
+    },
+    "Off · Fix": {
+      "comment": "Bluetooth-off status and action to open Settings in the Account sheet."
+    },
+    "Open Bluetooth Settings": {
+      "comment": "Accessibility label for the Account Bluetooth-off recovery control."
+    },
+    "Organizer tools": {
+      "comment": "Account navigation row opening venue operator tools."
+    },
+    "Sensing is paused until Bluetooth is on. Tap to open Settings.": {},
+    "Venue broadcast": {},
+    "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime.": {},
+    "account.wallet.header": {
+      "comment": "Account sheet label naming the connected wallet provider.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet · Connected via %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
