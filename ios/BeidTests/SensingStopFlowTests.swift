@@ -37,7 +37,7 @@ final class SensingStopFlowTests: XCTestCase {
     _ = coordinator.sensingCoordinator.reset()
   }
 
-  func testStopFinalizesOnceThenDoneOnlyDismisses() async {
+  func testStopFinalizesOnceThenDoneShowsPersistentProofCollected() async throws {
     let coordinator = makeCoordinator()
     await reachRecording(coordinator)
     let proofID = coordinator.sensingCoordinator.currentProofID
@@ -52,11 +52,26 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented)
     XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
     let sealedAt = coordinator.sealedSnapshot?.sealedAt
+    let sealedDetectedCount = coordinator.sealedSnapshot?.detectedDeviceCount
+    let sealedWindowCount = coordinator.sealedSnapshot?.aggregate.map { Int($0.windowCount) }
+    let storedProof = try XCTUnwrap(proofID.flatMap { coordinator.proofStore.proof(withId: $0) })
     coordinator.confirmStopSensing()
     XCTAssertEqual(coordinator.sealedSnapshot?.sealedAt, sealedAt)
     coordinator.doneWithSealedRecord()
-    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertTrue(coordinator.scanPresented)
     XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertEqual(coordinator.proofCollectedSnapshot?.recordID, storedProof.id)
+    XCTAssertEqual(coordinator.proofCollectedSnapshot?.eventName, storedProof.eventName)
+    XCTAssertEqual(coordinator.proofCollectedSnapshot?.date, storedProof.date)
+    XCTAssertEqual(coordinator.proofCollectedSnapshot?.detectedPeerCount, sealedDetectedCount)
+    XCTAssertEqual(coordinator.proofCollectedSnapshot?.observedWindowCount, sealedWindowCount)
+    coordinator.doneWithSealedRecord()
+    XCTAssertNotNil(coordinator.proofCollectedSnapshot)
+    XCTAssertTrue(coordinator.scanPresented, "07 must persist until View collection")
+
+    coordinator.viewCollectionAfterProofCollected()
+    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
   }
 
   func testStaleProofIDCannotFinalizeOrShowSealed() async {
@@ -69,6 +84,7 @@ final class SensingStopFlowTests: XCTestCase {
 
     XCTAssertFalse(coordinator.scanPresented)
     XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
   }
 
@@ -86,6 +102,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
     guard case .recording = coordinator.sensingCoordinator.phase else {
       return XCTFail("a newer Proof must remain live")
     }
@@ -103,6 +120,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented)
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
     XCTAssertNotNil(coordinator.sensingCoordinator.currentProofID)
     _ = coordinator.sensingCoordinator.reset()
   }
@@ -134,6 +152,17 @@ final class SensingStopFlowTests: XCTestCase {
       coordinator.sealedSnapshot?.aggregate?.deviceCount,
       Int32(laterCount)
     )
+  }
+
+  func testProofCollectedDoesNotTurnMissingAggregateIntoZeroWindows() {
+    let proof = Proof(eventName: "Real event", date: Date(), peersVerified: 2)
+    let snapshot = ProofCollectedSnapshot(
+      proof: proof, detectedPeerCount: 2, observedWindowCount: nil
+    )
+
+    XCTAssertEqual(snapshot.withValue, "2 peers")
+    XCTAssertFalse(snapshot.withValue.contains("window"))
+    XCTAssertEqual(snapshot.shortRecordID, String(proof.id.uuidString.prefix(8)))
   }
 
   private func makeCoordinator() -> AppCoordinator {

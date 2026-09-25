@@ -10,8 +10,8 @@ import XCTest
 /// `testBindingSheetAutoPresentsOnRecordingAndDoesNotReopenAfterDismissal`
 /// guards the auto-present invariant: the sheet must present automatically
 /// once `.recording` begins (chained through `bindingState` going fresh
-/// `.none` → `.pendingConnect`, then `RecordingView`'s entrance ceremony
-/// finishing), not only on the next scenePhase foreground transition — a
+/// `.none` → `.pendingConnect`, then `RecordingView` mounting), not only on
+/// the next scenePhase foreground transition — a
 /// session that never backgrounds the app (e.g. this whole DemoEvent
 /// walkthrough) previously never saw it. It also guards against a
 /// regression this fix could introduce if written wrong: dismissing the
@@ -29,7 +29,7 @@ import XCTest
 /// then `Close`. On iPad, the same tap lands on the form sheet's visible
 /// backdrop and genuinely dismisses the binding sheet, recovering in one
 /// fewer tap. Both device classes converge on the same end state —
-/// stop confirmation, then Collection Home — by different real paths.
+/// stop confirmation, 06, 07, then Collection Home — by different real paths.
 final class RecordingBindingSheetUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -46,12 +46,9 @@ final class RecordingBindingSheetUITests: XCTestCase {
     // `bindingState = .pendingConnect(event)` fresh from `.none`
     // (`resetSessionState()` at the `.eventFound` transition put it there
     // moments earlier). `ScanFlowView` no longer presents directly off that
-    // — it chains presentation to `sensing.entranceCeremonyFinished`
-    // instead (sequenced after the ceremony, not racing its animation —
-    // see `ScanFlowView`'s doc comment on that `.onChange`), so this must
-    // wait out `RecordingView`'s ~2s entrance-ceremony dwell on top of the
-    // ~2s demo step delay before the sheet appears; the generous timeout
-    // reflects that, not test flakiness.
+    // — it chains presentation to `sensing.recordingSurfaceReady` instead,
+    // after RecordingView mounts. The timeout covers the demo step delay and
+    // sheet presentation.
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(
       cancelButton.waitForExistence(timeout: 15),
@@ -113,9 +110,9 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// 2. Add sequencing: Close dismisses the sheet first and defers
   ///    `finishScan()` to the sheet's `onDismiss`; presentation itself
   ///    chained to `RecordingView`'s entrance-ceremony finishing rather
-  ///    than directly to `bindingState` (both still present in
-  ///    `ScanFlowView.swift`/`SensingCoordinator.swift`/`RecordingView.swift`
-  ///    today) — still insufficient, identical failure signature.
+  ///    than directly to `bindingState` — still insufficient, identical
+  ///    failure signature. #637 later removed that ceremony while retaining
+  ///    the sheet's sequencing after RecordingView mounts.
   /// 3. Restructure `EventBindingSheetView`'s presentation to be a sibling
   ///    of `ScanFlowView`'s `.fullScreenCover` (owned by `AppCoordinator`,
   ///    presented from `RootView`) instead of nested inside it — this
@@ -144,7 +141,8 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// `"Simulate Signal Lost"` being present — the same identifier
   /// `BeidIPadLayoutTests.swift` already uses to detect being on that
   /// screen), then `Close` reaches Stop confirmation, whose stop action
-  /// reaches the sealed screen and DONE returns to Collection Home.
+  /// reaches the sealed screen; DONE advances to 07, and View collection
+  /// returns to Collection Home.
   /// Ruling: beid#224 is not a defect. The auto-present binding
   /// sheet ships as-is, on `.sheet` — no chrome change, no fallback, no
   /// fifth structural fix. This test's job is to protect that recovery
@@ -234,10 +232,12 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    app.buttons["View collection"].tap()
     let homeScan = app.buttons["home.scan"]
     XCTAssertTrue(
       homeScan.waitForExistence(timeout: 5) && homeScan.isHittable,
-      "The confirmed stop and DONE must reach Collection Home"
+      "The confirmed stop, DONE, and View collection must reach Collection Home"
     )
   }
 

@@ -209,6 +209,7 @@ enum SensingScreenshotFixture: String {
   case cantJoin = "05d"
   case stopConfirm = "05e"
   case sealed = "06"
+  case proofCollected = "07"
 
   static var selected: SensingScreenshotFixture? {
     let arguments = ProcessInfo.processInfo.arguments
@@ -264,26 +265,9 @@ final class SensingCoordinator: ObservableObject {
   /// `RegistryVerifiedJoinContext`. This display/session field is never itself
   /// authority for joining.
   @Published private(set) var joinedCanonicalEventIdHex: String?
-  /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
-  /// played for the current session. Lives here rather than as view-local
-  /// `@State` because `.recording` can be interrupted by `.signalLost` and
-  /// resumed (`resumeSensing()`), which recreates `RecordingView` — a flag
-  /// on the view itself would incorrectly replay the ceremony after every
-  /// resume. Reset alongside the rest of per-session state in
-  /// `resetSessionState()`.
-  @Published private(set) var recordingCeremonyShown = false
-  /// Whether `RecordingView`'s one-time entrance ceremony has finished
-  /// dwelling (or never needed to run at all — see
-  /// `markEntranceCeremonyFinished()`'s own doc comment) for the current
-  /// session. `ScanFlowView` (beid#222) chains the wallet-binding sheet's
-  /// auto-presentation to this rather than directly to `bindingState`
-  /// becoming `.pendingConnect`, so the ceremony and the binding prompt are
-  /// sequenced one after the other per §5.5, instead of the sheet's
-  /// presentation animation starting on top of the ceremony's — which also
-  /// closed a presentation-transaction race where a same-tick Close tap
-  /// left both the scan flow and the sheet stuck on screen. Reset alongside
-  /// the rest of per-session state in `resetSessionState()`.
-  @Published private(set) var entranceCeremonyFinished = false
+  /// The recording surface has mounted. Binding sheet auto-presentation waits
+  /// for this signal so its animation does not race the recording transition.
+  @Published private(set) var recordingSurfaceReady = false
   /// Distinct devices observed so far this session — the value carried as
   /// `peersVerified` into `.recording` and the stored `Proof`, and so the
   /// number that ends up inside a signed artifact.
@@ -378,12 +362,12 @@ final class SensingCoordinator: ObservableObject {
     case .detectingFirstTime: elapsedSeconds = 2 * 60
     case .detectingLong: elapsedSeconds = 24
     case .cantJoin: elapsedSeconds = 0
-    case .sealed: elapsedSeconds = 30 * 60
+    case .sealed, .proofCollected: elapsedSeconds = 30 * 60
     }
-    firstSightingAt = fixture == .cantJoin ? nil : start
+    firstSightingAt = fixture == .cantJoin || fixture == .proofCollected ? nil : start
     sensingScreenshotNow = start.addingTimeInterval(elapsedSeconds)
 
-    if fixture != .cantJoin {
+    if fixture != .cantJoin && fixture != .proofCollected {
       let peerCounts = fixture == .sensing || fixture == .stopConfirm || fixture == .sealed
         ? [1, 4, 6, 9, 8, 13]
         : [5]
@@ -412,9 +396,10 @@ final class SensingCoordinator: ObservableObject {
     sensingScreenshotEvent = event
     switch fixture {
     case .sensing, .stopConfirm, .sealed:
-      recordingCeremonyShown = true
-      entranceCeremonyFinished = true
+      recordingSurfaceReady = true
       phase = .recording(event: event, peersVerified: devicesVerified)
+    case .proofCollected:
+      phase = .idle
     case .detecting, .detectingLong, .detectingFirstTime:
       phase = .eventFound(event)
     case .cantJoin:
@@ -2748,23 +2733,9 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Marks the one-time entrance ceremony consumed so it never replays —
-  /// called once by `RecordingView` the first time it appears for this
-  /// session (including across a `resumeSensing()` cycle, since this flag
-  /// outlives the view instance).
-  func markRecordingCeremonyShown() {
-    recordingCeremonyShown = true
-  }
-
-  /// Marks the entrance ceremony's on-screen dwell as over — called by
-  /// `RecordingView` either once its 2-second "Proof Collected" dwell
-  /// timer completes, or immediately if there was no ceremony to show at
-  /// all this time (`recordingCeremonyShown` already `true`, e.g. after a
-  /// `resumeSensing()` cycle). Both paths converge here because
-  /// `ScanFlowView` only cares whether the ceremony is done occupying the
-  /// screen, not which of the two reasons made that true right now.
-  func markEntranceCeremonyFinished() {
-    entranceCeremonyFinished = true
+  /// Called by RecordingView after its first render in this session.
+  func markRecordingSurfaceReady() {
+    recordingSurfaceReady = true
   }
 
   @discardableResult
@@ -2844,8 +2815,7 @@ final class SensingCoordinator: ObservableObject {
     activeProofId = nil
     pendingBindingMessage = nil
     bindingState = .none
-    recordingCeremonyShown = false
-    entranceCeremonyFinished = false
+    recordingSurfaceReady = false
   }
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)

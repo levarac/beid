@@ -51,6 +51,7 @@
 		250E00E36D5B7130E5D6B996 /* AggregationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */; };
 		255D085BC2EA4B205233623C /* ClockPreflightController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62A19D8CAE2EEEEB0EDA6472 /* ClockPreflightController.swift */; };
 		263C863A858418EFF3DBD26D /* AggregationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A840B8C3BCA7C4DA428288E4 /* AggregationRuntime.swift */; };
+		2676AFD809C0517E0E14FD13 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
 		27F23FCF992343950D9A04FA /* ScriptedVenuePorts.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD430BD5099C75924A32EB13 /* ScriptedVenuePorts.swift */; };
 		28E75B406BEB88F153F41935 /* VenueDeviceBroadcastingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B72321D5649C6DAE0C3B30 /* VenueDeviceBroadcastingTests.swift */; };
 		2924E7D98FAA1081D8540986 /* DMSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B3796B12138757334C876E30 /* DMSans-Regular.ttf */; };
@@ -193,6 +194,7 @@
 		8E46266E6961044BFC6ABA8C /* WalletHintStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0969D5632A59660576ACA113 /* WalletHintStoreTests.swift */; };
 		8FDC27D2283A74EB215D9DE0 /* BindingRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = E065C15C72E249BC341A101C /* BindingRecord.swift */; };
 		903C47844113AADA5701273B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BCB73A86C57A1BC267A96A7D /* Localizable.xcstrings */; };
+		9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C58EEA07A80440D53597D515 /* ProofCollectedView.swift */; };
 		90D18555A4C059568D9201EA /* WindowReportFinalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2FE2EEF9281491958E8E59 /* WindowReportFinalizationTests.swift */; };
 		910578C6645F07F1654CD867 /* SensingRadarViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC6F46089424F52C99F708B5 /* SensingRadarViewTests.swift */; };
 		92E18F40505179D2B6354798 /* BindingRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = E065C15C72E249BC341A101C /* BindingRecord.swift */; };
@@ -589,6 +591,7 @@
 		C3884063F022A5DF1260FEE5 /* EventCodeJoinError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCodeJoinError.swift; sourceTree = "<group>"; };
 		C4B72321D5649C6DAE0C3B30 /* VenueDeviceBroadcastingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceBroadcastingTests.swift; sourceTree = "<group>"; };
 		C5157DE43C6934B2D9C92AC3 /* VenueSignedServingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueSignedServingView.swift; sourceTree = "<group>"; };
+		C58EEA07A80440D53597D515 /* ProofCollectedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofCollectedView.swift; sourceTree = "<group>"; };
 		C637EA719C58481853B15B91 /* LocalizationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationContractTests.swift; sourceTree = "<group>"; };
 		C6F6A80B570DAEC0367D5AFE /* OwnerKeyProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerKeyProvider.swift; sourceTree = "<group>"; };
 		C7FC09FE3BAF5926B776ED4E /* libBeidMetaMaskSupport.a */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = archive.ar; path = libBeidMetaMaskSupport.a; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -872,6 +875,7 @@
 				05E3EC74423D098E4990BF12 /* PastEventsView.swift */,
 				FE1D6BBD55B5DDEB2D3476C2 /* PreviewAggregateFactory.swift */,
 				6660B6477CE489C244F95FED /* ProofCardView.swift */,
+				C58EEA07A80440D53597D515 /* ProofCollectedView.swift */,
 				DBBF900C092346BBFDF6BA96 /* RecordingView.swift */,
 				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
 				8D10C774A75E6C5C0BC285B0 /* SensingRadarView.swift */,
@@ -1451,6 +1455,7 @@
 				DC040CF25B30C603A232AB3B /* PreviewAggregateFactory.swift in Sources */,
 				875CDB76FD829588D665A7A1 /* Proof.swift in Sources */,
 				D2A520DAD7235ABCFF379E78 /* ProofCardView.swift in Sources */,
+				9069B5F7410946A28A7E2513 /* ProofCollectedView.swift in Sources */,
 				ADE6A43D56E0DEF8C96B228B /* ProofSignature.swift in Sources */,
 				AB2366D7C251E2A9CAA3BF30 /* ProofStore.swift in Sources */,
 				1AADFD0958F5B7312884FD4F /* RecordSchemaEnvelope.swift in Sources */,
@@ -1649,6 +1654,7 @@
 				5ECAD2B9708ED42FDC2C5170 /* PreviewAggregateFactory.swift in Sources */,
 				EF3749E865F3351F26705FBF /* Proof.swift in Sources */,
 				4E1332D3719ABE375DA9271A /* ProofCardView.swift in Sources */,
+				2676AFD809C0517E0E14FD13 /* ProofCollectedView.swift in Sources */,
 				9E2D155E6ECFFA1C6D379659 /* ProofSignature.swift in Sources */,
 				F793155CBBA051BB479BFAF3 /* ProofStore.swift in Sources */,
 				31ED6E4C0D3E950B31987CE1 /* RecordSchemaEnvelope.swift in Sources */,

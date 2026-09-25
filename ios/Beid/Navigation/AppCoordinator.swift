@@ -30,6 +30,7 @@ final class AppCoordinator: ObservableObject {
   @Published var scanPresented = false
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
+  @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
@@ -677,6 +678,7 @@ final class AppCoordinator: ObservableObject {
   func startScan() {
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
+    proofCollectedSnapshot = nil
     scanPresented = true
     #if DEBUG
     if sensingCoordinator.injectSensingScreenshotFixture() {
@@ -732,6 +734,7 @@ final class AppCoordinator: ObservableObject {
   private func resetAndDismissScan() {
     stopConfirmSnapshot = nil
     sealedSnapshot = nil
+    proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
@@ -743,7 +746,8 @@ final class AppCoordinator: ObservableObject {
   /// confirmation is possible only when this session's Proof is actually in
   /// ProofStore; prejoin CLOSE keeps the existing direct reset behavior.
   func requestScanClose() {
-    guard sealedSnapshot == nil, stopConfirmSnapshot == nil else { return }
+    guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
+      stopConfirmSnapshot == nil else { return }
     guard let proofID = sensingCoordinator.currentProofID,
       proofStore.proof(withId: proofID) != nil
     else {
@@ -809,10 +813,27 @@ final class AppCoordinator: ObservableObject {
     )
   }
 
-  /// DONE only dismisses; the session was already finalized above.
+  /// DONE advances from the sealed frame to persistent frame 07. The record
+  /// is looked up again so its fields come from the actual stored Proof.
   func doneWithSealedRecord() {
-    guard sealedSnapshot != nil else { return }
-    sealedSnapshot = nil
+    guard let sealedSnapshot, let recordID = sealedSnapshot.recordID else { return }
+    guard let proof = proofStore.proof(withId: recordID) else {
+      // A record removed since finalization cannot support frame 07's claim.
+      self.sealedSnapshot = nil
+      scanPresented = false
+      return
+    }
+    proofCollectedSnapshot = ProofCollectedSnapshot(
+      proof: proof,
+      detectedPeerCount: sealedSnapshot.detectedDeviceCount,
+      observedWindowCount: sealedSnapshot.aggregate.map { Int($0.windowCount) }
+    )
+    self.sealedSnapshot = nil
+  }
+
+  func viewCollectionAfterProofCollected() {
+    guard proofCollectedSnapshot != nil else { return }
+    proofCollectedSnapshot = nil
     scanPresented = false
   }
 

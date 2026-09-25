@@ -297,10 +297,10 @@ previews use the same production router; they are not separate diagnostic
 cards or text-only stand-ins.
 
 `05 Sensing → 06a Event Found → 06b Recording`. The proof lands in
-`ProofStore` when recording starts. `RecordingView` first shows the
-one-time "Proof Collected" entrance ceremony, then the steady event card as
-the peer count grows. The demo remains in recording until the user closes
-the scan flow, which returns to 04 home.
+`ProofStore` when recording starts. Recording stays live as the peer count
+grows. On confirmed stop, successful finalization shows 06 Sealed; DONE
+advances to persistent 07 Proof Collected, whose View collection action
+returns to 04 home.
 
 Release configurations, including TestFlight and App Store archives, always
 report `useDemoEventMode == false` and ignore attempts to enable it. A future
@@ -453,9 +453,9 @@ Issue #121.
 ## Screens
 
 01 Welcome, 02 Bluetooth permission guide, 03 Bluetooth-off, 04 Collection
-home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording
-(including the one-time "Proof Collected" entrance ceremony), 06d Signal
-Lost, 08 Item Detail, 09 Account sheet — plus Connect Wallet and manual Enter
+home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording,
+06d Signal Lost, 06 Sealed, 07 Proof Collected, 08 Item Detail, 09 Account sheet
+— plus Connect Wallet and manual Enter
 Event Code screens for the `.walletFirst` onboarding order (not in the
 original 9-screen list).
 

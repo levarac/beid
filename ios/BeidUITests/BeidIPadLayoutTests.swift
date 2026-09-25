@@ -52,17 +52,16 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
     capture(named: "event-found-\(orientation)")
 
-    // Verifying/Verified/Proof Collected merge into one continuous
-    // `.recording` phase (Scan Slice-2 sub-slice 2a) — there is no
-    // terminal screen to wait for anymore. Threshold-confirm auto-flips
-    // into `.recording` in the background; the "Simulate Signal Lost"
+    // Recording remains live until the user confirms stopping. Threshold
+    // confirmation auto-flips into `.recording`; the "Simulate Signal Lost"
     // affordance existing is the earliest reliable signal that happened.
     let signalLost = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
+    dismissBindingSheetToReachLiveRecording()
     capture(named: "recording-\(orientation)")
 
-    // CLOSE confirms the real Proof before finalizing, then DONE dismisses
-    // the already-sealed screen.
+    // CLOSE confirms the real Proof, DONE advances through persistent 07,
+    // then View collection dismisses to Home.
     app.buttons["Close"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     capture(named: "stop-confirm-\(orientation)")
@@ -70,6 +69,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "sealed-\(orientation)")
     app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    assertProofCollectedHeader()
+    capture(named: "proof-collected-\(orientation)")
+    app.buttons["View collection"].tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
@@ -84,6 +87,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     // (accumulated simulator/accessibility-tree overhead from the
     // intervening Collection/Proof Detail navigation), not a hang.
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
+    dismissBindingSheetToReachLiveRecording()
     signalLost.tap()
     XCTAssertTrue(app.staticTexts["Signal Lost"].waitForExistence(timeout: 30))
     capture(named: "signal-lost-\(orientation)")
@@ -200,9 +204,8 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   /// Shared navigation prefix: joins the DemoEvent event and waits until
-  /// `.recording` begins and `RecordingView`'s "Simulate Signal Lost"
-  /// affordance is present — the earliest reliable signal of that (see
-  /// `capturePrimaryFlow`'s own comment on this). Used by both the
+  /// `.recording` begins, then declines its automatic binding sheet so the
+  /// live screen's controls are hittable. Used by both the
   /// Recording-screen test above and `navigateToCollectionWithProof` below.
   private func reachRecordingScreen() {
     app.launchArguments = ["-beid-ui-test"]
@@ -219,6 +222,17 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    dismissBindingSheetToReachLiveRecording()
+  }
+
+  private func dismissBindingSheetToReachLiveRecording() {
+    let cancel = app.buttons["Cancel"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
+    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
+    cancel.tap()
+    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Close"].isHittable, "Live recording Close must be tappable")
   }
 
   /// Ends the session `reachRecordingScreen()` just started, landing on
@@ -231,6 +245,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    assertProofCollectedHeader()
+    app.buttons["View collection"].tap()
 
     XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
@@ -240,6 +257,15 @@ final class BeidIPadLayoutTests: XCTestCase {
   private func openFirstProof() {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+  }
+
+  private func assertProofCollectedHeader() {
+    let recordID = app.staticTexts["proof-collected.record-id"]
+    XCTAssertTrue(recordID.waitForExistence(timeout: 5))
+    XCTAssertTrue(recordID.label.hasPrefix("Record ID "))
+    XCTAssertEqual(recordID.label.count, "Record ID ".count + 36, "VoiceOver needs the full UUID")
+    XCTAssertGreaterThan(recordID.frame.width, 100, "The visible record label must not truncate")
+    XCTAssertEqual(app.staticTexts["proof-collected.status"].label, "SEALED")
   }
 
   private func assertWelcomeLayout(named name: String) {
