@@ -6,8 +6,10 @@ import XCTest
 
 @MainActor
 final class SensingStopFlowTests: XCTestCase {
-  func testPrejoinCloseBypassesConfirmationAndResets() {
-    let coordinator = makeCoordinator()
+  func testPrejoinCloseBypassesConfirmationAndKeepsAutomaticTransport() {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing)
     coordinator.scanPresented = true
 
     coordinator.requestScanClose()
@@ -16,6 +18,22 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(coordinator.stopConfirmSnapshot)
     XCTAssertNil(coordinator.sealedSnapshot)
     XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+  }
+
+  func testHomePrejoinStopStopsAutomaticTransportWithoutConfirmation() {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing)
+
+    coordinator.requestHomeStopSensing()
+
+    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertNil(coordinator.stopConfirmSnapshot)
+    XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
   }
 
   func testKeepSensingPreservesTheLiveProofAndDoesNotFinalize() async {
@@ -38,7 +56,9 @@ final class SensingStopFlowTests: XCTestCase {
   }
 
   func testStopFinalizesOnceThenDoneShowsPersistentProofCollected() async throws {
-    let coordinator = makeCoordinator()
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing)
     await reachRecording(coordinator)
     let proofID = coordinator.sensingCoordinator.currentProofID
 
@@ -48,6 +68,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertTrue(coordinator.scanPresented)
     coordinator.confirmStopSensing()
 
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
     XCTAssertEqual(coordinator.sealedSnapshot?.recordID, proofID)
     XCTAssertTrue(coordinator.scanPresented)
     XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
@@ -72,6 +93,63 @@ final class SensingStopFlowTests: XCTestCase {
     coordinator.viewCollectionAfterProofCollected()
     XCTAssertFalse(coordinator.scanPresented)
     XCTAssertNil(coordinator.proofCollectedSnapshot)
+  }
+
+  func testHomeStopWithStoredProofCannotBypass05eAndStopsTransportAfterConfirmation() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing)
+    await reachRecording(coordinator)
+    guard let proofID = coordinator.sensingCoordinator.currentProofID else {
+      return XCTFail("recording must create a Proof")
+    }
+    XCTAssertNotNil(coordinator.proofStore.proof(withId: proofID))
+    coordinator.scanPresented = false
+
+    coordinator.requestHomeStopSensing()
+    coordinator.requestHomeStopSensing()
+
+    XCTAssertTrue(coordinator.scanPresented)
+    XCTAssertEqual(coordinator.stopConfirmSnapshot?.proofID, proofID)
+    XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
+    XCTAssertEqual(coordinator.sensingCoordinator.currentProofID, proofID)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+
+    coordinator.confirmStopSensing()
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+    XCTAssertEqual(coordinator.sealedSnapshot?.recordID, proofID)
+    XCTAssertNil(coordinator.stopConfirmSnapshot)
+    coordinator.doneWithSealedRecord()
+    XCTAssertEqual(coordinator.proofCollectedSnapshot?.recordID, proofID)
+    XCTAssertTrue(coordinator.scanPresented)
+    coordinator.viewCollectionAfterProofCollected()
+    XCTAssertFalse(coordinator.scanPresented)
+  }
+
+  func testKeepSensingAfterHomeStopClearsTransportIntentForLaterScanClose() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let coordinator = makeCoordinator(sensingCoordinator: sensing)
+    await reachRecording(coordinator)
+    guard let proofID = coordinator.sensingCoordinator.currentProofID else {
+      return XCTFail("recording must create a Proof")
+    }
+    coordinator.scanPresented = false
+
+    coordinator.requestHomeStopSensing()
+    XCTAssertEqual(coordinator.stopConfirmSnapshot?.proofID, proofID)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+    coordinator.keepSensing()
+
+    XCTAssertNil(coordinator.stopConfirmSnapshot)
+    XCTAssertEqual(coordinator.sensingCoordinator.currentProofID, proofID)
+    coordinator.requestScanClose()
+    XCTAssertEqual(coordinator.stopConfirmSnapshot?.proofID, proofID)
+    coordinator.confirmStopSensing()
+
+    XCTAssertEqual(coordinator.sealedSnapshot?.recordID, proofID)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
   }
 
   func testStaleProofIDCannotFinalizeOrShowSealed() async {
@@ -165,13 +243,14 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertEqual(snapshot.shortRecordID, RecordIDDisplay.abbreviated(proof.id))
   }
 
-  private func makeCoordinator() -> AppCoordinator {
+  private func makeCoordinator(sensingCoordinator: SensingCoordinator? = nil) -> AppCoordinator {
     let identifier = UUID().uuidString
     let fileURL = FileManager.default.temporaryDirectory
       .appendingPathComponent("sensing-stop-\(identifier).json")
     let defaults = UserDefaults(suiteName: "sensing-stop-\(identifier)")!
     return AppCoordinator(
       proofStore: ProofStore(fileURL: fileURL),
+      sensingCoordinator: sensingCoordinator,
       registryClient: nil,
       userDefaults: defaults
     )
