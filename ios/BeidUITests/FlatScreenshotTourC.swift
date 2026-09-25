@@ -20,6 +20,7 @@ final class FlatScreenshotTourC: XCTestCase {
   func testShot_05e_StopConfirm() { capture("05e") }
   func testShot_06_Sealed() { capture("06") }
   func testShot_07_ProofCollected() { capture("07") }
+  func testShot_09_ProofDetail() { capture("09") }
 
   private func capture(_ code: String, file: StaticString = #filePath, line: UInt = #line) {
     let app = XCUIApplication()
@@ -41,6 +42,12 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].waitForExistence(timeout: 10), file: file, line: line)
     if code == "07" {
       XCTAssertTrue(app.buttons["View collection"].exists, file: file, line: line)
+    } else if code == "09" {
+      XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
+      XCTAssertTrue(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
+      XCTAssertTrue(app.buttons["Transparency"].exists, file: file, line: line)
+      XCTAssertTrue(app.buttons["View participation summary"].exists, file: file, line: line)
+      XCTAssertFalse(app.staticTexts["FROM REPORTS"].exists, file: file, line: line)
     }
     let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     attachment.name = code

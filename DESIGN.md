@@ -2710,8 +2710,9 @@ to.]**
 | `size.radar.centerDot` | `DS.Size.radarCenterDot` | 8 pt | Ink dot at the centre of the white disc |
 | `size.radar.detectedNode` | `DS.Size.radarDetectedNode` / `radarDetectedNodeStroke` | 8 / 1.5 pt | Detected-only node diameter and idle outline width |
 | `size.sensing.sealedSigil` | `DS.Size.sensingSealedSigil` | 300 pt | Frame 06 Sensing — Sealed artwork slot (Figma node `184:65`); its neutral ring remains until #653 supplies production history |
+| `size.proofDetail.sigil` | `DS.Size.proofDetailSigil` | 200 pt | Frame 09 Proof Detail artwork slot (Figma node `204:36`); the approved neutral `RecordSigilSlot` ring occupies this footprint |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
-| `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
+| `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | Legacy gradient-avatar diameter; no longer used by `ItemDetailView` after frame 09 |
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |
 | `type.section.title` | `DS.Font.sectionTitle` | `Library.title19` — DM Sans Bold 19 / `.title3` | State and section titles |
 | `type.ledger.mono` | `DS.Font.ledgerMono` | `Library.labelMono13Value` — DM Mono Medium 13 / `.footnote` | Addresses, hashes, proof IDs |

@@ -120,7 +120,14 @@ struct CollectionHomeView: View {
         DailySummaryView()
       }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
+        #if DEBUG
+        ItemDetailView(
+          proof: proof,
+          presentationOverride: coordinator.proofDetailScreenshotPresentation
+        )
+        #else
         ItemDetailView(proof: proof)
+        #endif
       }
     }
   }

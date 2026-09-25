@@ -136,10 +136,12 @@ enum DS {
     static let radarDetectedNodeStroke: CGFloat = 1.5
     /// Flat 2b 06 Sensing — Sealed Sigil frame (node 184:65).
     static let sensingSealedSigil: CGFloat = 300
+    /// Flat 2b 09 Proof Detail artwork slot (node 204:36).
+    static let proofDetailSigil: CGFloat = 200
     /// `ProofCardView`'s circular per-proof gradient avatar diameter.
     static let proofCardArtwork: CGFloat = 76
-    /// `ItemDetailView`'s circular per-proof gradient avatar diameter —
-    /// the same artwork generator as `proofCardArtwork`, at detail scale.
+    /// Legacy detail gradient-avatar diameter, superseded by
+    /// `proofDetailSigil` in frame 09.
     static let itemDetailArtwork: CGFloat = 190
     /// The 1 pt rule: hairline dividers and the empty block's dashed frame.
     static let hairline: CGFloat = 1

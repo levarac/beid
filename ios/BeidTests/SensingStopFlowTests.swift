@@ -162,7 +162,7 @@ final class SensingStopFlowTests: XCTestCase {
 
     XCTAssertEqual(snapshot.withValue, "2 peers")
     XCTAssertFalse(snapshot.withValue.contains("window"))
-    XCTAssertEqual(snapshot.shortRecordID, String(proof.id.uuidString.prefix(8)))
+    XCTAssertEqual(snapshot.shortRecordID, RecordIDDisplay.abbreviated(proof.id))
   }
 
   private func makeCoordinator() -> AppCoordinator {
