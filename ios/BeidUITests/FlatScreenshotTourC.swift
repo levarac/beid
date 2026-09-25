@@ -42,6 +42,15 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].waitForExistence(timeout: 10), file: file, line: line)
     if code == "07" {
       XCTAssertTrue(app.buttons["View collection"].exists, file: file, line: line)
+      let recordID = app.staticTexts["proof-collected.record-id"]
+      XCTAssertTrue(recordID.exists, file: file, line: line)
+      XCTAssertEqual(
+        recordID.label,
+        "Record ID 42110000-0000-4000-8000-000000000000",
+        file: file, line: line
+      )
+      XCTAssertGreaterThan(recordID.frame.width, 100, file: file, line: line)
+      XCTAssertEqual(app.staticTexts["proof-collected.status"].label, "SEALED", file: file, line: line)
     } else if code == "09" {
       XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
       XCTAssertTrue(app.staticTexts["Bound to wallet"].exists, file: file, line: line)

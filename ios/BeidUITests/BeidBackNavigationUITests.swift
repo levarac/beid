@@ -77,9 +77,8 @@ final class BeidBackNavigationUITests: XCTestCase {
   // step for step. They are copied rather than shared because those are
   // `private` to that class; if the seeding route changes, both must change.
 
-  /// Joins the DemoEvent event and waits until `.recording` begins.
-  /// "Simulate Signal Lost" existing is the earliest reliable signal of that
-  /// — see the comment on `BeidIPadLayoutTests.capturePrimaryFlow`.
+  /// Joins the DemoEvent event, then declines the automatic binding sheet so
+  /// the live Recording controls are hittable.
   private func reachRecordingScreen() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
@@ -95,6 +94,17 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    dismissBindingSheetToReachLiveRecording()
+  }
+
+  private func dismissBindingSheetToReachLiveRecording() {
+    let cancel = app.buttons["Cancel"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
+    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
+    cancel.tap()
+    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Close"].isHittable, "Live recording Close must be tappable")
   }
 
   /// Ends that session, landing on Collection with the resulting proof.
