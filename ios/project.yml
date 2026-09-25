@@ -51,6 +51,13 @@ targets:
       path: Beid/App/Info.plist
       properties:
         UILaunchScreen: {}
+        # Single appearance (beid#632, DESIGN.md §14): the app does not follow
+        # the OS dark-mode setting. An Info.plist key rather than a SwiftUI
+        # modifier, because it applies to every window the process shows —
+        # the launch screen, sheets, alerts, the keyboard and the status bar —
+        # and to system colors and materials, which no single-valued colorset
+        # reaches. Black screens are a state drawn with ink, not an appearance.
+        UIUserInterfaceStyle: Light
         # Release template (TestFlight/App Store): skips the per-upload
         # export-compliance question. The basis was "HTTPS/BLE only" until
         # gh#250 promoted MetaMask to Release (DECISIONS 2026-08-21), which

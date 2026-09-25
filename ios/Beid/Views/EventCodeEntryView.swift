@@ -178,12 +178,6 @@ struct EventCodeEntryView: View {
   EventCodeEntryView().environmentObject(AppCoordinator())
 }
 
-#Preview("Dark") {
-  EventCodeEntryView()
-    .environmentObject(AppCoordinator())
-    .preferredColorScheme(.dark)
-}
-
 #Preview("Error") {
   EventCodeEntryView(
     code: "BADCODE",

@@ -234,27 +234,12 @@ private struct ContinuousSensingStatus: View {
   CollectionHomeView().environmentObject(AppCoordinator())
 }
 
-#Preview("Empty (Dark)") {
-  CollectionHomeView()
-    .environmentObject(AppCoordinator())
-    .preferredColorScheme(.dark)
-}
-
 #Preview("Populated") {
   let coordinator = AppCoordinator()
   coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
   coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
   coordinator.proofStore.add(Proof(eventName: "beid Meetup", date: Date().addingTimeInterval(-86400 * 30), peersVerified: 1))
   return CollectionHomeView().environmentObject(coordinator)
-}
-
-#Preview("Populated (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
-  coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
-  return CollectionHomeView()
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
 }
 
 /// beid#217: a multi-session group (shared `eventCode`) alongside a
@@ -275,20 +260,4 @@ private struct ContinuousSensingStatus: View {
   ))
   coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
   return CollectionHomeView().environmentObject(coordinator)
-}
-
-#Preview("Populated with multi-session event (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.proofStore.add(Proof(
-    eventName: "ETHGlobal Tokyo", date: Date().addingTimeInterval(-86400 * 5),
-    peersVerified: 3, gradientSeed: 111, eventCode: "ETHTOKYO"
-  ))
-  coordinator.proofStore.add(Proof(
-    eventName: "ETHGlobal Tokyo", date: Date(),
-    peersVerified: 5, gradientSeed: 999, eventCode: "ETHTOKYO"
-  ))
-  coordinator.proofStore.add(Proof(eventName: "Devcon SEA", date: Date().addingTimeInterval(-86400 * 3), peersVerified: 7))
-  return CollectionHomeView()
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
 }

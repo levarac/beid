@@ -369,22 +369,8 @@ private struct EventMembershipSections: View {
   AccountSheetView().environmentObject(AppCoordinator())
 }
 
-#Preview("No wallet (Dark)") {
-  AccountSheetView()
-    .environmentObject(AppCoordinator())
-    .preferredColorScheme(.dark)
-}
-
 #Preview("Wallet connected") {
   let coordinator = AppCoordinator()
   coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
   return AccountSheetView().environmentObject(coordinator)
-}
-
-#Preview("Wallet connected (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
-  return AccountSheetView()
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
 }

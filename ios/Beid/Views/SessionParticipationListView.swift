@@ -148,31 +148,3 @@ struct SessionParticipationListView: View {
     )
   }
 }
-
-#Preview("Multiple sessions (Dark)") {
-  NavigationStack {
-    SessionParticipationListView(
-      eventName: "ETHGlobal Tokyo",
-      sessions: [
-        (
-          proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 5, eventCode: "ETHTOKYO"),
-          aggregate: PreviewAggregateFactory.sessionAggregate(
-            observations: [
-              (windowIndex: 0, peerKey: "peer-1", displayId: "device-1"),
-              (windowIndex: 1, peerKey: "peer-2", displayId: "device-2"),
-            ],
-            windowsPerBand: 2
-          )
-        ),
-        (
-          proof: Proof(
-            eventName: "ETHGlobal Tokyo", date: Date().addingTimeInterval(-86400 * 5),
-            peersVerified: 3, eventCode: "ETHTOKYO"
-          ),
-          aggregate: nil
-        ),
-      ]
-    )
-  }
-  .preferredColorScheme(.dark)
-}

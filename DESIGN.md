@@ -95,7 +95,7 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
 | Figma "Flat 2b — Library" (`189-2`) | Design values: colors, text styles, components |
 | Figma "Flat 2b — Screens" (`183-2`) | Screen layouts |
 | `ios/Beid/DesignSystem/Tokens.swift` | The `DS` namespace: all color/space/radius/size/font/motion tokens and artwork generators — what ships, and the only place code reads values |
-| `ios/Beid/DesignSystem/Colors.xcassets` | Color values: the 13 Library variables, each a single-appearance colorset named after its Library variable (since #628, §4/§5). The app-level appearance mechanism, the illustrations' dark variants and the previews are still #632's |
+| `ios/Beid/DesignSystem/Colors.xcassets` | Color values: the 13 Library variables, each a single-appearance colorset named after its Library variable (since #628, §4/§5). The app does not follow the OS appearance: the app target's Info.plist sets `UIUserInterfaceStyle` to `Light` (#632, §14) |
 | `.swiftlint.yml` (repo root) | Enforcement rules for banned raw values |
 | DESIGN.md (this file) | Semantics, usage rules, tone, review criteria |
 | Figma "Minimal v4" board | Historical visual input only (superseded by Flat 2b, 2026-09-22) |
@@ -729,8 +729,9 @@ Rules:
 
 - MUST: Colors are single-appearance values (§14); the app does not follow
   the OS dark-mode setting. The colorsets have had no dark variants since
-  #628; how the app stops following the OS setting, and what happens to
-  the illustrations' dark variants and the previews, is #632's choice.
+  #628; the app target's Info.plist sets `UIUserInterfaceStyle` to
+  `Light`, and the illustrations and previews have no dark variants (#632,
+  §14).
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** Previously (initial
@@ -2255,8 +2256,8 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 ## 14. Dark Mode and High Contrast
 
 > **Platform scope:** iOS-specific mechanism — Android counterpart named
-> per bullet; the underlying "every screen correct in both modes, previews
-> prove it, forced overrides only in previews" principle is
+> per bullet; the underlying "one appearance whatever the OS dark-mode
+> setting, and previews show that appearance" principle is
 > platform-neutral.
 >
 > **Flat 2b (2026-09-22):** single appearance binds iOS now. Android's
@@ -2272,14 +2273,28 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 - Black is a **state, not a theme**: a screen is black because something
   is happening now (sensing, the in-progress event card, the Account
   sheet as the layer being operated — §5).
+- An `ink` screen may opt its own presentation into light *content* — the
+  status-bar and toolbar glyphs drawn on the ink ground — with a
+  bar-scoped modifier such as
+  `.toolbarColorScheme(.dark, for: .navigationBar)`. That is not the
+  "forced dark variant" §17 D forbids, because it changes only those
+  glyphs, not the theme. `.preferredColorScheme(.dark)` is not the way to
+  do it: it re-themes the whole presentation (system text, lists,
+  materials), which is a second theme, and lint rejects it (§16). A
+  screen with no other way to get light status-bar glyphs takes the §16
+  exception for that one line and records why.
 - A dark mode would be considered only if it is ever needed (spec §10-6);
   it is not planned.
 - #632 chooses the mechanism (Info.plist, removing the dark variants, or
   another). This document does not choose it. Retiring the FORBIDDEN
-  quoted below is what makes #632 implementable.
+  quoted below is what makes #632 implementable. As implemented by #632:
+  the app target's Info.plist sets `UIUserInterfaceStyle` to `Light`
+  (`ios/project.yml`), which also covers the system colors, materials,
+  sheets, alerts, keyboard, launch screen and status bar that colorsets
+  cannot reach; the illustrations' dark variants were removed.
 - MUST: Previews show the single appearance; light *and* dark preview
-  pairs are no longer required. Until #632 lands, the existing
-  `.preferredColorScheme` preview variants are migration debt.
+  pairs are no longer required. #632 removed the `.preferredColorScheme`
+  preview variants.
 
 Kept unchanged:
 
@@ -2558,19 +2573,20 @@ Enforcement layers:
    targets, and Dynamic Type behavior. An honest 80% lint layer plus
    review beats a broken 100% regex.
 
-   *Flat 2b note (2026-09-22): the lint layer does **not** cover the Flat
-   2b rules. `.swiftlint.yml` does not ban `glassEffect`,
-   `Image(systemName:)` or `preferredColorScheme` today (checked
-   2026-09-22), so no-glass, no-icons and single-appearance are
-   review-level until a lint rule lands. Any such rule belongs to #628,
-   #630, #631 or #632, not to this document. (The decorative-symbol size
-   and one-accent map named above are superseded, §12 and §5.)* Since
-   #630 (2026-09-23) no-glass is lint-covered: `no_glass_or_material`,
-   scoped to `ios/Beid` like the other rules but, unlike them, with no
-   excluded paths, so `ios/Beid/DesignSystem/` is covered too, flags
-   `glassEffect`, `GlassEffectContainer`, the glass button styles,
-   `Material` and its members, and the `.bar` shape style. No-icons and
-   single-appearance are still review-level.
+   *Flat 2b note (2026-09-22): the lint layer covers two of the three Flat
+   2b rules. Since #630 (2026-09-23) no-glass is lint-covered:
+   `no_glass_or_material`, scoped to `ios/Beid` like the other rules but,
+   unlike them, with no excluded paths, so `ios/Beid/DesignSystem/` is
+   covered too, flags `glassEffect`, `GlassEffectContainer`, the glass
+   button styles, `Material` and its members, and the `.bar` shape style.
+   Since #632 single appearance is lint-covered: `no_appearance_override`
+   rejects `.preferredColorScheme`, `.colorScheme(…)`,
+   `.environment(\.colorScheme, …)` and `overrideUserInterfaceStyle`, in
+   previews and production alike. **No-icons is still review-level** —
+   `.swiftlint.yml` does not ban `Image(systemName:)` today, and that rule
+   belongs to #631 (and, for the illustration and hero families, #633 /
+   #643), not to this document. (The decorative-symbol size and one-accent
+   map named above are superseded, §12 and §5.)*
 2. **Review-level**: the checklist above.
 3. **Exception process**: a PR that must deviate states
    `DesignException: <reason>` in its description and links the decision;
@@ -2764,7 +2780,7 @@ values, which is not a violation until an Android follow-up is scheduled
 > is active work in this area.]**
 
 `Illustrations.xcassets` currently contains four original-rendering SVG image
-sets, each with light and dark variants:
+sets, each a single variant (#632 removed the dark ones):
 
 - `welcome-mark` — `WelcomeView`
 - `encounter-field-empty` — the `CollectionHomeView` empty state
@@ -2775,10 +2791,10 @@ The image-set directories and the four `assetImage:` call sites are the
 inventory evidence. Naming remains governed by §12.
 
 > **Migration debt (2026-09-22, beid#627,
-> [D-627](docs/decisions/issue-627-flat-2b.md)).** These four assets and
-> their dark variants stay in the code until #631/#632/#633/#643 replace
-> them (Sigil hero, dashed empty block, sensing graph). Flat 2b has no image
-> assets (§12); this inventory describes today's code.
+> [D-627](docs/decisions/issue-627-flat-2b.md)).** These four assets stay
+> in the code until #631/#633/#643 replace them (Sigil hero, dashed empty
+> block, sensing graph). #632 removed their dark variants. Flat 2b has no
+> image assets (§12); this inventory describes today's code.
 
 ### C. Decision log
 

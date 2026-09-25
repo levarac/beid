@@ -178,10 +178,3 @@ struct VenueDeviceOrganizerView: View {
     VenueDeviceOrganizerView(sensingCoordinator: SensingCoordinator())
   }
 }
-
-#Preview("Dark") {
-  NavigationStack {
-    VenueDeviceOrganizerView(sensingCoordinator: SensingCoordinator())
-  }
-  .preferredColorScheme(.dark)
-}

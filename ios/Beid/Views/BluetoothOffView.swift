@@ -48,9 +48,3 @@ struct BluetoothOffView: View {
 #Preview {
   BluetoothOffView().environmentObject(AppCoordinator())
 }
-
-#Preview("Dark") {
-  BluetoothOffView()
-    .environmentObject(AppCoordinator())
-    .preferredColorScheme(.dark)
-}

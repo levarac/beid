@@ -6,6 +6,9 @@
 import SwiftUI
 
 struct LintFixturesPass: View {
+  // Reading the scheme is not an override; no_appearance_override must not flag it.
+  @Environment(\.colorScheme) private var colorScheme
+
   var body: some View {
     VStack(spacing: DS.Space.m) {
       Text("Sensing")
@@ -30,6 +33,8 @@ struct LintFixturesPass: View {
     .animation(DS.Motion.proofResolve, value: UUID())
     .background(DS.Color.surfaceCanvas)
     .tint(DS.Color.actionPrimary)
+    // Bar-scoped glyph scheme (§14 ink screens); no_appearance_override must not flag it.
+    .toolbarColorScheme(.dark, for: .navigationBar)
   }
 }
 

@@ -202,23 +202,6 @@ struct ParticipationSummaryView: View {
   }
 }
 
-#Preview("With snapshot (Dark)") {
-  NavigationStack {
-    ParticipationSummaryView(
-      eventName: "ETHGlobal Tokyo",
-      aggregate: PreviewAggregateFactory.sessionAggregate(
-        observations: [
-          (windowIndex: 0, peerKey: "peer-1", displayId: "device-1"),
-          (windowIndex: 1, peerKey: "peer-2", displayId: "device-2"),
-          (windowIndex: 5, peerKey: "peer-3", displayId: "device-3"),
-        ],
-        windowsPerBand: 2
-      )
-    )
-  }
-  .preferredColorScheme(.dark)
-}
-
 #Preview("No snapshot yet") {
   NavigationStack {
     ParticipationSummaryView(eventName: "ETHGlobal Tokyo", aggregate: nil)
