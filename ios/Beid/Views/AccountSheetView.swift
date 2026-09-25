@@ -137,7 +137,7 @@ struct AccountSheetView: View {
         }
       }
       .navigationDestination(isPresented: $showOrganizerTools) {
-        AccountOrganizerToolsView()
+        OrganizerToolsView()
           .toolbar(.visible, for: .navigationBar)
       }
       .navigationDestination(isPresented: $showPastEvents) {
@@ -510,46 +510,6 @@ private struct AccountBluetoothRow: View {
         .foregroundStyle(DS.Color.textSecondaryOnInk)
         .padding(.bottom, DS.Space.s)
     }
-  }
-}
-
-/// #647 owns the full Organizer tools surface. Until it lands, this narrow
-/// route preserves the sole production entrance to Venue broadcast (#597)
-/// without restoring the withdrawn Venue device path.
-private struct AccountOrganizerToolsView: View {
-  @State private var showVenueBroadcast = false
-
-  var body: some View {
-    List {
-      Button {
-        showVenueBroadcast = true
-      } label: {
-        HStack {
-          Text("Venue broadcast")
-          Spacer()
-          Text(verbatim: "→")
-            .accessibilityHidden(true)
-        }
-        .frame(minHeight: DS.Size.minHitTarget)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Venue broadcast")
-    }
-    .navigationDestination(isPresented: $showVenueBroadcast) {
-        VenueSignedServingView(viewModel: VenueSignedServingViewModel(
-          verifier: ProductionVenueBundleVerifier(registryClient: RegistryDependencies.createClient()),
-          broadcasting: BarnardVenueSignedContainerBroadcasting(),
-          acquisition: VenueArtifactAcquisition(),
-          store: VenuePublicArtifactStore(),
-          clock: { VenueDeviceClock.read() }
-        ))
-    }
-    .navigationTitle("Organizer tools")
-    .scrollContentBackground(.hidden)
-    .background(DS.Color.surfaceCanvas)
-    .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
-    .toolbarColorScheme(.light, for: .navigationBar)
   }
 }
 

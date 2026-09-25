@@ -4,41 +4,16 @@
 import SwiftUI
 import UIKit
 
-/// The venue broadcast screen: what this device is holding for an event, and
-/// what can be done with it.
-///
-/// beid#432 built it as a supply form — two URL fields and a Supply button, with
-/// the outcome reported as a status line underneath. beid#597 turned the input
-/// into one link, and then turned the screen around: the pack this device holds
-/// is the subject, and pasting, scanning, refreshing and stopping are verbs
-/// applied to it. An operator at a venue is looking after one thing, an event's
-/// pack, not operating two transports.
-///
-/// One entry reaches this screen. Whether the bytes inside a pack are signed is
-/// how the feature works, not a choice to put in front of an operator, so
-/// `AccountSheetView` no longer offers the unsigned v1 row beside this one.
-///
-/// Words on screen are the ones a venue operator uses. Pack, link, event, check,
-/// broadcast. Not bundle, handoff, supply, import or signed — those name the
-/// protocol and the code, and they are in this file's comments where they belong.
-///
-/// The seven `switch` statements below have NO `default` case, deliberately.
-/// Adding a case to any of the seven venue enums must break this build: a
-/// `default` would turn a new outcome into a silently mislabelled one, and
-/// the build break is the control that prevents that.
+/// Flat 2b screen 14b and its link, camera, radio and persistence outcomes.
+/// The view model remains the only owner of verification, effects and teardown.
 struct VenueSignedServingView: View {
   @StateObject private var viewModel: VenueSignedServingViewModel
   @Environment(\.scenePhase) private var scenePhase
-
   @State private var requestTask: Task<Void, Never>?
   @StateObject private var lifecycleTasks = VenueLifecycleTaskOwner()
-
   @State private var venueLinkText = ""
   @State private var isScanning = false
-  /// The system's own description of why scanning would not start, kept so the
-  /// operator can report it rather than describe a black screen.
   @State private var scannerStartFailure: String?
-  /// Why the camera was not opened after the operator asked for it.
   @State private var scannerRefusal: VenueLinkScanner.Authorization?
 
   init(viewModel: @autoclosure @escaping () -> VenueSignedServingViewModel) {
@@ -46,30 +21,72 @@ struct VenueSignedServingView: View {
   }
 
   var body: some View {
-    List {
-      packSection
-      actionsSection
-      radioSection
+    ScrollView {
+      VStack(alignment: .leading, spacing: 0) {
+        Text("Organizer tools · iOS only")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondary)
+          .padding(.bottom, DS.Space.s)
+        Text("Venue\nbroadcast")
+          .beidTextStyle(DS.Font.Library.display52)
+          .foregroundStyle(DS.Color.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+        Text("Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.")
+          .beidTextStyle(DS.Font.Library.body15)
+          .foregroundStyle(DS.Color.textSecondary)
+          .padding(.top, DS.Space.m)
+          .padding(.bottom, DS.Space.m)
+        linkSection
+        statusSection
+      }
+      .frame(maxWidth: DS.Layout.stateContentMaxWidth, alignment: .leading)
+      .padding(.horizontal, DS.Space.pageMargin)
+      .frame(maxWidth: .infinity)
     }
-    .navigationTitle("Venue broadcast")
+    .background(DS.Color.surfaceCanvas)
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbarBackground(DS.Color.surfaceCanvas, for: .navigationBar)
+    .toolbarColorScheme(.light, for: .navigationBar)
+    .safeAreaInset(edge: .bottom) {
+      BeidPrimaryButton("Stop broadcasting") {
+        guard fixtureCode == nil else { return }
+        viewModel.stop()
+        venueLinkText = ""
+        requestTask?.cancel()
+        lifecycleTasks.cancelAll()
+      }
+      .accessibilityIdentifier("Stop broadcasting")
+      .frame(maxWidth: DS.Layout.stateContentMaxWidth)
+      .padding(.horizontal, DS.Space.pageMargin)
+      .padding(.top, DS.Space.s)
+      .padding(.bottom, DS.Space.l)
+      .frame(maxWidth: .infinity)
+      .background(DS.Color.surfaceCanvas)
+    }
     .onAppear {
-      viewModel.beginSession(isForeground: scenePhase != .background)
+      if let fixtureCode {
+        switch fixtureCode {
+        case "14e": venueLinkText = "https://organizer.eth/eth-tokyo-26"
+        case "14e2": venueLinkText = "https://organizer.eth/#eth-tokyo-26"
+        case "14e3": venueLinkText = "ftp://organizer.eth/eth-tokyo-26.pack"
+        default: break
+        }
+      } else {
+        viewModel.beginSession(isForeground: scenePhase != .background)
+      }
     }
     .onDisappear {
+      guard fixtureCode == nil else { return }
+      // The camera uses a sheet, which leaves this presenting route mounted.
+      // A real route departure always ends the session and clears the radio.
       viewModel.endSession()
       requestTask?.cancel()
       lifecycleTasks.cancelAll()
     }
     .onChange(of: scenePhase) { _, phase in
+      guard fixtureCode == nil else { return }
       switch phase {
       case .background:
-        // Leaving the scene clears: the app can no longer observe expiry or a
-        // radio failure, so it must not leave signed bytes on the air.
-        //
-        // `.background` only. `.inactive` also fires for Control Center, the
-        // app switcher and an incoming-call banner, and treating those as
-        // departure would tear down serving — and re-verify on the way back —
-        // every time a notification banner appeared.
         viewModel.sceneDidEnterBackground()
       case .active:
         lifecycleTasks.start { await viewModel.sceneWillEnterForeground() }
@@ -80,246 +97,270 @@ struct VenueSignedServingView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .NSSystemClockDidChange)) { _ in
+      guard fixtureCode == nil else { return }
       lifecycleTasks.start { await viewModel.systemClockDidChange() }
     }
     .sheet(isPresented: $isScanning) {
-      NavigationStack {
-        VenueLinkScannerView(
-          onScan: { payload in
-            isScanning = false
-            venueLinkText = payload
-            supply(payload)
-          },
-          onStartFailure: { description in
-            isScanning = false
-            scannerStartFailure = description
-          }
-        )
-        .ignoresSafeArea(edges: .bottom)
-        .navigationTitle("Scan QR code")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          // A sheet holding a live camera and no way out but a swipe is a trap
-          // on a venue iPad in a case.
-          ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") { isScanning = false }
-          }
-          .beidWithoutSharedBackground()
-        }
-      }
+      VenueScannerScreen(isFixture: fixtureCode != nil, onCancel: { isScanning = false }, onScan: { payload in
+        isScanning = false
+        guard fixtureCode == nil else { return }
+        venueLinkText = payload
+        supply(payload)
+      }, onStartFailure: { description in
+        isScanning = false
+        scannerStartFailure = description
+      })
+      .presentationDetents([.large])
+      .presentationDragIndicator(.hidden)
     }
   }
 
-  // MARK: - The object
-
-  /// The pack itself, first on the screen and before any control.
-  ///
-  /// Each fact is shown only where something fixed it. A pack has no name until a
-  /// permit carries one — `EventDefinitionV1` does not contain one — so no name is
-  /// invented for the states before that, and the event id stands in. The id shown
-  /// while broadcasting is the permit's, because that is what is actually on the
-  /// air; the id shown before is the one the link named, which is a claim and not
-  /// yet a verified fact.
-  private var packSection: some View {
-    Section {
-      packBody
-    } header: {
-      Text("This event")
-    }
-  }
-
-  @ViewBuilder
-  private var packBody: some View {
-    switch viewModel.status {
-    case .idle:
-      if let eventId = viewModel.linkEventIdHex {
-        packRow(eventIdHex: eventId, detail: "Not broadcasting.")
-      } else {
-        emptyPack
-      }
-    case .acquiring:
-      packRow(eventIdHex: viewModel.linkEventIdHex, detail: "Getting the pack.")
-    case .importing:
-      packRow(eventIdHex: viewModel.linkEventIdHex, detail: "Checking the pack.")
-    case .imported(let identity), .evaluating(let identity):
-      packRow(eventIdHex: identity.eventIdHex, detail: "Checked. Deciding whether it can broadcast now.")
-    case .serving(let displayName, let stopAtUnixSeconds):
-      servingPack(displayName: displayName, stopAtUnixSeconds: stopAtUnixSeconds)
-    case .blocked(let rejection):
-      label(message(for: rejection.reason), tint: DS.Color.textPrimary)
-    case .importRejected(let failure):
-      label(message(for: failure), tint: DS.Color.textPrimary)
-    case .acquisitionFailed(let failure):
-      label(message(for: failure), tint: DS.Color.textPrimary)
-    case .radioRefused(let failure):
-      label(message(for: failure), tint: DS.Color.textPrimary)
-    }
-  }
-
-  private var emptyPack: some View {
-    VStack(alignment: .leading, spacing: DS.Space.xs) {
-      Text("No pack yet.")
-        .font(DS.Font.body)
-      Text("Paste the link the organiser gave you, or scan its QR code.")
-        .font(DS.Font.supporting)
-        .foregroundStyle(DS.Color.textSecondary)
-    }
-  }
-
-  private func servingPack(displayName: String, stopAtUnixSeconds: Int64) -> some View {
-    VStack(alignment: .leading, spacing: DS.Space.xs) {
-      // The permit's SDK-verified name is runtime data, not app copy.
-      Text(verbatim: displayName)
-        .font(DS.Font.cardTitle)
-      if let eventId = viewModel.servingEventIdHex {
-        Text(verbatim: eventId)
-          .font(DS.Font.ledgerMono)
-      }
-      Text(
-        String(
-          localized: "venue.serving.servingUntil",
-          defaultValue: "Broadcasting until \(Self.instantText(stopAtUnixSeconds)).",
-          // The catalogue holds a translated `en` unit for this key and it WINS
-          // over this defaultValue — changing the wording here alone left the
-          // screen still saying "Serving until" (beid#599 review). The
-          // catalogue entry is the one to edit; this stays in step with it.
-          comment: "The value is a time of day. This instant is fixed by the permit and is exclusive — broadcasting stops at it, it does not continue through it."
-        )
-      )
-      .font(DS.Font.supporting)
-      .foregroundStyle(DS.Color.textSecondary)
-    }
-  }
-
-  private func packRow(eventIdHex: String?, detail: LocalizedStringKey) -> some View {
-    VStack(alignment: .leading, spacing: DS.Space.xs) {
-      if let eventIdHex {
-        // Runtime data, not copy: an explicitly verbatim API so it can never be
-        // mistaken for a localizable string.
-        Text(verbatim: eventIdHex.prefix(16) + "…")
-          .font(DS.Font.ledgerMono)
+  private var linkSection: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Text("Link")
+          .beidTextStyle(DS.Font.Library.labelMono10)
           .foregroundStyle(DS.Color.textSecondary)
+        Spacer()
+        Button {
+          guard fixtureCode == nil else { return }
+          if let pasted = UIPasteboard.general.string { venueLinkText = pasted }
+        } label: {
+          BeidTextControlLabel("Paste", accessibilityLabel: "Paste venue link")
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("Paste venue link")
       }
-      Text(detail)
-        .font(DS.Font.body)
-    }
-  }
-
-  // MARK: - The verbs
-
-  private var actionsSection: some View {
-    Section {
       TextField("Link", text: $venueLinkText, prompt: Text("Paste the link"), axis: .vertical)
-        .font(DS.Font.body)
+        .beidTextStyle(DS.Font.Library.title17)
         .lineLimit(1...3)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .accessibilityIdentifier("Venue link")
-
-      Button("Use this link") { supply(venueLinkText) }
-        .font(DS.Font.cta)
-        .accessibilityIdentifier("Use this link")
-        .disabled(venueLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-      if VenueLinkScanner.isSupported {
-        Button("Scan QR code") {
+        .frame(minHeight: DS.Size.minHitTarget)
+      Rectangle()
+        .fill(linkFailure != nil ? DS.Color.statusOff : DS.Color.textPrimary)
+        .frame(height: DS.Size.hairline)
+      if let failure = linkFailure {
+        outcome(title: linkFailureTitle(failure), message: message(for: failure))
+          .padding(.top, DS.Space.s)
+      }
+      textAction("Use this link", identifier: "Use this link") {
+        guard fixtureCode == nil else { return }
+        supply(venueLinkText)
+      }
+      .disabled(venueLinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .padding(.top, DS.Space.s)
+      if VenueLinkScanner.isSupported || fixtureCode != nil {
+        textAction("Scan QR code", identifier: "Scan QR code") {
+          if fixtureCode != nil {
+            isScanning = true
+            return
+          }
           scannerStartFailure = nil
           scannerRefusal = nil
-          // Ask for the camera here rather than inferring the answer from a
-          // property. The button stays visible before anyone has been asked,
-          // because that is the only moment at which asking can happen.
           requestTask?.cancel()
           requestTask = Task {
             switch await VenueLinkScanner.authorize() {
-            case .granted:
-              isScanning = true
-            case .denied:
-              scannerRefusal = .denied
-            case .unavailableAnyway:
-              scannerRefusal = .unavailableAnyway
+            case .granted: isScanning = true
+            case .denied: scannerRefusal = .denied
+            case .unavailableAnyway: scannerRefusal = .unavailableAnyway
             }
           }
         }
-        .font(DS.Font.body)
-        .accessibilityIdentifier("Scan QR code")
       } else {
-        // Not offered, so say why rather than leaving a gap where an operator
-        // expects a button. Silence there reads as a missing feature.
         Text("This device cannot scan QR codes. Paste the link instead.")
-          .font(DS.Font.supporting)
+          .beidTextStyle(DS.Font.Library.body13)
           .foregroundStyle(DS.Color.textSecondary)
+          .padding(.vertical, DS.Space.s)
       }
-
-      if let refusal = scannerRefusal {
-        VStack(alignment: .leading, spacing: DS.Space.xs) {
-          Text(message(for: refusal))
-            .font(DS.Font.supporting)
-            .foregroundStyle(DS.Color.textPrimary)
-          if refusal == .denied, let settings = URL(string: UIApplication.openSettingsURLString) {
-            Link("Open Settings", destination: settings)
-              .font(DS.Font.body)
+      if let refusal = effectiveScannerRefusal {
+        outcome(title: scannerRefusalTitle(refusal), message: message(for: refusal))
+          .padding(.top, DS.Space.s)
+        if refusal == .denied, let settings = URL(string: UIApplication.openSettingsURLString) {
+          Link(destination: settings) {
+            BeidTextControlLabel("Open Settings", glyph: .trailing("→", announcing: "Open Settings"))
+              .frame(maxWidth: .infinity, alignment: .leading)
           }
+          .accessibilityIdentifier("Open Settings")
         }
       }
-
-      if let failure = scannerStartFailure {
-        Text("The camera could not start. Paste the link instead.")
-          .font(DS.Font.supporting)
-          .foregroundStyle(DS.Color.textPrimary)
+      if let failure = effectiveScannerStartFailure {
+        outcome(title: "Camera could not start", message: "The camera could not start. Paste the link instead.")
+          .padding(.top, DS.Space.s)
         Text(verbatim: failure)
-          .font(DS.Font.meta)
+          .beidTextStyle(DS.Font.Library.labelMono9)
           .foregroundStyle(DS.Color.textSecondary)
-      }
-
-      // Said beside the field it is about, and never through `status`: a link
-      // refused here is a fact about this text, not about what the radio is
-      // doing, and an operator already broadcasting must stay on the air.
-      if let failure = viewModel.linkFailure {
-        label(message(for: failure), tint: DS.Color.textPrimary)
-      }
-
-      if viewModel.storedSourceDescription != nil {
-        // One action, named for what it does from where the screen is. Nothing
-        // starts a broadcast without checking the pack again, so "start" and
-        // "refresh" are the same act seen from a stopped and a running device.
-        Button(isBroadcasting ? "Refresh pack" : "Start broadcasting") {
-          requestTask?.cancel()
-          requestTask = Task { await viewModel.restoreFromStorage() }
-        }
-        .font(DS.Font.body)
-        .accessibilityIdentifier("Refresh pack")
-      }
-
-      Button("Stop broadcasting") {
-        viewModel.stop()
-        venueLinkText = ""
-        requestTask?.cancel()
-        lifecycleTasks.cancelAll()
-      }
-      .font(DS.Font.body)
-      .accessibilityIdentifier("Stop broadcasting")
-    } header: {
-      Text("Actions")
-    } footer: {
-      VStack(alignment: .leading, spacing: DS.Space.xs) {
-        if viewModel.hasUnsavedArtifact {
-          Text("This pack could not be saved. It stays on this device only until the app closes.")
-            .foregroundStyle(DS.Color.textPrimary)
-        }
-        // Says plainly that keeping a pack is not a shortcut past checking it.
-        Text("A saved pack is checked again every time it is loaded.")
-          .font(DS.Font.meta)
-        // The fragment never reaches a server, so the pack's authority is the
-        // person who handed the link over. This screen is the only place an
-        // operator meets that rule.
-        Text("The link carries the event's details itself. Use one the event's organiser gave you.")
-          .font(DS.Font.meta)
       }
     }
   }
 
+  private var statusSection: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: DS.Space.xs) {
+        Text("Status")
+        Text(verbatim: "·")
+        Text(statusLabel)
+      }
+      .beidTextStyle(DS.Font.Library.labelMono10)
+      .foregroundStyle(DS.Color.textSecondary)
+      .padding(.top, DS.Space.xl)
+      .padding(.bottom, DS.Space.s)
+      hairline
+      switch effectiveStatus {
+      case .serving(let displayName, let stopAtUnixSeconds):
+        keyValueRow("Event") { Text(verbatim: displayName) }
+        if let eventId = effectiveEventId { keyValueRow("Event ID") { eventIdCopyControl(eventId) } }
+        keyValueRow("Until") {
+          if fixtureCode != nil {
+            Text("Broadcasting until 18:00")
+          } else {
+            Text(String(localized: "venue.serving.servingUntil", defaultValue: "Broadcasting until \(Self.instantText(stopAtUnixSeconds)).", comment: "The permit's exclusive end time."))
+          }
+        }
+      case .idle:
+        if let eventId = viewModel.linkEventIdHex {
+          keyValueRow("Event ID") { Text(verbatim: shortEventId(eventId)) }
+        } else {
+          Text("No pack yet. Paste the link the organiser gave you, or scan its QR code.")
+            .beidTextStyle(DS.Font.Library.body13)
+            .foregroundStyle(DS.Color.textSecondary)
+            .padding(.vertical, DS.Space.s)
+        }
+      case .acquiring:
+        statusMessage("Getting the pack.")
+      case .importing:
+        statusMessage("Checking the pack.")
+      case .imported(let identity), .evaluating(let identity):
+        keyValueRow("Event ID") { Text(verbatim: shortEventId(identity.eventIdHex)) }
+        statusMessage("Checked. Deciding whether it can broadcast now.")
+      case .blocked(let rejection):
+        statusMessage(message(for: rejection.reason))
+      case .importRejected(let failure):
+        statusMessage(message(for: failure))
+      case .acquisitionFailed(let failure):
+        statusMessage(message(for: failure))
+      case .radioRefused(let failure):
+        statusMessage(message(for: failure))
+      }
+      keyValueRow("Radio") {
+        HStack(spacing: DS.Space.s) {
+          Circle()
+            .fill(tint(for: effectiveRadio.state))
+            .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+            .accessibilityHidden(true)
+          Text(message(for: effectiveRadio.state))
+        }
+      }
+      if let failure = effectiveRadio.failure {
+        statusMessage(message(for: failure))
+      }
+      if viewModel.storedSourceDescription != nil, fixtureCode == nil {
+        textAction(isBroadcasting ? "Refresh pack" : "Start broadcasting", identifier: "Refresh pack") {
+          requestTask?.cancel()
+          requestTask = Task { await viewModel.restoreFromStorage() }
+        }
+      }
+      if effectiveUnsavedArtifact {
+        outcome(title: "Not saved", message: "This pack could not be saved. It stays on this device only until the app closes.")
+          .padding(.top, DS.Space.s)
+      }
+      Text("A saved pack is checked again every time it is loaded.")
+        .beidTextStyle(DS.Font.Library.body13)
+        .foregroundStyle(DS.Color.textSecondary)
+        .padding(.top, DS.Space.m)
+      Text("The link carries the event's details itself. Use one the event's organiser gave you.")
+        .beidTextStyle(DS.Font.Library.body13)
+        .foregroundStyle(DS.Color.textSecondary)
+    }
+  }
+
+  private var hairline: some View {
+    Rectangle().fill(DS.Color.strokeHairline).frame(height: DS.Size.hairline)
+  }
+
+  private func eventIdCopyControl(_ eventId: String) -> some View {
+    Button {
+      guard fixtureCode == nil else { return }
+      UIPasteboard.general.string = eventId
+    } label: {
+      HStack(spacing: DS.Space.xs) {
+        Text(verbatim: shortEventId(eventId))
+        Text(verbatim: "·")
+        Text("Copy")
+      }
+      .frame(minHeight: DS.Size.minHitTarget)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Copy event ID")
+    .accessibilityValue(Text(verbatim: eventId))
+    .accessibilityIdentifier("Copy event ID")
+  }
+
+  private func keyValueRow<Value: View>(_ key: LocalizedStringKey, @ViewBuilder value: () -> Value) -> some View {
+    VStack(spacing: 0) {
+      HStack(alignment: .center, spacing: DS.Space.s) {
+        Text(key)
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondary)
+        Spacer(minLength: DS.Space.s)
+        value()
+          .beidTextStyle(DS.Font.Library.labelMono11Time)
+          .foregroundStyle(DS.Color.textPrimary)
+          .multilineTextAlignment(.trailing)
+      }
+      .frame(minHeight: DS.Size.keyValueRowMinHeight)
+      hairline
+    }
+  }
+
+  private func textAction(_ title: LocalizedStringKey, identifier: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      HStack {
+        Text(title)
+        Spacer()
+        Text(verbatim: "→")
+          .accessibilityHidden(true)
+      }
+      .beidTextStyle(DS.Font.Library.labelMono11)
+      .foregroundStyle(DS.Color.textPrimary)
+      .frame(minHeight: DS.Size.minHitTarget)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(title)
+    .accessibilityIdentifier(identifier)
+    .overlay(alignment: .bottom) { hairline }
+  }
+
+  private func statusMessage(_ message: LocalizedStringKey) -> some View {
+    Text(message)
+      .beidTextStyle(DS.Font.Library.body13)
+      .foregroundStyle(DS.Color.textPrimary)
+      .padding(.vertical, DS.Space.s)
+  }
+
+  private func outcome(title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.s) {
+      HStack(spacing: DS.Space.s) {
+        Circle()
+          .fill(DS.Color.statusOff)
+          .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+          .accessibilityHidden(true)
+        Text(title)
+          .beidTextStyle(DS.Font.Library.labelMono10)
+      }
+      Text(message)
+        .beidTextStyle(DS.Font.Library.body13)
+        .foregroundStyle(DS.Color.textSecondary)
+    }
+    .foregroundStyle(DS.Color.textPrimary)
+  }
+
   private var isBroadcasting: Bool {
-    if case .serving = viewModel.status { return true }
+    if case .serving = effectiveStatus { return true }
     return false
   }
 
@@ -328,34 +369,98 @@ struct VenueSignedServingView: View {
     requestTask = Task { await viewModel.supply(link: link) }
   }
 
-  private var radioSection: some View {
-    Section {
-      label(message(for: viewModel.radio.state), tint: tint(for: viewModel.radio.state))
-      if let failure = viewModel.radio.failure {
-        Text(message(for: failure))
-          .font(DS.Font.supporting)
-          .foregroundStyle(DS.Color.textSecondary)
-      }
-    } header: {
-      Text("Radio")
-    }
-  }
-
-  private func label(_ key: LocalizedStringKey, tint: Color) -> some View {
-    HStack(alignment: .top, spacing: DS.Space.s) {
-      Circle()
-        .fill(tint)
-        .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
-        .padding(.top, DS.Space.xs)
-        .accessibilityHidden(true)
-      Text(key)
-        .font(DS.Font.body)
-    }
-  }
-
   private static func instantText(_ unixSeconds: Int64) -> String {
-    Date(timeIntervalSince1970: TimeInterval(unixSeconds))
-      .formatted(date: .omitted, time: .shortened)
+    Date(timeIntervalSince1970: TimeInterval(unixSeconds)).formatted(date: .omitted, time: .shortened)
+  }
+
+  private func shortEventId(_ value: String) -> String {
+    value.count > 12 ? "\(value.prefix(4))…\(value.suffix(4))" : value
+  }
+
+  private var statusLabel: LocalizedStringKey {
+    switch effectiveStatus {
+    case .idle: return "Not broadcasting"
+    case .acquiring: return "Getting pack"
+    case .importing: return "Checking pack"
+    case .imported, .evaluating: return "Checking permission"
+    case .serving: return "Asked to broadcast"
+    case .blocked: return "Cannot broadcast"
+    case .importRejected: return "Pack rejected"
+    case .acquisitionFailed: return "Pack unavailable"
+    case .radioRefused: return "Radio stopped"
+    }
+  }
+
+  private func linkFailureTitle(_ failure: VenueLinkFailure) -> LocalizedStringKey {
+    switch failure {
+    case .malformedLink: return "Not a venue link"
+    case .missingBundleUrl: return "Link names no source"
+    case .unsupportedBundleUrl: return "Source not supported"
+    }
+  }
+
+  private func scannerRefusalTitle(_ refusal: VenueLinkScanner.Authorization) -> LocalizedStringKey {
+    switch refusal {
+    case .granted: return "Camera ready"
+    case .denied: return "No camera access"
+    case .unavailableAnyway: return "Scanning unavailable"
+    }
+  }
+
+  // A display-only, two-argument Debug gate. No fixture enters the verifier,
+  // acquisition port or Barnard radio; no fixture is recognized in Release.
+  private var fixtureCode: String? {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+      let index = arguments.firstIndex(of: "-beid-venue-frame"),
+      arguments.indices.contains(index + 1) else { return nil }
+    let code = arguments[index + 1]
+    return ["14b", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g"].contains(code) ? code : nil
+    #else
+    return nil
+    #endif
+  }
+
+  private var effectiveStatus: VenueServingStatus {
+    if fixtureCode != nil { return .serving(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
+    return viewModel.status
+  }
+
+  private var effectiveEventId: String? {
+    if fixtureCode != nil { return "3d1a0000000000000000000000000000000000000000000000000000000077c2" }
+    return viewModel.servingEventIdHex
+  }
+
+  private var effectiveRadio: VenueRadioUpdate {
+    if fixtureCode != nil { return VenueRadioUpdate(state: .advertisingRequested)! }
+    return viewModel.radio
+  }
+
+  private var linkFailure: VenueLinkFailure? {
+    switch fixtureCode {
+    case "14e": return .malformedLink
+    case "14e2": return .missingBundleUrl
+    case "14e3": return .unsupportedBundleUrl
+    default: return viewModel.linkFailure
+    }
+  }
+
+  private var effectiveScannerRefusal: VenueLinkScanner.Authorization? {
+    switch fixtureCode {
+    case "14f": return .denied
+    case "14f2": return .unavailableAnyway
+    default: return scannerRefusal
+    }
+  }
+
+  private var effectiveScannerStartFailure: String? {
+    if fixtureCode == "14f3" { return "AVCaptureSession could not start — the camera is in use by another app." }
+    return scannerStartFailure
+  }
+
+  private var effectiveUnsavedArtifact: Bool {
+    fixtureCode == "14g" || viewModel.hasUnsavedArtifact
   }
 
   // MARK: - Exhaustive outcome copy. No `default` in any of the seven.

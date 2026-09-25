@@ -70,6 +70,59 @@ enum VenueLinkScanner {
   }
 }
 
+/// Flat 2b screen 14d. Only the camera surface is swapped for an inert Debug
+/// tour fixture; the production branch always hosts DataScannerViewController.
+struct VenueScannerScreen: View {
+  let isFixture: Bool
+  let onCancel: () -> Void
+  let onScan: (String) -> Void
+  let onStartFailure: (String) -> Void
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack {
+        Button(action: onCancel) {
+          Text("Cancel")
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("Cancel scan")
+        Spacer()
+      }
+      .overlay {
+        Text("Scan QR code")
+          .beidTextStyle(DS.Font.Library.labelMono11)
+          .accessibilityAddTraits(.isHeader)
+      }
+      .frame(minHeight: DS.Size.primaryButtonMinHeight)
+      .padding(.horizontal, DS.Space.pageMargin)
+
+      ZStack {
+        if isFixture {
+          DS.Color.surfaceTile
+        } else {
+          VenueLinkScannerView(onScan: onScan, onStartFailure: onStartFailure)
+        }
+        RoundedRectangle(cornerRadius: DS.Radius.nowCard)
+          .strokeBorder(DS.Color.actionInverse, lineWidth: DS.Size.hairline)
+          .frame(width: DS.Size.venueScannerGuide, height: DS.Size.venueScannerGuide)
+          .accessibilityHidden(true)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Text("Point at the organiser's QR code")
+        .beidTextStyle(DS.Font.Library.labelMono10)
+        .foregroundStyle(DS.Color.textSecondaryOnInk)
+        .frame(maxWidth: .infinity, minHeight: DS.Size.primaryButtonMinHeight * 2)
+    }
+    .foregroundStyle(DS.Color.actionInverse)
+    .background(DS.Color.textPrimary)
+    .accessibilityIdentifier("venue.scanner.screen")
+  }
+}
+
 struct VenueLinkScannerView: UIViewControllerRepresentable {
   /// Called with the first recognised payload. The view dismisses itself first so
   /// a second frame cannot deliver a different link into a screen already acting on

@@ -65,6 +65,95 @@ final class FlatScreenshotTourD: XCTestCase {
     assertMinimumHitTarget(copied)
   }
 
+  func testShot_14_OrganizerTools() {
+    openOrganizer()
+    let route = app.buttons["organizer.venueBroadcast"]
+    _ = route.waitForExistence(timeout: 5)
+    attachScreenshot("14")
+    assertMinimumHitTarget(route)
+    XCTAssertEqual(route.value as? String, "Not broadcasting")
+  }
+
+  func testShot_14b_VenueBroadcast() {
+    openVenue(frame: "14b")
+    attachScreenshot("14b")
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
+  }
+
+  func testShot_14d_ScanQR() {
+    openVenue(frame: "14d")
+    app.buttons["Scan QR code"].tap()
+    _ = app.otherElements["venue.scanner.screen"].waitForExistence(timeout: 5)
+    attachScreenshot("14d")
+    assertMinimumHitTarget(app.buttons["Cancel scan"])
+    XCTAssertTrue(app.staticTexts["Point at the organiser's QR code"].exists)
+  }
+
+  func testShot_14e_InvalidLink() {
+    assertVenueFrame("14e", outcome: "Not a venue link")
+  }
+
+  func testShot_14e2_NoSource() {
+    assertVenueFrame("14e2", outcome: "Link names no source")
+  }
+
+  func testShot_14e3_UnsupportedSource() {
+    assertVenueFrame("14e3", outcome: "Source not supported")
+  }
+
+  func testShot_14f_NoCameraAccess() {
+    openVenue(frame: "14f")
+    attachScreenshot("14f")
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts["No camera access"].exists)
+    assertMinimumHitTarget(app.links["Open Settings"])
+  }
+
+  func testShot_14f2_ScanningUnavailable() {
+    assertVenueFrame("14f2", outcome: "Scanning unavailable")
+    XCTAssertFalse(app.links["Open Settings"].exists)
+  }
+
+  func testShot_14f3_CameraCouldNotStart() {
+    assertVenueFrame("14f3", outcome: "Camera could not start")
+    XCTAssertFalse(app.links["Open Settings"].exists)
+  }
+
+  func testShot_14g_NotSaved() {
+    assertVenueFrame("14g", outcome: "Not saved")
+  }
+
+  private func assertVenueFrame(_ code: String, outcome: String) {
+    openVenue(frame: code)
+    attachScreenshot(code)
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts[outcome].exists)
+  }
+
+  private func assertVenueControls() {
+    assertMinimumHitTarget(app.buttons["Paste venue link"])
+    assertMinimumHitTarget(app.buttons["Use this link"])
+    assertMinimumHitTarget(app.buttons["Scan QR code"])
+    assertMinimumHitTarget(app.buttons["Copy event ID"])
+    assertMinimumHitTarget(app.buttons["Stop broadcasting"])
+    XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
+  }
+
+  private func openOrganizer(extraArguments: [String] = []) {
+    openAccount(extraArguments: extraArguments)
+    let organizer = app.buttons["Organizer tools"]
+    XCTAssertTrue(organizer.waitForExistence(timeout: 5))
+    organizer.tap()
+    XCTAssertTrue(app.buttons["organizer.venueBroadcast"].waitForExistence(timeout: 5))
+  }
+
+  private func openVenue(frame: String) {
+    openOrganizer(extraArguments: ["-beid-venue-frame", frame])
+    app.buttons["organizer.venueBroadcast"].tap()
+    XCTAssertTrue(app.buttons["Scan QR code"].waitForExistence(timeout: 5))
+  }
+
   private func openAccount(extraArguments: [String] = []) {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
     app.launch()

@@ -146,6 +146,8 @@ enum DS {
     /// `Button/Primary` Size=Large minimum height. Its width is the full
     /// content width at `Space.pageMargin`, so it has no width token.
     static let primaryButtonMinHeight: CGFloat = 56
+    /// Flat 2b 14d camera framing guide; the camera remains a live system view.
+    static let venueScannerGuide: CGFloat = 258
     /// `Button/Primary` Size=Small minimum height (Home's Scan).
     static let compactPrimaryButtonMinHeight: CGFloat = 52
     /// `Button/Primary` Size=Small width (Home's Scan).
