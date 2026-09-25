@@ -188,8 +188,13 @@ enum DS {
     static let benefitRowTop: CGFloat = 16
     static let recoveryRowTop: CGFloat = 18
     static let rowNumberWidth: CGFloat = 48
+    /// Figma 02's numbered-row copy occupies about 233–238 pt, even though
+    /// the space to the page edge is wider.
+    static let benefitDetailWidth: CGFloat = 238
     static let noteToButtonGap: CGFloat = 16
     static let recoveryActionGap: CGFloat = 8
+    /// Places Figma 03's two actions below the common onboarding footer.
+    static let recoveryFooterDrop: CGFloat = 18
     static let footerBottom: CGFloat = 6
     static let statusDot: CGFloat = 7
     static let statusLabelGap: CGFloat = 7
@@ -273,10 +278,9 @@ enum DS {
       /// and — deliberately — whenever the requested line height is below
       /// the face's own: `lineSpacing` is additive and
       /// `NSParagraphStyle.lineSpacing` "is always nonnegative", so there is
-      /// no supported way to tighten a line box on this deployment target.
-      /// Display/60 · 52 · 46 ask for 100% against Bricolage's 1.2 em face
-      /// and therefore land on the face's line height, not the Library's —
-      /// see §6's line-height gap.
+      /// no supported way to tighten a line box on iOS 17–25. On iOS 26+,
+      /// the full-style modifier uses `lineHeight(.exact(points:))` for
+      /// Display's 100% line height instead — see §6 and #661.
       func lineSpacing(atPointSize pointSize: CGFloat) -> CGFloat {
         guard
           let lineHeight,
@@ -496,9 +500,8 @@ extension View {
   /// settings above. Prefer this modifier when a screen is being built to
   /// the Library.
   ///
-  /// Line height is applied as `lineSpacing`, which is additive, so a
-  /// Library line height *below* the face's own is not applied — see
-  /// `DS.Font.Style.lineSpacing(atPointSize:)` and §6's line-height gap.
+  /// Line height uses additive `lineSpacing` on iOS 17–25. On iOS 26+,
+  /// Display's 100% line height uses the exact-height API — see #661.
   /// Tracking and line height scale with Dynamic Type: both are computed
   /// at the scaled point size, not the base size.
   func beidTextStyle(_ style: DS.Font.Style) -> some View {
@@ -522,10 +525,18 @@ private struct BeidTextStyleModifier: ViewModifier {
   }
 
   func body(content: Content) -> some View {
-    content
+    let styled = content
       .font(style.font)
       .tracking(style.tracking(atPointSize: scaledSize))
       .lineSpacing(style.lineSpacing(atPointSize: scaledSize))
       .textCase(style.isUppercase ? .uppercase : nil)
+
+    if #available(iOS 26.0, *), style.lineHeight == 1.0 {
+      // #661: align Display to the spec where iOS allows exact line height,
+      // unlike the iOS 26 glass branches removed by #630.
+      styled.lineHeight(.exact(points: scaledSize))
+    } else {
+      styled
+    }
   }
 }

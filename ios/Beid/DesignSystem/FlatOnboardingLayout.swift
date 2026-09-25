@@ -9,11 +9,14 @@ import SwiftUI
 struct FlatOnboardingPage<Content: View, Footer: View>: View {
   let content: Content
   let footer: Footer
+  let footerInsetReduction: CGFloat
 
   init(
+    footerInsetReduction: CGFloat = 0,
     @ViewBuilder content: () -> Content,
     @ViewBuilder footer: () -> Footer
   ) {
+    self.footerInsetReduction = footerInsetReduction
     self.content = content()
     self.footer = footer()
   }
@@ -36,7 +39,13 @@ struct FlatOnboardingPage<Content: View, Footer: View>: View {
 
             footer
               .padding(.horizontal, DS.Space.pageMargin)
-              .padding(.bottom, DS.Onboarding.footerBottom)
+              // A screen may use some of the bottom safe area, but its
+              // controls always stay inside the physical screen edge.
+              .padding(
+                .bottom,
+                DS.Onboarding.footerBottom
+                  - min(footerInsetReduction, geometry.safeAreaInsets.bottom)
+              )
           }
         }
       }
@@ -111,6 +120,7 @@ struct FlatOnboardingSteps: View {
                 .beidTextStyle(DS.Font.Library.body13)
                 .foregroundStyle(DS.Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: DS.Onboarding.benefitDetailWidth, alignment: .leading)
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)

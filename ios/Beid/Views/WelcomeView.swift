@@ -1,7 +1,6 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-import BeidSharedKit
 import SwiftUI
 
 /// Screen 01. The owner chose wallet-optional onboarding on 2026-09-26:
@@ -22,15 +21,14 @@ struct WelcomeView: View {
             .foregroundStyle(DS.Color.textSecondary)
         }
 
-        // A fixed illustrative sample, never a proof or device observation.
-        BeidSigilView(
-          input: WelcomeSigilIllustration.input,
-          size: DS.Onboarding.welcomeHeroSize,
-          ground: .OUTLINE
-        )
-        .accessibilityHidden(true)
-        .frame(maxWidth: .infinity)
-        .padding(.top, DS.Onboarding.welcomeHeroGap)
+        // Figma's fixed sample illustration, never a proof or observation.
+        Image("welcome-figma-sample-sigil")
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: DS.Onboarding.welcomeHeroSize, height: DS.Onboarding.welcomeHeroSize)
+          .accessibilityHidden(true)
+          .frame(maxWidth: .infinity)
+          .padding(.top, DS.Onboarding.welcomeHeroGap)
 
         Text("Prove you\nwere there.")
           .beidTextStyle(DS.Font.Library.display52)
@@ -53,26 +51,6 @@ struct WelcomeView: View {
         coordinator.beginOnboarding()
       }
     }
-  }
-}
-
-/// Stable illustration input for the Welcome hero only. It deliberately
-/// contains sample mutual marks, which live observations cannot supply yet.
-private enum WelcomeSigilIllustration {
-  static var input: BeidSharedKit.sigil.SigilInput {
-    let windowCount: Int32 = 12
-    let input = BeidSharedKit.sigil.createSigilInput(windowCount: windowCount)
-    for peer in 0..<9 {
-      for window in 0..<windowCount where (peer + Int(window)) % 3 != 0 {
-        _ = BeidSharedKit.sigil.addSigilPresence(
-          input: input,
-          peerKey: "illustration-peer-\(peer)",
-          windowIndex: window,
-          presence: (peer + Int(window)) % 4 == 0 ? 2 : 1
-        )
-      }
-    }
-    return input
   }
 }
 

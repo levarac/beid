@@ -17,7 +17,7 @@ struct BluetoothOffView: View {
   ]
 
   var body: some View {
-    FlatOnboardingPage {
+    FlatOnboardingPage(footerInsetReduction: DS.Onboarding.recoveryFooterDrop) {
       VStack(alignment: .leading, spacing: 0) {
         HStack(spacing: DS.Onboarding.statusLabelGap) {
           Circle()
