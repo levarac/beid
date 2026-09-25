@@ -133,17 +133,17 @@ struct EventCodeEntryView: View {
             code = pastedCode
           }
         } label: {
-          Text("Paste")
+          Text(verbatim: "PASTE")
+            // This literal is already uppercase; keep the mono style's text
+            // case from uppercasing the spoken label.
+            .textCase(nil)
             .beidTextStyle(DS.Font.Library.labelMono10)
             .foregroundStyle(DS.Color.textPrimary)
             .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
             .contentShape(Rectangle())
+            .accessibilityLabel(Text(verbatim: String(localized: "Paste event code")))
         }
         .buttonStyle(.plain)
-        // Clear text case for the spoken label. The inner Text's mono style
-        // reapplies uppercase only to the visible PASTE.
-        .textCase(nil)
-        .accessibilityLabel(Text("Paste event code"))
         .accessibilityIdentifier("eventCode.paste")
       }
       .frame(minHeight: 44)
