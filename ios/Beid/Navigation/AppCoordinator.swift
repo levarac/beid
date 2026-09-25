@@ -136,7 +136,7 @@ final class AppCoordinator: ObservableObject {
       self.proofStore.resetForUITesting()
       seedHomeFrameForUITesting()
     }
-    sensingCoordinator.onProofCollected = { [weak self] proof in
+    self.sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
     }
     if hasCompletedOnboardingPersisted {
