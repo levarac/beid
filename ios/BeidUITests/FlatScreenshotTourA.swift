@@ -32,7 +32,7 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(field.waitForExistence(timeout: 5))
     XCTAssertEqual(field.value as? String, "ETH-TOKY0-26")
     let errorLabel = app.staticTexts.matching(
-      NSPredicate(format: "label CONTAINS[c] %@", "Could not join event")
+      NSPredicate(format: "label == %@", "COULD NOT JOIN EVENT")
     ).firstMatch
     XCTAssertTrue(errorLabel.exists)
     XCTAssertTrue(

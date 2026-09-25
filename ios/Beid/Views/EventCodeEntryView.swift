@@ -181,7 +181,7 @@ struct EventCodeEntryView: View {
               .beidTextStyle(DS.Font.Library.labelMono10)
               .foregroundStyle(DS.Color.textPrimary)
           } else {
-            Text("Could not join event")
+            Text("COULD NOT JOIN EVENT")
               .beidTextStyle(DS.Font.Library.labelMono10)
               .foregroundStyle(DS.Color.textPrimary)
           }

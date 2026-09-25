@@ -29,7 +29,7 @@
     "Connected": {},
     "Connecting to wallet…": {},
     "Connection failed": {},
-    "Could not join event": {
+    "COULD NOT JOIN EVENT": {
       "comment": "Generic manual event join failure label. A failed join does not prove that the code was unrecognized."
     },
     "Codes are case-insensitive": {},
