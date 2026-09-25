@@ -19,6 +19,7 @@ final class FlatScreenshotTourC: XCTestCase {
   func testShot_05d_CantJoin() { capture("05d") }
   func testShot_05e_StopConfirm() { capture("05e") }
   func testShot_06_Sealed() { capture("06") }
+  func testShot_07_ProofCollected() { capture("07") }
 
   private func capture(_ code: String, file: StaticString = #filePath, line: UInt = #line) {
     let app = XCUIApplication()
@@ -38,6 +39,9 @@ final class FlatScreenshotTourC: XCTestCase {
     senseEvent.tap()
 
     XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].waitForExistence(timeout: 10), file: file, line: line)
+    if code == "07" {
+      XCTAssertTrue(app.buttons["View collection"].exists, file: file, line: line)
+    }
     let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     attachment.name = code
     attachment.lifetime = .keepAlways

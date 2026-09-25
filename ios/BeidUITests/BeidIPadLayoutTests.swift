@@ -52,17 +52,15 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
     capture(named: "event-found-\(orientation)")
 
-    // Verifying/Verified/Proof Collected merge into one continuous
-    // `.recording` phase (Scan Slice-2 sub-slice 2a) — there is no
-    // terminal screen to wait for anymore. Threshold-confirm auto-flips
-    // into `.recording` in the background; the "Simulate Signal Lost"
+    // Recording remains live until the user confirms stopping. Threshold
+    // confirmation auto-flips into `.recording`; the "Simulate Signal Lost"
     // affordance existing is the earliest reliable signal that happened.
     let signalLost = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     capture(named: "recording-\(orientation)")
 
-    // CLOSE confirms the real Proof before finalizing, then DONE dismisses
-    // the already-sealed screen.
+    // CLOSE confirms the real Proof, DONE advances through persistent 07,
+    // then View collection dismisses to Home.
     app.buttons["Close"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     capture(named: "stop-confirm-\(orientation)")
@@ -70,6 +68,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "sealed-\(orientation)")
     app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    capture(named: "proof-collected-\(orientation)")
+    app.buttons["View collection"].tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
@@ -231,6 +232,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    app.buttons["View collection"].tap()
 
     XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
   }
