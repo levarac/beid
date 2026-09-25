@@ -336,6 +336,39 @@ final class SensingCoordinator: ObservableObject {
   /// whoever first wires #109 to iOS.
   @Published private(set) var unidentifiedRpidCount = 0
 
+  // MARK: - Radar node signal strength (beid#652, display only)
+
+  /// Sensing-time signal strength per node, keyed by normalized display id —
+  /// the same id the drawing's angle uses, so a node's radius and its angle
+  /// cannot end up describing two different devices.
+  ///
+  /// **Display only. No record, signing, or submission path reads this**, and
+  /// that is structural rather than promised: its only writer,
+  /// `handleSignalStrength`, is a sibling of `handleDetection` and not
+  /// reachable from it, so no RSSI value is ever in lexical scope inside the
+  /// recording call tree. See `NodeSignalStrength`.
+  ///
+  /// Republished at most once per `BeidConfig.nodeSignalRedrawMinimumInterval`
+  /// (see `handleSignalStrength`), so this is a *coalesced view* of
+  /// `smoothedNodeSignalDbm` below rather than its live value. Read it through
+  /// `signalStrength(forNodeId:)`, which is the one place that turns "no entry"
+  /// and "not measured yet" into a single answer.
+  ///
+  /// A node never appears here as `.unmeasured`: an entry exists only once a
+  /// usable sample has been smoothed into it. `.unmeasured` is what
+  /// `signalStrength(forNodeId:)` says about a key that is absent.
+  @Published private(set) var nodeSignalStrengths: [String: NodeSignalStrength] = [:]
+  /// Live smoothed dBm per node — updated on **every** usable sample, unlike
+  /// `nodeSignalStrengths`, which only republishes on the coalescing schedule.
+  /// Keeping the two apart is what lets the smoother stay accurate while the
+  /// redraw stays cheap; `nodeSignalStrengths` is a total projection of this
+  /// dictionary, so the two cannot drift.
+  private var smoothedNodeSignalDbm: [String: Double] = [:]
+  /// Event timestamp of the most recent `nodeSignalStrengths` republish, or
+  /// `nil` if none has happened this session. Sourced from the caller's
+  /// timestamp, never `Date()` — see `handleSignalStrength`.
+  private var lastNodeSignalPublishAt: Date?
+
   /// Fired once, the instant `.recording` begins and a `Proof` is created.
   var onProofCollected: ((Proof) -> Void)?
   /// Fired on every subsequent distinct-peer observation while
@@ -1394,6 +1427,25 @@ final class SensingCoordinator: ObservableObject {
         detectedDisplayId: detection.detectedDisplayId,
         reporterRpid: detection.reporterRpid
       )
+      // A SIBLING call, deliberately — not an extra argument to
+      // `handleDetection` above (beid#652). A detection carries an `rssi`
+      // this app used to drop here; routing it through its own function
+      // instead of into the recording call tree is what keeps signal
+      // strength out of lexical scope everywhere a record is built. Note it
+      // is not given `detection.enin`: the window index is record
+      // vocabulary. See `NodeSignalStrength`.
+      //
+      // Called AFTER `handleDetection`, and that order is load-bearing: a
+      // detection arriving in `.sensing` runs `beginEventFoundSessionState`
+      // synchronously, which calls `resetSessionState()` and clears the
+      // signal-strength state with the rest of the session. Applying this
+      // sample first would throw it away at the very transition where the
+      // radar most needs a radius for the device that caused it.
+      handleSignalStrength(
+        rssi: detection.rssi,
+        detectedDisplayId: detection.detectedDisplayId,
+        at: detection.timestamp
+      )
     case .eventInfoEnvelopeV2(let envelopeEvent):
       handleObservedEventInfoEnvelopeV2(envelopeEvent)
     case .relayDecision(let relay):
@@ -1427,10 +1479,24 @@ final class SensingCoordinator: ObservableObject {
     //
     // Why each is ignored today: `.constraint` and `.error` are barnard's own
     // diagnostics, which this app surfaces through its sensing state rather
-    // than by reacting per event, and `.rssiUpdate` is signal strength, which
-    // no beid decision reads.
-    case .constraint, .error, .rssiUpdate:
+    // than by reacting per event, and reacting to them one at a time would
+    // duplicate that state machine.
+    //
+    // `.rssiUpdate` used to be in this list. It no longer is (beid#652): it
+    // is handled below, and it is handled by the same sibling function the
+    // `.detection` case calls, because it is the same kind of value — signal
+    // strength, used for display only, never for any decision. What has not
+    // changed is the part that mattered: no beid *decision* reads it. Being
+    // handled is not the same as being trusted, and nothing that records,
+    // signs, or submits may start reading it now that it has a home.
+    case .constraint, .error:
       break
+    case .rssiUpdate(let update):
+      handleSignalStrength(
+        rssi: update.rssi,
+        detectedDisplayId: update.detectedDisplayId,
+        at: update.timestamp
+      )
     }
   }
 
@@ -1871,6 +1937,147 @@ final class SensingCoordinator: ObservableObject {
     guard updatedDeviceCount != devicesVerified else { return false }
     devicesVerified = updatedDeviceCount
     return true
+  }
+
+  // MARK: - Radar node signal strength (beid#652, display only)
+
+  /// The signal strength to draw for `nodeId`. **Always answers; never
+  /// returns `nil`.**
+  ///
+  /// This is THE decision point for "no signal yet". A node with no entry in
+  /// `nodeSignalStrengths` and a node explicitly not measured are the same
+  /// thing to every caller, and collapsing them here is the whole reason this
+  /// function exists: without it there would be two ways to say "no signal"
+  /// — an absent key and `.unmeasured` — and each consumer would have to know
+  /// which one it was looking at. One named function, one answer.
+  ///
+  /// `nodeId` must already be normalized
+  /// (`BeidSharedKit.sensing.normalizedDisplayIdOrNull`), like every other id
+  /// in this dictionary; an unknown id is not an error, it is `.unmeasured`.
+  func signalStrength(forNodeId nodeId: String) -> NodeSignalStrength {
+    nodeSignalStrengths[nodeId] ?? .unmeasured
+  }
+
+  /// Folds one RSSI sample into the display-only per-node signal strength.
+  ///
+  /// **A sibling of `handleDetection`, never a step inside it.** Both the
+  /// `.detection` and `.rssiUpdate` Barnard events route here, and nothing on
+  /// the recording path calls this or is called by it. That separation — not
+  /// this comment — is what guarantees signal strength never reaches a
+  /// record, a signature, or a submission. Do not add an `rssi` parameter to
+  /// `handleDetection`, `observe`, or `recordDeviceIdentity` to "simplify"
+  /// this away; the guarantee is the shape.
+  ///
+  /// **Takes no `enin`, deliberately.** The window index is record
+  /// vocabulary, and a display path that cannot name the window it belongs to
+  /// cannot be folded into a per-window record even by accident. Do not add
+  /// it back for symmetry with `handleDetection`.
+  ///
+  /// Not `private` for the same reason `handleDetection` is not: Barnard's
+  /// event structs have no public initializer, so `BeidTests` drives this
+  /// path by calling it with plain arguments.
+  ///
+  /// **Gated to the sensing phases**, mirroring `handleDetection`'s own
+  /// `.idle, .signalLost` branch rather than inventing a second shape. The
+  /// reason a reader will not reconstruct is `.signalLost`: that phase is a
+  /// *frozen* count, resumed only by an explicit `resumeSensing()`, and
+  /// `simulateSignalLost()` does not call `resetSessionState()`. Without this
+  /// gate the radar would keep its nodes moving while the count printed
+  /// beside them was frozen — one screen telling the user two different
+  /// things about whether anything is still happening. `.idle` is the same
+  /// argument with less at stake: nothing is drawn, so folding samples in is
+  /// at best wasted work and at worst state for the next session to inherit
+  /// if a reset is ever missed. It is also what makes the acceptance
+  /// criterion's "**sensing-time** signal strength" literally true rather
+  /// than approximately true.
+  ///
+  /// **This gate runs in the opposite direction to the one DESIGN.md §2
+  /// forbids, and must not be "fixed" by deleting it.** The Non-Negotiable is
+  /// that signal strength may not influence a decision. Here the *phase*
+  /// decides whether the *display* updates; signal strength still decides
+  /// nothing, and nothing downstream of it decides anything. Information
+  /// flows phase → display, never display → phase.
+  ///
+  /// Three things happen here, in order, and only the third is gated:
+  ///
+  /// 1. **Usability.** A sample is a measurement only if it is below
+  ///    `BeidConfig.nodeSignalUsableUpperBoundDbm`. `0` (Barnard's proven
+  ///    `discoveredRssi[id] ?? 0` sentinel), any positive value, and `127`
+  ///    (CoreBluetooth's unavailable marker) are not measurements: the node
+  ///    stays `.unmeasured` and the smoother never sees them. A rejected
+  ///    sample creates no entry at all, so it cannot later be mistaken for a
+  ///    measured one.
+  /// 2. **Smoothing**, on every usable sample. An exponential moving average,
+  ///    `new = previous + alpha * (sample - previous)`. The first usable
+  ///    sample seeds the value *directly* rather than ramping from zero — a
+  ///    ramp from 0 dBm would walk a node inward from the radar's centre,
+  ///    which is `NodeSignalStrength.unmeasured`'s failure mode in motion.
+  /// 3. **Republishing**, at most once per
+  ///    `BeidConfig.nodeSignalRedrawMinimumInterval`, decided purely from the
+  ///    `timestamp` the caller passes — not `Date()`, not a `Timer`, not a
+  ///    `Task`. No clock seam, no async, so the whole path is deterministic
+  ///    under test. A node's first transition out of `.unmeasured` always
+  ///    publishes immediately regardless of the interval: a node appearing is
+  ///    not jitter, and delaying it would leave a device visible in
+  ///    `devicesVerified` but missing a radius. That forced publish *does*
+  ///    rearm the interval, so a burst of arrivals can push an established
+  ///    node's next update back by up to one interval per new node. Chosen
+  ///    deliberately, not overlooked: a burst of arrivals is exactly when an
+  ///    extra redraw costs most, and the established nodes are meanwhile
+  ///    sitting at a radius that is at most one EMA step stale.
+  ///
+  /// The accepted trade-off of coalescing without a timer: **the last sample
+  /// before a node goes quiet may never be published.** That is deliberate. A
+  /// single sample moves an EMA by only `alpha`, and a node that stops
+  /// advertising expires shortly afterwards anyway, so the cost is a
+  /// marginally stale radius on a node that is already leaving — paid to
+  /// avoid a timer, and with it a second clock this path would have to stay
+  /// correct against.
+  func handleSignalStrength(rssi: Int, detectedDisplayId: String?, at timestamp: Date) {
+    switch phase {
+    case .sensing, .eventFound, .recording:
+      break
+    case .idle, .signalLost:
+      // See this function's doc comment: `.signalLost` is a frozen count, and
+      // a radar that kept moving underneath it would contradict the number
+      // next to it. The phase gates the display; the display gates nothing.
+      return
+    }
+
+    // Same `shared/` canonicalization `recordDeviceIdentity` uses (beid#231),
+    // so the radius and the angle key on one identity rather than two. A null
+    // display id (Barnard B003 unavailable) is not a node: it cannot be
+    // attributed to a device, so there is nothing to draw it on.
+    guard let nodeId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(
+      detectedDisplayId: detectedDisplayId
+    ) else { return }
+    guard rssi < BeidConfig.nodeSignalUsableUpperBoundDbm else { return }
+
+    let sample = Double(rssi)
+    let isFirstMeasurement = smoothedNodeSignalDbm[nodeId] == nil
+    let smoothed: Double
+    if let previous = smoothedNodeSignalDbm[nodeId] {
+      smoothed = previous + BeidConfig.nodeSignalSmoothingFactor * (sample - previous)
+    } else {
+      smoothed = sample
+    }
+    smoothedNodeSignalDbm[nodeId] = smoothed
+
+    guard isFirstMeasurement || shouldRepublishNodeSignalStrengths(at: timestamp) else { return }
+    lastNodeSignalPublishAt = timestamp
+    nodeSignalStrengths = smoothedNodeSignalDbm.mapValues { NodeSignalStrength.measured(dBm: $0) }
+  }
+
+  /// Whether enough event time has passed since the last republish. Compares
+  /// the caller's event timestamps only, so it holds no clock of its own.
+  ///
+  /// A timestamp at or before the last publish — which a reordered or
+  /// replayed Barnard event can produce — yields a non-positive elapsed value
+  /// and so does not republish. That is the safe direction: it withholds a
+  /// redraw rather than admitting an out-of-order one.
+  private func shouldRepublishNodeSignalStrengths(at timestamp: Date) -> Bool {
+    guard let last = lastNodeSignalPublishAt else { return true }
+    return timestamp.timeIntervalSince(last) >= BeidConfig.nodeSignalRedrawMinimumInterval
   }
 
   /// Whether the co-presence arm is why an event just confirmed — used only
@@ -2458,6 +2665,16 @@ final class SensingCoordinator: ObservableObject {
     rpidsAwaitingDisplayId = []
     devicesVerified = 0
     unidentifiedRpidCount = 0
+    // beid#652: display-only, but still per-session. A radius measured at
+    // last night's event must not be on screen at this morning's, and a
+    // stale `lastNodeSignalPublishAt` must not suppress the first redraw of
+    // the new session. All three fields are the same state and are cleared
+    // together; keeping the published projection and its source in step is
+    // what makes `nodeSignalStrengths` a total projection of
+    // `smoothedNodeSignalDbm` rather than a cache that can drift.
+    nodeSignalStrengths = [:]
+    smoothedNodeSignalDbm = [:]
+    lastNodeSignalPublishAt = nil
     currentWindowEnin = nil
     currentWindowId = nil
     currentWindowObservationReference = nil
