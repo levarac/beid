@@ -28,10 +28,18 @@ private struct CollectionHomeContent: View {
 
   /// One row per distinct event. The newest dated session drives title/date
   /// and the Event Detail route; every stored Proof remains session-level.
-  private struct EventCard: Identifiable {
+  private struct EventCard: Identifiable, Hashable {
     let id: UUID
     let representative: Proof
     let sessionCount: Int
+
+    static func == (lhs: EventCard, rhs: EventCard) -> Bool {
+      lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+      hasher.combine(id)
+    }
   }
 
   private var eventCards: [EventCard] {
