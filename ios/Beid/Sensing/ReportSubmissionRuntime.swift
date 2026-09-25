@@ -136,12 +136,20 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   /// persisted state — never triggers a network call or a write.
   func submissionState(forEventCode eventCode: String) -> ReportSubmissionState?
   func excludedWindowCount(forEventCode eventCode: String) -> Int
+
+  /// The event code a canonical Observation for `eventIdHex` was signed
+  /// under, from already-persisted records. A pure read; the event-key
+  /// signing entry point uses it to bind a web request's Event ID to the key
+  /// that actually observed that event.
+  func eventCode(forCanonicalEventIdHex eventIdHex: String) -> String?
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
   func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
     .failure(.unreadable)
   }
+
+  func eventCode(forCanonicalEventIdHex eventIdHex: String) -> String? { nil }
 }
 
 /// Native composition boundary for the inactive-by-default report pipeline.
@@ -397,6 +405,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     store.labRecordProjection()
   }
 
+  func eventCode(forCanonicalEventIdHex eventIdHex: String) -> String? {
+    guard let wanted = eventIdHex.normalizedCanonicalEventIdHex else { return nil }
+    return store.records.last { $0.eventIdHex?.normalizedCanonicalEventIdHex == wanted }?.eventCode
+  }
+
   func submitPending() {
     for capture in store.pendingCaptures {
       processPendingCapture(capture)
@@ -602,7 +615,9 @@ private extension ReportSubmissionState {
   }
 }
 
-private extension String {
+extension String {
+  /// Lowercase 64-hex Event ID without `0x`, or nil. Internal (not private)
+  /// because the event-key signing entry point matches Event IDs the same way.
   var normalizedCanonicalEventIdHex: String? {
     let value = hasPrefix("0x") || hasPrefix("0X") ? String(dropFirst(2)) : self
     guard value.count == 64,
