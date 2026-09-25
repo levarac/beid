@@ -74,6 +74,8 @@ targets:
         BeidVenueBundleURLTemplate: "$(BEID_VENUE_BUNDLE_URL_TEMPLATE)"
         BeidEventCodeLookupURLTemplate: "$(BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE)"
         BeidEventCodeHashLookupURLTemplate: "$(BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE)"
+        BeidEventKeySignPersonhoodCallbackURL: "$(BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL)"
+        BeidEventKeySignClaimCallbackURL: "$(BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL)"
         BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
@@ -161,6 +163,12 @@ targets:
         # event identity, digest, and validity are supplied only by the
         # verified Event Definition fetched through the registry module.
         BEID_REPORT_SUBMISSION_ENABLED: "NO"
+        # Event-key signing entry point: the only places a signature may be
+        # sent, one per purpose. Placeholders on the non-resolving .invalid
+        # TLD until the alcor and mizar hosts are decided; a non-https or
+        # empty value disables that purpose.
+        BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL: "https://alcor.levarac.invalid/bind/callback"
+        BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL: "https://mizar.levarac.invalid/claim/callback"
         # Same non-secret reasoning as BEID_EVENT_DEFINITION_URL_TEMPLATE
         # above. Route existence verified live: GET /artifacts/key-sets/<a
         # wrong digest> -> 404 "EventKeySet artifact not found", not 500.
