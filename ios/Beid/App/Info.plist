@@ -57,7 +57,11 @@
 	<string>beid uses the camera only to scan a venue link QR code when a venue device is set up.</string>
 	<key>UIAppFonts</key>
 	<array>
-		<string>BricolageGrotesque-ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display60ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display52ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display46ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display40ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display34ExtraBold.ttf</string>
 		<string>DMSans-Bold.ttf</string>
 		<string>DMSans-Regular.ttf</string>
 		<string>DMMono-Medium.ttf</string>

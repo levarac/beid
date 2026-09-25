@@ -3,13 +3,31 @@
 
 import XCTest
 
-/// Stream A's Flat 2b frames. Merge #643's 01/02/03 methods into this one
-/// tour file when the updated design branch reaches #648.
+/// Captures Flat 2b onboarding and event-code states through production navigation.
 final class FlatScreenshotTourA: XCTestCase {
   private let app = XCUIApplication()
 
   override func setUpWithError() throws {
     continueAfterFailure = false
+  }
+
+  func testShot_01_Welcome() {
+    launch()
+    capture("01 Welcome")
+  }
+
+  func testShot_02_EnableBluetooth() {
+    launch()
+    showBluetoothPermission()
+    capture("02 Enable Bluetooth")
+  }
+
+  func testShot_03_BluetoothOff() {
+    launch(bluetoothOff: true)
+    showBluetoothPermission()
+    app.buttons["Allow Bluetooth"].tap()
+    XCTAssertTrue(app.buttons["Open Settings"].waitForExistence(timeout: 5))
+    capture("03 Bluetooth Off")
   }
 
   func testShot_13_EnterEventCode() {
@@ -75,5 +93,24 @@ final class FlatScreenshotTourA: XCTestCase {
     attachment.name = name
     attachment.lifetime = .keepAlways
     add(attachment)
+  }
+
+  private func launch(bluetoothOff: Bool = false) {
+    app.launchArguments = ["-beid-ui-test"]
+    if bluetoothOff {
+      app.launchArguments.append("-beid-bluetooth-off-fixture")
+    }
+    app.launch()
+  }
+
+  private func showBluetoothPermission() {
+    let getStarted = app.buttons["Get Started"]
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
+    getStarted.tap()
+    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+  }
+
+  private func capture(_ frameCode: String) {
+    keepScreenshot(named: frameCode)
   }
 }
