@@ -41,6 +41,7 @@ struct VenueSignedServingView: View {
       }
       .frame(maxWidth: DS.Layout.stateContentMaxWidth, alignment: .leading)
       .padding(.horizontal, DS.Space.pageMargin)
+      .padding(.bottom, DS.Space.l)
       .frame(maxWidth: .infinity)
     }
     .background(DS.Color.surfaceCanvas)
@@ -209,18 +210,26 @@ struct VenueSignedServingView: View {
       hairline
       switch effectiveStatus {
       case .serving(let displayName, let stopAtUnixSeconds):
-        keyValueRow("Event") { Text(verbatim: displayName) }
+        keyValueRow("Event") {
+          Text(verbatim: displayName)
+            .beidTextStyle(DS.Font.Library.labelMono11Time)
+        }
         if let eventId = effectiveEventId { keyValueRow("Event ID") { eventIdCopyControl(eventId) } }
         keyValueRow("Until") {
           if fixtureCode != nil {
             Text("Broadcasting until 18:00")
+              .beidTextStyle(DS.Font.Library.labelMono11)
           } else {
             Text(String(localized: "venue.serving.servingUntil", defaultValue: "Broadcasting until \(Self.instantText(stopAtUnixSeconds)).", comment: "The permit's exclusive end time."))
+              .beidTextStyle(DS.Font.Library.labelMono11)
           }
         }
       case .idle:
         if let eventId = viewModel.linkEventIdHex {
-          keyValueRow("Event ID") { Text(verbatim: shortEventId(eventId)) }
+          keyValueRow("Event ID") {
+            Text(verbatim: shortEventId(eventId))
+              .beidTextStyle(DS.Font.Library.labelMono11Time)
+          }
         } else {
           Text("No pack yet. Paste the link the organiser gave you, or scan its QR code.")
             .beidTextStyle(DS.Font.Library.body13)
@@ -232,7 +241,10 @@ struct VenueSignedServingView: View {
       case .importing:
         statusMessage("Checking the pack.")
       case .imported(let identity), .evaluating(let identity):
-        keyValueRow("Event ID") { Text(verbatim: shortEventId(identity.eventIdHex)) }
+        keyValueRow("Event ID") {
+          Text(verbatim: shortEventId(identity.eventIdHex))
+            .beidTextStyle(DS.Font.Library.labelMono11Time)
+        }
         statusMessage("Checked. Deciding whether it can broadcast now.")
       case .blocked(let rejection):
         statusMessage(message(for: rejection.reason))
@@ -249,7 +261,9 @@ struct VenueSignedServingView: View {
             .fill(tint(for: effectiveRadio.state))
             .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
             .accessibilityHidden(true)
-          Text(message(for: effectiveRadio.state))
+          Text(radioRowLabel(for: effectiveRadio.state))
+            .beidTextStyle(DS.Font.Library.labelMono11)
+            .accessibilityLabel(message(for: effectiveRadio.state))
         }
       }
       if let failure = effectiveRadio.failure {
@@ -262,16 +276,25 @@ struct VenueSignedServingView: View {
         }
       }
       if effectiveUnsavedArtifact {
-        outcome(title: "Not saved", message: "This pack could not be saved. It stays on this device only until the app closes.")
+        outcome(
+          title: "Not saved",
+          message: "This pack could not be saved. It stays on this device only until the app closes.",
+          dotColor: DS.Color.statusPending
+        )
           .padding(.top, DS.Space.s)
       }
-      Text("A saved pack is checked again every time it is loaded.")
+      if effectiveRadio.state == .advertisingRequested {
+        Text("The system has not confirmed it is on air.")
+          .beidTextStyle(DS.Font.Library.body13)
+          .foregroundStyle(DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.top, DS.Space.m)
+      }
+      Text("A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.")
         .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondary)
-        .padding(.top, DS.Space.m)
-      Text("The link carries the event's details itself. Use one the event's organiser gave you.")
-        .beidTextStyle(DS.Font.Library.body13)
-        .foregroundStyle(DS.Color.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, effectiveRadio.state == .advertisingRequested ? DS.Space.s : DS.Space.m)
     }
   }
 
@@ -286,8 +309,11 @@ struct VenueSignedServingView: View {
     } label: {
       HStack(spacing: DS.Space.xs) {
         Text(verbatim: shortEventId(eventId))
+          .beidTextStyle(DS.Font.Library.labelMono11Time)
         Text(verbatim: "·")
+          .beidTextStyle(DS.Font.Library.labelMono11)
         Text("Copy")
+          .beidTextStyle(DS.Font.Library.labelMono11)
       }
       .frame(minHeight: DS.Size.minHitTarget)
       .contentShape(Rectangle())
@@ -306,7 +332,6 @@ struct VenueSignedServingView: View {
           .foregroundStyle(DS.Color.textSecondary)
         Spacer(minLength: DS.Space.s)
         value()
-          .beidTextStyle(DS.Font.Library.labelMono11Time)
           .foregroundStyle(DS.Color.textPrimary)
           .multilineTextAlignment(.trailing)
       }
@@ -319,11 +344,12 @@ struct VenueSignedServingView: View {
     Button(action: action) {
       HStack {
         Text(title)
+          .beidTextStyle(DS.Font.Library.title15)
         Spacer()
         Text(verbatim: "→")
+          .beidTextStyle(DS.Font.Library.labelMono11)
           .accessibilityHidden(true)
       }
-      .beidTextStyle(DS.Font.Library.labelMono11)
       .foregroundStyle(DS.Color.textPrimary)
       .frame(minHeight: DS.Size.minHitTarget)
       .contentShape(Rectangle())
@@ -342,11 +368,15 @@ struct VenueSignedServingView: View {
       .padding(.vertical, DS.Space.s)
   }
 
-  private func outcome(title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
+  private func outcome(
+    title: LocalizedStringKey,
+    message: LocalizedStringKey,
+    dotColor: Color = DS.Color.statusOff
+  ) -> some View {
     VStack(alignment: .leading, spacing: DS.Space.s) {
       HStack(spacing: DS.Space.s) {
         Circle()
-          .fill(DS.Color.statusOff)
+          .fill(dotColor)
           .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
           .accessibilityHidden(true)
         Text(title)
@@ -561,6 +591,15 @@ struct VenueSignedServingView: View {
       return "Asked to broadcast. The system has not confirmed it is on air."
     case .failed:
       return "The radio stopped."
+    }
+  }
+
+  private func radioRowLabel(for state: VenueRadioState) -> LocalizedStringKey {
+    switch state {
+    case .stopped: return "Stopped"
+    case .waitingForBluetooth: return "Waiting for Bluetooth"
+    case .advertisingRequested: return "Asked to broadcast"
+    case .failed: return "Radio stopped"
     }
   }
 

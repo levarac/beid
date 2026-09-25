@@ -1505,7 +1505,13 @@
     "Organizer tools · iOS only": {},
     "Cancel scan": {
       "comment": "VoiceOver label for the scanner sheet Cancel control."
-    }
+    },
+    "The system has not confirmed it is on air.": {
+      "comment": "Venue radio disclosure: a request was sent to the system, but no confirmation of actual airtime is available."
+    },
+    "Stopped": {},
+    "Waiting for Bluetooth": {},
+    "A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.": {}
   },
   "version": "1.0"
 }

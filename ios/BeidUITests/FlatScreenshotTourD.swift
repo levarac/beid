@@ -88,7 +88,7 @@ final class FlatScreenshotTourD: XCTestCase {
     attachScreenshot("14d")
     XCTAssertTrue(app.staticTexts["venue.scanner.title"].exists)
     assertMinimumHitTarget(app.buttons["Cancel scan"])
-    XCTAssertTrue(app.staticTexts["Point at the organiser's QR code"].exists)
+    XCTAssertTrue(app.staticTexts["venue.scanner.caption"].exists)
   }
 
   func testShot_14e_InvalidLink() {
@@ -107,7 +107,7 @@ final class FlatScreenshotTourD: XCTestCase {
     openVenue(frame: "14f")
     attachScreenshot("14f")
     assertVenueControls()
-    XCTAssertTrue(app.staticTexts["No camera access"].exists)
+    XCTAssertTrue(app.staticTexts["NO CAMERA ACCESS"].exists)
     assertMinimumHitTarget(app.links["Open Settings"])
   }
 
@@ -129,7 +129,7 @@ final class FlatScreenshotTourD: XCTestCase {
     openVenue(frame: code)
     attachScreenshot(code)
     assertVenueControls()
-    XCTAssertTrue(app.staticTexts[outcome].exists)
+    XCTAssertTrue(app.staticTexts[outcome.uppercased()].exists)
   }
 
   private func assertVenueControls() {
@@ -179,7 +179,8 @@ final class FlatScreenshotTourD: XCTestCase {
 
   private func assertMinimumHitTarget(_ control: XCUIElement) {
     XCTAssertTrue(control.exists)
-    XCTAssertGreaterThanOrEqual(control.frame.width, 44)
-    XCTAssertGreaterThanOrEqual(control.frame.height, 44)
+    // CoreGraphics can represent an exact 44pt frame as 43.99999999999994.
+    XCTAssertGreaterThanOrEqual(control.frame.width + 0.01, 44)
+    XCTAssertGreaterThanOrEqual(control.frame.height + 0.01, 44)
   }
 }
