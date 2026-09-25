@@ -56,10 +56,8 @@ struct EventCodeEntryView: View {
         Spacer()
 
         BeidHeroHeader(
-          systemImage: "number",
           title: "Enter Event Code",
-          subtitle: "Ask the event organizer for the code. This joins the event directly, without connecting a wallet.",
-          tint: DS.Color.actionPrimary
+          subtitle: "Ask the event organizer for the code. This joins the event directly, without connecting a wallet."
         )
 
         BeidPanel {
@@ -86,14 +84,9 @@ struct EventCodeEntryView: View {
               .onChange(of: code) { _, _ in errorMessage = nil }
 
             if let errorMessage {
-              HStack(alignment: .top, spacing: DS.Space.s) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                  .foregroundStyle(DS.Color.textPrimary)
-                  .accessibilityHidden(true)
-                Text(errorMessage)
-                  .font(DS.Font.supporting)
-                  .foregroundStyle(DS.Color.textPrimary)
-              }
+              Text(errorMessage)
+                .font(DS.Font.supporting)
+                .foregroundStyle(DS.Color.textPrimary)
             }
           }
         }
@@ -101,7 +94,7 @@ struct EventCodeEntryView: View {
         Spacer()
 
         VStack(spacing: DS.Space.s) {
-          BeidPrimaryButton("Join Event", systemImage: "checkmark.circle", action: submit)
+          BeidPrimaryButton("Join Event", action: submit)
             .tint(DS.Color.actionPrimary)
 
           if mode == .onboarding {

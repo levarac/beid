@@ -19,7 +19,6 @@ struct BluetoothOffView: View {
 
   var body: some View {
     BeidStatusLayout(
-      systemImage: "antenna.radiowaves.left.and.right.slash",
       title: "Bluetooth is off",
       message: "beid can't sense events or collect proofs while Bluetooth is off.",
       accessory: {
@@ -27,7 +26,7 @@ struct BluetoothOffView: View {
       },
       footer: {
         VStack(spacing: DS.Space.s) {
-          BeidPrimaryButton("Open Settings", systemImage: "gearshape") {
+          BeidPrimaryButton("Open Settings") {
             coordinator.sensingCoordinator.reset()
             UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
           }
@@ -38,9 +37,8 @@ struct BluetoothOffView: View {
         }
       }
     )
-    // Recovery screen: the whole screen (header glyph, step-list badges, and
-    // both buttons) takes the actionPrimary tint — Flat 2b has one ink and
-    // no per-screen motif accents (DESIGN.md §5).
+    // Keep the recovery actions in the same actionPrimary tint as the rest
+    // of the app (DESIGN.md §5).
     .tint(DS.Color.actionPrimary)
   }
 }

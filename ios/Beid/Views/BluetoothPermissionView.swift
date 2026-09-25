@@ -8,16 +8,15 @@ import SwiftUI
 struct BluetoothPermissionView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
-  private let bullets: [(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey)] = [
-    ("sparkles", "Events find you", "Nearby events appear automatically — no codes, no search."),
-    ("lock.shield", "Private by design", "Only anonymous proofs are exchanged, never your identity."),
-    ("bolt.fill", "Zero effort", "Sensing runs quietly in the background. Nothing to tap."),
+  private let bullets: [(title: LocalizedStringKey, subtitle: LocalizedStringKey)] = [
+    ("Events find you", "Nearby events appear automatically — no codes, no search."),
+    ("Private by design", "Only anonymous proofs are exchanged, never your identity."),
+    ("Zero effort", "Sensing runs quietly in the background. Nothing to tap."),
   ]
 
   var body: some View {
     BeidScreen {
       BeidHeroHeader(
-        systemImage: "dot.radiowaves.left.and.right",
         title: "Enable Bluetooth",
         subtitle: "beid senses nearby events and people over Bluetooth Low Energy — that's how it proves you were really there."
       )
@@ -26,13 +25,13 @@ struct BluetoothPermissionView: View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
           ForEach(bullets.indices, id: \.self) { index in
             let bullet = bullets[index]
-            BeidBulletRow(systemImage: bullet.icon, title: bullet.title, subtitle: bullet.subtitle)
+            BeidBulletRow(title: bullet.title, subtitle: bullet.subtitle)
           }
         }
       }
     } footer: {
       VStack(spacing: DS.Space.s) {
-        BeidPrimaryButton("Allow Bluetooth", systemImage: "dot.radiowaves.left.and.right") {
+        BeidPrimaryButton("Allow Bluetooth") {
           coordinator.requestBluetoothPermission()
         }
 

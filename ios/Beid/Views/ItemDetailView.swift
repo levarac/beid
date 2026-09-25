@@ -121,7 +121,7 @@ struct ItemDetailView: View {
         .font(DS.Font.supporting)
         .foregroundStyle(DS.Color.textSecondary)
       Spacer(minLength: DS.Space.m)
-      Label(recordedOnDeviceStatusText, systemImage: "checkmark.circle.fill")
+      Text(recordedOnDeviceStatusText)
         .font(DS.Font.cardTitle)
         .foregroundStyle(DS.Color.textPrimary)
     }
@@ -166,10 +166,6 @@ struct ItemDetailView: View {
         .font(DS.Font.cardTitle)
         .foregroundStyle(DS.Color.textPrimary)
         Spacer(minLength: DS.Space.m)
-        Image(systemName: "chevron.right")
-          .font(DS.Font.meta)
-          .foregroundStyle(DS.Color.textSecondary)
-          .accessibilityHidden(true)
       }
       .frame(minHeight: DS.Size.minHitTarget)
     }
@@ -242,10 +238,6 @@ struct ItemDetailView: View {
         .font(DS.Font.cardTitle)
         .foregroundStyle(DS.Color.textPrimary)
         Spacer(minLength: DS.Space.m)
-        Image(systemName: "chevron.right")
-          .font(DS.Font.meta)
-          .foregroundStyle(DS.Color.textSecondary)
-          .accessibilityHidden(true)
       }
       .frame(minHeight: DS.Size.minHitTarget)
     }

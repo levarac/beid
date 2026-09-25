@@ -4,7 +4,7 @@
 import SwiftUI
 
 /// The presentation contract for the event-registry status row. Keeping this
-/// mapping pure makes visibility, copy, icon semantics, and retry affordance
+/// mapping pure makes visibility, copy, status styling, and retry affordance
 /// testable without starting asynchronous work from a SwiftUI body.
 struct EventIdentityVerificationPresentation: Equatable {
   static let rowAccessibilityIdentifier = "event-identity-verification-row"
@@ -14,11 +14,10 @@ struct EventIdentityVerificationPresentation: Equatable {
 
   let messageKey: String
   let defaultMessage: String
-  let iconSystemName: String
   let statusAccessibilityIdentifier: String
   let showsProgress: Bool
   let showsRetry: Bool
-  let usesProofSeal: Bool
+  let isVerified: Bool
 
   static func forStatus(
     _ status: EventIdentityVerification
@@ -30,41 +29,37 @@ struct EventIdentityVerificationPresentation: Equatable {
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.checking",
         defaultMessage: "Checking event registry…",
-        iconSystemName: "arrow.triangle.2.circlepath",
         statusAccessibilityIdentifier: "event-identity-verification-status-checking",
         showsProgress: true,
         showsRetry: false,
-        usesProofSeal: false
+        isVerified: false
       )
     case .verified:
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.verified",
         defaultMessage: "Event identity verified",
-        iconSystemName: "checkmark.seal.fill",
         statusAccessibilityIdentifier: "event-identity-verification-status-verified",
         showsProgress: false,
         showsRetry: false,
-        usesProofSeal: true
+        isVerified: true
       )
     case .unavailable:
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.unavailable",
         defaultMessage: "Event registry is temporarily unavailable.",
-        iconSystemName: "questionmark.circle",
         statusAccessibilityIdentifier: "event-identity-verification-status-unavailable",
         showsProgress: false,
         showsRetry: true,
-        usesProofSeal: false
+        isVerified: false
       )
     case .notFound:
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.notFound",
         defaultMessage: "No registry definition was found for this event.",
-        iconSystemName: "questionmark.circle",
         statusAccessibilityIdentifier: "event-identity-verification-status-not-found",
         showsProgress: false,
         showsRetry: true,
-        usesProofSeal: false
+        isVerified: false
       )
     }
   }
@@ -96,16 +91,14 @@ struct EventIdentityVerificationRow: View {
             BeidDesign.haptic()
             onRetry()
           } label: {
-            Label(
-              LocalizedStringKey(EventIdentityVerificationPresentation.retryButtonKey),
-              systemImage: "arrow.clockwise"
-            )
-            .font(DS.Font.meta.weight(.semibold))
-            .frame(
-              minWidth: DS.Size.minHitTarget,
-              minHeight: DS.Size.minHitTarget,
-              alignment: .leading
-            )
+            Text(LocalizedStringKey(EventIdentityVerificationPresentation.retryButtonKey))
+              .font(DS.Font.meta.weight(.semibold))
+              .frame(
+                minWidth: DS.Size.minHitTarget,
+                minHeight: DS.Size.minHitTarget,
+                alignment: .leading
+              )
+              .contentShape(Rectangle())
           }
           .buttonStyle(.borderless)
           .tint(DS.Color.actionPrimary)
@@ -122,11 +115,6 @@ struct EventIdentityVerificationRow: View {
     _ presentation: EventIdentityVerificationPresentation
   ) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
-      Image(systemName: presentation.iconSystemName)
-        .symbolRenderingMode(.hierarchical)
-        .foregroundStyle(statusColor(for: presentation))
-        .accessibilityHidden(true)
-
       if presentation.showsProgress {
         ProgressView()
           .controlSize(.small)
@@ -147,7 +135,7 @@ struct EventIdentityVerificationRow: View {
   private func statusColor(
     for presentation: EventIdentityVerificationPresentation
   ) -> Color {
-    presentation.usesProofSeal ? DS.Color.textPrimary : DS.Color.textSecondary
+    presentation.isVerified ? DS.Color.textPrimary : DS.Color.textSecondary
   }
 }
 

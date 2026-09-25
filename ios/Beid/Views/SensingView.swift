@@ -157,9 +157,8 @@ struct SensingView: View {
       }
     }
     // Sensing screen: actionPrimary tint — Flat 2b has one ink and no
-    // per-screen motif accents (DESIGN.md §5). Also what the radar rings'
-    // `.tint.opacity(...)` and the center glyph's default `.accentColor`
-    // resolve to.
+    // per-screen motif accents (DESIGN.md §5). The radar rings use this
+    // tint through `.tint.opacity(...)`.
     .tint(DS.Color.actionPrimary)
     .onAppear { pulse = !reduceMotion }
     .safeAreaInset(edge: .bottom) {
@@ -241,15 +240,11 @@ struct SensingView: View {
   /// its accessibility identifier are kept here; its copy is not.
   private func joinRefusalNotice(_ message: LocalizedStringKey) -> some View {
     BeidPanel {
-      HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
-        Image(systemName: "exclamationmark.triangle.fill")
-          .foregroundStyle(DS.Color.textPrimary)
-        Text(message)
-          .font(DS.Font.supporting)
-          .foregroundStyle(DS.Color.textPrimary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      Text(message)
+        .font(DS.Font.supporting)
+        .foregroundStyle(DS.Color.textPrimary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("scan.join-refusal")
@@ -345,11 +340,11 @@ struct SensingView: View {
             .foregroundStyle(DS.Color.textPrimary)
 
           if card.eventIdHex != nil {
-            Label(verifiedLabel, systemImage: "checkmark.shield.fill")
+            Text(verbatim: verifiedLabel)
               .font(DS.Font.meta)
               .foregroundStyle(DS.Color.textSecondary)
           } else {
-            Label(waitingForVerificationLabel, systemImage: "clock")
+            Text(verbatim: waitingForVerificationLabel)
               .font(DS.Font.meta)
               .foregroundStyle(DS.Color.textSecondary)
           }
@@ -362,7 +357,7 @@ struct SensingView: View {
           }
 
           if selected {
-            Label(selectedLabel, systemImage: "checkmark.circle.fill")
+            Text(verbatim: selectedLabel)
               .font(DS.Font.meta)
               .foregroundStyle(DS.Color.textSecondary)
           }
@@ -481,12 +476,14 @@ struct SensingView: View {
           .animation(reduceMotion ? nil : pulseAnimation(delay: Double(index) * 0.5), value: pulse)
       }
 
-      BeidGlyph(
-        systemImage: "dot.radiowaves.left.and.right",
-        assetImage: "encounter-field-pulse",
-        tint: .accentColor,
-        size: DS.Size.radarCore
-      )
+      // Interim bordered roundel; #634 owns the final radar center.
+      Circle()
+        .fill(DS.Color.surfaceCanvas)
+        .overlay {
+          Circle().strokeBorder(DS.Color.strokeHairline, lineWidth: 1)
+        }
+        .frame(width: DS.Size.radarCore, height: DS.Size.radarCore)
+        .accessibilityHidden(true)
     }
     .frame(width: DS.Size.radarField, height: DS.Size.radarField)
   }

@@ -45,17 +45,11 @@ struct ScanFlowView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
           ToolbarItem(placement: .topBarTrailing) {
-            Button {
-              BeidDesign.haptic()
+            BeidTextControl("Close", accessibilityLabel: "Close") {
               coordinator.finishScan()
-            } label: {
-              Image(systemName: "xmark")
-                .foregroundStyle(DS.Color.textPrimary)
-                .frame(width: DS.Size.minHitTarget, height: DS.Size.minHitTarget)
-                .beidSurface(cornerRadius: DS.Radius.pill)
             }
-            .accessibilityLabel("Close")
           }
+          .beidWithoutSharedBackground()
         }
     }
     .sheet(isPresented: $bindingSheetPresented) {

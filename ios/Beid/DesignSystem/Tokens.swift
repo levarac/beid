@@ -105,8 +105,6 @@ enum DS {
     static let seal: CGFloat = 28
     /// Fully rounded pills and capsule buttons.
     static let pill: CGFloat = 999
-    /// `BeidGlyph`'s icon roundel.
-    static let glyph: CGFloat = 24
     /// Frame of the empty block (`Block/Empty`).
     static let emptyBlock: CGFloat = 16
     /// The now-sensing ink card (DESIGN.md §8).
@@ -123,7 +121,7 @@ enum DS {
     static let statusDot: CGFloat = 8
     /// Sensing radar field — width/height of the concentric-ring frame in `SensingView`.
     static let radarField: CGFloat = 210
-    /// Sensing radar center glyph size in `SensingView`.
+    /// Sensing radar center diameter in `SensingView`.
     static let radarCore: CGFloat = 86
     /// `ProofCardView`'s circular per-proof gradient avatar diameter.
     static let proofCardArtwork: CGFloat = 76
@@ -152,8 +150,6 @@ enum DS {
     static let compactPrimaryButtonMinHeight: CGFloat = 52
     /// `Button/Primary` Size=Small width (Home's Scan).
     static let compactPrimaryButtonWidth: CGFloat = 140
-    /// Icon roundel diameter for two-line bullet rows (`BeidBulletRow`).
-    static let bulletIcon: CGFloat = 32
     /// Numbered badge diameter for step lists (`BeidNumberedStepList`).
     static let stepBadge: CGFloat = 28
   }

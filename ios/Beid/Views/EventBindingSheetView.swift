@@ -49,11 +49,12 @@ struct EventBindingSheetView: View {
       .toolbar {
         if showsCancelToolbarButton {
           ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel", role: .cancel) {
+            BeidTextControl("Cancel", accessibilityLabel: "Cancel", role: .cancel) {
               sensing.declineBinding()
               dismiss()
             }
           }
+          .beidWithoutSharedBackground()
         }
       }
       .interactiveDismissDisabled(isInFlight)
@@ -113,10 +114,8 @@ struct EventBindingSheetView: View {
   private var header: some View {
     if let event {
       BeidHeroHeader(
-        systemImage: "checkmark.seal",
         title: LocalizedStringKey(eventConfirmedTitle(event: event)),
-        subtitle: "Connect a wallet to seal your attendance to this event.",
-        tint: DS.Color.actionPrimary
+        subtitle: "Connect a wallet to seal your attendance to this event."
       )
     }
   }
@@ -134,7 +133,7 @@ struct EventBindingSheetView: View {
       // earlier binding attempt) — `liveWalletAddress` only ever holds a
       // value that came from a connector's own live session, never a
       // `CachedWalletHint` (beid#315 structural containment).
-      BeidPrimaryButton("Seal with connected wallet", systemImage: "checkmark.seal") {
+      BeidPrimaryButton("Seal with connected wallet") {
         Task { await performBinding(address: address, connector: connector) }
       }
       .tint(DS.Color.actionPrimary)
@@ -168,8 +167,7 @@ struct EventBindingSheetView: View {
         .multilineTextAlignment(.center)
 
       BeidPrimaryButton(
-        LocalizedStringKey(continueAsButtonTitle(hint: hint)),
-        systemImage: "checkmark.seal"
+        LocalizedStringKey(continueAsButtonTitle(hint: hint))
       ) {
         Task { await continueFromRestoredHint(hint) }
       }
@@ -186,13 +184,11 @@ struct EventBindingSheetView: View {
     VStack(spacing: DS.Space.l) {
       if let event {
         BeidHeroHeader(
-          systemImage: "checkmark.seal.fill",
           title: "Sealed",
-          subtitle: LocalizedStringKey(sealedSubtitle(event: event)),
-          tint: DS.Color.actionPrimary
+          subtitle: LocalizedStringKey(sealedSubtitle(event: event))
         )
       }
-      BeidPrimaryButton("Done", systemImage: "checkmark") {
+      BeidPrimaryButton("Done") {
         dismiss()
       }
       .tint(DS.Color.actionPrimary)
@@ -202,10 +198,8 @@ struct EventBindingSheetView: View {
   private func failedContent(reason: String, retryable: Bool) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
-        systemImage: "xmark.octagon.fill",
         title: "Couldn't seal attendance",
-        subtitle: "beid couldn't finish sealing your attendance with this wallet.",
-        tint: DS.Color.actionPrimary
+        subtitle: "beid couldn't finish sealing your attendance with this wallet."
       )
       Text(verbatim: reason)
         .font(DS.Font.meta)
@@ -390,8 +384,8 @@ struct EventBindingSheetView: View {
     case .cancelled:
       // The user stopped this from beid's own UI (Cancel/Try Again/Start
       // Over on the wallet-connect step), not a wallet-side rejection or a
-      // stuck request. failedContent's header ("Couldn't seal attendance",
-      // a red X) is unconditionally alarming regardless of the reason text
+      // stuck request. failedContent's header ("Couldn't seal attendance")
+      // is unconditionally alarming regardless of the reason text
       // below it, so routing this through failBinding(reason:retryable:) would tell
       // a user who cancelled themselves that something went wrong.
       // declineBinding() is the same neutral "attempt not completed, no

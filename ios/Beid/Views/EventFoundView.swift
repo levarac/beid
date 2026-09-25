@@ -21,7 +21,6 @@ struct EventFoundView: View {
 
   var body: some View {
     BeidStatusLayout(
-      systemImage: "sparkles",
       title: "Event Found",
       message: "Verification starts automatically — stay nearby",
       accessory: {

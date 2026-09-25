@@ -29,6 +29,17 @@
     "Connected": {},
     "Connecting to wallet…": {},
     "Connection failed": {},
+    "Copy": {
+      "comment": "Button on the Account sheet: copies the connected wallet address to the clipboard. Verb, not a noun or a generic duplicate action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        }
+      }
+    },
     "Copy URI": {},
     "Copy address": {
       "comment": "Button: copies the connected wallet address to the clipboard, not a noun."
@@ -1111,7 +1122,7 @@
       }
     },
     "collection.dailySummaryButton": {
-      "comment": "Accessibility label for the calendar-icon toolbar button on Collection Home that opens the Daily Summary screen (gh#291) — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's own navigation title, since this button's only purpose is opening that screen.",
+      "comment": "Visible Today text control on Collection Home that opens the Daily Summary screen — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's navigation title; it means the current day, not a to-do list.",
       "localizations": {
         "en": {
           "stringUnit": {

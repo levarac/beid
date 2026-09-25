@@ -2685,7 +2685,6 @@ to.]**
 | `space.page.margin` | `DS.Space.pageMargin` | 24 pt | Full-width content and bottom CTAs (was 32) |
 | `space.emptyBlock.vertical` | `DS.Space.emptyBlockVertical` | 40 pt | `Block/Empty` vertical padding |
 | `radius.card` | `DS.Radius.card` | 16 pt | Cards |
-| `radius.glyph` | `DS.Radius.glyph` | 24 pt | `BeidGlyph` icon roundel (from `BeidDesign`; removed with icons in #631) |
 | `radius.emptyBlock` | `DS.Radius.emptyBlock` | 16 pt | `Block/Empty` frame |
 | `radius.nowCard` | `DS.Radius.nowCard` | 20 pt | The now-sensing `ink` card on Home (#635) |
 | `layout.state.content.maxWidth` | `DS.Layout.stateContentMaxWidth` | 600 pt | Readable state-screen and CTA width in regular size classes |
@@ -2703,10 +2702,9 @@ to.]**
 | `size.button.primary.minHeight` | `DS.Size.primaryButtonMinHeight` | 56 pt | `Button/Primary` Size=Large minimum height |
 | `size.button.primary.compact.minHeight` | `DS.Size.compactPrimaryButtonMinHeight` | 52 pt | `Button/Primary` Size=Small minimum height |
 | `size.button.primary.compact.width` | `DS.Size.compactPrimaryButtonWidth` | 140 pt | `Button/Primary` Size=Small width (Home's Scan) |
-| `size.bullet.icon` | `DS.Size.bulletIcon` | 32 pt | `BeidBulletRow` icon roundel (from `BeidDesign`) |
 | `size.step.badge` | `DS.Size.stepBadge` | 28 pt | `BeidNumberedStepList` index badge (from `BeidDesign`) |
 | `size.radar.field` | `DS.Size.radarField` | 210 pt | Sensing radar frame (`SensingView`) |
-| `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center glyph (`SensingView`) |
+| `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center diameter (`SensingView`); survives #631; #634 owns the final radar |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |

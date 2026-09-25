@@ -221,6 +221,14 @@ left open. They are also recorded in `DECISIONS.md` (2026-09-22,
   SHARE control is not part of the contract; #631 and #638 remove it from
   09 Proof Detail.
 
+## Settled on 2026-09-25 (owner decision, relayed by the PM)
+
+- **D. Back navigation.** The stock `NavigationStack` back button and
+  stock interactive pop gesture stay on all 18 screens. The custom
+  "← PARENT" / "← EVENTS" text control is not adopted. §2 rule 10
+  (standard containers first) wins at this site. The mismatch with the
+  Flat 2b frames is accepted and goes to the designer as a question.
+
 ## The preserved rules
 
 Unchanged by this decision:
@@ -229,8 +237,8 @@ Unchanged by this decision:
   coherent to a user who never connects a wallet."
 - §2 rule 5 (44×44pt hit region) and rule 9 (never color alone). Both now
   bind the new text-only controls and the semantic status dots.
-- §2 rule 10 (standard containers first). Whether it yields to "← PARENT"
-  text is open (item 5 below).
+- §2 rule 10 (standard containers first). The owner kept the standard
+  `NavigationStack` back button on 2026-09-25.
 - §9 motion.
 - §11 "Agents MUST NOT improvise these".
 - §13's requirements (AA text contrast, Dynamic Type through AX sizes,
@@ -289,8 +297,6 @@ Each item names the issue that owns it. `DESIGN.md` references them as
    `on-ink/idle` nodes on `ink` (2.97:1) are under WCAG 1.4.11's 3:1 for
    graphical objects. §13 today covers text only. Recorded; no new rule.
    Owners: #634, #640.
-5. **The standard back button vs "← PARENT" text** (§2 rule 10, standard
-   containers first). Owner: #631.
 6. **Encounter Field's "avoid radar/sonar clichés" (§3) vs the Flat 2b
    sensing graph's concentric rings.** Not settled here. Owner: #634.
 7. **The spec's own open items** (spec §10): window length, peer cap, the
@@ -300,8 +306,9 @@ Each item names the issue that owns it. `DESIGN.md` references them as
    text on `bg`, it fails AA (3.41:1); on `ink` it passes (5.77:1).
 
 "Japanese text", "VERIFIED wording" and "SHARE" were settled on
-2026-09-22 and are recorded above, not here. The §0 steady-state rule was
-confirmed on 2026-09-22 and is not open.
+2026-09-22; back navigation was settled on 2026-09-25. They are recorded
+above, not here. The §0 steady-state rule was confirmed on 2026-09-22
+and is not open.
 
 ## Corrections to the spec's contrast figures
 

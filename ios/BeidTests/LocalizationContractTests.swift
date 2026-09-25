@@ -8,11 +8,12 @@ import XCTest
 @MainActor
 final class LocalizationContractTests: XCTestCase {
   func testDesignSystemCopyUsesLocalizedStringKeys() {
-    let hero = BeidHeroHeader(systemImage: "star", title: "Title", subtitle: "Subtitle")
+    let hero = BeidHeroHeader(title: "Title", subtitle: "Subtitle")
     let primaryButton = BeidPrimaryButton("Primary") {}
     let secondaryButton = BeidSecondaryButton(title: "Secondary") {}
-    let bullet = BeidBulletRow(systemImage: "star", title: "Bullet")
-    let status = BeidStatusLayout(systemImage: "star", title: "Status", message: "Message")
+    let textControl = BeidTextControlLabel("Copy")
+    let bullet = BeidBulletRow(title: "Bullet")
+    let status = BeidStatusLayout(title: "Status", message: "Message")
     let metric = BeidMetricRow(label: "Label", value: "Value")
     let dynamicMetric = BeidMetricRow(label: "Label", verbatimValue: "runtime-value")
 
@@ -20,6 +21,7 @@ final class LocalizationContractTests: XCTestCase {
     XCTAssertEqual(typeName(of: hero.subtitle), "Swift.Optional<SwiftUI.LocalizedStringKey>")
     XCTAssertEqual(typeName(of: primaryButton.title), "SwiftUI.LocalizedStringKey")
     XCTAssertEqual(typeName(of: secondaryButton.title), "SwiftUI.LocalizedStringKey")
+    XCTAssertEqual(typeName(of: textControl.title), "SwiftUI.LocalizedStringKey")
     XCTAssertEqual(typeName(of: bullet.title), "SwiftUI.LocalizedStringKey")
     XCTAssertEqual(typeName(of: status.title), "SwiftUI.LocalizedStringKey")
     XCTAssertEqual(typeName(of: status.message), "SwiftUI.LocalizedStringKey")

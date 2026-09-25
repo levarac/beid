@@ -4,8 +4,8 @@
 import SwiftUI
 
 /// Screens 06b/06c/07 merged: the steady `.recording` phase, replacing
-/// `VerifyingView` + `VerifiedView`. `ProofCollectedView`'s Figma content
-/// (checkmark artwork + copy) becomes a one-time entrance ceremony shown the
+/// `VerifyingView` + `VerifiedView`. `ProofCollectedView`'s copy
+/// becomes a one-time entrance ceremony shown the
 /// instant `.recording` begins, then gives way to the steady eventCard —
 /// see `docs/specs/scan-slice2-redesign.md` §5.2-§5.5.
 struct RecordingView: View {
@@ -49,15 +49,11 @@ struct RecordingView: View {
     BeidScreen {
       VStack(spacing: DS.Space.l) {
         if showEntranceCeremony {
-          // Reuses ProofCollectedView's retired hero content verbatim (same
-          // already-localized strings, §5.5) as a one-time highlight, not a
-          // separate screen.
+          // Reuses ProofCollectedView's retired text (same already-localized
+          // strings, §5.5) as a one-time highlight, not a separate screen.
           BeidHeroHeader(
-            systemImage: "seal.fill",
-            assetImage: "proof-seal-mark",
             title: "Proof Collected",
-            subtitle: "Added to your collection.",
-            tint: DS.Color.actionPrimary
+            subtitle: "Added to your collection."
           )
           .transition(.opacity)
         }
