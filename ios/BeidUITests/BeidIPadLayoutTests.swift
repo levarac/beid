@@ -68,8 +68,12 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    app.buttons["event-detail.proof.1"].tap()
     XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
     capture(named: "proof-detail-\(orientation)")
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
 
     resumedSenseEvent.tap()
@@ -229,6 +233,8 @@ final class BeidIPadLayoutTests: XCTestCase {
   /// Collection, and waits for Proof Detail to appear.
   private func openFirstProof() {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    app.buttons["event-detail.proof.1"].tap()
     XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
   }
 

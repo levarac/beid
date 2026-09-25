@@ -16,11 +16,9 @@ struct ItemDetailView: View {
   }()
 
   /// Every session sharing `proof`'s event (beid#217, spec §2/§3), newest
-  /// first. `proof` is always this group's newest session by construction
-  /// (it is exactly the representative `CollectionHomeView` passed to
-  /// `openProof(_:)` per spec §5.1), so `groupSessions.first == proof`
-  /// always holds — title/date below use `proof` directly rather than
-  /// `groupSessions.first` for that reason, not by coincidence.
+  /// first. Event Detail can now open any session's own Proof, while Daily
+  /// Summary can also pass one directly. Title/date below describe the
+  /// selected Proof rather than treating it as the group's representative.
   private var groupSessions: [Proof] {
     EventGrouping.sessions(for: proof, in: coordinator.proofStore.proofs)
   }

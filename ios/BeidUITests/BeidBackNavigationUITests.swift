@@ -17,12 +17,15 @@ final class BeidBackNavigationUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  /// With the standard back button, a leading-edge drag pops Proof Detail
-  /// back to Collection.
+  /// A Proof pushed from Event Detail pops through both standard stack levels.
   func testLeadingEdgeSwipePopsProofDetailBackToCollection() {
     navigateToCollectionWithProof()
     openFirstProof()
 
+    swipeFromLeadingEdge()
+
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.staticTexts["Proof Detail"].exists)
     swipeFromLeadingEdge()
 
     let senseEvent = app.buttons["home.scan"]
@@ -108,6 +111,8 @@ final class BeidBackNavigationUITests: XCTestCase {
   /// Pushes Proof Detail for the DemoEvent proof left on Collection.
   private func openFirstProof() {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    app.buttons["event-detail.proof.1"].tap()
     XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
   }
 }

@@ -38,6 +38,7 @@
 		1AADFD0958F5B7312884FD4F /* RecordSchemaEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */; };
 		1B942A1AE5234AE85F9F3051 /* BindingMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE886DB77235ACE898E6D2CF /* BindingMessage.swift */; };
 		1CC8EB9F7EF9C9C28082A39F /* VenueServingContractFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD44A5AAE447B59BE320F525 /* VenueServingContractFixture.swift */; };
+		1F1C3E2BBA0F5053EBABF01A /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 585ED83B70A07B98029AD182 /* EventDetailView.swift */; };
 		2039711087916D30BEC01836 /* tampered-envelope.venue-bundle.cbor in Resources */ = {isa = PBXBuildFile; fileRef = 0ED82E11631EC6CC43CF4D53 /* tampered-envelope.venue-bundle.cbor */; };
 		21ADB0A2B750AED641305BBD /* VenueDeviceOrganizerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B5D084B36D8B81C91BD987 /* VenueDeviceOrganizerViewModel.swift */; };
 		233C4ABB4C7C909DDF036EF6 /* EventJoinControlling.swift in Sources */ = {isa = PBXBuildFile; fileRef = C238EFE3D2172FCAC370F5F0 /* EventJoinControlling.swift */; };
@@ -193,6 +194,7 @@
 		99813BE424EACEBEF1843B53 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00B88F37F569ED386AB057A8 /* Assets.xcassets */; };
 		9A2B3BDF160CCAA0B45E2B5E /* MetaMaskConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91E549BC973FCF8B0F1B275 /* MetaMaskConnector.swift */; };
 		9AF57AA98679B17508065714 /* SensingCryptography.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDBD7729D4F63584EA8130EB /* SensingCryptography.swift */; };
+		9DE92F9A95331CD822BD43A6 /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 585ED83B70A07B98029AD182 /* EventDetailView.swift */; };
 		9E2D155E6ECFFA1C6D379659 /* ProofSignature.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E157C35B263F222E1DBDD5 /* ProofSignature.swift */; };
 		9E337258C7DB06C41ADCC141 /* RecordSchemaEnvelopeMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D133F06DAE45C0813736C592 /* RecordSchemaEnvelopeMigrationTests.swift */; };
 		9E3E13E74E31642055354E0E /* VenueSignedServingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA117D55E966AD51D4A45492 /* VenueSignedServingViewModel.swift */; };
@@ -450,6 +452,7 @@
 		5459592F237296DD025E2E77 /* SessionAggregateSnapshotStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateSnapshotStoreTests.swift; sourceTree = "<group>"; };
 		54F11AED207016A2105C874E /* valid.venue-handoff.cbor */ = {isa = PBXFileReference; path = "valid.venue-handoff.cbor"; sourceTree = "<group>"; };
 		5651A43309524D95F802AF30 /* BeidTextControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidTextControlTests.swift; sourceTree = "<group>"; };
+		585ED83B70A07B98029AD182 /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
 		596FC02E4F5386F9BC759C20 /* VenueDeviceOrganizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueDeviceOrganizerView.swift; sourceTree = "<group>"; };
 		5F76E12B71ED26CFB7AF316F /* UnsentWindowLedgerRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsentWindowLedgerRuntime.swift; sourceTree = "<group>"; };
 		62A19D8CAE2EEEEB0EDA6472 /* ClockPreflightController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockPreflightController.swift; sourceTree = "<group>"; };
@@ -822,6 +825,7 @@
 				99A0CFB332AC5A882931E08F /* EventBindingSheetView.swift */,
 				1000D4B43F2D5A1703701E95 /* EventCardView.swift */,
 				FEECBF137DC6001E7401B5CF /* EventCodeEntryView.swift */,
+				585ED83B70A07B98029AD182 /* EventDetailView.swift */,
 				B07FD0202575465DCF463745 /* EventFoundView.swift */,
 				40AE7B86E16A35087D86618D /* EventIdentityVerificationRow.swift */,
 				2169FFDF6767C427D481ED17 /* ItemDetailView.swift */,
@@ -1364,6 +1368,7 @@
 				2AAE343C266A4EF91A080FFD /* EventCodeEntryView.swift in Sources */,
 				8BB563E1C3CC3DBAE3C3938E /* EventCodeJoinError.swift in Sources */,
 				8C4D4B90304963291F940D0E /* EventCommitment.swift in Sources */,
+				1F1C3E2BBA0F5053EBABF01A /* EventDetailView.swift in Sources */,
 				E95026757980944AB4C933FE /* EventFoundView.swift in Sources */,
 				38460E1F17ADDE4D3FCBEADF /* EventGrouping.swift in Sources */,
 				EB4452CC6433082A8A77269D /* EventIdHash.swift in Sources */,
@@ -1553,6 +1558,7 @@
 				A33B0DD593353C9E55DDF71C /* EventCodeEntryView.swift in Sources */,
 				F88CE3886B4B697DEBCDC4AF /* EventCodeJoinError.swift in Sources */,
 				FA96332EDF0D18A39DF16099 /* EventCommitment.swift in Sources */,
+				9DE92F9A95331CD822BD43A6 /* EventDetailView.swift in Sources */,
 				E2A38C5ED97959455A3229D2 /* EventFoundView.swift in Sources */,
 				AF1B90A7E58E1AE31010D662 /* EventGrouping.swift in Sources */,
 				F36170CC6F0367C6CB8FF91E /* EventIdHash.swift in Sources */,

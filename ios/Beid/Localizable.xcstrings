@@ -132,7 +132,7 @@
       }
     },
     "home.past.proofAction": {
-      "comment": "Trailing past event action. Count is stored Proof records in the event group; arrow means open its newest proof detail.",
+      "comment": "Trailing past event action. Count is stored Proof records in the event group; the arrow opens Event Detail.",
       "localizations": {
         "en": {
           "variations": {
@@ -1883,6 +1883,444 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wallet · Connected via %@"
+          }
+        }
+      }
+    },
+    "eventDetail.rejoin.accessibilityLabel": {
+      "comment": "VoiceOver label for rejoining the operator-named stored event by code.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejoin %@"
+          }
+        }
+      }
+    },
+    "eventDetail.observations.sessions": {
+      "comment": "Count of stored recording sessions in the event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OBSERVATIONS · %#@sessions@"
+          },
+          "substitutions": {
+            "sessions": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg SESSION"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg SESSIONS"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.session.title": {
+      "comment": "Ordinal label for a stored recording session, oldest first.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session %lld"
+          }
+        }
+      }
+    },
+    "eventDetail.session.measurements": {
+      "comment": "Independent per-session sensed-device and observation-window counts from the persisted shared aggregate.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@devices@ · %#@windows@"
+          },
+          "substitutions": {
+            "devices": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg device"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg devices"
+                    }
+                  }
+                }
+              }
+            },
+            "windows": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg window"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg windows"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.reports.count": {
+      "comment": "Count of stored canonical Observation submission records for this event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@reports@"
+          },
+          "substitutions": {
+            "reports": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "REPORT · %arg"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "REPORTS · %arg"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.report.title": {
+      "comment": "Ordinal label for a stored canonical Observation submission record, oldest first.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report #%lld"
+          }
+        }
+      }
+    },
+    "eventDetail.report.stoppedMetadata": {
+      "comment": "Stored report digest and terminal local submission state; no operator rejection is implied.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Submission stopped"
+          }
+        }
+      }
+    },
+    "eventDetail.report.preparedMetadata": {
+      "comment": "Stored report digest and PREPARED local state; no network send has started.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · On device · not sent"
+          }
+        }
+      }
+    },
+    "eventDetail.report.submittingMetadata": {
+      "comment": "Stored report digest with no operator receipt yet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Receipt unavailable"
+          }
+        }
+      }
+    },
+    "eventDetail.report.missingReceiptMetadata": {
+      "comment": "Stored report digest when a state says accepted but no receipt is stored; no acceptance is claimed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Receipt unavailable"
+          }
+        }
+      }
+    },
+    "eventDetail.report.receiptMetadata": {
+      "comment": "Stored report digest with an operator receipt durably present.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Operator receipt on device"
+          }
+        }
+      }
+    },
+    "eventDetail.proofs.count": {
+      "comment": "Count of stored recording Proofs in this event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@proofs@"
+          },
+          "substitutions": {
+            "proofs": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "PROOF · %arg"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "PROOFS · %arg"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.proof.title": {
+      "comment": "Opens the stored Proof for this numbered recording session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session %lld proof"
+          }
+        }
+      }
+    },
+    "eventDetail.proof.accessibilityLabel": {
+      "comment": "VoiceOver label for a Proof row; no third-party verification outcome exists.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open proof for session %lld, verification unavailable"
+          }
+        }
+      }
+    },
+    "REJOIN": {
+      "comment": "Action that rejoins this stored event by its code.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REJOIN"
+          }
+        }
+      }
+    },
+    "Measurements unavailable": {
+      "comment": "No persisted per-Proof aggregate snapshot is available for this session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measurements unavailable"
+          }
+        }
+      }
+    },
+    "Reports": {
+      "comment": "Heading for stored operator-directed submission records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports"
+          }
+        }
+      }
+    },
+    "Reports unavailable on this device": {
+      "comment": "Stored submission records could not be read; this is not an empty result.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports unavailable on this device"
+          }
+        }
+      }
+    },
+    "Reports unavailable for this older proof": {
+      "comment": "Legacy Proof has no stored event code to scope submission records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports unavailable for this older proof"
+          }
+        }
+      }
+    },
+    "NO REPORTS YET": {
+      "comment": "Empty report-section title when no canonical Observation submission record is stored.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NO REPORTS YET"
+          }
+        }
+      }
+    },
+    "No reports for this event are stored on this device.": {
+      "comment": "Empty report-section body; says nothing about automatic sending.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No reports for this event are stored on this device."
+          }
+        }
+      }
+    },
+    "Session association unavailable": {
+      "comment": "Submission records do not persist a relation to recording sessions.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session association unavailable"
+          }
+        }
+      }
+    },
+    "Stopped": {
+      "comment": "A local report submission ended without an operator verdict.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped"
+          }
+        }
+      }
+    },
+    "Prepared": {
+      "comment": "A canonical Observation is stored locally before sending.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepared"
+          }
+        }
+      }
+    },
+    "Submitting": {
+      "comment": "A report may have been sent; receipt lookup is pending.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitting"
+          }
+        }
+      }
+    },
+    "Status unavailable": {
+      "comment": "Submission status cannot be claimed without a stored receipt.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status unavailable"
+          }
+        }
+      }
+    },
+    "Receipt stored": {
+      "comment": "An operator acceptance receipt is stored on the device.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receipt stored"
+          }
+        }
+      }
+    },
+    "VERIFICATION UNAVAILABLE": {
+      "comment": "No third-party proof verification outcome exists for this stored Proof.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VERIFICATION UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "eventDetail.recordedDate": {
+      "comment": "Recording start date from the newest stored Proof; past event date and venue are not persisted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED %@"
+          }
+        }
+      }
+    },
+    "Reports unavailable for this event code": {
+      "comment": "A stored Proof has an invalid event code, so the app cannot safely scope submission records to this event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports unavailable for this event code"
           }
         }
       }
