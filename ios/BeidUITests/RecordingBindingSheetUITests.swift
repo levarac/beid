@@ -40,7 +40,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testBindingSheetAutoPresentsOnRecordingAndDoesNotReopenAfterDismissal() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["home.scan"].tap()
 
     // Reaching `.recording` fires `beginRecording`, which sets
     // `bindingState = .pendingConnect(event)` fresh from `.none`
@@ -83,7 +83,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
   func testKeepSensingReturnsToLiveRecordingAfterBindingWasDeclined() {
     launchAndReachSenseEventScreen()
-    app.buttons["Sense Event"].tap()
+    app.buttons["home.scan"].tap()
 
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
@@ -170,7 +170,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["Sense Event"].tap()
+    app.buttons["home.scan"].tap()
 
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
@@ -234,8 +234,9 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     app.buttons["Done"].tap()
+    let homeScan = app.buttons["home.scan"]
     XCTAssertTrue(
-      app.buttons["Sense Event"].waitForExistence(timeout: 5),
+      homeScan.waitForExistence(timeout: 5) && homeScan.isHittable,
       "The confirmed stop and DONE must reach Collection Home"
     )
   }
@@ -253,6 +254,6 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }
 }

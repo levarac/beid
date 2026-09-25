@@ -2902,6 +2902,34 @@ final class SensingCoordinator: ObservableObject {
     isScanning = true
     isAdvertising = true
   }
+
+  /// Makes the Home frame fixture exercise the same phase and transport
+  /// properties that a real recording publishes. It never starts Barnard or
+  /// creates a Proof; AppCoordinator seeds the latter separately to verify
+  /// that the active group's stored Proof does not also appear under PAST.
+  func injectHomeRecordingForUITesting() {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04")
+    else { return }
+    let event = EventSession(id: "ACTIVE-EVENT", name: "ETH Tokyo 2026", venue: nil)
+    let fixtureAggregation = AggregationRuntime()
+    for window in 1...6 {
+      for peer in 1...7 {
+        fixtureAggregation.recordObservation(
+          windowIndex: window,
+          peerKey: "fixture-rpid-\(window)-\(peer)",
+          displayId: "fixture-device-\(peer)"
+        )
+      }
+    }
+    let aggregate = fixtureAggregation.sessionAggregate
+    sessionAggregate = aggregate
+    devicesVerified = Int(aggregate.deviceCount)
+    phase = .recording(event: event, peersVerified: devicesVerified)
+    isScanning = true
+    isAdvertising = true
+  }
 #endif
 
   /// Ends the pre-join discovery session and stops the Central scan only when

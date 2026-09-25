@@ -182,6 +182,37 @@ enum DS {
     static let compactGridCardMinimumWidth: CGFloat = 150
   }
 
+  /// Measured against the 402 × 874 Flat 2b onboarding exports (nodes
+  /// 183:398, 183:572, 183:595). The page scrolls when Dynamic Type needs
+  /// more room; these are default-size anchors, not fixed text heights.
+  enum Onboarding {
+    static let eyebrowY: CGFloat = 72
+    static let titleGap: CGFloat = 16
+    static let titleToBodyGap: CGFloat = 22
+    static let welcomeHeroGap: CGFloat = 54
+    static let welcomeHeroSize: CGFloat = 250
+    static let welcomeTitleGap: CGFloat = 46
+    static let welcomeBodyGap: CGFloat = 20
+    static let welcomeBodyWidth: CGFloat = 308
+    static let permissionStepsGap: CGFloat = 39
+    static let recoveryStepsGap: CGFloat = 60
+    static let benefitRowHeight: CGFloat = 104
+    static let recoveryRowHeight: CGFloat = 64
+    static let benefitRowTop: CGFloat = 16
+    static let recoveryRowTop: CGFloat = 18
+    static let rowNumberWidth: CGFloat = 48
+    /// Figma 02's numbered-row copy occupies about 233–238 pt, even though
+    /// the space to the page edge is wider.
+    static let benefitDetailWidth: CGFloat = 238
+    static let noteToButtonGap: CGFloat = 16
+    static let recoveryActionGap: CGFloat = 8
+    /// Places Figma 03's two actions below the common onboarding footer.
+    static let recoveryFooterDrop: CGFloat = 18
+    static let footerBottom: CGFloat = 6
+    static let statusDot: CGFloat = 7
+    static let statusLabelGap: CGFloat = 7
+  }
+
   // MARK: - Font
   //
   // Two tiers (DESIGN.md §4), the same shape #628 gave `DS.Color`. Tier 1
@@ -260,10 +291,9 @@ enum DS {
       /// and — deliberately — whenever the requested line height is below
       /// the face's own: `lineSpacing` is additive and
       /// `NSParagraphStyle.lineSpacing` "is always nonnegative", so there is
-      /// no supported way to tighten a line box on this deployment target.
-      /// Display/60 · 52 · 46 ask for 100% against Bricolage's 1.2 em face
-      /// and therefore land on the face's line height, not the Library's —
-      /// see §6's line-height gap.
+      /// no supported way to tighten a line box on iOS 17–25. On iOS 26+,
+      /// the full-style modifier uses `lineHeight(.exact(points:))` for
+      /// Display's 100% line height instead — see §6 and #661.
       func lineSpacing(atPointSize pointSize: CGFloat) -> CGFloat {
         guard
           let lineHeight,
@@ -301,24 +331,23 @@ enum DS {
     /// survive AX3 would not take. The curve and the style's own size
     /// progression are different things; do not derive one from the other.
     enum Library {
-      private static let displayFace = "BricolageGrotesque-ExtraBold"
       private static let titleFace = "DMSans-Bold"
       private static let bodyFace = "DMSans-Regular"
       private static let monoFace = "DMMono-Medium"
 
       /// `Display/60` — Home title "Events".
       static let display60 = Style(
-        postScriptName: displayFace, size: 60, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display60ExtraBold", size: 60, textStyle: .largeTitle,
         tracking: -0.02, lineHeight: 1.0
       )
       /// `Display/52` — onboarding titles.
       static let display52 = Style(
-        postScriptName: displayFace, size: 52, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display52ExtraBold", size: 52, textStyle: .largeTitle,
         tracking: -0.02, lineHeight: 1.0
       )
       /// `Display/46` — screen titles (event name, Session 1, Report #2).
       static let display46 = Style(
-        postScriptName: displayFace, size: 46, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display46ExtraBold", size: 46, textStyle: .largeTitle,
         tracking: -0.015, lineHeight: 1.0
       )
       /// `Display/Number 40` — sensing figures. The only style with
@@ -327,13 +356,13 @@ enum DS {
       /// jitter sideways as it counts. DM Mono needs no such setting — it
       /// is already monospaced.
       static let displayNumber40 = Style(
-        postScriptName: displayFace, size: 40, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display40ExtraBold", size: 40, textStyle: .largeTitle,
         tracking: -0.01, usesMonospacedDigits: true
       )
       /// `Display/Address 34` — the Account sheet address (typeface still
       /// open: spec §10-5, #642).
       static let displayAddress34 = Style(
-        postScriptName: displayFace, size: 34, textStyle: .largeTitle,
+        postScriptName: "BricolageGrotesque-Display34ExtraBold", size: 34, textStyle: .largeTitle,
         tracking: -0.01
       )
       /// `Title/19` — section and state titles.
@@ -483,9 +512,8 @@ extension View {
   /// settings above. Prefer this modifier when a screen is being built to
   /// the Library.
   ///
-  /// Line height is applied as `lineSpacing`, which is additive, so a
-  /// Library line height *below* the face's own is not applied — see
-  /// `DS.Font.Style.lineSpacing(atPointSize:)` and §6's line-height gap.
+  /// Line height uses additive `lineSpacing` on iOS 17–25. On iOS 26+,
+  /// Display's 100% line height uses the exact-height API — see #661.
   /// Tracking and line height scale with Dynamic Type: both are computed
   /// at the scaled point size, not the base size.
   func beidTextStyle(_ style: DS.Font.Style) -> some View {
@@ -509,10 +537,18 @@ private struct BeidTextStyleModifier: ViewModifier {
   }
 
   func body(content: Content) -> some View {
-    content
+    let styled = content
       .font(style.font)
       .tracking(style.tracking(atPointSize: scaledSize))
       .lineSpacing(style.lineSpacing(atPointSize: scaledSize))
       .textCase(style.isUppercase ? .uppercase : nil)
+
+    if #available(iOS 26.0, *), style.lineHeight == 1.0 {
+      // #661: align Display to the spec where iOS allows exact line height,
+      // unlike the iOS 26 glass branches removed by #630.
+      styled.lineHeight(.exact(points: scaledSize))
+    } else {
+      styled
+    }
   }
 }

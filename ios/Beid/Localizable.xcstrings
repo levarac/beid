@@ -1,6 +1,449 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "home.header.counts": {
+      "comment": "Collection Home header: independently pluralized distinct event count, including the active event, and total stored Proof record count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@events@ · %#@proofs@"
+          },
+          "substitutions": {
+            "events": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg event"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg events"
+                    }
+                  }
+                }
+              }
+            },
+            "proofs": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proof"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proofs"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.account.accessibilityLabel": {
+      "comment": "VoiceOver label for the Collection Home account control. The argument is a shortened wallet address or the localized Account title.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account, %@"
+          }
+        }
+      }
+    },
+    "home.account.title": {
+      "comment": "Collection Home account control when no wallet address is available; opens the account sheet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "home.active.metrics": {
+      "comment": "Live active event metrics: mutual device count from SessionAggregate and current sensing window count. Zero mutual is a valid current outcome.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld mutual · window %2$lld"
+          }
+        }
+      }
+    },
+    "home.active.metrics.accessibilityLabel": {
+      "comment": "VoiceOver expansion of the active event metrics: mutual and detected are distinct live counts; window is the sensing window count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld mutual, %2$lld detected, window %3$lld"
+          }
+        }
+      }
+    },
+    "home.past.sessionCaption": {
+      "comment": "Past event row: latest session date followed by the independently pluralized number of stored sessions in this event group.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %#@sessions@"
+          },
+          "substitutions": {
+            "sessions": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg session"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg sessions"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.past.proofAction": {
+      "comment": "Trailing past event action. Count is stored Proof records in the event group; arrow means open its newest proof detail.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proof →"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proofs →"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.past.accessibilityLabel": {
+      "comment": "VoiceOver label for a past event row. First argument is the operator-supplied event name; second is the number of stored Proof records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %#@proofs@, open event"
+          },
+          "substitutions": {
+            "proofs": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proof"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proofs"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.clock.networkInstructions.title": {
+      "comment": "Home clock help title when beid could not compare the device clock with network time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check your connection"
+          }
+        }
+      }
+    },
+    "home.clock.timeInstructions.title": {
+      "comment": "Home clock help title when network comparison found the device clock outside tolerance.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the time automatically"
+          }
+        }
+      }
+    },
+    "home.scan.action": {
+      "comment": "Primary Collection Home action: verb meaning start sensing nearby events, distinct from the Scan screen title.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan"
+          }
+        }
+      }
+    },
+    "home.empty.description": {
+      "comment": "Collection Home empty-state explanation. The English line break after show up matches the two-line design; other locales may wrap as needed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walk into an event — it will show up\nhere automatically."
+          }
+        }
+      }
+    },
+    "Events": {
+      "comment": "Title of the Collection Home screen.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Events"
+          }
+        }
+      }
+    },
+    "NOW · SENSING": {
+      "comment": "Eyebrow on the active event card, meaning sensing is currently running.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOW · SENSING"
+          }
+        }
+      }
+    },
+    "OPEN": {
+      "comment": "Action on the active event card; returns to the live sensing screen.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OPEN"
+          }
+        }
+      }
+    },
+    "Open sensing event": {
+      "comment": "VoiceOver description of the arrow on the active event OPEN action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open sensing event"
+          }
+        }
+      }
+    },
+    "PAST": {
+      "comment": "Section title for previously finalized events on Collection Home.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PAST"
+          }
+        }
+      }
+    },
+    "NO EVENTS YET": {
+      "comment": "Heading in Collection Home empty state when no event has been sensed or stored.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NO EVENTS YET"
+          }
+        }
+      }
+    },
+    "ENTER EVENT CODE": {
+      "comment": "Collection Home empty-state action to join an event by entering its code.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ENTER EVENT CODE"
+          }
+        }
+      }
+    },
+    "Enter event code": {
+      "comment": "VoiceOver description of the arrow on the event-code action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter event code"
+          }
+        }
+      }
+    },
+    "CLOCK OUT OF SYNC": {
+      "comment": "Home clock warning when the preflight comparison exceeds the allowed time tolerance.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLOCK OUT OF SYNC"
+          }
+        }
+      }
+    },
+    "CLOCK CHECK UNAVAILABLE": {
+      "comment": "Home clock warning when the preflight comparison could not determine clock accuracy.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLOCK CHECK UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "Proofs need an accurate clock. Turn on “Set automatically” in Settings.": {
+      "comment": "Body of the Home clock warning after an over-tolerance verdict.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proofs need an accurate clock. Turn on “Set automatically” in Settings."
+          }
+        }
+      }
+    },
+    "beid couldn't compare the clock with the network. Check your connection, then try again.": {
+      "comment": "Body of the Home clock warning after an undeterminable verdict.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid couldn't compare the clock with the network. Check your connection, then try again."
+          }
+        }
+      }
+    },
+    "FIX": {
+      "comment": "Action on the Home clock warning; opens instructions and a Check again control.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FIX"
+          }
+        }
+      }
+    },
+    "Clock help": {
+      "comment": "VoiceOver description of the arrow on the Home clock FIX action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clock help"
+          }
+        }
+      }
+    },
+    "Connect to the network, then check the clock again before joining an event.": {
+      "comment": "Home clock help instructions after the clock comparison was undeterminable.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the network, then check the clock again before joining an event."
+          }
+        }
+      }
+    },
+    "Open Settings, choose General, then Date & Time, and turn on Set Automatically.": {
+      "comment": "Home clock help instructions after an over-tolerance verdict; the app cannot deep-link to Date & Time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings, choose General, then Date & Time, and turn on Set Automatically."
+          }
+        }
+      }
+    },
+    "Sensing continues in background": {
+      "comment": "Status on Collection Home while sensing continues after the Scan screen closes.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensing continues in background"
+          }
+        }
+      }
+    },
+    "Stop sensing": {
+      "comment": "Collection Home action that stops the active sensing session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop sensing"
+          }
+        }
+      }
+    },
+    "Bluetooth · off": {},
+    "Bluetooth\nis off": {},
+    "Enable\nBluetooth": {},
+    "I’ve turned it on": {
+      "comment": "Button: rechecks whether the user has switched Bluetooth back on."
+    },
+    "Proofs of presence, collected automatically while you are at an event. No codes, no taps.": {},
+    "Prove you\nwere there.": {},
+    "Setup · 1 / 1": {},
+    "V 1.0": {
+      "comment": "Version label in the Welcome screen header."
+    },
+    "You can change this anytime in Settings": {},
+    "beid can’t sense events or collect proofs while Bluetooth is off.": {},
+    "beid senses nearby events and people over Bluetooth Low Energy — that’s how it proves you were really there.": {},
     "%lld": {},
     "Account": {},
     "Active": {
@@ -16,9 +459,27 @@
     "Automatic": {},
     "Bluetooth": {},
     "Bluetooth is off": {},
-    "Cancel": {},
+    "Cancel": {
+      "comment": "Dismisses the Home event-code entry sheet without joining an event. Also used for other cancellation actions.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
     "Close": {
-      "comment": "Dismisses the current screen without taking further action. Used as the accessibility label for the scan flow's toolbar close (X) button, and as the button on the wallet-binding failure sheet when trying again cannot help (an unsupported smart-contract wallet)."
+      "comment": "Dismisses the current screen without taking further action. Used as the accessibility label for the scan flow's toolbar close (X) button, and as the button on the wallet-binding failure sheet when trying again cannot help (an unsupported smart-contract wallet).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
     },
     "Connect Wallet": {},
     "Connect Your Wallet": {},
@@ -53,7 +514,17 @@
     "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again.": {},
     "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
     "beid couldn't compare the clock with the network, so event times can't be trusted yet. Check your connection, then try again.": {},
-    "Check again": {},
+    "Check again": {
+      "comment": "Re-runs the clock preflight comparison after the user follows the clock help instructions.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
     "Couldn't check this device's clock": {},
     "This device's clock is off": {},
     "demo.scenario.longDisplayNames.eventName": {
@@ -443,7 +914,17 @@
     "Verified": {},
     "Verifying proof": {},
     "Waiting for wallet to approve…": {},
-    "Walk into an event — it will show up here automatically.": {},
+    "Walk into an event — it will show up here automatically.": {
+      "comment": "Collection Home empty-state explanation: nearby events appear automatically when sensing detects them.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walk into an event — it will show up here automatically."
+          }
+        }
+      }
+    },
     "Wallet": {},
     "Wallet not available": {},
     "This wallet can't be used right now. Try again in a moment.": {},
@@ -1376,6 +1857,47 @@
           "stringUnit": {
             "state": "translated",
             "value": "Broadcasting until %@."
+          }
+        }
+      }
+    },
+    "Copied": {
+      "comment": "Feedback after the full wallet address has been copied."
+    },
+    "Copied address": {
+      "comment": "Accessibility label after copying the full wallet address."
+    },
+    "Disconnect": {
+      "comment": "Confirms disconnecting the wallet after the Account confirmation message."
+    },
+    "Disconnect wallet": {
+      "comment": "Destructive Account row that opens a confirmation before disconnecting the wallet."
+    },
+    "Disconnect wallet?": {
+      "comment": "Title of the wallet disconnection confirmation within the Account sheet."
+    },
+    "Keep connected": {
+      "comment": "Cancels wallet disconnection and returns to the Account sheet."
+    },
+    "Off · Fix": {
+      "comment": "Bluetooth-off status and action to open Settings in the Account sheet."
+    },
+    "Open Bluetooth Settings": {
+      "comment": "Accessibility label for the Account Bluetooth-off recovery control."
+    },
+    "Organizer tools": {
+      "comment": "Account navigation row opening venue operator tools."
+    },
+    "Sensing is paused until Bluetooth is on. Tap to open Settings.": {},
+    "Venue broadcast": {},
+    "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime.": {},
+    "account.wallet.header": {
+      "comment": "Account sheet label naming the connected wallet provider.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet · Connected via %@"
           }
         }
       }
