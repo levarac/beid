@@ -182,14 +182,6 @@ struct DailySummaryView: View {
   .environmentObject(AppCoordinator())
 }
 
-#Preview("Empty (Dark)") {
-  NavigationStack {
-    DailySummaryView()
-  }
-  .environmentObject(AppCoordinator())
-  .preferredColorScheme(.dark)
-}
-
 #Preview("Populated") {
   let coordinator = AppCoordinator()
   coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
@@ -198,15 +190,4 @@ struct DailySummaryView: View {
     DailySummaryView()
   }
   .environmentObject(coordinator)
-}
-
-#Preview("Populated (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
-  coordinator.proofStore.add(Proof(eventName: "beid Meetup", date: Date().addingTimeInterval(-3_600), peersVerified: 1))
-  return NavigationStack {
-    DailySummaryView()
-  }
-  .environmentObject(coordinator)
-  .preferredColorScheme(.dark)
 }

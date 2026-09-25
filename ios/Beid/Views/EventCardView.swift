@@ -109,13 +109,12 @@ struct EventCardView<Caption: View>: View {
   .tint(DS.Color.actionPrimary)
 }
 
-#Preview("Paused (Dark)") {
+#Preview("Paused") {
   EventCardView(event: .demoSample, badge: .paused) {
     BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "5")
   }
   .padding()
   .tint(DS.Color.actionPrimary)
-  .preferredColorScheme(.dark)
 }
 
 #Preview("No venue, long name") {

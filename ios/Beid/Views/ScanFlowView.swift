@@ -230,13 +230,6 @@ struct ScanFlowPreviewHarness: View {
   return ScanFlowView(sensing: coordinator.sensingCoordinator).environmentObject(coordinator)
 }
 
-#Preview("Sensing (Dark)") {
-  let coordinator = AppCoordinator()
-  return ScanFlowView(sensing: coordinator.sensingCoordinator)
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
-}
-
 #Preview("Signal Lost scenario") {
   let coordinator = AppCoordinator()
   let sensing = coordinator.sensingCoordinator
