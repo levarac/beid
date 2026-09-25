@@ -1,6 +1,7 @@
 // Copyright 2024-2026 The Greeting Inc. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
+import BeidSharedKit
 import SwiftUI
 
 /// Screens 06b/06c/07 merged: the steady `.recording` phase, replacing
@@ -46,50 +47,51 @@ struct RecordingView: View {
   }
 
   var body: some View {
-    BeidScreen {
-      VStack(spacing: DS.Space.l) {
-        if showEntranceCeremony {
-          // Reuses ProofCollectedView's retired text (same already-localized
-          // strings, §5.5) as a one-time highlight, not a separate screen.
-          BeidHeroHeader(
-            title: "Proof Collected",
-            subtitle: "Added to your collection."
-          )
-          .transition(.opacity)
-        }
-
-        EventCardView(event: event, badge: .recording) {
-          VStack(alignment: .leading, spacing: DS.Space.xs) {
-            EventIdentityVerificationRow(
-              status: event.identityVerification,
-              onRetry: onRetryVerification
+    Group {
+      if showEntranceCeremony {
+        // The existing one-time collection ceremony remains reachable. #637
+        // owns its Flat 2b visual pass; after its real dwell this gives way
+        // to frame 05's steady sensing surface.
+        BeidScreen {
+          VStack(spacing: DS.Space.l) {
+            BeidHeroHeader(
+              title: "Proof Collected",
+              subtitle: "Added to your collection."
             )
-            HStack(spacing: DS.Space.s) {
-              // Indeterminate, non-fractional activity indicator — no
-              // denominator exists to show a fraction of (§5.2). Not
-              // `ProgressView(value:)`.
-              ProgressView()
-                .tint(DS.Color.actionPrimary)
-              Text(recordingCaption)
-                .font(DS.Font.meta)
-                .foregroundStyle(DS.Color.textSecondary)
+            EventCardView(event: event, badge: .recording) {
+              VStack(alignment: .leading, spacing: DS.Space.xs) {
+                EventIdentityVerificationRow(
+                  status: event.identityVerification,
+                  onRetry: onRetryVerification
+                )
+                HStack(spacing: DS.Space.s) {
+                  ProgressView()
+                    .tint(DS.Color.actionPrimary)
+                  Text(recordingCaption)
+                    .font(DS.Font.meta)
+                    .foregroundStyle(DS.Color.textSecondary)
+                }
+                Text(windowBuildupCaption)
+                  .font(DS.Font.meta)
+                  .foregroundStyle(DS.Color.textSecondary)
+                Text(diagnosticCaption)
+                  .font(DS.Font.meta)
+                  .foregroundStyle(DS.Color.textSecondary)
+              }
             }
-            // #142 — window-by-window buildup, plain-text fallback per the
-            // PM's ruling on spec §3.4/§9-7 (the dot-row visualization is an
-            // unratified component and out of scope here).
-            Text(windowBuildupCaption)
-              .font(DS.Font.meta)
-              .foregroundStyle(DS.Color.textSecondary)
-            // #218 — temporary field-diagnostic line, not #if DEBUG-gated
-            // (see diagnosticCaption's doc comment): a live multi-device
-            // field test needs to read these counters without a debugger.
-            Text(diagnosticCaption)
-              .font(DS.Font.meta)
-              .foregroundStyle(DS.Color.textSecondary)
           }
         }
+      } else {
+        SensingSessionSurface(
+          sensing: sensing,
+          event: event,
+          presentation: .steady,
+          diagnosticCaption: diagnosticCaption,
+          onRetryVerification: onRetryVerification
+        )
       }
-    } footer: {
+    }
+    .safeAreaInset(edge: .bottom) {
       // Demo-mode-only affordance so the Signal Lost screen stays
       // reachable even though the golden EventSession path keeps
       // recording indefinitely otherwise.
@@ -103,8 +105,6 @@ struct RecordingView: View {
       }
       #endif
     }
-    // Ceremony screen: actionPrimary tint — Flat 2b has one ink and no
-    // per-screen motif accents (DESIGN.md §5).
     .tint(DS.Color.actionPrimary)
     .onAppear {
       // beid#222: `ScanFlowView` chains the wallet-binding sheet's
@@ -224,4 +224,120 @@ struct RecordingView: View {
       // static snapshot is taken.
       try? await Task.sleep(nanoseconds: 100_000_000)
     }
+}
+
+/// Immutable inputs for the terminal 06 surface. #655 supplies this only
+/// after its stop/finalization path has actually sealed the record. The
+/// RecordSigilSlot draws only a neutral ring: #653 owns the missing per-peer,
+/// per-window history and its privacy decision.
+struct SensingSealedSnapshot {
+  let recordID: UUID?
+  let event: EventSession
+  let aggregate: BeidSharedKit.aggregation.SessionAggregate?
+  let detectedDeviceCount: Int
+  let firstSightingAt: Date?
+  let sealedAt: Date?
+}
+
+/// Frame 06. Routing and the DONE action belong to #655's closure flow.
+/// The neutral RecordSigilSlot is used in production and screenshot tours;
+/// neither path fabricates nodes or strands from aggregate counts.
+struct SensingSealedView: View {
+  let snapshot: SensingSealedSnapshot
+
+  var body: some View {
+    GeometryReader { geometry in
+      ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+          Text(verbatim: snapshot.event.name)
+            .beidTextStyle(DS.Font.Library.display46)
+            .foregroundStyle(DS.Color.labelOnActionPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+
+          Text(verbatim: sealedSubtitle)
+            .beidTextStyle(DS.Font.Library.body15)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .padding(.top, DS.Space.s)
+
+          RecordSigilSlot(
+            recordID: snapshot.recordID,
+            size: DS.Size.sensingSealedSigil,
+            ground: .ink
+          )
+          .frame(maxWidth: .infinity)
+          .padding(.top, DS.Space.xl)
+
+          Spacer(minLength: DS.Space.l)
+          SensingWindowBars(
+            aggregate: snapshot.aggregate,
+            firstSightingAt: snapshot.firstSightingAt,
+            endsSession: true
+          )
+
+          Rectangle()
+            .fill(DS.Color.strokeHairlineOnInk)
+            .frame(height: DS.Size.hairline)
+            .padding(.top, DS.Space.l)
+
+          metrics
+            .padding(.top, DS.Space.m)
+
+          Spacer(minLength: DS.Space.m)
+          Text("Added to your collection · no action needed")
+            .beidTextStyle(DS.Font.Library.labelMono9)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .frame(maxWidth: .infinity)
+        }
+        .frame(minHeight: geometry.size.height, alignment: .top)
+        .padding(.horizontal, DS.Space.pageMargin)
+      }
+    }
+    .background(DS.Color.textPrimary.ignoresSafeArea())
+    .accessibilityIdentifier("scan.sealed")
+  }
+
+  private var observedWindowCount: Int {
+    Int(snapshot.aggregate?.windowCount ?? 0)
+  }
+
+  private var sealedSubtitle: String {
+    guard let firstSightingAt = snapshot.firstSightingAt, let sealedAt = snapshot.sealedAt else {
+      return "Proof sealed"
+    }
+    let start = firstSightingAt.formatted(date: .omitted, time: .shortened)
+    let end = sealedAt.formatted(date: .omitted, time: .shortened)
+    return "Proof sealed · \(start) – \(end)"
+  }
+
+  private var metrics: some View {
+    let elapsed = snapshot.firstSightingAt.flatMap { start in
+      snapshot.sealedAt.map { max(0, Int($0.timeIntervalSince(start))) }
+    }
+    var items = [
+      SensingMetric(value: String(snapshot.aggregate?.mutualDeviceCount ?? 0), label: "MUTUAL"),
+      SensingMetric(value: String(snapshot.detectedDeviceCount), label: "DETECTED")
+    ]
+    if let elapsed {
+      items.append(SensingMetric(value: "\(elapsed / 60)′", label: "ELAPSED"))
+    }
+    return HStack(alignment: .top, spacing: 0) {
+      ForEach(items) { item in
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+          Text(verbatim: item.value)
+            .beidTextStyle(DS.Font.Library.displayNumber40)
+            .foregroundStyle(DS.Color.labelOnActionPrimary)
+          Text(verbatim: item.label)
+            .beidTextStyle(DS.Font.Library.labelMono10)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(
+      "\(snapshot.aggregate?.mutualDeviceCount ?? 0) mutual, "
+        + "\(snapshot.detectedDeviceCount) detected, window \(observedWindowCount)"
+    )
+  }
 }

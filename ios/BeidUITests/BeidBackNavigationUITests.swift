@@ -101,6 +101,10 @@ final class BeidBackNavigationUITests: XCTestCase {
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
 
     XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
   }

@@ -61,9 +61,15 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     capture(named: "recording-\(orientation)")
 
-    // The scan modal's close button ends the session at any point during
-    // `.recording` — there is no separate terminal "Done" CTA anymore.
+    // CLOSE confirms the real Proof before finalizing, then DONE dismisses
+    // the already-sealed screen.
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    capture(named: "stop-confirm-\(orientation)")
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    capture(named: "sealed-\(orientation)")
+    app.buttons["Done"].tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
@@ -221,6 +227,10 @@ final class BeidIPadLayoutTests: XCTestCase {
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
 
     XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
   }

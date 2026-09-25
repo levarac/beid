@@ -198,6 +198,29 @@ enum OwnerKeyOperationFailure: Identifiable, Equatable {
   var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used for proofs. Proof-key operations are paused. Try again when your device is available.") }
 }
 
+#if DEBUG
+/// Screenshot-only screen selection. Requires both launch arguments; no
+/// Release build can select one, and none is written to persistent state.
+enum SensingScreenshotFixture: String {
+  case sensing = "05"
+  case detecting = "05a"
+  case detectingLong = "05a2"
+  case detectingFirstTime = "05a3"
+  case cantJoin = "05d"
+  case stopConfirm = "05e"
+  case sealed = "06"
+
+  static var selected: SensingScreenshotFixture? {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+      let flagIndex = arguments.firstIndex(of: "-beid-sensing-shot"),
+      arguments.indices.contains(flagIndex + 1)
+    else { return nil }
+    return SensingScreenshotFixture(rawValue: arguments[flagIndex + 1])
+  }
+}
+#endif
+
 /// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
 /// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
 /// state machine. The facade — not `BarnardIdentity` directly — is what this
@@ -303,6 +326,102 @@ final class SensingCoordinator: ObservableObject {
   /// every new observation (#109's "no subscription API, caller recomputes"
   /// contract — see `AggregationRuntime.sessionAggregate`).
   @Published private(set) var sessionAggregate: BeidSharedKit.aggregation.SessionAggregate?
+  /// First Barnard detection timestamp for this session. Presentation only:
+  /// it never enters a record, signature, or submission. A direct test/demo
+  /// detection without a timestamp leaves this nil instead of inventing one.
+  @Published private(set) var firstSightingAt: Date?
+  /// Stable display IDs actually resolved during this live session. The radar
+  /// needs the IDs even before a usable RSSI arrives; neither this set nor
+  /// signal strength is persisted. All peers remain detected-only until a
+  /// reciprocal observation source exists (DECISIONS 2026-09-26).
+  @Published private(set) var detectedDisplayIDs: Set<String> = []
+  /// Read-only linkage to the Proof created at the recording threshold.
+  /// A phase alone cannot establish that a durable Proof actually exists.
+  var currentProofID: UUID? { activeProofId }
+
+  /// Uses the live wall clock for display. A guarded screenshot fixture may
+  /// substitute a fixed instant so elapsed copy cannot race capture.
+  func sensingPresentationNow(_ liveNow: Date) -> Date {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"), let sensingScreenshotNow {
+      return sensingScreenshotNow
+    }
+    #endif
+    return liveNow
+  }
+
+  #if DEBUG
+  private var sensingScreenshotNow: Date?
+  private(set) var sensingScreenshotFixture: SensingScreenshotFixture?
+  private(set) var sensingScreenshotEvent: EventSession?
+
+  /// Deliberate UI-test fixture for the Figma screenshot tour. It injects
+  /// synthetic observations into the in-memory display aggregate only; no
+  /// Barnard, ledger, signature, proof store, or network path runs. Each
+  /// sample signal is display-only. Production uses Barnard timestamps and
+  /// actual RSSI and never calls this method.
+  @discardableResult
+  func injectSensingScreenshotFixture() -> Bool {
+    guard let fixture = SensingScreenshotFixture.selected else { return false }
+    resetSessionState()
+    sensingScreenshotFixture = fixture
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    let start = calendar.date(from: DateComponents(
+      year: 2026, month: 9, day: 26, hour: 10, minute: 0
+    )) ?? Date(timeIntervalSince1970: 1_800_000_000)
+    let elapsedSeconds: TimeInterval
+    switch fixture {
+    case .sensing, .stopConfirm: elapsedSeconds = 25 * 60
+    case .detecting, .detectingFirstTime: elapsedSeconds = 2 * 60
+    case .detectingLong: elapsedSeconds = 24
+    case .cantJoin: elapsedSeconds = 0
+    case .sealed: elapsedSeconds = 30 * 60
+    }
+    firstSightingAt = fixture == .cantJoin ? nil : start
+    sensingScreenshotNow = start.addingTimeInterval(elapsedSeconds)
+
+    if fixture != .cantJoin {
+      let peerCounts = fixture == .sensing || fixture == .stopConfirm || fixture == .sealed
+        ? [1, 4, 6, 9, 8, 13]
+        : [5]
+      for (window, peerCount) in peerCounts.enumerated() {
+        for peer in 0..<peerCount {
+          let displayID = String(format: "%08x", peer + 1)
+          _ = recordDeviceIdentity(
+            enin: 6_000_000 + window,
+            rpid: "tour-rpid-\(window)-\(peer)",
+            detectedDisplayId: displayID
+          )
+          // Screen capture has no radio; these illustrative negative
+          // values only place fixture nodes across the field. They cannot
+          // enter a record and are never used by the production path.
+          nodeSignalStrengths[displayID] = .measured(dBm: Double(-45 - peer * 3))
+        }
+      }
+    }
+
+    let event = EventSession(
+      id: "ETH-TOKYO-26",
+      name: "ETH Tokyo 2026",
+      venue: "Tokyo Big Sight",
+      identityVerification: fixture == .cantJoin ? .verified : .notChecked
+    )
+    sensingScreenshotEvent = event
+    switch fixture {
+    case .sensing, .stopConfirm, .sealed:
+      recordingCeremonyShown = true
+      entranceCeremonyFinished = true
+      phase = .recording(event: event, peersVerified: devicesVerified)
+    case .detecting, .detectingLong, .detectingFirstTime:
+      phase = .eventFound(event)
+    case .cantJoin:
+      phase = .sensing
+    }
+    return true
+  }
+  #endif
   /// Distinct proximity identifiers observed this session that never arrived
   /// with a `detectedDisplayId`, and so could not be attributed to a device.
   ///
@@ -621,7 +740,7 @@ final class SensingCoordinator: ObservableObject {
   /// why the whole raw detection is queued rather than only its
   /// store-touching calls.
   private var queuedDetectionsWhileLoading:
-    [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?)] = []
+    [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?, observedAt: Date?)] = []
   /// Decision 1's background load/reconcile task (`beginLedgerLoad(...)`).
   /// Held so tests can deterministically await it
   /// (`waitForLedgerLoadToFinish()`), mirroring `demoTask`/
@@ -1425,7 +1544,8 @@ final class SensingCoordinator: ObservableObject {
         enin: detection.enin,
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
-        reporterRpid: detection.reporterRpid
+        reporterRpid: detection.reporterRpid,
+        observedAt: detection.timestamp
       )
       // A SIBLING call, deliberately — not an extra argument to
       // `handleDetection` above (beid#652). A detection carries an `rssi`
@@ -1516,7 +1636,8 @@ final class SensingCoordinator: ObservableObject {
     enin: Int,
     rpid: String,
     detectedDisplayId: String?,
-    reporterRpid: String? = nil
+    reporterRpid: String? = nil,
+    observedAt: Date? = nil
   ) {
     // beid#134 Decision 1: while the background load is still recovering
     // stores, queue the whole raw detection instead of processing it —
@@ -1531,7 +1652,8 @@ final class SensingCoordinator: ObservableObject {
           enin: enin,
           rpid: rpid,
           detectedDisplayId: detectedDisplayId,
-          reporterRpid: reporterRpid
+          reporterRpid: reporterRpid,
+          observedAt: observedAt
         )
       )
       return
@@ -1564,6 +1686,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .eventFound(let session):
       observe(
         enin: enin,
@@ -1572,6 +1695,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .recording(let session, _):
       observe(
         enin: enin,
@@ -1580,6 +1704,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .idle, .signalLost:
       // `.signalLost` is frozen — real signal-loss *detection* doesn't
       // exist yet (only the demo-only manual trigger does), so this branch
@@ -1591,6 +1716,11 @@ final class SensingCoordinator: ObservableObject {
       // two phases as "ignored") is not duplicated here.
       break
     }
+  }
+
+  private func rememberFirstSighting(at timestamp: Date?) {
+    guard firstSightingAt == nil, let timestamp else { return }
+    firstSightingAt = timestamp
   }
 
   /// Records the detection against the running device count and window, then
@@ -1914,6 +2044,10 @@ final class SensingCoordinator: ObservableObject {
     // Android's `ScanDeviceAccounting.record` applies, not a native
     // `.lowercased()` check owned here.
     let displayId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(detectedDisplayId: detectedDisplayId)
+
+    if let displayId, !detectedDisplayIDs.contains(displayId) {
+      detectedDisplayIDs.insert(displayId)
+    }
 
     if displayId == nil {
       if rpidsAwaitingDisplayId.insert(rpid).inserted {
@@ -2661,6 +2795,13 @@ final class SensingCoordinator: ObservableObject {
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
     sessionAggregate = nil
+    firstSightingAt = nil
+    detectedDisplayIDs = []
+    #if DEBUG
+    sensingScreenshotNow = nil
+    sensingScreenshotFixture = nil
+    sensingScreenshotEvent = nil
+    #endif
     demoDeviceSequence = 0
     rpidsAwaitingDisplayId = []
     devicesVerified = 0
@@ -4712,7 +4853,8 @@ final class SensingCoordinator: ObservableObject {
         enin: detection.enin,
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
-        reporterRpid: detection.reporterRpid
+        reporterRpid: detection.reporterRpid,
+        observedAt: detection.observedAt
       )
     }
   }
