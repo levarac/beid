@@ -46,10 +46,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     let resumedSenseEvent = app.buttons["home.scan"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
     capture(named: "sensing-\(orientation)")
 
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
     capture(named: "event-found-\(orientation)")
 
     // Verifying/Verified/Proof Collected merge into one continuous
@@ -61,9 +61,15 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     capture(named: "recording-\(orientation)")
 
-    // The scan modal's close button ends the session at any point during
-    // `.recording` — there is no separate terminal "Done" CTA anymore.
+    // CLOSE confirms the real Proof before finalizing, then DONE dismisses
+    // the already-sealed screen.
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    capture(named: "stop-confirm-\(orientation)")
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    capture(named: "sealed-\(orientation)")
+    app.buttons["Done"].tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
@@ -209,8 +215,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
   }
@@ -221,6 +227,10 @@ final class BeidIPadLayoutTests: XCTestCase {
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
 
     XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }

@@ -2701,8 +2701,13 @@ to.]**
 | `size.button.primary.compact.minHeight` | `DS.Size.compactPrimaryButtonMinHeight` | 52 pt | `Button/Primary` Size=Small minimum height |
 | `size.button.primary.compact.width` | `DS.Size.compactPrimaryButtonWidth` | 140 pt | `Button/Primary` Size=Small width (Home's Scan) |
 | `size.step.badge` | `DS.Size.stepBadge` | 28 pt | `BeidNumberedStepList` index badge (from `BeidDesign`) |
-| `size.radar.field` | `DS.Size.radarField` | 210 pt | Sensing radar frame (`SensingView`) |
-| `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center diameter (`SensingView`); survives #631; #634 owns the final radar |
+| `size.radar.field` | `DS.Size.radarField` | 362 pt | Flat 2b 05 sensing graph frame; also read by the interim `SensingView` pulse until integration |
+| `size.radar.rings` | `DS.Size.radarRingInner` / `radarRingMiddle` / `radarRingOuter` | 133.22 / 233.12 / 333.04 pt | Three circle path diameters measured from the 05 graph SVG |
+| `size.radar.core` | `DS.Size.radarCore` | 38 pt | White centre disc in the 05 sensing graph |
+| `size.radar.coreSeparation` | `DS.Size.radarCoreSeparation` | 48 pt | Ink separation around the white centre disc |
+| `size.radar.centerDot` | `DS.Size.radarCenterDot` | 8 pt | Ink dot at the centre of the white disc |
+| `size.radar.detectedNode` | `DS.Size.radarDetectedNode` / `radarDetectedNodeStroke` | 8 / 1.5 pt | Detected-only node diameter and idle outline width |
+| `size.sensing.sealedSigil` | `DS.Size.sensingSealedSigil` | 300 pt | Frame 06 Sensing — Sealed artwork slot (Figma node `184:65`); its neutral ring remains until #653 supplies production history |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |

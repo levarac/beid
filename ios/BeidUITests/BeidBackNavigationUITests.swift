@@ -91,8 +91,8 @@ final class BeidBackNavigationUITests: XCTestCase {
     let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
   }
@@ -101,6 +101,10 @@ final class BeidBackNavigationUITests: XCTestCase {
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
 
     XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }

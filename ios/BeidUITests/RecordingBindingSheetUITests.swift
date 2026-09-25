@@ -29,7 +29,7 @@ import XCTest
 /// then `Close`. On iPad, the same tap lands on the form sheet's visible
 /// backdrop and genuinely dismisses the binding sheet, recovering in one
 /// fewer tap. Both device classes converge on the same end state —
-/// Collection Home, deterministically reachable — by different real paths.
+/// stop confirmation, then Collection Home — by different real paths.
 final class RecordingBindingSheetUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -81,6 +81,25 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not reopen itself after being dismissed")
   }
 
+  func testKeepSensingReturnsToLiveRecordingAfterBindingWasDeclined() {
+    launchAndReachSenseEventScreen()
+    app.buttons["home.scan"].tap()
+
+    let cancelButton = app.buttons["Cancel"]
+    XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
+    cancelButton.tap()
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+
+    app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Keep sensing"].tap()
+
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Close"].exists)
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
+    XCTAssertFalse(cancelButton.exists, "an explicitly declined binding sheet must stay declined")
+  }
+
   /// Regression test for beid#224: a mistimed tap on `ScanFlowView`'s own
   /// "Close" toolbar button, landing in the narrow window right as the
   /// auto-presented binding sheet begins animating in, must not strand the
@@ -124,8 +143,9 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// sheet onto a live `RecordingView` (confirmed by
   /// `"Simulate Signal Lost"` being present — the same identifier
   /// `BeidIPadLayoutTests.swift` already uses to detect being on that
-  /// screen), then `Close` reaches Collection Home (`home.scan`
-  /// hittable). Ruling: beid#224 is not a defect. The auto-present binding
+  /// screen), then `Close` reaches Stop confirmation, whose stop action
+  /// reaches the sealed screen and DONE returns to Collection Home.
+  /// Ruling: beid#224 is not a defect. The auto-present binding
   /// sheet ships as-is, on `.sheet` — no chrome change, no fallback, no
   /// fifth structural fix. This test's job is to protect that recovery
   /// invariant going forward, not to chase a lockup that doesn't exist.
@@ -182,8 +202,8 @@ final class RecordingBindingSheetUITests: XCTestCase {
       )
 
       // The binding sheet is already gone, so this real tap reaches
-      // ScanFlowView's own toolbar Close button directly — the same final
-      // destination the iPhone branch below reaches in two taps instead.
+      // ScanFlowView's own toolbar Close button directly — the same stop
+      // confirmation the iPhone branch below reaches in two taps instead.
       closeButton.tap()
     } else {
       // The raced tap is a no-op, not damage: it must not tear down or
@@ -206,17 +226,18 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
     let closeGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: closeButton)
     let cancelStillGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: cancelButton)
-    let senseEventHittable = expectation(
-      for: NSPredicate(format: "isHittable == true"),
-      evaluatedWith: app.buttons["home.scan"]
-    )
-    wait(for: [closeGone, cancelStillGone, senseEventHittable], timeout: 8)
+    wait(for: [closeGone, cancelStillGone], timeout: 8)
 
-    XCTAssertFalse(closeButton.exists, "Close should dismiss the scan flow")
+    XCTAssertFalse(closeButton.exists, "Close should lead to stop confirmation")
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not remain presented")
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
+    let homeScan = app.buttons["home.scan"]
     XCTAssertTrue(
-      app.buttons["home.scan"].isHittable,
-      "The final real Close tap must reach Collection Home"
+      homeScan.waitForExistence(timeout: 5) && homeScan.isHittable,
+      "The confirmed stop and DONE must reach Collection Home"
     )
   }
 
