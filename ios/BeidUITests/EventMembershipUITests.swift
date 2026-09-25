@@ -24,9 +24,9 @@ final class EventMembershipUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
 
-    app.buttons["Account"].tap()
+    app.buttons["home.account"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
 
     // Lower rows can exist in the accessibility tree while sitting behind
