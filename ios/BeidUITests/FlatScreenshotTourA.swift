@@ -72,7 +72,7 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
 
-    let account = app.buttons["Account"]
+    let account = app.buttons["home.account"]
     XCTAssertTrue(account.waitForExistence(timeout: 5))
     account.tap()
 

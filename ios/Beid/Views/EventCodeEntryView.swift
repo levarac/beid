@@ -115,6 +115,7 @@ struct EventCodeEntryView: View {
       .beidTextStyle(DS.Font.Library.display52)
       .foregroundStyle(DS.Color.textPrimary)
       .fixedSize(horizontal: false, vertical: true)
+      .accessibilityIdentifier("eventCode.title")
   }
 
   private var codeEntry: some View {
