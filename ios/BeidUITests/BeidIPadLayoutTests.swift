@@ -46,10 +46,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     let resumedSenseEvent = app.buttons["Sense Event"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
     capture(named: "sensing-\(orientation)")
 
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
     capture(named: "event-found-\(orientation)")
 
     // Verifying/Verified/Proof Collected merge into one continuous
@@ -215,8 +215,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     let senseEvent = app.buttons["Sense Event"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
   }

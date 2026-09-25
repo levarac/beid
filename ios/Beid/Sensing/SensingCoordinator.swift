@@ -374,7 +374,8 @@ final class SensingCoordinator: ObservableObject {
     let elapsedSeconds: TimeInterval
     switch fixture {
     case .sensing, .stopConfirm: elapsedSeconds = 25 * 60
-    case .detecting, .detectingFirstTime: elapsedSeconds = 2 * 60
+    case .detecting: elapsedSeconds = 10
+    case .detectingFirstTime: elapsedSeconds = 2 * 60
     case .detectingLong: elapsedSeconds = 24
     case .cantJoin: elapsedSeconds = 0
     case .sealed: elapsedSeconds = 30 * 60

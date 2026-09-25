@@ -24,6 +24,7 @@ struct SensingStopConfirmView: View {
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.labelOnActionPrimary)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 220, alignment: .leading)
             .accessibilityAddTraits(.isHeader)
 
           if let eventDetail {

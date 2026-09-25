@@ -64,8 +64,12 @@ struct ScanFlowView: View {
                   usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary
                 )
             }
+            .fixedSize(horizontal: true, vertical: false)
             .accessibilityElement(children: .combine)
           }
+          // #631 / 2026-09-25: suppress iOS 26's item glass; #630 removed
+          // branches that added glass, not this branch that removes it.
+          .beidWithoutSharedBackground()
           ToolbarItem(placement: .topBarTrailing) {
             if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
               BeidTextControl(

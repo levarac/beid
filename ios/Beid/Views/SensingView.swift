@@ -531,11 +531,11 @@ struct SensingSessionSurface: View {
       GeometryReader { geometry in
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
-            Text(verbatim: event.name)
-              .beidTextStyle(DS.Font.Library.display46)
-              .foregroundStyle(DS.Color.labelOnActionPrimary)
-              .fixedSize(horizontal: false, vertical: true)
-              .accessibilityAddTraits(.isHeader)
+            if presentation == .steady {
+              eventHeading
+            } else {
+              eventHeading.accessibilityIdentifier("scan.event-found")
+            }
 
             if let eventSubtitle = eventSubtitle {
               Text(verbatim: eventSubtitle)
@@ -593,6 +593,15 @@ struct SensingSessionSurface: View {
     }
     .background(DS.Color.textPrimary.ignoresSafeArea())
     .accessibilityIdentifier("scan.sensing-session")
+  }
+
+  private var eventHeading: some View {
+    Text(verbatim: event.name)
+      .beidTextStyle(DS.Font.Library.display46)
+      .foregroundStyle(DS.Color.labelOnActionPrimary)
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: 220, alignment: .leading)
+      .accessibilityAddTraits(.isHeader)
   }
 
   private var observedWindowCount: Int? {
@@ -874,6 +883,7 @@ struct SensingCantJoinView: View {
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.labelOnActionPrimary)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 220, alignment: .leading)
             .accessibilityAddTraits(.isHeader)
 
           if let venue = event?.venue {
