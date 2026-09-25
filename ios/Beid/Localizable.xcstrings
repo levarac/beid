@@ -1334,7 +1334,7 @@
       }
     },
     "Sent": {
-      "comment": "Sub-state row under \"Participation record\": whether this device's sensing data has been transmitted to a report server for this event. Available once at least one submission has reached the SUBMITTING or ACCEPTED durable state (beid#292); report-submission code exists in the app today but is gated off in production by the BeidReportSubmissionEnabled build setting, so this reflects genuinely stored state, not a permanently-unbuilt capability like the rows below it. Shows \"Not yet available\" (not a failed-send state) before any submission for this event has been attempted.",
+      "comment": "Participation-record delivery row. SUBMITTING is persisted before POST and displays delivery unconfirmed; Sent is shown only for ACCEPTED with a verified receipt stored.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2620,6 +2620,281 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reports unavailable for this event code"
+          }
+        }
+      }
+    },
+    "reportDetail.stopped": {
+      "comment": "Terminal local submission state; it does not claim the operator rejected the Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SUBMISSION STOPPED"
+          }
+        }
+      }
+    },
+    "reportDetail.deliveryUnconfirmed": {
+      "comment": "The device has no durable evidence that the operator received this Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELIVERY UNCONFIRMED"
+          }
+        }
+      }
+    },
+    "reportDetail.receiptUnavailable": {
+      "comment": "No verified acceptance receipt is stored for this report.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECEIPT UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "reportDetail.prepared": {
+      "comment": "The signed Observation was prepared and queued locally; sending has not begun.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PREPARED ON DEVICE"
+          }
+        }
+      }
+    },
+    "reportDetail.notSent": {
+      "comment": "The local report has not begun a network submission.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOT SENT"
+          }
+        }
+      }
+    },
+    "reportDetail.notYetAvailable": {
+      "comment": "A report status or capability has no durable result to show yet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOT YET AVAILABLE"
+          }
+        }
+      }
+    },
+    "reportDetail.inProgress": {
+      "comment": "A submission attempt may be underway; the persisted state precedes the network POST.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SUBMISSION IN PROGRESS"
+          }
+        }
+      }
+    },
+    "reportDetail.operatorAccepted": {
+      "comment": "Shown only with a verified operator acceptance receipt stored on device.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ACCEPTED BY OPERATOR"
+          }
+        }
+      }
+    },
+    "reportDetail.receiptStored": {
+      "comment": "A verified operator acceptance receipt is stored on device.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STORED"
+          }
+        }
+      }
+    },
+    "reportDetail.statusUnavailable": {
+      "comment": "The state flag has no matching receipt; do not claim acceptance.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STATUS UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "reportDetail.record": {
+      "comment": "Section heading for the selected durable submission record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORD"
+          }
+        }
+      }
+    },
+    "reportDetail.reportID": {
+      "comment": "Label for the durable UUID of one canonical Observation submission record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REPORT ID"
+          }
+        }
+      }
+    },
+    "reportDetail.recorded": {
+      "comment": "Label for the one signed Observation stored in this report record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED ON DEVICE"
+          }
+        }
+      }
+    },
+    "reportDetail.oneObservation": {
+      "comment": "Exactly one canonical signed Observation is stored in a report record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 OBSERVATION"
+          }
+        }
+      }
+    },
+    "reportDetail.mutual": {
+      "comment": "Reciprocal presence confirmation, which this record cannot currently establish.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MUTUAL OBSERVATION"
+          }
+        }
+      }
+    },
+    "reportDetail.sent": {
+      "comment": "Delivery state row; in-progress values explicitly say delivery is unconfirmed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SENT"
+          }
+        }
+      }
+    },
+    "reportDetail.acceptanceReceipt": {
+      "comment": "Verified operator receipt state for the selected report.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ACCEPTANCE RECEIPT"
+          }
+        }
+      }
+    },
+    "reportDetail.published": {
+      "comment": "Whether the report appears in published data, currently unavailable.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PUBLISHED"
+          }
+        }
+      }
+    },
+    "reportDetail.observations": {
+      "comment": "Section for the one signed canonical Observation in this record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OBSERVATIONS INCLUDED"
+          }
+        }
+      }
+    },
+    "reportDetail.reportID.accessibility": {
+      "comment": "VoiceOver reads the full durable report UUID; the visible value is shortened.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report ID %@"
+          }
+        }
+      }
+    },
+    "reportDetail.observationDigest.accessibility": {
+      "comment": "VoiceOver reads the full digest of the selected signed Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observation digest %@"
+          }
+        }
+      }
+    },
+    "reportDetail.preparedAt": {
+      "comment": "Preparation time on this device, not a network send or operator acceptance time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PREPARED ON DEVICE · %@"
+          }
+        }
+      }
+    },
+    "Report unavailable on this device": {
+      "comment": "The selected durable report UUID could not be read from the shared store.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report unavailable on this device"
+          }
+        }
+      }
+    },
+    "1 signed observation": {
+      "comment": "One report record contains exactly one signed canonical Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 signed observation"
+          }
+        }
+      }
+    },
+    "transparency.deliveryUnconfirmed": {
+      "comment": "Sent row while SUBMITTING is stored before POST; the device cannot yet claim that data left it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In progress · delivery unconfirmed"
           }
         }
       }

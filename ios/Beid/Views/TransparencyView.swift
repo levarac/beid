@@ -28,6 +28,17 @@ import SwiftUI
 /// it is `nil` for any proof persisted before that field existed, and
 /// renders identically to the other not-yet-available sub-states below it
 /// — never a false zero.
+/// Separates a pre-POST SUBMITTING marker from durable receipt evidence.
+struct TransparencySubmissionDisplay {
+  let isSubmitting: Bool
+  let isSent: Bool
+
+  init(state: ReportSubmissionState?, receiptStored: Bool) {
+    isSubmitting = state == .submitting
+    isSent = state == .accepted && receiptStored
+  }
+}
+
 struct TransparencyView: View {
   let eventName: String
   /// Tier 1 (参加操作): whether this device has joined the event this
@@ -49,9 +60,10 @@ struct TransparencyView: View {
   /// therefore can never become a canonical report-server submission.
   /// `nil` uses the same honest-gap treatment as the adjacent count.
   let excludedWindowCount: Int?
-  /// Tier 2 (参加記録), third and fourth sub-states (送信済み / 受領確認済み):
-  /// the most-advanced durable state of this event's report submissions,
-  /// read from `SensingCoordinator.submissionState(forEventCode:)` (beid#292).
+  /// Tier 2 (参加記録), delivery and receipt sub-states: the most-advanced
+  /// durable state of this event's report submissions, read from
+  /// `SensingCoordinator.submissionState(forEventCode:)` (beid#292).
+  /// SUBMITTING is saved before POST and cannot support a Sent claim.
   /// Event-code scoped like `recordedOnDeviceCount` above, for the same
   /// historically-scoped reason (this screen's type doc comment) — not a
   /// second design decision, matching the convention that property already
@@ -61,6 +73,9 @@ struct TransparencyView: View {
   /// off in production (`BeidReportSubmissionEnabled`) or when this event
   /// simply has no submission queued yet; never a false negative for either.
   let submissionState: ReportSubmissionState?
+  /// A verified operator receipt is stored for this event. The state flag
+  /// alone cannot prove a POST was sent or accepted.
+  let receiptStored: Bool
 
   var body: some View {
     ScrollView {
@@ -133,10 +148,10 @@ struct TransparencyView: View {
         TierRow(
           label: Text(
             "Sent",
-            comment: "Sub-state row under \"Participation record\": whether this device's sensing data has been transmitted to a report server for this event. Available once at least one submission has reached the SUBMITTING or ACCEPTED durable state (beid#292); report-submission code exists in the app today but is gated off in production by the BeidReportSubmissionEnabled build setting, so this reflects genuinely stored state, not a permanently-unbuilt capability like the rows below it. Shows \"Not yet available\" (not a failed-send state) before any submission for this event has been attempted."
+            comment: "Whether a submission for this event has a stored operator receipt. SUBMITTING is durably set before POST, so its value says delivery is unconfirmed, not Sent."
           ),
-          isAvailable: isSent,
-          valueText: isSent ? sentValueText : nil
+          isAvailable: isSent || isSubmitting,
+          valueText: isSent ? sentValueText : (isSubmitting ? inProgressValueText : nil)
         )
         Divider()
         TierRow(
@@ -157,13 +172,13 @@ struct TransparencyView: View {
     }
   }
 
-  private var isSent: Bool {
-    submissionState == .submitting || submissionState == .accepted
+  private var submissionDisplay: TransparencySubmissionDisplay {
+    TransparencySubmissionDisplay(state: submissionState, receiptStored: receiptStored)
   }
 
-  private var hasAcceptanceReceipt: Bool {
-    submissionState == .accepted
-  }
+  private var isSubmitting: Bool { submissionDisplay.isSubmitting }
+  private var isSent: Bool { submissionDisplay.isSent }
+  private var hasAcceptanceReceipt: Bool { submissionDisplay.isSent }
 
   private var verifiedProofPanel: some View {
     BeidPanel {
@@ -216,6 +231,14 @@ struct TransparencyView: View {
   /// trailing text to describe the status, and there is no
   /// separate status word for "a report was sent"; a distinct explicit key
   /// from the row's label so translators can adjust either independently.
+  private var inProgressValueText: String {
+    String(
+      localized: "transparency.deliveryUnconfirmed",
+      defaultValue: "In progress · delivery unconfirmed",
+      comment: "Sent row while SUBMITTING is stored before POST; the device cannot yet claim that data left it."
+    )
+  }
+
   private var sentValueText: String {
     String(
       localized: "transparency.sent",
@@ -227,8 +250,8 @@ struct TransparencyView: View {
   /// Fourth row under "Participation record" (beid#292): whether the report
   /// server has confirmed receipt of at least one of this device's
   /// submissions for this event — a verified, stored `AcceptanceReceipt`,
-  /// not merely that a POST was attempted. Distinct from "Sent" above it,
-  /// which only means transmission was attempted.
+  /// not merely that a POST was attempted. The Sent row also waits for
+  /// this durable receipt because SUBMITTING does not establish transmission.
   private var acceptanceReceiptLabelText: String {
     String(
       localized: "transparency.acceptanceReceipt",
@@ -311,7 +334,8 @@ private struct TierRow: View {
       hasJoined: true,
       recordedOnDeviceCount: 5,
       excludedWindowCount: 1,
-      submissionState: nil
+      submissionState: nil,
+      receiptStored: false
     )
   }
 }
@@ -323,19 +347,21 @@ private struct TierRow: View {
       hasJoined: true,
       recordedOnDeviceCount: nil,
       excludedWindowCount: nil,
-      submissionState: nil
+      submissionState: nil,
+      receiptStored: false
     )
   }
 }
 
-#Preview("Sent, awaiting receipt") {
+#Preview("In progress, delivery unconfirmed") {
   NavigationStack {
     TransparencyView(
       eventName: "ETHGlobal Tokyo",
       hasJoined: true,
       recordedOnDeviceCount: 5,
       excludedWindowCount: 1,
-      submissionState: .submitting
+      submissionState: .submitting,
+      receiptStored: false
     )
   }
 }
@@ -347,7 +373,8 @@ private struct TierRow: View {
       hasJoined: true,
       recordedOnDeviceCount: 5,
       excludedWindowCount: 1,
-      submissionState: .accepted
+      submissionState: .accepted,
+      receiptStored: true
     )
   }
 }

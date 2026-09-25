@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00D7E40DAFDCE053CF9BF79B /* ReportDetailPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77A724040AAA2FFF7A5F6C0C /* ReportDetailPresentationTests.swift */; };
 		00E73AEE3E5E0157C5F22567 /* VenuePublicArtifactStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D764CF34303FF0E427BB098 /* VenuePublicArtifactStore.swift */; };
 		014EFF3C5268B71F222C207C /* SessionParticipationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80776036F593C26215147B46 /* SessionParticipationListView.swift */; };
 		04348FFAAEB9C9CDC881D668 /* VenueArtifactAcquisition.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3561B972C4187D3C2F5410B /* VenueArtifactAcquisition.swift */; };
@@ -19,6 +20,7 @@
 		069813A870D327358882201A /* AccountSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */; };
 		06CBE6472448DC8001F8F186 /* ScanPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA15C98B3D313F27CFFFF0 /* ScanPhase.swift */; };
 		073C1934D82087724B66692B /* VenueDeviceClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = A506F40794EF36DFEBF44C78 /* VenueDeviceClock.swift */; };
+		07908AE00A8E831ED4674D41 /* ReportDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43AD3DA84214F49B601AC776 /* ReportDetailView.swift */; };
 		08558ED65AFA7A03AA4DDDC0 /* EventJoinGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24484D87C1409892A5EE1045 /* EventJoinGateTests.swift */; };
 		098ACD866A98357CA444D973 /* AppScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812C170544758548D2A4DCC /* AppScreen.swift */; };
 		09BD82DD877BBFE7B46A6BB8 /* libBeidMetaMaskSupport.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C7FC09FE3BAF5926B776ED4E /* libBeidMetaMaskSupport.a */; };
@@ -70,6 +72,7 @@
 		2DD5AFE11D99953040076E2C /* SelfProofCheckpointStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 884640A5A92A08B45287E2FE /* SelfProofCheckpointStore.swift */; };
 		2F36014D656BCE29F29D3F19 /* VenueSignedServingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5157DE43C6934B2D9C92AC3 /* VenueSignedServingView.swift */; };
 		2F98E9B2465705813B204FEE /* PastEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E3EC74423D098E4990BF12 /* PastEventsView.swift */; };
+		30065493F622E9FCFB876BDD /* ReportDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43AD3DA84214F49B601AC776 /* ReportDetailView.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
 		30C9614DEA2F505D90FFFA41 /* FlatScreenshotTourA.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE1B81EFECE0C1E386CE9F58 /* FlatScreenshotTourA.swift */; };
 		3116FAC12C905DDC8829DF22 /* BluetoothDeniedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */; };
@@ -472,6 +475,7 @@
 		3FBEC508A2909B9992D8103A /* overlapping-envelope.venue-bundle.cbor */ = {isa = PBXFileReference; path = "overlapping-envelope.venue-bundle.cbor"; sourceTree = "<group>"; };
 		40AE7B86E16A35087D86618D /* EventIdentityVerificationRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventIdentityVerificationRow.swift; sourceTree = "<group>"; };
 		419A7740F7F6539A7F6ADAB5 /* OFL-DMMono.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-DMMono.txt"; sourceTree = "<group>"; };
+		43AD3DA84214F49B601AC776 /* ReportDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportDetailView.swift; sourceTree = "<group>"; };
 		445445FA6433DEA8CEE81FE1 /* SigilViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SigilViewTests.swift; sourceTree = "<group>"; };
 		4608CE86B394B0C7CE5728D8 /* Beid */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Beid; sourceTree = SOURCE_ROOT; };
 		480CE93C8D4395FC56AD7DDD /* TransparencyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransparencyView.swift; sourceTree = "<group>"; };
@@ -510,6 +514,7 @@
 		76D6C6B572888B6C2DBAC62A /* ClockPreflightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockPreflightTests.swift; sourceTree = "<group>"; };
 		7726C4148C25E9309E34D1A8 /* ParticipationSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticipationSummaryView.swift; sourceTree = "<group>"; };
 		779C1DBA70189E14E9D1D5AE /* ReportSubmissionWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportSubmissionWiringTests.swift; sourceTree = "<group>"; };
+		77A724040AAA2FFF7A5F6C0C /* ReportDetailPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportDetailPresentationTests.swift; sourceTree = "<group>"; };
 		77B393454AB42E627CAFA6E8 /* venue-current-lease-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "venue-current-lease-v1.json"; sourceTree = "<group>"; };
 		77BE08EA539A56DDC580EC96 /* SignalStrengthNeverRecordedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalStrengthNeverRecordedTests.swift; sourceTree = "<group>"; };
 		782122FCD0A207085E7E9E75 /* NodeSignalStrength.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeSignalStrength.swift; sourceTree = "<group>"; };
@@ -893,6 +898,7 @@
 				6660B6477CE489C244F95FED /* ProofCardView.swift */,
 				C58EEA07A80440D53597D515 /* ProofCollectedView.swift */,
 				DBBF900C092346BBFDF6BA96 /* RecordingView.swift */,
+				43AD3DA84214F49B601AC776 /* ReportDetailView.swift */,
 				03ED09B8873C1E4E83EF0F85 /* ScanFlowView.swift */,
 				8D10C774A75E6C5C0BC285B0 /* SensingRadarView.swift */,
 				6F376084B4B89D65F5E75C95 /* SensingStopConfirmView.swift */,
@@ -1038,6 +1044,7 @@
 				0878FCEEE4A3B3DACEEE7330 /* RecordingEventJoinControl.swift */,
 				D133F06DAE45C0813736C592 /* RecordSchemaEnvelopeMigrationTests.swift */,
 				85F54669D72FA3CD4E816097 /* RelayedEventInfoContractTests.swift */,
+				77A724040AAA2FFF7A5F6C0C /* ReportDetailPresentationTests.swift */,
 				227F031B1D42A852CC6278C8 /* ReportSubmissionOperatorIntegrationTests.swift */,
 				A8D8A4D0AA5745D9AAC65FBF /* ReportSubmissionStateQueryTests.swift */,
 				8F2E357058CCA15BA3DCAE5E /* ReportSubmissionStoreTests.swift */,
@@ -1483,6 +1490,7 @@
 				6F64A83864C22FEC9B59A3BC /* RecordSigilSlot.swift in Sources */,
 				5E564D27C5FC2D5146A9AA83 /* RecordingView.swift in Sources */,
 				74A66D42D8B3D3B3D03A7496 /* RegistryDependencies.swift in Sources */,
+				30065493F622E9FCFB876BDD /* ReportDetailView.swift in Sources */,
 				322BD9E32E34B01EA0112610 /* ReportSubmissionRuntime.swift in Sources */,
 				F136D1BDE474A653F515B147 /* ReportSubmissionStore.swift in Sources */,
 				18404D198F54E376B76E29F1 /* RootView.swift in Sources */,
@@ -1578,6 +1586,7 @@
 				9E337258C7DB06C41ADCC141 /* RecordSchemaEnvelopeMigrationTests.swift in Sources */,
 				62ACD1EAD2895F4BC2649744 /* RecordingEventJoinControl.swift in Sources */,
 				88BE08DAFF00BDFDF9F27C7A /* RelayedEventInfoContractTests.swift in Sources */,
+				00D7E40DAFDCE053CF9BF79B /* ReportDetailPresentationTests.swift in Sources */,
 				737AD87C8947B5348871BBC6 /* ReportSubmissionOperatorIntegrationTests.swift in Sources */,
 				F5A2C42AA783E9F15EAE309B /* ReportSubmissionStateQueryTests.swift in Sources */,
 				2B231C75AA6AECD2C9DF9766 /* ReportSubmissionStoreTests.swift in Sources */,
@@ -1687,6 +1696,7 @@
 				AAE89D8A19AFC0C6EF9F5B95 /* RecordSigilSlot.swift in Sources */,
 				C5E2DBFEA4C62F42B9EC80A6 /* RecordingView.swift in Sources */,
 				792F14967D9F9041A16821BD /* RegistryDependencies.swift in Sources */,
+				07908AE00A8E831ED4674D41 /* ReportDetailView.swift in Sources */,
 				88C378EF46D6D2D793856BDB /* ReportSubmissionRuntime.swift in Sources */,
 				D0C45EC8C05304CE1860D0E2 /* ReportSubmissionStore.swift in Sources */,
 				551175335552AB9F7C3D97BE /* RootView.swift in Sources */,

@@ -209,7 +209,8 @@ struct ItemDetailView: View {
         hasJoined: true,
         recordedOnDeviceCount: recordedOnDeviceCount,
         excludedWindowCount: excludedWindowCount,
-        submissionState: submissionState
+        submissionState: submissionState,
+        receiptStored: acceptanceReceiptStored
       )
     } label: {
       destinationRow("Transparency")
@@ -230,6 +231,13 @@ struct ItemDetailView: View {
   private var submissionState: ReportSubmissionState? {
     guard let eventCode = proof.eventCode else { return nil }
     return coordinator.sensingCoordinator.submissionState(forEventCode: eventCode)
+  }
+
+  private var acceptanceReceiptStored: Bool {
+    guard let eventCode = proof.eventCode else { return false }
+    return coordinator.reportSubmissionStore.records.contains {
+      $0.eventCode == eventCode && $0.submissionState == .accepted && $0.isReceiptStored
+    }
   }
 
   private var participationSummaryRow: some View {
