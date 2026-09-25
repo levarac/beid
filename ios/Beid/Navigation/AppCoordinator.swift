@@ -4,6 +4,14 @@
 import BeidSharedKit
 import Foundation
 
+#if DEBUG
+private struct HomeClockFixtureDateSource: TrustedDateSource {
+  func fetchDateHeader() async -> String? {
+    "Wed, 16 Sep 2026 11:58:53 GMT"
+  }
+}
+#endif
+
 /// Root state machine for onboarding + the collection home. Order of the
 /// wallet step is decided once at init from `OnboardingMode.current`; see
 /// README "Onboarding flag".
@@ -27,6 +35,7 @@ final class AppCoordinator: ObservableObject {
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
+  @Published var homeEventCodeSheetPresented = false
   @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
@@ -62,9 +71,26 @@ final class AppCoordinator: ObservableObject {
     let bluetoothMonitor = BluetoothMonitor()
     self.registryClient = registryClient
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"), arguments.contains("-beid-home-frame-04c") {
+      // A three-minute wall-clock skew passes through the real controller
+      // and shared verdict. The fixture never injects a presentation key.
+      self.clockPreflight = ClockPreflightController(
+        source: HomeClockFixtureDateSource(),
+        wallMillis: { 1_789_559_933_000 + 180_000 },
+        monotonicMillis: { 1_000 }
+      )
+    } else {
+      self.clockPreflight = ClockPreflightController(
+        source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())
+      )
+    }
+    #else
     self.clockPreflight = ClockPreflightController(
       source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())
     )
+    #endif
     self.walletConnector = walletConnector
     self.proofStore = proofStore ?? ProofStore()
     self.userDefaults = userDefaults
@@ -76,15 +102,28 @@ final class AppCoordinator: ObservableObject {
       // UI tests run without a real CoreBluetooth daemon. Keep their existing
       // onboarding contract deterministic while production and normal Debug
       // launches continue to wait for the real authorization callback.
-      self.permissionEvaluation = { .granted }
+      let bluetoothOffFixture = ProcessInfo.processInfo.arguments.contains(
+        "-beid-bluetooth-off-fixture"
+      )
+      self.permissionEvaluation = { bluetoothOffFixture ? .poweredOff : .granted }
     } else {
       self.permissionEvaluation = permissionEvaluation
     }
     #else
     self.permissionEvaluation = permissionEvaluation
     #endif
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"),
+      ProcessInfo.processInfo.arguments.contains("-beid-account-connected-fixture")
+    {
+      // Display-only Account screenshot fixture. It cannot stand in for a
+      // live connector address on the binding path (beid#315).
+      walletAddress = "0x7aF31234567890abcdef1234567890abcdef9E2b"
+    }
+    #endif
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
+      seedHomeFrameForUITesting()
     }
     sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
@@ -125,6 +164,47 @@ final class AppCoordinator: ObservableObject {
     return ProcessInfo.processInfo.arguments.contains("-beid-ui-test")
     #else
     return false
+    #endif
+  }
+
+  /// Deterministic Home screenshot data, available only to a Debug UI-test
+  /// launch. Production and ordinary Debug launches still read the real
+  /// ProofStore and sensing state. 04 deliberately includes a stored Proof
+  /// for the active event: the Home list must hide that entire event group.
+  private func seedHomeFrameForUITesting() {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test") else { return }
+    let isEvents = arguments.contains("-beid-home-frame-04")
+    let isEmpty = arguments.contains("-beid-home-frame-04b")
+    let isClock = arguments.contains("-beid-home-frame-04c")
+    guard isEvents || isEmpty || isClock else { return }
+
+    walletAddress = "0x7aF3c2D451eA0B7684f6A23D87c9e910f13b9E2b"
+    guard !isEmpty else { return }
+    proofStore.add(Proof(
+      eventName: "DeFi Summit Singapore", date: Date(timeIntervalSince1970: 1_726_315_200),
+      peersVerified: 2, eventCode: "DEFI-SINGAPORE"
+    ))
+    proofStore.add(Proof(
+      eventName: "ETH Denver 2025", date: Date(timeIntervalSince1970: 1_740_751_200),
+      peersVerified: 3, eventCode: "ETH-DENVER"
+    ))
+    proofStore.add(Proof(
+      eventName: "DevCon Bangkok 2025", date: Date(timeIntervalSince1970: 1_763_380_800),
+      peersVerified: 3, eventCode: "DEVCON-BANGKOK"
+    ))
+    proofStore.add(Proof(
+      eventName: "DevCon Bangkok 2025", date: Date(timeIntervalSince1970: 1_763_467_200),
+      peersVerified: 4, eventCode: "DEVCON-BANGKOK"
+    ))
+    proofStore.add(Proof(
+      eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: 1_774_526_400),
+      peersVerified: 4, eventCode: "ACTIVE-EVENT"
+    ))
+    if isEvents {
+      sensingCoordinator.injectHomeRecordingForUITesting()
+    }
     #endif
   }
 
@@ -392,6 +472,16 @@ final class AppCoordinator: ObservableObject {
     )
   }
 
+  /// Home's 04b entry has its own sheet flag so the Account sheet cannot
+  /// race to present its private wrapper for the same coordinator binding.
+  func joinEventFromHomeResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
+    let outcome = await joinEventFromAccountSheetResolvingCanonicalId(code: code)
+    if case .completed(nil) = outcome {
+      homeEventCodeSheetPresented = false
+    }
+    return outcome
+  }
+
   /// Manual rescue from the nearby-event scan surface. It preserves the same
   /// operator-lookup evidence path as every other typed-code join, then starts
   /// sensing inside the already-presented scan flow only after selection
@@ -618,6 +708,21 @@ final class AppCoordinator: ObservableObject {
     // "Sense Event" button into a real-device no-op. This entry point means
     // discovery again: Central-only B005 scanning, with no join or recording.
     sensingCoordinator.startNearbyEventDiscovery()
+  }
+
+  /// Frame 04c moves the clock notice to Home. Other launch points continue
+  /// checking independently because a clock can change after Home appeared.
+  func checkClockOnHome() async {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04") || arguments.contains("-beid-home-frame-04b") {
+      // Screenshot fixtures 04 and 04b represent the no-warning states;
+      // avoid a live network result changing their pixels between runs.
+      return
+    }
+    #endif
+    await clockPreflight.check()
   }
 
   /// Legacy close entry point. It follows the same Proof gate as every new

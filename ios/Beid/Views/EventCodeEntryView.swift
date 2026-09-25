@@ -26,6 +26,9 @@ struct EventCodeEntryView: View {
     /// not shown — the presenting sheet's own Cancel toolbar button is the
     /// escape hatch instead.
     case accountSheet
+    /// Reached from the 04b Home empty state. Shares the existing post-
+    /// onboarding join behavior, but dismisses Home's own sheet on success.
+    case home
     /// Pushed inside `ScanFlowView` as the rescue route when nearby discovery
     /// finds no joinable card. Success keeps the full-screen flow presented,
     /// starts sensing through the existing operator-lookup gate, and pops this
@@ -128,6 +131,8 @@ struct EventCodeEntryView: View {
         outcome = await coordinator.joinEventResolvingCanonicalId(code: submittedCode)
       case .accountSheet:
         outcome = await coordinator.joinEventFromAccountSheetResolvingCanonicalId(code: submittedCode)
+      case .home:
+        outcome = await coordinator.joinEventFromHomeResolvingCanonicalId(code: submittedCode)
       case .scanFlow:
         outcome = await coordinator.joinEventFromScanFlowResolvingCanonicalId(code: submittedCode)
       }

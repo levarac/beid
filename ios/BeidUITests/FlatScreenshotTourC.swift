@@ -34,7 +34,7 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10), file: file, line: line)
     allowBluetooth.tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 10), file: file, line: line)
     senseEvent.tap()
 

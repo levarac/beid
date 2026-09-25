@@ -93,21 +93,19 @@ struct BeidPrimaryButton: View {
 
   var body: some View {
     Button(action: performAction, label: label)
-      .buttonStyle(.borderedProminent)
-      .buttonBorderShape(.roundedRectangle(radius: DS.Radius.control))
-      .controlSize(.large)
+      .buttonStyle(.plain)
   }
 
   private func label() -> some View {
     Text(title)
       .font(DS.Font.cta)
-      // The label color is set explicitly rather than left to the prominent
-      // style's default: DESIGN.md §5 pairs every fill with an on-fill label
-      // token. The default fits the actionPrimary fill; a call site with an
-      // actionInverse fill passes labelOnActionInverse.
+      // DESIGN.md §5 pairs the actionPrimary fill with its on-fill label.
+      // Keep the existing labelColor override for callers that supply one.
       .foregroundStyle(labelColor)
       .frame(maxWidth: .infinity)
-      .frame(minHeight: 52)
+      .frame(minHeight: DS.Size.primaryButtonMinHeight)
+      .background(DS.Color.actionPrimary, in: Capsule())
+      .contentShape(Capsule())
   }
 
   private func performAction() {

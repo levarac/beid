@@ -550,7 +550,7 @@ struct SensingSessionSurface: View {
               mutualDeviceCount: Int(sensing.sessionAggregate?.mutualDeviceCount ?? 0),
               observedWindowCount: observedWindowCount ?? 0,
               showsEdges: presentation.showsEdges,
-              size: min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin)
+              size: max(0, min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin))
             )
             // Keep the measured radar centered without widening the inset content.
             .frame(width: contentWidth)
@@ -730,12 +730,13 @@ struct SensingWindowBars: View {
   var body: some View {
     VStack(spacing: DS.Space.s) {
       GeometryReader { geometry in
-        HStack(alignment: .bottom, spacing: DS.Space.s) {
+        let barGap: CGFloat = 6
+        HStack(alignment: .bottom, spacing: barGap) {
           ForEach(0..<6, id: \.self) { index in
             Rectangle()
               .fill(color(at: index))
               .frame(
-                width: (geometry.size.width - DS.Space.s * 5) / 6,
+                width: max(0, (geometry.size.width - barGap * 5) / 6),
                 height: height(at: index)
               )
           }

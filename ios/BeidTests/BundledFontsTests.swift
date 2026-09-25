@@ -4,7 +4,7 @@
 import UIKit
 import XCTest
 
-/// Pins the four Flat 2b typefaces bundled and registered in `project.yml`
+/// Pins the eight Flat 2b font files bundled and registered in `project.yml`
 /// (beid#629). Every expected name is a literal, never read back from
 /// `Bundle.main` or from the code under test. BeidTests is hosted by the
 /// Beid app (`TEST_HOST = $(BUILT_PRODUCTS_DIR)/Beid.app/Beid`), so
@@ -16,7 +16,11 @@ final class BundledFontsTests: XCTestCase {
   /// while `UIFont(name:)` and `Font.custom` take PostScript names, and a
   /// mismatch between the two is invisible until a glyph renders wrong.
   private let expectedFaces: [(postScriptName: String, fileName: String)] = [
-    ("BricolageGrotesque-ExtraBold", "BricolageGrotesque-ExtraBold.ttf"),
+    ("BricolageGrotesque-Display60ExtraBold", "BricolageGrotesque-Display60ExtraBold.ttf"),
+    ("BricolageGrotesque-Display52ExtraBold", "BricolageGrotesque-Display52ExtraBold.ttf"),
+    ("BricolageGrotesque-Display46ExtraBold", "BricolageGrotesque-Display46ExtraBold.ttf"),
+    ("BricolageGrotesque-Display40ExtraBold", "BricolageGrotesque-Display40ExtraBold.ttf"),
+    ("BricolageGrotesque-Display34ExtraBold", "BricolageGrotesque-Display34ExtraBold.ttf"),
     ("DMSans-Bold", "DMSans-Bold.ttf"),
     ("DMSans-Regular", "DMSans-Regular.ttf"),
     ("DMMono-Medium", "DMMono-Medium.ttf"),
@@ -57,12 +61,16 @@ final class BundledFontsTests: XCTestCase {
   /// `UIAppFonts` is what makes the files above loadable at all, so it is
   /// pinned exactly: a missing entry breaks a face, and an extra one names a
   /// file that is not there.
-  func testUIAppFontsListsExactlyTheFourBundledFontFiles() {
+  func testUIAppFontsListsExactlyTheEightBundledFontFiles() {
     let registered = Bundle.main.object(forInfoDictionaryKey: "UIAppFonts") as? [String]
     XCTAssertEqual(
       registered,
       [
-        "BricolageGrotesque-ExtraBold.ttf",
+        "BricolageGrotesque-Display60ExtraBold.ttf",
+        "BricolageGrotesque-Display52ExtraBold.ttf",
+        "BricolageGrotesque-Display46ExtraBold.ttf",
+        "BricolageGrotesque-Display40ExtraBold.ttf",
+        "BricolageGrotesque-Display34ExtraBold.ttf",
         "DMSans-Bold.ttf",
         "DMSans-Regular.ttf",
         "DMMono-Medium.ttf",
