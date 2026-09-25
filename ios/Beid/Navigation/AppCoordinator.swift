@@ -46,6 +46,9 @@ final class AppCoordinator: ObservableObject {
   /// assign it directly) and is never read on that path.
   @Published private(set) var liveWalletAddress: LiveWalletAddress?
   @Published var scanPresented = false
+  @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
+  @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
+  @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
@@ -703,7 +706,17 @@ final class AppCoordinator: ObservableObject {
   }
 
   func startScan() {
+    stopConfirmSnapshot = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
     scanPresented = true
+    #if DEBUG
+    if sensingCoordinator.injectSensingScreenshotFixture() {
+      // Gated by -beid-ui-test and a known frame code inside the fixture.
+      // A tour capture must not race a network clock check or BLE discovery.
+      return
+    }
+    #endif
     Task { await clockPreflight.check() }
 #if DEBUG
     if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
@@ -742,11 +755,116 @@ final class AppCoordinator: ObservableObject {
     await clockPreflight.check()
   }
 
+  /// Legacy close entry point. It follows the same Proof gate as every new
+  /// caller, so no caller can bypass the confirmation for an actual Proof.
   func finishScan() {
+    requestScanClose()
+  }
+
+  private func resetAndDismissScan() {
+    stopConfirmSnapshot = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
     sensingCoordinator.reset()
+  }
+
+  /// Stream B/D can call this same entry point as the scan toolbar, even if
+  /// the scan cover is not currently presented; a Proof opens it on 05e. A
+  /// confirmation is possible only when this session's Proof is actually in
+  /// ProofStore; prejoin CLOSE keeps the existing direct reset behavior.
+  func requestScanClose() {
+    guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
+      stopConfirmSnapshot == nil else { return }
+    guard let proofID = sensingCoordinator.currentProofID,
+      proofStore.proof(withId: proofID) != nil
+    else {
+      resetAndDismissScan()
+      return
+    }
+    let event: EventSession
+    switch sensingCoordinator.phase {
+    case .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+      event = currentEvent
+    case .idle, .sensing, .eventFound:
+      resetAndDismissScan()
+      return
+    }
+    stopConfirmSnapshot = SensingStopConfirmSnapshot(
+      proofID: proofID,
+      event: event
+    )
+    scanPresented = true
+  }
+
+  func keepSensing() {
+    stopConfirmSnapshot = nil
+  }
+
+  /// The single CLOSE finalization entry. Clear the pending confirmation
+  /// before resetting so a repeated tap cannot finalize a second time.
+  /// `reset()` preserves automatic engine operation, unlike `stopSensing()`.
+  /// A nil return means no signed self-proof was produced; the existing
+  /// Proof remains kept, but we dismiss without claiming it was sealed.
+  func confirmStopSensing() {
+    guard let snapshot = stopConfirmSnapshot, let proofID = snapshot.proofID else { return }
+    stopConfirmSnapshot = nil
+    guard sensingCoordinator.currentProofID == proofID else {
+      // A newer session may have taken this slot while 05e was open. Keep
+      // that live session visible; only an externally reset session exits.
+      if sensingCoordinator.currentProofID == nil { scanPresented = false }
+      return
+    }
+    guard proofStore.proof(withId: proofID) != nil else {
+      // Still sensing, but the record vanished: return to the live screen
+      // without finalizing or making a sealed claim.
+      return
+    }
+    let aggregate = sensingCoordinator.sessionAggregate
+    let detectedDeviceCount = sensingCoordinator.devicesVerified
+    let firstSightingAt = sensingCoordinator.firstSightingAt
+    cancelPendingJoinAttempt()
+    sensingCoordinator.stopNearbyEventDiscovery()
+    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
+    let selfProof = sensingCoordinator.reset()
+    guard selfProof?.proofId == proofID else {
+      scanPresented = false
+      return
+    }
+    sealedSnapshot = SensingSealedSnapshot(
+      recordID: proofID,
+      event: snapshot.event,
+      aggregate: aggregate,
+      detectedDeviceCount: detectedDeviceCount,
+      firstSightingAt: firstSightingAt,
+      sealedAt: sealedAt
+    )
+  }
+
+  /// DONE advances from the sealed frame to persistent frame 07. The record
+  /// is looked up again so its fields come from the actual stored Proof.
+  func doneWithSealedRecord() {
+    guard let sealedSnapshot, let recordID = sealedSnapshot.recordID else { return }
+    guard let proof = proofStore.proof(withId: recordID) else {
+      // A record removed since finalization cannot support frame 07's claim.
+      self.sealedSnapshot = nil
+      scanPresented = false
+      return
+    }
+    proofCollectedSnapshot = ProofCollectedSnapshot(
+      proof: proof,
+      detectedPeerCount: sealedSnapshot.detectedDeviceCount,
+      observedWindowCount: sealedSnapshot.aggregate.map { Int($0.windowCount) }
+    )
+    self.sealedSnapshot = nil
+  }
+
+  func viewCollectionAfterProofCollected() {
+    guard proofCollectedSnapshot != nil else { return }
+    proofCollectedSnapshot = nil
+    scanPresented = false
   }
 
   // MARK: - Item detail

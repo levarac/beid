@@ -77,9 +77,8 @@ final class BeidBackNavigationUITests: XCTestCase {
   // step for step. They are copied rather than shared because those are
   // `private` to that class; if the seeding route changes, both must change.
 
-  /// Joins the DemoEvent event and waits until `.recording` begins.
-  /// "Simulate Signal Lost" existing is the earliest reliable signal of that
-  /// — see the comment on `BeidIPadLayoutTests.capturePrimaryFlow`.
+  /// Joins the DemoEvent event, then declines the automatic binding sheet so
+  /// the live Recording controls are hittable.
   private func reachRecordingScreen() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
@@ -91,16 +90,33 @@ final class BeidBackNavigationUITests: XCTestCase {
     let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
 
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    dismissBindingSheetToReachLiveRecording()
+  }
+
+  private func dismissBindingSheetToReachLiveRecording() {
+    let cancel = app.buttons["Cancel"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
+    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
+    cancel.tap()
+    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Close"].isHittable, "Live recording Close must be tappable")
   }
 
   /// Ends that session, landing on Collection with the resulting proof.
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
     app.buttons["Close"].tap()
+    XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
+    app.buttons["Stop and keep record"].tap()
+    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    app.buttons["Done"].tap()
+    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    app.buttons["View collection"].tap()
 
     XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
   }

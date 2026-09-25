@@ -1916,7 +1916,98 @@
           }
         }
       }
-    }
+    },
+    "A saved pack is checked again every time it is loaded.": {},
+    "Asked to broadcast": {
+      "comment": "The radio request was made; the system has not confirmed that the device is on air."
+    },
+    "Asked to broadcast. The system has not confirmed it is on air.": {},
+    "beid does not have camera access, so it cannot scan. Turn it on in Settings, or paste the link instead.": {},
+    "Broadcasting could not start.": {},
+    "Broadcasting until 18:00": {},
+    "Camera access is on, but scanning is unavailable on this device — a Screen Time restriction can do this. Paste the link instead.": {},
+    "Camera could not start": {},
+    "Camera ready": {},
+    "Cannot broadcast": {},
+    "Checked. Deciding whether it can broadcast now.": {},
+    "Checking pack": {},
+    "Checking permission": {},
+    "Checking the pack.": {},
+    "Copy event ID": {
+      "comment": "Button: copies the full, unshortened event identifier to the system clipboard."
+    },
+    "Event": {},
+    "Event ID": {},
+    "Fetching the pack took too long. Check the network and try again.": {},
+    "Getting pack": {},
+    "Getting the pack.": {},
+    "iOS only": {},
+    "Link": {},
+    "Link names no source": {},
+    "Load a signed pack, check it, then broadcast it.": {},
+    "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
+    "No camera access": {},
+    "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
+    "Not a venue link": {},
+    "Not broadcasting": {},
+    "Not saved": {},
+    "Organizer": {},
+    "Pack rejected": {},
+    "Pack unavailable": {},
+    "Paste": {
+      "comment": "Button: reads a venue link from the system clipboard after a user tap."
+    },
+    "Paste the link": {},
+    "Paste venue link": {},
+    "Point at the organiser's QR code": {},
+    "Radio stopped": {},
+    "Scan QR code": {},
+    "Scanning unavailable": {},
+    "Source not supported": {},
+    "Stop broadcasting": {},
+    "That address sent us somewhere else, so it was not followed.": {},
+    "That file is larger than a pack may be.": {},
+    "That is not a venue link. Paste the whole link, including everything after the #.": {},
+    "The camera could not start. Paste the link instead.": {},
+    "The camera is ready.": {},
+    "The event record could not be reached, so it is unknown whether this may broadcast.": {},
+    "The event record could not be reached, so the pack was not checked.": {},
+    "The link and the pack do not agree. Ask the organiser for a current link.": {},
+    "The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "The pack could not be fetched.": {},
+    "The pack is not for the event this link named.": {},
+    "The part of this pack covering right now did not check out.": {},
+    "The radio refused this pack and nothing is going out.": {},
+    "This device cannot scan QR codes. Paste the link instead.": {},
+    "This device's clock is unavailable, so broadcasting cannot be scheduled.": {},
+    "This event has been updated. Ask the organiser for a current link.": {},
+    "This event has no record on chain.": {},
+    "This event needs an entry code. Broadcasting those is not supported yet.": {},
+    "This event's details were rejected.": {},
+    "This link names an event but does not say where to get its pack.": {},
+    "This link points somewhere this app cannot fetch from.": {},
+    "This pack came from a different event record than the one this app is set up for.": {},
+    "This pack could not be read.": {},
+    "This pack could not be saved. It stays on this device only until the app closes.": {},
+    "This pack covers no part of right now.": {},
+    "This pack is for a network this app does not support.": {},
+    "This pack's current period has ended. Refresh it.": {},
+    "Tools for the venue side. Attendees never need these.": {},
+    "Until": {},
+    "Use this link": {},
+    "Venue\nbroadcast": {
+      "comment": "Two-line heading for the venue operator broadcast screen."
+    },
+    "Organizer tools · iOS only": {},
+    "Cancel scan": {
+      "comment": "VoiceOver label for the scanner sheet Cancel control."
+    },
+    "The system has not confirmed it is on air.": {
+      "comment": "Venue radio disclosure: a request was sent to the system, but no confirmation of actual airtime is available."
+    },
+    "Stopped": {},
+    "Waiting for Bluetooth": {},
+    "A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.": {}
   },
   "version": "1.0"
 }
