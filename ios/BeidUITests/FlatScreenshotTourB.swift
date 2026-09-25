@@ -20,6 +20,9 @@ final class FlatScreenshotTourB: XCTestCase {
       app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETH Tokyo 2026")).firstMatch.exists,
       "The active Proof must not also appear as a PAST row"
     )
+    let stopSensing = app.buttons["collection.stop-sensing"]
+    XCTAssertTrue(stopSensing.waitForExistence(timeout: 5))
+    XCTAssertTrue(stopSensing.isHittable, "The live Stop control must clear the fixed Scan button")
     capture("04")
   }
 

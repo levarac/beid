@@ -96,23 +96,29 @@ private struct CollectionHomeContent: View {
                 coordinator.dailySummaryPresented = true
               }
               .padding(.top, DS.Space.s)
-
-              ContinuousSensingStatus(sensing: sensing)
-                .padding(.top, DS.Space.m)
             }
             .padding(.horizontal, DS.Space.pageMargin)
             .padding(.top, DS.Space.s)
+            .padding(.bottom, DS.Space.s)
           }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+          BeidAdaptiveContent(regularMaxWidth: DS.Layout.collectionContentMaxWidth) {
+            VStack(spacing: 0) {
+              if sensing.isScanning || sensing.isAdvertising {
+                ContinuousSensingStatus(sensing: sensing)
+                  .padding(.bottom, DS.Space.s)
+              }
+              scanButton
+                .padding(.bottom, DS.Space.s)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, DS.Space.pageMargin)
+          }
+          .background(DS.Color.surfaceCanvas)
         }
       }
       .toolbar(.hidden, for: .navigationBar)
-      .safeAreaInset(edge: .bottom) {
-        BeidAdaptiveContent {
-          scanButton
-            .padding(.vertical, DS.Space.s)
-        }
-        .background(DS.Color.surfaceCanvas)
-      }
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
           .environmentObject(coordinator)
