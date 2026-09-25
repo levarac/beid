@@ -29,6 +29,10 @@
     "Connected": {},
     "Connecting to wallet…": {},
     "Connection failed": {},
+    "Could not join event": {
+      "comment": "Generic manual event join failure label. A failed join does not prove that the code was unrecognized."
+    },
+    "Codes are case-insensitive": {},
     "Copy": {
       "comment": "Button on the Account sheet: copies the connected wallet address to the clipboard. Verb, not a noun or a generic duplicate action.",
       "localizations": {
@@ -93,6 +97,7 @@
     "Done": {},
     "Enable Bluetooth": {},
     "Enter Event Code": {},
+    "Enter\nevent code": {},
     "Enter an event code to continue. Ask the event organizer for it.": {},
     "Enter event code instead": {},
     "ETHGlobal Tokyo": {
@@ -165,6 +170,9 @@
     },
     "Event code": {
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join."
+    },
+    "Event code required": {
+      "comment": "Error label shown when Join Event is pressed without an event code."
     },
     "Events find you": {},
     "Get MetaMask": {
@@ -377,7 +385,14 @@
       }
     },
     "Open Settings": {},
+    "Only needed if an event didn’t appear automatically. Ask the organizer for the code.": {},
     "Pairing URI": {},
+    "Paste": {
+      "comment": "Button that inserts the clipboard text into the event-code field."
+    },
+    "Paste event code": {
+      "comment": "VoiceOver label for the event-code clipboard action."
+    },
     "Peers": {},
     "Privacy": {},
     "Private by design": {},

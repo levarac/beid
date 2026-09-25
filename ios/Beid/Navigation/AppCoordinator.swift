@@ -4,6 +4,26 @@
 import BeidSharedKit
 import Foundation
 
+#if DEBUG
+/// Two screenshot-only samples; production code never compiles this type.
+enum EventCodeScreenshotFixture {
+  case entry
+  case error
+
+  var code: String {
+    switch self {
+    case .entry: return "ETH-TOKYO-26"
+    case .error: return "ETH-TOKY0-26"
+    }
+  }
+
+  var hasError: Bool {
+    if case .error = self { return true }
+    return false
+  }
+}
+#endif
+
 /// Root state machine for onboarding + the collection home. Order of the
 /// wallet step is decided once at init from `OnboardingMode.current`; see
 /// README "Onboarding flag".
@@ -39,6 +59,18 @@ final class AppCoordinator: ObservableObject {
   private let permissionEvaluation: (() async -> BluetoothAuthorizationState)?
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
+
+  #if DEBUG
+  /// Screen 13/13b samples are reachable only by UI tests bearing both the
+  /// general test gate and the frame-specific launch argument.
+  nonisolated static var eventCodeScreenshotFixture: EventCodeScreenshotFixture? {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test") else { return nil }
+    if arguments.contains("-beid-shot-13b") { return .error }
+    if arguments.contains("-beid-shot-13") { return .entry }
+    return nil
+  }
+  #endif
 
   /// `registryClient` defaults to the production, Info.plist-driven
   /// resolution (`RegistryDependencies.createClient()`), evaluated fresh at

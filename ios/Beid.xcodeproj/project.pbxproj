@@ -64,6 +64,7 @@
 		2F36014D656BCE29F29D3F19 /* VenueSignedServingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5157DE43C6934B2D9C92AC3 /* VenueSignedServingView.swift */; };
 		2F98E9B2465705813B204FEE /* PastEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E3EC74423D098E4990BF12 /* PastEventsView.swift */; };
 		3017F3A68EBE11B85517A5AA /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F079463118A0C298F6C6BCEA /* Colors.xcassets */; };
+		30C9614DEA2F505D90FFFA41 /* FlatScreenshotTourA.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE1B81EFECE0C1E386CE9F58 /* FlatScreenshotTourA.swift */; };
 		3116FAC12C905DDC8829DF22 /* BluetoothDeniedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */; };
 		31CE600EA10E59FFD728B074 /* full-schedule.venue-handoff.hex in Resources */ = {isa = PBXBuildFile; fileRef = 6D2D84FE7BCBF4F102CD3D7E /* full-schedule.venue-handoff.hex */; };
 		31ED6E4C0D3E950B31987CE1 /* RecordSchemaEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */; };
@@ -543,6 +544,7 @@
 		BCCD629A370893E26EFAC785 /* SigilView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SigilView.swift; sourceTree = "<group>"; };
 		BD44A5AAE447B59BE320F525 /* VenueServingContractFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueServingContractFixture.swift; sourceTree = "<group>"; };
 		BD9B7C6DE5F7BB377D9B140B /* RecordSchemaEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSchemaEnvelope.swift; sourceTree = "<group>"; };
+		BE1B81EFECE0C1E386CE9F58 /* FlatScreenshotTourA.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlatScreenshotTourA.swift; sourceTree = "<group>"; };
 		BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofTests.swift; sourceTree = "<group>"; };
 		C0412932757042A17306C358 /* RegistryDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegistryDependencies.swift; sourceTree = "<group>"; };
 		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
@@ -743,6 +745,7 @@
 				D2FADCDE81137644238447E2 /* ContinuousSensingIndicatorUITests.swift */,
 				29B97F1CE6BE6E1A98E511D8 /* EventIdentityVerificationUITests.swift */,
 				6E780A92E950897B45BD16BD /* EventMembershipUITests.swift */,
+				BE1B81EFECE0C1E386CE9F58 /* FlatScreenshotTourA.swift */,
 				FC8CA45932A23FDA03ED6137 /* JoinRefusalUITests.swift */,
 				CADBE5E0B665DA97DF1CF7B6 /* RecordingBindingSheetUITests.swift */,
 				50415C0B040C5C474720CB32 /* SingleAppearanceUITests.swift */,
@@ -1303,6 +1306,7 @@
 				BFBC6182C8C422DF5DC18011 /* ContinuousSensingIndicatorUITests.swift in Sources */,
 				40B872B82F4E3D4FEB48C9C0 /* EventIdentityVerificationUITests.swift in Sources */,
 				A270412A7278D241A8A344C7 /* EventMembershipUITests.swift in Sources */,
+				30C9614DEA2F505D90FFFA41 /* FlatScreenshotTourA.swift in Sources */,
 				14F5181A7A905DE6BDFD01EA /* JoinRefusalUITests.swift in Sources */,
 				6A599DE79B7D6BFF11C01F49 /* RecordingBindingSheetUITests.swift in Sources */,
 				A5EFB243526D6924B932CA17 /* SingleAppearanceUITests.swift in Sources */,
