@@ -122,10 +122,7 @@ private struct CollectionHomeContent: View {
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
           .environmentObject(coordinator)
-          // PM build #2 measured the top at y≈437 versus Figma y=400. The
-          // larger detent lifts it while Account's top content margin keeps
-          // the already-aligned wallet block in place.
-          .presentationDetents([.fraction(0.575)])
+          // Account owns its compact/large detent as destinations are pushed.
           .presentationDragIndicator(.visible)
           // Sheets don't inherit the presenter's .tint (unlike push
           // navigation) — without this, the Done/Connect Wallet buttons

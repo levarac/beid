@@ -65,6 +65,107 @@ final class FlatScreenshotTourD: XCTestCase {
     assertMinimumHitTarget(copied)
   }
 
+  func testShot_14_OrganizerTools() {
+    openOrganizer()
+    let route = app.buttons["organizer.venueBroadcast"]
+    _ = route.waitForExistence(timeout: 5)
+    attachScreenshot("14")
+    assertMinimumHitTarget(route)
+    XCTAssertEqual(route.value as? String, "Not broadcasting")
+  }
+
+  func testShot_14b_VenueBroadcast() {
+    openVenue(frame: "14b")
+    attachScreenshot("14b")
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].exists)
+  }
+
+  func testShot_14d_ScanQR() {
+    openVenue(frame: "14d")
+    app.buttons["Scan QR code"].tap()
+    _ = app.staticTexts["venue.scanner.title"].waitForExistence(timeout: 5)
+    attachScreenshot("14d")
+    XCTAssertTrue(app.staticTexts["venue.scanner.title"].exists)
+    assertMinimumHitTarget(app.buttons["Cancel scan"])
+    XCTAssertTrue(app.staticTexts["venue.scanner.caption"].exists)
+  }
+
+  func testShot_14e_InvalidLink() {
+    assertVenueFrame("14e", outcome: "Not a venue link")
+  }
+
+  func testShot_14e2_NoSource() {
+    assertVenueFrame("14e2", outcome: "Link names no source")
+  }
+
+  func testShot_14e3_UnsupportedSource() {
+    assertVenueFrame("14e3", outcome: "Source not supported")
+  }
+
+  func testShot_14f_NoCameraAccess() {
+    openVenue(frame: "14f")
+    attachScreenshot("14f")
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts["NO CAMERA ACCESS"].exists)
+    let openSettings = openSettingsControl
+    XCTAssertTrue(openSettings.exists)
+    XCTAssertTrue(openSettings.elementType == .button || openSettings.elementType == .link)
+    XCTAssertTrue(openSettings.isHittable)
+    assertMinimumHitTarget(openSettings)
+  }
+
+  func testShot_14f2_ScanningUnavailable() {
+    assertVenueFrame("14f2", outcome: "Scanning unavailable")
+    XCTAssertFalse(openSettingsControl.exists)
+  }
+
+  func testShot_14f3_CameraCouldNotStart() {
+    assertVenueFrame("14f3", outcome: "Camera could not start")
+    XCTAssertFalse(openSettingsControl.exists)
+  }
+
+  func testShot_14g_NotSaved() {
+    assertVenueFrame("14g", outcome: "Not saved")
+  }
+
+  private func assertVenueFrame(_ code: String, outcome: String) {
+    openVenue(frame: code)
+    attachScreenshot(code)
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts[outcome.uppercased()].exists)
+  }
+
+  private func assertVenueControls() {
+    assertMinimumHitTarget(app.buttons["Paste venue link"])
+    assertMinimumHitTarget(app.buttons["Use this link"])
+    assertMinimumHitTarget(app.buttons["Scan QR code"])
+    assertMinimumHitTarget(app.buttons["Copy event ID"])
+    assertMinimumHitTarget(app.buttons["Stop broadcasting"])
+    XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
+  }
+
+  private var openSettingsControl: XCUIElement {
+    app.descendants(matching: .any).matching(identifier: "Open Settings").firstMatch
+  }
+
+  private func openOrganizer(extraArguments: [String] = []) {
+    openAccount(extraArguments: extraArguments)
+    let organizer = app.buttons["Organizer tools"]
+    XCTAssertTrue(organizer.waitForExistence(timeout: 5))
+    organizer.tap()
+    XCTAssertTrue(app.buttons["organizer.venueBroadcast"].waitForExistence(timeout: 5))
+  }
+
+  private func openVenue(frame: String) {
+    openOrganizer(extraArguments: ["-beid-venue-frame", frame])
+    app.buttons["organizer.venueBroadcast"].tap()
+    let scan = app.buttons["Scan QR code"]
+    XCTAssertTrue(scan.waitForExistence(timeout: 5))
+    let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: scan)
+    XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
+  }
+
   private func openAccount(extraArguments: [String] = []) {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
     app.launch()
@@ -86,7 +187,8 @@ final class FlatScreenshotTourD: XCTestCase {
 
   private func assertMinimumHitTarget(_ control: XCUIElement) {
     XCTAssertTrue(control.exists)
-    XCTAssertGreaterThanOrEqual(control.frame.width, 44)
-    XCTAssertGreaterThanOrEqual(control.frame.height, 44)
+    // CoreGraphics can represent an exact 44pt frame as 43.99999999999994.
+    XCTAssertGreaterThanOrEqual(control.frame.width + 0.01, 44)
+    XCTAssertGreaterThanOrEqual(control.frame.height + 0.01, 44)
   }
 }
