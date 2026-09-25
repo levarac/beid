@@ -163,7 +163,7 @@ private struct CollectionHomeContent: View {
       .navigationDestination(item: $selectedEvent) { card in
         EventDetailView(
           representative: card.representative, sensing: sensing, proofStore: proofStore,
-          submissionStore: coordinator.eventDetailSubmissionStore
+          submissionStore: coordinator.reportSubmissionStore
         )
           .toolbar(.visible, for: .navigationBar)
       }

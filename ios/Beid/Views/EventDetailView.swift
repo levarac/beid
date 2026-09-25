@@ -10,19 +10,19 @@ struct EventDetailView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject private var sensing: SensingCoordinator
   @ObservedObject private var proofStore: ProofStore
-  @StateObject private var submissionStore: ReportSubmissionStore
+  @ObservedObject private var submissionStore: ReportSubmissionStore
   let representative: Proof
 
   init(
     representative: Proof,
     sensing: SensingCoordinator,
     proofStore: ProofStore,
-    submissionStore: ReportSubmissionStore? = nil
+    submissionStore: ReportSubmissionStore
   ) {
     self.representative = representative
     self.sensing = sensing
     self.proofStore = proofStore
-    self._submissionStore = StateObject(wrappedValue: submissionStore ?? ReportSubmissionStore())
+    self._submissionStore = ObservedObject(wrappedValue: submissionStore)
   }
 
   private var sessions: [Proof] {
@@ -217,22 +217,32 @@ struct EventDetailView: View {
   }
 
   private func reportRow(index: Int, record: ReportSubmissionRecord) -> some View {
-    VStack(alignment: .leading, spacing: DS.Space.xs) {
-      HStack {
-        Text(reportTitle(index))
-          .beidTextStyle(DS.Font.Library.title15)
-          .foregroundStyle(DS.Color.textPrimary)
-        Spacer(minLength: DS.Space.s)
-        Text(reportStatus(record))
-          .beidTextStyle(DS.Font.Library.labelMono10)
-          .foregroundStyle(DS.Color.textPrimary)
+    NavigationLink {
+      ReportDetailView(
+        recordID: record.id, reportIndex: index, submissionStore: submissionStore
+      )
+      .toolbar(.visible, for: .navigationBar)
+    } label: {
+      VStack(alignment: .leading, spacing: DS.Space.xs) {
+        HStack {
+          Text(reportTitle(index))
+            .beidTextStyle(DS.Font.Library.title15)
+            .foregroundStyle(DS.Color.textPrimary)
+          Spacer(minLength: DS.Space.s)
+          Text(reportStatus(record))
+            .beidTextStyle(DS.Font.Library.labelMono10)
+            .foregroundStyle(DS.Color.textPrimary)
+        }
+        Text(reportMetadata(record))
+          .beidTextStyle(DS.Font.Library.labelMono10Tight)
+          .foregroundStyle(DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
-      Text(reportMetadata(record))
-        .beidTextStyle(DS.Font.Library.labelMono10Tight)
-        .foregroundStyle(DS.Color.textSecondary)
-        .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: .infinity, minHeight: DS.Size.reportRowMinHeight, alignment: .leading)
+      .contentShape(Rectangle())
     }
-    .frame(maxWidth: .infinity, minHeight: DS.Size.reportRowMinHeight, alignment: .leading)
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("event-detail.report.\(record.id.uuidString)")
   }
 
   private func reportTitle(_ index: Int) -> String {

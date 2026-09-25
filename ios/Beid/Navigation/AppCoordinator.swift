@@ -52,8 +52,8 @@ final class AppCoordinator: ObservableObject {
 
   let onboardingMode = OnboardingMode.current
   let proofStore: ProofStore
-  /// Only non-nil for isolated, Debug UI-test Event Detail frames.
-  private(set) var eventDetailSubmissionStore: ReportSubmissionStore?
+  /// Shared by the report producer and every reader in this app process.
+  let reportSubmissionStore: ReportSubmissionStore
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
   let bluetoothMonitor: BluetoothMonitor
@@ -76,14 +76,36 @@ final class AppCoordinator: ObservableObject {
     walletConnector: (any WalletConnector)? = nil,
     proofStore: ProofStore? = nil,
     sensingCoordinator: SensingCoordinator? = nil,
+    reportSubmissionStore: ReportSubmissionStore? = nil,
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
     permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil
   ) {
     let bluetoothMonitor = BluetoothMonitor()
+    let reportStore: ReportSubmissionStore
+    #if DEBUG
+    let reportArguments = ProcessInfo.processInfo.arguments
+    if reportArguments.contains("-beid-ui-test") &&
+      (reportArguments.contains("-beid-event-detail-frame-08") ||
+        reportArguments.contains("-beid-event-detail-frame-08c"))
+    {
+      // Screenshot records stay in an isolated file that normal launches cannot read.
+      let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "beid-event-detail-reports-\(UUID().uuidString).json"
+      )
+      reportStore = ReportSubmissionStore(fileURL: reportURL)
+    } else {
+      reportStore = reportSubmissionStore ?? ReportSubmissionStore()
+    }
+    #else
+    reportStore = reportSubmissionStore ?? ReportSubmissionStore()
+    #endif
     self.registryClient = registryClient
-    self.sensingCoordinator = sensingCoordinator ?? SensingCoordinator(registryClient: registryClient)
+    self.reportSubmissionStore = reportStore
+    self.sensingCoordinator = sensingCoordinator ?? SensingCoordinator(
+      registryClient: registryClient, reportSubmissionStore: reportStore
+    )
     #if DEBUG
     let arguments = ProcessInfo.processInfo.arguments
     if arguments.contains("-beid-ui-test"), arguments.contains("-beid-home-frame-04c") {
@@ -233,12 +255,6 @@ final class AppCoordinator: ObservableObject {
     let noReports = arguments.contains("-beid-event-detail-frame-08c")
     guard hasReport || noReports else { return }
 
-    let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "beid-event-detail-reports-\(UUID().uuidString).json"
-    )
-    let reportStore = ReportSubmissionStore(fileURL: reportURL)
-    eventDetailSubmissionStore = reportStore
-
     let eventCode = "ETHTOKYO2026"
     let starts: [TimeInterval] = [1_774_486_920, 1_774_498_500, 1_774_510_200]
     let deviceCounts = [23, 18, 31]
@@ -274,7 +290,7 @@ final class AppCoordinator: ObservableObject {
         createdAt: Date(timeIntervalSince1970: starts[0])
       )
       do {
-        try reportStore.add(record)
+        try reportSubmissionStore.add(record)
       } catch {
         assertionFailure("Unable to seed isolated Event Detail submission fixture: \(error)")
       }

@@ -12,6 +12,36 @@ final class FlatScreenshotTourD: XCTestCase {
     continueAfterFailure = false
   }
 
+  func testShot_12_ReportDetail() {
+    app.launchArguments = ["-beid-ui-test", "-beid-event-detail-frame-08"]
+    app.launch()
+    let getStarted = app.buttons["Get Started"]
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
+    getStarted.tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+    allowBluetooth.tap()
+
+    let event = app.buttons["home.past-event.ETHTOKYO2026"]
+    XCTAssertTrue(event.waitForExistence(timeout: 5))
+    event.tap()
+    let report = app.buttons["event-detail.report.00000000-0000-4000-8000-000000000639"]
+    for _ in 0..<5 where !report.isHittable { app.swipeUp() }
+    XCTAssertTrue(report.waitForExistence(timeout: 5))
+    XCTAssertTrue(report.isHittable)
+    report.tap()
+
+    let heading = app.staticTexts["report-detail.heading"]
+    _ = heading.waitForExistence(timeout: 5)
+    attachScreenshot("12")
+    XCTAssertEqual(heading.label, "Report #1")
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON DEVICE"))
+    XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
+    XCTAssertFalse(app.staticTexts.matching(
+      NSPredicate(format: "label CONTAINS[c] %@", "verified")
+    ).firstMatch.exists)
+  }
+
   func testShot_10_Account() {
     openAccount()
     let copy = app.buttons["Copy address"]

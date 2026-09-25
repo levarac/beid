@@ -1110,7 +1110,8 @@ final class SensingCoordinator: ObservableObject {
 
   convenience init(
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
-      RegistryDependencies.createClient()
+      RegistryDependencies.createClient(),
+    reportSubmissionStore: ReportSubmissionStore? = nil
   ) {
     let sensingCryptography = BarnardSensingCryptography()
     let allowInsecureLoopbackForTests: Bool
@@ -1150,6 +1151,7 @@ final class SensingCoordinator: ObservableObject {
             allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
           )
         },
+        store: reportSubmissionStore,
         allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
       ),
       eventIdentityVerificationSource: registryClient.map {
