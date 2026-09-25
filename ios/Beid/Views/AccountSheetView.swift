@@ -18,7 +18,12 @@ struct AccountSheetView: View {
   var body: some View {
     NavigationStack {
       List {
-        AccountSheetRow(minHeight: DS.Space.xxl * 2, hasDivider: !showDisconnectConfirmation) {
+        // With the taller detent and top space for Done, this 116pt wallet
+        // row places its divider near Figma's y=540 without moving the text.
+        AccountSheetRow(
+          minHeight: DS.Space.xxl * 2 + DS.Space.m + DS.Space.xs,
+          hasDivider: !showDisconnectConfirmation
+        ) {
           walletContent
         }
         if showDisconnectConfirmation {
@@ -90,6 +95,10 @@ struct AccountSheetView: View {
       }
       .id(showDisconnectConfirmation)
       .listStyle(.plain)
+      // A taller detent restores Figma's y=400 top. This top margin keeps
+      // the measured wallet/address block aligned while giving Done its own
+      // space above Copy.
+      .contentMargins(.top, DS.Space.l + DS.Space.xs, for: .scrollContent)
       .scrollContentBackground(.hidden)
       .background(DS.Color.textPrimary)
       .foregroundStyle(DS.Color.actionInverse)
@@ -99,7 +108,7 @@ struct AccountSheetView: View {
       .overlay(alignment: .topTrailing) {
         // DECISIONS 2026-09-26: retain an accessible Done dismissal even
         // though Figma 10 shows only the grabber. The overlay uses no space.
-        BeidTextControl(
+        AccountTextControl(
           "Done",
           labelColor: DS.Color.actionInverse,
           accessibilityLabel: "Done"
@@ -198,14 +207,17 @@ struct AccountSheetView: View {
                   .accessibilityHidden(true)
                 BeidTextControlLabel("Copied", labelColor: DS.Color.actionInverse)
               }
-              .frame(minHeight: DS.Size.minHitTarget)
+              .frame(
+                minWidth: AccountSheetHitTarget.minimum,
+                minHeight: AccountSheetHitTarget.minimum
+              )
               .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Copied address")
             .accessibilityIdentifier("account.copy.feedback")
           } else {
-            BeidTextControl("Copy", labelColor: DS.Color.actionInverse, accessibilityLabel: "Copy address") {
+            AccountTextControl("Copy", labelColor: DS.Color.actionInverse, accessibilityLabel: "Copy address") {
               UIPasteboard.general.string = address
               copied = true
             }
@@ -281,7 +293,7 @@ struct AccountSheetView: View {
       }
       .buttonStyle(.plain)
 
-      BeidTextControl(
+      AccountTextControl(
         "Keep connected",
         labelColor: DS.Color.actionInverse,
         accessibilityLabel: "Keep connected"
@@ -327,6 +339,46 @@ struct AccountSheetView: View {
     let prefix = address.prefix(6)
     let suffix = address.suffix(4)
     return "\(prefix)…\(suffix)"
+  }
+}
+
+private enum AccountSheetHitTarget {
+  // PM build #2: 44pt source size became 42.25pt in the native sheet's
+  // XCTest frame. A 48pt label keeps its rendered button frame above 44pt.
+  static let minimum = DS.Size.minHitTarget + DS.Space.xs
+}
+
+/// Account-local BeidTextControl label/button with a larger label hit region.
+/// Keeping the minimum inside the Button label enlarges its real hit target,
+/// rather than only the outer SwiftUI layout frame.
+private struct AccountTextControl: View {
+  let title: LocalizedStringKey
+  let labelColor: Color
+  let accessibilityLabel: LocalizedStringKey
+  let action: () -> Void
+
+  init(
+    _ title: LocalizedStringKey,
+    labelColor: Color,
+    accessibilityLabel: LocalizedStringKey,
+    action: @escaping () -> Void
+  ) {
+    self.title = title
+    self.labelColor = labelColor
+    self.accessibilityLabel = accessibilityLabel
+    self.action = action
+  }
+
+  var body: some View {
+    Button {
+      BeidDesign.haptic()
+      action()
+    } label: {
+      BeidTextControlLabel(title, labelColor: labelColor, accessibilityLabel: accessibilityLabel)
+        .frame(minWidth: AccountSheetHitTarget.minimum, minHeight: AccountSheetHitTarget.minimum)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 }
 

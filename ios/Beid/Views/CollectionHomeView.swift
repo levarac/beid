@@ -105,10 +105,10 @@ struct CollectionHomeView: View {
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
           .environmentObject(coordinator)
-          // Frame 10 is 474pt high on the 402×874 reference. The system's
-          // medium detent starts ~15pt too low on the PM's iPhone 17 Pro;
-          // this fraction brings the sheet top near Figma's y=400.
-          .presentationDetents([.fraction(0.53)])
+          // PM build #2 measured the top at y≈437 versus Figma y=400. The
+          // larger detent lifts it while Account's top content margin keeps
+          // the already-aligned wallet block in place.
+          .presentationDetents([.fraction(0.575)])
           .presentationDragIndicator(.visible)
           // Sheets don't inherit the presenter's .tint (unlike push
           // navigation) — without this, the Done/Connect Wallet buttons

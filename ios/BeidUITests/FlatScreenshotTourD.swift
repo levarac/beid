@@ -14,15 +14,21 @@ final class FlatScreenshotTourD: XCTestCase {
 
   func testShot_10_Account() {
     openAccount()
-    XCTAssertTrue(app.buttons["Copy address"].waitForExistence(timeout: 5))
+    let copy = app.buttons["Copy address"]
+    _ = copy.waitForExistence(timeout: 5)
     attachScreenshot("10")
+    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(copy)
   }
 
   func testShot_10c_BluetoothOff() {
     openAccount(extraArguments: ["-beid-account-bluetooth-off-fixture"])
-    XCTAssertTrue(app.buttons["account.bluetooth.status"].waitForExistence(timeout: 5))
-    XCTAssertEqual(app.buttons["account.bluetooth.status"].label, "Open Bluetooth Settings")
+    let bluetoothStatus = app.buttons["account.bluetooth.status"]
+    _ = bluetoothStatus.waitForExistence(timeout: 5)
     attachScreenshot("10c")
+    XCTAssertEqual(bluetoothStatus.label, "Open Bluetooth Settings")
+    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(app.buttons["Copy address"])
   }
 
   func testShot_10d_DisconnectConfirm() {
@@ -41,9 +47,10 @@ final class FlatScreenshotTourD: XCTestCase {
     attachScreenshot("10d")
     XCTAssertTrue(title.exists)
     let keepConnected = app.buttons["Keep connected"]
-    XCTAssertTrue(keepConnected.waitForExistence(timeout: 5))
-    XCTAssertGreaterThanOrEqual(keepConnected.frame.height, 44)
-    XCTAssertGreaterThanOrEqual(app.buttons["Disconnect"].frame.height, 44)
+    assertMinimumHitTarget(keepConnected)
+    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(app.buttons["Copy address"])
+    assertMinimumHitTarget(app.buttons["Disconnect"])
   }
 
   func testShot_10e_Copied() {
@@ -51,8 +58,11 @@ final class FlatScreenshotTourD: XCTestCase {
     let copy = app.buttons["Copy address"]
     XCTAssertTrue(copy.waitForExistence(timeout: 5))
     copy.tap()
-    XCTAssertTrue(app.buttons["account.copy.feedback"].waitForExistence(timeout: 5))
+    let copied = app.buttons["account.copy.feedback"]
+    _ = copied.waitForExistence(timeout: 5)
     attachScreenshot("10e")
+    assertMinimumHitTarget(app.buttons["Done"])
+    assertMinimumHitTarget(copied)
   }
 
   private func openAccount(extraArguments: [String] = []) {
@@ -72,5 +82,11 @@ final class FlatScreenshotTourD: XCTestCase {
     attachment.name = name
     attachment.lifetime = .keepAlways
     add(attachment)
+  }
+
+  private func assertMinimumHitTarget(_ control: XCUIElement) {
+    XCTAssertTrue(control.exists)
+    XCTAssertGreaterThanOrEqual(control.frame.width, 44)
+    XCTAssertGreaterThanOrEqual(control.frame.height, 44)
   }
 }
