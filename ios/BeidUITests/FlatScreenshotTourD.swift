@@ -72,7 +72,7 @@ final class FlatScreenshotTourD: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    let account = app.buttons["Account"]
+    let account = app.buttons["home.account"]
     XCTAssertTrue(account.waitForExistence(timeout: 5))
     account.tap()
   }
