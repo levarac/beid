@@ -131,10 +131,7 @@ private struct CollectionHomeContent: View {
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
           .environmentObject(coordinator)
-          // PM build #2 measured the top at y≈437 versus Figma y=400. The
-          // larger detent lifts it while Account's top content margin keeps
-          // the already-aligned wallet block in place.
-          .presentationDetents([.fraction(0.575)])
+          // Account owns its compact/large detent as destinations are pushed.
           .presentationDragIndicator(.visible)
           // Sheets don't inherit the presenter's .tint (unlike push
           // navigation) — without this, the Done/Connect Wallet buttons
@@ -258,7 +255,7 @@ private struct CollectionHomeContent: View {
   /// evidence, so it evaluates to 0 without a hard-coded display value.
   private func activeCard(for event: EventSession) -> some View {
     HStack(alignment: .top, spacing: DS.Space.m) {
-      RecordSigilSlot(size: 84, onInk: true)
+      RecordSigilSlot(recordID: sensing.currentProofID, size: 84, ground: .ink)
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         Text("NOW · SENSING")
           .beidTextStyle(DS.Font.Library.labelMono10)
@@ -343,7 +340,7 @@ private struct CollectionHomeContent: View {
       selectedEvent = card
     } label: {
       HStack(spacing: 0) {
-        RecordSigilSlot(size: 60, onInk: false)
+        RecordSigilSlot(recordID: card.representative.id, size: 60, ground: .canvas)
           .padding(.trailing, DS.Space.m)
         VStack(alignment: .leading, spacing: DS.Space.xs) {
           Text(verbatim: card.representative.eventName)
@@ -454,24 +451,6 @@ private struct CollectionHomeContent: View {
       }
       .frame(maxWidth: .infinity)
     }
-  }
-}
-
-/// TODO(#653): replace this neutral ring with a Sigil only when a production
-/// record supplies its real per-peer, per-window input. The Figma SVGs are
-/// sample data and would falsely draw confirmed links for stored proofs.
-private struct RecordSigilSlot: View {
-  let size: CGFloat
-  let onInk: Bool
-
-  var body: some View {
-    Circle()
-      .strokeBorder(
-        onInk ? DS.Color.strokeHairlineOnInk : DS.Color.strokeHairline,
-        lineWidth: DS.Size.hairline
-      )
-      .frame(width: size, height: size)
-      .accessibilityHidden(true)
   }
 }
 

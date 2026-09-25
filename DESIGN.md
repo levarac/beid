@@ -1406,10 +1406,11 @@ damping and response (`DS.Motion`), not fixed-duration curves.
 | `DS.Motion.entrance` | spring, response 0.5, damping 0.85 | Content entering (event card in `EventFoundView`) |
 | `DS.Motion.proofResolve` | spring, response 0.6, damping 0.8 | Proof seal ceremony |
 | `DS.Motion.sensingPulsePeriod` | 1.8 s | One radar pulse cycle in `SensingView` |
-| `DS.Motion.screenTransition` | spring, response 0.36, damping 0.88 | Root screen switches (`RootView`) and scan-flow phase switches (`ScanFlowView`) |
+| `DS.Motion.screenTransition` | spring, response 0.36, damping 1.0 | Root screen switches (`RootView`) and scan-flow phase switches (`ScanFlowView`) |
 
 `DS.Motion.screenTransition` is `BeidDesign.Animation.soft` moved into
-`DS` unchanged by #628 (2026-09-23), and `BeidDesign.Animation.entrance`,
+`DS` unchanged by #628 (2026-09-23); #657 later corrected its damping to
+1.0. `BeidDesign.Animation.entrance`,
 which was an alias of `DS.Motion.entrance`, is gone; its call site uses
 `DS.Motion.entrance` directly (§7's token-fold note).
 
@@ -2700,15 +2701,20 @@ to.]**
 | `size.button.primary.compact.minHeight` | `DS.Size.compactPrimaryButtonMinHeight` | 52 pt | `Button/Primary` Size=Small minimum height |
 | `size.button.primary.compact.width` | `DS.Size.compactPrimaryButtonWidth` | 140 pt | `Button/Primary` Size=Small width (Home's Scan) |
 | `size.step.badge` | `DS.Size.stepBadge` | 28 pt | `BeidNumberedStepList` index badge (from `BeidDesign`) |
-| `size.radar.field` | `DS.Size.radarField` | 210 pt | Sensing radar frame (`SensingView`) |
-| `size.radar.core` | `DS.Size.radarCore` | 86 pt | Sensing radar center diameter (`SensingView`); survives #631; #634 owns the final radar |
+| `size.radar.field` | `DS.Size.radarField` | 362 pt | Flat 2b 05 sensing graph frame; also read by the interim `SensingView` pulse until integration |
+| `size.radar.rings` | `DS.Size.radarRingInner` / `radarRingMiddle` / `radarRingOuter` | 133.22 / 233.12 / 333.04 pt | Three circle path diameters measured from the 05 graph SVG |
+| `size.radar.core` | `DS.Size.radarCore` | 38 pt | White centre disc in the 05 sensing graph |
+| `size.radar.coreSeparation` | `DS.Size.radarCoreSeparation` | 48 pt | Ink separation around the white centre disc |
+| `size.radar.centerDot` | `DS.Size.radarCenterDot` | 8 pt | Ink dot at the centre of the white disc |
+| `size.radar.detectedNode` | `DS.Size.radarDetectedNode` / `radarDetectedNodeStroke` | 8 / 1.5 pt | Detected-only node diameter and idle outline width |
+| `size.sensing.sealedSigil` | `DS.Size.sensingSealedSigil` | 300 pt | Frame 06 Sensing — Sealed artwork slot (Figma node `184:65`); its neutral ring remains until #653 supplies production history |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | `ItemDetailView` circular gradient-avatar diameter |
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |
 | `type.section.title` | `DS.Font.sectionTitle` | `Library.title19` — DM Sans Bold 19 / `.title3` | State and section titles |
 | `type.ledger.mono` | `DS.Font.ledgerMono` | `Library.labelMono13Value` — DM Mono Medium 13 / `.footnote` | Addresses, hashes, proof IDs |
 | `motion.proof.resolve` | `DS.Motion.proofResolve` | spring 0.6/0.8 | Seal ceremony |
-| `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/0.88 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
+| `motion.screen.transition` | `DS.Motion.screenTransition` | spring 0.36/1.0 | Root screen and scan-flow phase switches (from `BeidDesign.Animation.soft`) |
 
 (Full set: 17 color tokens, 8 space, 7 radius, 18 size, 4 layout, 8 font
 roles over 17 `DS.Font.Library` styles (§6; #629 removed `ceremonyTitle`,

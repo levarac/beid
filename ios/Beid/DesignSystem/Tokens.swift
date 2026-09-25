@@ -119,10 +119,23 @@ enum DS {
     static let minHitTarget: CGFloat = 44
     /// `BeidStatusPill` indicator dot diameter.
     static let statusDot: CGFloat = 8
-    /// Sensing radar field — width/height of the concentric-ring frame in `SensingView`.
-    static let radarField: CGFloat = 210
-    /// Sensing radar center diameter in `SensingView`.
-    static let radarCore: CGFloat = 86
+    /// Flat 2b 05 Sensing radar field, 362 pt in the Figma frame.
+    static let radarField: CGFloat = 362
+    /// Flat 2b 05 graph ring path diameters, measured from the 362 pt SVG.
+    static let radarRingInner: CGFloat = 133.22
+    static let radarRingMiddle: CGFloat = 233.12
+    static let radarRingOuter: CGFloat = 333.04
+    /// White centre disc in the Flat 2b 05 radar.
+    static let radarCore: CGFloat = 38
+    /// Ink separation disc around the white centre, covering incoming edges.
+    static let radarCoreSeparation: CGFloat = 48
+    /// Ink dot in the centre of the white disc.
+    static let radarCenterDot: CGFloat = 8
+    /// Detected-only node and its idle outline in the Flat 2b 05 graph.
+    static let radarDetectedNode: CGFloat = 8
+    static let radarDetectedNodeStroke: CGFloat = 1.5
+    /// Flat 2b 06 Sensing — Sealed Sigil frame (node 184:65).
+    static let sensingSealedSigil: CGFloat = 300
     /// `ProofCardView`'s circular per-proof gradient avatar diameter.
     static let proofCardArtwork: CGFloat = 76
     /// `ItemDetailView`'s circular per-proof gradient avatar diameter —
@@ -146,6 +159,10 @@ enum DS {
     /// `Button/Primary` Size=Large minimum height. Its width is the full
     /// content width at `Space.pageMargin`, so it has no width token.
     static let primaryButtonMinHeight: CGFloat = 56
+    /// Flat 2b 14d camera framing guide; the camera remains a live system view.
+    static let venueScannerGuide: CGFloat = 260
+    /// Flat 2b 14d scanner guide stroke.
+    static let venueScannerGuideStroke: CGFloat = 2
     /// `Button/Primary` Size=Small minimum height (Home's Scan).
     static let compactPrimaryButtonMinHeight: CGFloat = 52
     /// `Button/Primary` Size=Small width (Home's Scan).
@@ -449,7 +466,7 @@ enum DS {
     /// Content entering the screen (e.g. event card slide-in on EventFoundView).
     static let entrance = Animation.spring(response: 0.5, dampingFraction: 0.85)
     /// Transition between top-level screens (RootView, ScanFlowView).
-    static let screenTransition = Animation.spring(response: 0.36, dampingFraction: 0.88)
+    static let screenTransition = Animation.spring(response: 0.36, dampingFraction: 1.0)
     /// The proof seal/resolve ceremony (RecordingView's one-time entrance
     /// ceremony fading into its steady state).
     static let proofResolve = Animation.spring(response: 0.6, dampingFraction: 0.8)
