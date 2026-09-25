@@ -108,17 +108,21 @@ final class FlatScreenshotTourD: XCTestCase {
     attachScreenshot("14f")
     assertVenueControls()
     XCTAssertTrue(app.staticTexts["NO CAMERA ACCESS"].exists)
-    assertMinimumHitTarget(app.links["Open Settings"])
+    let openSettings = openSettingsControl
+    XCTAssertTrue(openSettings.exists)
+    XCTAssertTrue(openSettings.elementType == .button || openSettings.elementType == .link)
+    XCTAssertTrue(openSettings.isHittable)
+    assertMinimumHitTarget(openSettings)
   }
 
   func testShot_14f2_ScanningUnavailable() {
     assertVenueFrame("14f2", outcome: "Scanning unavailable")
-    XCTAssertFalse(app.links["Open Settings"].exists)
+    XCTAssertFalse(openSettingsControl.exists)
   }
 
   func testShot_14f3_CameraCouldNotStart() {
     assertVenueFrame("14f3", outcome: "Camera could not start")
-    XCTAssertFalse(app.links["Open Settings"].exists)
+    XCTAssertFalse(openSettingsControl.exists)
   }
 
   func testShot_14g_NotSaved() {
@@ -139,6 +143,10 @@ final class FlatScreenshotTourD: XCTestCase {
     assertMinimumHitTarget(app.buttons["Copy event ID"])
     assertMinimumHitTarget(app.buttons["Stop broadcasting"])
     XCTAssertTrue(app.descendants(matching: .any)["Venue link"].exists)
+  }
+
+  private var openSettingsControl: XCUIElement {
+    app.descendants(matching: .any).matching(identifier: "Open Settings").firstMatch
   }
 
   private func openOrganizer(extraArguments: [String] = []) {
