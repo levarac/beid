@@ -58,7 +58,7 @@ final class FlatScreenshotTourB: XCTestCase {
     if !proof.isHittable { app.swipeUp() }
     XCTAssertTrue(proof.waitForExistence(timeout: 5))
     proof.tap()
-    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 
   func testShot_08c_NoReports() {
