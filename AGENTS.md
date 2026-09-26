@@ -350,30 +350,16 @@ the same name shadows them.
 
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
-- **Require executed iOS evidence on the exact head SHA when the PR is
-  outside the live ASC `PR Build & Test` file exclusions.** The workflow's
-  `DO_NOT_START_IF_ALL_FILES_MATCH` setting suppresses the check when every
-  changed file matches an exclusion. On 2026-09-22 the configured matchers
-  were `docs/`, `.github/`, `*.md`, and `android/app/src/`. The last
-  directory covers Android app source, resources, manifest, and tests; these
-  Android-only changes do not require Xcode Cloud (maintainer decision,
-  [#625](https://github.com/thegreeting/beid/issues/625)). An Android build
-  input, `shared/`, `ios/`, or any other file outside the exclusion set
-  prevents the skip, including when mixed with Android app source. Re-read
-  ASC and the PR's complete changed-file list for each merge; a green Ubuntu
-  check alone cannot prove the iOS check was run or intentionally skipped.
-  Before public cutover, the evidence is the Xcode Cloud check while its
-  trusted PR workflow is enabled. During cutover that workflow is paused;
-  require the hosted iOS Simulator lane on the exact head instead. The same
-  exclusion-set exemption applies whichever check is the current iOS
-  evidence source. The hosted lane's automatic PR triggers omit synchronize, so a later
-  head needs deliberate verification. Absence of either check or a
-  skipped/pre-start failed run is not passing evidence. Do not resume the
-  Xcode Cloud PR workflow until the owner verifies its fork credential boundary.
-  Xcode Cloud is metered, so use local builds for iteration and batch pushes.
-  If the workflow later becomes manually triggered, invert the existence rule:
-  absence before the deliberate trigger is expected, and the evidence must
-  instead record that the manual run targeted the exact head and passed.
+- **Require executed hosted iOS evidence on the exact PR head SHA.**
+  The `iOS simulator` job runs on every PR open, push (`synchronize`), reopen,
+  and ready-for-review event, including drafts, with no PR path exclusions.
+  It checks out the PR head explicitly and builds/runs both `BeidTests` and
+  `BeidUITests` on a clean owned simulator. A missing, skipped, cancelled or
+  pre-start failed run is not passing evidence. Xcode Cloud `PR Build & Test`
+  stays paused; its former file exclusions do not apply to this hosted gate.
+  Xcode Cloud Internal/Release delivery is a separate concern. Required status
+  checks remain operator-managed repository settings; workflow code alone
+  does not establish branch protection.
 - **Negative compile fixtures are manual today.** The fixtures in
   `compile-fixtures/` prove stale Kotlin symbols and old Swift module names
   fail when applied in a disposable checkout. Recurring CI automation is
@@ -439,21 +425,34 @@ changes, and classifier failures run the relevant or all gates fail-closed.
   `scripts/check_pr_ci_doc_drift.py`, and
   `python3 -m unittest discover -s scripts/tests -t .`.
 
-The workflow remains the execution source of truth; this subsection records
-the jobs and command tokens checked for documentation drift.
+The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
+`build-for-testing` and `test-without-building` execute the Beid unit and UI
+suites. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
+`swift build -c release` and `swift test`. Both report on every PR head,
+including drafts, with `opened`, `synchronize`, `reopened`, and
+`ready_for_review`; neither has a PR workflow path filter. The lab CLI skips
+irrelevant build steps through the existing fail-closed path classifier.
+All PR build checkouts use the explicit PR head SHA.
+
+These three workflows remain the execution source of truth; the documentation
+drift check covers all three job lists and their distinguishing command tokens.
 
 All pull-request jobs use fixed GitHub-hosted runner labels. Determine changed
 paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
-`ubuntu-24.04`; SwiftLint, the informational iOS Simulator lane and the lab
-CLI lane use `macos-26`. SwiftLint needs Xcode SourceKit. Repository sanity
+`ubuntu-24.04`; SwiftLint, the iOS simulator lane and the lab
+CLI lane use `macos-26` with Xcode 26.5. The simulator uses iOS 26.5. SwiftLint needs Xcode SourceKit. Repository sanity
 installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
 All pull requests run these checks without private credentials. The private
 Parallax comparison is explicitly reported as SKIPPED, never as a passing
 comparison. All Actions use full commit SHA pins. Android delivery and private
 comparison use protected environments and main-only triggers. iOS delivery
 uses Xcode Cloud Internal/Release; no Actions job invokes iOS signing.
-Before public cutover, the operator must separately remove access to persistent
-self-hosted runners; changing these workflows does not revoke runner access.
+The main-only unsigned Release build also uses `macos-26` with Xcode 26.5;
+release metadata checks use `ubuntu-24.04`. Recommend requiring `Determine
+changed paths`, `Android build`, `SwiftLint`, `Repository sanity`, `iOS
+simulator`, and `beid-lab-cli build and test` on main. The operator owns those
+settings and removal of persistent runner access; changing workflows does not
+revoke runner access or configure branch protection.
 
 ## PR と issue の紐付け (Development 欄)
 

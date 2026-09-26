@@ -1,16 +1,4 @@
-"""Pin the trigger contract of the self-hosted iOS lane (gh#479).
-
-This lane occupies the single self-hosted macOS host for ~30 minutes and gates
-nothing, so *when* it runs is the whole point of its configuration. Re-adding
-`synchronize` would silently restore the per-push behavior #479 removed, and
-nothing else in CI would notice: `scripts/check_pr_ci_doc_drift.py` covers only
-`pr-ci.yml`, and the lane is informational so a regression never turns a check
-red. These assertions are that missing guard rail.
-
-Text/regex based rather than YAML based, matching the sibling workflow tests:
-PyYAML is not a dependency of this repository, and `on:` would parse as the
-boolean key `True` under it anyway.
-"""
+"""Keep the hosted iOS gate current on every PR head, including drafts."""
 
 import re
 import unittest
@@ -60,31 +48,15 @@ def event_section(block: str, event: str) -> str:
 
 
 class PrCiIosMacosTriggerTest(unittest.TestCase):
-    def test_pull_request_fires_only_on_merge_candidate_heads(self) -> None:
-        block = trigger_block(workflow_text())
-        section = event_section(block, "pull_request")
+    def test_pull_request_fires_on_every_head(self) -> None:
+        section = event_section(trigger_block(workflow_text()), "pull_request")
+        self.assertIn("    types: [opened, synchronize, reopened, ready_for_review]\n", section)
+        self.assertNotIn("paths:", section)
 
-        self.assertIn("    types: [opened, ready_for_review]\n", section)
-        for event in ("synchronize", "reopened", "edited"):
-            with self.subTest(event=event):
-                self.assertNotIn(event, section)
-
-    def test_draft_pull_requests_are_dropped_at_the_job(self) -> None:
-        """`opened` fires for drafts too, so the guard is load-bearing.
-
-        Without it, narrowing the triggers would still hand every draft PR a
-        30-minute slot on the shared macOS host. The `event_name` clause is
-        equally load-bearing: `github.event.pull_request` does not exist for
-        `push` or `workflow_dispatch`, so dropping it would disable the lane
-        on main.
-        """
+    def test_drafts_also_get_exact_head_evidence(self) -> None:
         text = workflow_text()
-
-        self.assertIn(
-            "    if: ${{ github.event_name != 'pull_request'"
-            " || github.event.pull_request.draft == false }}\n",
-            text,
-        )
+        self.assertNotIn("pull_request.draft", text)
+        self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", text)
 
     def test_push_is_limited_to_main(self) -> None:
         block = trigger_block(workflow_text())
@@ -98,10 +70,10 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
 
         self.assertIn("  workflow_dispatch:", block)
 
-    def test_both_filtered_events_keep_the_same_paths_filter(self) -> None:
+    def test_main_push_keeps_the_paths_filter(self) -> None:
         block = trigger_block(workflow_text())
 
-        for event in ("pull_request", "push"):
+        for event in ("push",):
             with self.subTest(event=event):
                 section = event_section(block, event)
                 found = re.findall(r'^      - "(.+)"$', section, re.MULTILINE)

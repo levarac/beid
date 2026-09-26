@@ -65,7 +65,7 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertNotIn("simctl erase", text)
 
     def test_simulator_helper_changes_trigger_the_lane(self) -> None:
-        self.assertEqual(workflow_text().count('      - "scripts/ci_simulator.py"'), 2)
+        self.assertEqual(workflow_text().count('      - "scripts/ci_simulator.py"'), 1)
 
     def test_every_device_operation_uses_only_the_create_steps_output(self) -> None:
         text = workflow_text()
@@ -136,7 +136,7 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
 class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
     def test_release_build_command_moved_unchanged(self) -> None:
         block = step_block(
-            release_workflow_text(), "Build Release for device (informational)"
+            release_workflow_text(), "Build Release for device"
         )
 
         self.assertIn(RELEASE_BUILD_COMMAND, block)

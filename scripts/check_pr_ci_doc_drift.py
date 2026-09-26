@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if AGENTS.md's ### PR CI section drifts from .github/workflows/pr-ci.yml.
+"""Fail if AGENTS.md's ### PR CI section drifts from the PR build workflows.
 
 AGENTS.md declares its ### PR CI subsection the single source of truth for
 which CI jobs/commands exist, but that subsection is prose restating the
@@ -23,7 +23,7 @@ JOB_NAME_LINE_RE = re.compile(r"^ {4}name:\s*(.+?)\s*$", re.MULTILINE)
 RUN_LINE_RE = re.compile(r"^(\s*)run:\s*(.*)$")
 BLOCK_SCALAR_RE = re.compile(r"^[|>][-+0-9]*\s*$")
 
-GRADLE_TASK_RE = re.compile(r":\w[\w:-]*\w")
+GRADLE_TASK_RE = re.compile(r"(?<![\w\[:]):\w[\w:-]*\w")
 SCRIPT_PATH_RE = re.compile(r"scripts/\S+\.(?:sh|py)")
 BARE_SCRIPT_RE = re.compile(r"^(scripts/\S+\.(?:sh|py))$")
 
@@ -145,14 +145,14 @@ def forward_check(job_names, command_tokens, section_text):
         if name.lower() not in lowered_section:
             failures.append(
                 f"AGENTS.md's ### PR CI section is missing job '{name}' "
-                f"(present in .github/workflows/pr-ci.yml but not mentioned in AGENTS.md). "
+                f"(present in the checked PR workflows but not mentioned in AGENTS.md). "
                 f"Fix: update AGENTS.md's ### PR CI section to mention it."
             )
     for token in sorted(command_tokens):
         if token not in section_text:
             failures.append(
                 f"AGENTS.md's ### PR CI section is missing command token '{token}' "
-                f"(present in .github/workflows/pr-ci.yml but not mentioned in AGENTS.md). "
+                f"(present in the checked PR workflows but not mentioned in AGENTS.md). "
                 f"Fix: update AGENTS.md's ### PR CI section to mention it."
             )
     return failures
@@ -173,7 +173,7 @@ def reverse_check(job_names, section_text, workflow_text):
         if candidate.lower() not in lowered_job_names:
             failures.append(
                 f"AGENTS.md's ### PR CI section names a job '{candidate}' that does not "
-                f"exist in .github/workflows/pr-ci.yml (no job with that name). "
+                f"exist in the checked PR workflows (no job with that name). "
                 f"Fix: remove/correct it in AGENTS.md, or add the job to the workflow."
             )
 
@@ -185,7 +185,7 @@ def reverse_check(job_names, section_text, workflow_text):
         if code_span not in workflow_text:
             failures.append(
                 f"AGENTS.md's ### PR CI section quotes command token '{code_span}' that does "
-                f"not appear anywhere in .github/workflows/pr-ci.yml. "
+                f"not appear anywhere in the checked PR workflows. "
                 f"Fix: remove/correct it in AGENTS.md, or add it to the workflow."
             )
 
@@ -194,17 +194,24 @@ def reverse_check(job_names, section_text, workflow_text):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workflow-path", default=".github/workflows/pr-ci.yml")
+    parser.add_argument("--workflow-path", action="append",
+                        help="Workflow to check; repeat for multiple workflows")
     parser.add_argument("--agents-md-path", default="AGENTS.md")
     args = parser.parse_args()
 
-    workflow_text = Path(args.workflow_path).read_text(encoding="utf-8")
+    workflow_paths = args.workflow_path or [
+        ".github/workflows/pr-ci.yml",
+        ".github/workflows/pr-ci-ios-macos.yml",
+        ".github/workflows/pr-ci-lab-cli.yml",
+    ]
+    workflow_text = "\n".join(Path(path).read_text(encoding="utf-8") for path in workflow_paths)
+    workflow_description = ", ".join(workflow_paths)
     agents_md_text = Path(args.agents_md_path).read_text(encoding="utf-8")
 
     section_text = extract_pr_ci_section(agents_md_text)
     job_names = workflow_job_names(workflow_text)
     if not job_names:
-        raise SystemExit(f"Found no job 'name:' fields in {args.workflow_path} — parser bug?")
+        raise SystemExit(f"Found no job 'name:' fields in {workflow_description} — parser bug?")
     run_blocks = collect_run_blocks(workflow_text)
     command_tokens = workflow_command_tokens(run_blocks)
 
@@ -213,7 +220,7 @@ def main():
 
     if failures:
         print(
-            f"AGENTS.md's ### PR CI section has drifted from {args.workflow_path}:\n",
+            f"AGENTS.md's ### PR CI section has drifted from {workflow_description}:\n",
             file=sys.stderr,
         )
         for failure in failures:
@@ -226,8 +233,9 @@ def main():
         return 1
 
     print(
-        f"OK: AGENTS.md's ### PR CI section matches {args.workflow_path} "
-        f"({len(job_names)} job(s), {len(command_tokens)} command token(s) checked)."
+        f"OK: AGENTS.md's ### PR CI section matches {workflow_description} "
+        f"({len(workflow_paths)} workflow(s), {len(job_names)} job(s), "
+        f"{len(command_tokens)} command token(s) checked)."
     )
     return 0
 
