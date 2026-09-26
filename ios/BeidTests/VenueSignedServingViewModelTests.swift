@@ -2213,6 +2213,41 @@ extension VenueSignedServingViewModelTests {
     XCTAssertEqual(inodeAfter, inodeBefore, "14 must not replace the stored file")
   }
 
+  // T6's isolation — a UI-test launch gets its own store file; any other
+  // launch keeps the default one.
+  func testOrganizerStoreURLIsIsolatedOnlyUnderUITest() throws {
+    XCTAssertNil(OrganizerToolsObjects.storeURL(arguments: []))
+    XCTAssertNil(OrganizerToolsObjects.storeURL(arguments: ["Beid", "-beid-organizer-frame", "14-saved"]))
+
+    let arguments = ["Beid", "-beid-ui-test"]
+    let first = try XCTUnwrap(OrganizerToolsObjects.storeURL(arguments: arguments), "a UI-test launch must get its own file")
+    let second = try XCTUnwrap(OrganizerToolsObjects.storeURL(arguments: arguments))
+
+    let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
+    XCTAssertEqual(first.deletingLastPathComponent().standardizedFileURL, temporary)
+    XCTAssertEqual(second.deletingLastPathComponent().standardizedFileURL, temporary)
+    XCTAssertEqual(first.pathExtension, "json")
+    XCTAssertTrue(first.lastPathComponent.hasPrefix("beid-venue-public-artifact-"), first.lastPathComponent)
+
+    let documents = try XCTUnwrap(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first)
+    let defaultURL = documents.appendingPathComponent("venue-public-artifact.json")
+    XCTAssertNotEqual(first.standardizedFileURL, defaultURL.standardizedFileURL, "a UI test must never write the real file")
+    XCTAssertNotEqual(second.standardizedFileURL, defaultURL.standardizedFileURL)
+    // A new UUID per call: one launch shares a file only because
+    // `productionStoreURL` computes it once.
+    XCTAssertNotEqual(first, second)
+
+    // The isolated file really starts empty and holds what is stored into it.
+    defer { try? FileManager.default.removeItem(at: first) }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
+    let isolated = VenuePublicArtifactStore(fileURL: first)
+    XCTAssertNil(isolated.record)
+    XCTAssertEqual(makeOrganizerTools(store: isolated).savedPack, SavedPackRowState.none)
+    isolated.store(savedPackRecord())
+    XCTAssertTrue(FileManager.default.fileExists(atPath: first.path), "the store must write to the isolated file")
+    XCTAssertEqual(VenuePublicArtifactStore(fileURL: first).record, savedPackRecord())
+  }
+
   // T4 — 14b's departure ends serving, which is why 14 never shows it.
   func testEndSessionWhileServingStopsTheRadioAndForgetsTheServedEvent() async throws {
     let model = makeViewModel()

@@ -95,8 +95,9 @@ final class FlatScreenshotTourD: XCTestCase {
     assertMinimumHitTarget(copied)
   }
 
-  /// Expects an ERASED Simulator: a pack stored by an earlier run on the same
-  /// device is a real saved pack, and this frame would then correctly say so.
+  /// The launch uses its own empty pack file (`OrganizerToolsObjects.storeURL`),
+  /// so a pack an earlier test or run stored is not read here: this frame does
+  /// not depend on an erased Simulator or on test order.
   func testShot_14_OrganizerTools() {
     openOrganizer()
     let route = app.buttons["organizer.venueBroadcast"]

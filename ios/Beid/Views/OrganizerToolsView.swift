@@ -68,8 +68,34 @@ final class OrganizerToolsObjects: ObservableObject {
     ]
   }
 
+  /// The store file `production()` uses, fixed once per process: re-entering
+  /// 14 within one launch reads the same file, not a new empty one. `nil` is
+  /// the store's default location.
+  private static let productionStoreURL: URL? = {
+    #if DEBUG
+    return storeURL(arguments: ProcessInfo.processInfo.arguments)
+    #else
+    return nil
+    #endif
+  }()
+
+  /// Every UI-test launch starts from its own empty pack file, so no UI test
+  /// reads a previous launch's pack or ever writes the real file. Each call
+  /// names a new file; `productionStoreURL` is what pins one per launch.
+  /// Release never reads the arguments and always uses the default location.
+  nonisolated static func storeURL(arguments: [String]) -> URL? {
+    #if DEBUG
+    guard arguments.contains("-beid-ui-test") else { return nil }
+    return FileManager.default.temporaryDirectory.appendingPathComponent(
+      "beid-venue-public-artifact-\(UUID().uuidString).json"
+    )
+    #else
+    return nil
+    #endif
+  }
+
   static func production() -> OrganizerToolsObjects {
-    OrganizerToolsObjects(store: VenuePublicArtifactStore()) { store in
+    OrganizerToolsObjects(store: VenuePublicArtifactStore(fileURL: productionStoreURL)) { store in
       VenueSignedServingViewModel(
         verifier: ProductionVenueBundleVerifier(registryClient: RegistryDependencies.createClient()),
         broadcasting: BarnardVenueSignedContainerBroadcasting(),

@@ -263,7 +263,7 @@ S1 に `isPersistenceSuspended` を含めるのは、`CorruptStoreQuarantine.res
 | T3 | 同上 | 14 の行状態を作る前後で `venue-public-artifact.json` のバイト列が同一(**新しい書き込みが無い**) | 前のファイルが存在し、空でないこと |
 | T4 | `VenueSignedServingViewModelTests` に追加 | 配信中(`.serving`)に `endSession()` を呼ぶと `status == .idle`・`servingEventIdHex == nil`・broadcasting の `clearAndStop` が呼ばれる。§6 の前提「14 が見えるとき配信は止まっている」の VM 側 | 呼ぶ前に `.serving` であることを確かめる |
 | T5 | 既存 `testStoredRecordHoldsOnlyPublicBytes`(`VenueSignedServingViewModelTests.swift:1304-1322`)を拡張 | `VenuePublicArtifactRecord` をエンコードした JSON のキー集合が**ちょうど** `{bundleBytes, handoffBytes, sourceDescription, storedAt}` である(`SignalStrengthNeverRecordedTests` の構造テストと同じ型)。表示名・判定・期限・鍵のフィールドが足された日に赤になる | キー集合が空でないこと、4 つすべてがあること |
-| T6 | `FlatScreenshotTourD.testShot_14_OrganizerTools`(`ios/BeidUITests/FlatScreenshotTourD.swift:98-105`)を拡張 | 消去した Simulator で欄の見出し(O1 の語)と `No saved pack` が出る。14 に `TextField` が無く、`Venue key` / `Save key` / `REMOVE KEY` の要素が無い(14c を作っていない) | 見出しの要素が存在すること |
+| T6 | `FlatScreenshotTourD.testShot_14_OrganizerTools`(`ios/BeidUITests/FlatScreenshotTourD.swift:98-120`)を拡張 | 起動ごとに隔離したストア(DEBUG かつ `-beid-ui-test` のとき `OrganizerToolsObjects.storeURL(arguments:)` が一時ディレクトリに新しいファイルを 1 起動に 1 つ与える)で、欄の見出し(O1 の語)と `No saved pack` が出る。Simulator の消去にもテストの順序にも依存しない。14 に `TextField` が無く、`Venue key` / `Save key` / `REMOVE KEY` の要素が無い(14c を作っていない) | 見出しの要素が存在すること |
 | T7 | 同ツアーに既存の DEBUG フィクスチャ(`-beid-venue-frame`、`VenueSignedServingView.swift:444-455` と同じ方式)で S2 / S3 を 1 枚ずつ追加 | Figma 14 との並置比較用(DECISIONS.md 2026-09-26 `:2076`) | 各フレームで `STATUS` の値の要素が存在すること |
 
 Keychain の書き込み箇所が増えないこと: `git grep -n -c SecItemAdd -- ios/Beid` が 1 のままであることを、実装 PR の検証欄に記録する
@@ -281,6 +281,7 @@ Keychain の書き込み箇所が増えないこと: `git grep -n -c SecItemAdd 
   6. `VenuePublicArtifactRecord` に `displayName: String?` を足す → T5 が赤
   7. `endSession()` から `stop()` を外す → T4 が赤
   8. S1 の行から `|| persistenceSuspended` を外す → T1 が赤(`resolve(nil, false, true, false)` と、実ストアの `.unpreserved` の場合)
+  9. `-beid-ui-test` のもとで `OrganizerToolsObjects.storeURL(arguments:)` が `nil` を返す(既定の `Documents/venue-public-artifact.json` に戻る)→ 先行する TourD のテスト(14b やリンク/パックの結果)がパックを保存していると T6 が赤(PM が観測した順序依存の失敗)、`testOrganizerStoreURLIsIsolatedOnlyUnderUITest` が赤
 
 ---
 
