@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import Barnard
 import BarnardCore
@@ -38,15 +38,19 @@ struct WindowReportRedeliveryBuffer {
 private func diagnosticEventIdPrefix(_ value: String?) -> String {
   guard let value else { return "unknown" }
   let normalized = value.hasPrefix("0x") ? String(value.dropFirst(2)) : value
-  guard normalized.count == 64,
-    normalized == normalized.lowercased(),
-    normalized.allSatisfy({ $0.isHexDigit })
+  guard normalized.utf8.count == 64,
+    normalized.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
   else { return "unknown" }
   return String(normalized.prefix(8))
 }
 #endif
 
-private func emitJoinStageDiagnostic(
+func joinRegistryFailureDiagnosticOutcome(_ errorCode: String?) -> String {
+  let reason = BeidSharedKit.event.eventJoinFailureReasonForRegistryErrorCode(errorCode: errorCode)
+  return "rejected_" + BeidSharedKit.event.eventJoinFailureReasonKey(reason: reason)
+}
+
+func emitJoinStageDiagnostic(
   _ log: (String) -> Void,
   eventIdHex: String?,
   stage: String,
@@ -640,7 +644,7 @@ final class SensingCoordinator: ObservableObject {
   /// populate.
   private static let ledgerLog = Logger(subsystem: "org.levarac.beid", category: "ledger")
 
-  private static func defaultJoinDiagnosticLog(_ message: String) {
+  static func defaultJoinDiagnosticLog(_ message: String) {
 #if DEBUG
     log.debug("\(message, privacy: .public)")
 #endif
@@ -715,6 +719,10 @@ final class SensingCoordinator: ObservableObject {
   private(set) var lastRelayDecision: ParticipantRelayDecision?
   private let sensingCryptography: any SensingCryptography
   private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
+  /// beid#701: which Proof each closed window belongs to, for display only.
+  /// Written in `closeWindow` and never handed to `reportSubmissionRuntime`.
+  /// `nil` writes no links (previews and tests that do not inject one).
+  private let reportProofLinkStore: ReportProofLinkStore?
   private let eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
   private let ownerKeyRestorationAcknowledgementDefaults: UserDefaults
   private var ownerKeyRestorationIdentityFingerprint: Data?
@@ -948,7 +956,8 @@ final class SensingCoordinator: ObservableObject {
 
   /// The definition this host's own authenticated registry read returned,
   /// kept so an envelope arriving *after* a hash's single registry resolution
-  /// completed still has something to be compared against.
+  /// completed still has something to be compared against. Shared owns its
+  /// retention lifetime, including source eviction followed by re-observation.
   private var nearbyVerifiedDefinitions: [String: BarnardEventDefinitionV1] = [:]
 
   /// Canonical Event IDs carried by Barnard's radio-self-verified B005 v2
@@ -1149,7 +1158,9 @@ final class SensingCoordinator: ObservableObject {
   convenience init(
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
-    reportSubmissionStore: ReportSubmissionStore? = nil
+    reportSubmissionStore: ReportSubmissionStore? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     let sensingCryptography = BarnardSensingCryptography()
     let allowInsecureLoopbackForTests: Bool
@@ -1193,10 +1204,12 @@ final class SensingCoordinator: ObservableObject {
         store: reportSubmissionStore,
         allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
       ),
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: registryClient.map {
         RegistryEventIdentityVerificationSource(client: $0)
       },
-      nearbyRegistryClient: registryClient
+      nearbyRegistryClient: registryClient,
+      joinDiagnosticLog: joinDiagnosticLog
     )
   }
 
@@ -1215,6 +1228,7 @@ final class SensingCoordinator: ObservableObject {
     loadingFromDirectory directory: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard
@@ -1228,6 +1242,7 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       eventJoinControl: eventJoinControl,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults
@@ -1260,11 +1275,13 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
+    reportProofLinkStore: ReportProofLinkStore?,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)?,
     eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     nearbyRegistryClient:
-      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil
+      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     self.init(
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
@@ -1275,11 +1292,13 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
       initialLedgerFailure: nil,
       nearbyRegistryClient: nearbyRegistryClient,
-      eventJoinControl: eventJoinControl
+      eventJoinControl: eventJoinControl,
+      joinDiagnosticLog: joinDiagnosticLog
     )
     // Only this initializer chain is actually loading — see
     // `isLedgerLoading`'s doc comment for why the default is `false`.
@@ -1462,6 +1481,7 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
@@ -1489,6 +1509,7 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       nearbyDiscoveryClock: nearbyDiscoveryClock,
       eventJoinControl: eventJoinControl,
@@ -1509,6 +1530,7 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     initialLedgerFailure: Error? = nil,
@@ -1554,6 +1576,7 @@ final class SensingCoordinator: ObservableObject {
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     self.reportSubmissionRuntime = reportSubmissionRuntime
+    self.reportProofLinkStore = reportProofLinkStore
     self.eventIdentityVerificationSource = eventIdentityVerificationSource
     self.ownerKeyRestorationAcknowledgementDefaults = ownerKeyRestorationAcknowledgementDefaults
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
@@ -2513,8 +2536,16 @@ final class SensingCoordinator: ObservableObject {
   ) {
     switch joinGatePreflight(canonicalEventIdHex: canonicalEventIdHex) {
     case .refuse(let refusal, let message):
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog, eventIdHex: canonicalEventIdHex, stage: "registry_resolution",
+        outcome: refusal == .noRegistryConfigured ? "rejected_no_registry" : "rejected_no_canonical_event_id"
+      )
       applyJoinGateDecision(.refuse(refusal, message))
     case .read(let registry, let eventIdHex):
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog, eventIdHex: eventIdHex,
+        stage: "registry_resolution", outcome: "started", attempt: "1"
+      )
       joinRegistryRequest = registry.resolveEventDefinition(
         eventIdHex: eventIdHex,
         nowEpochSeconds: nearbyDiscoveryClock() / 1000
@@ -2528,6 +2559,11 @@ final class SensingCoordinator: ObservableObject {
           // and either can outlive the attempt that started it.
           guard self.isCurrentJoinAttempt(generation) else { return }
           self.joinRegistryRequest = nil
+          emitJoinStageDiagnostic(
+            self.joinDiagnosticLog, eventIdHex: eventIdHex, stage: "registry_resolution",
+            outcome: resolution != nil ? "success" : joinRegistryFailureDiagnosticOutcome(failureErrorCode),
+            attempt: "1"
+          )
           self.applyJoinGateDecision(
             self.joinGateDecision(
               joinCode: joinCode,
@@ -3191,6 +3227,9 @@ final class SensingCoordinator: ObservableObject {
     registryAgreement: @escaping (BarnardEventDefinitionV1) -> Bool,
     observedAtEpochMillis: Int64? = nil
   ) {
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: verifiedEventIdHex, stage: "detection", outcome: "detected"
+    )
     let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
     let hash = eventCodeHash.lowercaseHexString
     // Asked before recording, because the reducer needs this envelope's own
@@ -3234,6 +3273,9 @@ final class SensingCoordinator: ObservableObject {
   /// Not `private`, for the same test-seam reason as the two handlers above.
   func handleUnverifiedEventInfoEnvelopeV2() {
     emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: nil, stage: "detection", outcome: "detected"
+    )
+    emitJoinStageDiagnostic(
       joinDiagnosticLog,
       eventIdHex: nil,
       stage: "envelope_verification",
@@ -3259,9 +3301,9 @@ final class SensingCoordinator: ObservableObject {
     asOf now: Int64
   ) {
     nearbyEventCandidates = snapshot
-    // Mirrors the Android session's prune: a hash whose sources have expired
-    // keeps neither its cached agreement nor its cached definition, so neither
-    // map grows without bound across a long discovery session.
+    // Agreements and radio identities follow visible sources. Definitions
+    // follow shared registry evidence, which survives source eviction and
+    // prevents re-resolution when an evicted hash reappears (beid#523).
     var liveHashes = Set<String>()
     for index in 0..<snapshot.candidateCount {
       if let candidate = snapshot.candidateAt(index: index) {
@@ -3269,7 +3311,9 @@ final class SensingCoordinator: ObservableObject {
       }
     }
     nearbyEnvelopeAgreements = nearbyEnvelopeAgreements.filter { liveHashes.contains($0.key) }
-    nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter { liveHashes.contains($0.key) }
+    nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter {
+      nearbyDiscoveryStore.retainsVerifiedRegistryDefinitionForHashHex(hashHex: $0.key)
+    }
     nearbyVerifiedEventIds = nearbyVerifiedEventIds.filter { liveHashes.contains($0.key) }
     republishRelayGateState()
     nearbyDiscoveryExpiryTask?.cancel()
@@ -4309,6 +4353,19 @@ final class SensingCoordinator: ObservableObject {
     // submission runtime is independent of the legacy WindowReport bytes.
     let closingPeerRpids = currentWindowRpids
     let closingReporterRpid = currentWindowReporterRpid
+    // beid#701: link the window to this session's Proof before the capture
+    // exists, so a capture finalised after a relaunch is already linked. A
+    // window can only reach here after `.recording`, and `activeProofId` is
+    // cleared together with that state, so the Proof is this session's. No
+    // runtime means no report to join, so no link. A failed link write
+    // leaves the report unlinked for good and never holds up the capture.
+    if reportSubmissionRuntime != nil, let proofId = activeProofId, let reportProofLinkStore {
+      do {
+        try reportProofLinkStore.add(windowId: currentWindowId, proofId: proofId)
+      } catch {
+        Self.ledgerLog.error("Unable to persist a report-to-proof link; the report stays unlinked")
+      }
+    }
     reportSubmissionRuntime?.captureAndQueueWindow(
       id: currentWindowId,
       eventCode: eventCode,

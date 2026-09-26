@@ -15,7 +15,7 @@ Ground truth, in precedence order:
    ("2026-08-17 裁定 — 表示側で集約する(選択肢 i)") — overrides the original
    issue body's "store-side dedup bug" framing. The fix is display-only;
    `Proof` grain stays per-session.
-2. `/Users/ko/agent-workspace/projects/beid/DECISIONS.md`, 2026-08-17
+2. `<private-project-records>/DECISIONS.md`, 2026-08-17
    "Proof の粒度はセッション単位のまま、コレクションと詳細をイベント単位へ
    集約する(#217)" — the binding decision. Selects Decision i (explicit
    session list) over Decision ii (single representative + "latest session"

@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import BeidSharedKit
 import SwiftUI
@@ -144,6 +144,20 @@ struct ItemDetailView: View {
             keyValueRow(String(localized: "WITH"), value: presentation.withValue)
           }
           .padding(.top, DS.Space.xs)
+
+          LinkedReportsSection(
+            heading: String(
+              localized: "proofDetail.fromReports",
+              defaultValue: "FROM REPORTS",
+              comment: "Section listing the stored reports whose observation window was closed in this Proof's recording session. No count is shown."
+            ),
+            identifierPrefix: "proof-detail.report",
+            proof: proof,
+            submissionStore: coordinator.reportSubmissionStore,
+            proofStore: coordinator.proofStore,
+            linkStore: coordinator.reportProofLinkStore,
+            sensing: coordinator.sensingCoordinator
+          )
 
           // These existing destinations have no slot in frame 09. Their
           // event and per-session routes remain reachable below its rows.

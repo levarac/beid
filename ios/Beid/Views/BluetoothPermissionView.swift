@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import SwiftUI
 
@@ -10,7 +10,7 @@ struct BluetoothPermissionView: View {
 
   private let steps: [FlatOnboardingSteps.Step] = [
     .init("Events find you", detail: "Nearby events appear automatically — no codes, no search."),
-    .init("Private by design", detail: "Only anonymous proofs are exchanged, never your identity."),
+    .init("Private by design", detail: "Phones exchange rotating anonymous IDs, not names or wallet addresses."),
     .init("Zero effort", detail: "Sensing runs quietly in the background. Nothing to tap."),
   ]
 

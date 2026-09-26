@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import Foundation
 import SwiftUI
@@ -59,6 +59,7 @@ struct ProofCollectedSnapshot: Sendable {
 struct ProofCollectedView: View {
   let snapshot: ProofCollectedSnapshot
   let onViewCollection: () -> Void
+  @State private var showWhatWeSend = false
 
   var body: some View {
     GeometryReader { geometry in
@@ -101,6 +102,18 @@ struct ProofCollectedView: View {
           }
           .padding(.top, DS.Space.l)
 
+          // Figma 07 "WHAT WAS SENT →"; decided label WHAT WE SEND (#637),
+          // opening 16's general disclosure (#646). Nothing is claimed sent.
+          BeidTextControl(
+            "What we send",
+            glyph: .trailing("→", announcing: "What we send"),
+            labelColor: DS.Color.textSecondary
+          ) {
+            showWhatWeSend = true
+          }
+          .accessibilityIdentifier("proof-collected.whatWeSend")
+          .padding(.top, DS.Space.s)
+
           Spacer(minLength: DS.Space.l)
 
           BeidPrimaryButton("View collection", action: onViewCollection)
@@ -115,6 +128,17 @@ struct ProofCollectedView: View {
     }
     .background(DS.Color.surfaceCanvas.ignoresSafeArea())
     .accessibilityIdentifier("scan.proof-collected")
+    .sheet(isPresented: $showWhatWeSend) {
+      NavigationStack {
+        WhatWeSendView()
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              BeidTextControl("Done", accessibilityLabel: "Done") { showWhatWeSend = false }
+            }
+            .beidWithoutSharedBackground()
+          }
+      }
+    }
   }
 
   private func keyValueRow(_ label: String, value: String) -> some View {

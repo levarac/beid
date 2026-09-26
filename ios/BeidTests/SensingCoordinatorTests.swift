@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import BarnardCore
 import BeidSharedKit
@@ -1182,6 +1182,65 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(Data(bytesFromKotlinByteArray: candidate.eventCodeHash), canonicalHashBytes)
   }
 
+  func testRegistryAgreementStillRunsAfterTheVerifiedCandidatesSourceWasEvicted() async throws {
+    let eventId = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    let hashHex = "6c86c6aac5fb24bc"
+    let hash = Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc])
+    var now: Int64 = 1_800_000_000_000
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      BeidSharedKit.jointestsupport.createEventDefinitionResolutionForTesting(
+        eventIdHex: "0x\(eventId)", definitionHashHex: String(repeating: "b", count: 64),
+        blockHashHex: String(repeating: "c", count: 64), eventCodeHashHex: hashHex,
+        validFromEpochSeconds: now / 1_000 - 100, validUntilEpochSeconds: now / 1_000 + 100,
+        joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN,
+        keySetDigestHex: String(repeating: "a", count: 64)
+      )
+    )
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry, nearbyDiscoveryClock: { now }
+    )
+    defer { coordinator.reset() }
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "target", eventDisplayName: "Beacon", eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer, verifiedEventIdHex: "0x\(eventId)",
+      registryAgreement: { _ in true }
+    )
+    await Task.yield()
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState, .REGISTRY_VERIFIED)
+
+    for index in 0..<256 {
+      now += 1
+      coordinator.handleEventInfoHint(
+        peripheralId: "junk-\(index)", eventDisplayName: "Junk",
+        eventCodeHash: Data(repeating: 0x77, count: 8), census: nil,
+        additionalNamesOmitted: false, additionalEventsOmitted: false
+      )
+    }
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNotEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.eventCodeHashHex, hashHex)
+
+    now += 1
+    var agreementCalls = 0
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "target", eventDisplayName: "Beacon", eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
+      registryAgreement: { _ in
+        agreementCalls += 1
+        return true
+      }
+    )
+    let restored = try XCTUnwrap(
+      (0..<coordinator.nearbyEventCandidates.candidateCount)
+        .compactMap { coordinator.nearbyEventCandidates.candidateAt(index: $0) }
+        .first { $0.eventCodeHashHex == hashHex }
+    )
+    XCTAssertEqual(restored.registryStatus, .REGISTERED_VIA_OPERATOR_LOOKUP)
+    XCTAssertEqual(restored.receiverState, .REGISTRY_VERIFIED)
+    XCTAssertEqual(registry.requestedEventIdHexes, ["0x\(eventId)"], "no second resolution replenishes the cache")
+    XCTAssertEqual(agreementCalls, 1, "the definition behind retained shared evidence must still reach Barnard")
+  }
+
   /// A v2 envelope carries no census, so recording one must not erase the
   /// census a v1 hint already published for the same source.
   func testRadioSelfVerifiedEnvelopeKeepsTheCensusAV1HintRecorded() throws {
@@ -1296,6 +1355,20 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 0)
   }
 
+  func testJoinDiagnosticsRejectNonASCIIHexEventIdentifiers() {
+    var lines: [String] = []
+    for character in ["ａ", "０", "９"] {
+      emitJoinStageDiagnostic(
+        { lines.append($0) }, eventIdHex: String(repeating: character, count: 64),
+        stage: "detection", outcome: "detected"
+      )
+    }
+    XCTAssertEqual(lines, Array(repeating:
+      "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+      count: 3
+    ))
+  }
+
   func testJoinDiagnosticsUseOnlyAnEventIdPrefixOrUnknown() {
     var lines: [String] = []
     let coordinator = makeIsolatedSensingCoordinator(
@@ -1329,7 +1402,9 @@ final class SensingCoordinatorTests: XCTestCase {
         "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
           "attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=unknown stage=envelope_verification outcome=rejected_unverified attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=abababab stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=abababab stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=abababab stage=registry_resolution outcome=rejected_no_registry " +
           "attempt=none retry_at_epoch_ms=none",
@@ -1362,6 +1437,26 @@ final class SensingCoordinatorTests: XCTestCase {
       ),
       "diagnostic lines: \(lines)"
     )
+  }
+
+  func testJoinDiagnosticsRejectMalformedIdentifiersAndKeepReceiptFieldsPrivate() {
+    var lines: [String] = []
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, joinDiagnosticLog: { lines.append($0) }
+    )
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "private-peripheral-rpid", eventDisplayName: "private-name",
+      eventCodeHash: Data([0, 1, 2, 3, 4, 5, 6, 7]),
+      rawContainer: Data("private-container".utf8),
+      verifiedEventIdHex: String(repeating: "ab", count: 32) + "\nforged_log_line",
+      registryAgreement: { _ in true }, observedAtEpochMillis: 1_000
+    )
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+        "attempt=none retry_at_epoch_ms=none"
+    ])
   }
 
   func testRegistryFailureLogsRetryDeadlineAndRetriesWhenTheClockReachesIt() async throws {
@@ -1415,6 +1510,16 @@ final class SensingCoordinatorTests: XCTestCase {
       ),
       "diagnostic lines: \(lines)"
     )
+    XCTAssertEqual(lines, [
+      "join_stage event_id=00010203 stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=registry_resolution " +
+        "outcome=rejected_verification_unavailable attempt=1 retry_at_epoch_ms=1800000005000",
+      "join_stage event_id=00010203 stage=registry_resolution outcome=started attempt=2 retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=registry_resolution " +
+        "outcome=rejected_verification_unavailable attempt=2 retry_at_epoch_ms=1800000035000"
+    ])
   }
 
   // MARK: - Registry definition mapping

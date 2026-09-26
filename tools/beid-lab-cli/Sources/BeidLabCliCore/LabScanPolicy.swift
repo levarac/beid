@@ -1,4 +1,4 @@
-// Use of this source code is governed by a BSD-style license.
+// SPDX-License-Identifier: MIT
 
 /// The two scan parameters `observe` must use, as values rather than as
 /// literals buried in a CoreBluetooth call.

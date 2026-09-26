@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import SwiftUI
 
@@ -22,6 +22,7 @@ private struct CollectionHomeContent: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var proofStore: ProofStore
   @ObservedObject var sensing: SensingCoordinator
+  @State private var showAboutSensing = false
   @State private var showsClockInstructions = false
   @State private var clockInstructionsForNetwork = false
   @State private var selectedEvent: EventCard?
@@ -98,6 +99,17 @@ private struct CollectionHomeContent: View {
                 }
               }
 
+              // Figma 04 places ABOUT SENSING → right after the PAST list (#646).
+              BeidTextControl(
+                "About sensing",
+                glyph: .trailing("→", announcing: "About sensing"),
+                labelColor: DS.Color.textSecondary
+              ) {
+                showAboutSensing = true
+              }
+              .accessibilityIdentifier("home.aboutSensing")
+              .padding(.top, DS.Space.s)
+
               // #644 has not settled Today. Keep its real destination visible
               // until an authorized navigation decision replaces it. Follow
               // the list's final rule with the same quiet text-control rhythm.
@@ -128,6 +140,10 @@ private struct CollectionHomeContent: View {
         }
       }
       .toolbar(.hidden, for: .navigationBar)
+      .navigationDestination(isPresented: $showAboutSensing) {
+        AboutSensingView()
+          .toolbar(.visible, for: .navigationBar)
+      }
       .sheet(isPresented: $coordinator.accountSheetPresented) {
         AccountSheetView()
           .environmentObject(coordinator)

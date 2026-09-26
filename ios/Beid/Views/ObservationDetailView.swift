@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import BeidSharedKit
 import SwiftUI
@@ -48,6 +48,7 @@ struct ObservationDetailPresentation {
 /// Flat 2b 11. A selected session, not the event-wide representative Proof.
 /// The native NavigationStack supplies its back control and pop gesture.
 struct ObservationDetailView: View {
+  @EnvironmentObject private var coordinator: AppCoordinator
   let proof: Proof
   let sessionNumber: Int
   let aggregate: BeidSharedKit.aggregation.SessionAggregate?
@@ -83,6 +84,21 @@ struct ObservationDetailView: View {
               .padding(.top, DS.Space.xl)
               .accessibilityIdentifier("observation-detail.unavailable")
           }
+
+          // One session is one Proof, so these are the reports closed in it.
+          LinkedReportsSection(
+            heading: String(
+              localized: "observationDetail.includedInReports",
+              defaultValue: "INCLUDED IN REPORTS",
+              comment: "Section listing the stored reports whose observation window was closed in this recording session. No count is shown."
+            ),
+            identifierPrefix: "observation-detail.report",
+            proof: proof,
+            submissionStore: coordinator.reportSubmissionStore,
+            proofStore: coordinator.proofStore,
+            linkStore: coordinator.reportProofLinkStore,
+            sensing: coordinator.sensingCoordinator
+          )
         }
         .padding(.horizontal, DS.Space.pageMargin)
         .padding(.top, DS.Space.s)
@@ -96,11 +112,7 @@ struct ObservationDetailView: View {
   }
 
   private var sessionTitle: String {
-    String(
-      localized: "eventDetail.session.title",
-      defaultValue: "Session \(sessionNumber)",
-      comment: "Ordinal label for one stored recording session within an event, oldest first."
-    )
+    SessionDisplay.title(sessionNumber)
   }
 
   private func observedWindowsChart(_ presentation: ObservationDetailPresentation) -> some View {

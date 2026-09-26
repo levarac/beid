@@ -1,6 +1,6 @@
 #if DEBUG
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import XCTest
 @testable import Beid
@@ -1319,6 +1319,21 @@ final class VenueSignedServingViewModelTests: XCTestCase {
       text.contains(VenueServingContractFixture.displayName),
       "a stored artifact must not carry a permit's display name"
     )
+
+    // Structural (beid#702, T5): the record's fields are EXACTLY the public
+    // bytes, their source and when they were stored. Screen 14 reads this
+    // record, so the day a display name, verdict, deadline or key field is
+    // added here is the day 14 could present a stale verification as current.
+    // Checked twice because each misses something: the encoded keys omit a nil
+    // optional (`encodeIfPresent`), and the declared fields do not show a key
+    // smuggled in by a custom `encode(to:)`.
+    let publicFields: Set<String> = ["bundleBytes", "handoffBytes", "sourceDescription", "storedAt"]
+    let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    XCTAssertFalse(object.isEmpty, "the encoded record must have keys to compare")
+    XCTAssertEqual(Set(object.keys), publicFields)
+    let declared = Mirror(reflecting: record).children.compactMap(\.label)
+    XCTAssertEqual(declared.count, publicFields.count, "declared fields: \(declared)")
+    XCTAssertEqual(Set(declared), publicFields)
   }
 
   // MARK: - Acquisition refusals are not import verdicts
@@ -2008,6 +2023,249 @@ extension VenueSignedServingViewModelTests {
     XCTAssertEqual(model.status, .blocked(VenueServingRejection(reason: .expired)!))
     let decisions = ports.calls.filter { if case .evaluating = $0 { return true }; return false }
     XCTAssertEqual(decisions.count, 2)
+  }
+}
+
+// MARK: - beid#702: screen 14's Saved pack area reads storage and nothing else
+
+extension VenueSignedServingViewModelTests {
+  private func savedPackRecord(_ source: String = "link, bundle from organizer.example") -> VenuePublicArtifactRecord {
+    VenuePublicArtifactRecord(
+      bundleBytes: fixture.artifact.bundleBytes,
+      handoffBytes: fixture.artifact.handoffBytes,
+      sourceDescription: source,
+      storedAt: Date(timeIntervalSince1970: 1_790_000_000)
+    )
+  }
+
+  /// Screen 14's objects over `store`, with every port scripted, exactly as
+  /// production builds them apart from the ports.
+  private func makeOrganizerTools(store: VenuePublicArtifactStore) -> OrganizerToolsObjects {
+    OrganizerToolsObjects(store: store) { [unowned self] store in
+      VenueSignedServingViewModel(
+        verifier: ports,
+        broadcasting: ports,
+        acquisition: acquisition,
+        store: store,
+        clock: { [unowned self] in self.clockReading },
+        expiry: expiry
+      )
+    }
+  }
+
+  private func temporaryStoreURL() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent("venue-artifact-702-\(UUID().uuidString).json")
+  }
+
+  // T1 — the four states and their order.
+  func testSavedPackRowStateResolvesEveryStateInPriorityOrder() {
+    let record = savedPackRecord()
+    XCTAssertFalse(record.sourceDescription.isEmpty, "a real record must be the input")
+    let resolve = SavedPackRowState.resolve
+
+    // S0
+    XCTAssertEqual(resolve(nil, false, false, false), SavedPackRowState.none)
+    // S1: nothing held, and the unreadable file was set aside.
+    XCTAssertEqual(resolve(nil, false, false, true), .unreadable)
+    // S1: nothing held, and the unreadable file was left in place (writes suspended).
+    XCTAssertEqual(resolve(nil, false, true, false), .unreadable)
+    // S2: the source and time are the record's own, not substitutes.
+    XCTAssertEqual(
+      resolve(record, false, false, false),
+      .saved(source: record.sourceDescription, storedAt: record.storedAt)
+    )
+    guard case .saved(let source, let storedAt) = resolve(record, false, false, false) else {
+      return XCTFail("a durable record must resolve to .saved")
+    }
+    XCTAssertEqual(source, "link, bundle from organizer.example")
+    XCTAssertEqual(storedAt, Date(timeIntervalSince1970: 1_790_000_000))
+    // S3 over S2: a failed or suspended write still leaves `record` set.
+    XCTAssertEqual(resolve(record, true, false, false), .notSaved(source: record.sourceDescription))
+    XCTAssertEqual(resolve(record, false, true, false), .notSaved(source: record.sourceDescription))
+    XCTAssertEqual(resolve(record, true, true, true), .notSaved(source: record.sourceDescription))
+    // S2 over S1: a record held after a quarantine is what this device has now.
+    XCTAssertEqual(
+      resolve(record, false, false, true),
+      .saved(source: record.sourceDescription, storedAt: record.storedAt)
+    )
+    // A failure with nothing held is not a pack that was not saved.
+    XCTAssertEqual(resolve(nil, true, false, false), SavedPackRowState.none)
+    XCTAssertEqual(resolve(nil, true, true, true), .unreadable)
+  }
+
+  // T1 — the store's real properties reach the resolver.
+  func testSavedPackRowStateReadsTheStoresRealState() throws {
+    // S0 on a fresh store.
+    XCTAssertEqual(makeOrganizerTools(store: VenuePublicArtifactStore(fileURL: temporaryStoreURL())).savedPack, SavedPackRowState.none)
+
+    // S2 after a durable write, read back through a fresh load.
+    let url = temporaryStoreURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let record = savedPackRecord()
+    VenuePublicArtifactStore(fileURL: url).store(record)
+    let reloaded = VenuePublicArtifactStore(fileURL: url)
+    XCTAssertEqual(reloaded.record, record, "the record must really have been written")
+    XCTAssertEqual(
+      makeOrganizerTools(store: reloaded).savedPack,
+      .saved(source: record.sourceDescription, storedAt: record.storedAt)
+    )
+
+    // S3 from a real failed write (missing parent directory, as in W22).
+    let failingURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString).appendingPathComponent("artifact.json")
+    let failing = VenuePublicArtifactStore(fileURL: failingURL)
+    failing.store(record)
+    XCTAssertNotNil(failing.record)
+    XCTAssertNotNil(failing.persistenceWriteFailure)
+    XCTAssertEqual(makeOrganizerTools(store: failing).savedPack, .notSaved(source: record.sourceDescription))
+
+    // S1 from a real quarantine.
+    let corruptURL = temporaryStoreURL()
+    try Data("not a record".utf8).write(to: corruptURL)
+    let quarantined = VenuePublicArtifactStore(fileURL: corruptURL)
+    let movedTo = try XCTUnwrap(quarantined.quarantinedFileURL, "the corrupt file must really be quarantined")
+    defer { try? FileManager.default.removeItem(at: movedTo) }
+    XCTAssertNil(quarantined.record)
+    XCTAssertEqual(makeOrganizerTools(store: quarantined).savedPack, .unreadable)
+
+    // S1 from a real unpreserved load: a DIRECTORY at the store's path exists,
+    // cannot be read as data, and that read error is not a DecodingError, so
+    // nothing is quarantined and writes are suspended instead.
+    let blockedURL = temporaryStoreURL()
+    try FileManager.default.createDirectory(at: blockedURL, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: blockedURL) }
+    let unpreserved = VenuePublicArtifactStore(fileURL: blockedURL)
+    XCTAssertTrue(unpreserved.isPersistenceSuspended, "the unreadable path must really suspend writes")
+    XCTAssertNil(unpreserved.quarantinedFileURL, "a read failure that is not a decode failure is left in place")
+    XCTAssertNil(unpreserved.record)
+    XCTAssertEqual(makeOrganizerTools(store: unpreserved).savedPack, .unreadable)
+  }
+
+  // T2 — building 14 and reading its state fetches nothing, verifies nothing
+  // and touches no radio.
+  func testOrganizerToolsReadsStorageWithoutFetchingVerifyingOrBroadcasting() async throws {
+    store.store(savedPackRecord())
+    XCTAssertNotNil(store.record, "a stored pack must exist, or there is nothing 14 could act on")
+
+    let tools = makeOrganizerTools(store: store)
+    XCTAssertEqual(tools.savedPack, .saved(source: savedPackRecord().sourceDescription, storedAt: savedPackRecord().storedAt))
+    // Give any work construction may have started a chance to reach a port.
+    for _ in 0..<10 { await Task.yield() }
+    XCTAssertEqual(tools.savedPack, .saved(source: savedPackRecord().sourceDescription, storedAt: savedPackRecord().storedAt))
+
+    XCTAssertTrue(ports.calls.isEmpty, "14 must not import, evaluate, install or clear: \(ports.calls)")
+    XCTAssertTrue(acquisition.requestedSources.isEmpty, "14 must not fetch")
+    XCTAssertEqual(tools.serving.status, .idle)
+
+    // Positive control: the same doubles DO count when 14b acts, so the zeros
+    // above are not a broken counter.
+    ports.importReplies = [.immediate(.rejected(.registryUnavailable))]
+    await tools.serving.restoreFromStorage()
+    XCTAssertTrue(
+      ports.calls.contains(.importing(id: 0, bundle: fixture.artifact.bundleBytes, handoff: fixture.artifact.handoffBytes)),
+      "14b's reload must reach the verifier through these doubles: \(ports.calls)"
+    )
+    acquisition.replies = [.failure(.transportFailure)]
+    await tools.serving.supply(
+      bundleSource: URL(string: "https://venue.example/bundle")!,
+      handoffSource: URL(string: "https://venue.example/handoff")!,
+      sourceDescription: "venue.example"
+    )
+    XCTAssertEqual(acquisition.requestedSources.count, 1, "14b's supply must reach acquisition through this double")
+  }
+
+  /// 14 and 14b share ONE store: what 14b saves is what 14 then reports.
+  func testOrganizerToolsViewModelWritesTheSameStoreFourteenReads() async throws {
+    let tools = makeOrganizerTools(store: store)
+    XCTAssertTrue(tools.store === store)
+    XCTAssertEqual(tools.savedPack, SavedPackRowState.none)
+    ports.importReplies = [.immediate(.rejected(.registryUnavailable))]
+    acquisition.replies = [.artifact(fixture.artifact)]
+
+    await tools.serving.supply(
+      bundleSource: URL(string: "https://venue.example/bundle")!,
+      handoffSource: URL(string: "https://venue.example/handoff")!,
+      sourceDescription: "venue.example"
+    )
+
+    let record = try XCTUnwrap(tools.store.record, "14b's supply must have stored into 14's store")
+    XCTAssertEqual(tools.savedPack, .saved(source: "venue.example", storedAt: record.storedAt))
+  }
+
+  // T3 — building 14 and reading its state writes nothing.
+  func testOrganizerToolsLeavesTheStoredFileUntouched() async throws {
+    let url = temporaryStoreURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    VenuePublicArtifactStore(fileURL: url).store(savedPackRecord())
+    let before = try Data(contentsOf: url)
+    let inodeBefore = try FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int
+    XCTAssertFalse(before.isEmpty, "the stored file must exist and hold the record")
+    XCTAssertNotNil(inodeBefore)
+
+    let tools = makeOrganizerTools(store: VenuePublicArtifactStore(fileURL: url))
+    XCTAssertEqual(tools.savedPack, .saved(source: savedPackRecord().sourceDescription, storedAt: savedPackRecord().storedAt))
+    for _ in 0..<10 { await Task.yield() }
+    _ = tools.savedPack
+
+    XCTAssertEqual(try Data(contentsOf: url), before, "14 must not rewrite the stored pack")
+    // An atomic write replaces the file even with identical bytes.
+    let inodeAfter = try FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int
+    XCTAssertEqual(inodeAfter, inodeBefore, "14 must not replace the stored file")
+  }
+
+  // T6's isolation — a UI-test launch gets its own store file; any other
+  // launch keeps the default one.
+  func testOrganizerStoreURLIsIsolatedOnlyUnderUITest() throws {
+    XCTAssertNil(OrganizerToolsObjects.storeURL(arguments: []))
+    XCTAssertNil(OrganizerToolsObjects.storeURL(arguments: ["Beid", "-beid-organizer-frame", "14-saved"]))
+
+    let arguments = ["Beid", "-beid-ui-test"]
+    let first = try XCTUnwrap(OrganizerToolsObjects.storeURL(arguments: arguments), "a UI-test launch must get its own file")
+    let second = try XCTUnwrap(OrganizerToolsObjects.storeURL(arguments: arguments))
+
+    let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
+    XCTAssertEqual(first.deletingLastPathComponent().standardizedFileURL, temporary)
+    XCTAssertEqual(second.deletingLastPathComponent().standardizedFileURL, temporary)
+    XCTAssertEqual(first.pathExtension, "json")
+    XCTAssertTrue(first.lastPathComponent.hasPrefix("beid-venue-public-artifact-"), first.lastPathComponent)
+
+    let documents = try XCTUnwrap(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first)
+    let defaultURL = documents.appendingPathComponent("venue-public-artifact.json")
+    XCTAssertNotEqual(first.standardizedFileURL, defaultURL.standardizedFileURL, "a UI test must never write the real file")
+    XCTAssertNotEqual(second.standardizedFileURL, defaultURL.standardizedFileURL)
+    // A new UUID per call: one launch shares a file only because
+    // `productionStoreURL` computes it once.
+    XCTAssertNotEqual(first, second)
+
+    // The isolated file really starts empty and holds what is stored into it.
+    defer { try? FileManager.default.removeItem(at: first) }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
+    let isolated = VenuePublicArtifactStore(fileURL: first)
+    XCTAssertNil(isolated.record)
+    XCTAssertEqual(makeOrganizerTools(store: isolated).savedPack, SavedPackRowState.none)
+    isolated.store(savedPackRecord())
+    XCTAssertTrue(FileManager.default.fileExists(atPath: first.path), "the store must write to the isolated file")
+    XCTAssertEqual(VenuePublicArtifactStore(fileURL: first).record, savedPackRecord())
+  }
+
+  // T4 — 14b's departure ends serving, which is why 14 never shows it.
+  func testEndSessionWhileServingStopsTheRadioAndForgetsTheServedEvent() async throws {
+    let model = makeViewModel()
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(model)
+    guard case .serving = model.status else {
+      return XCTFail("expected .serving before ending the session, got \(model.status)")
+    }
+    XCTAssertNotNil(model.servingEventIdHex)
+    let clearsBefore = ports.calls.filter { $0 == .clearing }.count
+
+    model.endSession()
+
+    XCTAssertEqual(model.status, .idle)
+    XCTAssertNil(model.servingEventIdHex)
+    XCTAssertGreaterThan(ports.calls.filter { $0 == .clearing }.count, clearsBefore, "ending must clear the radio")
+    XCTAssertNil(ports.installedPermit)
   }
 }
 #endif

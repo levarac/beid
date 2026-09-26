@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import BeidSharedKit
 import Foundation
@@ -55,6 +55,31 @@ enum EventGrouping {
   static func sessions(for proof: Proof, in proofs: [Proof]) -> [Proof] {
     guard let key = normalizedKey(for: proof.eventCode) else { return [proof] }
     return proofs.filter { normalizedKey(for: $0.eventCode) == key }
+  }
+
+  /// `sessions(for:in:)` in Event Detail's display order: recording start
+  /// ascending, with the id as a tie-break so two equal dates never depend
+  /// on store order (beid#701 §C).
+  static func orderedSessions(for proof: Proof, in proofs: [Proof]) -> [Proof] {
+    sessions(for: proof, in: proofs).sorted { left, right in
+      if left.date == right.date { return left.id.uuidString < right.id.uuidString }
+      return left.date < right.date
+    }
+  }
+
+  /// The 1-based `Session N` number screens 08, 11 and 12 show for `proof`.
+  /// Derived at display time and never stored; `nil` when `proof` is not in
+  /// `proofs`.
+  static func sessionOrdinal(of proof: Proof, in proofs: [Proof]) -> Int? {
+    guard proofs.contains(where: { $0.id == proof.id }) else { return nil }
+    return orderedSessions(for: proof, in: proofs).firstIndex { $0.id == proof.id }.map { $0 + 1 }
+  }
+
+  /// Whether two stored event codes name the same event under the grouping
+  /// key. A `nil` or unnormalizable code matches nothing.
+  static func sameEvent(_ left: String?, _ right: String?) -> Bool {
+    guard let left = normalizedKey(for: left) else { return false }
+    return left == normalizedKey(for: right)
   }
 
   /// The comparison/grouping key for `eventCode`, per beid#226/DECISIONS

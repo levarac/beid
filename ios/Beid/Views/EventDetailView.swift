@@ -1,11 +1,12 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import BeidSharedKit
 import SwiftUI
 
 /// Flat 2b screen 08. An event here is a group of stored recording Proofs;
-/// neither an event schedule nor a report-to-session relationship is stored.
+/// no event schedule is stored. Report-to-session links (beid#701) are shown
+/// on 09, 11 and 12; this screen does not show them yet (OD-9).
 struct EventDetailView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject private var sensing: SensingCoordinator
@@ -26,8 +27,7 @@ struct EventDetailView: View {
   }
 
   private var sessions: [Proof] {
-    EventGrouping.sessions(for: representative, in: proofStore.proofs)
-      .sorted { $0.date < $1.date }
+    EventGrouping.orderedSessions(for: representative, in: proofStore.proofs)
   }
 
   private var eventCode: String? { representative.eventCode }
@@ -127,7 +127,7 @@ struct EventDetailView: View {
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         HStack(alignment: .firstTextBaseline) {
-          Text(sessionTitle(index))
+          Text(SessionDisplay.title(index))
             .beidTextStyle(DS.Font.Library.title15)
             .foregroundStyle(DS.Color.textPrimary)
           Spacer(minLength: DS.Space.s)
@@ -152,23 +152,9 @@ struct EventDetailView: View {
     .accessibilityIdentifier("event-detail.observation.\(index)")
   }
 
-  private func sessionTitle(_ index: Int) -> String {
-    String(
-      localized: "eventDetail.session.title",
-      defaultValue: "Session \(index)",
-      comment: "Ordinal label for one stored recording session within an event, oldest first."
-    )
-  }
-
   private func sessionMeasurements(_ aggregate: BeidSharedKit.aggregation.SessionAggregate?) -> String {
     guard let aggregate else { return String(localized: "Measurements unavailable") }
-    let devices = Int(aggregate.deviceCount)
-    let windows = Int(aggregate.windowCount)
-    return String(
-      localized: "eventDetail.session.measurements",
-      defaultValue: "\(devices) devices · \(windows) windows",
-      comment: "Session's independently pluralized sensed-device and observation-window counts, read only from its persisted aggregate snapshot."
-    )
+    return SessionDisplay.measurements(aggregate)
   }
 
   private var reports: some View {
@@ -192,7 +178,15 @@ struct EventDetailView: View {
           } else {
             ForEach(Array(records.enumerated()), id: \.element.id) { index, record in
               hairline
-              reportRow(index: index + 1, record: record)
+              EventReportRow(
+                ordinal: index + 1,
+                record: record,
+                identifier: "event-detail.report.\(record.id.uuidString)",
+                submissionStore: submissionStore,
+                proofStore: proofStore,
+                linkStore: coordinator.reportProofLinkStore,
+                sensing: sensing
+              )
             }
             hairline
           }
@@ -228,97 +222,6 @@ struct EventDetailView: View {
     }
   }
 
-  private func reportRow(index: Int, record: ReportSubmissionRecord) -> some View {
-    NavigationLink {
-      ReportDetailView(
-        recordID: record.id, reportIndex: index, submissionStore: submissionStore
-      )
-      .toolbar(.visible, for: .navigationBar)
-    } label: {
-      VStack(alignment: .leading, spacing: DS.Space.xs) {
-        HStack {
-          Text(reportTitle(index))
-            .beidTextStyle(DS.Font.Library.title15)
-            .foregroundStyle(DS.Color.textPrimary)
-          Spacer(minLength: DS.Space.s)
-          Text(reportStatus(record))
-            .beidTextStyle(DS.Font.Library.labelMono10)
-            .foregroundStyle(DS.Color.textPrimary)
-        }
-        Text(reportMetadata(record))
-          .beidTextStyle(DS.Font.Library.labelMono10Tight)
-          .foregroundStyle(DS.Color.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .frame(maxWidth: .infinity, minHeight: DS.Size.reportRowMinHeight, alignment: .leading)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .accessibilityIdentifier("event-detail.report.\(record.id.uuidString)")
-  }
-
-  private func reportTitle(_ index: Int) -> String {
-    String(
-      localized: "eventDetail.report.title",
-      defaultValue: "Report #\(index)",
-      comment: "Ordinal label for a stored canonical Observation submission record, oldest first."
-    )
-  }
-
-  private func reportStatus(_ record: ReportSubmissionRecord) -> String {
-    if record.isTerminal { return String(localized: "Stopped") }
-    switch record.submissionState {
-    case .prepared: return String(localized: "Prepared")
-    case .submitting: return String(localized: "Submitting")
-    case .accepted:
-      return record.acceptanceReceiptHex == nil
-        ? String(localized: "Status unavailable") : String(localized: "Receipt stored")
-    }
-  }
-
-  private func reportMetadata(_ record: ReportSubmissionRecord) -> String {
-    let digest = shortDigest(record.observationDigestHex)
-    if record.isTerminal {
-      return String(
-        localized: "eventDetail.report.stoppedMetadata",
-        defaultValue: "\(digest) · Submission stopped",
-        comment: "Stored report digest followed by a terminal local submission state; no rejection or operator verdict is implied."
-      )
-    }
-    switch record.submissionState {
-    case .prepared:
-      return String(
-        localized: "eventDetail.report.preparedMetadata",
-        defaultValue: "\(digest) · On device · not sent",
-        comment: "Stored report digest followed by the PREPARED local submission state; no network send has started."
-      )
-    case .submitting:
-      return String(
-        localized: "eventDetail.report.submittingMetadata",
-        defaultValue: "\(digest) · Receipt unavailable",
-        comment: "Stored report digest for a submission started without a stored operator receipt."
-      )
-    case .accepted:
-      if record.acceptanceReceiptHex == nil {
-        return String(
-          localized: "eventDetail.report.missingReceiptMetadata",
-          defaultValue: "\(digest) · Receipt unavailable",
-          comment: "Stored report digest when a state says accepted but no operator receipt is stored; no acceptance claim is shown."
-        )
-      }
-      return String(
-        localized: "eventDetail.report.receiptMetadata",
-        defaultValue: "\(digest) · Operator receipt on device",
-        comment: "Stored report digest with an operator acceptance receipt durably present on this device."
-      )
-    }
-  }
-
-  private func shortDigest(_ digest: String) -> String {
-    guard digest.count > 8 else { return digest }
-    return "\(digest.prefix(4))…\(digest.suffix(4))"
-  }
-
   private func sectionLabel(_ title: String) -> some View {
     Text(verbatim: title)
       .beidTextStyle(DS.Font.Library.labelMono10)
@@ -332,7 +235,9 @@ struct EventDetailView: View {
         .foregroundStyle(DS.Color.textSecondary)
         .padding(.bottom, DS.Space.s)
       ForEach(Array(sessions.enumerated()), id: \.element.id) { index, proof in
-        let state = proofState(for: proof)
+        let state = SessionDisplay.proofState(
+          hasSelfProof: sensing.selfProofRecord(forProofId: proof.id) != nil
+        )
         hairline
         NavigationLink {
           ItemDetailView(proof: proof)
@@ -344,7 +249,7 @@ struct EventDetailView: View {
               ground: .canvas
             )
             VStack(alignment: .leading, spacing: DS.Space.xs) {
-              Text(proofTitle(index + 1))
+              Text(SessionDisplay.proofTitle(index + 1))
                 .beidTextStyle(DS.Font.Library.title15)
                 .foregroundStyle(DS.Color.textPrimary)
               Text(state)
@@ -374,29 +279,6 @@ struct EventDetailView: View {
       localized: "eventDetail.proofs.count",
       defaultValue: "PROOFS · \(count)",
       comment: "Section label and number of stored recording Proofs for this event."
-    )
-  }
-
-  private func proofTitle(_ index: Int) -> String {
-    String(
-      localized: "eventDetail.proof.title",
-      defaultValue: "Session \(index) proof",
-      comment: "Opens the existing detail for the stored Proof collected in this numbered recording session."
-    )
-  }
-
-  private func proofState(for proof: Proof) -> String {
-    if sensing.selfProofRecord(forProofId: proof.id) != nil {
-      return String(
-        localized: "eventDetail.proof.state.sealed",
-        defaultValue: "SEALED",
-        comment: "Proof row state when a self-proof signature record exists for this exact stored Proof."
-      )
-    }
-    return String(
-      localized: "eventDetail.proof.state.recorded",
-      defaultValue: "RECORDED ON DEVICE",
-      comment: "Proof row state when no self-proof signature record exists for this exact stored Proof."
     )
   }
 

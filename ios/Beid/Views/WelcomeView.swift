@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import SwiftUI
 
@@ -7,6 +7,7 @@ import SwiftUI
 /// Get Started truthfully follows the existing guest-first route.
 struct WelcomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
+  @State private var showAboutSensing = false
 
   var body: some View {
     FlatOnboardingPage {
@@ -43,12 +44,29 @@ struct WelcomeView: View {
           .frame(maxWidth: DS.Onboarding.welcomeBodyWidth, alignment: .leading)
           .padding(.top, DS.Onboarding.welcomeBodyGap)
 
-        // HOW IT WORKS awaits #646's destination decision. The Figma
-        // connecting/terms footer is false for this guest-first route.
+        // Figma 01 HOW IT WORKS → opens 15 About sensing (#646). The Figma
+        // connecting/terms footer stays out: this guest-first route connects nothing.
+        BeidTextControl("How it works", glyph: .trailing("→", announcing: "How it works"))
+        {
+          showAboutSensing = true
+        }
+        .accessibilityIdentifier("welcome.howItWorks")
+        .padding(.top, DS.Space.m)
       }
     } footer: {
       BeidPrimaryButton("Get Started") {
         coordinator.beginOnboarding()
+      }
+    }
+    .sheet(isPresented: $showAboutSensing) {
+      NavigationStack {
+        AboutSensingView()
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              BeidTextControl("Done", accessibilityLabel: "Done") { showAboutSensing = false }
+            }
+            .beidWithoutSharedBackground()
+          }
       }
     }
   }

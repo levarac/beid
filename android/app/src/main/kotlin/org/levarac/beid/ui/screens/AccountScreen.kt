@@ -71,6 +71,7 @@ fun AccountScreen(
     onOpenManualEventCode: () -> Unit = {},
     walletState: WalletConnectorState = WalletConnectorState.Idle,
     onOpenVenue: () -> Unit = {},
+    onShareSupport: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isSessionActive = uiState.sessionState is EventJoinUiState.Sensing
@@ -179,6 +180,19 @@ fun AccountScreen(
                 modifier = Modifier.testTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON),
             )
 
+            BeidSecondaryButton(
+                text = stringResource(R.string.account_support_share),
+                contentColor = BeidTheme.colors.textPrimary,
+                borderColor = BeidTheme.colors.strokeHairline,
+                onClick = onShareSupport,
+                modifier = Modifier.testTag("account_support_share"),
+            )
+            Text(
+                text = stringResource(R.string.account_support_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = BeidTheme.colors.textSecondary,
+            )
+
             // beid#491: the build position, in the same shape as iOS's row.
             // Two builds showing the same height came from the same commit,
             // which is what lets a tester report about Android and one about
@@ -207,6 +221,7 @@ fun AccountRoute(
     onOpenManualEventCode: () -> Unit,
     walletState: WalletConnectorState = WalletConnectorState.Idle,
     onOpenVenue: () -> Unit = {},
+    onShareSupport: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val bluetoothMonitor = remember { BluetoothRadioMonitor(context) }
@@ -219,6 +234,7 @@ fun AccountRoute(
         onOpenManualEventCode = onOpenManualEventCode,
         walletState = walletState,
         onOpenVenue = onOpenVenue,
+        onShareSupport = onShareSupport,
     )
 }
 
