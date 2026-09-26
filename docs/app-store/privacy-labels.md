@@ -2,7 +2,7 @@
 
 **DRAFT / 未承認・未入力・未公開。** [送信 ON とストア申告の整合（Issue #689）](https://github.com/thegreeting/beid/issues/689)
 の申告準備資料。コード上の事実とストア分類への当てはめを分ける。
-`UNKNOWN` は「いいえ」の意味ではない。未確認事項を解消し、Ken が値を承認してから入力する。
+`UNKNOWN` および `保留` は「いいえ」の意味ではない。未確認事項を解消し、Ken が値を承認してから入力する。
 Google Play は [Data safety 回答案](../google-play/data-safety.md) を使う。
 
 ## 承認リスト
@@ -18,11 +18,11 @@ Google Play は [Data safety 回答案](../google-play/data-safety.md) を使う
 | 上記各種類の利用目的 | **App Functionality** | 参加証拠の作成・送信・受理・検証（B2–B4、O2） |
 | 上記各種類がユーザーに紐づくか | **Yes** を提案 | 実名との結合を確認したという意味ではない。イベント内で同じ鍵に紐づき、匿名化・再結合防止を立証できていないため、旧案の断定的な No を撤回する（B3、O1–O2） |
 | トラッキングに使うか | **No** を暫定提案、第三者の利用確認まで保留 | iOS SDK の解析は無効。確認した経路に広告目的はないが、第三者による二次利用は UNKNOWN（W1、U3） |
-| Location | **UNKNOWN — Coarse Location / Precise Location の確定待ち** | event ID と時刻から会場を特定できる場合がある。座標が無いだけでは除外できず、「会場だから coarse」とも言えない（B3、U1） |
-| Contacts / Search History / Diagnostics / Device ID | **UNKNOWN — 該当性と受信側の用途を確認** | 近接 graph、event lookup、IP／SDK 経路がある。観測の User ID 分類だけで全識別子を説明したとはしない（B3、B5、O3、W1–W3） |
-| ウォレット・通信ログ由来の追加種類／目的 | **UNKNOWN** | 観測本文にウォレットが無いことはアプリ全体で送信しない証明ではない（W1–W3、U2–U3） |
-| その他の選択肢 | **非選択案**。Contact Info、Health & Fitness、Sensitive Info、User Content、Browsing History、Purchases、Advertising Data、Surroundings、Body の収集は確認していない | B3 の本文と W1 の analytics 無効化に基づく限定的な案。Financial Info は wallet 経路の確認まで UNKNOWN。第三者の全利用を確認済みとはしない（U1–U3） |
-| Privacy Policy URL / Privacy Choices URL | **UNKNOWN — 現行 URL と本文を owner が確認** | 公開ページ・ASC 保存値は今回取得していない。削除可能という文言も未確定（U2） |
+| Location | **Coarse Location を選択（Precise Location は選択しない）** | オーナー判断（2026-09-27）。観測と同じ扱い（Linked to user: Yes、Used for: App Functionality）で申告する（B3、U1） |
+| Contacts / Search History / Diagnostics / Device ID | **保留（オーナー判断で後日決定、2026-09-27）** | 近接 graph、event lookup、IP／SDK 経路がある。観測の User ID 分類だけで全識別子を説明したとはしない（B3、B5、O3、W1–W3） |
+| ウォレット・通信ログ由来の追加種類／目的 | **保留（オーナー判断で後日決定、2026-09-27）** | 観測本文にウォレットが無いことはアプリ全体で送信しない証明ではない（W1–W3、U2–U3） |
+| その他の選択肢 | **非選択案**。Contact Info、Health & Fitness、Sensitive Info、User Content、Browsing History、Purchases、Advertising Data、Surroundings、Body の収集は確認していない | B3 の本文と W1 の analytics 無効化に基づく限定的な案。Financial Info は wallet 経路の確認まで保留（オーナー判断で後日決定、2026-09-27）。第三者の全利用を確認済みとはしない（U1–U3） |
+| Privacy Policy URL / Privacy Choices URL | **保留（オーナー判断で後日決定、2026-09-27）** | 公開ページ・ASC 保存値は今回取得していない。削除可能という文言も未確定（U2） |
 
 そのまま公開できる完成済みフォームではない。location、第三者の保存・利用、公開 bundle、
 削除窓口の確認を伴わない一括承認はしない。
@@ -234,8 +234,9 @@ SDK／ウォレットの relay、保持、暗号化、利用者の操作によ�
 ## 未確認事項 — 入力前に解消する
 
 - **U1 分類**: event key を User ID とする案、近接証拠／参加履歴の分類、Contacts の social graph 該当性、
-  event→会場の解像度を owner が承認する。Apple の precise/coarse は座標の小数 3 桁相当を境にする。
-  GPS を読まないこと、Android の neverForLocation 宣言だけではこの判断は決まらない。
+  event→会場の解像度を owner が承認する。Location は Coarse Location としてオーナー判断済み
+  （2026-09-27）。Apple の precise/coarse は座標の小数 3 桁相当を境にするが、GPS を読まないこと、
+  Android の neverForLocation 宣言だけでこの分類を導いたわけではない。
 - **U2 運用**: 配備中の operator と O1–O3 の一致、公開 bundle の範囲・第三者への提供、Cloudflare／RPC／SDK の
   ログと保持期間、削除窓口・URL・実施範囲、バックアップ・公開済みコピーの扱いを確認する。
   ログの用途を見ずに Diagnostics に固定しない。IP の用途次第で Location／Identifiers 等にもなる。
