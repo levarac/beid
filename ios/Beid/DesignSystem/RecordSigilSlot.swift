@@ -8,10 +8,11 @@ import SwiftUI
 /// Every place a record's Sigil is drawn, with its size and both grounds.
 ///
 /// The grounds were measured from the Flat 2b Figma exports (beid#653 OD-6),
-/// not chosen: 07 and 09 draw the Sigil on a filled ink disc; 04, 04c, 06 and
-/// 08 draw it with no ground, and 04's active card and 06 sit on an ink page.
-/// The variant (full or mini) is not decided here: `layoutSigil` picks it from
-/// the size, so 04's past rows (60) and 08's rows (48) are minis.
+/// not chosen: 07 and 09 draw the Sigil on a filled ink disc; 04, 04c, 06, 08
+/// and 12 draw it with no ground, and 04's active card and 06 sit on an ink
+/// page. The variant (full or mini) is not decided here: `layoutSigil` picks it
+/// from the size, so 04's past rows (60), 08's rows (48) and 12's rows (40) are
+/// minis.
 enum RecordSigilPlacement: CaseIterable {
   /// Frame 04, the in-progress card (node 183:13).
   case homeActiveCard
@@ -25,6 +26,9 @@ enum RecordSigilPlacement: CaseIterable {
   case eventDetailRow
   /// Frame 09, Proof Detail (node 204:36).
   case proofDetail
+  /// Frame 12, a Report Detail session-proof row (nodes 206:174, 206:213;
+  /// 40×40, no ground, `#0B0B0F` strokes).
+  case reportDetailRow
 
   var size: CGFloat {
     switch self {
@@ -34,20 +38,21 @@ enum RecordSigilPlacement: CaseIterable {
     case .proofCollected: 290
     case .eventDetailRow: DS.Size.proofRowMinHeight - DS.Space.l
     case .proofDetail: DS.Size.proofDetailSigil
+    case .reportDetailRow: 40
     }
   }
 
   var page: RecordSigilSlot.Ground {
     switch self {
     case .homeActiveCard, .sensingSealed: .ink
-    case .homePastRow, .proofCollected, .eventDetailRow, .proofDetail: .canvas
+    case .homePastRow, .proofCollected, .eventDetailRow, .proofDetail, .reportDetailRow: .canvas
     }
   }
 
   var sigilGround: BeidSharedKit.sigil.SigilGround {
     switch self {
     case .proofCollected, .proofDetail: .DISC
-    case .homeActiveCard, .homePastRow, .sensingSealed, .eventDetailRow: .NONE
+    case .homeActiveCard, .homePastRow, .sensingSealed, .eventDetailRow, .reportDetailRow: .NONE
     }
   }
 }

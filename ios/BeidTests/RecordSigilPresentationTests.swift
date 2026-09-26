@@ -28,8 +28,9 @@ final class RecordSigilPresentationTests: XCTestCase {
       .proofCollected: Expected(size: 290, page: .canvas, sigilGround: .DISC),
       .eventDetailRow: Expected(size: 48, page: .canvas, sigilGround: .NONE),
       .proofDetail: Expected(size: 200, page: .canvas, sigilGround: .DISC),
+      .reportDetailRow: Expected(size: 40, page: .canvas, sigilGround: .NONE),
     ]
-    XCTAssertEqual(RecordSigilPlacement.allCases.count, 6)
+    XCTAssertEqual(RecordSigilPlacement.allCases.count, 7)
     for placement in RecordSigilPlacement.allCases {
       guard let want = expected[placement] else {
         XCTFail("\(placement) has no measured expectation")
@@ -49,6 +50,7 @@ final class RecordSigilPresentationTests: XCTestCase {
       )
       XCTAssertTrue(layout.isSuccess, "\(placement)")
       let expectMini = placement == .homePastRow || placement == .eventDetailRow
+        || placement == .reportDetailRow
       XCTAssertEqual(layout.isMini, expectMini, "\(placement)")
     }
   }

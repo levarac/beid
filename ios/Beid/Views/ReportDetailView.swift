@@ -253,9 +253,8 @@ struct ReportDetailView: View {
     } label: {
       HStack(spacing: DS.Space.m) {
         RecordSigilSlot(
-          recordID: session.proof.id,
-          size: DS.Size.proofRowMinHeight - DS.Space.l,
-          ground: .canvas
+          input: sensing.sigilInput(forProofId: session.proof.id),
+          placement: .reportDetailRow
         )
         VStack(alignment: .leading, spacing: DS.Space.xs) {
           Text(SessionDisplay.proofTitle(session.ordinal))

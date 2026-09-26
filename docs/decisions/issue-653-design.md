@@ -297,8 +297,10 @@ backup exclusion is what keeps it on the device.
 
 ## 6. UI (question G)
 
-`RecordSigilSlot` has six call sites. Frame numbers are taken from the views
-themselves.
+`RecordSigilSlot` had six call sites at `62531fe`. Frame numbers are taken
+from the views themselves. A seventh, frame 12's session-proof row, arrived
+with #701 when `design/flat-2b` was merged in (`d9190b5`). It is the last row
+of this table and is migrated to the same API.
 
 | Frame | Call site | Size | Page ground | Variant | Source | Draws |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -308,6 +310,7 @@ themselves.
 | 07 Proof Collected | `ProofCollectedView.swift:86` | 290 | canvas | full | Store | Detected-only full Sigil |
 | 08 event rows | `EventDetailView.swift:341` | 72 − 24 = **48** (`Tokens.swift:167`, `:83`) | canvas | **mini** | Store | See the mini note below |
 | 09 Proof Detail | `ItemDetailView.swift:118` | 200 (`Tokens.swift:140`) | canvas | full | Store | Detected-only full Sigil |
+| 12 report session-proof row | `ReportDetailView.swift` `sessionProofRow` (`.reportDetailRow`) | 40 | canvas | **mini** | Store | See the mini note below |
 
 - **Ground, measured (OD-6).** Measured from the Figma exports on disk, in
   place: each frame's `meta.xml` node, and the fill of its Sigil SVG asset. The
@@ -324,6 +327,7 @@ themselves.
   | 07 Proof Collected | `183:222` 290×290, ground `183:223` (`07/07.meta.xml`, asset `992c4.svg`) | Full 290 circle `fill="#0B0B0F"`; outer ring r 118.9 = 0.41 × 290 | `DISC` | canvas |
   | 08 event rows | `184:266`, `184:305` 48×48 (`issue-635-home/build/flat2b-figma/08/08.meta.xml`, asset `5a3f4.svg`) | No ground; marks `#0B0B0F` | `NONE` | canvas |
   | 09 Proof Detail | `204:36` 200×200 (`issue-636-sensing/build/flat2b-figma/09/09.meta.xml`, asset `dfa3a.svg`) | Full 200 circle `fill="#0B0B0F"`; inner ring r 30 = 0.15 × 200 | `DISC` | canvas |
+  | 12 report session-proof row | `206:174`, `206:213` 40×40 (`issue-635-home/build/flat2b-figma/12/12.meta.xml`, assets `283bc.svg`, `56c54.svg`) | No ground; `#0B0B0F` strokes of width 2; the only filled path is the r 3.2 centre dot | `NONE` | canvas |
 
   The **native color gap** is fixed. `SigilDrawing.inkRole` used to paint
   marks `bg` only on `DISC` (`SigilView.swift:98-110`), so on the ink-page
@@ -473,7 +477,7 @@ that remain protect nothing a test can observe:
 | OD-3 | Mini (≤ 60) content | (a) the layout's output (centre dot); (b) the neutral ring for every mini; (c) ask the designer for a detected-only mini, which changes spec §5.2 / #633 | **(a) now; raise (c) with the designer.** (b) would claim "no data" for records that have data. |
 | OD-4 | Over 1,024 peers | (a) write nothing, show the ring; (b) keep the first 1,024 and mark the record truncated, which needs "at least" VoiceOver copy | **(a)**. Fail-closed, like `SigilLayout` invariant 6 (`SigilLayout.kt:63-68`). Revisit if field data shows sessions of that size. |
 | OD-5 | Storage | Option 1 or Option 2 (§2) | **Option 2** |
-| OD-6 | Ground per frame | `DISC` vs `NONE` at 07 (290) and 09 (200). #633 names "Proof Collected 黒ベタ円 290 / Proof Detail 240", but frame 09 is 200 today. | **Measured** (§6): 07 and 09 are `DISC`; 04, 04c, 06 and 08 are `NONE`; 04's card and 06 sit on an ink page |
+| OD-6 | Ground per frame | `DISC` vs `NONE` at 07 (290) and 09 (200). #633 names "Proof Collected 黒ベタ円 290 / Proof Detail 240", but frame 09 is 200 today. | **Measured** (§6): 07 and 09 are `DISC`; 04, 04c, 06, 08 and 12 are `NONE`; 04's card and 06 sit on an ink page |
 | OD-7 | Presence 2 | (a) v1 never writes 2, and a future format version plus an owner decision covers keeping a (window, RPID)→token map until a #144 Stage 4 statement arrives; (b) design that retention now | **(a)**. Keeping that map is a new retention of RPIDs, which is outside this authorization. |
 | OD-8 | In-progress card | (a) live from memory; (b) neutral until sealed | **(a)**. Same data and same builder. |
 | OD-9 | Backup | (a) exclude the new file; (b) follow the existing stores, which are all backed up | **(a)**. It is required by "on the device only". Fixing the older stores is a separate issue (§5). |
