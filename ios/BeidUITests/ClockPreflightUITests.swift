@@ -39,7 +39,8 @@ final class ClockPreflightUITests: XCTestCase {
     // 05d's Can't join layout is not shown. (This fixture has no nearby event,
     // so there is no list header to find; NearbyJoinUITests covers a list shown
     // under the same undeterminable notice.)
-    XCTAssertTrue(app.buttons["scan.manual-entry"].exists)
+    // A NavigationLink in the bottom inset; match by identifier across element types.
+    XCTAssertTrue(app.descendants(matching: .any)["scan.manual-entry"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.cant-join"].exists)
   }
 }
