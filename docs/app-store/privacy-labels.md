@@ -181,7 +181,15 @@ SDK の [Analytics.swift:30–37](https://github.com/MetaMask/metamask-ios-sdk/b
 
 ### W2
 
-**Android は同じ analytics 無効化をしていない。**
+**更新（2026-09-26）:** main `77efbf61`（PR [#695](https://github.com/thegreeting/beid/pull/695)、Issue [#693](https://github.com/thegreeting/beid/issues/693) を close）で、Android も SDK 構築直後に `enableDebug(false)` を呼ぶようになった。
+独立 checker は次を確認している。
+- `Analytics.trackEvent` は唯一の HTTPS 送信経路で、`Analytics.kt:35` の `if (!enableDebug) return` によって送信前に戻る。
+- 最初の送信より前にこのフラグが立つ。
+- 修正を外すとテストが RED になる。
+
+以下は修正**前**の build（`45c39e69` 以前から作った Android build）の記述で、それらの build が配布に残っている間は有効である。
+
+**修正前の Android は同じ analytics 無効化をしていない。**
 [android/app/build.gradle.kts:134](https://github.com/thegreeting/beid/blob/45c39e698722883e930b36f45a3955929f601048/android/app/build.gradle.kts#L134)
 の SDK 0.6.6 と
 [WalletConnector.kt:79–101](https://github.com/thegreeting/beid/blob/45c39e698722883e930b36f45a3955929f601048/android/app/src/main/kotlin/org/levarac/beid/sensing/WalletConnector.kt#L79-L101)
