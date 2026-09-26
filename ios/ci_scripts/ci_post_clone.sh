@@ -37,10 +37,8 @@ echo "CI_PULL_REQUEST_NUMBER: ${CI_PULL_REQUEST_NUMBER:-}"
 # does not fail and does not return empty -- it returns a PLAUSIBLE SMALLER
 # NUMBER. That is the worst failure mode available here: a bundle that ships a
 # wrong build position with nothing to distinguish it from a right one. An
-# emptiness check cannot see it. (The model this was taken from, umidori
-# v0.12.10 ci_post_clone.sh:19-24, deepens with a trailing `|| true` and then
-# only checks for empty, so it does not actually refuse a truncated height.
-# Deliberate divergence, not an oversight.)
+# emptiness check cannot see it. Refuse a shallow repository even when
+# rev-list returns a plausible nonzero count.
 #
 # stderr is NOT suppressed here: `--unshallow` legitimately errors on a complete
 # repository, and hiding that stream would also hide a network failure. The

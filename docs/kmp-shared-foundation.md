@@ -19,7 +19,7 @@
 
 `AGENTS.md` の KMP section は ownership boundary と repository-wide constraints の要約であり、本書は詳細な KMP 作業手順の正本です。両者が KMP の詳細手順で食い違う場合は本書を優先し、同じ変更で `AGENTS.md` の要約も直します。`AGENTS.md` の repository-wide safety / delivery rules は引き続き適用します。
 
-基礎にした方法は ShiokazeHD/umidori の v0.10.0 KMP 切替です。ただし、beid は greenfield、Umidori は既存の Swift shared runtime からの切替でした。Umidori の構造と証明方法を使い、Umidori 固有の runner・一括置換・旧 runtime 削除はコピーしません。
+beid は greenfield の KMP 導入です。既存 runtime からの移行で使う一括置換や旧 runtime の削除は、この手順の前提にしません。
 
 上の照合時点で walking skeleton は両 app に接続済みです。未送信 window ledger の reducer と snapshot codec は `shared/` にあり、iOS の production `SensingCoordinator` が shared runtime を使用します。iOS と Android には snapshot bytes を保存する native store がありますが、Android store の production 接続は Issue #121 へ残っています。iOS の `SensingCoordinator` は `BarnardIdentity` を直接保持せず、native 境界の `SensingCryptography` を一つ保持し、production では `BarnardSensingCryptography` を注入します。これは署名器を交換可能にする native facade であり、新しい shared 判断ではありません。
 
@@ -304,7 +304,7 @@ link error が、この host の simulator に存在しない architecture を�
 
 ### GitHub-hosted Ubuntu
 
-beid は ShiokazeHD の self-hosted-only 制約の対象ではありません。現在の hosted job set と GitHub Actions / Xcode Cloud の分担は、repository の正本である [`AGENTS.md` の PR CI contract](../AGENTS.md#pr-ci) と実行定義 `.github/workflows/pr-ci.yml` を確認します。本書では task list を複製しません。KMP change は、上の local gate に加えてその PR CI contract を満たします。
+現在の hosted job set と GitHub Actions / Xcode Cloud の分担は、repository の正本である [`AGENTS.md` の PR CI contract](../AGENTS.md#pr-ci) と実行定義 `.github/workflows/pr-ci.yml` を確認します。本書では task list を複製しません。KMP change は、上の local gate に加えてその PR CI contract を満たします。
 
 toolchain は checkout だけから再現できるよう repo 内で pin します。Kotlin plugin version、Gradle wrapper と distribution checksum、CI の JDK version を暗黙の latest にしません。
 
@@ -495,10 +495,6 @@ source branch で通った結果を destination branch の証拠として使い�
 
 ## 11. 参照した一次資料
 
-- ShiokazeHD/umidori Issue #693: v0.10.0 shared runtime 置換の受け入れ条件と A/B/C 台帳
-- ShiokazeHD/umidori Issue #780: iOS family ごとの stacked runtime-authority 切替
-- ShiokazeHD/umidori PR #777: `shared/` 構造、Android 直接参照、Swift Export、ownership gate
-- `ShiokazeHD/umidori@release/0.10.0`: `shared/build.gradle.kts`、Android settings/app、PR CI
 - `Levarac/design-notes/2026-08-06-beid-reporting-claim-architecture.md`
 - Kura `journal/2026-08-06-levarac-beid-android-ci-blind-spot.md`
 - thegreeting/beid Issue #115: cold-start worker 向けの shared/native 境界と運用知識

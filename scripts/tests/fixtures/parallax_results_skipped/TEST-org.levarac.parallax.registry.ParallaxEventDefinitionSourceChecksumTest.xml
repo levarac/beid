@@ -10,7 +10,7 @@
   <testcase name="aConfiguredPathThatDoesNotExistFailsInsteadOfSkipping" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.0"/>
   <testcase name="existingNonGitDirectoryFailsInsteadOfSkipping" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.053"/>
   <testcase name="copiedVectorsAndCddlMatchTheParallaxCheckoutWhenAvailable" classname="org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest" time="0.002">
-    <skipped message="Parallax checkout is not available: /Users/kenichi/Develop/worktrees/thegreeting-beid/parallax" type="org.junit.AssumptionViolatedException">org.junit.AssumptionViolatedException: Parallax checkout is not available: /Users/kenichi/Develop/worktrees/thegreeting-beid/parallax
+    <skipped message="Parallax checkout is not available: /example/parallax" type="org.junit.AssumptionViolatedException">org.junit.AssumptionViolatedException: Parallax checkout is not available: /example/parallax
 	at org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest.assertExpectedCheckout(ParallaxEventDefinitionSourceChecksumTest.kt:272)
 	at org.levarac.parallax.registry.ParallaxEventDefinitionSourceChecksumTest.copiedVectorsAndCddlMatchTheParallaxCheckoutWhenAvailable(ParallaxEventDefinitionSourceChecksumTest.kt:331)
 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source)

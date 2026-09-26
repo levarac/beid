@@ -4,14 +4,17 @@ This document is the source of truth for beid's temporary Android delivery
 lane. It records repository behavior, runner-local prerequisites, and the
 manual activation steps that must be completed before API uploads can work.
 
-## Current temporary status — 2026-08-28, release-note publication 2026-09-11
+## Delivery configuration — checked 2026-09-26
 
 `.github/workflows/internal-google-play.yml` builds a signed Android App
 Bundle and uploads it to Google Play internal testing. It runs on pushes to
 `main` that change `what_to_test.json` or `what_to_test.android.json`, and can
 also be started manually. The job runs only when the repository variable
-`GHA_ANDROID_DELIVERY` is exactly `on`, uses the self-hosted `emi` runner, and
-keeps Android deliveries serialized without cancelling an in-progress upload.
+`GHA_ANDROID_DELIVERY` is exactly `on` and keeps Android deliveries serialized
+without cancelling an in-progress upload. The 2026-09-26 repository-variable
+readback was `GHA_ANDROID_DELIVERY=on` and `RUNS_ON_ANDROID=ubuntu-latest`: the
+configured route is GitHub-hosted. This readback does not initiate or verify
+a new upload.
 
 **This is an Android-only switch, and that is the point.** It used to be
 `GHA_DELIVERY`, which also gates the two temporary iOS lanes
@@ -24,9 +27,7 @@ in gh#401 so that arming Android arms Android only. Setting
 `GHA_ANDROID_DELIVERY` has no effect on the iOS lanes, and setting
 `GHA_DELIVERY` has no effect on this one.
 
-The workflow is still not activated (`GHA_ANDROID_DELIVERY` remains
-unset/`off`), but
-the store-side bootstrap is done: the `org.levarac.beid` Play Console app
+The historical store-side bootstrap is recorded below: the `org.levarac.beid` Play Console app
 exists (same Levarac developer account as meissa), an upload keystore was
 generated, and the mandatory first AAB upload was completed manually via the
 Play Console UI on 2026-08-28 — built and signed locally (not on `emi`) using
@@ -34,15 +35,14 @@ the same steps `build-and-sign-android.sh` would run, since a one-off bootstrap
 upload does not need the CI runner. The Play publishing service account is
 `play-publisher@levarac.iam.gserviceaccount.com` (its own dedicated `levarac`
 GCP project), granted "Release apps to testing tracks" scoped to just this
-app. Remaining: either place the upload keystore and this service-account
-JSON on `emi` at the paths below, or set the GitHub Secrets described in
-"Hosted-runner support" — then flip `GHA_ANDROID_DELIVERY` to `on`.
+app. The following sections describe the private-runner prerequisites and
+the hosted-runner secret configuration; changing either remains an operator
+action.
 
 The job's `runs-on` also now resolves through the repository variable
 `RUNS_ON_ANDROID` (`${{ vars.RUNS_ON_ANDROID || 'emi' }}`), so the same
 workflow file can run on either `emi` or a GitHub-hosted runner without
-edits — see "Hosted-runner support" below. This mirrors the pattern
-`ShiokazeHD/umidori` uses for its own Android delivery lane.
+edits — see "Hosted-runner support" below.
 
 `what_to_test.json` and `what_to_test.android.json` are both the lane's trigger
 **and** the text testers read. Since beid#503 a `Prepare Google Play release
@@ -91,12 +91,12 @@ checked before signing so a failed injection cannot upload a duplicate code.
 
 ## Runner-local configuration
 
-The `emi` runner has these non-secret path variables in
+For the optional private runner, set these non-secret path variables in
 `~/actions-runner-beid/.env`:
 
 ```text
-ANDROID_HOME=/Users/eiji/android-sdk
-PLAY_CRED_DIR=/Users/eiji/.credentials/play
+ANDROID_HOME=<RUNNER_HOME>/android-sdk
+PLAY_CRED_DIR=<RUNNER_HOME>/.credentials/play
 ```
 
 The Android SDK contains platform 36 and build-tools 36.0.0. The Play
@@ -108,8 +108,8 @@ since `check-play-delivery.sh` and `build-and-sign-android.sh` read
 everything through these variable names, never a hardcoded filename:
 
 ```text
-PLAY_SERVICE_ACCOUNT_JSON=/Users/eiji/.credentials/play/<whatever-the-actual-file-is-named>.json
-PLAY_KEYSTORE_PATH=/Users/eiji/.credentials/play/beid-upload.jks
+PLAY_SERVICE_ACCOUNT_JSON=<RUNNER_HOME>/.credentials/play/<whatever-the-actual-file-is-named>.json
+PLAY_KEYSTORE_PATH=<RUNNER_HOME>/.credentials/play/beid-upload.jks
 PLAY_KEY_ALIAS=beid-upload
 PLAY_KEYSTORE_PASSWORD=<runner-local value>
 PLAY_KEY_PASSWORD=<runner-local value>
@@ -125,8 +125,7 @@ The workflow can run on either `emi` or a GitHub-hosted runner. Which one a
 given run uses is controlled by the repository variable `RUNS_ON_ANDROID`:
 unset (the default) resolves to `emi`; setting it to `ubuntu-latest` switches
 delivery to a GitHub-hosted runner instead. No workflow edit is needed to
-switch — this follows the same `vars.RUNS_ON_* || <default>` pattern
-`ShiokazeHD/umidori` uses for its own Android delivery workflow.
+switch; the expression is `vars.RUNS_ON_* || <default>`.
 
 `emi`'s credential path is unchanged: it still reads the runner-local
 `$PLAY_CRED_DIR/env` file described above. A GitHub-hosted runner is a fresh
@@ -196,10 +195,10 @@ requirement by deepening in `ci_post_clone.sh`.
 under CI rather than falling back to `local`; outside CI it omits the flag so a
 developer build reads `local` from Gradle's own default. Never `0`, never empty.
 
-## Ken-side activation list
+## Historical bootstrap checklist (2026-08-28)
 
 These prerequisites were confirmed missing in the 2026-08-20 preflight; status
-as of 2026-08-28:
+as of 2026-08-28 (historical; see the current configuration above):
 
 1. ✅ Create the `org.levarac.beid` Play Console app — done, same Levarac
    developer account as meissa.
@@ -209,7 +208,7 @@ as of 2026-08-28:
    Android Developer API on that project, and granted the service account
    "Release apps to testing tracks" scoped to just `org.levarac.beid`.
 3. ⬜ Either place the upload keystore plus the service-account JSON under
-   `/Users/eiji/.credentials/play` on `emi`, as the mode-600 `env` file
+   `<RUNNER_HOME>/.credentials/play` on `emi`, as the mode-600 `env` file
    described above, **or** set the four GitHub Secrets and one variable
    described in "Hosted-runner support" and switch `RUNS_ON_ANDROID` to
    `ubuntu-latest`. Not yet done either way — the bootstrap upload below was
@@ -218,15 +217,15 @@ as of 2026-08-28:
 4. ✅ Perform the first AAB upload manually in Play Console — done 2026-08-28,
    via the Play Console UI (a new app's first upload cannot be API-driven).
 
-Item 3 still needs the interactive keystore-generation step, wherever the
-keystore is generated (this bootstrap ran it locally rather than on `emi`,
+Keystore generation is interactive wherever it is performed (this bootstrap
+ran it locally rather than on the private runner,
 since a one-off manual upload doesn't require the CI runner). It prompts for
 the store and key passwords; do not add password flags or run it from
 automation:
 
 ```bash
 keytool -genkeypair \
-  -keystore /Users/eiji/.credentials/play/beid-upload.jks \
+  -keystore "$PLAY_CRED_DIR/beid-upload.jks" \
   -storetype JKS \
   -alias beid-upload \
   -keyalg RSA \

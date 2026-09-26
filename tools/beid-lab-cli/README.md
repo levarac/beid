@@ -413,11 +413,11 @@ The tool is one self-contained executable inside a `.app`. Nothing about
 running it needs a repository checkout, an Xcode project, or DerivedData.
 
 ```sh
-# On the build Mac
+# On the build Mac; set LAB_HOST to your remote Mac SSH host
 cd tools/beid-lab-cli
 ./scripts/run.sh --build-only
 tar -C build -czf /tmp/beid-lab-cli.tgz BeidLabCli.app
-scp /tmp/beid-lab-cli.tgz altair:~/
+scp /tmp/beid-lab-cli.tgz "$LAB_HOST":~/
 
 # On the remote Mac
 tar -xzf ~/beid-lab-cli.tgz
@@ -431,7 +431,7 @@ codesign --force --sign "$CODESIGN_IDENTITY" \
 echo "exit=$?"
 
 # Back on the build Mac
-scp altair:~/observe.jsonl ./
+scp "$LAB_HOST":~/observe.jsonl ./
 ```
 
 Two things to know before the room is live rather than after:

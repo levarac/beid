@@ -31,7 +31,7 @@ README for its exact pin and verification path.
 
 `DECISIONS.md`, the append-only decision record at the top of this repo's
 source-of-truth hierarchy, lives outside this repository at
-`/Users/ko/agent-workspace/projects/beid/DECISIONS.md` (the agent-workspace
+`<private-project-records>/DECISIONS.md` (the agent-workspace
 PMO project) — it is not checked into `thegreeting/beid`.
 
 ## KMP shared/native development contract
