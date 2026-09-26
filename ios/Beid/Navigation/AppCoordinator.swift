@@ -64,7 +64,19 @@ final class AppCoordinator: ObservableObject {
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
-  @Published var homeEventCodeSheetPresented = false
+  /// Home's 04b code sheet. Closing it cancels a pending lookup, whatever
+  /// closed it: swipe-to-dismiss writes `false` through the sheet's binding
+  /// and runs no other code, so the cancellation lives on the write itself,
+  /// synchronously, as `AccountSheetView`'s custom binding does for its sheet
+  /// (PR #716 review). A completed join also closes it; the extra bump then
+  /// has no attempt left to supersede.
+  @Published var homeEventCodeSheetPresented = false {
+    didSet {
+      if oldValue, !homeEventCodeSheetPresented {
+        cancelPendingJoinAttempt()
+      }
+    }
+  }
   @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?

@@ -850,6 +850,17 @@ final class SensingCoordinator: ObservableObject {
   /// store-touching calls.
   private var queuedDetectionsWhileLoading:
     [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?, observedAt: Date?)] = []
+  /// Signal-strength samples `handleSignalStrength` deferred while
+  /// `isLedgerLoading` was `true`. A separate queue on purpose (beid#652):
+  /// RSSI never joins the detection tuple above or reaches `handleDetection`.
+  /// `afterQueuedDetections` is how many detections were already queued when
+  /// the sample arrived, so the drain replays each sample right after the
+  /// detection it followed, as live delivery does. Publishing it at once
+  /// instead let the replayed detection's `beginEventFoundSessionState` wipe
+  /// it, leaving the node unmeasured (PR #716 review). Display state only:
+  /// nothing here is recorded, signed, or sent.
+  private var queuedSignalStrengthWhileLoading:
+    [(afterQueuedDetections: Int, rssi: Int, detectedDisplayId: String?, timestamp: Date)] = []
   /// Decision 1's background load/reconcile task (`beginLedgerLoad(...)`).
   /// Held so tests can deterministically await it
   /// (`waitForLedgerLoadToFinish()`), mirroring `demoTask`/
@@ -2333,6 +2344,19 @@ final class SensingCoordinator: ObservableObject {
   /// avoid a timer, and with it a second clock this path would have to stay
   /// correct against.
   func handleSignalStrength(rssi: Int, detectedDisplayId: String?, at timestamp: Date) {
+    // Deferred with, and replayed after, the detection it arrived beside; see
+    // `queuedSignalStrengthWhileLoading`.
+    guard !isLedgerLoading else {
+      queuedSignalStrengthWhileLoading.append(
+        (
+          afterQueuedDetections: queuedDetectionsWhileLoading.count,
+          rssi: rssi,
+          detectedDisplayId: detectedDisplayId,
+          timestamp: timestamp
+        )
+      )
+      return
+    }
     switch phase {
     case .sensing, .eventFound, .recording:
       break
@@ -5112,8 +5136,16 @@ final class SensingCoordinator: ObservableObject {
   /// store-touching calls.
   private func drainQueuedDetectionsAfterLoad() {
     let queued = queuedDetectionsWhileLoading
+    var signalSamples = queuedSignalStrengthWhileLoading[...]
     queuedDetectionsWhileLoading = []
-    for detection in queued {
+    queuedSignalStrengthWhileLoading = []
+    for (index, detection) in queued.enumerated() {
+      // Samples that arrived before this detection, in arrival order. RSSI
+      // goes only to its sibling handler, never into `handleDetection`.
+      while let sample = signalSamples.first, sample.afterQueuedDetections <= index {
+        signalSamples.removeFirst()
+        handleSignalStrength(rssi: sample.rssi, detectedDisplayId: sample.detectedDisplayId, at: sample.timestamp)
+      }
       handleDetection(
         enin: detection.enin,
         rpid: detection.rpid,
@@ -5121,6 +5153,9 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: detection.reporterRpid,
         observedAt: detection.observedAt
       )
+    }
+    for sample in signalSamples {
+      handleSignalStrength(rssi: sample.rssi, detectedDisplayId: sample.detectedDisplayId, at: sample.timestamp)
     }
   }
 
