@@ -22,10 +22,30 @@ class PublicPrWorkflowTests(unittest.TestCase):
                 with self.subTest(workflow=path.name, runner=runner):
                     self.assertIn(
                         runner,
-                        {"ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-latest", "macos-26"},
+                        {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"},
                     )
                 checked += 1
         self.assertGreaterEqual(checked, 7)
+
+    def test_pr_build_lanes_report_every_head_without_workflow_path_filters(self):
+        for name in ("pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml"):
+            text = (WORKFLOWS / name).read_text()
+            pr = text.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
+            self.assertIn("types: [opened, synchronize, reopened, ready_for_review]", pr)
+            self.assertNotIn("paths:", pr)
+            self.assertNotIn("informational", text)
+        for name in ("pr-ci.yml", "pr-ci-ios-macos.yml", "pr-ci-lab-cli.yml"):
+            text = (WORKFLOWS / name).read_text()
+            for checkout in text.split("- uses: actions/checkout@")[1:]:
+                block = checkout.split("\n      - ", 1)[0]
+                self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", block)
+                self.assertIn("persist-credentials: false", block)
+
+    def test_macos_builds_pin_the_available_xcode(self):
+        for name in ("pr-ci-ios-macos.yml", "main-ios-release-build.yml", "pr-ci-lab-cli.yml"):
+            text = (WORKFLOWS / name).read_text()
+            self.assertIn("DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer", text)
+            self.assertNotIn("for app in /Applications/Xcode*.app", text)
 
     def test_public_pr_workflows_have_no_secrets(self):
         for path in WORKFLOWS.glob("*.yml"):
@@ -44,7 +64,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
     def test_every_runner_is_hosted(self):
         for path in WORKFLOWS.glob("*.yml"):
             for runner in re.findall(r"(?m)^    runs-on: (.+)$", path.read_text()):
-                self.assertIn(runner, {"ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-latest", "macos-26"})
+                self.assertIn(runner, {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"})
 
     def test_secret_lanes_are_main_only_and_environment_protected(self):
         for name, environment in (("internal-google-play.yml", "google-play-internal"),

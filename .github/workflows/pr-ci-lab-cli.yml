@@ -1,34 +1,11 @@
 name: PR lab CLI (GitHub-hosted macOS)
 
-# `tools/beid-lab-cli` builds and tests in about a minute, and it needs a Mac
-# (CoreBluetooth). Those two facts together are why this is its own workflow
-# rather than a step in `pr-ci-ios-macos.yml`.
-#
-# Folding it into that lane would have tied a one-minute check to a
-# ~24-minute simulator job. gh#479 narrowed that lane's triggers
-# for exactly that reason, and adding `tools/**` to its `paths` would have
-# undone the narrowing for changes that cannot affect a simulator test.
-#
-# So the split is not tidiness: a tools-only PR runs this and nothing else,
-# and the expensive lane keeps the trigger set it was deliberately given.
+# The standalone macOS package keeps its own short build/test lane.
 on:
-  # `synchronize` is present here where the simulator lane omits it. That lane
-  # measures a merge-candidate head once; this one is a fast feedback check an
-  # author iterates against, and a check that only ever ran on `opened` would
-  # be stale for every commit after the first -- which is the state this
-  # workflow was added to fix.
+  # Always report a status for every PR head, including drafts. Workflow-level
+  # path filters would leave a required context pending on unrelated changes.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - ".github/workflows/pr-ci-lab-cli.yml"
-      - "tools/beid-lab-cli/**"
-      - "scripts/ci_change_filter.py"
-      - "scripts/check_lab_cli_barnard_pin.py"
-      - "scripts/check_observe_never_connects.py"
-      # The app's Barnard pin: `check_lab_cli_barnard_pin.py` fails the two
-      # apart, so a bump here must be seen by this job even though nothing
-      # under `tools/` changed.
-      - "ios/project.yml"
   push:
     branches: [main]
     paths:
@@ -43,6 +20,9 @@ on:
 permissions:
   contents: read
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+
 concurrency:
   # Its own group: cancelling this must never cancel the simulator lane, and
   # vice versa.
@@ -56,22 +36,15 @@ jobs:
       contents: read
       pull-requests: read
     runs-on: macos-26
-    # This short hosted job also runs for drafts, independently of the
-    # longer optional simulator job.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      # The `paths` filter above decides whether this workflow runs at all.
-      # This decides whether the build is worth doing, and it is the same
-      # classifier `pr-ci.yml` uses -- so `tools/beid-lab-cli` has exactly one
-      # definition of "does this change need a build", rather than a YAML glob
-      # here and a Python rule there that drift apart.
-      #
-      # The case it actually catches is a README-only change: `paths` matches,
-      # nothing needs compiling.
+      # The shared classifier skips irrelevant builds while still reporting
+      # this check on every PR. Collection or classification errors build.
       - name: Collect changed paths
         id: changed
         if: always()
