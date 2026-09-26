@@ -2211,6 +2211,21 @@
     "Not a venue link": {},
     "Not broadcasting": {},
     "Not saved": {},
+    "Saved pack": {
+      "comment": "Section heading on Organizer tools for the venue pack stored on this device. Not a key: the venue device holds no key."
+    },
+    "Saved on this device": {
+      "comment": "Status of the stored venue pack: it was written to this device's storage. Not a claim that it was checked or is broadcasting."
+    },
+    "Could not read": {
+      "comment": "Status of the stored venue pack: the stored file could not be read and was set aside."
+    },
+    "No saved pack": {
+      "comment": "Status of the stored venue pack: nothing is stored on this device."
+    },
+    "Saved": {
+      "comment": "Row label: the date and time the venue pack was stored on this device."
+    },
     "Organizer": {},
     "Pack rejected": {},
     "Pack unavailable": {},

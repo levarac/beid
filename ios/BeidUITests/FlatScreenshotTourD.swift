@@ -95,6 +95,9 @@ final class FlatScreenshotTourD: XCTestCase {
     assertMinimumHitTarget(copied)
   }
 
+  /// The launch uses its own empty pack file (`OrganizerToolsObjects.storeURL`),
+  /// so a pack an earlier test or run stored is not read here: this frame does
+  /// not depend on an erased Simulator or on test order.
   func testShot_14_OrganizerTools() {
     openOrganizer()
     let route = app.buttons["organizer.venueBroadcast"]
@@ -102,6 +105,66 @@ final class FlatScreenshotTourD: XCTestCase {
     attachScreenshot("14")
     assertMinimumHitTarget(route)
     XCTAssertEqual(route.value as? String, "Not broadcasting")
+
+    // beid#702: the Saved pack area, and no trace of a key screen (14c).
+    let heading = app.staticTexts["organizer.savedPack.heading"]
+    XCTAssertTrue(heading.exists, "the Saved pack heading must be on 14")
+    XCTAssertEqual(heading.label.uppercased(), "SAVED PACK")
+    let status = app.staticTexts["organizer.savedPack.status"]
+    XCTAssertTrue(status.exists)
+    XCTAssertEqual(status.label.uppercased(), "NO SAVED PACK")
+    XCTAssertFalse(app.staticTexts["organizer.savedPack.source"].exists, "a row with no value is not drawn")
+    XCTAssertFalse(app.staticTexts["organizer.savedPack.storedAt"].exists, "a row with no value is not drawn")
+    XCTAssertFalse(app.staticTexts["organizer.savedPack.note"].exists)
+    assertNoKeyScreen()
+  }
+
+  func testShot_14_OrganizerTools_SavedPack() {
+    openOrganizer(extraArguments: ["-beid-organizer-frame", "14-saved"])
+    let status = app.staticTexts["organizer.savedPack.status"]
+    _ = status.waitForExistence(timeout: 5)
+    attachScreenshot("14-saved")
+    XCTAssertTrue(status.exists, "the STATUS value must be on 14")
+    XCTAssertEqual(status.label.uppercased(), "SAVED ON THIS DEVICE")
+    XCTAssertEqual(app.staticTexts["organizer.savedPack.source"].label, "link, bundle from organizer.eth")
+    XCTAssertTrue(app.staticTexts["organizer.savedPack.storedAt"].exists)
+    XCTAssertEqual(
+      app.staticTexts["organizer.savedPack.note"].label,
+      "A saved pack is checked again every time it is loaded."
+    )
+    XCTAssertEqual(app.buttons["organizer.venueBroadcast"].value as? String, "Not broadcasting")
+    assertNoKeyScreen()
+  }
+
+  func testShot_14_OrganizerTools_NotSaved() {
+    openOrganizer(extraArguments: ["-beid-organizer-frame", "14-not-saved"])
+    let status = app.staticTexts["organizer.savedPack.status"]
+    _ = status.waitForExistence(timeout: 5)
+    attachScreenshot("14-not-saved")
+    XCTAssertTrue(status.exists, "the STATUS value must be on 14")
+    XCTAssertEqual(status.label.uppercased(), "NOT SAVED")
+    XCTAssertEqual(app.staticTexts["organizer.savedPack.source"].label, "link, bundle from organizer.eth")
+    XCTAssertFalse(app.staticTexts["organizer.savedPack.storedAt"].exists, "an unsaved pack has no saved time")
+    XCTAssertEqual(
+      app.staticTexts["organizer.savedPack.note"].label,
+      "This pack could not be saved. It stays on this device only until the app closes."
+    )
+    assertNoKeyScreen()
+  }
+
+  /// 14c is not built (beid#702): 14 has no text field, no key wording and no
+  /// control inside the Saved pack area.
+  private func assertNoKeyScreen() {
+    XCTAssertEqual(app.textFields.count, 0)
+    XCTAssertEqual(app.textViews.count, 0)
+    for wording in ["Venue key", "Save key", "Remove key", "vk_"] {
+      let match = app.descendants(matching: .any)
+        .matching(NSPredicate(format: "label CONTAINS[c] %@", wording)).firstMatch
+      XCTAssertFalse(match.exists, "14 must not show \"\(wording)\"")
+    }
+    for identifier in ["organizer.savedPack", "organizer.savedPack.status", "organizer.savedPack.source"] {
+      XCTAssertFalse(app.buttons[identifier].exists, "\(identifier) must not be a control")
+    }
   }
 
   func testShot_14b_VenueBroadcast() {
