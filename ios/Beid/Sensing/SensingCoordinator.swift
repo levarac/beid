@@ -737,7 +737,8 @@ final class SensingCoordinator: ObservableObject {
 
   /// The definition this host's own authenticated registry read returned,
   /// kept so an envelope arriving *after* a hash's single registry resolution
-  /// completed still has something to be compared against.
+  /// completed still has something to be compared against. Shared owns its
+  /// retention lifetime, including source eviction followed by re-observation.
   private var nearbyVerifiedDefinitions: [String: BarnardEventDefinitionV1] = [:]
 
   /// Canonical Event IDs carried by Barnard's radio-self-verified B005 v2
@@ -2836,9 +2837,9 @@ final class SensingCoordinator: ObservableObject {
     asOf now: Int64
   ) {
     nearbyEventCandidates = snapshot
-    // Mirrors the Android session's prune: a hash whose sources have expired
-    // keeps neither its cached agreement nor its cached definition, so neither
-    // map grows without bound across a long discovery session.
+    // Agreements and radio identities follow visible sources. Definitions
+    // follow shared registry evidence, which survives source eviction and
+    // prevents re-resolution when an evicted hash reappears (beid#523).
     var liveHashes = Set<String>()
     for index in 0..<snapshot.candidateCount {
       if let candidate = snapshot.candidateAt(index: index) {
@@ -2846,7 +2847,9 @@ final class SensingCoordinator: ObservableObject {
       }
     }
     nearbyEnvelopeAgreements = nearbyEnvelopeAgreements.filter { liveHashes.contains($0.key) }
-    nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter { liveHashes.contains($0.key) }
+    nearbyVerifiedDefinitions = nearbyVerifiedDefinitions.filter {
+      nearbyDiscoveryStore.retainsVerifiedRegistryDefinitionForHashHex(hashHex: $0.key)
+    }
     nearbyVerifiedEventIds = nearbyVerifiedEventIds.filter { liveHashes.contains($0.key) }
     republishRelayGateState()
     nearbyDiscoveryExpiryTask?.cancel()

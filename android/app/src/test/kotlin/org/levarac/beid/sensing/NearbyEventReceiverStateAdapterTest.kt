@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import org.levarac.barnard.BarnardEventDefinitionV1
 import org.levarac.parallax.discovery.NearbyEventJoinEligibility
 import org.levarac.parallax.discovery.NearbyEventReceiverState
+import org.levarac.parallax.discovery.candidateForHashHex
 import org.levarac.parallax.discovery.nearbyCandidateJoinEligibility
 import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.registry.EventJoinMode
@@ -28,6 +29,46 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NearbyEventReceiverStateAdapterTest {
+    @Test
+    fun aVerifiedDefinitionSurvivesSourceEvictionWhileSharedRetainsItsRegistration() = runTest {
+        val registry = FakeRegistry()
+        val session = session(registry)
+        session.recordRadioSelfVerifiedEnvelope("target", "Beacon", EVENT_HASH, CONTAINER) { true }
+        resolveVerifiedOpenDefinition(registry)
+        val originalDefinition = assertNotNull(session.verifiedDefinitionsByHash()[EVENT_HASH.toHex()])
+
+        val junkHash = eventCodeHashForOpenEventV1(ByteArray(32) { 0x77 })
+        repeat(256) { index ->
+            advanceTimeBy(1)
+            session.recordHint("junk-$index", "Junk", junkHash, null, false, false)
+        }
+        assertNull(session.candidates.value.candidateForHashHex(EVENT_HASH.toHex()))
+
+        advanceTimeBy(1)
+        session.recordHint("target", "Beacon", EVENT_HASH, null, false, false)
+        val restored = assertNotNull(session.candidates.value.candidateForHashHex(EVENT_HASH.toHex()))
+        assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, restored.receiverState)
+        assertEquals(NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP, restored.registryStatus)
+        assertEquals(
+            originalDefinition,
+            session.verifiedDefinitionsByHash()[EVENT_HASH.toHex()],
+            "the relay verifier must still receive the definition behind shared registration",
+        )
+
+        var agreementCalls = 0
+        session.recordRadioSelfVerifiedEnvelope("target", "Beacon", EVENT_HASH, CONTAINER) {
+            agreementCalls += 1
+            assertEquals(originalDefinition, it)
+            true
+        }
+        assertEquals(1, agreementCalls, "re-observation must still consult Barnard registry agreement")
+        assertEquals(1, registry.lookupHashes.count { it == EVENT_HASH.toHex() }, "shared suppresses re-resolution")
+
+        advanceTimeBy(300_001)
+        runCurrent()
+        assertTrue(session.verifiedDefinitionsByHash().isEmpty(), "TTL cleanup must still clear the definition cache")
+    }
+
     /**
      * The adapter's own error-code mapping, and the second thing beid#391's
      * move dropped.
@@ -345,6 +386,7 @@ class NearbyEventReceiverStateAdapterTest {
         assertEquals(NearbyEventReceiverState.REGISTRY_VERIFIED, candidate(session).receiverState)
 
         session.reset()
+        assertTrue(session.verifiedDefinitionsByHash().isEmpty())
         session.recordHint("peripheral", "Beacon", EVENT_HASH, null, false, false)
 
         assertEquals(NearbyEventReceiverState.UNVERIFIED, candidate(session).receiverState)
@@ -394,6 +436,7 @@ class NearbyEventReceiverStateAdapterTest {
         )
 
     private class FakeRegistry : NearbyEventRegistry {
+        val lookupHashes = mutableListOf<String>()
         private lateinit var lookupCompletion: (NearbyEventIdLookup) -> Unit
         private lateinit var definitionCompletion: (NearbyEventDefinitionVerification) -> Unit
 
@@ -401,6 +444,7 @@ class NearbyEventReceiverStateAdapterTest {
             hashHex: String,
             completion: (NearbyEventIdLookup) -> Unit,
         ): NearbyEventRegistryRequest {
+            lookupHashes += hashHex
             lookupCompletion = completion
             return NearbyEventRegistryRequest {}
         }
