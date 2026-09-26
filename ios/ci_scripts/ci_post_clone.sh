@@ -88,17 +88,7 @@ fi
 if [[ "$INSTALLED_VERSION" != "$XCODEGEN_VERSION" ]]; then
   echo "Installing XcodeGen $XCODEGEN_VERSION (found: ${INSTALLED_VERSION:-none})..."
   XCODEGEN_TMP="$(mktemp -d)"
-  # Retry the download. Every Xcode Cloud runner is clean, so this fetch runs
-  # on every single build and its success depends on the runner reaching
-  # github.com at that moment — an unretried failure takes the whole build
-  # down with correct code. Observed 2026-08-05: build 93c57d8e failed with
-  # curl exit 35 (SSL connect error) here, nothing else wrong with the commit.
-  # --retry-all-errors is what makes --retry cover connection/TLS failures;
-  # --retry alone only covers transient HTTP responses and timeouts.
-  curl -sSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-    -o "$XCODEGEN_TMP/xcodegen.zip" \
-    "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
-  unzip -q "$XCODEGEN_TMP/xcodegen.zip" -d "$XCODEGEN_TMP"
+  "$CI_PRIMARY_REPOSITORY_PATH/scripts/download_xcodegen.sh" "$XCODEGEN_TMP"
   XCODEGEN_PREFIX="$HOME/.local/xcodegen-${XCODEGEN_VERSION}"
   # Use the unzipped release directly. The release's install.sh does a bare
   # `cp` into $PREFIX and fails when the directory doesn't exist (observed

@@ -74,12 +74,12 @@ jobs:
           set -euo pipefail
           printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: zulu
           java-version: "17"
@@ -156,14 +156,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(tr -d '[:space:]' < ios/ci_scripts/XCODEGEN_VERSION)"
-          archive="$RUNNER_TEMP/xcodegen.zip"
           install_dir="$RUNNER_TEMP/xcodegen-pinned"
-          curl --fail --location --retry 3 --output "$archive" \
-            "https://github.com/yonaskolb/XcodeGen/releases/download/$version/xcodegen.zip"
-          mkdir -p "$install_dir"
-          ditto -x -k "$archive" "$install_dir"
-          test -d "$install_dir/xcodegen/share/xcodegen/SettingPresets"
+          scripts/download_xcodegen.sh "$install_dir"
           printf '%s\n' "$install_dir/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Verify XcodeGen pin and generated project

@@ -53,12 +53,12 @@ jobs:
     runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: zulu
           java-version: "17"
@@ -115,6 +115,14 @@ jobs:
             echo "KMP_JAVA_HOME=$kmp_java_home"
             echo "JAVA_HOME=$kmp_java_home"
           } >> "$GITHUB_ENV"
+
+      - name: Install pinned XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/xcodegen-pinned"
+          scripts/download_xcodegen.sh "$install_dir"
+          printf '%s\n' "$install_dir/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Verify XcodeGen pin and generated project
         shell: bash

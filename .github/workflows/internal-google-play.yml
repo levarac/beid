@@ -52,7 +52,7 @@ jobs:
       # a shipped build, with nothing to distinguish it from a right one. iOS
       # meets the same requirement by deepening in ci_post_clone.sh; Android
       # meets it here.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -77,7 +77,7 @@ jobs:
 
       - name: Setup Java (hosted runners only)
         if: runner.environment == 'github-hosted'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: zulu
           java-version: "17"

@@ -128,7 +128,7 @@ class AndroidWiringTest(unittest.TestCase):
     def test_the_checkout_is_not_shallow(self) -> None:
         """The guard above can only pass if the checkout actually fetches history."""
         text = PLAY_WORKFLOW.read_text(encoding="utf-8")
-        checkout = text[text.index("- uses: actions/checkout@v4") :][:200]
+        checkout = text[text.index("- uses: actions/checkout@") :][:200]
         self.assertIn("fetch-depth: 0", checkout)
 
     def test_the_height_reaches_gradle(self) -> None:
