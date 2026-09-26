@@ -17,9 +17,9 @@ upstream freshness・operator の配備状態・実機送信の限界は
 | 収集・共有の有無 | **Yes** | 観測の自動 POST と保存（[B2](../app-store/privacy-labels.md#b2)、[B4](../app-store/privacy-labels.md#b4)、[O1](../app-store/privacy-labels.md#o1)） |
 | 観測の種類 | **Personal info → User IDs** と **App activity → Other actions** を選択する案 | 仮名の参加者鍵・commitment とイベント参加履歴／近接観測（[B3](../app-store/privacy-labels.md#b3)） |
 | 観測の扱い | **Collected + Shared / ephemeral: No / Required / App functionality** | 自動送信・無期限保持・公開 bundle 経路。共有目的も App functionality（[B2](../app-store/privacy-labels.md#b2)、[O1](../app-store/privacy-labels.md#o1)、[O2](../app-store/privacy-labels.md#o2)） |
-| Android の SDK 解析 | **App activity → App interactions** と **Device or other IDs** を選択する案。**Collected + Shared / Analytics** | MetaMask 0.6.6 は解析が既定で有効。接続イベントと session／channel ID 等を送る（[W2](../app-store/privacy-labels.md#w2)） |
-| SDK 解析を申告するか、先に修正するか | **現行 build を申告するなら上の解析を含める。除外するなら、先に修正 build を配布し、対象の全配布版を確認する** | この docs-only PR は analytics を無効にしない。宣言だけ先に削除しない（[W2](../app-store/privacy-labels.md#w2)） |
-| SDK 解析の一時処理／任意性 | **UNKNOWN** | 受信先の保持と、接続前の発火・利用者の選択可能性の実機確認が無い。操作が任意という理由だけで解析も Optional としない（W2） |
+| Android の SDK 解析 | **修正済み build だけが配布されているなら非選択。** 修正前の build が配布に残るなら、**App activity → App interactions** と **Device or other IDs** を選び、**Collected + Shared / Analytics** とする | main `77efbf61`（PR [#695](https://github.com/thegreeting/beid/pull/695)、[#693](https://github.com/thegreeting/beid/issues/693) close）で解析を無効化した。修正前の build は接続イベントと session／channel ID 等を送る（[W2](../app-store/privacy-labels.md#w2)） |
+| SDK 解析を申告するか、先に修正するか | **修正は main に入った。次の手順を順に満たしてから申告を外す。**<br>1. 次の Android 配布で `77efbf61` 以降の versionCode を出す。<br>2. それより前の versionCode がすべての track（internal を含む）から外れたことを Play Console で読み返す。 | 宣言だけ先に削除しない。配布中の旧 build は今も送信する（W2） |
+| SDK 解析の一時処理／任意性 | **修正済み build では該当なし。** 旧 build を申告する間は **UNKNOWN** | 旧 build について、受信先の保持と、接続前の発火・利用者の選択可能性は実機で確認していない（W2） |
 | Location | **UNKNOWN — Approximate location / Precise location の選択待ち** | event ID と時刻による会場の解像度を確認する。仮に採用する種類は観測と同じ扱い（B3） |
 | 全データの転送暗号化 | **UNKNOWN**。観測 HTTPS は確認済み | SDK／wallet relay／BLE を含めた全経路の保証は未確認（[B4](../app-store/privacy-labels.md#b4)、[W1–W3](../app-store/privacy-labels.md#w1)） |
 | アカウント作成 | **My app does not allow users to create an account** を提案 | 下記 2a。wallet binding とサーバーアカウント作成を混同しない |
@@ -62,7 +62,7 @@ upstream freshness・operator の配備状態・実機送信の限界は
      - Etherscan: 既定では無効。`project.yml:104` と `beid.etherscanApiKey` の既定値は空文字。
 3. **送信先はイベント定義が決める。** 送信 endpoint は検証済み Event Definition から来る（`SubmissionModels.kt:189-195`）。`validateSubmissionEndpoint` は任意の HTTPS URL を受け付ける。
    O1〜O3 は、現行の定義が名指す operator（levarac/parallax）の説明であって、固定の受信者ではない。Shared = Yes は最悪の場合も含む。
-4. **Android の analytics は Issue [#693](https://github.com/thegreeting/beid/issues/693) で修正中（PR [#695](https://github.com/thegreeting/beid/pull/695)）。**
+4. **Android の analytics は修正済み。** Issue [#693](https://github.com/thegreeting/beid/issues/693) は PR [#695](https://github.com/thegreeting/beid/pull/695) の merge（main `77efbf61`）で close した。
    上の「申告するか、先に修正するか」の行はこれを前提にする。修正 build が全配布版に行き渡るまでは、現行の挙動として申告する。
 5. **分類の OS 差。** 近接観測を iOS は「Other Data Types」、Android は「App activity → Other actions」に入れる。
    どちらもその platform の受け皿なので、Ken が並べて確認する。
