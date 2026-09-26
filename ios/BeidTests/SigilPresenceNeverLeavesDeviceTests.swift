@@ -179,6 +179,7 @@ private final class PresenceContainmentSubmissionSpy: WindowReportSubmissionRunt
   func excludedWindowCount(forEventCode eventCode: String) -> Int { 0 }
 }
 
+@MainActor
 private struct PresenceContainmentSession {
   let directory: URL
   let eventCode: String

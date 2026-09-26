@@ -12,14 +12,19 @@ import XCTest
 final class SigilPresenceStoreTests: XCTestCase {
   private var directory: URL!
 
-  override func setUpWithError() throws {
+  // The async overrides, because XCTest declares them `@MainActor`; the sync
+  // `setUpWithError`/`tearDownWithError` are nonisolated and could not touch
+  // `directory` (same shape as `ReportProofLinkPresentationTests`).
+  override func setUp() async throws {
+    try await super.setUp()
     directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("beid653-store-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
   }
 
-  override func tearDownWithError() throws {
+  override func tearDown() async throws {
     try? FileManager.default.removeItem(at: directory)
+    try await super.tearDown()
   }
 
   private var fileURL: URL {
