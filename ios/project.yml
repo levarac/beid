@@ -166,11 +166,10 @@ targets:
         # verified Event Definition fetched through the registry module.
         BEID_REPORT_SUBMISSION_ENABLED: "NO"
         # Event-key signing entry point: the only places a signature may be
-        # sent, one per purpose. Placeholders on the non-resolving .invalid
-        # TLD until the alcor and mizar hosts are decided; a non-https or
-        # empty value disables that purpose.
-        BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL: "https://alcor.levarac.invalid/bind/callback"
-        BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL: "https://mizar.levarac.invalid/claim/callback"
+        # sent, one per purpose: the alcor join page and the mizar claim page.
+        # A non-https or empty value disables that purpose.
+        BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL: "https://alcor-human-check.levarac.workers.dev/"
+        BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL: "https://levarac-mizar-claim.levarac.workers.dev/"
         # Same non-secret reasoning as BEID_EVENT_DEFINITION_URL_TEMPLATE
         # above. Route existence verified live: GET /artifacts/key-sets/<a
         # wrong digest> -> 404 "EventKeySet artifact not found", not 500.

@@ -1721,8 +1721,8 @@
 				BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}";
 				BEID_EVENT_DEFINITION_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}";
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";
-				BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL = "https://mizar.levarac.invalid/claim/callback";
-				BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL = "https://alcor.levarac.invalid/bind/callback";
+				BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL = "https://levarac-mizar-claim.levarac.workers.dev/";
+				BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL = "https://alcor-human-check.levarac.workers.dev/";
 				BEID_EVENT_REGISTRY_READER_ADDRESS = 0xd4852f8526A1555A1b2C34145f0eCDA412a53c51;
 				BEID_REPORT_SUBMISSION_ENABLED = NO;
 				BEID_VENUE_BUNDLE_URL_TEMPLATE = "";
@@ -1979,8 +1979,8 @@
 				BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/v1/events/by-code/{code}";
 				BEID_EVENT_DEFINITION_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}";
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";
-				BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL = "https://mizar.levarac.invalid/claim/callback";
-				BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL = "https://alcor.levarac.invalid/bind/callback";
+				BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL = "https://levarac-mizar-claim.levarac.workers.dev/";
+				BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL = "https://alcor-human-check.levarac.workers.dev/";
 				BEID_EVENT_REGISTRY_READER_ADDRESS = 0xd4852f8526A1555A1b2C34145f0eCDA412a53c51;
 				BEID_REPORT_SUBMISSION_ENABLED = NO;
 				BEID_VENUE_BUNDLE_URL_TEMPLATE = "";
