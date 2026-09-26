@@ -102,8 +102,8 @@ class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
         self.assertIn("  workflow_dispatch:\n", directives)
         self.assertNotIn("pull_request", directives)
 
-    def test_release_workflow_shares_the_runner_routing_variable(self) -> None:
-        self.assertIn("fromJSON(vars.RUNS_ON_MACOS", release_workflow_text())
+    def test_release_workflow_uses_a_hosted_runner(self) -> None:
+        self.assertIn("runs-on: macos-26", release_workflow_text())
 
 
 if __name__ == "__main__":

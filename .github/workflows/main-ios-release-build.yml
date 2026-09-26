@@ -1,4 +1,4 @@
-name: main iOS Release build (self-hosted macOS, informational)
+name: main iOS Release build (GitHub-hosted macOS, informational)
 
 on:
   # PUSH TO MAIN ONLY, deliberately (gh#479). This step used to run inside
@@ -9,11 +9,6 @@ on:
   # It does not need a merge candidate. It catches Release-only compile
   # regressions, and catching them on main is what the informational signal is
   # for; running it per PR bought an earlier signal at the price of the queue.
-  # That price is real: `emi` is the repository's only self-hosted runner and
-  # `internal-testflight.yml` and `release-testflight.yml` both require it, so
-  # minutes spent here sit in front of TestFlight builds testers are waiting
-  # for. Sampled queue waits on this runner were 0s, 0s, 27min and 58min.
-  #
   # `paths` mirrors the lane this moved out of, minus the entries that only
   # affect simulator testing. Keep it in sync with `pr-ci-ios-macos.yml` when
   # that list changes.
@@ -29,6 +24,7 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/download_xcodegen.sh"
   # Escape hatch: run against any ref on demand. `paths` does not apply to
   # workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
@@ -45,20 +41,16 @@ concurrency:
 
 jobs:
   ios-release-build:
-    name: iOS Release device build (self-hosted macOS, informational)
-    # Same routing variable as `pr-ci-ios-macos.yml`: a repo variable applies
-    # to every branch at once, where a baked-in label would need a PR per
-    # branch to change. fromJSON is required because `runs-on` treats a plain
-    # string variable as ONE label and does not split on commas.
-    runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
+    name: iOS Release device build (GitHub-hosted macOS, informational)
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Set up Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: zulu
           java-version: "17"
@@ -115,6 +107,14 @@ jobs:
             echo "KMP_JAVA_HOME=$kmp_java_home"
             echo "JAVA_HOME=$kmp_java_home"
           } >> "$GITHUB_ENV"
+
+      - name: Install pinned XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/xcodegen-pinned"
+          scripts/download_xcodegen.sh "$install_dir"
+          printf '%s\n' "$install_dir/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Verify XcodeGen pin and generated project
         shell: bash

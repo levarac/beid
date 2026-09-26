@@ -49,7 +49,7 @@ that lane:
 
 Both jobs run only when the repository variable `GHA_DELIVERY` is exactly
 `on`. They share the fixed `beid-ios-delivery` concurrency group, do not cancel
-an in-progress delivery, and run on the self-hosted `emi` runner. Setting the
+an in-progress delivery, and run on the configured private delivery runner. Setting the
 variable to `on` re-arms the fallback; setting it to `off` silences both
 workflows. Neither direction requires changing any Xcode Cloud setting.
 
@@ -117,13 +117,13 @@ Test" notes. Xcode Cloud supplies those notes through
 after processing. That notes update is a follow-up, not part of this temporary
 upload lane.
 
-## The self-hosted iOS lane, and when it runs
+## The GitHub-hosted iOS lane, and when it runs
 
-Verified 2026-09-10 against `.github/workflows/pr-ci-ios-macos.yml`.
+Updated 2026-09-26 against `.github/workflows/pr-ci-ios-macos.yml`.
 
 Xcode Cloud is not the only thing that builds iOS for a pull request.
-`.github/workflows/pr-ci-ios-macos.yml` runs a Debug simulator build/test plus
-an unsigned Release device build on the self-hosted `emi` runner. It is
+`.github/workflows/pr-ci-ios-macos.yml` runs a Debug simulator build/test on
+the fixed GitHub-hosted `macos-26` runner. This simulator lane is
 **informational** — it gates nothing, and Xcode Cloud's
 `Beid | PR Build & Test | Test - iOS` remains the effective gate on the head
 under review. Since gh#479 it fires on exactly three triggers, **not on every
@@ -133,29 +133,15 @@ limits the lane to `ios/`, `shared/`, the Android build-configuration files,
 and `scripts/resolve_kmp_java_home.sh`; `paths` does not apply to
 `workflow_dispatch`, so a manual run always executes.
 
-**The reason for narrowing it is TestFlight delivery latency, not cost and not
-developer-machine contention.** The repository has exactly one self-hosted
-runner, `emi`. `internal-testflight.yml` and `release-testflight.yml` both
-declare `runs-on: [self-hosted, emi]` — the same single runner this lane uses.
-Their concurrency group (`beid-ios-delivery`) is not this lane's, so GitHub
-does not serialize the two; the single runner does. A 30-minute informational
-run on an intermediate head that nobody merges can therefore sit in front of a
-TestFlight build that testers are waiting for. On 2026-09-10 ten runs of this
-lane occupied that runner for 274 minutes in a single day, 147 of them on one
-PR's six intermediate pushes.
+Unsigned Release device builds use the separate main-only
+`main-ios-release-build.yml` workflow.
 
-**Correction, 2026-09-10 — the rationale first recorded here was wrong.** This
-section originally said the lane competed for a machine that "also serves
-human-run local iOS suites". It does not. `emi` is a separate host, and the
-developer machine those suites run on has no self-hosted runner registered at
-all, so these runs never touched local Gradle or simulators. The narrowing is
-still correct and the measured numbers are unchanged — only the harm they
-cause was misidentified, and the real one (delaying tester builds) is the
-stronger argument. It is corrected in place rather than deleted because the
-original wording was cited in gh#479 and during review, and because a reader
-who met the old claim elsewhere needs to find out here that it was retracted.
-Note that nothing is lost by narrowing either way: the merge-candidate head and
-`main` are each still measured exactly once.
+The narrow triggers date from gh#479, when this lane shared a persistent
+runner with TestFlight delivery. The public-release preparation moved all
+PR code to GitHub-hosted runners; that delivery contention no longer describes
+this lane. Historical measurements and the correction of the original
+local-machine contention claim remain in gh#479 and Git history. Later PR
+pushes do not rerun this lane, so require evidence on the actual review head.
 
 The pairing of `opened` with a job-level draft guard is deliberate and the two
 halves are not separable. `ready_for_review` fires **only** on a draft→ready
@@ -345,7 +331,7 @@ executable):
   needed for this part.
 
   **The platform preference lives in the Python, not in this hook.** All three
-  publication paths — this one, the `emi` TestFlight lane and the Android
+  publication paths — this one, the private-runner TestFlight lane and the Android
   lane — resolve their source file through the same function, so a change to
   the preference cannot apply to one lane and not the others. This hook holds
   no copy of the candidate list, which is also why it passes `--missing-ok`

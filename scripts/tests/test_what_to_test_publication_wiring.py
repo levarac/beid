@@ -257,12 +257,10 @@ class EmiTestFlightPathTest(unittest.TestCase):
         self.assertIn("set -euo pipefail", text)
         self.assertNotIn("|| true", invocation)
 
-    def test_the_workflow_runs_the_delivery_script_that_publishes_them(self) -> None:
-        """Without this, the lane's own workflow is never referenced at all."""
-        self.assertIn(
-            "run: scripts/gha/build-and-upload-ios.sh",
-            IOS_WORKFLOW.read_text(encoding="utf-8"),
-        )
+    def test_legacy_ios_delivery_has_no_actions_entrypoint(self) -> None:
+        self.assertFalse(IOS_WORKFLOW.exists())
+        for workflow in PLAY_WORKFLOW.parent.glob("*.yml"):
+            self.assertNotIn("build-and-upload-ios.sh", workflow.read_text())
 
     def test_it_is_told_which_export_to_read_the_build_number_from(self) -> None:
         text = IOS_DELIVERY.read_text(encoding="utf-8")
@@ -291,11 +289,6 @@ class TriggerContractTest(unittest.TestCase):
             found.append(line[len("      - ") :].strip())
         return found
 
-    def test_the_ios_lane_still_fires_on_exactly_two_files(self) -> None:
-        self.assertEqual(
-            self._paths(IOS_WORKFLOW), ["what_to_test.json", "what_to_test.ios.json"]
-        )
-
     def test_the_android_lane_still_fires_on_exactly_two_files(self) -> None:
         self.assertEqual(
             self._paths(PLAY_WORKFLOW), ["what_to_test.json", "what_to_test.android.json"]
@@ -303,7 +296,7 @@ class TriggerContractTest(unittest.TestCase):
 
     def test_neither_lane_fires_on_a_script_or_workflow_change(self) -> None:
         """The paths list is a whitelist, so a push touching only these is inert."""
-        for workflow in (IOS_WORKFLOW, PLAY_WORKFLOW):
+        for workflow in (PLAY_WORKFLOW,):
             with self.subTest(workflow=workflow.name):
                 paths = self._paths(workflow)
                 for unrelated in ("scripts/prepare_testflight_notes.py",

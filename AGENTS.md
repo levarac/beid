@@ -50,7 +50,7 @@ README for its exact pin and verification path.
 
 `DECISIONS.md`, the append-only decision record at the top of this repo's
 source-of-truth hierarchy, lives outside this repository at
-`/Users/ko/agent-workspace/projects/beid/DECISIONS.md` (the agent-workspace
+`<private-project-records>/DECISIONS.md` (the agent-workspace
 PMO project) — it is not checked into `thegreeting/beid`.
 
 ## 実機オペレーションで毎回効く知識
@@ -350,7 +350,7 @@ the same name shadows them.
 
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
-- **Require the Xcode Cloud iOS check on the exact head SHA when the PR is
+- **Require executed iOS evidence on the exact head SHA when the PR is
   outside the live ASC `PR Build & Test` file exclusions.** The workflow's
   `DO_NOT_START_IF_ALL_FILES_MATCH` setting suppresses the check when every
   changed file matches an exclusion. On 2026-09-22 the configured matchers
@@ -362,6 +362,14 @@ the same name shadows them.
   prevents the skip, including when mixed with Android app source. Re-read
   ASC and the PR's complete changed-file list for each merge; a green Ubuntu
   check alone cannot prove the iOS check was run or intentionally skipped.
+  Before public cutover, the evidence is the Xcode Cloud check while its
+  trusted PR workflow is enabled. During cutover that workflow is paused;
+  require the hosted iOS Simulator lane on the exact head instead. The same
+  exclusion-set exemption applies whichever check is the current iOS
+  evidence source. The hosted lane's automatic PR triggers omit synchronize, so a later
+  head needs deliberate verification. Absence of either check or a
+  skipped/pre-start failed run is not passing evidence. Do not resume the
+  Xcode Cloud PR workflow until the owner verifies its fork credential boundary.
   Xcode Cloud is metered, so use local builds for iteration and batch pushes.
   If the workflow later becomes manually triggered, invert the existence rule:
   absence before the deliberate trigger is expected, and the evidence must
@@ -424,10 +432,8 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 
 **Android build**: `:shared:testAndroidHostTest`, `:app:testDebugUnitTest`,
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
-  `:app:dependencyInsight` for Barnard dependency provenance. The job also
-  runs `scripts/clone_parallax_pinned.sh` and
-  `scripts/check_parallax_comparison_ran.py` when its comparison source is
-  available.
+  `:app:dependencyInsight` for Barnard dependency provenance. The private Parallax comparison is explicitly SKIPPED here;
+  a separate protected main-only workflow runs it.
 **SwiftLint**: `scripts/lint.sh`.
 **Repository sanity**: YAML and TestFlight note validation,
   `scripts/check_pr_ci_doc_drift.py`, and
@@ -436,16 +442,18 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 The workflow remains the execution source of truth; this subsection records
 the jobs and command tokens checked for documentation drift.
 
-Determine changed paths and Repository sanity run on the existing Linux ARM64
-self-hosted labels `self-hosted, Linux, ARM64, default`. Repository sanity
-installs the pinned Python 3.12 standalone build into the runner's temporary
-directory. SwiftLint remains on the existing private `emi` macOS ARM64 runner
-because this repository's lint requires Xcode SourceKit; the official Linux
-ARM64 binary starts but fails while loading `libsourcekitdInProc.so`. Android
-also remains on `emi` and installs JDK 17 and Android 36 SDK job-locally.
-The macOS runner is shared with the iOS delivery lane, so its queue is
-intentionally serialized. Fork pull requests fail each named check before
-checkout on these persistent self-hosted runners.
+All pull-request jobs use fixed GitHub-hosted runner labels. Determine changed
+paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
+`ubuntu-24.04`; SwiftLint, the informational iOS Simulator lane and the lab
+CLI lane use `macos-26`. SwiftLint needs Xcode SourceKit. Repository sanity
+installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
+All pull requests run these checks without private credentials. The private
+Parallax comparison is explicitly reported as SKIPPED, never as a passing
+comparison. All Actions use full commit SHA pins. Android delivery and private
+comparison use protected environments and main-only triggers. iOS delivery
+uses Xcode Cloud Internal/Release; no Actions job invokes iOS signing.
+Before public cutover, the operator must separately remove access to persistent
+self-hosted runners; changing these workflows does not revoke runner access.
 
 ## PR と issue の紐付け (Development 欄)
 

@@ -4,7 +4,7 @@ Produced by SubPM a-20260808-026 for PM a-20260808-020. This is a **map and
 recommendation document, not a ruling**. Nothing in this file has been acted
 on — no issue was opened, closed, edited, labeled, or commented on.
 
-Source-of-truth used throughout: `/Users/ko/agent-workspace/projects/beid/DECISIONS.md`,
+Source-of-truth used throughout: `<private-project-records>/DECISIONS.md`,
 read in full. Per the hierarchy that document itself states as of
 2026-08-08: **decision record > UX canonical source (Notion press release,
 linked from #141) > Figma > current code.**

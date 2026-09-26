@@ -29,20 +29,20 @@
     "resultDirectory": "android/app/build/test-results/testDebugUnitTest"
   },
   "deviceReview": {
-    "device": "Pixel 8a 46111JEKB11173",
+    "device": "Pixel 8a DEVICE_SERIAL",
     "apkSha256": "e1a546dddfd077945beafad568633ccea7fe7c6a78fb8851de8d38f91b295723",
     "result": "Fresh second-pass screenshots matched the intended top-aligned Material 3 hierarchy; no join, leave, or new record action was performed.",
     "screens": {
       "discovery": {
-        "image": "evidence/beid-pixel-46111JEKB11173/20260915-secondpass-e84-discovery.png",
+        "image": "evidence/beid-pixel-DEVICE_SERIAL/20260915-secondpass-e84-discovery.png",
         "hierarchy": "top app bar -> discovery heading and supporting copy -> one search/empty state card -> manual code rescue action"
       },
       "eventCode": {
-        "image": "evidence/beid-pixel-46111JEKB11173/20260915-secondpass-e84-event-code.png",
+        "image": "evidence/beid-pixel-DEVICE_SERIAL/20260915-secondpass-e84-event-code.png",
         "hierarchy": "back top app bar -> short helper -> event code field -> secondary paste action -> primary join action"
       },
       "records": {
-        "image": "evidence/beid-pixel-46111JEKB11173/20260915-secondpass-e84-records.png",
+        "image": "evidence/beid-pixel-DEVICE_SERIAL/20260915-secondpass-e84-records.png",
         "hierarchy": "Today heading and action -> compact record cards -> short event identifier -> preserved status facts"
       }
     }

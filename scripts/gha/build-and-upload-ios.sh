@@ -24,10 +24,7 @@ fi
 
 if [[ "$INSTALLED_VERSION" != "$XCODEGEN_VERSION" ]]; then
   echo "Installing XcodeGen $XCODEGEN_VERSION (found: ${INSTALLED_VERSION:-none})..."
-  curl -sSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 30 \
-    -o "$DELIVERY_TMP/xcodegen.zip" \
-    "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
-  unzip -q "$DELIVERY_TMP/xcodegen.zip" -d "$DELIVERY_TMP/xcodegen-release"
+  scripts/download_xcodegen.sh "$DELIVERY_TMP/xcodegen-release"
   XCODEGEN_PREFIX="$HOME/.local/xcodegen-${XCODEGEN_VERSION}"
   rm -rf -- "$XCODEGEN_PREFIX"
   mkdir -p "$(dirname "$XCODEGEN_PREFIX")"
