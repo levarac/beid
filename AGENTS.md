@@ -275,14 +275,13 @@ the same name shadows them.
 
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
-- **Require the Xcode Cloud iOS check on the exact head SHA.** The current
-  automatic PR workflow can silently omit the check while the Ubuntu checks
-  remain green. Verify both existence and success on the commit under
-  review. Xcode Cloud is metered, so pushing to a branch with an open PR can
-  spend real budget; use local builds for iteration and batch pushes. If the
-  workflow later becomes manually triggered, invert the existence rule:
-  absence before the deliberate trigger is expected, and the evidence must
-  instead record that the manual run targeted the exact head and passed.
+- **Require executed iOS evidence on the exact head SHA.** Before public
+  cutover, use the Xcode Cloud check while its trusted PR workflow is enabled.
+  During cutover that workflow is paused; require the hosted iOS Simulator
+  lane on the exact head instead. Its automatic PR triggers omit synchronize,
+  so a later head needs deliberate verification. Absence of either check or
+  a skipped/pre-start failed run is not passing evidence. Do not resume the
+  Xcode Cloud PR workflow until the owner verifies its fork credential boundary.
 - **Negative compile fixtures are manual today.** The fixtures in
   `compile-fixtures/` prove stale Kotlin symbols and old Swift module names
   fail when applied in a disposable checkout. Recurring CI automation is
@@ -341,10 +340,8 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 
 **Android build**: `:shared:testAndroidHostTest`, `:app:testDebugUnitTest`,
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
-  `:app:dependencyInsight` for Barnard dependency provenance. The job also
-  runs `scripts/clone_parallax_pinned.sh` and
-  `scripts/check_parallax_comparison_ran.py` when its comparison source is
-  available.
+  `:app:dependencyInsight` for Barnard dependency provenance. The private Parallax comparison is explicitly SKIPPED here;
+  a separate protected main-only workflow runs it.
 **SwiftLint**: `scripts/lint.sh`.
 **Repository sanity**: YAML and TestFlight note validation,
   `scripts/check_pr_ci_doc_drift.py`, and
@@ -358,9 +355,11 @@ paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
 `ubuntu-24.04`; SwiftLint, the informational iOS Simulator lane and the lab
 CLI lane use `macos-26`. SwiftLint needs Xcode SourceKit. Repository sanity
 installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
-Fork pull requests run these checks without private credentials. The private
-Parallax comparison is explicitly reported as SKIPPED for forks, never as a
-passing comparison. Delivery workflows retain their separate triggers.
+All pull requests run these checks without private credentials. The private
+Parallax comparison is explicitly reported as SKIPPED, never as a passing
+comparison. All Actions use full commit SHA pins. Android delivery and private
+comparison use protected environments and main-only triggers. iOS delivery
+uses Xcode Cloud Internal/Release; no Actions job invokes iOS signing.
 Before public cutover, the operator must separately remove access to persistent
 self-hosted runners; changing these workflows does not revoke runner access.
 

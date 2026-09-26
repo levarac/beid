@@ -24,6 +24,7 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/download_xcodegen.sh"
   push:
     # Measure the merged result on main exactly once. Note the concurrency
     # group below is keyed on github.ref with cancel-in-progress, so two merges
@@ -40,6 +41,7 @@ on:
       - "android/gradlew"
       - "android/gradle/wrapper/**"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/download_xcodegen.sh"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
   workflow_dispatch:

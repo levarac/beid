@@ -1,0 +1,43 @@
+name: Trusted Parallax comparison
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-parallax-comparison
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    environment: parallax-comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17.0.20+8"
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: platforms;android-36 build-tools;36.0.0
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Clone Parallax at the pinned commit
+        env:
+          PARALLAX_READ_TOKEN: ${{ secrets.PARALLAX_READ_TOKEN }}
+        run: |
+          test -n "$PARALLAX_READ_TOKEN" || { echo "Missing environment secret PARALLAX_READ_TOKEN" >&2; exit 1; }
+          scripts/clone_parallax_pinned.sh
+      - name: Run shared tests with the private comparison
+        working-directory: android
+        run: ./gradlew :shared:testAndroidHostTest --no-daemon --no-parallel
+      - name: Verify the Parallax comparison actually ran
+        run: scripts/check_parallax_comparison_ran.py

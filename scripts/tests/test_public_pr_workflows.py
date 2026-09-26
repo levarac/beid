@@ -7,20 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
-TRUSTED_EVENT = (
-    "github.event_name != 'pull_request' || "
-    "github.event.pull_request.head.repo.full_name == github.repository"
-)
-FORK_EVENT = (
-    "github.event_name == 'pull_request' && "
-    "github.event.pull_request.head.repo.full_name != github.repository"
-)
-
-
-def step(text, name):
-    start = text.index(f"      - name: {name}\n")
-    end = text.find("\n      - ", start + 1)
-    return text[start:] if end < 0 else text[start:end]
 
 
 class PublicPrWorkflowTests(unittest.TestCase):
@@ -41,28 +27,48 @@ class PublicPrWorkflowTests(unittest.TestCase):
                 checked += 1
         self.assertGreaterEqual(checked, 7)
 
-    def test_fork_comparison_has_no_secret_or_false_pass(self):
+    def test_public_pr_workflows_have_no_secrets(self):
+        for path in WORKFLOWS.glob("*.yml"):
+            text = path.read_text()
+            if re.search(r"^  pull_request(?:_target)?:", text, re.M):
+                self.assertNotRegex(text, r"\$\{\{[^}]*secrets[.\[]", path.name)
         text = (WORKFLOWS / "pr-ci.yml").read_text()
-        clone = step(text, "Clone Parallax at the pinned commit")
-        self.assertIn(TRUSTED_EVENT, clone)
-        self.assertIn("secrets.PARALLAX_READ_TOKEN", clone)
-        skipped = step(text, "Report skipped Parallax comparison for fork PRs")
-        self.assertIn(FORK_EVENT, skipped)
-        self.assertNotIn("secrets.", skipped)
-        self.assertIn("SKIPPED", skipped)
-        self.assertIn("not a passing comparison", skipped)
-        self.assertIn("GITHUB_STEP_SUMMARY", skipped)
-        verify = step(text, "Verify the Parallax comparison actually ran")
-        self.assertIn(TRUSTED_EVENT, verify)
-        self.assertIn("env.PARALLAX_REPO != ''", verify)
+        self.assertIn("SKIPPED", text)
+        self.assertIn("not a passing comparison", text)
 
-    def test_delivery_has_no_pull_request_trigger(self):
-        for name in ("internal-google-play.yml", "internal-testflight.yml", "release-testflight.yml"):
+    def test_all_actions_are_pinned_and_annotated(self):
+        for path in WORKFLOWS.glob("*.yml"):
+            for action in re.findall(r"(?m)^\s+(?:- )?uses: (.+)$", path.read_text()):
+                self.assertRegex(action, r"^[\w/-]+@[0-9a-f]{40} # v[\w.]+$", path.name)
+
+    def test_every_runner_is_hosted(self):
+        for path in WORKFLOWS.glob("*.yml"):
+            for runner in re.findall(r"(?m)^    runs-on: (.+)$", path.read_text()):
+                self.assertIn(runner, {"ubuntu-24.04", "ubuntu-24.04-arm", "ubuntu-latest", "macos-26"})
+
+    def test_secret_lanes_are_main_only_and_environment_protected(self):
+        for name, environment in (("internal-google-play.yml", "google-play-internal"),
+                                  ("trusted-parallax-comparison.yml", "parallax-comparison")):
             text = (WORKFLOWS / name).read_text()
-            with self.subTest(workflow=name):
-                self.assertNotRegex(text, r"(?m)^  (pull_request|pull_request_target|workflow_run):")
-                self.assertIn("  push:", text)
-                self.assertIn("  workflow_dispatch:", text)
+            self.assertNotRegex(text, r"(?m)^  (pull_request|pull_request_target|workflow_run):")
+            self.assertIn("github.ref == 'refs/heads/main'", text)
+            self.assertIn("    environment: " + environment, text)
+            self.assertIn("  workflow_dispatch:", text)
+
+    def test_ios_delivery_is_not_reachable_from_actions(self):
+        for name in ("internal-testflight.yml", "release-testflight.yml"):
+            self.assertFalse((WORKFLOWS / name).exists())
+        for path in WORKFLOWS.glob("*.yml"):
+            self.assertNotIn("build-and-upload-ios.sh", path.read_text())
+
+    def test_default_permissions_are_read_only(self):
+        for path in WORKFLOWS.glob("*.yml"):
+            text = path.read_text()
+            baseline = text.split("permissions:\n", 1)[1].split("\n\n", 1)[0]
+            self.assertEqual(baseline.strip(), "contents: read", path.name)
+            writes = re.findall(r"(?m)^\s+([\w-]+): write$", text)
+            expected = ["pull-requests"] if path.name == "release-notes-warning.yml" else []
+            self.assertEqual(writes, expected, path.name)
 
     def test_privileged_pr_metadata_workflow_never_checks_out_code(self):
         for path in WORKFLOWS.glob("*.yml"):

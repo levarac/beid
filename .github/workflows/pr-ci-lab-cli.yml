@@ -52,6 +52,9 @@ concurrency:
 jobs:
   lab-cli:
     name: beid-lab-cli build and test
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: macos-26
     # This short hosted job also runs for drafts, independently of the
     # longer optional simulator job.

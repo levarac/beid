@@ -19,21 +19,15 @@ concurrency:
 jobs:
   deliver:
     name: Build and upload AAB to internal testing
-    # Android has its OWN switch, deliberately not the iOS one. `GHA_DELIVERY`
-    # also gates internal-testflight.yml and release-testflight.yml, and
-    # internal-testflight.yml fires on a push to `main` that changes
-    # `what_to_test.json` -- the same file that fires this workflow. Sharing
-    # one variable therefore means arming Android also arms an iOS upload to
-    # App Store Connect, from the same commit, without anyone asking for it.
-    # Separate gates are what make "Android only" expressible at all (gh#401).
-    if: ${{ vars.GHA_ANDROID_DELIVERY == 'on' }}
-    runs-on: ${{ vars.RUNS_ON_ANDROID || 'emi' }}
+    # Environment approval and main-only policy must be configured before enabling.
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.GHA_ANDROID_DELIVERY == 'on' }}
+    environment: google-play-internal
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       # GitHub-hosted runners leave limited free disk space; a release AAB
       # build can exhaust it. Reclaim space by dropping preinstalled
-      # toolchains this job never uses. runner.environment guards every
-      # hosted-only step below so none of them can fire on emi.
+      # toolchains this job never uses on this disposable VM.
       - name: Free disk space (hosted runners only)
         if: runner.environment == 'github-hosted'
         run: |
@@ -55,6 +49,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Calculate git height
         id: git-height
@@ -92,8 +87,8 @@ jobs:
         run: echo "KMP_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
 
       # build-and-sign-android.sh hard-fails if these exact components are
-      # missing under ANDROID_HOME. emi has them pre-provisioned; a hosted
-      # runner's bundled SDK is not guaranteed to, so install explicitly
+      # missing under ANDROID_HOME. The hosted runner's bundled SDK is not
+      # guaranteed to contain them, so install explicitly
       # rather than depend on what a given runner image happens to ship.
       - name: Install required Android SDK components (hosted runners only)
         if: runner.environment == 'github-hosted'
@@ -114,15 +109,8 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-36" "build-tools;36.0.0"
 
-      # emi keeps the keystore, service-account JSON, and passwords in a
-      # runner-local $PLAY_CRED_DIR/env file (see docs/google-play.md) because
-      # it is a persistent machine. A hosted runner is a fresh VM every run,
-      # so there is no local state to read here -- decode the same five
-      # variables from GitHub Secrets into a fresh, mode-600 env file instead,
-      # then point PLAY_CRED_DIR at it. check-play-delivery.sh and
-      # build-and-sign-android.sh are already filename- and path-agnostic
-      # (they only care about PLAY_CRED_DIR/env existing with these five
-      # names), so nothing below this step needs to change per runner type.
+      # Credentials exist only in the protected google-play-internal environment.
+      # Materialize them on the disposable runner after approval, never in logs.
       - name: Synthesize Play credentials from GitHub Secrets (hosted runners only)
         if: runner.environment == 'github-hosted'
         env:
@@ -135,13 +123,14 @@ jobs:
           set -euo pipefail
           for name in PLAY_KEYSTORE_B64 PLAY_SERVICE_ACCOUNT_JSON_B64 PLAY_KEYSTORE_PASSWORD PLAY_KEY_PASSWORD; do
             if [[ -z "${!name:-}" ]]; then
-              echo "::error::Missing $name secret. Set it with 'gh secret set $name --repo thegreeting/beid' before running this workflow on a hosted runner."
+              echo "::error::Missing $name secret. Set it with 'gh secret set $name --repo thegreeting/beid --env google-play-internal' before running this workflow on a hosted runner."
               exit 1
             fi
           done
 
           cred_dir="$RUNNER_TEMP/play-creds"
-          mkdir -m 700 -p "$cred_dir"
+          mkdir -p "$cred_dir"
+          chmod 700 "$cred_dir"
           echo "$PLAY_KEYSTORE_B64" | base64 --decode > "$cred_dir/upload.jks"
           echo "$PLAY_SERVICE_ACCOUNT_JSON_B64" | base64 --decode > "$cred_dir/service-account.json"
           chmod 600 "$cred_dir/upload.jks" "$cred_dir/service-account.json"
