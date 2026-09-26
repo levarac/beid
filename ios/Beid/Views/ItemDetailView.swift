@@ -115,9 +115,12 @@ struct ItemDetailView: View {
     ScrollView {
       BeidAdaptiveContent {
         VStack(alignment: .leading, spacing: 0) {
-          RecordSigilSlot(recordID: proof.id, size: DS.Size.proofDetailSigil, ground: .canvas)
-            .frame(maxWidth: .infinity)
-            .padding(.top, DS.Space.s)
+          RecordSigilSlot(
+            input: coordinator.sensingCoordinator.sigilInput(forProofId: proof.id),
+            placement: .proofDetail
+          )
+          .frame(maxWidth: .infinity)
+          .padding(.top, DS.Space.s)
 
           Text("Attendance\nProof")
             .beidTextStyle(DS.Font.Library.display46)

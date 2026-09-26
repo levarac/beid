@@ -263,7 +263,7 @@ private struct CollectionHomeContent: View {
   /// evidence, so it evaluates to 0 without a hard-coded display value.
   private func activeCard(for event: EventSession) -> some View {
     HStack(alignment: .top, spacing: DS.Space.m) {
-      RecordSigilSlot(recordID: sensing.currentProofID, size: 84, ground: .ink)
+      RecordSigilSlot(input: sensing.liveSigilInput, placement: .homeActiveCard)
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         Text("NOW · SENSING")
           .beidTextStyle(DS.Font.Library.labelMono10)
@@ -348,8 +348,11 @@ private struct CollectionHomeContent: View {
       selectedEvent = card
     } label: {
       HStack(spacing: 0) {
-        RecordSigilSlot(recordID: card.representative.id, size: 60, ground: .canvas)
-          .padding(.trailing, DS.Space.m)
+        RecordSigilSlot(
+          input: sensing.sigilInput(forProofId: card.representative.id),
+          placement: .homePastRow
+        )
+        .padding(.trailing, DS.Space.m)
         VStack(alignment: .leading, spacing: DS.Space.xs) {
           Text(verbatim: card.representative.eventName)
             .beidTextStyle(DS.Font.Library.title17)

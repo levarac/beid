@@ -80,8 +80,8 @@ struct RecordingView: View {
 
 /// Immutable inputs for the terminal 06 surface. #655 supplies this only
 /// after its stop/finalization path has actually sealed the record. The
-/// RecordSigilSlot draws only a neutral ring: #653 owns the missing per-peer,
-/// per-window history and its privacy decision.
+/// Sigil itself is passed to `SensingSealedView` separately (beid#653): it is
+/// read from the store the session end has just written.
 struct SensingSealedSnapshot {
   let recordID: UUID?
   let event: EventSession
@@ -92,10 +92,13 @@ struct SensingSealedSnapshot {
 }
 
 /// Frame 06. Routing and the DONE action belong to #655's closure flow.
-/// The neutral RecordSigilSlot is used in production and screenshot tours;
-/// neither path fabricates nodes or strands from aggregate counts.
+/// The Sigil is the record's stored presence (beid#653), or the neutral ring
+/// when there is none (screenshot tours pass none). Neither path fabricates
+/// nodes or strands from aggregate counts.
 struct SensingSealedView: View {
   let snapshot: SensingSealedSnapshot
+  /// This record's stored Sigil input; `nil` keeps the ring.
+  var sigilInput: BeidSharedKit.sigil.SigilInput? = nil
 
   var body: some View {
     GeometryReader { geometry in
@@ -113,13 +116,9 @@ struct SensingSealedView: View {
             .foregroundStyle(DS.Color.textSecondaryOnInk)
             .padding(.top, DS.Space.s)
 
-          RecordSigilSlot(
-            recordID: snapshot.recordID,
-            size: DS.Size.sensingSealedSigil,
-            ground: .ink
-          )
-          .frame(maxWidth: .infinity)
-          .padding(.top, DS.Space.xl)
+          RecordSigilSlot(input: sigilInput, placement: .sensingSealed)
+            .frame(maxWidth: .infinity)
+            .padding(.top, DS.Space.xl)
 
           Spacer(minLength: DS.Space.l)
           SensingWindowBars(

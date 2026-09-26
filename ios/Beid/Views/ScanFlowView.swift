@@ -244,7 +244,10 @@ struct ScanFlowView: View {
   @ViewBuilder
   private var content: some View {
     if let collected = proofCollectedForDisplay {
-      ProofCollectedView(snapshot: collected) {
+      ProofCollectedView(
+        snapshot: collected,
+        sigilInput: sensing.sigilInput(forProofId: collected.recordID)
+      ) {
         if coordinator.proofCollectedSnapshot != nil {
           coordinator.viewCollectionAfterProofCollected()
         } else {
@@ -252,7 +255,10 @@ struct ScanFlowView: View {
         }
       }
     } else if let sealed = coordinator.sealedSnapshot {
-      SensingSealedView(snapshot: sealed)
+      SensingSealedView(
+        snapshot: sealed,
+        sigilInput: sealed.recordID.flatMap { sensing.sigilInput(forProofId: $0) }
+      )
     } else if let pending = coordinator.stopConfirmSnapshot {
       SensingStopConfirmView(
         sensing: sensing,
