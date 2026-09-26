@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "Start from Sense Event and a nearby event card as before. New here: if your phone's clock is off, the Scan screen says so and offers Check again — tell us if that warning shows up when your clock looks fine. While serving, confirm the event ID on screen is the event you actually joined. On the wallet side, an unsupported smart wallet now ends with Close instead of Try Again, and connecting with MetaMask should no longer say you are not connected after you approve the signature."
+    "text": "This build sends your signed attendance observations to the event's server while you take part, as Android already does. Join the test event from the nearby card, keep the app in front and the screen unlocked for about ten minutes next to the other test phones, and check that Recording starts and the record grows. Tell us if the app says it could not send, or if anything looks different from the last build."
   }
 ]
