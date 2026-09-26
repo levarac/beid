@@ -237,6 +237,7 @@ jobs:
 
           if total <= 0:
               raise SystemExit("xcresult contains zero tests")
+          print(f"iOS tests: result={result}, total={total}, passed={passed}, failed={failed}, skipped={skipped}, expected_failures={expected_failures}")
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY

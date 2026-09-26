@@ -75,6 +75,30 @@ class PublicPrWorkflowTests(unittest.TestCase):
             self.assertIn("    environment: " + environment, text)
             self.assertIn("  workflow_dispatch:", text)
 
+    def test_every_secret_reference_belongs_to_an_approved_main_only_job(self):
+        approved = {
+            ("internal-google-play.yml", "deliver"): "google-play-internal",
+            ("trusted-parallax-comparison.yml", "compare"): "parallax-comparison",
+        }
+        found = set()
+        secret = re.compile(r"\$\{\{[^}]*secrets[.\[]")
+        for path in WORKFLOWS.glob("*.yml"):
+            text = path.read_text()
+            preamble, jobs = text.split("\njobs:\n", 1)
+            self.assertNotRegex(preamble, secret, path.name)
+            blocks = re.split(r"(?m)^  ([\w-]+):\n", jobs)
+            for job, block in zip(blocks[1::2], blocks[2::2]):
+                if not secret.search(block):
+                    continue
+                key = (path.name, job)
+                with self.subTest(workflow=path.name, job=job):
+                    self.assertIn(key, approved)
+                    self.assertIn("    environment: " + approved[key] + "\n", block)
+                    self.assertIn("github.ref == 'refs/heads/main'", block)
+                    self.assertNotRegex(preamble, r"(?m)^  (pull_request|pull_request_target|workflow_run):")
+                found.add(key)
+        self.assertEqual(found, set(approved))
+
     def test_ios_delivery_is_not_reachable_from_actions(self):
         for name in ("internal-testflight.yml", "release-testflight.yml"):
             self.assertFalse((WORKFLOWS / name).exists())

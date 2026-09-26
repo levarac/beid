@@ -115,6 +115,23 @@ jobs:
         run: |
           java -version
           ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel
+      - name: Summarize Android test results
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.run_local_tests import junit_directory, parse_junit_files, format_counts
+
+          problems = []
+          for task in (":shared:testAndroidHostTest", ":app:testDebugUnitTest"):
+              results = junit_directory(Path.cwd(), task)
+              counts = parse_junit_files(sorted(results.glob("**/*.xml")))
+              print(f"{task}: {format_counts(counts)}", flush=True)
+              if counts.warnings or counts.failed or counts.passed <= 0:
+                  problems.append(f"{task}: missing, invalid or failing test evidence")
+          if problems:
+              raise SystemExit("\n".join(problems))
+          PY
       - name: Compile Android instrumented tests
         working-directory: android
         run: ./gradlew :app:compileDebugAndroidTestKotlin --no-daemon --no-parallel
