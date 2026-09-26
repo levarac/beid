@@ -74,49 +74,24 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertIn('--name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"', creation)
         self.assertIn('printf \'udid=%s\\n\' "$simulator_udid" >> "$GITHUB_OUTPUT"', creation)
         for name in ("Boot owned simulator", "Build for testing",
-                     "Test without rebuilding", "Delete owned simulator"):
+                     "Wait for simulator readiness", "Test without rebuilding"):
             with self.subTest(step=name):
                 self.assertIn("SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}", step_block(text, name))
-        cleanup = step_block(text, "Delete owned simulator")
-        self.assertIn("if: ${{ always() && steps.simulator.outputs.udid != '' }}", cleanup)
-
-    def test_cleanup_deletes_only_owned_udid_even_when_shutdown_fails(self) -> None:
-        block = step_block(workflow_text(), "Delete owned simulator")
-        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
-        owned = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
-        with tempfile.TemporaryDirectory() as temporary:
-            folder = Path(temporary)
-            calls = folder / "calls.jsonl"
-            fake = folder / "xcrun"
-            fake.write_text(
-                f"#!{sys.executable}\n"
-                "import json, os, sys\n"
-                "with open(os.environ['CALLS'], 'a') as calls:\n"
-                "    calls.write(json.dumps(sys.argv[1:]) + '\\n')\n"
-                "sys.exit(1 if sys.argv[2] == 'shutdown' else int(os.environ['DELETE_EXIT']))\n"
-            )
-            fake.chmod(0o755)
-            for delete_exit in (0, 1):
-                with self.subTest(delete_exit=delete_exit):
-                    calls.write_text("")
-                    result = subprocess.run(
-                        ["bash", "-c", command], capture_output=True, text=True,
-                        env={**os.environ, "PATH": str(folder) + os.pathsep + os.environ["PATH"],
-                             "SIMULATOR_UDID": owned, "CALLS": str(calls),
-                             "DELETE_EXIT": str(delete_exit)},
-                    )
-                    self.assertEqual(result.returncode, delete_exit, result.stderr)
-                    self.assertEqual([json.loads(line) for line in calls.read_text().splitlines()], [
-                        ["simctl", "shutdown", owned], ["simctl", "delete", owned],
-                    ])
-
-    def test_debug_build_and_test_use_measured_optimization(self) -> None:
+    def test_disposable_runner_overlaps_boot_with_build_and_needs_no_cleanup(self) -> None:
         text = workflow_text()
+        self.assertIn("runs-on: macos-26", text)
+        self.assertLess(text.index("- name: Boot owned simulator"), text.index("- name: Build for testing"))
+        self.assertLess(text.index("- name: Build for testing"), text.index("- name: Wait for simulator readiness"))
+        self.assertLess(text.index("- name: Wait for simulator readiness"), text.index("- name: Test without rebuilding"))
+        self.assertNotIn("simctl bootstatus", step_block(text, "Boot owned simulator"))
+        self.assertNotIn("simctl shutdown", text)
+        self.assertNotIn("simctl delete", text)
 
+    def test_debug_build_and_test_use_debug_defaults(self) -> None:
         for name in ("Build for testing", "Test without rebuilding"):
-            with self.subTest(step=name):
-                block = step_block(text, name)
-                self.assertEqual(block.count("SWIFT_OPTIMIZATION_LEVEL=-O"), 1)
+            block = step_block(workflow_text(), name)
+            self.assertIn("-configuration Debug", block)
+            self.assertNotIn("SWIFT_OPTIMIZATION_LEVEL", block)
 
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).

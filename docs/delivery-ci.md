@@ -20,19 +20,12 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
   `main` への push で、GitHub-hosted Linux/macOS 上に次の gate を実行する。
   - Android build: `:shared:testAndroidHostTest`、
     `:app:testDebugUnitTest`、`:app:assembleDebug`、
-    `:app:compileDebugAndroidTestKotlin` (instrumented test source を
-    **compile だけする** 別 step。emulator は使わず実行もしない。
-    `androidTest` source set は `assembleDebug` でも `testDebugUnitTest` でも
-    compile されないため、この step が無いと device-lab の instrumented test が
-    engine API の変更で壊れても CI が緑のままになる)、`:app:dependencyInsight`
-    (`org.levarac:barnard` の `debugRuntimeClasspath` resolution を build と
-    test の step とは別の `./gradlew` 呼び出しとして追加実行し、その出力を
-    `scripts/check_barnard_dependency_provenance.py` で検証する。resolved
-    version が `android/app/build.gradle.kts` の宣言と一致すること、
-    force override / project・composite-build substitution /
-    `mavenLocal()` による差し替えが無いことを確認し、published dependency
-    が実際に何へ resolve したかを CI log に machine-checkable な証拠として
-    残す — gh#110)。Private upstream comparison is explicitly **SKIPPED** in this workflow;
+    `:app:compileDebugAndroidTestKotlin`, and `:app:dependencyInsight` run in
+    one Gradle invocation with parallel project execution (at most four workers).
+    Instrumented tests are compiled, not executed. The captured dependency
+    report is checked by `scripts/check_barnard_dependency_provenance.py` for
+    the declared Barnard version and unexpected dependency substitutions.
+    Private upstream comparison is explicitly **SKIPPED** in this workflow;
     this is not a passing comparison. `trusted-parallax-comparison.yml` runs
     `scripts/clone_parallax_pinned.sh`, the shared host suite, and
     `scripts/check_parallax_comparison_ran.py` only on trusted main push/manual
@@ -69,9 +62,12 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The standard `macos-26` image uses `/Applications/Xcode_26.5.app` and
     requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
     simulator for each job and returns its UDID; only that device is booted,
-    tested and deleted, even on failure. Build-for-testing and
-    test-without-building run the complete Beid scheme (`BeidTests` and
-    `BeidUITests`) with `SWIFT_OPTIMIZATION_LEVEL=-O`. The structured xcresult
+    and tested. Boot overlaps the build, with readiness checked before tests.
+    The disposable VM needs no simulator deletion after success or cancellation.
+    Build-for-testing and test-without-building run the complete Beid scheme
+    (`BeidTests` and `BeidUITests`) with the project Debug defaults. Gradle,
+    Kotlin Native, and Swift package dependencies are cached by platform and
+    dependency inputs; PR cache writes remain scoped to that PR. The structured xcresult
     summary must contain nonzero tests, consistent counts and a passing result.
     Superseded runs are cancelled; require a completed passing run for the
     exact current PR head before merge.
