@@ -1,12 +1,11 @@
-name: PR lab CLI (self-hosted macOS)
+name: PR lab CLI (GitHub-hosted macOS)
 
 # `tools/beid-lab-cli` builds and tests in about a minute, and it needs a Mac
 # (CoreBluetooth). Those two facts together are why this is its own workflow
 # rather than a step in `pr-ci-ios-macos.yml`.
 #
 # Folding it into that lane would have tied a one-minute check to a
-# ~24-minute simulator job, on the repository's single self-hosted runner,
-# which also serves TestFlight delivery. gh#479 narrowed that lane's triggers
+# ~24-minute simulator job. gh#479 narrowed that lane's triggers
 # for exactly that reason, and adding `tools/**` to its `paths` would have
 # undone the narrowing for changes that cannot affect a simulator test.
 #
@@ -53,10 +52,9 @@ concurrency:
 jobs:
   lab-cli:
     name: beid-lab-cli build and test
-    runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
-    # No draft guard, unlike the simulator lane. That guard exists because 30
-    # minutes of the delivery runner is worth withholding from a draft; one
-    # minute is not, and a draft is exactly when an author wants this answer.
+    runs-on: macos-26
+    # This short hosted job also runs for drafts, independently of the
+    # longer optional simulator job.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -137,8 +135,7 @@ jobs:
         working-directory: tools/beid-lab-cli
         # `BeidLabCliCore` imports Foundation only and `BeidLabCliBarnardTests`
         # is pure crypto, so nothing here needs a Bluetooth radio -- which is
-        # just as well, since this runner has one and must not be put on the
-        # air by CI.
+        # appropriate for a hosted runner without access to a BLE device lab.
         run: |
           # Deliberately not `set -e`: it would abort on a failing `swift test`
           # before `rc` is captured, and the whole point here is to report the

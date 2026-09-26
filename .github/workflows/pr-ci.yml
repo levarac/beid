@@ -16,7 +16,7 @@ concurrency:
 jobs:
   changes:
     name: Determine changed paths
-    runs-on: [self-hosted, Linux, ARM64, default]
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     permissions:
       contents: read
@@ -26,11 +26,6 @@ jobs:
       lint: ${{ steps.classify.outputs.lint }}
       sanity: ${{ steps.classify.outputs.sanity }}
     steps:
-      - name: Reject fork pull request code on the private runner
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          echo "Fork pull requests are not executed on the private self-hosted runner."
-          exit 1
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -77,17 +72,21 @@ jobs:
   android:
     name: Android build
     needs: changes
-    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.android == 'true') }}
-    runs-on: [self-hosted, macOS, ARM64, emi]
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.android == 'true') }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Reject fork pull request code on the private runner
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Report skipped Parallax comparison for fork PRs
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          echo "Fork pull requests are not executed on the private self-hosted runner."
-          exit 1
-      - uses: actions/checkout@v4
+          echo "Parallax upstream comparison SKIPPED for fork PRs; not a passing comparison."
+          echo "### Parallax upstream comparison: SKIPPED" >> "$GITHUB_STEP_SUMMARY"
+          echo "Fork PRs do not receive the private upstream token. This is not a passing comparison." >> "$GITHUB_STEP_SUMMARY"
       - name: Clone Parallax at the pinned commit
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           PARALLAX_READ_TOKEN: ${{ secrets.PARALLAX_READ_TOKEN }}
         run: scripts/clone_parallax_pinned.sh
@@ -120,7 +119,7 @@ jobs:
           java -version
           ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel
       - name: Verify the Parallax comparison actually ran
-        if: env.PARALLAX_REPO != ''
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && env.PARALLAX_REPO != '' }}
         run: scripts/check_parallax_comparison_ran.py
       - name: Compile Android instrumented tests
         working-directory: android
@@ -143,16 +142,13 @@ jobs:
   lint:
     name: SwiftLint
     needs: changes
-    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.lint == 'true') }}
-    runs-on: [self-hosted, macOS, ARM64, emi]
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.lint == 'true') }}
+    runs-on: macos-26
     timeout-minutes: 10
     steps:
-      - name: Reject fork pull request code on the private runner
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          echo "Fork pull requests are not executed on the private self-hosted runner."
-          exit 1
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Select Xcode for SourceKit
         run: echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
       - name: Install SwiftLint 0.65.0
@@ -182,16 +178,13 @@ jobs:
   sanity:
     name: Repository sanity
     needs: changes
-    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || needs.changes.result != 'success' || needs.changes.outputs.sanity == 'true') }}
-    runs-on: [self-hosted, Linux, ARM64, default]
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.sanity == 'true') }}
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     steps:
-      - name: Reject fork pull request code on the private runner
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          echo "Fork pull requests are not executed on the private self-hosted runner."
-          exit 1
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set up Python
         env:
           PYTHON_SHA256: b61b856c3e1a4fc65b8f6e6b0495ef975dd0924f90c59f3ea61b38a079173b84

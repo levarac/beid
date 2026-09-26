@@ -6,9 +6,16 @@ dates). The contract every agent must know before touching delivery files:
 
 ## PR CI
 
+All pull-request jobs use literal GitHub-hosted labels: `ubuntu-24.04-arm`
+for classification/sanity, `ubuntu-24.04` for Android, and `macos-26` for
+SwiftLint, iOS and the lab CLI. Forks receive no private Parallax token.
+Removing persistent runner access before public cutover is a separate operator
+step; workflow edits alone cannot prevent a modified fork workflow from
+requesting a runner that remains registered. Delivery triggers are unchanged.
+
 - **この subsection が repository の PR CI lane 分担の正本。** 実行定義は
   `.github/workflows/pr-ci.yml` にある。現在の `pr-ci` はすべての PR と
-  `main` への push で、Ubuntu 上に次の 3 job を実行する。
+  `main` への push で、GitHub-hosted Linux/macOS 上に次の gate を実行する。
   - Android build: `:shared:testAndroidHostTest`、
     `:app:testDebugUnitTest`、`:app:assembleDebug`、
     `:app:compileDebugAndroidTestKotlin` (instrumented test source を
@@ -28,10 +35,10 @@ dates). The contract every agent must know before touching delivery files:
     (ref は `ParallaxEventDefinitionSourceChecksumTest` の
     `EXPECTED_PARALLAX_REF` から読む。YAML に write down しない)、
     `PARALLAX_REPO` を後続 step へ渡す。これにより vendored 資材のバイト比較が
-    **毎回走る** — 従来は誰かが手元で環境変数を指したときにしか走らなかった
+    **同一 repository の実行で、token が利用可能なら走る** — 従来は手元で環境変数を指したときにしか走らなかった
     (gh#415)。test の後に `scripts/check_parallax_comparison_ran.py` が
     JUnit XML を読み、比較の testcase が存在し skipped でないことを確認して
-    job を落とす。**secret `PARALLAX_READ_TOKEN` が無い環境では clone せず、
+    job を落とす。**fork PR では private clone と比較を明示的に SKIPPED とし、成功した比較とは扱わない。secret を渡さない。secret `PARALLAX_READ_TOKEN` が無い環境でも clone せず、
     warning annotation と step summary を出して skip する** (緑と見分けが付く)。
     `PARALLAX_REPO` を空文字で export してはならない。設定済みだが存在しない
     path は misconfiguration として loud に落ちる仕様であり (gh#403 / PR #412)、
@@ -48,8 +55,7 @@ dates). The contract every agent must know before touching delivery files:
   - **`.github/workflows/pr-ci-lab-cli.yml`(beid#588、2026-09-17 追加)** —
     `tools/beid-lab-cli` (macOS の device-lab CLI) を
     `swift build -c release` + `swift test` で検査する lane。job 名は
-    `beid-lab-cli build and test`。**required ではない**。同じ self-hosted
-    Mac 上で動くが、**上の simulator lane とは別 workflow** である。理由は
+    `beid-lab-cli build and test`。**required ではない**。GitHub-hosted `macos-26` 上で動き、**上の simulator lane とは別 workflow** である。理由は
     2 つあり、どちらも意図的:
     - この job は約 1 分で終わる。simulator lane の約 24 分に相乗りさせると、
       simulator test に影響し得ない変更のために #479 が意図的に狭めた
@@ -90,8 +96,8 @@ dates). The contract every agent must know before touching delivery files:
     いる) で、判断対象の head に check が存在し succeeded かどうかは
     `gh pr checks` が答える。
   - **`.github/workflows/pr-ci-ios-macos.yml`(#301、2026-09-02 追加)** —
-    self-hosted runner `emi` 上の **informational-only** lane。job 名は
-    `iOS simulator (self-hosted macOS, informational)`。**required ではない**。
+    GitHub-hosted `macos-26` 上の **informational-only** lane。job 名は
+    `iOS simulator (GitHub-hosted macOS, informational)`。**required ではない**。
     **起動条件は次の 3 つだけであり、PR への push 毎ではない**
     (#479、2026-09-10 に変更): (1) `pull_request` の `opened` と
     `ready_for_review`、(2) `push` の `main`、(3) `workflow_dispatch`。
@@ -100,23 +106,9 @@ dates). The contract every agent must know before touching delivery files:
     `paths` は効かないので、手動実行は常に走る。`synchronize` を外した理由は、
     この lane が 1 回あたり約 30 分かかりながら merge を gate せず、同じ head を
     Xcode Cloud の `Beid | PR Build & Test | Test - iOS` が約 12 分で検証して
-    いるため。**コストの実体は TestFlight 配信の遅延であって、開発機の取り合い
-    ではない。** この repository の self-hosted runner は `emi` ただ 1 つで、
-    `internal-testflight.yml` と `release-testflight.yml` はどちらも
-    `runs-on: [self-hosted, emi]`、つまり同じ 1 つの runner を要求する。
-    配信側の concurrency group (`beid-ios-delivery`) はこの lane のものとは
-    別なので、両者を直列化しているのは GitHub の concurrency ではなく
-    **runner が 1 つしかないこと**である。したがって誰も merge しない中間 head
-    への 30 分の informational run が、**テスターが待っている TestFlight
-    ビルドの前に居座り得る**。2026-09-10 の実測では 10 run が 1 日にその runner
-    を 274 分占有し、うち 147 分は 1 本の PR の 6 push 分だった。
-    **訂正 (2026-09-10)**: この節は当初「同じ host をローカルの iOS フルスイート
-    と共有しており人手の検証が待たされる」と書いていた。**それは誤り。** `emi` は
-    別のホストで、それらのローカル実行が動く開発機には runner が 1 つも登録されて
-    いない (実測 0 プロセス)。よって当該 run がローカルの Gradle や simulator に
-    触れたことは一度も無い。絞る判断自体と実測値は変わらず、**害の同定だけが
-    間違っていた**。削除ではなく訂正として残すのは、旧記述が #479 とレビューで
-    引かれたため。
+    いるため。2026-09-26 の公開準備で PR lane を GitHub-hosted に移した。
+    以前の self-hosted 配信 runner との競合は現在の PR lane には当てはまらない。
+    過去の計測と訂正は #479 および変更履歴に残る。
     **`opened` を入れてあるのは、`ready_for_review` が draft から上げた時に
     しか発火しないため。** issue #479 の本文は `ready_for_review` 単独を
     指定していたが、直近 25 本を timeline で数えると決着済み 22 本のうち
@@ -144,7 +136,7 @@ dates). The contract every agent must know before touching delivery files:
     **`skipped` の job が runner を占有する時間はゼロ秒**である (PR #486、
     2026-09-10 に初観測。job が `steps=0` で `started_at` と `completed_at` が
     同一)。上のコストモデルからすると、draft gate の価値はここにある —
-    draft PR は runner を一切占有しないので、TestFlight ビルドを遅らせ得ない。
+    draft PR はこの lane の計算資源を消費しない。
     **`concurrency` は `github.ref` 単位で `cancel-in-progress: true` のまま**
     なので、main への連続 merge では前の main run が cancel される。merge 毎に
     run が「起動する」ことは保証されるが、**完走は保証されない**。
@@ -152,10 +144,8 @@ dates). The contract every agent must know before touching delivery files:
     Repository sanity job の `python3 -m unittest discover -s scripts/tests -t .`
     で毎 PR 実行される (この subsection が件数もファイル名も書かないのは
     上と同じ理由 — 追加のたびに古くなるため)。
-    Debug simulator build/test の集計後、テスト結果にかかわらず Release device
-    build (`CODE_SIGNING_ALLOWED=NO`) も実行し、Release-only の compile regression
-    を検出する。個々の step を `continue-on-error` にはせず、lane 全体が
-    informational-only である既存の境界を保つ。
+    Release device build (`CODE_SIGNING_ALLOWED=NO`) は別の
+    `main-ios-release-build.yml` で main push 時に実行する。
     Xcode Cloud への依存を段階的に減らすための実績積みの段階であり、
     Xcode Cloud の設定・branch protection・他の workflow は変更していない。
 

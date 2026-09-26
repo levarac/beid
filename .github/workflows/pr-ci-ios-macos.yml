@@ -1,60 +1,11 @@
-name: PR iOS CI (self-hosted macOS, informational)
+name: PR iOS CI (GitHub-hosted macOS, informational)
 
 on:
-  # Triggers are deliberately narrow (gh#479). This lane gates nothing:
-  # Xcode Cloud's "Beid | PR Build & Test | Test - iOS" verifies the same head
-  # in ~12 minutes and is the effective gate.
-  #
-  # The cost is TestFlight delivery latency, not developer-machine contention.
-  # The repository has exactly one self-hosted runner (`emi`), and
-  # `internal-testflight.yml` and `release-testflight.yml` both require
-  # `[self-hosted, emi]` — that same single runner. Their concurrency group
-  # (`beid-ios-delivery`) differs from this lane's, so GitHub does not
-  # serialize them; the single runner does. A 30-minute informational run on
-  # an intermediate head that nobody merges can therefore sit in front of a
-  # TestFlight build testers are waiting for.
-  #
-  # Do not restate the earlier rationale that this run competes with local iOS
-  # suites on a developer's machine. It was wrong: `emi` is a separate host,
-  # and the machine those suites run on has no runner registered at all, so
-  # these runs never touched local Gradle or simulators. It is corrected here
-  # rather than deleted because it was cited in gh#479 and in review.
-  #
-  # Nothing is lost by narrowing: the merge-candidate head and `main` are each
-  # still measured exactly once. So there is no `synchronize` here.
-  #
-  # The `paths` list is repeated per event because GitHub Actions does not
-  # support YAML anchors in workflow files. Keep the two copies identical.
-  #
-  # The Release-for-device build used to run here and now lives in
-  # `main-ios-release-build.yml`, on push to main only (gh#479). It was about
-  # 11 of this lane's 33 minutes, inside a lane whose purpose is simulator
-  # tests, and it never needed a merge candidate to be useful. Runs 116, 117
-  # and 118 measured that step at 10.82, 13.87 and 11.2; 117 is set aside
-  # because two jobs from another repository sharing this host ran inside its
-  # Release window. Moving the step shortens the queue for TestFlight
-  # delivery, which contends for this same single runner.
-  #
-  # Measured after the split: 23.87 min of job execution on 2026-09-11
-  # (run 119), with zero Release steps in the executed job. That run's
-  # build-for-testing was 16.15 against 13.12 on the immediately preceding
-  # run, a 3.03 excess whose cause is UNRESOLVED. The source is identical
-  # between the two heads. No other beid job EXECUTED concurrently, and 119's
-  # job began three seconds after 118's job ENDED — 119 itself had queued
-  # about fifty-one minutes before that, so this is a statement about what
-  # ran beside it, not about a clear queue. And EXECUTION ON THIS RUNNER IS
-  # NOT THE HOST: emi also hosts a separately-registered runner for another
-  # repository, and one of its jobs ran entirely inside this step, 4.40 of
-  # its 16.15 minutes, where the preceding run's window had none. That is a
-  # CO-OCCURRENCE AND NOT A DEMONSTRATED CAUSE — 3.03 is not 4.40, and core
-  # contention was never measured directly. The run is not repeatable, so the
-  # anomaly is recorded rather than explained.
-  #
-  # That figure is emi as configured on the day: a background scheduling
-  # priority confined the runner to the efficiency cores. NOTHING IN THIS
-  # LANE HAS BEEN MEASURED UNTHROTTLED, so no ratio between the two is stated
-  # here — a comment on main carries the authority of a measurement whether
-  # or not one was taken.
+  # Informational lane; Xcode Cloud remains the merge verification gate.
+  # Keep the existing merge-candidate triggers (gh#479). Later pushes need
+  # separate exact-head evidence because synchronize is intentionally absent.
+  # PR code runs on an ephemeral GitHub-hosted runner with no signing secrets.
+  # Release device builds use the separate main-only workflow.
   pull_request:
     # Both events that produce a merge-candidate head, and neither of them is
     # `synchronize`. `ready_for_review` alone would miss every PR opened
@@ -102,20 +53,11 @@ concurrency:
 
 jobs:
   ios-simulator:
-    name: iOS simulator (self-hosted macOS, informational)
-    # Routing lives in the repo variable RUNS_ON_MACOS, not here (same pattern
-    # as ShiokazeHD/umidori's pr-ci.yml). A variable applies to every branch at
-    # once; a label baked into this file would need a separate PR per branch
-    # to change, and ties the workflow to one machine's name instead of a
-    # capability. RUNS_ON_MACOS is currently ["self-hosted","macOS","ARM64","emi"]
-    # (repo settings), matching only the emi runner; the fallback below is the
-    # generic self-hosted-macOS label set so this workflow still resolves if
-    # the variable is ever unset, and so any additional self-hosted Mac can be
-    # brought in later by widening the variable rather than editing this file.
-    # fromJSON is required because runs-on treats a plain string variable as
-    # ONE label; it does not split on commas.
-    runs-on: ${{ fromJSON(vars.RUNS_ON_MACOS || '["self-hosted","macOS"]') }}
-    # Draft pulls do not get 30 minutes of the delivery runner. `opened`
+    name: iOS simulator (GitHub-hosted macOS, informational)
+    # Keep PR code on disposable hosted runners; repository variables must
+    # never route a fork pull request back to a persistent signing host.
+    runs-on: macos-26
+    # Draft pulls skip this optional simulator job. `opened`
     # above fires for drafts too, so this is where they are dropped. The
     # event_name clause keeps `push` and `workflow_dispatch` unaffected, since
     # `github.event.pull_request` is absent for them and would otherwise make
@@ -210,6 +152,20 @@ jobs:
             echo "SIMULATOR_UDID=$simulator_udid"
           } >> "$GITHUB_ENV"
 
+      - name: Install pinned XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < ios/ci_scripts/XCODEGEN_VERSION)"
+          archive="$RUNNER_TEMP/xcodegen.zip"
+          install_dir="$RUNNER_TEMP/xcodegen-pinned"
+          curl --fail --location --retry 3 --output "$archive" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/$version/xcodegen.zip"
+          mkdir -p "$install_dir"
+          ditto -x -k "$archive" "$install_dir"
+          test -d "$install_dir/xcodegen/share/xcodegen/SettingPresets"
+          printf '%s\n' "$install_dir/xcodegen/bin" >> "$GITHUB_PATH"
+
       - name: Verify XcodeGen pin and generated project
         shell: bash
         run: |
@@ -249,7 +205,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          xcodebuild \
+          xcodebuild -quiet \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
             -configuration Debug \
@@ -263,7 +219,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild \
+          xcodebuild -quiet \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
             -configuration Debug \

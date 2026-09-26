@@ -353,16 +353,16 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 The workflow remains the execution source of truth; this subsection records
 the jobs and command tokens checked for documentation drift.
 
-Determine changed paths and Repository sanity run on the existing Linux ARM64
-self-hosted labels `self-hosted, Linux, ARM64, default`. Repository sanity
-installs the pinned Python 3.12 standalone build into the runner's temporary
-directory. SwiftLint remains on the existing private `emi` macOS ARM64 runner
-because this repository's lint requires Xcode SourceKit; the official Linux
-ARM64 binary starts but fails while loading `libsourcekitdInProc.so`. Android
-also remains on `emi` and installs JDK 17 and Android 36 SDK job-locally.
-The macOS runner is shared with the iOS delivery lane, so its queue is
-intentionally serialized. Fork pull requests fail each named check before
-checkout on these persistent self-hosted runners.
+All pull-request jobs use fixed GitHub-hosted runner labels. Determine changed
+paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
+`ubuntu-24.04`; SwiftLint, the informational iOS Simulator lane and the lab
+CLI lane use `macos-26`. SwiftLint needs Xcode SourceKit. Repository sanity
+installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
+Fork pull requests run these checks without private credentials. The private
+Parallax comparison is explicitly reported as SKIPPED for forks, never as a
+passing comparison. Delivery workflows retain their separate triggers.
+Before public cutover, the operator must separately remove access to persistent
+self-hosted runners; changing these workflows does not revoke runner access.
 
 ## PR と issue の紐付け (Development 欄)
 
