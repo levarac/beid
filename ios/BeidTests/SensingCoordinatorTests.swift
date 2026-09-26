@@ -1182,6 +1182,65 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(Data(bytesFromKotlinByteArray: candidate.eventCodeHash), canonicalHashBytes)
   }
 
+  func testRegistryAgreementStillRunsAfterTheVerifiedCandidatesSourceWasEvicted() async throws {
+    let eventId = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    let hashHex = "6c86c6aac5fb24bc"
+    let hash = Data([0x6c, 0x86, 0xc6, 0xaa, 0xc5, 0xfb, 0x24, 0xbc])
+    var now: Int64 = 1_800_000_000_000
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      BeidSharedKit.jointestsupport.createEventDefinitionResolutionForTesting(
+        eventIdHex: "0x\(eventId)", definitionHashHex: String(repeating: "b", count: 64),
+        blockHashHex: String(repeating: "c", count: 64), eventCodeHashHex: hashHex,
+        validFromEpochSeconds: now / 1_000 - 100, validUntilEpochSeconds: now / 1_000 + 100,
+        joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN,
+        keySetDigestHex: String(repeating: "a", count: 64)
+      )
+    )
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinRegistry: registry, nearbyDiscoveryClock: { now }
+    )
+    defer { coordinator.reset() }
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "target", eventDisplayName: "Beacon", eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer, verifiedEventIdHex: "0x\(eventId)",
+      registryAgreement: { _ in true }
+    )
+    await Task.yield()
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState, .REGISTRY_VERIFIED)
+
+    for index in 0..<256 {
+      now += 1
+      coordinator.handleEventInfoHint(
+        peripheralId: "junk-\(index)", eventDisplayName: "Junk",
+        eventCodeHash: Data(repeating: 0x77, count: 8), census: nil,
+        additionalNamesOmitted: false, additionalEventsOmitted: false
+      )
+    }
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNotEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.eventCodeHashHex, hashHex)
+
+    now += 1
+    var agreementCalls = 0
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "target", eventDisplayName: "Beacon", eventCodeHash: hash,
+      rawContainer: Self.envelopeContainer,
+      registryAgreement: { _ in
+        agreementCalls += 1
+        return true
+      }
+    )
+    let restored = try XCTUnwrap(
+      (0..<coordinator.nearbyEventCandidates.candidateCount)
+        .compactMap { coordinator.nearbyEventCandidates.candidateAt(index: $0) }
+        .first { $0.eventCodeHashHex == hashHex }
+    )
+    XCTAssertEqual(restored.registryStatus, .REGISTERED_VIA_OPERATOR_LOOKUP)
+    XCTAssertEqual(restored.receiverState, .REGISTRY_VERIFIED)
+    XCTAssertEqual(registry.requestedEventIdHexes, ["0x\(eventId)"], "no second resolution replenishes the cache")
+    XCTAssertEqual(agreementCalls, 1, "the definition behind retained shared evidence must still reach Barnard")
+  }
+
   /// A v2 envelope carries no census, so recording one must not erase the
   /// census a v1 hint already published for the same source.
   func testRadioSelfVerifiedEnvelopeKeepsTheCensusAV1HintRecorded() throws {

@@ -81,6 +81,27 @@ class EventJoinCoordinatorRegistryGateTest {
     }
 
     @Test
+    fun invalidCodeLogsDistinctRefusalWithoutReadingRegistry() = runTest {
+        val lines = mutableListOf<String>()
+        val registry = FakeEventJoinRegistry()
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, registry, diagnosticLog = lines::add)
+
+        coordinator.joinEvent(" \n\t ")
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                diagnostic("unknown", "registry_resolution", "rejected_invalid_code", "none"),
+                diagnostic("unknown", "admission", "rejected_verification_failed", "none"),
+            ), lines,
+        )
+        assertEquals(0, registry.lookupRequests)
+        assertEquals(0, registry.definitionRequests)
+        assertNoJoinAndNoSensing(engine, coordinator)
+    }
+
+    @Test
     fun manualJoinWithoutRegistryLogsResolutionRefusalBeforeAdmission() = runTest {
         val lines = mutableListOf<String>()
         val engine = FakeEventJoinEngine()

@@ -113,8 +113,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     過去の計測と訂正は #479 および変更履歴に残る。
     Simulator は `scripts/ci_simulator.py` が実行ごとに一意の名前で新規作成し、
     返された UDID だけを起動・テスト・削除に使う。既存端末の選択や erase は行わない。
-    iOS 26.5 runtime または対応する iPhone の機種が無い場合は明示的に失敗し、
-    他の端末には代替しない。端末作成後は build/test が失敗した場合も `always()` で削除する。
+    iOS 26.5 runtime の対応機種から iPhone 18 Pro → 17 Pro → 16 Pro の順で選ぶ。
+    runtime またはこの優先リストの機種が無い場合は明示的に失敗し、他の機種には代替しない。
+    返された UDID が不正な場合は、作成時の一意な名前でその端末を削除してから失敗する。
+    simctl の失敗時は stderr も出力する。端末作成後は build/test が失敗した場合も `always()` で削除する。
     **`opened` を入れてあるのは、`ready_for_review` が draft から上げた時に
     しか発火しないため。** issue #479 の本文は `ready_for_review` 単独を
     指定していたが、直近 25 本を timeline で数えると決着済み 22 本のうち

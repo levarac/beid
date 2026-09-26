@@ -18,6 +18,11 @@ join_stage event_id=01234567 stage=registry_resolution outcome=rejected_verifica
 - `outcome`: `detected`, `started`, `success`, `admitted`, or a fixed
   `rejected_*` category. A successful registry read is distinct from
   admission: the event can still be ineligible to join.
+  Manual entry that cannot be normalized logs `registry_resolution` /
+  `rejected_invalid_code` before any lookup on both platforms. A missing
+  registry logs `rejected_no_registry` once at the join preflight; iOS code
+  selection defers that diagnostic until sensing is requested. The later
+  `admission` refusal is a separate stage, not a second resolution refusal.
 - `attempt`: one-based lookup or resolution attempt number, or `none` for
   stages outside an attempt. An attempt can end before network I/O, for
   example when no registry is configured. Nearby retries use the shared
