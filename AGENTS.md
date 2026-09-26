@@ -94,7 +94,13 @@ VenueDeviceBroadcasting` returns hits under `ios/` and **none** under
 both-OS rule forbids a silent platform asymmetry: the gap may be deliberate,
 but it may not go unnamed. Naming it: for v1.0 this asymmetry **is**
 deliberate — the venue device ships iOS-first, and the Android venue surface
-is tracked as #460.
+is tracked as #460. Measured again on 2026-09-27 against `design/flat-2b`
+`53861c7`: PR #622 added an Android **signed-pack** import and broadcast
+surface (`android/.../venue/VenueActivity.kt`, opened from Account via
+`AppNavHost.kt:141`), paste-only and holding the pack in memory. What stays
+iOS-only is the unsigned v1 path named above (whose iOS entry #597 withdrew)
+and the persisted pack state shown on iOS screen 14 (#702). Do not restate
+that Android has no venue surface.
 Do not restate "Android has only one screen"—that was true when Issue #117
 was filed and has not been true since #119/#120/#123/#126/#118 landed.
 Do not restate that Android lacks owner-key binding or a records list either;

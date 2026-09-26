@@ -292,6 +292,7 @@
 		CAFE8F781147CAA5382816E2 /* BeidKeychainKeyStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EF2389970BED4997DBC2826 /* BeidKeychainKeyStorage.swift */; };
 		CB158153C98D8C18CBAFFEF8 /* SessionAggregateExposureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EAEB0CA3E864A05492129FB /* SessionAggregateExposureTests.swift */; };
 		CB9007B77CB1E2B073F8F476 /* SigilView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCCD629A370893E26EFAC785 /* SigilView.swift */; };
+		CCB92AFBF1D6B9EB01779B2F /* AboutSensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53886839A1EB9B5547EC859D /* AboutSensingView.swift */; };
 		CE328CD7C6B5FEA7C2354C40 /* EventCodeJoinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1AB3554282B2FBE1C9CB723 /* EventCodeJoinTests.swift */; };
 		CE66819F7BFC92E084CB11C8 /* ProductionVenueBundleVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC9F4DB6268EFD5BC4F9AFD /* ProductionVenueBundleVerifierTests.swift */; };
 		CEC22F35AC01E719B81B22BC /* OnboardingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E27B79DCA1AD7EA94292B1 /* OnboardingMode.swift */; };
@@ -316,6 +317,7 @@
 		DC040CF25B30C603A232AB3B /* PreviewAggregateFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE1D6BBD55B5DDEB2D3476C2 /* PreviewAggregateFactory.swift */; };
 		DC6602DAD2654B56CFBC9B7D /* Barnard in Frameworks */ = {isa = PBXBuildFile; productRef = 85120383F176FDA459C0D6E8 /* Barnard */; };
 		DCAEAECF24E060991C872745 /* EventBindingSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A0CFB332AC5A882931E08F /* EventBindingSheetView.swift */; };
+		DE20B42DC06C9B32CFD5FF1A /* AboutSensingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53886839A1EB9B5547EC859D /* AboutSensingView.swift */; };
 		DFBE1C1F985E8D1C6DCFA11E /* BindingRecordStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0AA6219B53ABF42EDACF85 /* BindingRecordStore.swift */; };
 		E0FD29898478987B0801C84C /* WalletConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 957B35015FE66EA57458D691 /* WalletConnector.swift */; };
 		E2A38C5ED97959455A3229D2 /* EventFoundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B07FD0202575465DCF463745 /* EventFoundView.swift */; };
@@ -488,6 +490,7 @@
 		50415C0B040C5C474720CB32 /* SingleAppearanceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingleAppearanceUITests.swift; sourceTree = "<group>"; };
 		5139B6D3D93F5DD6E7E90A54 /* DemoEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEvent.swift; sourceTree = "<group>"; };
 		52A6E868212391771EFD73E5 /* ClockPreflightNoticeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockPreflightNoticeView.swift; sourceTree = "<group>"; };
+		53886839A1EB9B5547EC859D /* AboutSensingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSensingView.swift; sourceTree = "<group>"; };
 		5459592F237296DD025E2E77 /* SessionAggregateSnapshotStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAggregateSnapshotStoreTests.swift; sourceTree = "<group>"; };
 		54F11AED207016A2105C874E /* valid.venue-handoff.cbor */ = {isa = PBXFileReference; path = "valid.venue-handoff.cbor"; sourceTree = "<group>"; };
 		5651A43309524D95F802AF30 /* BeidTextControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeidTextControlTests.swift; sourceTree = "<group>"; };
@@ -876,6 +879,7 @@
 		6BACA62F999D7F7071D2E51C /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				53886839A1EB9B5547EC859D /* AboutSensingView.swift */,
 				1098CC9D54E372BBAC1D4CAF /* AccountSheetView.swift */,
 				8B0104638BEAF63737710AD8 /* BluetoothDeniedView.swift */,
 				A80A94378B0116CC976961AC /* BluetoothOffView.swift */,
@@ -1423,6 +1427,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DE20B42DC06C9B32CFD5FF1A /* AboutSensingView.swift in Sources */,
 				069813A870D327358882201A /* AccountSheetView.swift in Sources */,
 				263C863A858418EFF3DBD26D /* AggregationRuntime.swift in Sources */,
 				3EEA86E51D83334A77A2A6C9 /* AppCoordinator.swift in Sources */,
@@ -1628,6 +1633,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CCB92AFBF1D6B9EB01779B2F /* AboutSensingView.swift in Sources */,
 				72B8A4CCCFFA734701CAA40A /* AccountSheetView.swift in Sources */,
 				250E00E36D5B7130E5D6B996 /* AggregationRuntime.swift in Sources */,
 				0AF44A6AFBF8DB7DEDD4FA44 /* AppCoordinator.swift in Sources */,
