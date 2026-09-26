@@ -426,7 +426,7 @@ changes, and classifier failures run the relevant or all gates fail-closed.
   `python3 -m unittest discover -s scripts/tests -t .`.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
-`build-for-testing` and `test-without-building` execute the Beid unit and UI
+`xcodebuild build-for-testing` and `xcodebuild test-without-building` execute the Beid unit and UI
 suites. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
