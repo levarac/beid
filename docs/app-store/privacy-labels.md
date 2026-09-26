@@ -11,78 +11,60 @@ App Store Connect の「App のプライバシー」に入れる回答と、**�
 **このファイルに選択肢のトークン名そのものを書いていないのは、`asc web privacy catalog` を
 引かずに書くと綴りを推測することになるため。** 推測したトークンが正本として残るのが一番まずい。
 
-## 根拠（すべて `origin/main` 4c99036 で確認）
+## 根拠（`origin/main` 047fa4e7 に送信 ON の変更を加えた状態で確認、2026-09-26）
 
 | 事実 | どこで確認したか |
 | --- | --- |
-| 観測データをサーバーに送らない | `ios/project.yml` の `BEID_REPORT_SUBMISSION_ENABLED: "NO"`。リリースビルドを作る `scripts/gha/build-and-upload-ios.sh` は `-configuration Release` で archive するだけで、この設定を上書きしていない。アプリ側は `ReportSubmissionRuntime.swift:552` で Info.plist から読む |
-| アカウントが無い | サインアップ画面も認証も存在しない。オンボーディングは `OnboardingMode.current = .guestFirst`（`OnboardingMode.swift:19`） |
-| 解析 SDK が無い | Firebase / Crashlytics / Segment 等の依存が無い。SPM 依存は barnard, MetaMask SDK, Socket.IO, Starscream のみ |
-| **MetaMask SDK の解析送信が止まっている** | `MetaMaskConnector.swift:339-346` が `enableDebug: false` で SDK を構築している。SDK 側の `Analytics.trackEvent` は `if !debug { return }` で即座に戻る（`metamask-ios-sdk/Classes/Analytics/Analytics.swift`）。したがって `metamask-sdk.api.cx.metamask.io/evt` への送信は発生しない |
-| MetaMask との通信がリレー経由でない | 同じ構築箇所で `transport: .deeplinking(dappScheme: "beid")`。ソケットリレーではなく端末内のディープリンクで MetaMask アプリと往復する |
-| 広告・トラッキングが無い | IDFA も ATT も使っていない。`NSUserTrackingUsageDescription` は不要 |
-| 端末間で個人情報が飛ばない | 交換されるのは回転する識別子と署名付き観測。アプリ内文言も「Only anonymous proofs are exchanged, never your identity.」 |
+| **イベント参加中、署名付き観測をサーバーに送る** | `ios/project.yml` の `BEID_REPORT_SUBMISSION_ENABLED: "YES"`（Ken 決定 2026-09-26）。Android は本番の `EventJoinCoordinator(activity)` が `ledgerFilesDir = activity.filesDir` を渡すので、送信（`WindowObservationSubmissionDrain`）が以前から動いている |
+| 送るのは署名付き観測（COSE_Sign1）だけ | `shared/.../parallax/submission/SubmissionClient.kt` の POST 本文。中身は `ObservationV1`：イベントごとの仮名の鍵（`observer`）、聞こえた回転 RPID、自分の RPID、イベント ID（`context`）、ENIN と時刻、参加コミットメント（ハッシュ） |
+| 名前・メール・電話・アカウント・端末 ID・ウォレットアドレス・緯度経度は含まない | 同上。ウォレットアドレスは端末内（`CachedWalletHint.swift`）に留まり、送信経路に無い |
+| operator は受理した観測を無期限に保存する | operator の health endpoint が retention indefinite を返す。D1 に `signed_observation`, `acceptance_receipt`, `context`, `accepted_at`, `delegation_cert` を保存（`delegation_cert` は operator 側の値で、アプリは送らない） |
+| operator は Levarac 自身が運営する | `parallax-observation-operator.levarac.workers.dev`。第三者への提供ではない |
+| アカウントが無い | サインアップ画面も認証も存在しない。`OnboardingMode.current = .guestFirst`（`OnboardingMode.swift:19`） |
+| 解析 SDK・広告・トラッキングが無い | Firebase / Crashlytics / Segment 等の依存が無い。IDFA も ATT も使っていない |
+| MetaMask SDK の解析送信は止まっている | `MetaMaskConnector.swift` が `enableDebug: false` で構築。SDK の `Analytics.trackEvent` は `if !debug { return }` で戻る |
 
 ## 回答
 
 ### トラッキング
 
-**「トラッキングに使用しています」= いいえ。**
-他社のアプリやサイトをまたいでユーザーを追う仕組みが無く、データブローカーにも渡していない。
+**「トラッキングに使用しています」= いいえ。** 他社のアプリやサイトをまたいでユーザーを追う仕組みが無く、
+データブローカーにも渡していない。
 
-### 収集するデータ
+### 収集するデータ（App Store「App のプライバシー」）
 
-**「データを収集していません」で申告する見込み。ただし下の「未確認」2 点を owner が Cloudflare で確認するまでは申告しない。**
+**「データを収集していません」はもう使えない。** 観測はデバイスの外に送られ、保存されるので、Apple の言う「収集」に当たる。
 
-beid が外に出す通信は次の 3 つだけで、いずれも**ユーザーに紐づくデータを送っていない**。
+申告案（トークン名は `asc web privacy catalog` で確認してから書く。推測で書かない）:
 
-1. イベント定義・鍵セットの取得（`parallax-observation-operator.levarac.workers.dev/artifacts/...`）。
-   送るのはダイジェスト値だけ。
-2. イベントコードの照合（同ホストの `/v1/events/by-code/...`）。送るのは主催者が配ったコードだけ。
-3. レジストリの読み取り。
+1. **その他のデータ**（署名付き近接観測）
+   - 目的: App の機能
+   - ユーザーに紐づくか: **いいえ**。鍵はイベントごとの仮名で、アカウントも端末 ID も無い
+   - トラッキング: いいえ
+2. **おおよその位置情報**（要判断、申告する側を推奨）
+   - 観測は「このイベント（会場と日時が公開されている）にいた」ことを示す。緯度経度は送っていないが、
+     会場が公開されている以上、低解像度の位置情報に当たると読むのが安全側
+   - 目的: App の機能 / ユーザーに紐づくか: いいえ / トラッキング: いいえ
 
-いずれもリクエストに付随して IP アドレスは当然サーバーに届くが、
-Apple のプライバシーラベルは「識別子として収集・保存しているか」を問うものであり、
-**通信に伴う一時的な IP は、それ自体を保存・利用していない限り収集に当たらない**という整理。
-operator 側でアクセスログを保存している場合は話が変わるので、下の「未確認」を参照。
+### Google Play「データセーフティ」
 
-### ウォレットアドレスの扱い
+- 収集: **あり**（上と同じ 2 種。「その他」と「おおよその位置情報」）。共有（第三者への提供）: なし
+- 送信時の暗号化: あり（https）
+- 必須か任意か: イベントに参加した時だけ送る。参加は任意
+- 削除リクエスト: **未確認**。operator に削除の手段があるかを確認してから答える
 
-ウォレットを接続すると、アドレスは**端末内に保存される**（`CachedWalletHint.swift`）。
-アドレスは MetaMask アプリとの間でやり取りされるが、**beid のサーバーには送られない**
-（観測の送信自体が止まっているため）。
-端末内に留まるデータは Apple の言う「収集」に当たらない。
+Android は以前から送信しているので、Play の現行申告が「収集なし」なら、それは今すでに実態と食い違っている。
 
-## 未確認 — 申告前に潰すべき 1 点
+## 未確認 — 申告前に潰すべき点
 
-**operator（`parallax-observation-operator.levarac.workers.dev`）がアクセスログを保存しているか。**
-
-保存していて、かつそれを解析等に使っているなら、「診断」または「使用状況データ」の申告が要る可能性がある。
-Cloudflare Workers の既定のログ保持だけであれば通常は申告不要の範囲。
-「データを収集していません」は強い主張なので、これを確認しないまま出すべきではない。
-
-ops-event に確認した結果（2026-09-17 19:2x JST）:
-
-- **リポジトリ上は保存していない。** `operator/wrangler.jsonc` に observability / logpush / Analytics Engine /
-  KV / R2 のいずれも無く、binding は D1 と静的アセットだけ。Worker が `console.error` を呼ぶのはエラー経路だけで、
-  それは一時的な tail にしか出ない。
-- **確認できていないのは 2 点で、どちらも Cloudflare ダッシュボードを見られる owner の作業。**
-  アカウント単位の Logpush はリポジトリから見えない。デプロイ中の Worker（version `7f58367c`、parallax `0c6e2a85`
-  から 09-14 にビルド）が現設定と一致するかも照合していない。
-
-## 送信を有効にした瞬間に、この申告は見直しになる
-
-operator は**観測データを D1 に無期限で保存する**（health endpoint 自身が retention indefinite と返す）。
-保存するのは `signed_observation`, `acceptance_receipt`, `context`, `accepted_at`, `delegation_cert`。
-これらが Apple の言う「ユーザーに紐づく収集データ」に当たるかは、中身が何を運ぶかで決まる。
-
-現ビルドで問題にならないのは、送信が `BEID_REPORT_SUBMISSION_ENABLED: "NO"` で止まっているからだけで、
-D1 にも 2 日間 1 件も受け付けられていないことを ops-event が確認している。
-**アクセスログより、こちらのほうが申告を変える力が大きい。**
+1. **operator のアクセスログ**。リポジトリ上は保存していない（`operator/wrangler.jsonc` に observability / logpush /
+   Analytics Engine / KV / R2 が無い）が、アカウント単位の Logpush と、デプロイ中の Worker が現設定と一致するかは
+   Cloudflare ダッシュボードを見られる owner の確認が要る。保存しているなら「診断」の申告が加わる
+2. **削除リクエストへの対応**（Play が問う）
+3. **おおよその位置情報を申告するか**（上の 2。推奨は申告する）
 
 ## 変更に強くするために
 
 このファイルの「根拠」表のどれかが変わる PR は、このファイルも一緒に変える。
-とくに **`BEID_REPORT_SUBMISSION_ENABLED` を `YES` にする変更は、
-プライバシーラベルを「データを収集していません」から書き換える必要がある**。
-その変更だけでストア上の申告が実態と食い違う状態になる。
+とくに観測の中身（`ObservationV1`）にフィールドを足す変更と、ウォレットアドレスや端末識別子を
+送信経路に載せる変更は、「ユーザーに紐づくか」の答えを変える。
