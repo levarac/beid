@@ -27,6 +27,16 @@ Google Play は [Data safety 回答案](../google-play/data-safety.md) を使う
 そのまま公開できる完成済みフォームではない。location、第三者の保存・利用、公開 bundle、
 削除窓口の確認を伴わない一括承認はしない。
 
+独立チェック（2026-09-26）の結論は APPROVE WITH NOTES で、blocking は無い。
+指摘の全文は [Data safety 案の該当節](../google-play/data-safety.md#独立チェックの指摘2026-09-26承認前に反映すること) にある。
+iOS に関わる点は次のとおり。
+
+- 転送暗号化は source で確認済み。すべての通信経路が HTTPS である。
+- wallet は `.deeplinking` による端末内の往復で、network relay は無い。
+- 送信先は検証済み Event Definition が決める。O1〜O3 は現行 operator の説明であり、固定の受信者ではない。
+- commitment は owner key と結びつく（`EventCommitment.swift:7`）。Linked = Yes の根拠になる。
+- `PrivacyInfo.xcprivacy` は無い。この PR の範囲外。
+
 ## 調査対象と限界
 
 2026-09-26 UTC に確認。beid は担当に指定された main 由来の

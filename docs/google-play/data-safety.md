@@ -31,6 +31,50 @@ upstream freshness・operator の配備状態・実機送信の限界は
 配備差分、service-provider 例外、利用者が意図して行う共有の例外が適用できる証拠が揃った場合だけ、
 該当種類の Shared を再検討する。仮名を完全匿名として例外扱いしない。
 
+## 独立チェックの指摘（2026-09-26、承認前に反映すること）
+
+独立 checker は同じ snapshot を読み、引用はすべて存在し主張を支えると確認した。
+結論は **APPROVE WITH NOTES**、blocking は無い。
+承認前に次を反映する。
+
+1. **Android の位置情報権限。** Barnard 0.9.2 の AAR manifest が 2 つの権限をアプリに merge する。
+   - `ACCESS_FINE_LOCATION`（maxSdk 30）
+   - `ACCESS_COARSE_LOCATION`（maxSdk 28）
+
+   アプリの minSdk は 26 である。上の Location 行が根拠にする `neverForLocation`（`android/app/src/main/AndroidManifest.xml:8-9`）は API 31 以上にしか効かない。
+   beid 自身は位置情報を読まない。`LocationManager` / Fused provider の参照は無い。
+   Play Console は宣言権限とデータセーフティの回答を突き合わせるので、Location の判断ではこの merge 済み権限を前提にする。
+2. **UNKNOWN のうち、source から答えられるもの。**
+   - 転送暗号化（2.2）: アプリが始める通信はすべて HTTPS 固定か HTTPS 強制である。
+     - 送信
+     - registry template
+     - Sepolia RPC 2 本
+     - Etherscan
+     - ClockPreflight の HEAD
+     - `HttpsVenueBundleAcquirer`
+   - wallet の転送は両 OS とも端末内で完結する。network relay は無い。
+     - iOS は `.deeplinking` を使う。
+     - Android は `bindService` IPC を使う（`CommunicationClient.kt:505-532`）。
+   - wallet address は同じ端末の MetaMask アプリにしか渡らない。Android の analytics 項目（`CommunicationClient.kt:109-124`, 214）に address は含まれない。
+   - 小さな通信先 3 つも明記する。
+     - ClockPreflight: operator origin への HEAD で、Date header を読む。
+     - venue artifact の取得。
+     - Etherscan: 既定では無効。`project.yml:104` と `beid.etherscanApiKey` の既定値は空文字。
+3. **送信先はイベント定義が決める。** 送信 endpoint は検証済み Event Definition から来る（`SubmissionModels.kt:189-195`）。`validateSubmissionEndpoint` は任意の HTTPS URL を受け付ける。
+   O1〜O3 は、現行の定義が名指す operator（levarac/parallax）の説明であって、固定の受信者ではない。Shared = Yes は最悪の場合も含む。
+4. **Android の analytics は Issue [#693](https://github.com/thegreeting/beid/issues/693) で修正中（PR [#695](https://github.com/thegreeting/beid/pull/695)）。**
+   上の「申告するか、先に修正するか」の行はこれを前提にする。修正 build が全配布版に行き渡るまでは、現行の挙動として申告する。
+5. **分類の OS 差。** 近接観測を iOS は「Other Data Types」、Android は「App activity → Other actions」に入れる。
+   どちらもその platform の受け皿なので、Ken が並べて確認する。
+6. **commitment と owner key のつながり。** 参加者 commitment は `H(event signing key ‖ owner key ‖ salt)` で作る（`OwnerKeyProvider.kt:22`、`EventCommitment.swift:7`）。wallet binding は owner key に署名する。
+   B3 の「owner 公開鍵を追加するフィールドは無い」は文字どおりには正しいが、このつながりを示していない。Linked = Yes の提案は変えない。
+7. **無いことの確認。**
+   - 両 OS とも、MetaMask 以外のクラッシュ／解析 SDK は無い。
+   - main に support bundle は無い。#466 で開発中で、入ったら再判定する。
+   - Barnard の AAR に network code と INTERNET 権限は無い。
+   - self-proof と binding の記録は端末外に出ない。
+   - iOS の `PrivacyInfo.xcprivacy` は無い。この PR の範囲外。
+
 ## フォーム順序の出典と未確認範囲
 
 以下の 1 → 2 → 3 → 4 → 5 は Google の
