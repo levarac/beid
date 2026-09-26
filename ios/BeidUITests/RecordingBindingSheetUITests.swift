@@ -25,7 +25,7 @@ import XCTest
 /// binding sheet begins animating in must not strand the user. **Its
 /// recovery path is device-class dependent (beid#245)** — see that test's
 /// own doc comment. On iPhone, the tap is a true no-op (the page sheet
-/// covers the button) and recovery takes two further, real taps: `Cancel`
+/// covers the button) and recovery takes two further, real taps: `Not now`
 /// then `Close`. On iPad, the same tap lands on the form sheet's visible
 /// backdrop and genuinely dismisses the binding sheet, recovering in one
 /// fewer tap. Both device classes converge on the same end state —
@@ -49,7 +49,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     // — it chains presentation to `sensing.recordingSurfaceReady` instead,
     // after RecordingView mounts. The timeout covers the demo step delay and
     // sheet presentation.
-    let cancelButton = app.buttons["Cancel"]
+    let cancelButton = app.buttons["Not now"]
     XCTAssertTrue(
       cancelButton.waitForExistence(timeout: 15),
       "Binding sheet should auto-present once .recording begins, without backgrounding the app"
@@ -57,12 +57,12 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
     cancelButton.tap()
 
-    // `Cancel` calls `sensing.declineBinding()`, which re-sets `bindingState`
+    // `Not now` calls `sensing.declineBinding()`, which re-sets `bindingState`
     // back to `.pendingConnect(event)` (§5.6: re-offered next foreground,
     // never re-shown mid-session on its own) — the regression this test
     // guards against is a naive `.onChange` that treats that re-entry as
     // another fresh threshold-cross and reopens the sheet immediately.
-    XCTAssertFalse(cancelButton.exists, "Binding sheet should be dismissed after tapping Cancel")
+    XCTAssertFalse(cancelButton.exists, "Binding sheet should be dismissed after tapping Not now")
 
     // Give any errant auto-reopen a real window to occur before asserting
     // it stayed dismissed — long enough to catch an immediate-reopen bug,
@@ -78,11 +78,48 @@ final class RecordingBindingSheetUITests: XCTestCase {
     XCTAssertFalse(cancelButton.exists, "Binding sheet must not reopen itself after being dismissed")
   }
 
+  /// Regression coverage for the binding-sheet clarity pass: testers could
+  /// not tell (1) whether sensing stopped while this sheet was open, or (2)
+  /// what connecting a wallet does. Asserts both new explanatory elements
+  /// are actually on screen, and that `Not now` — declineBinding() only, no
+  /// effect on `phase` — leaves the user on a live `RecordingView`, the same
+  /// oracle `testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose`
+  /// uses for "sensing is still running": `Simulate Signal Lost` is only
+  /// present on that live screen.
+  func testBindingSheetShowsSensingLiveAndWalletExplainerAndNotNowLeavesSensingRunning() {
+    launchAndReachSenseEventScreen()
+    app.buttons["home.scan"].tap()
+
+    let cancelButton = app.buttons["Not now"]
+    XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
+
+    let sensingLive = app.descendants(matching: .any)["binding.sensing-live"]
+    XCTAssertTrue(sensingLive.waitForExistence(timeout: 5), "The live-sensing indicator must be visible on the sheet")
+    let walletExplainer = app.descendants(matching: .any)["binding.wallet-explainer"]
+    XCTAssertTrue(walletExplainer.exists, "The wallet explainer text must be visible on the sheet")
+
+    // PM-facing reference frame of the sheet's connect state, both new
+    // elements visible — not a Flat 2b screenshot-tour frame, just evidence
+    // for this change's review.
+    let connectStateShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    connectStateShot.name = "binding-sheet-connect"
+    connectStateShot.lifetime = .keepAlways
+    add(connectStateShot)
+
+    cancelButton.tap()
+
+    XCTAssertFalse(cancelButton.exists, "Not now should dismiss the binding sheet")
+    XCTAssertTrue(
+      app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5),
+      "Not now must land the user on a live RecordingView — sensing keeps running, unaffected by the sheet"
+    )
+  }
+
   func testKeepSensingReturnsToLiveRecordingAfterBindingWasDeclined() {
     launchAndReachSenseEventScreen()
     app.buttons["home.scan"].tap()
 
-    let cancelButton = app.buttons["Cancel"]
+    let cancelButton = app.buttons["Not now"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
     cancelButton.tap()
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
@@ -136,7 +173,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   /// presentation deadlock. Nothing wedges at the UIKit level: a
   /// ~68k-line console capture across 3 runs showed zero
   /// presentation-conflict warnings. Recovery is deterministic in exactly
-  /// two further, real, reachable taps: `Cancel` dismisses the binding
+  /// two further, real, reachable taps: `Not now` dismisses the binding
   /// sheet onto a live `RecordingView` (confirmed by
   /// `"Simulate Signal Lost"` being present — the same identifier
   /// `BeidIPadLayoutTests.swift` already uses to detect being on that
@@ -170,12 +207,12 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
     app.buttons["home.scan"].tap()
 
-    let cancelButton = app.buttons["Cancel"]
+    let cancelButton = app.buttons["Not now"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
 
     let closeButton = app.buttons["Close"]
     print(
-      "PRE-TAP: Close.isHittable=\(closeButton.isHittable) Cancel.isHittable=\(cancelButton.isHittable)"
+      "PRE-TAP: Close.isHittable=\(closeButton.isHittable) NotNow.isHittable=\(cancelButton.isHittable)"
     )
 
     // Deliberately no wait here — tapping Close in the same tight cadence
@@ -208,15 +245,15 @@ final class RecordingBindingSheetUITests: XCTestCase {
       // otherwise disturb the binding sheet that's still mid-presentation.
       XCTAssertTrue(
         cancelButton.exists,
-        "A mistimed Close tap should be a no-op on iPhone (Close not yet hittable), leaving the binding sheet's Cancel button present"
+        "A mistimed Close tap should be a no-op on iPhone (Close not yet hittable), leaving the binding sheet's Not now button present"
       )
 
       cancelButton.tap()
 
-      XCTAssertFalse(cancelButton.exists, "Cancel should dismiss the binding sheet")
+      XCTAssertFalse(cancelButton.exists, "Not now should dismiss the binding sheet")
       XCTAssertTrue(
         app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5),
-        "Cancel must land the user on a live RecordingView, not a dead screen"
+        "Not now must land the user on a live RecordingView, not a dead screen"
       )
 
       closeButton.tap()

@@ -49,7 +49,11 @@ struct EventBindingSheetView: View {
       .toolbar {
         if showsCancelToolbarButton {
           ToolbarItem(placement: .cancellationAction) {
-            BeidTextControl("Cancel", accessibilityLabel: "Cancel", role: .cancel) {
+            // "Not now", not "Cancel": this only declines the wallet
+            // connect, never the recording session — `declineBinding()`
+            // only resets `bindingState` and leaves `phase` untouched, so
+            // sensing keeps running after this control is tapped.
+            BeidTextControl("Not now", accessibilityLabel: "Not now", role: .cancel) {
               sensing.declineBinding()
               dismiss()
             }
@@ -115,14 +119,45 @@ struct EventBindingSheetView: View {
     if let event {
       BeidHeroHeader(
         title: LocalizedStringKey(eventConfirmedTitle(event: event)),
-        subtitle: "Connect a wallet to seal your attendance to this event."
+        // Answers "did sensing stop while this sheet is up?" (testers could
+        // not tell) — connecting a wallet never gates or pauses sensing;
+        // see `sensingLiveIndicator` and `walletExplainerText` below for the
+        // rest of that same answer.
+        subtitle: "Sensing keeps running while this is open."
       )
     }
+  }
+
+  /// A small live indicator answering "is sensing still running?" while
+  /// this sheet is up — testers could not tell from the sheet alone.
+  /// `BeidStatusPill` is the existing Flat 2b sensing-status component
+  /// (`SensingView`/`SignalLostView` already use its other two states);
+  /// `.accessibilityElement(children: .combine)` mirrors
+  /// `ScanFlowView.swift`'s own dot+label toolbar indicator so the
+  /// identifier below lands on one element, not the dot alone.
+  private var sensingLiveIndicator: some View {
+    BeidStatusPill(state: .sensingNearby)
+      .accessibilityElement(children: .combine)
+      .accessibilityIdentifier("binding.sensing-live")
+  }
+
+  /// Answers "what does connecting a wallet actually do?" — testers could
+  /// not tell. States the one signature/no-transaction/no-fee facts this
+  /// sheet's connect call sites (`performBinding`/`continueFromRestoredHint`
+  /// below) actually perform, and that declining is safe.
+  private var walletExplainer: some View {
+    Text(verbatim: Self.walletExplainerText)
+      .font(DS.Font.meta)
+      .foregroundStyle(DS.Color.textSecondary)
+      .multilineTextAlignment(.center)
+      .accessibilityIdentifier("binding.wallet-explainer")
   }
 
   @ViewBuilder
   private var connectContent: some View {
     header
+    sensingLiveIndicator
+    walletExplainer
 
     if isInFlight {
       ProgressView()
@@ -223,6 +258,23 @@ struct EventBindingSheetView: View {
       }
     }
   }
+
+  /// Shown under the header on `connectContent` (all three connect states):
+  /// answers "what does connecting a wallet actually do?" — testers could
+  /// not tell this was a single free signature, not a transaction. Not
+  /// `private`, unlike the rest of this section's helpers, so
+  /// `EventBindingTests.swift` can pin its exact wording (`@testable import
+  /// Beid`); this view has no other test harness to render it through.
+  static let walletExplainerText = String(
+    localized: "scan.binding.walletExplainer",
+    defaultValue: "Connecting a wallet is optional. Your wallet signs one message that links this attendance to your address, so you can claim it later. It costs nothing and sends no transaction. You can skip this and keep sensing.",
+    comment: """
+    Explains the connect+binding sheet's wallet-connect step to a first-time participant. Must convey, precisely: \
+    (1) connecting is optional and can be skipped, (2) the wallet performs exactly one signature (personal_sign), \
+    never a transaction, so it has no fee/gas cost, (3) skipping it does not stop or pause the ongoing sensing \
+    session. Do not translate this loosely enough to imply a transaction, a cost, or that sensing depends on it.
+    """
+  )
 
   /// Shown only under a non-retryable failure, which is not re-offered for
   /// the rest of the session (beid#591).

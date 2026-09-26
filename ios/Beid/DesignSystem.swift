@@ -167,17 +167,22 @@ struct BeidStatusPill: View {
   enum State {
     case sensingAutomatically
     case sensingPaused
+    /// `EventBindingSheetView`'s connect+binding sheet: sensing is active
+    /// and running underneath while the sheet is up (never paused by it —
+    /// see that view's `sensingLiveIndicator`).
+    case sensingNearby
 
     fileprivate var label: LocalizedStringKey {
       switch self {
       case .sensingAutomatically: "Sensing automatically"
       case .sensingPaused: "Sensing paused"
+      case .sensingNearby: "Sensing nearby"
       }
     }
 
     fileprivate var dotColor: Color {
       switch self {
-      case .sensingAutomatically: DS.Color.statusOn
+      case .sensingAutomatically, .sensingNearby: DS.Color.statusOn
       case .sensingPaused: DS.Color.statusPending
       }
     }

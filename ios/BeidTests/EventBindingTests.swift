@@ -20,6 +20,30 @@ final class EventBindingTests: XCTestCase {
   /// tests that need `completeBinding` to actually succeed end-to-end.
   private let realWalletAddress = TestWallet.address
 
+  // MARK: - Binding-sheet clarity copy (EventBindingSheetView)
+  //
+  // `EventBindingSheetView` has no view-rendering test harness (see
+  // `testSmartWalletFailureIsNotRetryableAndStaysFailedAfterClose`'s doc
+  // comment), so the sheet's rendered copy is otherwise only pinned by
+  // `RecordingBindingSheetUITests`'s on-screen text assertions. This pins
+  // the one piece of that copy carrying a safety-relevant factual claim —
+  // one signature, no transaction, no fee, sensing unaffected — at the
+  // unit level too, via the `static` (non-private) constant
+  // `EventBindingSheetView.walletExplainerText` exposes for exactly this.
+
+  func testWalletExplainerTextStatesNoTransactionAndSensingUnaffected() {
+    let text = EventBindingSheetView.walletExplainerText
+    XCTAssertEqual(
+      text,
+      "Connecting a wallet is optional. Your wallet signs one message that links this attendance to your address, so you can claim it later. It costs nothing and sends no transaction. You can skip this and keep sensing.",
+      "must not silently drift from the safety claims this exact wording makes"
+    )
+    XCTAssertTrue(text.contains("optional"))
+    XCTAssertTrue(text.contains("no transaction"))
+    XCTAssertTrue(text.contains("costs nothing"))
+    XCTAssertTrue(text.contains("keep sensing"))
+  }
+
   func testBeginBindingReturnsNilWhenNotRecording() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
     XCTAssertNil(coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId))

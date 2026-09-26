@@ -1153,7 +1153,6 @@
         }
       }
     },
-    "Connect a wallet to seal your attendance to this event.": {},
     "Seal with connected wallet": {},
     "Sealed": {},
     "Couldn't seal attendance": {},
@@ -3065,6 +3064,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "In progress · delivery unconfirmed"
+          }
+        }
+      }
+    },
+    "Not now": {
+      "comment": "Toolbar control on the wallet connect+binding sheet. Declines connecting a wallet for now; does not cancel or pause the ongoing sensing session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
+          }
+        }
+      }
+    },
+    "Sensing keeps running while this is open.": {
+      "comment": "Subtitle on the wallet connect+binding sheet's header. Reassures the participant that sensing continues in the background while this sheet is open, whether or not they connect a wallet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensing keeps running while this is open."
+          }
+        }
+      }
+    },
+    "Sensing nearby": {
+      "comment": "Status pill label on the wallet connect+binding sheet: sensing is actively running underneath the sheet. Parallels 'Sensing automatically'/'Sensing paused' — keep the same grammatical form.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensing nearby"
+          }
+        }
+      }
+    },
+    "scan.binding.walletExplainer": {
+      "comment": "Explains the connect+binding sheet's wallet-connect step to a first-time participant. Must convey, precisely: (1) connecting is optional and can be skipped, (2) the wallet performs exactly one signature (personal_sign), never a transaction, so it has no fee/gas cost, (3) skipping it does not stop or pause the ongoing sensing session. Do not translate this loosely enough to imply a transaction, a cost, or that sensing depends on it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting a wallet is optional. Your wallet signs one message that links this attendance to your address, so you can claim it later. It costs nothing and sends no transaction. You can skip this and keep sensing."
           }
         }
       }

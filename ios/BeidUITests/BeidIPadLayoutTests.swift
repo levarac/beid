@@ -230,11 +230,11 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func dismissBindingSheetToReachLiveRecording() {
-    let cancel = app.buttons["Cancel"]
+    let cancel = app.buttons["Not now"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
-    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
+    XCTAssertTrue(cancel.isHittable, "The binding sheet Not now control must be tappable")
     cancel.tap()
-    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertFalse(cancel.exists, "Not now must dismiss the binding sheet")
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["Close"].isHittable, "Live recording Close must be tappable")
   }
