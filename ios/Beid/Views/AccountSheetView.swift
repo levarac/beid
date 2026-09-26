@@ -10,6 +10,7 @@ import UIKit
 struct AccountSheetView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @Environment(\.dismiss) private var dismiss
+  @State private var supportShareItem: SupportShareItem?
 
   var body: some View {
     NavigationStack {
@@ -119,6 +120,17 @@ struct AccountSheetView: View {
 
         EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
 
+        Section {
+          Button {
+            supportShareItem = SupportShareItem(text: coordinator.supportDiagnostics.exportJson())
+          } label: {
+            Label("Share support information", systemImage: "square.and.arrow.up")
+          }
+          .accessibilityIdentifier("account.support.share")
+        } footer: {
+          Text("Includes app version, recent states and failure reasons from this app session. Choose who to share it with.")
+        }
+
         // beid#491: the build position, in the same shape as Android's row.
         // Two builds showing the same height came from the same commit, which
         // is what lets a tester report about iOS and one about Android be
@@ -146,6 +158,9 @@ struct AccountSheetView: View {
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()
         .environmentObject(coordinator)
+    }
+    .sheet(item: $supportShareItem) { item in
+      SupportShareSheet(item: item)
     }
     // A custom `Binding`, not `$coordinator.eventCodeEntrySheetPresented`
     // directly: swipe-to-dismiss writes `false` through whatever binding

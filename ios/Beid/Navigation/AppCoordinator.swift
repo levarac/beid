@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import BeidSharedKit
+import Combine
 import Foundation
 
 /// Root state machine for onboarding + the collection home. Order of the
@@ -32,6 +33,7 @@ final class AppCoordinator: ObservableObject {
   let proofStore: ProofStore
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
+  let supportDiagnostics: SupportDiagnostics
   private let joinDiagnosticLog: (String) -> Void
   let bluetoothMonitor: BluetoothMonitor
   /// beid#464's device-clock preflight, checked each time the scan flow opens.
@@ -62,6 +64,11 @@ final class AppCoordinator: ObservableObject {
     self.registryClient = registryClient
     self.joinDiagnosticLog = joinDiagnosticLog
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient, joinDiagnosticLog: joinDiagnosticLog)
+    self.supportDiagnostics = SupportDiagnostics(
+      phases: sensingCoordinator.$phase.eraseToAnyPublisher(),
+      refusalReasons: sensingCoordinator.$joinRefusalReasonKey.eraseToAnyPublisher(),
+      ownerKeyFailures: sensingCoordinator.$ownerKeyOperationFailure.eraseToAnyPublisher()
+    )
     self.clockPreflight = ClockPreflightController(
       source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())
     )

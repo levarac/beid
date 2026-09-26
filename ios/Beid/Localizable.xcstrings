@@ -1357,7 +1357,9 @@
           }
         }
       }
-    }
+    },
+    "Share support information": {},
+    "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {}
   },
   "version": "1.0"
 }
