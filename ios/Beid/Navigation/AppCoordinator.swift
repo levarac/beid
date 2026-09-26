@@ -32,6 +32,7 @@ final class AppCoordinator: ObservableObject {
   let proofStore: ProofStore
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
+  private let joinDiagnosticLog: (String) -> Void
   let bluetoothMonitor: BluetoothMonitor
   /// beid#464's device-clock preflight, checked each time the scan flow opens.
   let clockPreflight: ClockPreflightController
@@ -54,11 +55,13 @@ final class AppCoordinator: ObservableObject {
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
-    permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil
+    permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil,
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     let bluetoothMonitor = BluetoothMonitor()
     self.registryClient = registryClient
-    self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
+    self.joinDiagnosticLog = joinDiagnosticLog
+    self.sensingCoordinator = SensingCoordinator(registryClient: registryClient, joinDiagnosticLog: joinDiagnosticLog)
     self.clockPreflight = ClockPreflightController(
       source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())
     )
@@ -300,6 +303,27 @@ final class AppCoordinator: ObservableObject {
   }
 
   func lookUpCanonicalEventId(forCode rawCode: String) async -> CanonicalEventIdLookup {
+    if resolveCanonicalEventIdHexOverride == nil,
+      registryClient == nil || BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) == nil
+    {
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog, eventIdHex: nil, stage: "registry_resolution", outcome: "rejected_no_registry"
+      )
+      return .noAnswer
+    }
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: nil, stage: "registry_lookup", outcome: "started", attempt: "1"
+    )
+    let lookup = await readCanonicalEventId(forCode: rawCode)
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: lookup.eventIdHex, stage: "registry_lookup",
+      outcome: lookup.eventIdHex != nil ? "success" : joinRegistryFailureDiagnosticOutcome(lookup.errorCode),
+      attempt: "1"
+    )
+    return lookup
+  }
+
+  private func readCanonicalEventId(forCode rawCode: String) async -> CanonicalEventIdLookup {
     if let resolveCanonicalEventIdHexOverride {
       return await resolveCanonicalEventIdHexOverride(rawCode)
     }

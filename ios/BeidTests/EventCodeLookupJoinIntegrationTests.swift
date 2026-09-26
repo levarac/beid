@@ -44,6 +44,64 @@ import XCTest
 /// exists specifically to get the ordering right instead.
 @MainActor
 final class EventCodeLookupJoinIntegrationTests: XCTestCase {
+  func testMissingRegistryLogsPreflightRefusalWithoutStartingLookup() async {
+    var lines: [String] = []
+    let coordinator = AppCoordinator(registryClient: nil, joinDiagnosticLog: { lines.append($0) })
+
+    let result = await coordinator.lookUpCanonicalEventId(forCode: "private-code")
+
+    XCTAssertNil(result.eventIdHex)
+    XCTAssertNil(result.errorCode)
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+        "attempt=none retry_at_epoch_ms=none"
+    ])
+  }
+
+  func testInvalidCodeLogsPreflightRefusalWithoutStartingLookup() async throws {
+    var lines: [String] = []
+    let coordinator = try makeCoordinator(
+      eventCodeLookupUrlTemplate: "https://operator.example/v1/events/by-code/{code}",
+      joinDiagnosticLog: { lines.append($0) }
+    )
+
+    let result = await coordinator.lookUpCanonicalEventId(forCode: "   ")
+
+    XCTAssertNotNil(coordinator.registryClient)
+    XCTAssertNil(result.eventIdHex)
+    XCTAssertNil(result.errorCode)
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+        "attempt=none retry_at_epoch_ms=none"
+    ])
+  }
+
+  func testManualLookupDiagnosticsBracketTheAwaitAndBoundEveryField() async {
+    var lines: [String] = []
+    let coordinator = AppCoordinator(registryClient: nil, joinDiagnosticLog: { lines.append($0) })
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      XCTAssertEqual(lines, [
+        "join_stage event_id=unknown stage=registry_lookup outcome=started attempt=1 retry_at_epoch_ms=none"
+      ])
+      return .init(eventIdHex: "0x" + String(repeating: "ab", count: 32), errorCode: nil)
+    }
+    _ = await coordinator.joinEventResolvingCanonicalId(code: "private-code")
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=registry_lookup outcome=started attempt=1 retry_at_epoch_ms=none",
+      "join_stage event_id=abababab stage=registry_lookup outcome=success attempt=1 retry_at_epoch_ms=none"
+    ])
+
+    lines.removeAll()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: nil, errorCode: "private-rpid-error\nforged_line")
+    }
+    _ = await coordinator.joinEventResolvingCanonicalId(code: "private-code")
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=registry_lookup outcome=started attempt=1 retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=registry_lookup outcome=rejected_unknown attempt=1 retry_at_epoch_ms=none"
+    ])
+  }
+
   /// Selecting a code with no registry client configured is not a *code
   /// entry* error, so this surface shows nothing. It is also not a join:
   /// `SensingCoordinator.joinEvent` records the code and tells Barnard
@@ -204,7 +262,10 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
     XCTAssertNil(coordinator.sensingCoordinator.joinedCanonicalEventIdHex)
   }
 
-  private func makeCoordinator(eventCodeLookupUrlTemplate: String?) throws -> AppCoordinator {
+  private func makeCoordinator(
+    eventCodeLookupUrlTemplate: String?,
+    joinDiagnosticLog: @escaping (String) -> Void = { _ in }
+  ) throws -> AppCoordinator {
     let registryClient = try XCTUnwrap(
       ExportedKotlinPackages.org.levarac.parallax.registry.createSepoliaRegistryClient(
         readerAddressHex: "0x" + String(repeating: "11", count: 20),
@@ -215,7 +276,7 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
         eventCodeHashLookupUrlTemplate: nil
       )
     )
-    return AppCoordinator(registryClient: registryClient)
+    return AppCoordinator(registryClient: registryClient, joinDiagnosticLog: joinDiagnosticLog)
   }
 }
 
