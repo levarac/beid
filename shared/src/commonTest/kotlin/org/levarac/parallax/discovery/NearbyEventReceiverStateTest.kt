@@ -51,8 +51,9 @@ class NearbyEventReceiverStateTest {
     /**
      * A hash's registry resolution starts on its first v1 hint and completes
      * exactly once, so an envelope landing after that completion has no
-     * resolution callback left to ride on and must be promoted through the
-     * standalone agreement entry instead.
+     * resolution callback left to ride on. This test covers the standalone
+     * agreement seam; production hosts instead pass agreement into the envelope
+     * record call, covered by [recordingAnAgreeingEnvelopePromotesWithoutASecondCall].
      */
     @Test
     fun registryAgreementPromotesWhenTheEnvelopeArrivedAfterResolution() {

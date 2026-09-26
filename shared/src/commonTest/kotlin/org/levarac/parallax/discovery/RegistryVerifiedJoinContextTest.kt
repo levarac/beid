@@ -422,6 +422,68 @@ class RegistryVerifiedJoinContextTest {
         )
     }
 
+    /**
+     * Defense in depth: public reducers currently clear evidence on downgrade.
+     * Use the module-internal snapshot constructor to isolate the issuer's own
+     * guard, so reducer cleanup cannot make a deleted guard look safe.
+     */
+    @Test
+    fun aPromotedTierWithoutAnOperatorRegistrationReportsEvidenceMismatch() {
+        val candidates = inconsistentPromotedCandidates(registryStatus = NearbyEventRegistryStatus.UNRESOLVED)
+
+        assertEquals(
+            NearbyEventJoinEligibility.EVIDENCE_MISMATCH,
+            nearbyCandidateJoinEligibility(candidates, HASH, VALID_FROM),
+        )
+        assertNull(RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, VALID_FROM))
+    }
+
+    @Test
+    fun aPromotedTierWithoutAValidResolvedEventIdReportsEvidenceMismatch() {
+        for (eventId in listOf(null, "", "not-hex", "abc")) {
+            val candidates = inconsistentPromotedCandidates(resolvedEventIdHex = eventId)
+            assertEquals(
+                NearbyEventJoinEligibility.EVIDENCE_MISMATCH,
+                nearbyCandidateJoinEligibility(candidates, HASH, VALID_FROM),
+                "invalid resolved event ID: $eventId",
+            )
+            assertNull(RegistryVerifiedJoinContext.fromNearbyCandidate(candidates, HASH, VALID_FROM))
+        }
+    }
+
+    private fun inconsistentPromotedCandidates(
+        registryStatus: NearbyEventRegistryStatus = NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP,
+        resolvedEventIdHex: String? = EVENT_ID,
+    ): NearbyEventCandidates {
+        val valid = assertNotNull(promotedCandidates().candidateAt(0))
+        val candidate = NearbyEventCandidate(
+            eventCodeHash = valid.eventCodeHash,
+            firstSeenAtEpochMillis = valid.firstSeenAtEpochMillis,
+            lastSeenAtEpochMillis = valid.lastSeenAtEpochMillis,
+            sources = List(valid.sourceCount) { assertNotNull(valid.sourceAt(it)) },
+            displayNames = List(valid.distinctDisplayNameCount) { assertNotNull(valid.displayNameAt(it)) },
+            registryStatus = registryStatus,
+            resolvedEventIdHex = resolvedEventIdHex,
+            receiverState = valid.receiverState,
+            verifiedDefinitionHashHex = valid.verifiedDefinitionHashHex,
+            registryBlockHashHex = valid.registryBlockHashHex,
+            definitionValidFromEpochSeconds = valid.definitionValidFromEpochSeconds,
+            definitionValidUntilEpochSeconds = valid.definitionValidUntilEpochSeconds,
+            registryResolutionFailureCount = 0,
+            registryRetryAtEpochMillis = null,
+            rawEnvelopeContainer = valid.rawEnvelopeContainer,
+        )
+        return NearbyEventCandidates(
+            candidates = listOf(candidate),
+            additionalNamesOmitted = false,
+            additionalEventsOmitted = false,
+            hasLocallyEvictedSources = false,
+            nextExpiryAtEpochMillis = null,
+            nextRegistryRetryAtEpochMillis = null,
+            unverifiedEnvelopeCount = 0,
+        )
+    }
+
     /** A promoted candidate whose registration was established with the digest and block retained. */
     private fun promotedCandidates(
         retainEvidence: Boolean = true,

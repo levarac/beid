@@ -248,6 +248,12 @@ class NearbyEventReceiverStateAdapterTest {
         runCurrent()
         registry.completeDefinition(verification(validUntilEpochSeconds = 10_000L))
         runCurrent()
+        val registered = candidate(session)
+        assertEquals(NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP, registered.registryStatus)
+        assertEquals(EVENT_ID_HEX, registered.resolvedEventIdHex)
+        assertEquals(DEFINITION_HASH_HEX, registered.verifiedDefinitionHashHex)
+        assertEquals(BLOCK_HASH_HEX, registered.registryBlockHashHex)
+        assertEquals(10_000L, registered.definitionValidUntilEpochSeconds)
         assertNull(
             session.cards.value.single().eventIdHex,
             "a hint-only candidate is not joinable even before its registration lapses",
@@ -262,6 +268,9 @@ class NearbyEventReceiverStateAdapterTest {
         val candidate = candidate(session)
         assertEquals(NearbyEventReceiverState.RADIO_SELF_VERIFIED, candidate.receiverState)
         assertEquals(NearbyEventRegistryStatus.UNRESOLVED, candidate.registryStatus)
+        assertNull(candidate.resolvedEventIdHex)
+        assertNull(candidate.verifiedDefinitionHashHex)
+        assertNull(candidate.registryBlockHashHex)
         assertNull(session.cards.value.single().eventIdHex)
         assertNull(session.cards.value.single().displayValidUntilEpochSeconds)
     }

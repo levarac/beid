@@ -597,15 +597,29 @@ class EventJoinCoordinator internal constructor(
             // A deployment with nothing to ask is broken for everyone here and
             // is not improved by finding a network, so it is not reported as a
             // network failure however much it looks like one from the outside.
+            emitJoinStageDiagnostic(
+                joinDiagnostics, eventIdHex = null,
+                stage = "registry_resolution", outcome = "rejected_no_registry",
+            )
             refuseJoin(owner, EventJoinFailureReason.VERIFICATION_FAILED)
             return
         }
         _state.value = EventJoinUiState.VerifyingRegistry
+        emitJoinStageDiagnostic(
+            joinDiagnostics, eventIdHex = null,
+            stage = "registry_lookup", outcome = "started", attempt = 1,
+        )
         registry.resolveEventId(eventCode) { eventIdHex, errorCode ->
             coroutineScope.launch {
                 if (!isCurrentJoinVerification(owner)) return@launch
+                val reason = eventJoinFailureReasonForRegistryErrorCode(errorCode)
+                emitJoinStageDiagnostic(
+                    joinDiagnostics, eventIdHex = eventIdHex, stage = "registry_lookup",
+                    outcome = if (eventIdHex != null) "success" else "rejected_${reason.name.lowercase()}",
+                    attempt = 1,
+                )
                 if (eventIdHex == null) {
-                    refuseJoin(owner, eventJoinFailureReasonForRegistryErrorCode(errorCode))
+                    refuseJoin(owner, reason)
                     return@launch
                 }
                 verifyDefinitionThenJoin(registry, eventCode, eventIdHex, owner)
@@ -620,11 +634,21 @@ class EventJoinCoordinator internal constructor(
         owner: Any,
     ) {
         val useTimeEpochSeconds = nowEpochMillis() / 1_000L
+        emitJoinStageDiagnostic(
+            joinDiagnostics, eventIdHex = eventIdHex,
+            stage = "registry_resolution", outcome = "started", attempt = 1,
+        )
         registry.resolveEventDefinition(eventIdHex, useTimeEpochSeconds) { resolution, errorCode ->
             coroutineScope.launch {
                 if (!isCurrentJoinVerification(owner)) return@launch
+                val reason = eventJoinFailureReasonForRegistryErrorCode(errorCode)
+                emitJoinStageDiagnostic(
+                    joinDiagnostics, eventIdHex = eventIdHex, stage = "registry_resolution",
+                    outcome = if (resolution != null) "success" else "rejected_${reason.name.lowercase()}",
+                    attempt = 1,
+                )
                 if (resolution == null) {
-                    refuseJoin(owner, eventJoinFailureReasonForRegistryErrorCode(errorCode))
+                    refuseJoin(owner, reason, eventIdHex = eventIdHex)
                     return@launch
                 }
                 // Evidence shape (b). This host decides *when* to ask, never

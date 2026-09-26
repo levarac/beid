@@ -157,10 +157,14 @@ targets:
         # signed EventDefinition CBOR bytes; GET .../<a wrong digest> -> 404,
         # not 500 (confirms the route, not just a lucky match).
         BEID_EVENT_DEFINITION_URL_TEMPLATE: "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}"
-        # Canonical Observation submission is opt-in. Endpoint, receipt key,
-        # event identity, digest, and validity are supplied only by the
-        # verified Event Definition fetched through the registry module.
-        BEID_REPORT_SUBMISSION_ENABLED: "NO"
+        # Canonical Observation submission is on in the shipping app (Ken,
+        # 2026-09-26): v1.0 evidence and the Android app, which already
+        # submits, both depend on it. Endpoint, receipt key, event identity,
+        # digest, and validity are supplied only by the verified Event
+        # Definition fetched through the registry module. Turning this on is
+        # what changes the App Store privacy answer: keep
+        # docs/app-store/privacy-labels.md in step with it.
+        BEID_REPORT_SUBMISSION_ENABLED: "YES"
         # Same non-secret reasoning as BEID_EVENT_DEFINITION_URL_TEMPLATE
         # above. Route existence verified live: GET /artifacts/key-sets/<a
         # wrong digest> -> 404 "EventKeySet artifact not found", not 500.
@@ -229,6 +233,7 @@ targets:
       path: Lab/Info.plist
       properties:
         UILaunchScreen: {}
+        BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Declared here so regeneration keeps it. f1ff25e added this key to

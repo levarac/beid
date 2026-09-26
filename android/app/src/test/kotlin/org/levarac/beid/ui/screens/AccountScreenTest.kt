@@ -38,6 +38,25 @@ class AccountScreenTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
     @Test
+    fun supportShareStartsOnlyAfterTheUserTaps() {
+        val viewModel = AccountViewModel(FakeEventJoinSession())
+        var shareCount = 0
+        composeTestRule.setContent {
+            BeidAppTheme {
+                AccountScreen(
+                    viewModel = viewModel,
+                    isBluetoothOn = true,
+                    onOpenRecords = {},
+                    onShareSupport = { shareCount++ },
+                )
+            }
+        }
+        assertEquals(0, shareCount)
+        composeTestRule.onNodeWithTag("account_support_share").performScrollTo().performClick()
+        assertEquals(1, shareCount)
+    }
+
+    @Test
     fun bluetoothOnRendersTheActiveStatusText() {
         val viewModel = AccountViewModel(FakeEventJoinSession())
 

@@ -11,10 +11,12 @@ independently dispatched reviewer was ever assigned, while CI stayed green and
 mergeable. A gate that is documented but never runs is worse than no gate,
 because it gets cited as though it were in force.
 
-What suspension does **not** relax: the Xcode Cloud requirement below still
-stands in full — verify that the iOS check **exists on the exact head SHA and
-succeeded**, not merely that a green check exists somewhere. That check is the
-only automated gate left, so treat its absence as a hard stop.
+What suspension does **not** relax: when the current ASC `PR Build & Test`
+start condition does not exclude a PR, verify that the iOS check **exists on
+the exact head SHA and succeeded**, not merely that a green check exists
+somewhere. The 2026-09-22 maintainer decision makes a pure Android app
+source/resources/manifest/tests change under `android/app/src/` exempt.
+Do not exclude all of `android/`: its build inputs can affect shared/iOS.
 
 **Carve-out — when absence is configuration rather than a hard stop.** Xcode
 Cloud runs `DO_NOT_START_IF_ALL_FILES_MATCH` over a set of path matchers
@@ -27,16 +29,18 @@ record:
    the head being merged, and show each one falls inside the exclusion set.
    Give the count (`N of N`).
 
-   **The set itself is defined in ASC and is not restated here as a rule.** As
-   read from the ASC API on **2026-09-09** it was {`docs/`, `.github/`,
-   `*.md`} — use that to classify the obvious cases without a GUI, but treat it
-   as a dated observation rather than as the contract, and **re-read ASC before
-   relying on it for any PR whose classification is not obvious**, or whose
-   answer would change if a matcher had been added or removed. The ASC GUI is
-   the source of truth for workflow settings, as stated elsewhere in this file.
-2. **Complement** — state that anything failing (1) is outside the set **by
-   definition**, so an iOS-affecting change cannot qualify for this record.
-   Do not enumerate what lies outside. The predicate already answers it, and a
+   **The set is defined in ASC and is not restated here as a rule.** The
+   2026-09-22 readback recorded the matchers `docs/`, `.github/`, `*.md`, and
+   `android/app/src/` ([decision and readback: #625](https://github.com/thegreeting/beid/issues/625)).
+   The readback establishes saved configuration; no new run tested the
+   automatic skip.
+   Re-read ASC before relying on the set for a future PR. The ASC GUI is the
+   source of truth for workflow settings, as stated elsewhere in this file.
+2. **Complement** — anything failing (1) is outside the set **by
+   definition** and needs the iOS check. File exclusion alone does not prove
+   a change has no effect on iOS: for example, a control file in `.github/`
+   may change another CI lane. Check its applicable gate separately. Do not
+   enumerate what lies outside; the predicate answers it, and a
    list of the outside is a second, weaker statement of the same rule that can
    go wrong on its own — silently, the first time a new top-level directory
    appears, leaving a reader who trusts the list unable to classify a path that
@@ -70,8 +74,9 @@ record:
    asks whether the allowed set is too small will never find one that is too
    large.
 4. **Void clause** — if **any** file at the final head is outside the exclusion
-   set, absence of the check is the hard stop again and the remedy is a
-   close→reopen retrigger, **not** this record. Re-evaluate (1) at the head SHA
+   set, absence of the check is the hard stop again. When the workflow is
+   active, the documented close→reopen retrigger can request a run; it cannot
+   revive a deactivated workflow. Re-evaluate (1) at the head SHA
    named in the package, since the file set is a property of the (head, base)
    pair rather than of the PR.
 

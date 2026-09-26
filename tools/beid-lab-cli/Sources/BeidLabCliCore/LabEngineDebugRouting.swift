@@ -1,4 +1,4 @@
-// Use of this source code is governed by a BSD-style license.
+// SPDX-License-Identifier: MIT
 
 /// Where one Barnard debug callback belongs in the log: which stage, at which
 /// level, with which verdict.

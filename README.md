@@ -23,3 +23,13 @@ the detailed KMP procedure lives in
 - `compile-fixtures/` — negative compile proofs for stale platform bindings
 - `lint/` and `lint-fixtures/` — the portable lint baseline and its behavior fixtures
 - `DESIGN.md` — cross-platform product design and copy contract
+
+## License and third-party terms
+
+First-party beid code is [MIT licensed](LICENSE), copyright 2024-2026
+Levarac Foundation. Beid is a non-commercial application and uses MetaMask
+SDKs, copyright ConsenSys Software Inc. 2022. The resulting app and its
+redistribution remain subject to the SDKs' Notice and Non-Commercial Use
+conditions. The first-party MIT license does not remove those conditions.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the exact licenses and
+required notices; include them with copies of the app.

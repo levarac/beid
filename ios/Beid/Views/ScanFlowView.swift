@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import SwiftUI
 
@@ -101,6 +101,11 @@ struct ScanFlowView: View {
           }
         }
     }
+    #if DEBUG
+    .safeAreaInset(edge: .top) {
+      if NearbyJoinUITestFixture.isEnabled { NearbyJoinUITestReceipt() }
+    }
+    #endif
     .sheet(isPresented: $bindingSheetPresented) {
       EventBindingSheetView(sensing: sensing)
         .environmentObject(coordinator)

@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import BarnardCore
 import XCTest
@@ -121,7 +121,7 @@ final class EventBindingTests: XCTestCase {
     XCTAssertEqual(coordinator.bindingState, .awaitingApproval)
   }
 
-  func testCompleteBindingWithNoInFlightAttemptReturnsNil() {
+  func testCompleteBindingWithNoInFlightAttemptReturnsNotVerified() {
     let coordinator = makeIsolatedSensingCoordinator(for: self)
     XCTAssertEqual(
       coordinator.completeBinding(walletAddress: "0xABC", walletSignatureHex: "0xSIG"),
@@ -291,6 +291,50 @@ final class EventBindingTests: XCTestCase {
   }
 
   // MARK: - beid#357: signature-length boundary check
+
+  func testCompleteBindingDoesNotAskOwnerToSign64ByteSignature() async throws {
+    try await assertOwnerAcknowledgementCalls(walletSignature: Data(repeating: 0xab, count: 64))
+  }
+
+  func testCompleteBindingDoesNotAskOwnerToSign66ByteSignature() async throws {
+    try await assertOwnerAcknowledgementCalls(walletSignature: Data(repeating: 0xab, count: 66))
+  }
+
+  func testCompleteBindingDoesNotAskOwnerToSignSmartWalletSignature() async throws {
+    let signature = Data(repeating: 0xcd, count: 32) + Data(Array(repeating: [UInt8(0x64), 0x92], count: 16).joined())
+    try await assertOwnerAcknowledgementCalls(walletSignature: signature, expectedResult: .smartWalletUnsupported)
+  }
+
+  /// Positive control: the same setup must reach the signer for an EOA-shaped
+  /// input. The double returns nil, so no real owner key signs wallet bytes.
+  func testCompleteBindingAsksOwnerToSign65ByteSignature() async throws {
+    try await assertOwnerAcknowledgementCalls(walletSignature: Data(repeating: 0xab, count: 65), expectedCalls: 1)
+  }
+
+  private func assertOwnerAcknowledgementCalls(
+    walletSignature: Data,
+    expectedResult: BindingCompletionResult = .notVerified,
+    expectedCalls: Int = 0,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async throws {
+    let cryptography = DeterministicSensingCryptography(walletAcknowledgementSignature: nil)
+    let coordinator = makeIsolatedSensingCoordinator(for: self, sensingCryptography: cryptography)
+    coordinator.runDemoSequence(demoEvent: .demoSample, stepDelayNanos: 0)
+    await coordinator.waitForDemoSequenceToFinish()
+    _ = try XCTUnwrap(coordinator.beginBinding(walletAddress: testWalletAddress, chainId: testChainId))
+
+    let result = coordinator.completeBinding(
+      walletAddress: testWalletAddress,
+      walletSignatureHex: "0x" + walletSignature.map { String(format: "%02x", $0) }.joined()
+    )
+    let acknowledgementCalls = cryptography.calls.filter {
+      if case .signWalletAcknowledgement = $0 { return true }
+      return false
+    }.count
+    XCTAssertEqual(acknowledgementCalls, expectedCalls, "classification must precede owner signing", file: file, line: line)
+    XCTAssertEqual(result, expectedResult, file: file, line: line)
+  }
 
   /// beid#357's trap: a wallet signature one byte off the required 65 bytes
   /// must be rejected before it ever reaches the owner key, and must not

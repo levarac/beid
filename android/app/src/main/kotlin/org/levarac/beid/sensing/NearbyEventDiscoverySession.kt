@@ -229,6 +229,7 @@ internal class NearbyEventDiscoverySession(
         registryAgreement: (BarnardEventDefinitionV1) -> Boolean,
     ) {
         if (disposed) return
+        emitJoinStageDiagnostic(log, eventIdHex = verifiedEventIdHex, stage = "detection", outcome = "detected")
         val hash = eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
         // Asked before recording, because the reducer needs this envelope's
         // own verdict to decide whether it may replace the container retained
@@ -272,6 +273,7 @@ internal class NearbyEventDiscoverySession(
      */
     fun recordUnverifiedEnvelope() {
         if (disposed) return
+        emitJoinStageDiagnostic(log, eventIdHex = null, stage = "detection", outcome = "detected")
         emitJoinStageDiagnostic(
             log,
             eventIdHex = null,
@@ -301,10 +303,17 @@ internal class NearbyEventDiscoverySession(
     }
 
     private fun resolveUnresolvedCandidates(snapshot: NearbyEventCandidates) {
-        val client = registry ?: return
         repeat(snapshot.candidateCount) { index ->
             val candidate = snapshot.candidateAt(index) ?: return@repeat
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            val client = registry
+            if (client == null) {
+                emitJoinStageDiagnostic(
+                    log, eventIdHex = verifiedEventIdByHash[hash],
+                    stage = "registry_resolution", outcome = "rejected_no_registry",
+                )
+                return@repeat
+            }
             val attemptNumber = candidate.registryResolutionFailureCount + 1
             val attempt = beginNearbyEventRegistryResolutionFromHex(store, hash) ?: return@repeat
             emitJoinStageDiagnostic(

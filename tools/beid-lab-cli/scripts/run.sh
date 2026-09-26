@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Use of this source code is governed by a BSD-style license.
+# SPDX-License-Identifier: MIT
 #
 # Bundle beid-lab-cli and launch it, passing every remaining argument through.
 #

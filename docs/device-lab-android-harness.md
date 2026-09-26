@@ -3,7 +3,7 @@
 This document covers only the integration surface available in the beid
 repository. The device-lab configuration, its runner scripts, commit-status
 reporting, and `last_tested_sha.beid` are owned by the separate device-lab
-repository and must be changed there by someone who can test on emi.
+repository and must be changed there by someone who can test on the device-lab host.
 
 ## Two-device BLE scenario
 
@@ -108,6 +108,6 @@ or fewer/more than exactly two authorized physical device serials is FAIL.
    itself coordinate one phone as one BLE role and the second phone as its
    peer.
 5. Map zero/nonzero exit to the commit status and archive the XML/HTML output.
-6. Only after a real two-device PASS has been demonstrated on emi, remove the
+6. Only after a real two-device PASS has been demonstrated on the device-lab host, remove the
    legacy Flutter harness and manual-skip mechanism in the device-lab
    repository. Those files are intentionally untouched here.
