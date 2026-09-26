@@ -23,6 +23,7 @@ on:
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
+      - "scripts/ci_ios_results.py"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
@@ -40,7 +41,7 @@ concurrency:
 
 jobs:
   ios-simulator:
-    name: iOS simulator
+    name: Build iOS test products
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
@@ -65,9 +66,7 @@ jobs:
 
       - name: Cache Gradle dependencies
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-        with:
-          # GitHub scopes PR writes to that PR; they cannot replace main caches.
-          cache-read-only: false
+        # Default policy: PRs read caches; only main writes Gradle state.
 
       - name: Cache Kotlin Native dependencies
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -147,15 +146,8 @@ jobs:
             --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")"
           printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
 
-      # A newly created device is already clean. Never erase or reuse one
-      # found in the host's device list: it may belong to another job or seat.
-      - name: Boot owned simulator
-        shell: bash
-        env:
-          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
-        run: |
-          set -euo pipefail
-          xcrun simctl boot "$SIMULATOR_UDID"
+      - name: Verify complete test group coverage
+        run: python3 scripts/ci_ios_results.py check-scheme ios/Beid.xcodeproj/xcshareddata/xcschemes/Beid.xcscheme
 
       - name: Build for testing
         shell: bash
@@ -164,7 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          xcodebuild -quiet \
+          xcodebuild \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
             -configuration Debug \
@@ -176,100 +168,141 @@ jobs:
             -showBuildTimingSummary \
             build-for-testing
 
-      - name: Wait for simulator readiness
-        shell: bash
+      - name: Package test products
+        run: |
+          set -euo pipefail
+          # tar preserves executable modes and framework symlinks.
+          tar -C "$CI_OUTPUT_ROOT/DerivedData/Build" -czf "$RUNNER_TEMP/ios-test-products.tgz" Products
+
+      - name: Upload test products
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios-test-products
+          path: ${{ runner.temp }}/ios-test-products.tgz
+          compression-level: 0
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
+
+  ios-tests:
+    name: iOS tests (${{ matrix.group }})
+    needs: ios-simulator
+    runs-on: macos-26
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [unit, ipad, interface]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Initialize test output path
+        run: printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+
+      - name: Create clean test simulator
+        id: simulator
+        env:
+          TEST_GROUP: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.5"
+          simulator_udid="$(python3 scripts/ci_simulator.py --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$TEST_GROUP")"
+          printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$simulator_udid"
+
+      - name: Download test products
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ios-test-products
+          path: ${{ runner.temp }}/ios-products-download
+
+      - name: Unpack test products
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_OUTPUT_ROOT/DerivedData/Build"
+          tar -xzf "$RUNNER_TEMP/ios-products-download/ios-test-products.tgz" -C "$CI_OUTPUT_ROOT/DerivedData/Build"
+
+      - name: Wait for test simulator readiness
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
         run: xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
       - name: Test without rebuilding
-        shell: bash
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+          TEST_GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
-          xcodebuild -quiet \
-            -project ios/Beid.xcodeproj \
-            -scheme Beid \
-            -configuration Debug \
-            -sdk iphonesimulator \
+          shopt -s nullglob
+          test_runs=("$CI_OUTPUT_ROOT/DerivedData/Build/Products/"*.xctestrun)
+          if [[ ${#test_runs[@]} -ne 1 ]]; then
+            echo "Expected exactly one compiled test manifest" >&2
+            exit 1
+          fi
+          selection="$(python3 scripts/ci_ios_results.py arguments "$TEST_GROUP")"
+          test_args=()
+          while IFS= read -r argument; do test_args+=("$argument"); done <<< "$selection"
+          xcodebuild \
+            -xctestrun "${test_runs[0]}" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
-            SWIFT_OPTIMIZATION_LEVEL=-O \
-            -clonedSourcePackagesDirPath "$RUNNER_TEMP/beid-source-packages" \
-            -parallel-testing-enabled YES \
-            -parallel-testing-worker-count 2 \
+            -parallel-testing-enabled NO \
+            "${test_args[@]}" \
             test-without-building
 
-      - name: Summarize structured test results
+      - name: Record structured test results
         if: always()
-        shell: bash
+        env:
+          TEST_GROUP: ${{ matrix.group }}
+          TEST_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          result_bundle="$CI_OUTPUT_ROOT/Tests.xcresult"
-          summary_json="$CI_OUTPUT_ROOT/test-summary.json"
+          xcrun xcresulttool get test-results summary --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$RUNNER_TEMP/test-summary.json"
+          python3 scripts/ci_ios_results.py record "$TEST_GROUP" "$RUNNER_TEMP/test-summary.json" "$RUNNER_TEMP/ios-results/$TEST_GROUP.json" "$TEST_HEAD" | tee -a "$GITHUB_STEP_SUMMARY"
 
-          if [[ ! -d "$result_bundle" ]]; then
-            echo "### iOS simulator tests" >> "$GITHUB_STEP_SUMMARY"
-            echo "Result bundle missing; tests did not produce verifiable results." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          if ! xcrun xcresulttool get test-results summary --path "$result_bundle" --compact > "$summary_json"; then
-            echo "### iOS simulator tests" >> "$GITHUB_STEP_SUMMARY"
-            echo "Result bundle could not be parsed." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+      - name: Upload structured test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios-results-${{ matrix.group }}
+          path: ${{ runner.temp }}/ios-results/${{ matrix.group }}.json
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
 
-          python3 - "$summary_json" "$GITHUB_STEP_SUMMARY" <<'PY'
-          import json
-          import pathlib
-          import sys
+  ios-result:
+    name: iOS simulator
+    if: always()
+    needs: [ios-simulator, ios-tests]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Require every build and test job to pass
+        env:
+          BUILD_RESULT: ${{ needs.ios-simulator.result }}
+          TEST_RESULT: ${{ needs.ios-tests.result }}
+        run: |
+          set -euo pipefail
+          test "$BUILD_RESULT" = success
+          test "$TEST_RESULT" = success
 
-          summary_path = pathlib.Path(sys.argv[1])
-          job_summary_path = pathlib.Path(sys.argv[2])
-          try:
-              summary = json.loads(summary_path.read_text(encoding="utf-8"))
-              result = summary["result"]
-              counts = {
-                  "total": summary["totalTestCount"],
-                  "passed": summary["passedTests"],
-                  "failed": summary["failedTests"],
-                  "skipped": summary["skippedTests"],
-                  "expected failures": summary["expectedFailures"],
-              }
-              if any(isinstance(value, bool) or not isinstance(value, int) for value in counts.values()):
-                  raise TypeError("test counts must be integers")
-              total = counts["total"]
-              passed = counts["passed"]
-              failed = counts["failed"]
-              skipped = counts["skipped"]
-              expected_failures = counts["expected failures"]
-              if any(value < 0 for value in counts.values()):
-                  raise ValueError("test counts must be nonnegative")
-              if any(value > total for name, value in counts.items() if name != "total"):
-                  raise ValueError("a test category exceeds the total test count")
-              if passed + failed + skipped + expected_failures != total:
-                  raise ValueError("test categories do not account for the total test count")
-          except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-              with job_summary_path.open("a", encoding="utf-8") as output:
-                  output.write("### iOS simulator tests\n\nStructured result data is corrupt or incomplete.\n")
-              raise SystemExit(f"invalid xcresult summary: {error}")
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
-          with job_summary_path.open("a", encoding="utf-8") as output:
-              output.write("### iOS simulator tests\n\n")
-              output.write("| Result | Total | Passed | Failed | Skipped | Expected failures |\n")
-              output.write("| --- | ---: | ---: | ---: | ---: | ---: |\n")
-              output.write(
-                  f"| {result} | {total} | {passed} | {failed} | {skipped} | {expected_failures} |\n"
-              )
+      - name: Download every result
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ios-results-*
+          path: ${{ runner.temp }}/ios-results
+          merge-multiple: true
 
-          if total <= 0:
-              raise SystemExit("xcresult contains zero tests")
-          print(f"iOS tests: result={result}, total={total}, passed={passed}, failed={failed}, skipped={skipped}, expected_failures={expected_failures}")
-          if failed != 0 or result != "Passed":
-              raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
-          PY
-
-      # The entire hosted VM is discarded. No shutdown/delete work is needed
-      # after success or cancellation, and it must not delay the next PR head.
+      - name: Verify complete current-head evidence
+        env:
+          TEST_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci_ios_results.py aggregate "$RUNNER_TEMP/ios-results" "$TEST_HEAD" | tee -a "$GITHUB_STEP_SUMMARY"

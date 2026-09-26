@@ -9,6 +9,8 @@ updating a pin; never copy a SHA from an unrelated repository.
 
 | Action | Tag | Commit / source |
 | --- | --- | --- |
+| `actions/upload-artifact` | `v7.0.1` | [`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`](https://github.com/actions/upload-artifact/blob/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/action.yml) |
+| `actions/download-artifact` | `v8.0.1` | [`3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c`](https://github.com/actions/download-artifact/blob/3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/action.yml) |
 | `actions/cache` | `v4` | [`0057852bfaa89a56745cba8c7296529d2fc39830`](https://github.com/actions/cache/blob/0057852bfaa89a56745cba8c7296529d2fc39830/action.yml) |
 | `actions/checkout` | `v4` | [`11d5960a326750d5838078e36cf38b85af677262`](https://github.com/actions/checkout/blob/11d5960a326750d5838078e36cf38b85af677262/action.yml) |
 | `actions/github-script` | `v7` | [`f28e40c7f34bde8b3046d885e986cb6290c5673b`](https://github.com/actions/github-script/blob/f28e40c7f34bde8b3046d885e986cb6290c5673b/action.yml) |
@@ -27,3 +29,5 @@ before extraction and requires both the executable and SettingPresets.
 Source: [XcodeGen 2.45.3 release](https://github.com/yonaskolb/XcodeGen/releases/tag/2.45.3).
 Both the version and hash must be reviewed together when upgrading. Never derive
 the expected digest from the archive being verified at runtime.
+
+Artifact actions were verified on 2026-09-27 from the upstream release tags and manifests. Both run Node 24; upload enters `dist/upload/index.js`, download enters `dist/index.js`, with no nested composite actions. Download uses the default digest-mismatch error policy.
