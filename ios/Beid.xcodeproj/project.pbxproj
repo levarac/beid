@@ -1590,7 +1590,7 @@
 				BEID_EVENT_DEFINITION_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/definitions/{definitionHash}";
 				BEID_EVENT_KEY_SET_URL_TEMPLATE = "https://parallax-observation-operator.levarac.workers.dev/artifacts/key-sets/{keySetDigest}";
 				BEID_EVENT_REGISTRY_READER_ADDRESS = 0xd4852f8526A1555A1b2C34145f0eCDA412a53c51;
-				BEID_REPORT_SUBMISSION_ENABLED = NO;
+				BEID_REPORT_SUBMISSION_ENABLED = YES;
 				BEID_VENUE_BUNDLE_URL_TEMPLATE = "";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
