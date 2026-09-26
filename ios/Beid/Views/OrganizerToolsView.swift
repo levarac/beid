@@ -124,8 +124,28 @@ final class OrganizerToolsObjects: ObservableObject {
 /// pack import and signed broadcast workflow; the Saved pack area below it only
 /// reports what is stored and has no controls.
 struct OrganizerToolsView: View {
-  @StateObject private var tools = OrganizerToolsObjects.production()
+  @StateObject private var tools: OrganizerToolsObjects
   @State private var showVenueBroadcast = false
+
+  /// The only production entry point (`AccountSheetView.swift`'s single call
+  /// site is `OrganizerToolsView()`). `.production()` is an autoclosure
+  /// (`StateObject`'s `wrappedValue:` init parameter), so it still runs once
+  /// per view identity, not once per struct init — the same laziness
+  /// `OrganizerToolsObjects.productionStoreURL`'s doc comment relies on.
+  init() {
+    _tools = StateObject(wrappedValue: OrganizerToolsObjects.production())
+  }
+
+  /// Test-only entry: builds 14 over a caller-supplied store/view-model pair
+  /// instead of `.production()`, so a unit test never touches the real
+  /// device's default `Documents` store (beid#705, see also the
+  /// `VenuePublicArtifactStore()` contamination this same follow-up fixed in
+  /// `ProductionVenueBundleVerifierTests`).
+  #if DEBUG
+  init(toolsForTesting tools: OrganizerToolsObjects) {
+    _tools = StateObject(wrappedValue: tools)
+  }
+  #endif
 
   private var serving: VenueSignedServingViewModel { tools.serving }
 
@@ -295,6 +315,15 @@ struct OrganizerToolsView: View {
   private var savedPack: SavedPackRowState {
     savedPackFixture ?? tools.savedPack
   }
+
+  /// Test-only seam onto `savedPack`: the value this view actually renders,
+  /// fixture included. Exists so a unit test can pin that the no-fixture
+  /// production path renders `tools.savedPack` — nothing built on
+  /// `OrganizerToolsObjects` directly exercises this view's own
+  /// `savedPackFixture ?? tools.savedPack` expression (beid#705).
+  #if DEBUG
+  var savedPackForTesting: SavedPackRowState { savedPack }
+  #endif
 
   // A display-only, two-argument Debug gate, the same shape as 14b's
   // `-beid-venue-frame`. It replaces what this area DRAWS and nothing else: it
