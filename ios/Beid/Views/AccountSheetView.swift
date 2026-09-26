@@ -60,6 +60,7 @@ struct AccountSheetView: View {
   @Environment(\.dismiss) private var dismiss
   @State private var showOrganizerTools = false
   @State private var showPastEvents = false
+  @State private var showAboutSensing = false
   @State private var showDisconnectConfirmation = false
   @State private var copied = false
   @StateObject private var largeDetentRequests = AccountLargeDetentRequests()
@@ -140,6 +141,28 @@ struct AccountSheetView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Past Events")
           }
+          AccountSheetRow {
+            Button {
+              largeDetentRequests.set(.aboutSensing, active: true)
+              selectedDetent = .large
+              showAboutSensing = true
+            } label: {
+              HStack {
+                Text("About sensing")
+                  .beidTextStyle(DS.Font.Library.title17)
+                Spacer()
+                Text(verbatim: "→")
+                  .beidTextStyle(DS.Font.Library.labelMono11)
+                  .accessibilityHidden(true)
+              }
+              .foregroundStyle(DS.Color.actionInverse)
+              .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("account.aboutSensing")
+            .accessibilityLabel("About sensing")
+          }
           // Account Join stays with the owner decision that wallet is optional.
           // Sensing ends through Home Stop or the scan cover's CLOSE.
           EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
@@ -206,6 +229,14 @@ struct AccountSheetView: View {
           }
         )
         .toolbar(.visible, for: .navigationBar)
+      }
+      .navigationDestination(isPresented: $showAboutSensing) {
+        AboutSensingView()
+          .toolbar(.visible, for: .navigationBar)
+      }
+      .onChange(of: showAboutSensing) { _, isShown in
+        // 15 (and 16 pushed from it) stay at .large while 15 is in the stack.
+        largeDetentRequests.set(.aboutSensing, active: isShown)
       }
     }
     .environmentObject(largeDetentRequests)

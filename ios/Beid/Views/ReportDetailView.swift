@@ -153,12 +153,21 @@ struct ReportDetailView: View {
       )
       hairline
 
-      // TODO(#646): add a NavigationLink to WhatWeSendView once #646 merges.
-      // This build has no report-specific disclosure destination; a dead
-      // "WHAT WE SEND" control would mislead, and Transparency is event-wide.
-      sectionHeading(
-        String(localized: "reportDetail.observations", defaultValue: "OBSERVATIONS INCLUDED")
-      )
+      HStack(alignment: .firstTextBaseline) {
+        sectionHeading(
+          String(localized: "reportDetail.observations", defaultValue: "OBSERVATIONS INCLUDED")
+        )
+        Spacer(minLength: DS.Space.s)
+        // Figma 12: WHAT WE SEND → opens 16, the general disclosure (#646).
+        NavigationLink {
+          WhatWeSendView()
+            .toolbar(.visible, for: .navigationBar)
+        } label: {
+          BeidTextControlLabel("What we send", glyph: .trailing("→", announcing: "What we send"))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("report-detail.whatWeSend")
+      }
       .padding(.top, DS.Space.l)
       hairline
       HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {

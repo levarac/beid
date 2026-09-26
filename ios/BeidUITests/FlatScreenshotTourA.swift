@@ -119,4 +119,83 @@ final class FlatScreenshotTourA: XCTestCase {
   private func capture(_ frameCode: String) {
     keepScreenshot(named: frameCode)
   }
+
+  // MARK: - #646 About sensing / What we send
+
+  /// 01's HOW IT WORKS reaches 15, and 15 reaches 16 (#646 entry wiring).
+  func testWelcomeHowItWorksOpensAboutSensingAndWhatWeSend() {
+    launch()
+    let howItWorks = app.buttons["welcome.howItWorks"]
+    XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
+    assertMinimumHitTarget(howItWorks)
+    howItWorks.tap()
+    let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
+    XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    whatWeSend.tap()
+    XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].waitForExistence(timeout: 5))
+  }
+
+  func testShot_15_AboutSensing() {
+    openAboutSensing()
+    keepScreenshot(named: "15")
+    assertMinimumHitTarget(app.buttons["aboutSensing.whatWeSend"])
+    assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
+  }
+
+  func testShot_16_WhatWeSend() {
+    openAboutSensing()
+    let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
+    assertMinimumHitTarget(whatWeSend)
+    whatWeSend.tap()
+
+    let scroll = app.scrollViews["whatWeSend.scroll"]
+    XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    let firstRow = app.descendants(matching: .any)["whatWeSend.firstRow"]
+    XCTAssertTrue(firstRow.isHittable)
+    keepScreenshot(named: "16")
+
+    let finalRow = app.descendants(matching: .any)["whatWeSend.finalRow"]
+    var attempts = 0
+    while !finalRow.isHittable, attempts < 6 {
+      scroll.swipeUp()
+      attempts += 1
+    }
+    XCTAssertTrue(finalRow.isHittable)
+    scroll.swipeUp()
+    keepScreenshot(named: "16-bottom")
+    assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
+  }
+
+  private func openAboutSensing() {
+    app.launchArguments = ["-beid-ui-test"]
+    app.launch()
+
+    let getStarted = app.buttons["Get Started"]
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
+    getStarted.tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
+    allowBluetooth.tap()
+    let account = app.buttons["home.account"]
+    XCTAssertTrue(account.waitForExistence(timeout: 5))
+    account.tap()
+
+    let aboutSensing = app.buttons["account.aboutSensing"]
+    let accountList = app.collectionViews.firstMatch
+    var attempts = 0
+    while !aboutSensing.isHittable, attempts < 6 {
+      accountList.swipeUp()
+      attempts += 1
+    }
+    XCTAssertTrue(aboutSensing.isHittable)
+    assertMinimumHitTarget(aboutSensing)
+    aboutSensing.tap()
+    XCTAssertTrue(app.buttons["aboutSensing.whatWeSend"].waitForExistence(timeout: 5))
+  }
+
+  private func assertMinimumHitTarget(_ control: XCUIElement) {
+    XCTAssertTrue(control.exists)
+    XCTAssertGreaterThanOrEqual(control.frame.width, 44)
+    XCTAssertGreaterThanOrEqual(control.frame.height, 44)
+  }
 }
