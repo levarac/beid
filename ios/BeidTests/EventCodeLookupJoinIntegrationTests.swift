@@ -44,16 +44,33 @@ import XCTest
 /// exists specifically to get the ordering right instead.
 @MainActor
 final class EventCodeLookupJoinIntegrationTests: XCTestCase {
-  func testMissingRegistryLogsPreflightRefusalWithoutStartingLookup() async {
+  func testMissingRegistryDefersTheSingleRefusalDiagnosticToJoinPreflight() async {
     var lines: [String] = []
     let coordinator = AppCoordinator(registryClient: nil, joinDiagnosticLog: { lines.append($0) })
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let sensing = makeIsolatedSensingCoordinator(
+      for: self, eventJoinControl: engine, joinDiagnosticLog: { lines.append($0) }
+    )
+    sensing.useDemoEventMode = false
 
     let result = await coordinator.lookUpCanonicalEventId(forCode: "private-code")
 
     XCTAssertNil(result.eventIdHex)
     XCTAssertNil(result.errorCode)
+    XCTAssertTrue(lines.isEmpty, "selection is not a join refusal; preflight owns that diagnostic")
+    XCTAssertTrue(sensing.joinEvent("private-code", canonicalEventIdHex: result.eventIdHex))
+    sensing.startSensing()
+    let deadline = Date().addingTimeInterval(5)
+    while sensing.joinRefusal == nil && Date() < deadline {
+      try? await Task.sleep(nanoseconds: 5_000_000)
+    }
+    XCTAssertEqual(sensing.joinRefusal, .noRegistryConfigured)
+    XCTAssertFalse(engine.didJoin)
     XCTAssertEqual(lines, [
       "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+        "attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=admission outcome=rejected_no_registry_configured " +
         "attempt=none retry_at_epoch_ms=none"
     ])
   }
@@ -71,7 +88,7 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
     XCTAssertNil(result.eventIdHex)
     XCTAssertNil(result.errorCode)
     XCTAssertEqual(lines, [
-      "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+      "join_stage event_id=unknown stage=registry_resolution outcome=rejected_invalid_code " +
         "attempt=none retry_at_epoch_ms=none"
     ])
   }

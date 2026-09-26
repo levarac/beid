@@ -44,6 +44,7 @@ import org.levarac.beid.shared.event.RESCUE_ENTRY_DELAY_SECONDS
 import org.levarac.beid.shared.event.nearbyEventSearchOutcome as searchOutcomeFor
 import org.levarac.beid.shared.event.eventJoinFailureReasonForJoinEligibility
 import org.levarac.beid.shared.event.eventJoinFailureReasonForRegistryErrorCode
+import org.levarac.beid.shared.event.normalizedEventCodeOrNull
 
 /**
  * UI-facing state for [EventJoinCoordinator]. Mirrors the shape of iOS's
@@ -593,6 +594,14 @@ class EventJoinCoordinator internal constructor(
         val registry = eventJoinRegistry
         val owner = Any()
         joinVerificationOwner = owner
+        if (normalizedEventCodeOrNull(eventCode) == null) {
+            emitJoinStageDiagnostic(
+                joinDiagnostics, eventIdHex = null,
+                stage = "registry_resolution", outcome = "rejected_invalid_code",
+            )
+            refuseJoin(owner, EventJoinFailureReason.VERIFICATION_FAILED)
+            return
+        }
         if (registry == null) {
             // A deployment with nothing to ask is broken for everyone here and
             // is not improved by finding a network, so it is not reported as a

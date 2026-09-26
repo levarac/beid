@@ -318,13 +318,16 @@ final class AppCoordinator: ObservableObject {
   }
 
   func lookUpCanonicalEventId(forCode rawCode: String) async -> CanonicalEventIdLookup {
-    if resolveCanonicalEventIdHexOverride == nil,
-      registryClient == nil || BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) == nil
-    {
-      emitJoinStageDiagnostic(
-        joinDiagnosticLog, eventIdHex: nil, stage: "registry_resolution", outcome: "rejected_no_registry"
-      )
-      return .noAnswer
+    if resolveCanonicalEventIdHexOverride == nil {
+      guard BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) != nil else {
+        emitJoinStageDiagnostic(
+          joinDiagnosticLog, eventIdHex: nil, stage: "registry_resolution", outcome: "rejected_invalid_code"
+        )
+        return .noAnswer
+      }
+      // Selection has not requested sensing yet. The sensing preflight owns
+      // the missing-registry refusal and emits it once when joining is tried.
+      guard registryClient != nil else { return .noAnswer }
     }
     emitJoinStageDiagnostic(
       joinDiagnosticLog, eventIdHex: nil, stage: "registry_lookup", outcome: "started", attempt: "1"
