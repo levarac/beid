@@ -1951,37 +1951,67 @@
     "proofDetail.method.bluetooth": {
       "comment": "Proof Detail method value for a Proof collected through Bluetooth sensing.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Bluetooth sensing" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth sensing"
+          }
+        }
       }
     },
     "proofDetail.status.recorded": {
       "comment": "Proof Detail status when a Proof is stored locally but no matching self-proof signature record exists. Do not imply sealing or third-party verification.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Recorded on device" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded on device"
+          }
+        }
       }
     },
     "proofDetail.signature.bound": {
       "comment": "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Bound to wallet" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bound to wallet"
+          }
+        }
       }
     },
     "proofDetail.signature.selfSigned": {
       "comment": "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Self-signed on device" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Self-signed on device"
+          }
+        }
       }
     },
     "proofDetail.with.multipleSessions": {
       "comment": "Proof Detail WITH value for an event with multiple recording sessions. The participation summary below lists each session separately; never show one session's counts as event-wide.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "See each session" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See each session"
+          }
+        }
       }
     },
     "proofDetail.with.counts": {
       "comment": "Proof Detail WITH value for one session. Device count and observed window count come from this Proof's durable aggregate snapshot, not an event-wide sum.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "%1$@ · %2$@" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
       }
     },
     "proofDetail.with.peers": {
@@ -1990,8 +2020,18 @@
         "en": {
           "variations": {
             "plural": {
-              "one": { "stringUnit": { "state": "translated", "value": "%lld peer" } },
-              "other": { "stringUnit": { "state": "translated", "value": "%lld peers" } }
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld peer"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld peers"
+                }
+              }
             }
           }
         }
@@ -2003,8 +2043,18 @@
         "en": {
           "variations": {
             "plural": {
-              "one": { "stringUnit": { "state": "translated", "value": "%lld window" } },
-              "other": { "stringUnit": { "state": "translated", "value": "%lld windows" } }
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld window"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld windows"
+                }
+              }
             }
           }
         }
@@ -2013,13 +2063,23 @@
     "proofDetail.value.unavailable": {
       "comment": "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Not yet available" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet available"
+          }
+        }
       }
     },
     "proofDetail.recordID.accessibility": {
       "comment": "VoiceOver reads the complete Proof UUID even though the visible record ID is abbreviated.",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Record ID %@" } }
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record ID %@"
+          }
+        }
       }
     },
     "venue.serving.servingUntil": {
@@ -2033,6 +2093,8 @@
         }
       }
     },
+    "Share support information": {},
+    "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {},
     "Copied": {
       "comment": "Feedback after the full wallet address has been copied."
     },
@@ -2095,7 +2157,14 @@
     "Saved observations are sent to the event operator.": {},
     "aboutSensing.submission.enabled": {
       "comment": "Status on About sensing when the report submission build flag is on. This only says the feature is enabled, not that a record was sent or accepted.",
-      "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Sending is turned on for this build."}}}
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending is turned on for this build."
+          }
+        }
+      }
     },
     "account.wallet.header": {
       "comment": "Account sheet label naming the connected wallet provider.",

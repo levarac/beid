@@ -163,7 +163,8 @@ internal class NearbyEventDiscoverySession(
     /**
      * The definition this host's own authenticated registry read returned,
      * kept so an envelope arriving *after* a hash's single registry resolution
-     * completed still has something to be compared against.
+     * completed still has something to be compared against. Shared owns its
+     * retention lifetime, including source eviction followed by re-observation.
      */
     private val verifiedDefinitionByHash = mutableMapOf<String, BarnardEventDefinitionV1>()
     private val verifiedEventIdByHash = mutableMapOf<String, String>()
@@ -180,7 +181,8 @@ internal class NearbyEventDiscoverySession(
      *
      * barnard's relay verifier runs on the thread a GATT read arrived on, so
      * it must never read this session's mutable maps. Copying is what makes
-     * the hand-off safe, and the map is bounded by the live candidate set.
+     * the hand-off safe. Definitions follow retained shared registration;
+     * the relay gate still requires a live candidate.
      */
     fun verifiedDefinitionsByHash(): Map<String, BarnardEventDefinitionV1> =
         verifiedDefinitionByHash.toMap()
@@ -229,6 +231,7 @@ internal class NearbyEventDiscoverySession(
         registryAgreement: (BarnardEventDefinitionV1) -> Boolean,
     ) {
         if (disposed) return
+        emitJoinStageDiagnostic(log, eventIdHex = verifiedEventIdHex, stage = "detection", outcome = "detected")
         val hash = eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
         // Asked before recording, because the reducer needs this envelope's
         // own verdict to decide whether it may replace the container retained
@@ -272,6 +275,7 @@ internal class NearbyEventDiscoverySession(
      */
     fun recordUnverifiedEnvelope() {
         if (disposed) return
+        emitJoinStageDiagnostic(log, eventIdHex = null, stage = "detection", outcome = "detected")
         emitJoinStageDiagnostic(
             log,
             eventIdHex = null,
@@ -301,10 +305,17 @@ internal class NearbyEventDiscoverySession(
     }
 
     private fun resolveUnresolvedCandidates(snapshot: NearbyEventCandidates) {
-        val client = registry ?: return
         repeat(snapshot.candidateCount) { index ->
             val candidate = snapshot.candidateAt(index) ?: return@repeat
             val hash = candidate.eventCodeHash.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            val client = registry
+            if (client == null) {
+                emitJoinStageDiagnostic(
+                    log, eventIdHex = verifiedEventIdByHash[hash],
+                    stage = "registry_resolution", outcome = "rejected_no_registry",
+                )
+                return@repeat
+            }
             val attemptNumber = candidate.registryResolutionFailureCount + 1
             val attempt = beginNearbyEventRegistryResolutionFromHex(store, hash) ?: return@repeat
             emitJoinStageDiagnostic(
@@ -438,7 +449,7 @@ internal class NearbyEventDiscoverySession(
         }
         verifiedMetadataByHash.keys.retainAll(liveHashes)
         envelopeAgreementByHash.keys.retainAll(liveHashes)
-        verifiedDefinitionByHash.keys.retainAll(liveHashes)
+        verifiedDefinitionByHash.keys.removeAll { !store.retainsVerifiedRegistryDefinitionForHashHex(it) }
         verifiedEventIdByHash.keys.retainAll(liveHashes)
         _cards.value = buildList {
             repeat(snapshot.candidateCount) { index ->

@@ -55,10 +55,14 @@
 >
 > ### Data
 >
-> This build does not upload observations to any server. Report submission exists in the codebase
-> but is switched off in shipping builds by a build setting (`BeidReportSubmissionEnabled = NO`),
-> and records stay on the device. The app's outbound network requests are limited to reading
-> public event definitions and verifying an event code.
+> While a user takes part in an event, the app uploads signed proximity observations to the
+> event's report server, named by the event's published definition. An observation carries a
+> per-event pseudonymous key, the rotating Bluetooth identifiers the device heard, the event
+> identifier and the time window. It carries no name, account, email, phone number, device
+> identifier, wallet address or location coordinates, and it is not used for tracking or
+> advertising. The server keeps accepted observations so anyone can verify the event's
+> attendance record later. Other outbound requests read public event definitions and verify an
+> event code.
 >
 > ### Contact
 >

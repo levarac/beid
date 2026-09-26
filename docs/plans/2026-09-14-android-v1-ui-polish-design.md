@@ -51,7 +51,7 @@ the `Scaffold` structure, progress indicators, and Compose semantics:
 ## Device review follow-up
 
 The first device pass exposed three presentation problems in the actual Pixel
-screens (`evidence/beid-pixel-46111JEKB11173/20260915-041-discovery.png`,
+screens (`evidence/beid-pixel-DEVICE_SERIAL/20260915-041-discovery.png`,
 `20260915-041-event-code.png`, and `20260915-041-records.png`). The discovery
 and code bodies were vertically centered below their app bars, leaving a large
 empty gap before the primary content. Both now use local top-aligned scroll

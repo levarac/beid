@@ -8,12 +8,16 @@ AcceptanceReceipt. The same suite also proves the inactive-by-default flag,
 the durable `SUBMITTING` crash boundary (lookup before any replay POST), and
 rejection of a receipt signed by a key outside the verified Event Definition.
 
+Set `BEID_REPO` and `PARALLAX_REPO` to your local checkouts. Select a concrete
+available Simulator from `xcrun simctl list devices available` and set
+`SIMULATOR_UDID` before running the commands below.
+
 Run the normal integration suite with the required exact simulator destination:
 
 ```sh
-cd /Users/kenichi/Develop/worktrees/thegreeting-beid/report-submission
+cd "$BEID_REPO"
 xcodebuild -project ios/Beid.xcodeproj -scheme Beid -configuration Debug \
-  -destination 'platform=iOS Simulator,id=5638ACA8-5A90-4931-AB47-9F472D95B7E1' \
+  -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
   test -only-testing:BeidTests/ReportSubmissionOperatorIntegrationTests
 ```
 
@@ -32,7 +36,7 @@ From the Parallax checkout, install dependencies once and start the local
 Worker:
 
 ```sh
-cd /Users/kenichi/Repository/Levarac/parallax
+cd "$PARALLAX_REPO"
 npm ci
 cd operator
 npm run d1:migrate:local
@@ -49,14 +53,14 @@ operator's compressed public key, while the event identity and definition
 digest must be the values selected by the Event Definition used for the test:
 
 ```sh
-cd /Users/kenichi/Develop/worktrees/thegreeting-beid/report-submission
+cd "$BEID_REPO"
 BEID_RUN_OPERATOR_SUBMISSION_TEST=1 \
 BEID_OPERATOR_SUBMISSION_ENDPOINT=http://127.0.0.1:8787 \
 BEID_OPERATOR_RECEIPT_PUBLIC_KEY=<operator-compressed-public-key-hex> \
 BEID_EVENT_ID=<event-id-32-byte-hex> \
 BEID_EVENT_DEFINITION_DIGEST=<definition-digest-32-byte-hex> \
 xcodebuild -project ios/Beid.xcodeproj -scheme Beid -configuration Debug \
-  -destination 'platform=iOS Simulator,id=5638ACA8-5A90-4931-AB47-9F472D95B7E1' \
+  -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
   test -only-testing:BeidTests/ReportSubmissionOperatorIntegrationTests
 ```
 

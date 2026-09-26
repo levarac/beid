@@ -42,6 +42,13 @@ import kotlin.test.assertNotNull
  * — see `NearbyEventReceiverStateAdapterTest.theCardFollowsTheSharedJoinEligibility`.
  * Moving it here would have left the projection unpinned, which is the exact
  * defect beid#374's review found in it.
+ *
+ * The unresolved-radio and promoted-candidate cases overlap with
+ * `RegistryVerifiedJoinContextTest.aRadioSelfVerifiedCandidateIssuesNothing`
+ * and `aPromotedCandidateInsideItsWindowIssuesTheCapability`, respectively.
+ * This suite pins the tier rule; that suite also checks capability issuance.
+ * The registered RADIO_SELF_VERIFIED combination is this suite's distinct
+ * refusal case. The hint-only case additionally proves a real lookup resolved.
  */
 class NearbyEventJoinEligibilityTest {
     /**

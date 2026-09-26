@@ -29,6 +29,8 @@ EXPECTED_PATHS = [
     'android/gradlew',
     'android/gradle/wrapper/**',
     'scripts/resolve_kmp_java_home.sh',
+    'scripts/download_xcodegen.sh',
+    'scripts/ci_simulator.py',
 ]
 
 
