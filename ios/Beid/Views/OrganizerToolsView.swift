@@ -226,7 +226,10 @@ struct OrganizerToolsView: View {
   /// shown empty.
   private var savedPackSection: some View {
     VStack(alignment: .leading, spacing: 0) {
-      Text("Saved pack")
+      Text(
+        "Saved pack",
+        comment: "Section heading on Organizer tools for the venue pack stored on this device. Not a key: the venue device holds no key."
+      )
         .beidTextStyle(DS.Font.Library.labelMono10)
         .foregroundStyle(DS.Color.textSecondary)
         .accessibilityAddTraits(.isHeader)
@@ -234,15 +237,17 @@ struct OrganizerToolsView: View {
         .padding(.top, DS.Space.xl)
         .padding(.bottom, DS.Space.s)
       savedPackHairline
-      savedPackRow("Status") {
-        Text(savedPackStatusLabel)
+      savedPackRow(Text("Status")) {
+        savedPackStatusLabel
           .beidTextStyle(DS.Font.Library.labelMono11)
           .accessibilityIdentifier("organizer.savedPack.status")
       }
       switch savedPack {
       case .saved(let source, let storedAt):
         sourceRow(source)
-        savedPackRow("Saved") {
+        savedPackRow(
+          Text("Saved", comment: "Row label: the date and time the venue pack was stored on this device.")
+        ) {
           Text(verbatim: storedAt.formatted(date: .abbreviated, time: .shortened))
             .beidTextStyle(DS.Font.Library.labelMono11Time)
             .accessibilityIdentifier("organizer.savedPack.storedAt")
@@ -266,7 +271,7 @@ struct OrganizerToolsView: View {
   }
 
   private func sourceRow(_ source: String) -> some View {
-    savedPackRow("Source") {
+    savedPackRow(Text("Source")) {
       Text(verbatim: source)
         .beidTextStyle(DS.Font.Library.labelMono11Time)
         .accessibilityIdentifier("organizer.savedPack.source")
@@ -274,10 +279,16 @@ struct OrganizerToolsView: View {
   }
 
   /// The same key/value row 14b draws, without any control in it.
-  private func savedPackRow<Value: View>(_ key: LocalizedStringKey, @ViewBuilder value: () -> Value) -> some View {
+  ///
+  /// `key` takes a `Text` rather than a `LocalizedStringKey` so each call
+  /// site can attach its own translator `comment:` directly on the `Text(_:
+  /// comment:)` literal it passes in — a `comment:` threaded through this
+  /// shared helper's own `Text(key)` would not be the extraction site Xcode
+  /// looks for (docs/localization-process.md).
+  private func savedPackRow<Value: View>(_ key: Text, @ViewBuilder value: () -> Value) -> some View {
     VStack(spacing: 0) {
       HStack(alignment: .center, spacing: DS.Space.s) {
-        Text(key)
+        key
           .beidTextStyle(DS.Font.Library.labelMono10)
           .foregroundStyle(DS.Color.textSecondary)
         Spacer(minLength: DS.Space.s)
@@ -294,12 +305,24 @@ struct OrganizerToolsView: View {
     Rectangle().fill(DS.Color.strokeHairline).frame(height: DS.Size.hairline)
   }
 
-  private var savedPackStatusLabel: LocalizedStringKey {
+  private var savedPackStatusLabel: Text {
     switch savedPack {
-    case .notSaved: return "Not saved"
-    case .saved: return "Saved on this device"
-    case .unreadable: return "Could not read"
-    case .none: return "No saved pack"
+    case .notSaved: return Text("Not saved")
+    case .saved:
+      return Text(
+        "Saved on this device",
+        comment: "Status of the stored venue pack: it was written to this device's storage. Not a claim that it was checked or is broadcasting."
+      )
+    case .unreadable:
+      return Text(
+        "Could not read",
+        comment: "Status of the stored venue pack: the stored file could not be read and was set aside."
+      )
+    case .none:
+      return Text(
+        "No saved pack",
+        comment: "Status of the stored venue pack: nothing is stored on this device."
+      )
     }
   }
 
