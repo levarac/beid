@@ -202,4 +202,7 @@
     <!-- Trailing value for an independent row above with nothing to show yet — either the capability doesn\'t exist in the product yet, or it exists but hasn\'t happened for this proof yet. Means there is nothing to report, not that an attempt was made and failed; never an error/warning/declined state. -->
     <string name="record_detail_not_yet_available">Not yet available</string>
     <string name="event_join_owner_key_unavailable">Your identity key could not be opened. Your existing identity has been preserved. Try joining again after unlocking this device. If this continues, keep the app and its data and contact support.</string>
+    <string name="account_support_share">Share support information</string>
+    <string name="account_support_description">Includes app version, recent states and failure reasons from this app session. Choose who to share it with.</string>
+    <string name="account_support_unavailable">Sharing is unavailable. Try again later.</string>
 </resources>
