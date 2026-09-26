@@ -63,7 +63,15 @@ final class AppCoordinator: ObservableObject {
     let bluetoothMonitor = BluetoothMonitor()
     self.registryClient = registryClient
     self.joinDiagnosticLog = joinDiagnosticLog
+#if DEBUG
+    if NearbyJoinUITestFixture.isEnabled {
+      self.sensingCoordinator = NearbyJoinUITestFixture.makeCoordinator()
+    } else {
+      self.sensingCoordinator = SensingCoordinator(registryClient: registryClient, joinDiagnosticLog: joinDiagnosticLog)
+    }
+#else
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient, joinDiagnosticLog: joinDiagnosticLog)
+#endif
     self.supportDiagnostics = SupportDiagnostics(
       phases: sensingCoordinator.$phase.eraseToAnyPublisher(),
       refusalReasons: sensingCoordinator.$joinRefusalReasonKey.eraseToAnyPublisher(),
@@ -604,6 +612,7 @@ final class AppCoordinator: ObservableObject {
   /// without depending on the network.
   private static func clockPreflightOrigin(bundle: Bundle = .main) -> URL? {
 #if DEBUG
+    if NearbyJoinUITestFixture.isEnabled { return nil }
     if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
       return nil
     }
@@ -617,6 +626,7 @@ final class AppCoordinator: ObservableObject {
     scanPresented = true
     Task { await clockPreflight.check() }
 #if DEBUG
+    if NearbyJoinUITestFixture.isEnabled { return }
     if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
       // Stays on the pre-join Scan screen: no discovery, so the Simulator's
       // DemoEvent script cannot move the phase past it.

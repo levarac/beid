@@ -58,6 +58,11 @@ struct ScanFlowView: View {
           }
         }
     }
+    #if DEBUG
+    .safeAreaInset(edge: .top) {
+      if NearbyJoinUITestFixture.isEnabled { NearbyJoinUITestReceipt() }
+    }
+    #endif
     .sheet(isPresented: $bindingSheetPresented) {
       EventBindingSheetView(sensing: sensing)
         .environmentObject(coordinator)
