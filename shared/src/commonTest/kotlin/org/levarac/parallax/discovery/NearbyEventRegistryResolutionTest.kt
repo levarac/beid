@@ -10,6 +10,57 @@ import kotlin.test.assertTrue
 
 class NearbyEventRegistryResolutionTest {
     @Test
+    fun definitionCacheRetentionFollowsRegistryEvidenceThroughSourceEvictionAndTtlCleanup() {
+        val store = createNearbyEventDiscoveryStore()
+        recordNearbyEventHint(store, "target", "Event", CANONICAL_HASH.hexBytes(), null, false, false, 0L)
+        val attempt = assertNotNull(beginNearbyEventRegistryResolutionFromHex(store, CANONICAL_HASH))
+        completeVerifiedOpenDefinition(store, attempt)
+        assertTrue(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+
+        repeat(256) { index ->
+            recordNearbyEventHint(store, "junk-$index", "Junk", ByteArray(8) { 0x77 }, null, false, false, index + 1L)
+        }
+        assertNull(store.snapshot.candidateForHashHex(CANONICAL_HASH))
+        assertTrue(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+
+        recordNearbyEventHint(store, "target", "Event", CANONICAL_HASH.hexBytes(), null, false, false, 257L)
+        assertNull(beginNearbyEventRegistryResolutionFromHex(store, CANONICAL_HASH))
+        assertTrue(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+        refreshNearbyEventDiscovery(store, 300_256L)
+        assertTrue(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+        refreshNearbyEventDiscovery(store, 300_257L)
+        assertFalse(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+    }
+
+    @Test
+    fun resetDropsDefinitionCacheRetentionEvenForAnEvictedHash() {
+        val store = createNearbyEventDiscoveryStore()
+        recordNearbyEventHint(store, "target", "Event", CANONICAL_HASH.hexBytes(), null, false, false, 0L)
+        completeVerifiedOpenDefinition(store, assertNotNull(beginNearbyEventRegistryResolutionFromHex(store, CANONICAL_HASH)))
+        repeat(256) { index ->
+            recordNearbyEventHint(store, "junk-$index", "Junk", ByteArray(8) { 0x77 }, null, false, false, index + 1L)
+        }
+        resetNearbyEventDiscovery(store)
+        assertFalse(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+    }
+
+    @Test
+    fun unresolvedFailedMissingAndMalformedHashesDoNotRetainDefinitions() {
+        val store = createNearbyEventDiscoveryStore()
+        recordNearbyEventHint(store, "target", "Event", CANONICAL_HASH.hexBytes(), null, false, false, 0L)
+        assertFalse(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+        val attempt = assertNotNull(beginNearbyEventRegistryResolutionFromHex(store, CANONICAL_HASH))
+        completeNearbyEventRegistryResolutionFromHex(
+            store, attempt, NearbyEventRegistryResolutionResult.VERIFICATION_UNAVAILABLE,
+            null, null, null, null, false,
+        )
+        assertFalse(store.retainsVerifiedRegistryDefinitionForHashHex(CANONICAL_HASH))
+        for (hash in listOf("", "x".repeat(16), "0", "00", "00".repeat(9), "00".repeat(8))) {
+            assertFalse(store.retainsVerifiedRegistryDefinitionForHashHex(hash))
+        }
+    }
+
+    @Test
     fun openDefinitionWhoseB005SignedAndRecomputedHashesMatchPublishesRegisteredEventId() {
         val store = createNearbyEventDiscoveryStore()
         val eventId = (0..31).joinToString("") { it.toString(16).padStart(2, '0') }

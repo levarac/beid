@@ -285,6 +285,22 @@ public class NearbyEventDiscoveryStore internal constructor() {
 
     public val snapshot: NearbyEventCandidates
         get() = buildSnapshot()
+
+    /**
+     * Registry evidence still owned by this session, including hashes whose
+     * last source was evicted by the live-source cap (beid#523).
+     *
+     * Native Barnard definition caches follow this lifetime, not the visible
+     * candidate set. Eviction deliberately retains registration and prevents
+     * a second resolution; pruning a definition at that point strands relay
+     * agreement when the hash reappears. TTL cleanup and reset remove both.
+     * This is a cache-retention answer, never permission to join or relay.
+     */
+    public fun retainsVerifiedRegistryDefinitionForHashHex(hashHex: String): Boolean {
+        val bytes = runCatching { hashHex.decodeHexBytes() }.getOrNull() ?: return false
+        if (bytes.size != EVENT_CODE_HASH_BYTES) return false
+        return registry[EventHash(bytes)]?.status == NearbyEventRegistryStatus.REGISTERED_VIA_OPERATOR_LOOKUP
+    }
 }
 
 internal data class RegistryRecord(
