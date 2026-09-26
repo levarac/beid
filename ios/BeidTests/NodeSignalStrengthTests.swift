@@ -656,6 +656,52 @@ final class NodeSignalStrengthTests: XCTestCase {
     )
   }
 
+  /// PR #716 review (Codex, P2): while `isLedgerLoading`, `handleDetection`
+  /// queues the recording fields but its sibling `handleSignalStrength` used to
+  /// publish at once. Replaying the queued `.sensing` detection then runs
+  /// `beginEventFoundSessionState`, whose `resetSessionState()` wiped that
+  /// radius, so a node whose only sample arrived during startup stayed
+  /// unmeasured. Called in `handle(.detection)`'s order: the recording call,
+  /// then its sibling. RSSI is never passed to `handleDetection`.
+  func testSignalStrengthArrivingDuringLedgerLoadingSurvivesTheQueuedDetectionReplay() async {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("node-signal-loading-test-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+    // No permission grant arrives, as in SensingCoordinatorTests' loading
+    // test, so nothing but the replay moves the phase.
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .neverAnswers
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: DeterministicSensingCryptography(),
+      eventJoinControl: engine
+    )
+    coordinator.useDemoEventMode = false
+    XCTAssertTrue(coordinator.isLedgerLoading, "construction is still mid-load before any await")
+    coordinator.startSensing()
+    let node = DetectionFixture.displayId(device: 0)
+
+    coordinator.handleDetection(
+      enin: 1,
+      rpid: DetectionFixture.rotatingRpid(device: 0, enin: 1),
+      detectedDisplayId: node,
+      observedAt: baseTimestamp
+    )
+    coordinator.handleSignalStrength(rssi: -61, detectedDisplayId: node, at: baseTimestamp)
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    guard case .eventFound = coordinator.phase else {
+      XCTFail("the replayed detection must reach .eventFound; got \(coordinator.phase)")
+      return
+    }
+    XCTAssertEqual(
+      publishedDbm(coordinator, node), -61,
+      "a sample that arrived with its detection during loading must survive that detection's replay"
+    )
+  }
+
   // MARK: - Separation from the recording path (the point of beid#652)
 
   /// **What this pins:** the recording path acquiring a signal-strength side
