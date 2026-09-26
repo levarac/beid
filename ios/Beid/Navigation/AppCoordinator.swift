@@ -73,6 +73,9 @@ final class AppCoordinator: ObservableObject {
   let proofStore: ProofStore
   /// Shared by the report producer and every reader in this app process.
   let reportSubmissionStore: ReportSubmissionStore
+  /// beid#701's report-to-Proof table. Written only by `sensingCoordinator`
+  /// at window close; screens read it. Never reaches the submission runtime.
+  let reportProofLinkStore: ReportProofLinkStore
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
   let supportDiagnostics: SupportDiagnostics
@@ -110,6 +113,7 @@ final class AppCoordinator: ObservableObject {
     proofStore: ProofStore? = nil,
     sensingCoordinator injectedSensingCoordinator: SensingCoordinator? = nil,
     reportSubmissionStore: ReportSubmissionStore? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
@@ -135,9 +139,27 @@ final class AppCoordinator: ObservableObject {
     #else
     reportStore = reportSubmissionStore ?? ReportSubmissionStore()
     #endif
+    let linkStore: ReportProofLinkStore
+    #if DEBUG
+    if let reportProofLinkStore {
+      linkStore = reportProofLinkStore
+    } else if reportArguments.contains("-beid-ui-test") {
+      // Every UI-test launch starts from its own empty link file, so no UI
+      // test reads a previous launch's links or ever writes the real file.
+      let linkURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "beid-report-proof-links-\(UUID().uuidString).json"
+      )
+      linkStore = ReportProofLinkStore(fileURL: linkURL)
+    } else {
+      linkStore = ReportProofLinkStore()
+    }
+    #else
+    linkStore = reportProofLinkStore ?? ReportProofLinkStore()
+    #endif
     self.registryClient = registryClient
     self.reportSubmissionStore = reportStore
     self.joinDiagnosticLog = joinDiagnosticLog
+    self.reportProofLinkStore = linkStore
     // An injected coordinator (tests) wins over the nearby-join UI fixture.
     if let injectedSensingCoordinator {
       self.sensingCoordinator = injectedSensingCoordinator
@@ -148,12 +170,14 @@ final class AppCoordinator: ObservableObject {
       } else {
         self.sensingCoordinator = SensingCoordinator(
           registryClient: registryClient, reportSubmissionStore: reportStore,
+          reportProofLinkStore: linkStore,
           joinDiagnosticLog: joinDiagnosticLog
         )
       }
       #else
       self.sensingCoordinator = SensingCoordinator(
         registryClient: registryClient, reportSubmissionStore: reportStore,
+        reportProofLinkStore: linkStore,
         joinDiagnosticLog: joinDiagnosticLog
       )
       #endif
@@ -356,6 +380,18 @@ final class AppCoordinator: ObservableObject {
         try reportSubmissionStore.add(record)
       } catch {
         assertionFailure("Unable to seed isolated Event Detail submission fixture: \(error)")
+      }
+      // beid#701: links the report to Session 1 only, in the isolated link
+      // file every UI-test launch gets. Sessions 2 and 3 stay unlinked.
+      if arguments.contains("-beid-report-links-701") {
+        do {
+          try reportProofLinkStore.add(
+            windowId: record.id,
+            proofId: UUID(uuidString: "00000000-0000-4000-8000-000000000631")!
+          )
+        } catch {
+          assertionFailure("Unable to seed isolated report-to-proof link fixture: \(error)")
+        }
       }
     }
     #endif

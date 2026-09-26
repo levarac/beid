@@ -50,20 +50,31 @@ struct ReportDetailPresentation {
 
 /// Flat 2b frame 12. The selected UUID, not the possibly-changing list
 /// ordinal, identifies the report. The observed store is the coordinator's
-/// same instance used by Event Detail and the submission runtime.
+/// same instance used by Event Detail and the submission runtime. The
+/// session and proof rows appear only for a linked report (beid#701); an
+/// unlinked report shows exactly the pre-#701 screen.
 struct ReportDetailView: View {
   @ObservedObject private var submissionStore: ReportSubmissionStore
+  @ObservedObject private var proofStore: ProofStore
+  @ObservedObject private var linkStore: ReportProofLinkStore
+  @ObservedObject private var sensing: SensingCoordinator
   let recordID: UUID
   let reportIndex: Int
 
   init(
     recordID: UUID,
     reportIndex: Int,
-    submissionStore: ReportSubmissionStore
+    submissionStore: ReportSubmissionStore,
+    proofStore: ProofStore,
+    linkStore: ReportProofLinkStore,
+    sensing: SensingCoordinator
   ) {
     self.recordID = recordID
     self.reportIndex = reportIndex
     self._submissionStore = ObservedObject(wrappedValue: submissionStore)
+    self._proofStore = ObservedObject(wrappedValue: proofStore)
+    self._linkStore = ObservedObject(wrappedValue: linkStore)
+    self._sensing = ObservedObject(wrappedValue: sensing)
   }
 
   var body: some View {
@@ -92,6 +103,10 @@ struct ReportDetailView: View {
 
   private func reportContent(_ record: ReportSubmissionRecord) -> some View {
     let presentation = ReportDetailPresentation(record: record)
+    let session = ReportProofLinkPresentation.session(
+      for: record, linkStore: linkStore, proofStore: proofStore,
+      hasSelfProof: { sensing.selfProofRecord(forProofId: $0) != nil }
+    )
     return VStack(alignment: .leading, spacing: 0) {
       Text(reportTitle)
         .beidTextStyle(DS.Font.Library.display46)
@@ -186,7 +201,92 @@ struct ReportDetailView: View {
       }
       .frame(minHeight: DS.Size.reportRowMinHeight)
       hairline
+
+      if let session {
+        sessionRow(session)
+        hairline
+
+        sectionHeading(
+          String(
+            localized: "reportDetail.sessionProof",
+            defaultValue: "SESSION PROOF",
+            comment: "Section for the one stored Proof of the recording session this report was closed in. Not a verification or earned-reward claim."
+          )
+        )
+        .padding(.top, DS.Space.l)
+        hairline
+        sessionProofRow(session)
+        hairline
+      }
     }
+  }
+
+  /// Not a link: 11 already opens this screen, so linking back would make an
+  /// unbounded push cycle. The session stays reachable from Event Detail.
+  private func sessionRow(_ session: LinkedSession) -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.xs) {
+      HStack(alignment: .firstTextBaseline) {
+        Text(SessionDisplay.title(session.ordinal))
+          .beidTextStyle(DS.Font.Library.title15)
+          .foregroundStyle(DS.Color.textPrimary)
+        Spacer(minLength: DS.Space.s)
+        Text(session.proof.date.formatted(date: .omitted, time: .shortened))
+          .beidTextStyle(DS.Font.Library.labelMono11Time)
+          .foregroundStyle(DS.Color.textPrimary)
+      }
+      // Omitted, not "unavailable", when no aggregate snapshot was persisted.
+      if let aggregate = sensing.sessionAggregateSnapshot(forProofId: session.proof.id) {
+        Text(SessionDisplay.measurements(aggregate))
+          .beidTextStyle(DS.Font.Library.labelMono10Tight)
+          .foregroundStyle(DS.Color.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .frame(maxWidth: .infinity, minHeight: DS.Size.sessionRowMinHeight, alignment: .leading)
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("report-detail.session")
+  }
+
+  private func sessionProofRow(_ session: LinkedSession) -> some View {
+    NavigationLink {
+      ItemDetailView(proof: session.proof)
+    } label: {
+      HStack(spacing: DS.Space.m) {
+        RecordSigilSlot(
+          recordID: session.proof.id,
+          size: DS.Size.proofRowMinHeight - DS.Space.l,
+          ground: .canvas
+        )
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+          Text(SessionDisplay.proofTitle(session.ordinal))
+            .beidTextStyle(DS.Font.Library.title15)
+            .foregroundStyle(DS.Color.textPrimary)
+          Text(session.proofSubtitle)
+            .beidTextStyle(DS.Font.Library.labelMono10)
+            .foregroundStyle(DS.Color.textSecondary)
+        }
+        Spacer(minLength: 0)
+        Text("→")
+          .beidTextStyle(DS.Font.Library.labelMono11Time)
+          .foregroundStyle(DS.Color.textPrimary)
+          .accessibilityHidden(true)
+      }
+      .frame(minHeight: DS.Size.proofRowMinHeight)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(sessionProofAccessibilityLabel(session))
+    .accessibilityIdentifier("report-detail.session-proof")
+  }
+
+  private func sessionProofAccessibilityLabel(_ session: LinkedSession) -> String {
+    let title = SessionDisplay.proofTitle(session.ordinal)
+    let state = session.proofState
+    return String(
+      localized: "reportDetail.sessionProof.accessibilityLabel",
+      defaultValue: "Open \(title), \(state)",
+      comment: "VoiceOver label for the Report Detail proof row. The first value is the visible proof title; the state comes only from a matching self-proof signature record."
+    )
   }
 
   private var reportTitle: String {
