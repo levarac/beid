@@ -180,7 +180,7 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(account.waitForExistence(timeout: 5))
     account.tap()
 
-    let aboutSensing = app.buttons["About sensing"]
+    let aboutSensing = app.buttons["account.aboutSensing"]
     let accountList = app.collectionViews.firstMatch
     var attempts = 0
     while !aboutSensing.isHittable, attempts < 6 {

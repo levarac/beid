@@ -160,6 +160,7 @@ struct AccountSheetView: View {
               .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("account.aboutSensing")
             .accessibilityLabel("About sensing")
           }
           // Account Join stays with the owner decision that wallet is optional.
