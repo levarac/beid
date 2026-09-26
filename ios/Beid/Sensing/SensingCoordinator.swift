@@ -46,7 +46,12 @@ private func diagnosticEventIdPrefix(_ value: String?) -> String {
 }
 #endif
 
-private func emitJoinStageDiagnostic(
+func joinRegistryFailureDiagnosticOutcome(_ errorCode: String?) -> String {
+  let reason = BeidSharedKit.event.eventJoinFailureReasonForRegistryErrorCode(errorCode: errorCode)
+  return "rejected_" + BeidSharedKit.event.eventJoinFailureReasonKey(reason: reason)
+}
+
+func emitJoinStageDiagnostic(
   _ log: (String) -> Void,
   eventIdHex: String?,
   stage: String,
@@ -425,7 +430,7 @@ final class SensingCoordinator: ObservableObject {
   /// populate.
   private static let ledgerLog = Logger(subsystem: "org.levarac.beid", category: "ledger")
 
-  private static func defaultJoinDiagnosticLog(_ message: String) {
+  static func defaultJoinDiagnosticLog(_ message: String) {
 #if DEBUG
     log.debug("\(message, privacy: .public)")
 #endif
@@ -933,7 +938,8 @@ final class SensingCoordinator: ObservableObject {
 
   convenience init(
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
-      RegistryDependencies.createClient()
+      RegistryDependencies.createClient(),
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     let sensingCryptography = BarnardSensingCryptography()
     let allowInsecureLoopbackForTests: Bool
@@ -965,7 +971,8 @@ final class SensingCoordinator: ObservableObject {
       eventIdentityVerificationSource: registryClient.map {
         RegistryEventIdentityVerificationSource(client: $0)
       },
-      nearbyRegistryClient: registryClient
+      nearbyRegistryClient: registryClient,
+      joinDiagnosticLog: joinDiagnosticLog
     )
   }
 
@@ -1033,7 +1040,8 @@ final class SensingCoordinator: ObservableObject {
     eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     nearbyRegistryClient:
-      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil
+      ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     self.init(
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
@@ -1048,7 +1056,8 @@ final class SensingCoordinator: ObservableObject {
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
       initialLedgerFailure: nil,
       nearbyRegistryClient: nearbyRegistryClient,
-      eventJoinControl: eventJoinControl
+      eventJoinControl: eventJoinControl,
+      joinDiagnosticLog: joinDiagnosticLog
     )
     // Only this initializer chain is actually loading — see
     // `isLedgerLoading`'s doc comment for why the default is `false`.
@@ -2093,8 +2102,16 @@ final class SensingCoordinator: ObservableObject {
   ) {
     switch joinGatePreflight(canonicalEventIdHex: canonicalEventIdHex) {
     case .refuse(let refusal, let message):
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog, eventIdHex: canonicalEventIdHex, stage: "registry_resolution",
+        outcome: refusal == .noRegistryConfigured ? "rejected_no_registry" : "rejected_no_canonical_event_id"
+      )
       applyJoinGateDecision(.refuse(refusal, message))
     case .read(let registry, let eventIdHex):
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog, eventIdHex: eventIdHex,
+        stage: "registry_resolution", outcome: "started", attempt: "1"
+      )
       joinRegistryRequest = registry.resolveEventDefinition(
         eventIdHex: eventIdHex,
         nowEpochSeconds: nearbyDiscoveryClock() / 1000
@@ -2108,6 +2125,11 @@ final class SensingCoordinator: ObservableObject {
           // and either can outlive the attempt that started it.
           guard self.isCurrentJoinAttempt(generation) else { return }
           self.joinRegistryRequest = nil
+          emitJoinStageDiagnostic(
+            self.joinDiagnosticLog, eventIdHex: eventIdHex, stage: "registry_resolution",
+            outcome: resolution != nil ? "success" : joinRegistryFailureDiagnosticOutcome(failureErrorCode),
+            attempt: "1"
+          )
           self.applyJoinGateDecision(
             self.joinGateDecision(
               joinCode: joinCode,
@@ -2741,6 +2763,9 @@ final class SensingCoordinator: ObservableObject {
     registryAgreement: @escaping (BarnardEventDefinitionV1) -> Bool,
     observedAtEpochMillis: Int64? = nil
   ) {
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: verifiedEventIdHex, stage: "detection", outcome: "detected"
+    )
     let observedAt = observedAtEpochMillis ?? nearbyDiscoveryClock()
     let hash = eventCodeHash.lowercaseHexString
     // Asked before recording, because the reducer needs this envelope's own
@@ -2783,6 +2808,9 @@ final class SensingCoordinator: ObservableObject {
   /// identity at all -- so this tally is the only trace the drop leaves.
   /// Not `private`, for the same test-seam reason as the two handlers above.
   func handleUnverifiedEventInfoEnvelopeV2() {
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: nil, stage: "detection", outcome: "detected"
+    )
     emitJoinStageDiagnostic(
       joinDiagnosticLog,
       eventIdHex: nil,

@@ -44,6 +44,32 @@ import XCTest
 /// exists specifically to get the ordering right instead.
 @MainActor
 final class EventCodeLookupJoinIntegrationTests: XCTestCase {
+  func testManualLookupDiagnosticsBracketTheAwaitAndBoundEveryField() async {
+    var lines: [String] = []
+    let coordinator = AppCoordinator(registryClient: nil, joinDiagnosticLog: { lines.append($0) })
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      XCTAssertEqual(lines, [
+        "join_stage event_id=unknown stage=registry_lookup outcome=started attempt=1 retry_at_epoch_ms=none"
+      ])
+      return .init(eventIdHex: "0x" + String(repeating: "ab", count: 32), errorCode: nil)
+    }
+    _ = await coordinator.joinEventResolvingCanonicalId(code: "private-code")
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=registry_lookup outcome=started attempt=1 retry_at_epoch_ms=none",
+      "join_stage event_id=abababab stage=registry_lookup outcome=success attempt=1 retry_at_epoch_ms=none"
+    ])
+
+    lines.removeAll()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: nil, errorCode: "private-rpid-error\nforged_line")
+    }
+    _ = await coordinator.joinEventResolvingCanonicalId(code: "private-code")
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=registry_lookup outcome=started attempt=1 retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=registry_lookup outcome=rejected_unknown attempt=1 retry_at_epoch_ms=none"
+    ])
+  }
+
   /// Selecting a code with no registry client configured is not a *code
   /// entry* error, so this surface shows nothing. It is also not a join:
   /// `SensingCoordinator.joinEvent` records the code and tells Barnard

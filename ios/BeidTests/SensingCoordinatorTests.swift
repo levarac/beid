@@ -1329,7 +1329,9 @@ final class SensingCoordinatorTests: XCTestCase {
         "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
           "attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=unknown stage=envelope_verification outcome=rejected_unverified attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=abababab stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=abababab stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
         "join_stage event_id=abababab stage=registry_resolution outcome=rejected_no_registry " +
           "attempt=none retry_at_epoch_ms=none",
@@ -1362,6 +1364,26 @@ final class SensingCoordinatorTests: XCTestCase {
       ),
       "diagnostic lines: \(lines)"
     )
+  }
+
+  func testJoinDiagnosticsRejectMalformedIdentifiersAndKeepReceiptFieldsPrivate() {
+    var lines: [String] = []
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, joinDiagnosticLog: { lines.append($0) }
+    )
+    coordinator.handleEventInfoEnvelopeV2(
+      peripheralId: "private-peripheral-rpid", eventDisplayName: "private-name",
+      eventCodeHash: Data([0, 1, 2, 3, 4, 5, 6, 7]),
+      rawContainer: Data("private-container".utf8),
+      verifiedEventIdHex: String(repeating: "ab", count: 32) + "\nforged_log_line",
+      registryAgreement: { _ in true }, observedAtEpochMillis: 1_000
+    )
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_registry " +
+        "attempt=none retry_at_epoch_ms=none"
+    ])
   }
 
   func testRegistryFailureLogsRetryDeadlineAndRetriesWhenTheClockReachesIt() async throws {
@@ -1415,6 +1437,16 @@ final class SensingCoordinatorTests: XCTestCase {
       ),
       "diagnostic lines: \(lines)"
     )
+    XCTAssertEqual(lines, [
+      "join_stage event_id=00010203 stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=registry_resolution " +
+        "outcome=rejected_verification_unavailable attempt=1 retry_at_epoch_ms=1800000005000",
+      "join_stage event_id=00010203 stage=registry_resolution outcome=started attempt=2 retry_at_epoch_ms=none",
+      "join_stage event_id=00010203 stage=registry_resolution " +
+        "outcome=rejected_verification_unavailable attempt=2 retry_at_epoch_ms=1800000035000"
+    ])
   }
 
   // MARK: - Registry definition mapping

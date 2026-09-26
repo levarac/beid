@@ -380,7 +380,7 @@ class NearbyEventDiscoverySessionTest {
                 "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=registry_resolution outcome=rejected_lookup_unavailable " +
-                    "attempt=1 retry_at_epoch_ms=${150_000L + FIRST_RETRY_DELAY_MILLIS}",
+                    "attempt=1 retry_at_epoch_ms=155000",
                 "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=2 retry_at_epoch_ms=none",
             ),
             lines,
@@ -406,6 +406,7 @@ class NearbyEventDiscoverySessionTest {
 
         assertEquals(
             listOf(
+                "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
                 "join_stage event_id=01020304 stage=registry_resolution outcome=success attempt=1 retry_at_epoch_ms=none",
@@ -424,9 +425,45 @@ class NearbyEventDiscoverySessionTest {
 
         assertEquals(
             listOf(
+                "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=envelope_verification " +
                     "outcome=rejected_unverified attempt=none retry_at_epoch_ms=none",
             ),
+            lines,
+        )
+    }
+
+    @Test
+    fun missingRegistryLogsEveryV2ReceiptWithoutLeakingPayloads() = runTest {
+        val lines = mutableListOf<String>()
+        val session = NearbyEventDiscoverySession(
+            nowEpochMillis = { 150_000L }, coroutineScope = backgroundScope,
+            registry = null, log = lines::add,
+        )
+        repeat(2) {
+            session.recordRadioSelfVerifiedEnvelope(
+                "private-peripheral-rpid", "private-name", EVENT_HASH,
+                "private-container".toByteArray(), verifiedEventIdHex = EVENT_ID_HEX,
+            ) { true }
+        }
+        assertEquals(
+            List(2) {
+                listOf(
+                    "join_stage event_id=01020304 stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+                    "join_stage event_id=01020304 stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+                    "join_stage event_id=01020304 stage=registry_resolution outcome=rejected_no_registry attempt=none retry_at_epoch_ms=none",
+                )
+            }.flatten(), lines,
+        )
+    }
+
+    @Test
+    fun malformedEventIdentifiersNeverEnterTheDiagnosticLine() {
+        val lines = mutableListOf<String>()
+        listOf(null, "private-rpid", "ab".repeat(31), "ab".repeat(32) + "\nforged", "ａ".repeat(64))
+            .forEach { id -> emitJoinStageDiagnostic(lines::add, id, "detection", "detected") }
+        assertEquals(
+            List(5) { "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none" },
             lines,
         )
     }
