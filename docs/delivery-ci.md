@@ -74,13 +74,25 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `tools/beid-lab-cli/` だけに効く。`tools/` 配下の未分類の path は従来どおり
     fail closed のままである。
 
+  - **Xcode Cloud PR gate** — ASC's live `PR Build & Test` start condition is
+    the source for whether its iOS check is expected. On 2026-09-22 its
+    `DO_NOT_START_IF_ALL_FILES_MATCH` exclusions were `docs/`, `.github/`,
+    `*.md`, and `android/app/src/` ([#625](https://github.com/thegreeting/beid/issues/625)).
+    Android app source/resources/manifest/tests alone need no Xcode Cloud run;
+    a mixed PR with `shared/`, `ios/`, Android build inputs, or another
+    nonexcluded path still requires the iOS check. Re-read ASC before applying
+    this dated observation to a future PR. Do not exclude all of `android/`.
+
   **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
   この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
 
-  - **Xcode Cloud** — trusted Internal/Release delivery remains here. During
+  - **Xcode Cloud** — trusted Internal/Release delivery remains here. Its PR
+    check is a merge criterion only when the PR is outside the ASC PR file
+    exclusions (see the Xcode Cloud PR gate bullet above). During
     public cutover the PR workflow stays paused until its fork credential
     boundary is verified. While paused, require executed hosted iOS evidence
-    on the exact review head; a missing Xcode Cloud check is not success.
+    on the exact review head for any PR outside those exclusions; a missing
+    Xcode Cloud check is not success.
     Check current workflow state in ASC and exact-head results on GitHub.
     Branch protection and required contexts are separate operator settings;
     a clean merge state does not prove that an iOS check was required or ran.
