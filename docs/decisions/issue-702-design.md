@@ -1,7 +1,10 @@
-# beid#702 — 14 Organizer tools の `VENUE KEY` 欄: 鍵ではなく、保存済みの配信パックの状態を出す(設計案)
+# beid#702 — 14 Organizer tools の `VENUE KEY` 欄: 鍵ではなく、保存済みの配信パックの状態を出す(Implemented)
 
-読む人: PM(実装前の確認)。
+読む人: PM, and any agent touching this area in the future.
 書いた人: Worker a-20260927-006。作成日 2026-09-27。
+Status: **Implemented in PR #705.** Landed as `5b1abdce` (the #702 change itself) and `af6934dc`
+(per-launch UI test store isolation). The Open decisions below (O1–O5) each get an "Implementation"
+note recording the choice actually taken — see the end of each item.
 測った対象: beid ブランチ `work/issue-702-venue-key`、コミット `62531fe`(#679 のマージ commit `27c1525` を含むことを `git merge-base --is-ancestor` で確認済み)。
 Barnard はタグ `v0.9.2`(`61e2f0bacde14d78b18278bf743f587380f76cba`)。`ios/project.yml:8-10` の `exactVersion: 0.9.2` と
 `ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved:5-11` の revision が一致する。
@@ -9,7 +12,10 @@ Barnard はタグ `v0.9.2`(`61e2f0bacde14d78b18278bf743f587380f76cba`)。`ios/pr
 `git -C ~/Workspace/levarac/barnard show v0.9.2:<path>` で読んだ行番号である(作業ツリーではない)。
 Figma は `xf2uFHceIYg0h0gJndUkmI`(#626 本文のリンク)を Figma MCP で直接読んだ(2026-09-27)。
 
-**この文書はアプリのコードを変えない。** 実装は PM の確認後。
+**This document originally said it did not change app code (implementation was to follow PM
+confirmation).** That confirmation has since been given and implementation is complete (see
+Status above). The body below is left as written at design time; the choice actually taken is
+recorded as an addition to each Open decision item.
 
 ---
 
@@ -234,10 +240,10 @@ S1 に `isPersistenceSuspended` を含めるのは、`CorruptStoreQuarantine.res
 - **削除**: 本設計では 14 に削除の操作を置かない(O4)。したがって「削除したとき配信中の電波はどうなるか」は起きない
   (14 が見えている時点で配信は止まっている。上の前提)。O4 で削除を足す場合も、その時点で電波は止まっているので、
   消すのは保存ファイルだけになる。
-- 新規の文言は 3 つ(`Saved on this device` / `Could not read` / `Saved`)と、O1 で決める見出し 1 つ。
+- 新規の文言は 4 つ(`Saved on this device` / `Could not read` / `No saved pack` / `Saved`)と、O1 で決めた見出し 1 つ。
   新規の文言は `Localizable.xcstrings` に英語で足す(DECISIONS.md 2026-09-22 `:1686`「日本語対応は不要」)。
 
-### 実装の形(PM 確認後)
+### 実装の形(Implemented)
 
 - 判定は純粋関数 1 つに置く: 入力 `(record: VenuePublicArtifactRecord?, persistenceFailed: Bool, persistenceSuspended: Bool, quarantined: Bool)`、
   出力 `enum SavedPackRowState { case none, unreadable, saved(source: String, storedAt: Date), notSaved(source: String) }`。
@@ -287,13 +293,22 @@ Keychain の書き込み箇所が増えないこと: `git grep -n -c SecItemAdd 
 
 ## Open decisions
 
-### O1 — 見出しの語。Figma は `VENUE KEY` だが、中身は鍵ではなくパック
+### O1 — 見出しの語。Figma は `VENUE KEY` だが、中身は鍵ではなくパック — **DECIDED: `Saved pack`**
 
-- **A. `Saved pack`(推奨)** — 中身(この端末に保存したパック)そのもの。14b の語「pack」(#647 本文「`bundle` ではなく `pack`」)と揃う。新規の文言。
+- **A. `Saved pack`(推奨・DECIDED)** — 中身(この端末に保存したパック)そのもの。14b の語「pack」(#647 本文「`bundle` ではなく `pack`」)と揃う。新規の文言。
 - B. `Venue pack` — 同じく正しいが、「会場のパック」は保存の有無を言わない。新規。
 - C. `VENUE KEY` のまま — Figma に一致するが、鍵を預かっていると読める。2026-09-27 の決定の理由(鍵を持たない)と逆向きの印象を与える。
 
 推奨理由: 欄が示すのは「この端末に保存されているか」なので、その語を見出しに置く。
+
+**Decided: `Saved pack`, confirmed by maintainer decision on 2026-09-27** — replaces Figma's
+`VENUE KEY`, in line with the decision (#432) that the venue device holds no key.
+
+**Implementation: A.** `OrganizerToolsView.swift:230`'s heading is the literal `"Saved pack"`.
+`VENUE KEY` survives nowhere as displayed text — the one match is a code comment at
+`OrganizerToolsView.swift:224` ("Figma 14's `VENUE KEY` block", naming Figma's own label for the
+frame), not a user-visible string (`git grep -n 'VENUE KEY' -- ios/Beid` returns 1 hit, the same
+comment). The implementation matches the maintainer decision; no UI string change is needed.
 
 ### O2 — 14 で検証済みの事実(表示名・eventId・期限)を出すか
 
@@ -301,17 +316,37 @@ Keychain の書き込み箇所が増えないこと: `git grep -n -c SecItemAdd 
 - B. 14 を開くたびに取り込みと評価をやり直し(配信はしない)、結果を出す — registry への通信が 14 を開くたびに起き、14b の処理を二重に持つ。出した瞬間から古くなる。
 - C. 配信の寿命を 14 まで延ばす — #531 の「画面を離れたら電波を止める」安全策を変える。本 issue の範囲を越える。
 
+**Implementation: A.** `OrganizerToolsView.swift`'s `savedPackSection` / `SavedPackRowState` draw
+only `source` (`sourceDescription`) and `storedAt`. There is no code that reads or displays a
+display name, eventId, or validity window (`grep -n 'displayName\|eventId\|validFrom\|validThrough'
+ios/Beid/Views/OrganizerToolsView.swift` returns 0 hits). 14b (`VenueSignedServingView`) is
+unchanged.
+
 ### O3 — 保存バイトを解読して、未検証の eventId を「パックが名乗るイベント」として出すか
 
 - **A. 出さない(推奨)** — `VenueBundle.kt:7-11` のとおり解読は認証ではない。PM の指示「信頼できる値・測った値だけを出す」に従う。
 - B. 「未検証」と明記して短い eventId を出す — 前例として 14b はリンクが名乗る eventId を検証前に `Event ID` 行へ出している(`VenueSignedServingViewModel.swift:134-142`, `VenueSignedServingView.swift:237-242`)。ただしそれはリンクを貼った直後の、打ち間違いに気づかせる目的の表示で、14 の常設欄とは目的が違う。B を採るなら shared の解読を 14 から新たに呼ぶことになる。
+
+**Implementation: A.** `OrganizerToolsView.swift` has no call to `decodeVenueBundleHex`
+(`git grep -n decodeVenueBundleHex -- ios/Beid/Views/OrganizerToolsView.swift` returns 0 hits). No
+code path decodes the stored bytes on 14.
 
 ### O4 — 14 に「保存済みパックを消す」操作を置くか
 
 - **A. 置かない(推奨)** — 現在も削除の操作は無い(§1: `clear()` の本番呼び出し 0 件)。Flat 2b で機能を増やさない方針(DECISIONS.md 2026-09-22 `:1687`「再デザインで新機能を増やさない」)。
 - B. 置く(Figma 14c の `REMOVE KEY` に当たる物を 14 に) — 呼ぶのは `VenuePublicArtifactStore.clear()` だけで、14 の時点で電波は止まっている。破壊的操作なので確認ダイアログの有無も決める必要がある。別 issue にするのが妥当。
 
+**Implementation: A.** `OrganizerToolsView.swift` has no call to `.clear()`. 14 only reads; there
+is no delete action or button (`savedPackSection` has no row with an action attached).
+`VenuePublicArtifactStore.clear()` still has 0 production callers, as §1 states.
+
 ### O5 — Figma 14 の `Venue device`(v1)行
 
 - 本 issue の範囲外。#597 で外し、#679 でも出していない(PR #679「Figma との差」)。デザイナーへの質問は #642 の Q6
   (`docs/decisions/issue-642-account-inventory.md:442-455`)で既に上がっている。本設計はこの行について何も変えない。
+
+**Implementation: still out of scope, untouched.** `OrganizerToolsView.swift` has no `Venue
+device` UI row. The one match is a code comment at `:121` ("#597 withdrew the unsigned Venue
+device entrance", recording that #597 already removed it), not user-visible text (`git grep -n
+'Venue device' -- ios/Beid/Views/OrganizerToolsView.swift` returns 1 hit, the same comment).
+#642 Q6's question remains unanswered.
