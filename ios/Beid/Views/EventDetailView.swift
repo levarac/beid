@@ -244,9 +244,8 @@ struct EventDetailView: View {
         } label: {
           HStack(spacing: DS.Space.m) {
             RecordSigilSlot(
-              recordID: proof.id,
-              size: DS.Size.proofRowMinHeight - DS.Space.l,
-              ground: .canvas
+              input: sensing.sigilInput(forProofId: proof.id),
+              placement: .eventDetailRow
             )
             VStack(alignment: .leading, spacing: DS.Space.xs) {
               Text(SessionDisplay.proofTitle(index + 1))
