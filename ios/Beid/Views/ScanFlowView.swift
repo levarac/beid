@@ -33,7 +33,6 @@ struct ScanFlowView: View {
   ///    triggers firing is harmless.
   @State private var bindingSheetPresented = false
   @State private var restoreBindingSheetAfterKeepSensing = false
-  @State private var preflightStateKey: String?
 
   init(sensing: SensingCoordinator) {
     self.sensing = sensing
@@ -144,7 +143,6 @@ struct ScanFlowView: View {
       guard oldPhase != .active, newPhase == .active else { return }
       presentBindingSheetIfNeeded()
     }
-    .onReceive(coordinator.clockPreflight.$stateKey) { preflightStateKey = $0 }
     // Dismisses off `bindingState` itself, not off any one specific caller
     // of `reset()`. `SensingCoordinator.resetSessionState()` (reached by
     // confirmed stop, direct prejoin CLOSE, and every fresh `.eventFound`)
@@ -184,10 +182,7 @@ struct ScanFlowView: View {
     #if DEBUG
     if sensing.sensingScreenshotFixture != nil { return true }
     #endif
-    if preflightStateKey == "overTolerance" || preflightStateKey == "undeterminable"
-      || sensing.joinRefusalReasonKey != nil {
-      return true
-    }
+    if sensing.joinRefusalReasonKey != nil { return true }
     switch sensing.phase {
     case .eventFound, .recording: return true
     case .idle, .sensing, .signalLost: return false
@@ -206,10 +201,10 @@ struct ScanFlowView: View {
     if sensing.sensingScreenshotFixture == .sealed {
       return "Sealed · \(Int(sensing.sessionAggregate?.windowCount ?? 0)) windows"
     }
-    if sensing.sensingScreenshotFixture == .cantJoin { return "Can't join · clock off" }
+    if sensing.sensingScreenshotFixture == .cantJoin { return "Can't join" }
     #endif
-    if preflightStateKey == "overTolerance" { return "Can't join · clock off" }
-    if preflightStateKey == "undeterminable" { return "Can't join · clock unchecked" }
+    // A clock notice informs on the pre-join screen; only a refusal is
+    // "Can't join".
     if sensing.joinRefusalReasonKey != nil { return "Can't join" }
     switch sensing.phase {
     case .eventFound, .recording:
@@ -391,8 +386,9 @@ enum ScanFlowContent {
     case .detectingFirstTime:
       SensingSessionSurface(sensing: sensing, event: event, presentation: .detectingFirstTime)
     case .cantJoin:
+      // 05d is reached only by a join refusal: a clock notice never blocks.
       SensingCantJoinView(
-        reason: .clockOff,
+        reason: .refused("event_not_active"),
         code: event.id,
         event: event,
         candidate: NearbyEventCard(
@@ -401,8 +397,7 @@ enum ScanFlowContent {
           displayValidFromEpochSeconds: nil,
           displayValidUntilEpochSeconds: nil,
           eventCodeHashHex: "fixture-hash"
-        ),
-        onCheckAgain: {}
+        )
       )
     case .stopConfirm:
       SensingStopConfirmView(

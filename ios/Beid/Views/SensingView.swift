@@ -774,24 +774,21 @@ struct SensingWindowBars: View {
 }
 
 /// Keeps the existing B005 discovery list available before an event is
-/// joined, and promotes an actual clock/join refusal to frame 05d's layout.
-/// Observing the clock here is necessary: it changes independently of the
-/// SensingCoordinator and AppCoordinator publications.
+/// joined, and promotes an actual join refusal to frame 05d's layout.
+/// A clock that is off or could not be checked is not a refusal: it stays on
+/// this screen as `ClockPreflightNoticeView` above an enabled nearby list, as
+/// it did before the Flat 2b redesign and as it does on Android.
 struct SensingPrejoinRouter: View {
   @ObservedObject var sensing: SensingCoordinator
-  @ObservedObject var clockPreflight: ClockPreflightController
+  let clockPreflight: ClockPreflightController
 
   var body: some View {
-    if let reason = SensingCantJoinReason(
-      clockStateKey: clockPreflight.stateKey,
-      joinRefusalKey: sensing.joinRefusalReasonKey
-    ) {
+    if let reason = SensingCantJoinReason(joinRefusalKey: sensing.joinRefusalReasonKey) {
       SensingCantJoinView(
         reason: reason,
         code: sensing.joinedEventCode,
         event: nil,
-        candidate: nil,
-        onCheckAgain: { Task { await clockPreflight.check(force: true) } }
+        candidate: nil
       )
     } else {
       SensingView(sensing: sensing, clockPreflight: clockPreflight)
@@ -800,32 +797,21 @@ struct SensingPrejoinRouter: View {
 }
 
 enum SensingCantJoinReason {
-  case clockOff
-  case clockUnchecked
   case refused(String)
 
-  init?(clockStateKey: String?, joinRefusalKey: String?) {
-    switch clockStateKey {
-    case "overTolerance": self = .clockOff
-    case "undeterminable": self = .clockUnchecked
-    default:
-      guard let joinRefusalKey else { return nil }
-      self = .refused(joinRefusalKey)
-    }
+  init?(joinRefusalKey: String?) {
+    guard let joinRefusalKey else { return nil }
+    self = .refused(joinRefusalKey)
   }
 
   var status: String {
     switch self {
-    case .clockOff: "Can't join · clock off"
-    case .clockUnchecked: "Can't join · clock unchecked"
     case .refused: "Can't join"
     }
   }
 
   var title: LocalizedStringKey {
     switch self {
-    case .clockOff: "This device's clock is off"
-    case .clockUnchecked: "Couldn't check this device's clock"
     case .refused(let key):
       switch key {
       case "network_required": "No network connection"
@@ -839,10 +825,6 @@ enum SensingCantJoinReason {
 
   var message: LocalizedStringKey {
     switch self {
-    case .clockOff:
-      "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again."
-    case .clockUnchecked:
-      "beid couldn't compare the clock with the network, so event times can't be trusted yet. Check your connection, then try again."
     case .refused(let key):
       switch key {
       case "network_required":
@@ -860,13 +842,6 @@ enum SensingCantJoinReason {
       }
     }
   }
-
-  var isClockReason: Bool {
-    switch self {
-    case .clockOff, .clockUnchecked: true
-    case .refused: false
-    }
-  }
 }
 
 /// Frame 05d. The illustrated registry rows are shown only when a caller
@@ -877,7 +852,6 @@ struct SensingCantJoinView: View {
   let code: String?
   let event: EventSession?
   let candidate: NearbyEventCard?
-  let onCheckAgain: () -> Void
 
   var body: some View {
     GeometryReader { geometry in
@@ -906,9 +880,7 @@ struct SensingCantJoinView: View {
             .beidTextStyle(DS.Font.Library.title19)
             .foregroundStyle(DS.Color.labelOnActionPrimary)
             .padding(.top, DS.Space.s)
-            .accessibilityIdentifier(
-              reason.isClockReason ? "scan.clock-preflight" : "scan.join-refusal"
-            )
+            .accessibilityIdentifier("scan.join-refusal")
 
           Text(reason.message)
             .beidTextStyle(DS.Font.Library.body15)
@@ -930,15 +902,6 @@ struct SensingCantJoinView: View {
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("scan.manual-entry")
-
-          if reason.isClockReason {
-            BeidPrimaryButton("Check again", labelColor: DS.Color.labelOnActionInverse) {
-              onCheckAgain()
-            }
-            .tint(DS.Color.actionInverse)
-            .accessibilityIdentifier(ClockPreflightPresentation.retryAccessibilityIdentifier)
-            .padding(.top, DS.Space.s)
-          }
         }
         .frame(minHeight: geometry.size.height, alignment: .top)
         .padding(.horizontal, DS.Space.pageMargin)

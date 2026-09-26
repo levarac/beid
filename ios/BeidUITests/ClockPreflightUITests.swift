@@ -35,5 +35,10 @@ final class ClockPreflightUITests: XCTestCase {
     )
     XCTAssertTrue(app.buttons["scan.clock-preflight.retry"].exists)
     XCTAssertFalse(app.staticTexts["This device's clock is off"].exists)
+    // A notice, not a refusal: the pre-join list and code entry stay on the
+    // same screen, and frame 05d's Can't join layout is not shown.
+    XCTAssertTrue(app.staticTexts["Nearby events"].exists)
+    XCTAssertTrue(app.buttons["scan.manual-entry"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.cant-join"].exists)
   }
 }

@@ -37,8 +37,10 @@ struct ClockPreflightPresentation: Equatable {
   }
 }
 
-/// Rendered on the pre-join Scan screen, in the same caution register as the
-/// join-refusal notice beside it (DESIGN.md §15: what happened, one action).
+/// Rendered above the nearby list on the pre-join Scan screen (DESIGN.md §15:
+/// what happened, one action). It informs and never blocks joining: neither
+/// clock state refused a join before the Flat 2b redesign, and Android's
+/// `ClockPreflightNotice` does not either.
 struct ClockPreflightNoticeView: View {
   @ObservedObject var preflight: ClockPreflightController
 
@@ -69,17 +71,10 @@ struct ClockPreflightNotice: View {
             .font(DS.Font.supporting)
             .foregroundStyle(DS.Color.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
-          Button {
-            BeidDesign.haptic()
+          // #631: a Flat 2b text control, not an accent-tinted button.
+          BeidTextControl("Check again", accessibilityLabel: "Check again") {
             onRetry()
-          } label: {
-            Text("Check again")
-              .font(DS.Font.meta.weight(.semibold))
-              .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget, alignment: .leading)
-              .contentShape(Rectangle())
           }
-          .buttonStyle(.borderless)
-          .tint(DS.Color.actionPrimary)
           .accessibilityIdentifier(ClockPreflightPresentation.retryAccessibilityIdentifier)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
