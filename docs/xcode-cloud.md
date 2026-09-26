@@ -373,6 +373,16 @@ not depend on generated Swift artifacts being committed to the repository.
 
 ## When Xcode Cloud declines to start — the measurement record
 
+On 2026-09-22, the PR workflow's live readback verified `android/app/src/`
+alongside the existing `docs/`, `.github/`, and `*.md` exclusions
+([decision and readback: #625](https://github.com/thegreeting/beid/issues/625)).
+The `Test - iOS` action still had `isRequiredToPass: true`; Release Build
+was untouched. The PR start condition uses `DO_NOT_START_IF_ALL_FILES_MATCH`:
+only a PR whose complete changed-file list matches the exclusions is skipped.
+Do not add a blanket `android/` exclusion: Gradle settings, wrapper, and
+other build inputs can change the iOS/shared build graph. Shared and
+iOS/native Swift paths remain outside the configured set.
+
 **This section is the source of truth for what has actually been measured about
 `DO_NOT_START_IF_ALL_FILES_MATCH`.** The *rule* for citing that behaviour in a
 merge record lives in the [PR CI / review-gate carve-out](../AGENTS.md#review-gate--suspended-as-of-2026-08-19),
@@ -380,7 +390,10 @@ which points here rather than restating the evidence. Rule and evidence are
 split because the rule is read on every merge and should stay short, while the
 evidence accretes an entry per observation.
 
-Verified 2026-09-10.
+The 2026-09-22 readback is configuration/predicate evidence only. No Xcode
+Cloud run was triggered, so it does not demonstrate runtime no-run behaviour
+for a new Android-only PR. The earlier runtime observations below remain
+separate evidence.
 
 ### What is being decided
 

@@ -275,12 +275,20 @@ the same name shadows them.
 
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
-- **Require the Xcode Cloud iOS check on the exact head SHA.** The current
-  automatic PR workflow can silently omit the check while the Ubuntu checks
-  remain green. Verify both existence and success on the commit under
-  review. Xcode Cloud is metered, so pushing to a branch with an open PR can
-  spend real budget; use local builds for iteration and batch pushes. If the
-  workflow later becomes manually triggered, invert the existence rule:
+- **Require the Xcode Cloud iOS check on the exact head SHA when the PR is
+  outside the live ASC `PR Build & Test` file exclusions.** The workflow's
+  `DO_NOT_START_IF_ALL_FILES_MATCH` setting suppresses the check when every
+  changed file matches an exclusion. On 2026-09-22 the configured matchers
+  were `docs/`, `.github/`, `*.md`, and `android/app/src/`. The last
+  directory covers Android app source, resources, manifest, and tests; these
+  Android-only changes do not require Xcode Cloud (maintainer decision,
+  [#625](https://github.com/thegreeting/beid/issues/625)). An Android build
+  input, `shared/`, `ios/`, or any other file outside the exclusion set
+  prevents the skip, including when mixed with Android app source. Re-read
+  ASC and the PR's complete changed-file list for each merge; a green Ubuntu
+  check alone cannot prove the iOS check was run or intentionally skipped.
+  Xcode Cloud is metered, so use local builds for iteration and batch pushes.
+  If the workflow later becomes manually triggered, invert the existence rule:
   absence before the deliberate trigger is expected, and the evidence must
   instead record that the manual run targeted the exact head and passed.
 - **Negative compile fixtures are manual today.** The fixtures in
