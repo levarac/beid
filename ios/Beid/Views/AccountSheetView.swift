@@ -143,6 +143,8 @@ struct AccountSheetView: View {
           }
           AccountSheetRow {
             Button {
+              largeDetentRequests.set(.aboutSensing, active: true)
+              selectedDetent = .large
               showAboutSensing = true
             } label: {
               HStack {
@@ -229,6 +231,11 @@ struct AccountSheetView: View {
       }
       .navigationDestination(isPresented: $showAboutSensing) {
         AboutSensingView()
+          .toolbar(.visible, for: .navigationBar)
+      }
+      .onChange(of: showAboutSensing) { _, isShown in
+        // 15 (and 16 pushed from it) stay at .large while 15 is in the stack.
+        largeDetentRequests.set(.aboutSensing, active: isShown)
       }
     }
     .environmentObject(largeDetentRequests)

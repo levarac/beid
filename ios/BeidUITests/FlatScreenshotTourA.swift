@@ -122,6 +122,19 @@ final class FlatScreenshotTourA: XCTestCase {
 
   // MARK: - #646 About sensing / What we send
 
+  /// 01's HOW IT WORKS reaches 15, and 15 reaches 16 (#646 entry wiring).
+  func testWelcomeHowItWorksOpensAboutSensingAndWhatWeSend() {
+    launch()
+    let howItWorks = app.buttons["welcome.howItWorks"]
+    XCTAssertTrue(howItWorks.waitForExistence(timeout: 5))
+    assertMinimumHitTarget(howItWorks)
+    howItWorks.tap()
+    let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
+    XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    whatWeSend.tap()
+    XCTAssertTrue(app.descendants(matching: .any)["whatWeSend.firstRow"].waitForExistence(timeout: 5))
+  }
+
   func testShot_15_AboutSensing() {
     openAboutSensing()
     keepScreenshot(named: "15")

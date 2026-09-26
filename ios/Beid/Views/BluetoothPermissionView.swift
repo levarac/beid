@@ -10,7 +10,7 @@ struct BluetoothPermissionView: View {
 
   private let steps: [FlatOnboardingSteps.Step] = [
     .init("Events find you", detail: "Nearby events appear automatically — no codes, no search."),
-    .init("Private by design", detail: "Only anonymous proofs are exchanged, never your identity."),
+    .init("Private by design", detail: "Phones exchange rotating anonymous IDs, not names or wallet addresses."),
     .init("Zero effort", detail: "Sensing runs quietly in the background. Nothing to tap."),
   ]
 
