@@ -233,7 +233,6 @@ targets:
       path: Lab/Info.plist
       properties:
         UILaunchScreen: {}
-        BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Declared here so regeneration keeps it. f1ff25e added this key to
