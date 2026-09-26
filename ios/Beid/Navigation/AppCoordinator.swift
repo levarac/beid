@@ -63,7 +63,8 @@ final class AppCoordinator: ObservableObject {
     self.sensingCoordinator = SensingCoordinator(registryClient: registryClient)
     self.supportDiagnostics = SupportDiagnostics(
       phases: sensingCoordinator.$phase.eraseToAnyPublisher(),
-      refusalReasons: sensingCoordinator.$joinRefusalReasonKey.eraseToAnyPublisher()
+      refusalReasons: sensingCoordinator.$joinRefusalReasonKey.eraseToAnyPublisher(),
+      ownerKeyFailures: sensingCoordinator.$ownerKeyOperationFailure.eraseToAnyPublisher()
     )
     self.clockPreflight = ClockPreflightController(
       source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())

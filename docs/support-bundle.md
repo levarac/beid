@@ -18,19 +18,45 @@ The screen explains the contents and that history covers this app session.
 
 The shared implementation owns the JSON schema, metadata validation, fixed
 reason vocabulary, duplicate suppression, and retention of the latest 100
-entries. Native adapters observe only existing UI state. iOS records scan phases and
-join-refusal categories; Android records join-session states (including scan
-phases, permission and owner-key failures). This is not a general logging tap. Times are device-clock hour buckets (not trusted server time), coarser than
+entries. Native adapters observe only existing UI state. iOS records scan phases,
+join-refusal categories and published owner-key failures (including an already
+latched failure at subscription). Android records join-session states (including
+scan phases, permission and owner-key failures).
+
+The remaining platform difference is intentional: Android's `EventJoinUiState`
+has `REQUESTING_PERMISSION`, `VERIFYING_REGISTRY` and `PERMISSION_DENIED`
+counterparts. iOS's observed `ScanPhase` and join-refusal publishers do not
+represent those intermediate permission/verification states. iOS permission
+screens belong to the separate `AppCoordinator`/`BluetoothMonitor` onboarding
+flow, and registry work happens inside `SensingCoordinator` without a matching
+published scan phase. This slice does not add lifecycle instrumentation or infer
+those states from screen appearance; their absence in an iOS bundle does not
+prove permission or registry success. Both platforms do record the existing
+published owner-key failure as `OWNER_KEY_UNAVAILABLE` without its storage detail.
+
+This is not a general logging tap. Times are device-clock hour buckets (not trusted server time), coarser than
 the supported window durations. Exact sighting times are not emitted. History is memory-only and
 resets when the process ends. This is not a crash log or a submission audit.
 
-The output includes schema version, platform, app version, build, and recent
-state/failure entries. No free-form error descriptions, event names/codes,
+The top-level keys are exactly `schemaVersion`, `platform`, `appVersion`, `build`,
+`gitHeight`, `historyScope`, and `entries`. Each entry has exactly
+`hourStartEpochMs`, `state`, and `failure`; the last two contain only shared enum
+values. `gitHeight` reads the existing public build identifier from Android's
+`BuildConfig.GIT_HEIGHT` and iOS's `BeidGitHeight` bundle key. One to ten ASCII
+decimal digits become a JSON number (leading zeroes are normalized); missing,
+local or invalid metadata becomes JSON `null`. This distinguishes delivered
+Android builds whose version name/code are fixed without accepting arbitrary text.
+
+No free-form error descriptions, event names/codes,
 identifiers, wallet details, HTTP bodies, or stored artifacts are accepted.
 Unknown reason strings become an enum sentinel. Invalid version/build strings
 become `unknown`. Failure categories describe the UI's existing decision.
 
 Tests inspect the actual exported UTF-8 JSON and native share payloads with
 synthetic sensitive markers, 17-byte RPID hex/base64 values, prefixes, suffixes
-and an unsalted SHA-256 in rejected metadata, reason strings, and UI event
-payloads. They do not seed or read real observation/key/ledger stores.
+and unsalted SHA-256 of both the raw bytes and their hex text in rejected metadata,
+reason strings, and UI event payloads. Seeds include iOS venue and canonical Event
+ID fields and Android signal-lost/owner-key-failure payloads. Exact schema key
+sets and every emitted enum value are asserted on parsed JSON. A per-entry
+`detail` string mutation makes that test fail. Tests do not seed or read real
+observation/key/ledger stores.

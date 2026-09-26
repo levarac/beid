@@ -39,5 +39,6 @@ class SupportDiagnostics(private val clock: () -> Long = System::currentTimeMill
         SupportPlatform.ANDROID,
         BuildConfig.VERSION_NAME,
         BuildConfig.VERSION_CODE.toString(),
+        BuildConfig.GIT_HEIGHT,
     )
 }

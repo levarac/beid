@@ -53,6 +53,13 @@ class SupportBundleBoundaryTest(unittest.TestCase):
         self.assertIn("coordinator.supportDiagnostics.exportJson()", ios)
         self.assertIn("supportDiagnostics.exportJson()", android)
 
+    def test_ios_subscribes_to_the_published_owner_key_failure(self):
+        coordinator = (ROOT / "ios/Beid/Navigation/AppCoordinator.swift").read_text()
+        self.assertIn(
+            "ownerKeyFailures: sensingCoordinator.$ownerKeyOperationFailure.eraseToAnyPublisher()",
+            coordinator,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

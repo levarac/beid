@@ -15,6 +15,7 @@ final class SupportDiagnostics {
   init(
     phases: AnyPublisher<ScanPhase, Never>,
     refusalReasons: AnyPublisher<String?, Never>,
+    ownerKeyFailures: AnyPublisher<OwnerKeyOperationFailure?, Never>,
     clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1_000) }
   ) {
     phases.sink { [weak self] phase in
@@ -23,6 +24,16 @@ final class SupportDiagnostics {
         failure: Self.failure(for: phase),
         timestampMs: clock()
       )
+    }.store(in: &subscriptions)
+    ownerKeyFailures.compactMap { $0 }.sink { [weak self] failure in
+      switch failure {
+      case .unavailable:
+        self?.recorder.record(
+          state: .OWNER_KEY_UNAVAILABLE,
+          failure: .OWNER_KEY_UNAVAILABLE,
+          timestampMs: clock()
+        )
+      }
     }.store(in: &subscriptions)
     refusalReasons.compactMap { $0 }.sink { [weak self] key in
       self?.recorder.record(
@@ -37,7 +48,8 @@ final class SupportDiagnostics {
     recorder.exportJson(
       platform: .IOS,
       appVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
-      build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+      build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+      gitHeight: bundle.object(forInfoDictionaryKey: "BeidGitHeight") as? String ?? ""
     )
   }
 

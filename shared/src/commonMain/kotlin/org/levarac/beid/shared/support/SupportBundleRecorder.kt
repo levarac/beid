@@ -43,12 +43,15 @@ public class SupportBundleRecorder {
         entries.addLast(Entry(state, failure, timestampMs.coerceAtLeast(0)))
     }
 
-    public fun exportJson(platform: SupportPlatform, appVersion: String, build: String): String =
+    public fun exportJson(platform: SupportPlatform, appVersion: String, build: String, gitHeight: String): String =
         buildJsonObject {
             put("schemaVersion", 1)
             put("platform", platform.name)
             put("appVersion", numericVersion(appVersion))
             put("build", numericVersion(build))
+            // The public git ancestry count is a number, never arbitrary text.
+            // Missing/local/invalid metadata remains explicitly unknown (null).
+            put("gitHeight", if (Regex("[0-9]{1,10}").matches(gitHeight)) gitHeight.toLong() else null)
             put("historyScope", "current_process")
             put("entries", buildJsonArray {
                 for (entry in entries) add(buildJsonObject {
