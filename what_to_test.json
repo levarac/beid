@@ -1,6 +1,6 @@
 [
   {
     "language": "en-US",
-    "text": "This build sends your signed attendance observations to the event's server while you take part, as Android already does. Join the test event from the nearby card, keep the app in front and the screen unlocked for about ten minutes next to the other test phones, and check that Recording starts and the record grows. Tell us if the app says it could not send, or if anything looks different from the last build."
+    "text": "This demo build adds the human check: after you have joined the demo event and recorded, open the Alcor check page on this phone and tap the button. Beid opens, shows what it is about to sign with your event key, and returns to the page when you approve. Check that the page then shows you as checked, and that Decline goes back without signing. Observations keep sending as in the last build."
   }
 ]
