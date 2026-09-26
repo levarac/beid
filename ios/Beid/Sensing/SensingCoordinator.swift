@@ -743,6 +743,10 @@ final class SensingCoordinator: ObservableObject {
   private(set) var lastRelayDecision: ParticipantRelayDecision?
   private let sensingCryptography: any SensingCryptography
   private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
+  /// beid#701: which Proof each closed window belongs to, for display only.
+  /// Written in `closeWindow` and never handed to `reportSubmissionRuntime`.
+  /// `nil` writes no links (previews and tests that do not inject one).
+  private let reportProofLinkStore: ReportProofLinkStore?
   private let eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
   private let ownerKeyRestorationAcknowledgementDefaults: UserDefaults
   private var ownerKeyRestorationIdentityFingerprint: Data?
@@ -1187,7 +1191,8 @@ final class SensingCoordinator: ObservableObject {
   convenience init(
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
-    reportSubmissionStore: ReportSubmissionStore? = nil
+    reportSubmissionStore: ReportSubmissionStore? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil
   ) {
     let sensingCryptography = BarnardSensingCryptography()
     let allowInsecureLoopbackForTests: Bool
@@ -1237,6 +1242,7 @@ final class SensingCoordinator: ObservableObject {
         store: reportSubmissionStore,
         allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
       ),
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: registryClient.map {
         RegistryEventIdentityVerificationSource(client: $0)
       },
@@ -1259,6 +1265,7 @@ final class SensingCoordinator: ObservableObject {
     loadingFromDirectory directory: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard
@@ -1273,6 +1280,7 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       eventJoinControl: eventJoinControl,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults
@@ -1306,6 +1314,7 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
+    reportProofLinkStore: ReportProofLinkStore?,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)?,
     eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
@@ -1322,6 +1331,7 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
       initialLedgerFailure: nil,
@@ -1511,6 +1521,7 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
@@ -1540,6 +1551,7 @@ final class SensingCoordinator: ObservableObject {
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       nearbyDiscoveryClock: nearbyDiscoveryClock,
       eventJoinControl: eventJoinControl,
@@ -1562,6 +1574,7 @@ final class SensingCoordinator: ObservableObject {
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     initialLedgerFailure: Error? = nil,
@@ -1616,6 +1629,7 @@ final class SensingCoordinator: ObservableObject {
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     self.reportSubmissionRuntime = reportSubmissionRuntime
+    self.reportProofLinkStore = reportProofLinkStore
     self.eventIdentityVerificationSource = eventIdentityVerificationSource
     self.ownerKeyRestorationAcknowledgementDefaults = ownerKeyRestorationAcknowledgementDefaults
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
@@ -4349,6 +4363,19 @@ final class SensingCoordinator: ObservableObject {
     // submission runtime is independent of the legacy WindowReport bytes.
     let closingPeerRpids = currentWindowRpids
     let closingReporterRpid = currentWindowReporterRpid
+    // beid#701: link the window to this session's Proof before the capture
+    // exists, so a capture finalised after a relaunch is already linked. A
+    // window can only reach here after `.recording`, and `activeProofId` is
+    // cleared together with that state, so the Proof is this session's. No
+    // runtime means no report to join, so no link. A failed link write
+    // leaves the report unlinked for good and never holds up the capture.
+    if reportSubmissionRuntime != nil, let proofId = activeProofId, let reportProofLinkStore {
+      do {
+        try reportProofLinkStore.add(windowId: currentWindowId, proofId: proofId)
+      } catch {
+        Self.ledgerLog.error("Unable to persist a report-to-proof link; the report stays unlinked")
+      }
+    }
     reportSubmissionRuntime?.captureAndQueueWindow(
       id: currentWindowId,
       eventCode: eventCode,
