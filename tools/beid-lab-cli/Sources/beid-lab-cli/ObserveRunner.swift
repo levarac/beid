@@ -1,4 +1,4 @@
-// Use of this source code is governed by a BSD-style license.
+// SPDX-License-Identifier: MIT
 
 import BeidLabCliCore
 import CoreBluetooth

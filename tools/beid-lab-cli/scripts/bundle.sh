@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Use of this source code is governed by a BSD-style license.
+# SPDX-License-Identifier: MIT
 #
 # Build beid-lab-cli with SwiftPM and assemble it into BeidLabCli.app.
 #
