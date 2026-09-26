@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2026 Levarac Foundation
 // SPDX-License-Identifier: MIT
 
+import BeidSharedKit
 import Foundation
 import SwiftUI
 
@@ -58,6 +59,9 @@ struct ProofCollectedSnapshot: Sendable {
 /// Persistent frame 07. The only action returns to Collection Home.
 struct ProofCollectedView: View {
   let snapshot: ProofCollectedSnapshot
+  /// This record's stored Sigil input (beid#653); `nil` keeps the ring.
+  /// Kept out of the `Sendable` snapshot, which cannot hold a Kotlin object.
+  var sigilInput: BeidSharedKit.sigil.SigilInput? = nil
   let onViewCollection: () -> Void
   @State private var showWhatWeSend = false
 
@@ -84,7 +88,7 @@ struct ProofCollectedView: View {
           .beidTextStyle(DS.Font.Library.labelMono11)
           .frame(maxWidth: .infinity)
 
-          RecordSigilSlot(recordID: snapshot.recordID, size: 290, ground: .canvas)
+          RecordSigilSlot(input: sigilInput, placement: .proofCollected)
             .frame(maxWidth: .infinity)
             .padding(.top, DS.Space.m)
 

@@ -16,10 +16,10 @@ import SwiftUI
 /// If a future change needs a geometry value here, it belongs in
 /// `SigilLayout.kt` instead (see that file's "Ownership" paragraph).
 ///
-/// Not wired into any screen. #633 is scoped to the drawing component; the
-/// production data source is beid#653, and `DS.Artwork.proofCardGradient`
-/// remains the Proof visual until then. The previews at the bottom document
-/// the contexts #633 names, from fixture input only.
+/// Wired by beid#653 through `RecordSigilSlot`, which draws a record's own
+/// stored presence (or the live session's, on frame 04's active card) and
+/// keeps the neutral ring for a record without data. The previews at the
+/// bottom document the contexts #633 names, from fixture input only.
 
 // MARK: - Ink roles
 
@@ -43,6 +43,15 @@ enum SigilInkRole: Equatable {
     case .onInk: return DS.Color.surfaceCanvas
     }
   }
+}
+
+/// The page a Sigil sits on (beid#653 OD-6). Frames 04 (the active card)
+/// and 06 put a Sigil with no ground on an ink page; its marks must then be
+/// `bg`, or they would be ink on ink. A color decision only: the page moves
+/// no geometry.
+enum SigilPage: Equatable {
+  case canvas
+  case ink
 }
 
 // MARK: - Draw commands
@@ -92,19 +101,21 @@ enum SigilDrawing {
     return nil
   }
 
-  /// The ground itself is always `ink`; every mark on a filled ink disc is
-  /// `bg`, and on the open grounds (`OUTLINE`, `NONE`) it is `ink`. Returns
-  /// `nil` for an unrecognized kind, for the reason given on `markShape`.
+  /// The ground itself is always `ink`. A mark is `bg` when it sits on ink
+  /// (the filled disc, or an ink page), and `ink` otherwise (DESIGN.md §5:
+  /// "text and Sigil on `ink`" use `bg`). Returns `nil` for an unrecognized
+  /// kind, for the reason given on `markShape`.
   static func inkRole(
     for kind: BeidSharedKit.sigil.SigilPrimitiveKind,
-    ground: BeidSharedKit.sigil.SigilGround
+    ground: BeidSharedKit.sigil.SigilGround,
+    page: SigilPage = .canvas
   ) -> SigilInkRole? {
     if kind == .GROUND_DISC || kind == .GROUND_OUTLINE {
       return .ink
     }
     if kind == .RING || kind == .DETECTED_LINE || kind == .MUTUAL_LINE
       || kind == .DETECTED_DOT || kind == .MUTUAL_DOT || kind == .CENTER_DOT {
-      return ground == .DISC ? .onInk : .ink
+      return ground == .DISC || page == .ink ? .onInk : .ink
     }
     return nil
   }
@@ -121,7 +132,8 @@ enum SigilDrawing {
   /// minimum) has nothing to draw and yields no commands.
   static func commands(
     for layout: BeidSharedKit.sigil.SigilLayout,
-    ground: BeidSharedKit.sigil.SigilGround
+    ground: BeidSharedKit.sigil.SigilGround,
+    page: SigilPage = .canvas
   ) -> [SigilDrawCommand] {
     guard layout.isSuccess else { return [] }
 
@@ -131,7 +143,7 @@ enum SigilDrawing {
     for index in 0..<Int(layout.primitiveCount) {
       guard let primitive = layout.primitiveAt(index: Int32(index)),
         let shape = markShape(for: primitive.kind),
-        let role = inkRole(for: primitive.kind, ground: ground)
+        let role = inkRole(for: primitive.kind, ground: ground, page: page)
       else { continue }
 
       switch shape {
@@ -262,6 +274,8 @@ struct BeidSigilView: View {
   let input: BeidSharedKit.sigil.SigilInput
   let size: CGFloat
   let ground: BeidSharedKit.sigil.SigilGround
+  /// The page under the Sigil; decides mark color only (`SigilPage`).
+  var page: SigilPage = .canvas
 
   var body: some View {
     let layout = BeidSharedKit.sigil.layoutSigil(
@@ -269,7 +283,7 @@ struct BeidSigilView: View {
       size: Double(size),
       ground: ground
     )
-    let commands = SigilDrawing.commands(for: layout, ground: ground)
+    let commands = SigilDrawing.commands(for: layout, ground: ground, page: page)
 
     Canvas { context, _ in
       for command in commands {
@@ -317,9 +331,9 @@ enum SigilPreviewInputFactory {
 // MARK: - Previews
 //
 // The five contexts issue #633 names. Documentation of the contexts only —
-// none of these is wiring, and no screen renders a Sigil today. The two Proof
-// sizes come from the issue; the Welcome and Sensing sizes are illustrative,
-// since neither surface has chosen one yet.
+// none of these is wiring; production screens draw through `RecordSigilSlot`
+// and `RecordSigilPlacement` (beid#653). The sizes here come from #633 and are
+// illustrative; the measured ones live in `RecordSigilPlacement`.
 
 #Preview("Proof Collected — 290, disc") {
   BeidSigilView(input: SigilPreviewInputFactory.sample, size: 290, ground: .DISC)

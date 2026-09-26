@@ -549,6 +549,34 @@ final class SensingCoordinator: ObservableObject {
     sessionAggregateSnapshotStore.snapshot(proofId: proofId)
   }
 
+  /// beid#653: the stored Sigil input for `proofId`, or `nil`, which every
+  /// caller draws as the neutral ring (no row, an unreadable row, or a
+  /// session that could not be encoded). See `SigilPresenceStore`.
+  func sigilInput(forProofId proofId: UUID) -> BeidSharedKit.sigil.SigilInput? {
+    sigilPresenceStore.sigilInput(proofId: proofId)
+  }
+
+  /// beid#653: the in-progress record's Sigil (frame 04's active card), built
+  /// live from this session's observations by the same shared builder that
+  /// writes the stored row at session end, so the live and the sealed Sigil
+  /// cannot disagree. `nil` until the recording threshold creates a Proof,
+  /// and whenever shared cannot build one (for example more than 1,024 peers).
+  var liveSigilInput: BeidSharedKit.sigil.SigilInput? {
+    guard activeProofId != nil else { return nil }
+    let built = BeidSharedKit.sigil.buildSigilPresenceInput(
+      session: sigilPresenceSession,
+      observations: aggregationRuntime.observations
+    )
+    guard built.isSuccess else { return nil }
+    return built.input
+  }
+
+  /// Test-only: clears stored presence together with
+  /// `ProofStore.resetForUITesting()` (`AppCoordinator`).
+  func resetSigilPresenceForUITesting() {
+    sigilPresenceStore.resetForUITesting()
+  }
+
   /// Read-only presentation lookups. The stores remain the sole owners of
   /// these durable artifacts; neither a Proof signature state nor a connected
   /// wallet substitutes for a matching record.
@@ -771,6 +799,16 @@ final class SensingCoordinator: ObservableObject {
   /// stake in `docs/specs/ledger-async-io.md` §4's startup-latency problem
   /// and needs no placeholder/background-load treatment.
   private let sessionAggregateSnapshotStore: SessionAggregateSnapshotStore
+  /// beid#653: per-record Sigil presence, on this device only and excluded
+  /// from backup. Written once at session end
+  /// (`persistSigilPresenceIfNeeded()`), beside the aggregate snapshot.
+  /// Nothing on the recording, signing or submission path reads it.
+  private let sigilPresenceStore: SigilPresenceStore
+  /// beid#653: this session's in-memory display id -> token map. Never
+  /// persisted, never logged; replaced in `resetSessionState()`.
+  private var sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
+  /// beid#653: the CSPRNG port that supplies Sigil presence tokens.
+  private let sigilPresenceTokenSource: any SigilPresenceTokenSource
   /// gh#156 Signal A (`docs/specs/owner-key-seed-read-failure.md` §8):
   /// non-nil once the owner key resolution behind `sensingCryptography` has
   /// quarantined an unreadable stored seed this session. `nil` both when
@@ -1185,12 +1223,18 @@ final class SensingCoordinator: ObservableObject {
       ? FileManager.default.temporaryDirectory.appendingPathComponent(
         "beid-event-detail-snapshots-\(UUID().uuidString).json"
       ) : nil
+    let eventDetailSigilPresenceFileURL = isEventDetailFixture
+      ? FileManager.default.temporaryDirectory
+        .appendingPathComponent("beid-event-detail-sigil-presence-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("sigil-presence.json")
+      : nil
     self.init(
       windowReportFileURL: nil,
       selfProofFileURL: nil,
       selfProofCheckpointFileURL: nil,
       bindingRecordFileURL: nil,
       sessionAggregateSnapshotFileURL: eventDetailSnapshotFileURL,
+      sigilPresenceFileURL: eventDetailSigilPresenceFileURL,
       unsentWindowLedgerFileURL: nil,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: isEventDetailFixture ? nil : ReportSubmissionRuntime.makeIfEnabled(
@@ -1239,6 +1283,7 @@ final class SensingCoordinator: ObservableObject {
       selfProofCheckpointFileURL: directory.appendingPathComponent("self-proof-checkpoint.json"),
       bindingRecordFileURL: directory.appendingPathComponent("binding-records.json"),
       sessionAggregateSnapshotFileURL: directory.appendingPathComponent("session-aggregate-snapshots.json"),
+      sigilPresenceFileURL: directory.appendingPathComponent("sigil-presence.json"),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
@@ -1272,6 +1317,7 @@ final class SensingCoordinator: ObservableObject {
     selfProofCheckpointFileURL: URL?,
     bindingRecordFileURL: URL?,
     sessionAggregateSnapshotFileURL: URL?,
+    sigilPresenceFileURL: URL?,
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
@@ -1289,6 +1335,7 @@ final class SensingCoordinator: ObservableObject {
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: Self.unloadedPlaceholderFileURL()),
       bindingRecordStore: BindingRecordStore(fileURL: bindingRecordFileURL),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: sessionAggregateSnapshotFileURL),
+      sigilPresenceStore: SigilPresenceStore(fileURL: sigilPresenceFileURL),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
@@ -1478,6 +1525,8 @@ final class SensingCoordinator: ObservableObject {
     selfProofCheckpointStore: SelfProofCheckpointStore,
     bindingRecordStore: BindingRecordStore,
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
+    sigilPresenceStore: SigilPresenceStore? = nil,
+    sigilPresenceTokenSource: (any SigilPresenceTokenSource)? = nil,
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
@@ -1506,6 +1555,8 @@ final class SensingCoordinator: ObservableObject {
       selfProofCheckpointStore: selfProofCheckpointStore,
       bindingRecordStore: bindingRecordStore,
       sessionAggregateSnapshotStore: sessionAggregateSnapshotStore,
+      sigilPresenceStore: sigilPresenceStore,
+      sigilPresenceTokenSource: sigilPresenceTokenSource,
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
@@ -1527,6 +1578,8 @@ final class SensingCoordinator: ObservableObject {
     selfProofCheckpointStore: SelfProofCheckpointStore,
     bindingRecordStore: BindingRecordStore,
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
+    sigilPresenceStore: SigilPresenceStore? = nil,
+    sigilPresenceTokenSource: (any SigilPresenceTokenSource)? = nil,
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
@@ -1573,6 +1626,15 @@ final class SensingCoordinator: ObservableObject {
     self.selfProofCheckpointStore = selfProofCheckpointStore
     self.bindingRecordStore = bindingRecordStore
     self.sessionAggregateSnapshotStore = sessionAggregateSnapshotStore
+    // Production always passes its store (the private convenience init
+    // above). A caller that omits it — tests that do not look at presence —
+    // gets an isolated temporary file, never the device's real store.
+    self.sigilPresenceStore = sigilPresenceStore ?? SigilPresenceStore(
+      fileURL: FileManager.default.temporaryDirectory
+        .appendingPathComponent("beid-sigil-presence-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("sigil-presence.json")
+    )
+    self.sigilPresenceTokenSource = sigilPresenceTokenSource ?? SystemSigilPresenceTokenSource()
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     self.reportSubmissionRuntime = reportSubmissionRuntime
@@ -2167,6 +2229,7 @@ final class SensingCoordinator: ObservableObject {
     }
 
     aggregationRuntime.recordObservation(windowIndex: enin, peerKey: rpid, displayId: displayId)
+    topUpSigilPresenceTokens()
     let aggregate = aggregationRuntime.sessionAggregate
     sessionAggregate = aggregate
     let updatedDeviceCount = Int(aggregate.deviceCount)
@@ -2875,6 +2938,7 @@ final class SensingCoordinator: ObservableObject {
   private func endSensing(stopEngine: Bool) -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
     persistSessionAggregateSnapshotIfNeeded()
+    persistSigilPresenceIfNeeded()
     closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
@@ -2895,6 +2959,7 @@ final class SensingCoordinator: ObservableObject {
   private func resetSessionState() {
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
+    sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
     sessionAggregate = nil
     firstSightingAt = nil
     detectedDisplayIDs = []
@@ -4596,6 +4661,57 @@ final class SensingCoordinator: ObservableObject {
       try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
     } catch {
       Self.ledgerLog.error("Unable to persist the session aggregate snapshot: \(error, privacy: .public)")
+    }
+  }
+
+  // MARK: - Sigil presence (beid#653)
+
+  /// Supplies one CSPRNG token per display id first seen since the last call.
+  /// Shared decides which display ids need one and assigns them; this only
+  /// draws the bytes. A failed draw assigns nothing: the next observation
+  /// tries again, and a record left with an untokened peer is never written
+  /// (never a zero token).
+  ///
+  /// Reads nothing but the aggregation rows it shares with the counts, and
+  /// writes nothing but the in-memory session, so it adds no input to any
+  /// window report, ledger entry, signature or submission.
+  private func topUpSigilPresenceTokens() {
+    let observations = aggregationRuntime.observations
+    let needed = Int(
+      BeidSharedKit.sigil.sigilPresenceTokensNeeded(
+        session: sigilPresenceSession,
+        observations: observations
+      )
+    )
+    for _ in 0..<needed {
+      guard let token = sigilPresenceTokenSource.nextToken() else { return }
+      _ = BeidSharedKit.sigil.addSigilPresenceToken(
+        session: sigilPresenceSession,
+        observations: observations,
+        token: token
+      )
+    }
+  }
+
+  /// Stores this session's Sigil presence for its Proof, with the same gate
+  /// and the same best-effort failure handling as
+  /// `persistSessionAggregateSnapshotIfNeeded()`, and in the same position:
+  /// before `resetSessionState()` drops the session. The log line carries
+  /// only `SigilPresenceStoreError`, which has no payload by design.
+  private func persistSigilPresenceIfNeeded() {
+    guard let proofId = activeProofId, sessionAggregate != nil else { return }
+    do {
+      try sigilPresenceStore.persist(
+        session: sigilPresenceSession,
+        observations: aggregationRuntime.observations,
+        proofId: proofId
+      )
+    } catch let error as SigilPresenceStoreError {
+      Self.ledgerLog.error("Unable to persist the Sigil presence: \(String(describing: error), privacy: .public)")
+    } catch {
+      // A file-system error from the atomic write: logged by type only, so
+      // no path or payload reaches the log.
+      Self.ledgerLog.error("Unable to write the Sigil presence file: \(String(describing: type(of: error)), privacy: .public)")
     }
   }
 
