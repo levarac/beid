@@ -1,5 +1,7 @@
 package org.levarac.beid.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -49,6 +51,7 @@ object AccountScreenTestTags {
     const val VENUE_BROADCAST_BUTTON = "account_venue_broadcast_button"
     const val RELAY_NOTE = "account_relay_note"
     const val VERSION_TEXT = "account_version_text"
+    const val PRIVACY_POLICY_BUTTON = "account_privacy_policy_button"
     const val WALLET_REFERENCE = "account_wallet_reference"
 }
 
@@ -71,6 +74,7 @@ fun AccountScreen(
     onOpenManualEventCode: () -> Unit = {},
     walletState: WalletConnectorState = WalletConnectorState.Idle,
     onOpenVenue: () -> Unit = {},
+    onOpenPrivacyPolicy: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val isSessionActive = uiState.sessionState is EventJoinUiState.Sensing
@@ -179,6 +183,14 @@ fun AccountScreen(
                 modifier = Modifier.testTag(AccountScreenTestTags.LEAVE_EVENT_BUTTON),
             )
 
+            BeidSecondaryButton(
+                text = stringResource(R.string.account_privacy_policy_button),
+                contentColor = BeidTheme.colors.textPrimary,
+                borderColor = BeidTheme.colors.strokeHairline,
+                onClick = onOpenPrivacyPolicy,
+                modifier = Modifier.testTag(AccountScreenTestTags.PRIVACY_POLICY_BUTTON),
+            )
+
             // beid#491: the build position, in the same shape as iOS's row.
             // Two builds showing the same height came from the same commit,
             // which is what lets a tester report about Android and one about
@@ -219,6 +231,9 @@ fun AccountRoute(
         onOpenManualEventCode = onOpenManualEventCode,
         walletState = walletState,
         onOpenVenue = onOpenVenue,
+        onOpenPrivacyPolicy = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://levarac.org/privacy")))
+        },
     )
 }
 
