@@ -35,6 +35,51 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorRegistryGateTest {
+    /** The typed code routes the lookup; only the verified canonical ID reaches Barnard. */
+    @Test
+    fun aHumanCodeJoinsTheVerifiedCanonicalEventAndStartsSensing() = runTest {
+        val engine = FakeEventJoinEngine()
+        val typedCodes = mutableListOf<String>()
+        val definitionIds = mutableListOf<String>()
+        val eventId = "ab".repeat(32)
+        val registry = object : EventJoinRegistry {
+            override fun resolveEventId(code: String, completion: (String?, String?) -> Unit) {
+                typedCodes += code
+                completion(eventId, null)
+            }
+
+            override fun resolveEventDefinition(
+                eventIdHex: String,
+                useTimeEpochSeconds: Long,
+                completion: (org.levarac.parallax.registry.EventDefinitionResolution?, String?) -> Unit,
+            ) {
+                definitionIds += eventIdHex
+                completion(
+                    org.levarac.beid.shared.jointestsupport.createEventDefinitionResolutionForTesting(
+                        eventIdHex = eventId,
+                        definitionHashHex = "bb".repeat(32),
+                        blockHashHex = "cc".repeat(32),
+                        validFromEpochSeconds = useTimeEpochSeconds - 60,
+                        validUntilEpochSeconds = useTimeEpochSeconds + 60,
+                        joinMode = org.levarac.parallax.registry.EventJoinMode.OPEN,
+                    ),
+                    null,
+                )
+            }
+        }
+        val coordinator = coordinator(engine, registry)
+
+        coordinator.joinEvent("community-meetup")
+        runCurrent()
+
+        assertEquals(listOf("community-meetup"), typedCodes)
+        assertEquals(listOf(eventId), definitionIds)
+        assertEquals(1, engine.joinEventCalls)
+        assertEquals(1, engine.startAutoCalls)
+        assertEquals(eventId, engine.getCurrentEventCode())
+        assertIs<EventJoinUiState.Sensing>(coordinator.state.value)
+    }
+
     @Test
     fun manualJoinWithoutRegistryLogsResolutionRefusalBeforeAdmission() = runTest {
         val lines = mutableListOf<String>()
@@ -412,7 +457,7 @@ class EventJoinCoordinatorRegistryGateTest {
 
     private fun TestScope.coordinator(
         engine: FakeEventJoinEngine,
-        joinRegistry: FakeEventJoinRegistry?,
+        joinRegistry: EventJoinRegistry?,
         nearbyRegistry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
         diagnosticLog: (String) -> Unit = {},
     ): EventJoinCoordinator = EventJoinCoordinator(
