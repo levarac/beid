@@ -139,7 +139,7 @@ final class RecordSigilPresentationTests: XCTestCase {
   }
 
   /// Drives three windows; one detection per window has no display id.
-  private func record(on coordinator: SensingCoordinator) throws -> UUID {
+  private func record(on coordinator: SensingCoordinator, expectLiveSigil: Bool = true) throws -> UUID {
     let devices = max(BeidConfig.eventConfirmThreshold, 3)
     coordinator.startSensing(eventCode: "BEID653-PRESENTATION")
     for enin in [40, 41, 43] {
@@ -159,7 +159,14 @@ final class RecordSigilPresentationTests: XCTestCase {
       )
     }
     let proofId = try XCTUnwrap(coordinator.currentProofID)
-    XCTAssertNotNil(coordinator.liveSigilInput, "the active card draws live during recording")
+    if expectLiveSigil {
+      XCTAssertNotNil(coordinator.liveSigilInput, "the active card draws live during recording")
+    } else {
+      XCTAssertNil(
+        coordinator.liveSigilInput,
+        "no token means no live Sigil: an untokened peer is never drawn, and never with a zero token"
+      )
+    }
     coordinator.reset()
     XCTAssertNil(coordinator.liveSigilInput, "the live Sigil ends with the session")
     return proofId
@@ -199,7 +206,7 @@ final class RecordSigilPresentationTests: XCTestCase {
 
   func testAFailingTokenSourceWritesNoRowAndLeavesTheCountsAlone() throws {
     let (coordinator, store) = try makeCoordinator(tokenSource: FailingSigilPresenceTokenSource())
-    let proofId = try record(on: coordinator)
+    let proofId = try record(on: coordinator, expectLiveSigil: false)
     XCTAssertTrue(store.records.isEmpty, "never a zero token, never a partial row")
     XCTAssertNil(coordinator.sigilInput(forProofId: proofId))
     XCTAssertNotNil(coordinator.sessionAggregateSnapshot(forProofId: proofId),
