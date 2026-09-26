@@ -2833,6 +2833,61 @@
         }
       }
     },
+    "reportDetail.sessionProof": {
+      "comment": "Section for the one stored Proof of the recording session this report was closed in. Not a verification or earned-reward claim.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SESSION PROOF"
+          }
+        }
+      }
+    },
+    "reportDetail.sessionProof.subtitle": {
+      "comment": "Report Detail proof row: the same local proof state Event Detail shows, then the shortened Proof record ID. No verification or mutual claim.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "reportDetail.sessionProof.accessibilityLabel": {
+      "comment": "VoiceOver label for the Report Detail proof row. The first value is the visible proof title; the state comes only from a matching self-proof signature record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "proofDetail.fromReports": {
+      "comment": "Section listing the stored reports whose observation window was closed in this Proof's recording session. No count is shown.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FROM REPORTS"
+          }
+        }
+      }
+    },
+    "observationDetail.includedInReports": {
+      "comment": "Section listing the stored reports whose observation window was closed in this recording session. No count is shown.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "INCLUDED IN REPORTS"
+          }
+        }
+      }
+    },
     "reportDetail.reportID.accessibility": {
       "comment": "VoiceOver reads the full durable report UUID; the visible value is shortened.",
       "localizations": {
