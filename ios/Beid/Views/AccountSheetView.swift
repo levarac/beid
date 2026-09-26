@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import SwiftUI
 import UIKit
@@ -63,6 +63,7 @@ struct AccountSheetView: View {
   @State private var showAboutSensing = false
   @State private var showDisconnectConfirmation = false
   @State private var copied = false
+  @State private var supportShareItem: SupportShareItem?
   @StateObject private var largeDetentRequests = AccountLargeDetentRequests()
   @State private var selectedDetent: PresentationDetent = AccountSheetDetent.compact
 
@@ -166,6 +167,30 @@ struct AccountSheetView: View {
           // Account Join stays with the owner decision that wallet is optional.
           // Sensing ends through Home Stop or the scan cover's CLOSE.
           EventMembershipSections(sensingCoordinator: coordinator.sensingCoordinator)
+          // beid#466: a user-initiated, frozen support snapshot. Flat 2b
+          // text row (#631 keeps icons out of controls); its explanation
+          // sits under the action like the Bluetooth relay note.
+          AccountSheetRow {
+            VStack(alignment: .leading, spacing: 0) {
+              Button {
+                supportShareItem = SupportShareItem(text: coordinator.supportDiagnostics.exportJson())
+              } label: {
+                Text("Share support information")
+                  .beidTextStyle(DS.Font.Library.title17)
+                  .foregroundStyle(DS.Color.actionInverse)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+                  .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+              .accessibilityIdentifier("account.support.share")
+
+              Text("Includes app version, recent states and failure reasons from this app session. Choose who to share it with.")
+                .beidTextStyle(DS.Font.Library.body13)
+                .foregroundStyle(DS.Color.textSecondaryOnInk)
+                .padding(.bottom, DS.Space.s)
+            }
+          }
         }
       }
       .id(showDisconnectConfirmation)
@@ -250,6 +275,9 @@ struct AccountSheetView: View {
     .sheet(isPresented: $coordinator.walletConnectSheetPresented) {
       WalletConnectSheetView()
         .environmentObject(coordinator)
+    }
+    .sheet(item: $supportShareItem) { item in
+      SupportShareSheet(item: item)
     }
     // A custom `Binding`, not `$coordinator.eventCodeEntrySheetPresented`
     // directly: swipe-to-dismiss writes `false` through whatever binding

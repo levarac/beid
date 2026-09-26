@@ -5,10 +5,12 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.advanceTimeBy
 import org.levarac.parallax.registry.EventJoinMode
+import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.registry.eventCodeHashForOpenEventV1
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NearbyEventDiscoverySessionTest {
@@ -82,7 +84,7 @@ class NearbyEventDiscoverySessionTest {
     }
 
     @Test
-    fun gatedDefinitionRemainsNonJoinable() = runTest {
+    fun gatedDefinitionDoesNotEstablishAnOperatorLookupRegistration() = runTest {
         val registry = FakeNearbyEventRegistry()
         val session = session(registry)
         session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
@@ -101,14 +103,25 @@ class NearbyEventDiscoverySessionTest {
         )
         runCurrent()
 
+        // Assert the admission rule at the registration boundary. A null card
+        // alone also holds for every hint-only candidate, even with a broken gate.
+        assertEquals(listOf(EVENT_ID_HEX), registry.definitionEventIds)
+        assertEquals(
+            NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE,
+            assertNotNull(session.candidates.value.candidateAt(0)).registryStatus,
+        )
         assertNull(session.cards.value.single().eventIdHex)
     }
 
     @Test
-    fun verifiedDefinitionWithDifferentEventIdRemainsNonJoinable() = runTest {
+    fun verifiedDefinitionWithDifferentEventIdDoesNotEstablishAnOperatorLookupRegistration() = runTest {
         val registry = FakeNearbyEventRegistry()
         val session = session(registry)
-        session.recordHint("peripheral", "Beacon announcement", EVENT_HASH, null, false, false)
+        // The returned definition is internally consistent, including its hash.
+        // Only its disagreement with the lookup's Event ID should reject it.
+        val otherEventId = ByteArray(32) { 0xff.toByte() }
+        val otherHash = eventCodeHashForOpenEventV1(otherEventId)
+        session.recordHint("peripheral", "Beacon announcement", otherHash, null, false, false)
 
         registry.completeLookup(NearbyEventIdLookup(true, EVENT_ID_HEX, null))
         runCurrent()
@@ -117,13 +130,18 @@ class NearbyEventDiscoverySessionTest {
                 true,
                 EventJoinMode.OPEN,
                 "0x" + "ff".repeat(32),
-                EVENT_HASH.toHex(),
+                otherHash.toHex(),
                 100L,
                 200L,
             ),
         )
         runCurrent()
 
+        assertEquals(listOf(EVENT_ID_HEX), registry.definitionEventIds)
+        assertEquals(
+            NearbyEventRegistryStatus.LOOKUP_UNAVAILABLE,
+            assertNotNull(session.candidates.value.candidateAt(0)).registryStatus,
+        )
         assertNull(session.cards.value.single().eventIdHex)
     }
 
@@ -380,7 +398,7 @@ class NearbyEventDiscoverySessionTest {
                 "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=registry_resolution outcome=rejected_lookup_unavailable " +
-                    "attempt=1 retry_at_epoch_ms=${150_000L + FIRST_RETRY_DELAY_MILLIS}",
+                    "attempt=1 retry_at_epoch_ms=155000",
                 "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=2 retry_at_epoch_ms=none",
             ),
             lines,
@@ -406,6 +424,7 @@ class NearbyEventDiscoverySessionTest {
 
         assertEquals(
             listOf(
+                "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=registry_resolution outcome=started attempt=1 retry_at_epoch_ms=none",
                 "join_stage event_id=01020304 stage=registry_resolution outcome=success attempt=1 retry_at_epoch_ms=none",
@@ -424,9 +443,45 @@ class NearbyEventDiscoverySessionTest {
 
         assertEquals(
             listOf(
+                "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
                 "join_stage event_id=unknown stage=envelope_verification " +
                     "outcome=rejected_unverified attempt=none retry_at_epoch_ms=none",
             ),
+            lines,
+        )
+    }
+
+    @Test
+    fun missingRegistryLogsEveryV2ReceiptWithoutLeakingPayloads() = runTest {
+        val lines = mutableListOf<String>()
+        val session = NearbyEventDiscoverySession(
+            nowEpochMillis = { 150_000L }, coroutineScope = backgroundScope,
+            registry = null, log = lines::add,
+        )
+        repeat(2) {
+            session.recordRadioSelfVerifiedEnvelope(
+                "private-peripheral-rpid", "private-name", EVENT_HASH,
+                "private-container".toByteArray(), verifiedEventIdHex = EVENT_ID_HEX,
+            ) { true }
+        }
+        assertEquals(
+            List(2) {
+                listOf(
+                    "join_stage event_id=01020304 stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+                    "join_stage event_id=01020304 stage=envelope_verification outcome=success attempt=none retry_at_epoch_ms=none",
+                    "join_stage event_id=01020304 stage=registry_resolution outcome=rejected_no_registry attempt=none retry_at_epoch_ms=none",
+                )
+            }.flatten(), lines,
+        )
+    }
+
+    @Test
+    fun malformedEventIdentifiersNeverEnterTheDiagnosticLine() {
+        val lines = mutableListOf<String>()
+        listOf(null, "private-rpid", "ab".repeat(31), "ab".repeat(32) + "\nforged", "ａ".repeat(64))
+            .forEach { id -> emitJoinStageDiagnostic(lines::add, id, "detection", "detected") }
+        assertEquals(
+            List(5) { "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none" },
             lines,
         )
     }

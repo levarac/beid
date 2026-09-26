@@ -1,8 +1,12 @@
 package org.levarac.beid.navigation
 
 import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.widget.Toast
 import android.provider.Settings
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
@@ -30,6 +34,9 @@ import org.levarac.beid.ui.screens.RecordsRoute
 import org.levarac.beid.ui.screens.TodaySummaryRoute
 import org.levarac.beid.ui.screens.WelcomeScreen
 import org.levarac.beid.venue.VenueActivity
+import org.levarac.beid.R
+import org.levarac.beid.support.SupportDiagnostics
+import org.levarac.beid.support.supportShareIntent
 
 /**
  * Root navigation scaffold — the Compose-Navigation equivalent of iOS's
@@ -55,6 +62,10 @@ fun AppNavHost(
     val navController = rememberNavController()
     val onboardingPreferences = remember { OnboardingPreferences(context) }
     val radioMonitor = remember { BluetoothRadioMonitor(context) }
+    val supportDiagnostics: SupportDiagnostics = viewModel()
+    LaunchedEffect(session) {
+        session.state.collect { supportDiagnostics.accept(it) }
+    }
 
     val startDestination = remember {
         when {
@@ -139,6 +150,16 @@ fun AppNavHost(
                 onOpenManualEventCode = { navController.navigate(Screen.ManualEventCode.route) },
                 walletState = walletState,
                 onOpenVenue = { context.startActivity(VenueActivity.createIntent(context)) },
+                onShareSupport = {
+                    try {
+                        context.startActivity(supportShareIntent(
+                            supportDiagnostics.exportJson(),
+                            context.getString(R.string.account_support_share),
+                        ))
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, R.string.account_support_unavailable, Toast.LENGTH_LONG).show()
+                    }
+                },
             )
         }
 

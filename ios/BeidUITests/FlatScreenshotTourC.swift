@@ -1,5 +1,5 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import XCTest
 
@@ -17,6 +17,33 @@ final class FlatScreenshotTourC: XCTestCase {
   func testShot_05a2_Detecting20s() { capture("05a2") }
   func testShot_05a3_DetectingFirstTime() { capture("05a3") }
   func testShot_05d_CantJoin() { capture("05d") }
+
+  /// Not a Figma frame. An unchecked device clock is a notice above the
+  /// nearby list on the pre-join screen; it never becomes 05d.
+  func testShot_05_ClockUncheckedNotice() {
+    let app = XCUIApplication()
+    app.launchArguments = ["-beid-ui-test", "-beid-clock-preflight-fixture"]
+    app.launch()
+    let getStarted = app.buttons["Get Started"]
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+    getStarted.tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
+    allowBluetooth.tap()
+    let senseEvent = app.buttons["home.scan"]
+    XCTAssertTrue(senseEvent.waitForExistence(timeout: 10))
+    senseEvent.tap()
+
+    XCTAssertTrue(app.staticTexts["Couldn't check this device's clock"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["scan.clock-preflight.retry"].exists)
+    XCTAssertTrue(app.staticTexts["Nearby events"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.cant-join"].exists)
+
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    attachment.name = "05-clock-unchecked-notice"
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
   func testShot_05e_StopConfirm() { capture("05e") }
   func testShot_06_Sealed() { capture("06") }
   func testShot_07_ProofCollected() { capture("07") }

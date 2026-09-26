@@ -1,7 +1,8 @@
-// Copyright 2024-2026 The Greeting Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
+// Copyright (c) 2024-2026 Levarac Foundation
+// SPDX-License-Identifier: MIT
 
 import BeidSharedKit
+import Combine
 import Foundation
 
 #if DEBUG
@@ -77,6 +78,8 @@ final class AppCoordinator: ObservableObject {
   let reportProofLinkStore: ReportProofLinkStore
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
+  let supportDiagnostics: SupportDiagnostics
+  private let joinDiagnosticLog: (String) -> Void
   let bluetoothMonitor: BluetoothMonitor
   /// beid#464's device-clock preflight, checked each time the scan flow opens.
   let clockPreflight: ClockPreflightController
@@ -108,13 +111,14 @@ final class AppCoordinator: ObservableObject {
   init(
     walletConnector: (any WalletConnector)? = nil,
     proofStore: ProofStore? = nil,
-    sensingCoordinator: SensingCoordinator? = nil,
+    sensingCoordinator injectedSensingCoordinator: SensingCoordinator? = nil,
     reportSubmissionStore: ReportSubmissionStore? = nil,
     reportProofLinkStore: ReportProofLinkStore? = nil,
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
-    permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil
+    permissionEvaluation: (() async -> BluetoothAuthorizationState)? = nil,
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     let bluetoothMonitor = BluetoothMonitor()
     let reportStore: ReportSubmissionStore
@@ -154,11 +158,34 @@ final class AppCoordinator: ObservableObject {
     #endif
     self.registryClient = registryClient
     self.reportSubmissionStore = reportStore
+    self.joinDiagnosticLog = joinDiagnosticLog
     self.reportProofLinkStore = linkStore
-    self.sensingCoordinator = sensingCoordinator ?? SensingCoordinator(
-      registryClient: registryClient,
-      reportSubmissionStore: reportStore,
-      reportProofLinkStore: linkStore
+    // An injected coordinator (tests) wins over the nearby-join UI fixture.
+    if let injectedSensingCoordinator {
+      self.sensingCoordinator = injectedSensingCoordinator
+    } else {
+      #if DEBUG
+      if NearbyJoinUITestFixture.isEnabled {
+        self.sensingCoordinator = NearbyJoinUITestFixture.makeCoordinator()
+      } else {
+        self.sensingCoordinator = SensingCoordinator(
+          registryClient: registryClient, reportSubmissionStore: reportStore,
+          reportProofLinkStore: linkStore,
+          joinDiagnosticLog: joinDiagnosticLog
+        )
+      }
+      #else
+      self.sensingCoordinator = SensingCoordinator(
+        registryClient: registryClient, reportSubmissionStore: reportStore,
+        reportProofLinkStore: linkStore,
+        joinDiagnosticLog: joinDiagnosticLog
+      )
+      #endif
+    }
+    self.supportDiagnostics = SupportDiagnostics(
+      phases: sensingCoordinator.$phase.eraseToAnyPublisher(),
+      refusalReasons: sensingCoordinator.$joinRefusalReasonKey.eraseToAnyPublisher(),
+      ownerKeyFailures: sensingCoordinator.$ownerKeyOperationFailure.eraseToAnyPublisher()
     )
     #if DEBUG
     let arguments = ProcessInfo.processInfo.arguments
@@ -545,6 +572,30 @@ final class AppCoordinator: ObservableObject {
   }
 
   func lookUpCanonicalEventId(forCode rawCode: String) async -> CanonicalEventIdLookup {
+    if resolveCanonicalEventIdHexOverride == nil {
+      guard BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) != nil else {
+        emitJoinStageDiagnostic(
+          joinDiagnosticLog, eventIdHex: nil, stage: "registry_resolution", outcome: "rejected_invalid_code"
+        )
+        return .noAnswer
+      }
+      // Selection has not requested sensing yet. The sensing preflight owns
+      // the missing-registry refusal and emits it once when joining is tried.
+      guard registryClient != nil else { return .noAnswer }
+    }
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: nil, stage: "registry_lookup", outcome: "started", attempt: "1"
+    )
+    let lookup = await readCanonicalEventId(forCode: rawCode)
+    emitJoinStageDiagnostic(
+      joinDiagnosticLog, eventIdHex: lookup.eventIdHex, stage: "registry_lookup",
+      outcome: lookup.eventIdHex != nil ? "success" : joinRegistryFailureDiagnosticOutcome(lookup.errorCode),
+      attempt: "1"
+    )
+    return lookup
+  }
+
+  private func readCanonicalEventId(forCode rawCode: String) async -> CanonicalEventIdLookup {
     if let resolveCanonicalEventIdHexOverride {
       return await resolveCanonicalEventIdHexOverride(rawCode)
     }
@@ -828,6 +879,7 @@ final class AppCoordinator: ObservableObject {
   /// without depending on the network.
   private static func clockPreflightOrigin(bundle: Bundle = .main) -> URL? {
 #if DEBUG
+    if NearbyJoinUITestFixture.isEnabled { return nil }
     if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
       return nil
     }
@@ -877,6 +929,7 @@ final class AppCoordinator: ObservableObject {
     #endif
     Task { await clockPreflight.check() }
 #if DEBUG
+    if NearbyJoinUITestFixture.isEnabled { return }
     if ProcessInfo.processInfo.arguments.contains("-beid-clock-preflight-fixture") {
       // Stays on the pre-join Scan screen: no discovery, so the Simulator's
       // DemoEvent script cannot move the phase past it.
