@@ -251,6 +251,8 @@ final class AppCoordinator: ObservableObject {
     #endif
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
+      // beid#653: stored presence belongs to records; it is reset with them.
+      self.sensingCoordinator.resetSigilPresenceForUITesting()
       seedHomeFrameForUITesting()
       seedEventDetailFrameForUITesting()
     }
