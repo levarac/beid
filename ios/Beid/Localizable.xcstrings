@@ -936,7 +936,7 @@
     "Only needed if an event didn’t appear automatically. Ask the organizer for the code.": {},
     "Pairing URI": {},
     "Paste": {
-      "comment": "Button that inserts the clipboard text into the event-code field."
+      "comment": "Button that pastes clipboard text: the event code (13) or a venue link (14b)."
     },
     "Paste event code": {
       "comment": "VoiceOver label for the event-code clipboard action."
@@ -2145,9 +2145,6 @@
     "Organizer": {},
     "Pack rejected": {},
     "Pack unavailable": {},
-    "Paste": {
-      "comment": "Button: reads a venue link from the system clipboard after a user tap."
-    },
     "Paste the link": {},
     "Paste venue link": {},
     "Point at the organiser's QR code": {},
