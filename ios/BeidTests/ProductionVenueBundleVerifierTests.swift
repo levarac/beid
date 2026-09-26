@@ -746,7 +746,7 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
       verifier: verifier,
       broadcasting: ports,
       acquisition: acquisition,
-      store: VenuePublicArtifactStore(),
+      store: makeTemporaryArtifactStore(),
       clock: { clock.get() },
       expiry: expiry
     )
