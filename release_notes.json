@@ -1,10 +1,6 @@
 [
   {
-    "language": "ja",
-    "text": "beidへようこそ。イベント会場で近くにいる人同士をBluetoothで自動的に検知し、参加の証を残せるアプリです。"
-  },
-  {
     "language": "en-US",
-    "text": "Welcome to beid. It uses Bluetooth to automatically sense the people around you at an event and turns those encounters into a portable proof of attendance."
+    "text": "beid uses Bluetooth to sense the people near you at an event and keeps a proof that you were there. At ETHTokyo, open beid, join the event from the card that appears nearby, and keep the app open next to other attendees for a few minutes to collect your proof. Tell us anything that looks broken."
   }
 ]
