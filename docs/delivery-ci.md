@@ -111,6 +111,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     hosted iOS 検証を別途必須とする。2026-09-26 の公開準備で PR lane を GitHub-hosted に移した。
     以前の self-hosted 配信 runner との競合は現在の PR lane には当てはまらない。
     過去の計測と訂正は #479 および変更履歴に残る。
+    Simulator は `scripts/ci_simulator.py` が実行ごとに一意の名前で新規作成し、
+    返された UDID だけを起動・テスト・削除に使う。既存端末の選択や erase は行わない。
+    iOS 26.5 runtime または対応する iPhone の機種が無い場合は明示的に失敗し、
+    他の端末には代替しない。端末作成後は build/test が失敗した場合も `always()` で削除する。
     **`opened` を入れてあるのは、`ready_for_review` が draft から上げた時に
     しか発火しないため。** issue #479 の本文は `ready_for_review` 単独を
     指定していたが、直近 25 本を timeline で数えると決着済み 22 本のうち
