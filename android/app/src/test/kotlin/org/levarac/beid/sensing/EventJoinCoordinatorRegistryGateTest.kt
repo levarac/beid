@@ -36,6 +36,107 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorRegistryGateTest {
     @Test
+    fun manualJoinWithoutRegistryLogsResolutionRefusalBeforeAdmission() = runTest {
+        val lines = mutableListOf<String>()
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, joinRegistry = null, diagnosticLog = lines::add)
+
+        coordinator.joinEvent("private-join-code")
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                diagnostic("unknown", "registry_resolution", "rejected_no_registry", "none"),
+                diagnostic("unknown", "admission", "rejected_verification_failed", "none"),
+            ), lines,
+        )
+        assertNoJoinAndNoSensing(engine, coordinator)
+    }
+
+    @Test
+    fun manualJoinLogsLookupFailureBeforeAdmissionWithoutReadingDefinition() = runTest {
+        val lines = mutableListOf<String>()
+        val registry = FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.HOLDS, errorCode = "timeout")
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine, registry, diagnosticLog = lines::add)
+
+        coordinator.joinEvent("private-join-code")
+        runCurrent()
+        assertEquals(listOf(diagnostic("unknown", "registry_lookup", "started")), lines)
+        registry.completeHeldLookup(routed = false)
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                diagnostic("unknown", "registry_lookup", "started"),
+                diagnostic("unknown", "registry_lookup", "rejected_network_required"),
+                diagnostic("unknown", "admission", "rejected_network_required", "none"),
+            ), lines,
+        )
+        assertEquals(0, registry.definitionRequests)
+        assertNoJoinAndNoSensing(engine, coordinator)
+    }
+
+    @Test
+    fun manualJoinLogsPendingLookupAndDefinitionFailureWithoutRawErrorOrCode() = runTest {
+        val lines = mutableListOf<String>()
+        val registry = FakeEventJoinRegistry(
+            FakeEventJoinRegistry.Answer.HOLDS,
+            errorCode = "private-error-rpid-value\nforged_log_line",
+        )
+        val coordinator = coordinator(FakeEventJoinEngine(), registry, diagnosticLog = lines::add)
+
+        coordinator.joinEvent("private-join-code")
+        runCurrent()
+        assertEquals(listOf(diagnostic("unknown", "registry_lookup", "started")), lines)
+
+        registry.completeHeldLookup()
+        runCurrent()
+        assertEquals(
+            listOf(
+                diagnostic("unknown", "registry_lookup", "started"),
+                diagnostic("21212121", "registry_lookup", "success"),
+                diagnostic("21212121", "registry_resolution", "started"),
+            ), lines,
+        )
+        registry.completeHeldDefinition()
+        runCurrent()
+        assertEquals(
+            listOf(
+                diagnostic("unknown", "registry_lookup", "started"),
+                diagnostic("21212121", "registry_lookup", "success"),
+                diagnostic("21212121", "registry_resolution", "started"),
+                diagnostic("21212121", "registry_resolution", "rejected_unknown"),
+                diagnostic("21212121", "admission", "rejected_unknown", "none"),
+            ), lines,
+        )
+    }
+
+    @Test
+    fun successfulRegistryReadIsLoggedEvenWhenAdmissionIsRejected() = runTest {
+        val lines = mutableListOf<String>()
+        val coordinator = coordinator(
+            FakeEventJoinEngine(),
+            FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.DEFINITION_NOT_ELIGIBLE),
+            diagnosticLog = lines::add,
+        )
+        coordinator.joinEvent("GATED-EVENT")
+        runCurrent()
+        assertEquals(
+            listOf(
+                diagnostic("unknown", "registry_lookup", "started"),
+                diagnostic("21212121", "registry_lookup", "success"),
+                diagnostic("21212121", "registry_resolution", "started"),
+                diagnostic("21212121", "registry_resolution", "success"),
+                diagnostic("21212121", "admission", "rejected_event_not_active", "none"),
+            ), lines,
+        )
+    }
+
+    private fun diagnostic(id: String, stage: String, outcome: String, attempt: String = "1") =
+        "join_stage event_id=$id stage=$stage outcome=$outcome attempt=$attempt retry_at_epoch_ms=none"
+
+    @Test
     fun joinEventStartsNeitherJoinNorSensingWhenTheRegistryLookupFails() = runTest {
         val engine = FakeEventJoinEngine()
         val registry = FakeEventJoinRegistry(FakeEventJoinRegistry.Answer.LOOKUP_FAILS)

@@ -191,6 +191,7 @@ targets:
       path: Lab/Info.plist
       properties:
         UILaunchScreen: {}
+        BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSBluetoothAlwaysUsageDescription: "beid Lab uses Bluetooth for the device harness."

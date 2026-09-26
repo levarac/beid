@@ -1,6 +1,8 @@
 package org.levarac.beid.sensing
 
 import android.content.Context
+import io.metamask.androidsdk.CommunicationClientModule
+import io.metamask.androidsdk.CommunicationClientModuleInterface
 import io.metamask.androidsdk.DappMetadata
 import io.metamask.androidsdk.Ethereum
 import io.metamask.androidsdk.Result
@@ -76,11 +78,16 @@ internal interface MetaMaskTransport {
 }
 
 /** The only class that translates the pinned MetaMask Android SDK's result model. */
-private class MetaMaskSdkTransport(context: Context) : MetaMaskTransport {
+internal class MetaMaskSdkTransport(
+    context: Context,
+    communicationClientModule: CommunicationClientModuleInterface = CommunicationClientModule(context.applicationContext),
+) : MetaMaskTransport {
+    // SDK 0.6.6 uses this flag to gate outbound analytics/tracking.
     private val ethereum = Ethereum(
         context = context.applicationContext,
         dappMetadata = DappMetadata("Beid", "https://beid.levarac.org"),
-    )
+        communicationClientModule = communicationClientModule,
+    ).enableDebug(false)
     private val callbackDispatcher = MainThreadWalletCallbackDispatcher()
 
     override val selectedAddress: String get() = ethereum.selectedAddress
