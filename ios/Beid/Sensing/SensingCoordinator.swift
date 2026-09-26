@@ -38,9 +38,8 @@ struct WindowReportRedeliveryBuffer {
 private func diagnosticEventIdPrefix(_ value: String?) -> String {
   guard let value else { return "unknown" }
   let normalized = value.hasPrefix("0x") ? String(value.dropFirst(2)) : value
-  guard normalized.count == 64,
-    normalized == normalized.lowercased(),
-    normalized.allSatisfy({ $0.isHexDigit })
+  guard normalized.utf8.count == 64,
+    normalized.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
   else { return "unknown" }
   return String(normalized.prefix(8))
 }

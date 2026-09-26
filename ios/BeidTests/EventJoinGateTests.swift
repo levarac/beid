@@ -54,13 +54,15 @@ final class EventJoinGateTests: XCTestCase {
   private func makeGatedCoordinator(
     engine: RecordingEventJoinControl,
     registry: FakeEventJoinRegistry? = nil,
-    relay: RecordingParticipantRelayControl? = nil
+    relay: RecordingParticipantRelayControl? = nil,
+    joinDiagnosticLog: @escaping (String) -> Void = { _ in }
   ) -> SensingCoordinator {
     let coordinator = makeIsolatedSensingCoordinator(
       for: self,
       participantRelayControl: relay,
       eventJoinControl: engine,
-      eventJoinRegistry: registry
+      eventJoinRegistry: registry,
+      joinDiagnosticLog: joinDiagnosticLog
     )
     coordinator.useDemoEventMode = false
     return coordinator
@@ -154,7 +156,10 @@ final class EventJoinGateTests: XCTestCase {
     engine.permissionOutcome = .granted
     let relay = RecordingParticipantRelayControl()
     // No registry at all: `makeGatedCoordinator` defaults `registry` to nil.
-    let coordinator = makeGatedCoordinator(engine: engine, relay: relay)
+    var lines: [String] = []
+    let coordinator = makeGatedCoordinator(
+      engine: engine, relay: relay, joinDiagnosticLog: { lines.append($0) }
+    )
     coordinator.joinEvent("ethtokyo2026", canonicalEventIdHex: canonicalEventIdHex)
 
     coordinator.startSensing()
@@ -167,6 +172,10 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertEqual(coordinator.joinRefusal, .noRegistryConfigured)
     XCTAssertFalse(engine.didJoin, "no registry means nothing was verified, so nothing may join")
     XCTAssertNil(relay.verifier, "a refused join must leave the relay disarmed")
+    XCTAssertEqual(lines, [
+      diagnostic("registry_resolution", "rejected_no_registry", attempt: "none"),
+      diagnostic("admission", "rejected_no_registry_configured", attempt: "none")
+    ])
   }
 
   func testRefusedJoinWritesAnAdmissionDiagnostic() {
@@ -261,7 +270,10 @@ final class EventJoinGateTests: XCTestCase {
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
     let registry = FakeEventJoinRegistry()
-    let coordinator = makeGatedCoordinator(engine: engine, registry: registry)
+    var lines: [String] = []
+    let coordinator = makeGatedCoordinator(
+      engine: engine, registry: registry, joinDiagnosticLog: { lines.append($0) }
+    )
     coordinator.joinEvent("ethtokyo2026")
 
     coordinator.startSensing()
@@ -270,6 +282,12 @@ final class EventJoinGateTests: XCTestCase {
     XCTAssertTrue(registry.requestedEventIdHexes.isEmpty, "there is no id to ask about")
     XCTAssertFalse(engine.didJoin)
     XCTAssertEqual(coordinator.joinRefusal, .noCanonicalEventId)
+    XCTAssertEqual(lines, [
+      "join_stage event_id=unknown stage=registry_resolution outcome=rejected_no_canonical_event_id " +
+        "attempt=none retry_at_epoch_ms=none",
+      "join_stage event_id=unknown stage=admission outcome=rejected_no_canonical_event_id " +
+        "attempt=none retry_at_epoch_ms=none"
+    ])
   }
 
   /// gh#101. The event code used to fall back to the literal

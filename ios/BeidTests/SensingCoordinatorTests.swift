@@ -1296,6 +1296,20 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 0)
   }
 
+  func testJoinDiagnosticsRejectNonASCIIHexEventIdentifiers() {
+    var lines: [String] = []
+    for character in ["ａ", "０", "９"] {
+      emitJoinStageDiagnostic(
+        { lines.append($0) }, eventIdHex: String(repeating: character, count: 64),
+        stage: "detection", outcome: "detected"
+      )
+    }
+    XCTAssertEqual(lines, Array(repeating:
+      "join_stage event_id=unknown stage=detection outcome=detected attempt=none retry_at_epoch_ms=none",
+      count: 3
+    ))
+  }
+
   func testJoinDiagnosticsUseOnlyAnEventIdPrefixOrUnknown() {
     var lines: [String] = []
     let coordinator = makeIsolatedSensingCoordinator(

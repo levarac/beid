@@ -303,6 +303,14 @@ final class AppCoordinator: ObservableObject {
   }
 
   func lookUpCanonicalEventId(forCode rawCode: String) async -> CanonicalEventIdLookup {
+    if resolveCanonicalEventIdHexOverride == nil,
+      registryClient == nil || BeidSharedKit.event.normalizedEventCodeOrNull(rawEventCode: rawCode) == nil
+    {
+      emitJoinStageDiagnostic(
+        joinDiagnosticLog, eventIdHex: nil, stage: "registry_resolution", outcome: "rejected_no_registry"
+      )
+      return .noAnswer
+    }
     emitJoinStageDiagnostic(
       joinDiagnosticLog, eventIdHex: nil, stage: "registry_lookup", outcome: "started", attempt: "1"
     )
