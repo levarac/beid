@@ -93,7 +93,7 @@ class EventJoinCoordinatorBindingTest {
     }
 
     @Test
-    fun completeBindingReturnsNullWithoutAnInFlightAttempt() = runTest {
+    fun completeBindingReturnsNotVerifiedWithoutAnInFlightAttempt() = runTest {
         val coordinator = coordinator(FakeEventJoinEngine(), FakeSensingCryptography())
 
         assertIs<BindingCompletionResult.NotVerified>(coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65)))
@@ -156,12 +156,15 @@ class EventJoinCoordinatorBindingTest {
         val engine = FakeEventJoinEngine()
         val registry = FakeNearbyEventRegistry()
         val store = BindingRecordStore(newTempRecordFile("binding-records"))
-        val coordinator = coordinator(engine, FakeSensingCryptography(), bindingRecordStore = store, nearbyRegistry = registry)
+        val cryptography = FakeSensingCryptography()
+        val coordinator = coordinator(engine, cryptography, bindingRecordStore = store, nearbyRegistry = registry)
         joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)
         coordinator.beginBinding(walletAddress, chainId = 1)
 
         val record = assertIs<BindingCompletionResult.Bound>(coordinator.completeBinding(walletAddress, walletSignatureHex = "0x" + "0a".repeat(65))).record
+
+        assertEquals(1, cryptography.calls.count { it is FakeSensingCryptography.Call.SignWalletAcknowledgement })
 
         assertNotNull(record)
         assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, record.eventCode)
@@ -301,22 +304,50 @@ class EventJoinCoordinatorBindingTest {
     }
 
     @Test
+    fun completeBindingDoesNotAskOwnerToSign64ByteSignature() = runTest {
+        assertInvalidSignatureDoesNotReachOwnerSigning(byteCount = 64)
+    }
+
+    @Test
+    fun completeBindingDoesNotAskOwnerToSign66ByteSignature() = runTest {
+        assertInvalidSignatureDoesNotReachOwnerSigning(byteCount = 66)
+    }
+
+    private suspend fun TestScope.assertInvalidSignatureDoesNotReachOwnerSigning(byteCount: Int) {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        // Return null after recording the call so a removed classification gate
+        // still yields NotVerified. The call count, not that result, must catch it.
+        val cryptography = FakeSensingCryptography(walletAcknowledgementSignatureResult = null)
+        val coordinator = coordinator(engine, cryptography, nearbyRegistry = registry)
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        confirmRecording(engine)
+        assertNotNull(coordinator.beginBinding(walletAddress, chainId = 1))
+
+        val result = coordinator.completeBinding(walletAddress, "0x" + "ab".repeat(byteCount))
+
+        assertEquals(0, cryptography.calls.count { it is FakeSensingCryptography.Call.SignWalletAcknowledgement })
+        assertIs<BindingCompletionResult.NotVerified>(result)
+    }
+
+    @Test
     fun erc6492SignatureIsUnsupportedBeforeOwnerAcknowledgementSigning() = runTest {
         val engine = FakeEventJoinEngine(); val registry = FakeNearbyEventRegistry()
         val cryptography = FakeSensingCryptography(
+            walletAcknowledgementSignatureResult = null,
             walletSignatureClassification = WalletSignatureClassification.SMART_WALLET_UNSUPPORTED,
         )
         val coordinator = coordinator(engine, cryptography, nearbyRegistry = registry)
         joinPromotedVectorEvent(coordinator, engine, registry); confirmRecording(engine)
-        coordinator.beginBinding(walletAddress, chainId = 1)
+        assertNotNull(coordinator.beginBinding(walletAddress, chainId = 1))
 
         val result = coordinator.completeBinding(
             walletAddress,
             "0x" + "cd".repeat(32) + "6492".repeat(16),
         )
 
+        assertEquals(0, cryptography.calls.count { it is FakeSensingCryptography.Call.SignWalletAcknowledgement })
         assertIs<BindingCompletionResult.SmartWalletUnsupported>(result)
-        assertTrue(cryptography.calls.none { it is FakeSensingCryptography.Call.SignWalletAcknowledgement })
     }
 
     @Test
