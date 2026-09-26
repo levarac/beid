@@ -32,6 +32,7 @@ permissions:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+  GRADLE_OPTS: -Dorg.gradle.caching=true
 
 concurrency:
   group: pr-ios-macos-${{ github.ref }}
@@ -170,7 +171,9 @@ jobs:
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
+            SWIFT_OPTIMIZATION_LEVEL=-O \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/beid-source-packages" \
+            -showBuildTimingSummary \
             build-for-testing
 
       - name: Wait for simulator readiness
@@ -193,7 +196,10 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            SWIFT_OPTIMIZATION_LEVEL=-O \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/beid-source-packages" \
+            -parallel-testing-enabled YES \
+            -parallel-testing-worker-count 2 \
             test-without-building
 
       - name: Summarize structured test results

@@ -1,10 +1,4 @@
-import json
-import os
 from pathlib import Path
-import subprocess
-import sys
-import tempfile
-import textwrap
 import unittest
 
 
@@ -77,6 +71,7 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                      "Wait for simulator readiness", "Test without rebuilding"):
             with self.subTest(step=name):
                 self.assertIn("SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}", step_block(text, name))
+
     def test_disposable_runner_overlaps_boot_with_build_and_needs_no_cleanup(self) -> None:
         text = workflow_text()
         self.assertIn("runs-on: macos-26", text)
@@ -87,11 +82,18 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertNotIn("simctl shutdown", text)
         self.assertNotIn("simctl delete", text)
 
-    def test_debug_build_and_test_use_debug_defaults(self) -> None:
+    def test_debug_build_and_test_preserve_measured_optimization(self) -> None:
         for name in ("Build for testing", "Test without rebuilding"):
             block = step_block(workflow_text(), name)
             self.assertIn("-configuration Debug", block)
-            self.assertNotIn("SWIFT_OPTIMIZATION_LEVEL", block)
+            self.assertIn("SWIFT_OPTIMIZATION_LEVEL=-O", block.split())
+
+    def test_full_scheme_runs_on_two_workers_without_test_filters(self) -> None:
+        block = step_block(workflow_text(), "Test without rebuilding")
+        self.assertIn("-parallel-testing-enabled YES", block)
+        self.assertIn("-parallel-testing-worker-count 2", block)
+        self.assertNotIn("-only-testing", block)
+        self.assertNotIn("-skip-testing", block)
 
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).

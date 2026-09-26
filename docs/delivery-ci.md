@@ -61,13 +61,15 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
     The standard `macos-26` image uses `/Applications/Xcode_26.5.app` and
     requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
-    simulator for each job and returns its UDID; only that device is booted,
-    and tested. Boot overlaps the build, with readiness checked before tests.
+    simulator for each job and returns its UDID. That device is used as the
+    destination; Xcode creates disposable clones for two parallel test workers. Boot overlaps the build, with readiness checked before tests.
     The disposable VM needs no simulator deletion after success or cancellation.
     Build-for-testing and test-without-building run the complete Beid scheme
-    (`BeidTests` and `BeidUITests`) with the project Debug defaults. Gradle,
+    (`BeidTests` and `BeidUITests`) with `SWIFT_OPTIMIZATION_LEVEL=-O`. Two test
+    workers run in the same job; no test selection filter is applied. Gradle,
     Kotlin Native, and Swift package dependencies are cached by platform and
-    dependency inputs; PR cache writes remain scoped to that PR. The structured xcresult
+    dependency inputs. Gradle also caches task outputs by their input hashes.
+    PR cache writes remain scoped to that PR. The structured xcresult
     summary must contain nonzero tests, consistent counts and a passing result.
     Superseded runs are cancelled; require a completed passing run for the
     exact current PR head before merge.

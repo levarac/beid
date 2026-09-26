@@ -127,6 +127,8 @@ def workflow_command_tokens(run_blocks):
     anywhere in a run: block, plus script paths that are a run: step's *entire*
     (single-line) content — i.e. the job is identified by that bare script
     invocation, the same way `scripts/lint.sh` identifies the SwiftLint job today.
+    Native xcodebuild build/test actions and Swift build/test invocations are
+    also checked after joining shell continuation lines.
     A script invoked with extra args/flags alongside other setup lines (e.g.
     prepare_testflight_notes.py inside the sanity job) is a supporting step, not
     a distinguishing token, so it is intentionally not swept in here.
