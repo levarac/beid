@@ -1020,6 +1020,17 @@ class EventJoinCoordinator internal constructor(
         stopParticipantRelay()
         discoveryOnlyScanOwned = false
         nearbyDiscovery.reset()
+        // beid#463. Leaving an event ends the search too, and this function's
+        // own contract below says that leaving and ending the session are
+        // today the same act — so the rescue clock has to end here exactly as
+        // it does in `stopNearbyEventDiscovery`. Without this the participant
+        // returns to the join surface and finds the rescue route already
+        // standing, timed from a search that finished before they ever joined:
+        // the radio is given no chance to look, and the screen says looking
+        // has already failed. The stale start time also survives re-entry,
+        // because `beginRescueEntryCountdown` treats a non-null start as a
+        // countdown already running and returns.
+        endRescueEntryCountdown()
         scanPhase = applyStopSensing()
         resetSessionState()
         _state.value = EventJoinUiState.Idle
