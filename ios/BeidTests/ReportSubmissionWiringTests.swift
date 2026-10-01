@@ -19,6 +19,9 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
 
   var captures: [Capture] = []
   var submitPendingCallCount = 0
+  var onStop: (() -> Void)?
+
+  func stop() { onStop?() }
 
   func captureAndQueueWindow(
     id: UUID,
@@ -60,6 +63,20 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
 
 @MainActor
 final class ReportSubmissionWiringTests: XCTestCase {
+  func testCoordinatorTeardownStopsItsSubmissionRuntime() async {
+    let runtime = ReportSubmissionRuntimeSpy()
+    let stopped = expectation(description: "coordinator teardown stops submission retries")
+    runtime.onStop = { stopped.fulfill() }
+    var coordinator: SensingCoordinator? = makeIsolatedSensingCoordinator(
+      for: self, reportSubmissionRuntime: runtime
+    )
+    await coordinator?.waitForLedgerLoadToFinish()
+    weak var releasedCoordinator = coordinator
+    coordinator = nil
+    XCTAssertNil(releasedCoordinator)
+    await fulfillment(of: [stopped], timeout: 1)
+  }
+
   func testCoordinatorForwardsExclusionCountAndKeepsDisabledRuntimeUnavailable() {
     let runtime = ReportSubmissionRuntimeSpy()
     runtime.excludedCountByEventCode["EVENTA"] = 2

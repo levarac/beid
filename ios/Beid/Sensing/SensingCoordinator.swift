@@ -907,7 +907,7 @@ final class SensingCoordinator: ObservableObject {
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
     if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
-      return 2_000_000_000
+      return 6_000_000_000
     }
     #endif
     return 700_000_000
@@ -1380,10 +1380,12 @@ final class SensingCoordinator: ObservableObject {
     // `deinit` cannot hand `self` to a task.
     let relayControl = self.relayControl
     let cadenceTask = relayCadenceTask
+    let submissionRuntime = reportSubmissionRuntime
     Task { @MainActor in
       request?.cancel()
       expiryTask?.cancel()
       cadenceTask?.cancel()
+      submissionRuntime?.stop()
       if stopOwnedDiscoveryScan {
         eventJoinControl.stopDiscoveryScan()
       }

@@ -5,6 +5,166 @@ import Foundation
 import XCTest
 @testable import Beid
 
+@MainActor
+final class ManualReportSubmissionRetryScheduler: ReportSubmissionRetryScheduler {
+  final class Entry: ReportSubmissionRetryCancellation {
+    let deadline: TimeInterval
+    let action: @MainActor () -> Void
+    private(set) var cancelled = false
+
+    init(deadline: TimeInterval, action: @escaping @MainActor () -> Void) {
+      self.deadline = deadline
+      self.action = action
+    }
+
+    func cancel() { cancelled = true }
+  }
+
+  var now: TimeInterval = 0
+  private(set) var entries: [Entry] = []
+  var onSchedule: (() -> Void)?
+
+  func schedule(
+    after delay: TimeInterval,
+    action: @escaping @MainActor () -> Void
+  ) -> any ReportSubmissionRetryCancellation {
+    let entry = Entry(deadline: now + delay, action: action)
+    entries.append(entry)
+    onSchedule?()
+    return entry
+  }
+
+  func advance(by duration: TimeInterval) {
+    now += duration
+    for entry in entries where !entry.cancelled && entry.deadline <= now {
+      entry.cancel()
+      entry.action()
+    }
+  }
+}
+
+@MainActor
+final class ReportSubmissionRetryTests: XCTestCase {
+  func testExponentialBackoffIsCappedAndStopsAfterSixAttempts() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let id = UUID()
+    var retryCount = 0
+    XCTAssertTrue(controller.beginAttempt(for: id))
+
+    for delay in [2.0, 4.0, 8.0, 8.0, 8.0] {
+      controller.retry(for: id) { retryCount += 1 }
+      XCTAssertEqual(scheduler.entries.last?.deadline, scheduler.now + delay)
+      XCTAssertFalse(controller.beginAttempt(for: id), "app events must respect the retry deadline")
+      scheduler.advance(by: delay - 0.5)
+      XCTAssertEqual(retryCount, scheduler.entries.count - 1)
+      scheduler.advance(by: 0.5)
+      XCTAssertTrue(controller.beginAttempt(for: id))
+    }
+    controller.retry(for: id) { retryCount += 1 }
+    XCTAssertEqual(retryCount, 5)
+    XCTAssertEqual(scheduler.entries.count, 5)
+    XCTAssertFalse(controller.beginAttempt(for: id), "the pending capture has exhausted its attempt budget")
+  }
+
+  func testEventTriggeredAttemptInvalidatesAnAlreadyQueuedTimerCallback() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let id = UUID()
+    var callbacks = 0
+    XCTAssertTrue(controller.beginAttempt(for: id))
+    controller.retry(for: id) { callbacks += 1 }
+
+    scheduler.now = 2
+    XCTAssertTrue(controller.beginAttempt(for: id))
+    XCTAssertTrue(scheduler.entries[0].cancelled)
+    scheduler.entries[0].action()
+    XCTAssertEqual(callbacks, 0, "a cancelled timer may already be queued on the main actor")
+  }
+
+  func testEarlyTimerPreservesTheDeadlineWithoutConsumingAnotherAttempt() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let id = UUID()
+    var callbacks = 0
+    XCTAssertTrue(controller.beginAttempt(for: id))
+    controller.retry(for: id) { callbacks += 1 }
+
+    scheduler.now = 1
+    scheduler.entries[0].action()
+    XCTAssertTrue(scheduler.entries[0].cancelled)
+    XCTAssertEqual(scheduler.entries[1].deadline, 2)
+    XCTAssertEqual(callbacks, 0)
+    scheduler.advance(by: 1)
+    XCTAssertEqual(callbacks, 1)
+    XCTAssertTrue(controller.beginAttempt(for: id))
+    controller.retry(for: id) { callbacks += 1 }
+    XCTAssertEqual(scheduler.entries.last?.deadline, 6)
+  }
+
+  func testStopCancelsTimersAndIgnoresLateCallbacksAndFailures() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let id = UUID()
+    var callbacks = 0
+    XCTAssertTrue(controller.beginAttempt(for: id))
+    controller.retry(for: id) { callbacks += 1 }
+    controller.stop()
+    controller.retry(for: id) { callbacks += 1 }
+
+    XCTAssertTrue(scheduler.entries[0].cancelled)
+    scheduler.now = 2
+    scheduler.entries[0].action()
+    XCTAssertEqual(callbacks, 0)
+    XCTAssertEqual(scheduler.entries.count, 1)
+    XCTAssertFalse(controller.beginAttempt(for: id))
+  }
+
+  func testAttemptBudgetsAreIndependentForEachPendingCapture() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let first = UUID()
+    let second = UUID()
+    for _ in 0..<6 { XCTAssertTrue(controller.beginAttempt(for: first)) }
+    XCTAssertFalse(controller.beginAttempt(for: first))
+    XCTAssertTrue(controller.beginAttempt(for: second))
+    controller.retry(for: second) {}
+    XCTAssertEqual(scheduler.entries.last?.deadline, 2)
+  }
+
+  func testFinishingACaptureCancelsItsScheduledCallback() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let id = UUID()
+    var callbacks = 0
+    XCTAssertTrue(controller.beginAttempt(for: id))
+    controller.retry(for: id) { callbacks += 1 }
+    controller.finish(id)
+    scheduler.now = 2
+    scheduler.entries[0].action()
+    XCTAssertTrue(scheduler.entries[0].cancelled)
+    XCTAssertEqual(callbacks, 0)
+  }
+
+  func testReleasingTheControllerCancelsTimersWithoutARetainCycle() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    var controller: ReportSubmissionRetryController? = ReportSubmissionRetryController(
+      scheduler: scheduler, now: { scheduler.now }
+    )
+    weak var releasedController = controller
+    let id = UUID()
+    var callbacks = 0
+    XCTAssertEqual(controller?.beginAttempt(for: id), true)
+    controller?.retry(for: id) { callbacks += 1 }
+    controller = nil
+    XCTAssertNil(releasedController)
+    XCTAssertTrue(scheduler.entries[0].cancelled)
+    scheduler.now = 2
+    scheduler.entries[0].action()
+    XCTAssertEqual(callbacks, 0)
+  }
+}
+
 /// Proves `ReportSubmissionRuntime.submissionState(forEventCode:)` — the
 /// query beid#292's Transparency screen uses for its "Sent" and "Acceptance
 /// receipt" rows — reads real, durable `ReportSubmissionStore` state rather

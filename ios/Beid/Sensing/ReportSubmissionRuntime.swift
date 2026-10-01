@@ -113,6 +113,117 @@ final class RegistryEventDefinitionContextProvider: EventDefinitionContextProvid
   }
 }
 
+protocol ReportSubmissionRetryCancellation: AnyObject {
+  func cancel()
+}
+
+@MainActor
+protocol ReportSubmissionRetryScheduler: AnyObject {
+  func schedule(
+    after delay: TimeInterval,
+    action: @escaping @MainActor () -> Void
+  ) -> any ReportSubmissionRetryCancellation
+}
+
+private final class ReportSubmissionRetryTask: ReportSubmissionRetryCancellation {
+  private let task: Task<Void, Never>
+
+  init(_ task: Task<Void, Never>) { self.task = task }
+  func cancel() { task.cancel() }
+}
+
+@MainActor
+private final class DefaultReportSubmissionRetryScheduler: ReportSubmissionRetryScheduler {
+  func schedule(
+    after delay: TimeInterval,
+    action: @escaping @MainActor () -> Void
+  ) -> any ReportSubmissionRetryCancellation {
+    ReportSubmissionRetryTask(Task { @MainActor in
+      do {
+        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      } catch {
+        return
+      }
+      guard !Task.isCancelled else { return }
+      action()
+    })
+  }
+}
+
+@MainActor
+final class ReportSubmissionRetryController {
+  private static let maximumAttempts = 6
+
+  private struct ScheduledRetry {
+    let token: UUID
+    let deadline: TimeInterval
+    let cancellation: any ReportSubmissionRetryCancellation
+  }
+
+  private let scheduler: any ReportSubmissionRetryScheduler
+  private let now: () -> TimeInterval
+  private var attempts: [UUID: Int] = [:]
+  private var scheduled: [UUID: ScheduledRetry] = [:]
+  private(set) var isStopped = false
+
+  init(scheduler: any ReportSubmissionRetryScheduler, now: @escaping () -> TimeInterval) {
+    self.scheduler = scheduler
+    self.now = now
+  }
+
+  func beginAttempt(for id: UUID) -> Bool {
+    guard !isStopped, attempts[id, default: 0] < Self.maximumAttempts else { return false }
+    if let retry = scheduled[id] {
+      guard now() >= retry.deadline else { return false }
+      retry.cancellation.cancel()
+      scheduled.removeValue(forKey: id)
+    }
+    attempts[id, default: 0] += 1
+    return true
+  }
+
+  func retry(for id: UUID, action: @escaping @MainActor () -> Void) {
+    let attempt = attempts[id, default: 0]
+    guard !isStopped, (1..<Self.maximumAttempts).contains(attempt) else { return }
+    let delay = min(2 * pow(2, Double(attempt - 1)), 8)
+    armRetry(for: id, deadline: now() + delay, action: action)
+  }
+
+  func finish(_ id: UUID) {
+    scheduled.removeValue(forKey: id)?.cancellation.cancel()
+    attempts.removeValue(forKey: id)
+  }
+
+  func stop() {
+    isStopped = true
+    for retry in scheduled.values { retry.cancellation.cancel() }
+    scheduled.removeAll()
+  }
+
+  private func armRetry(
+    for id: UUID,
+    deadline: TimeInterval,
+    action: @escaping @MainActor () -> Void
+  ) {
+    scheduled.removeValue(forKey: id)?.cancellation.cancel()
+    let token = UUID()
+    let cancellation = scheduler.schedule(after: max(0, deadline - now())) { [weak self] in
+      guard let self, !self.isStopped, self.scheduled[id]?.token == token else { return }
+      if self.now() < deadline {
+        self.armRetry(for: id, deadline: deadline, action: action)
+        return
+      }
+      self.scheduled.removeValue(forKey: id)
+      action()
+    }
+    scheduled[id] = ScheduledRetry(token: token, deadline: deadline, cancellation: cancellation)
+  }
+
+  deinit {
+    for retry in scheduled.values { retry.cancellation.cancel() }
+  }
+}
+
 @MainActor
 protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   func captureAndQueueWindow(
@@ -126,6 +237,7 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   )
 
   func submitPending()
+  func stop()
 
   func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>
 
@@ -139,6 +251,8 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
+  func stop() {}
+
   func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
     .failure(.unreadable)
   }
@@ -158,6 +272,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   private let definitionProvider: any EventDefinitionContextProvider
   private let store: ReportSubmissionStore
   private let client: ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionClient
+  private let retryController: ReportSubmissionRetryController
   private let allowInsecureLoopbackForTests: Bool
   private var inFlight = Set<UUID>()
 
@@ -173,12 +288,15 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     definitionProvider: any EventDefinitionContextProvider,
     store: ReportSubmissionStore,
     client: ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionClient,
+    retryScheduler: any ReportSubmissionRetryScheduler,
+    now: @escaping () -> TimeInterval,
     allowInsecureLoopbackForTests: Bool
   ) {
     self.eventSigningCryptography = eventSigningCryptography
     self.definitionProvider = definitionProvider
     self.store = store
     self.client = client
+    self.retryController = ReportSubmissionRetryController(scheduler: retryScheduler, now: now)
     self.allowInsecureLoopbackForTests = allowInsecureLoopbackForTests
   }
 
@@ -187,6 +305,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     eventSigningCryptography: any SensingCryptography,
     definitionProvider: (any EventDefinitionContextProvider)? = nil,
     fileURL: URL? = nil,
+    retryScheduler: (any ReportSubmissionRetryScheduler)? = nil,
+    now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
     allowInsecureLoopbackForTests: Bool = false
   ) -> ReportSubmissionRuntime? {
     guard isEnabled(bundle: bundle), let definitionProvider else { return nil }
@@ -196,6 +316,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       definitionProvider: definitionProvider,
       store: ReportSubmissionStore(fileURL: fileURL),
       client: ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionClient(),
+      retryScheduler: retryScheduler ?? DefaultReportSubmissionRetryScheduler(),
+      now: now,
       allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
     )
   }
@@ -209,6 +331,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     reporterRpid: String?,
     participantCommitment: Data?
   ) {
+    guard !retryController.isStopped else { return }
     // A missing reporter RPID means this window has only legacy/count-style
     // evidence. It is deliberately ineligible and is never synthesized into
     // an Observation from the peer count.
@@ -276,7 +399,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     guard inFlight.insert(capture.id).inserted else { return }
     definitionProvider.resolve(eventIdHex: eventIdHex) { [weak self] verified in
       Task { @MainActor [weak self] in
-        guard let self else { return }
+        guard let self, !self.retryController.isStopped else { return }
         self.inFlight.remove(capture.id)
         self.prepareAndQueueWindow(capture: capture, verified: verified)
       }
@@ -397,6 +520,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   }
 
   func submitPending() {
+    guard !retryController.isStopped else { return }
     for capture in store.pendingCaptures {
       processPendingCapture(capture)
     }
@@ -419,6 +543,10 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         Self.log.error("Skipped a persisted submission with invalid queue metadata")
         continue
       }
+      guard retryController.beginAttempt(for: record.id) else {
+        inFlight.remove(record.id)
+        continue
+      }
       if record.submissionState == .submitting {
         lookupReceipt(
           for: record,
@@ -433,6 +561,17 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         )
       }
     }
+  }
+
+  func stop() {
+    guard !retryController.isStopped else { return }
+    retryController.stop()
+    client.close()
+    inFlight.removeAll()
+  }
+
+  deinit {
+    client.close()
   }
 
   private func beginPost(
@@ -461,7 +600,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   ) {
     client.lookupReceipt(observation: stored, configuration: configuration) { [weak self] result in
       Task { @MainActor [weak self] in
-        guard let self else { return }
+        guard let self, !self.retryController.isStopped else { return }
         if result.isSuccess, let receipt = result.receipt {
           self.persistAcceptedReceipt(receipt, for: record)
         } else if result.errorCode == "receipt_not_found" {
@@ -482,7 +621,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   ) {
     client.submit(observation: stored, configuration: configuration) { [weak self] result in
       Task { @MainActor [weak self] in
-        guard let self else { return }
+        guard let self, !self.retryController.isStopped else { return }
         guard result.isSuccess, let receipt = result.receipt else {
           self.finishFailedSubmission(result, for: record)
           return
@@ -511,6 +650,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
           bytesFromKotlinByteArray: receipt.signedBytes.toByteArray()
         ).hexString
       )
+      retryController.finish(record.id)
     } catch {
       Self.log.error("Unable to persist verified AcceptanceReceipt: \(String(describing: error), privacy: .public)")
     }
@@ -521,12 +661,16 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     for record: ReportSubmissionRecord
   ) {
     defer { inFlight.remove(record.id) }
-    guard !result.isRetryable else { return }
+    if result.isRetryable {
+      retryController.retry(for: record.id) { [weak self] in self?.submitPending() }
+      return
+    }
     do {
       _ = try store.markTerminalFailure(
         for: record.id,
         code: result.errorCode ?? "submission_failed"
       )
+      retryController.finish(record.id)
     } catch {
       Self.log.error("Unable to persist terminal submission failure: \(String(describing: error), privacy: .public)")
     }

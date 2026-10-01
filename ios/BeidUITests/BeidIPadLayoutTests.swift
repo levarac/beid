@@ -46,10 +46,16 @@ final class BeidIPadLayoutTests: XCTestCase {
     let resumedSenseEvent = app.buttons["Sense Event"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30),
+      "Expected the transient sensing screen in \(orientation).\n\(app.debugDescription)"
+    )
     capture(named: "sensing-\(orientation)")
 
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.staticTexts["Event Found"].waitForExistence(timeout: 30),
+      "Expected the transient event-found screen in \(orientation).\n\(app.debugDescription)"
+    )
     capture(named: "event-found-\(orientation)")
 
     // Verifying/Verified/Proof Collected merge into one continuous
@@ -203,16 +209,31 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.launch()
 
     app.buttons["Get Started"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5),
+      "Expected Bluetooth permission after Get Started.\n\(app.debugDescription)"
+    )
     app.buttons["Allow Bluetooth"].tap()
 
     let senseEvent = app.buttons["Sense Event"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      senseEvent.waitForExistence(timeout: 5),
+      "Expected Collection after allowing Bluetooth.\n\(app.debugDescription)"
+    )
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30),
+      "Expected the transient sensing screen after Sense Event.\n\(app.debugDescription)"
+    )
+    XCTAssertTrue(
+      app.staticTexts["Event Found"].waitForExistence(timeout: 30),
+      "Expected the transient event-found screen after sensing.\n\(app.debugDescription)"
+    )
 
-    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30),
+      "Expected recording after Event Found.\n\(app.debugDescription)"
+    )
   }
 
   /// Ends the session `reachRecordingScreen()` just started, landing on
@@ -222,21 +243,27 @@ final class BeidIPadLayoutTests: XCTestCase {
     reachRecordingScreen()
     app.buttons["Close"].tap()
 
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.buttons["Sense Event"].waitForExistence(timeout: 5),
+      "Expected Collection after closing recording.\n\(app.debugDescription)"
+    )
   }
 
   /// Opens the DemoEvent proof `navigateToCollectionWithProof` just left on
   /// Collection, and waits for Proof Detail to appear.
   private func openFirstProof() {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
-    XCTAssertTrue(app.staticTexts["Proof Detail"].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.staticTexts["Proof Detail"].waitForExistence(timeout: 5),
+      "Expected Proof Detail after opening the DemoEvent proof.\n\(app.debugDescription)"
+    )
   }
 
   private func assertWelcomeLayout(named name: String) {
     let getStarted = app.buttons["Get Started"]
     let appWindow = app.windows.firstMatch
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
-    XCTAssertTrue(appWindow.exists)
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 5), "Expected Welcome CTA: \(name)")
+    XCTAssertTrue(appWindow.exists, "Expected an app window: \(name)")
     XCTAssertLessThan(
       getStarted.frame.width,
       appWindow.frame.width,
