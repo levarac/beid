@@ -235,6 +235,29 @@ jobs:
                   f"| {result} | {total} | {passed} | {failed} | {skipped} | {expected_failures} |\n"
               )
 
+          # The test step runs xcodebuild -quiet, which prints only the names
+          # of failing tests. Surface each failure's message and location from
+          # the result bundle so a red run can be diagnosed from the job log.
+          # Every line is indented so test output can never be read as a
+          # workflow command.
+          failures = summary.get("testFailures") or []
+          if failures:
+              lines = []
+              for failure in failures:
+                  name = failure.get("testIdentifierString") or failure.get("testName") or "unknown test"
+                  target = failure.get("targetName") or "unknown target"
+                  text = failure.get("failureText") or "(no failure text)"
+                  lines.append(f"{target} {name}")
+                  lines.extend(f"    {line}" for line in str(text).splitlines() or [""])
+              print("Test failures:")
+              for line in lines:
+                  print(f"  {line}")
+              with job_summary_path.open("a", encoding="utf-8") as output:
+                  output.write("\n#### Failures\n\n```text\n")
+                  for line in lines:
+                      output.write(line.replace("```", "'''") + "\n")
+                  output.write("```\n")
+
           if total <= 0:
               raise SystemExit("xcresult contains zero tests")
           print(f"iOS tests: result={result}, total={total}, passed={passed}, failed={failed}, skipped={skipped}, expected_failures={expected_failures}")
