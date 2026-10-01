@@ -687,6 +687,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     let coordinator = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
     try await driveOneRealWindow(coordinator: coordinator)
+    try await server.waitFor(postCount: 1)
     await fulfillment(of: [scheduled], timeout: 5)
     scheduler.onSchedule = nil
     let entry = try XCTUnwrap(scheduler.entries.first)
