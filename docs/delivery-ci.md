@@ -50,19 +50,34 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   - **`.github/workflows/pr-ci-lab-cli.yml`** — `beid-lab-cli build and test`
     runs `swift build -c release` and `swift test` on standard `macos-26`
-    with Xcode 26.5. It reports on every PR, including drafts. The existing
-    `scripts/ci_change_filter.py` gates its build steps: documentation or
-    unrelated app-only changes skip compilation, while unknown paths and
-    collection/classification failures build. Main pushes retain the lab
-    path filter; manual dispatch always builds. This standalone package has
-    its own lane so its result does not wait for the simulator suite.
+    with Xcode 26.5. The job is created on every PR, including drafts, so its
+    required context always reports. A small `Classify paths for lab CLI lane`
+    job runs the same collection step and `scripts/ci_change_filter.py` as
+    `Determine changed paths`, and the lane has a job-level `if:` on its
+    output: it runs when the classifier reports `labcli`, `lint` or `error`,
+    and is skipped (reported as skipped) otherwise, for example on a
+    documentation-only PR. A failed classification job runs the lane. Main
+    pushes retain the lab path filter and always build; manual dispatch always
+    builds. This standalone package has its own lane so its result does not
+    wait for the simulator suite.
 
   - **`.github/workflows/pr-ci-ios-macos.yml`** — `iOS simulator` is the
     hosted iOS PR gate. `pull_request` includes `opened`, `synchronize`,
     `reopened`, and `ready_for_review`, with no path filter or draft guard.
-    Thus every PR reports a status suitable for branch protection, including
-    documentation-only PRs. Main pushes retain their iOS/build-input path
-    filter, and `workflow_dispatch` supports deliberate verification.
+    Thus every PR creates the `iOS simulator` context for branch protection.
+    A `Classify paths for iOS lane` job runs the same collection step and
+    `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
+    job-level `if:` and runs when the classifier reports `android`, `lint` or
+    `error` (Android changes can affect the shared KMP build). A
+    documentation-only PR therefore reports `iOS simulator` as skipped, which
+    GitHub treats as passing for a required check, and a failed classification
+    job runs the lane. The lane uses `!cancelled()` rather than `always()` so a
+    superseded run does not start a macOS job. Main pushes retain their
+    iOS/build-input path filter and always run the lane, and
+    `workflow_dispatch` supports deliberate verification and is never skipped.
+    The two classification jobs have their own names, distinct from
+    `Determine changed paths`, because required contexts are keyed by job name;
+    do not add them to the required list.
     All PR build lanes check out `github.event.pull_request.head.sha`
     explicitly; push and manual events check out `github.sha`.
 
@@ -94,8 +109,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   Recommended required status checks on main: `Determine changed paths`,
   `Android build`, `SwiftLint`, `Repository sanity`, `iOS simulator`, and
-  `beid-lab-cli build and test`. Android/lint may legitimately be skipped by
-  their changed-path classifier; iOS always executes. Do not require the
+  `beid-lab-cli build and test`. Android, lint, iOS and lab CLI may
+  legitimately be skipped by their changed-path classifier (all four on a
+  documentation-only PR); a skipped required check counts as passing. Do not require the
   main-only delivery, trusted comparison or Release compilation jobs, nor the
   release-notes metadata warning. Branch protection is a separate operator
   change; this document does not claim it has been applied.

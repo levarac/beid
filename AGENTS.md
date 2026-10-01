@@ -430,8 +430,15 @@ The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
 suites. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
-`ready_for_review`; neither has a PR workflow path filter. The lab CLI skips
-irrelevant build steps through the existing fail-closed path classifier.
+`ready_for_review`; neither has a PR workflow path filter, so the required
+contexts are always created. Each workflow has its own small classification
+job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that
+runs the same collection step and `scripts/ci_change_filter.py` as Determine
+changed paths. Both lanes are skipped, and report as skipped, on a
+documentation-only PR. The iOS lane runs when the classifier reports android,
+lint or error; the lab CLI lane runs when it reports labcli, lint or error;
+a failed classification runs both. Main pushes and manual dispatch always run
+both lanes.
 All PR build checkouts use the explicit PR head SHA.
 
 These three workflows remain the execution source of truth; the documentation
