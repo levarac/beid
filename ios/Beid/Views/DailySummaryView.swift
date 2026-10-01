@@ -14,8 +14,8 @@ import SwiftUI
 ///
 /// Deliberately omits any Verified / public-scope row (beid#240 precedent —
 /// a state without backing must never be labeled "Verified"). Each record
-/// row instead pushes into the same `ItemDetailView` `CollectionHomeView`
-/// already uses (`coordinator.openProof`), which is where a participant
+/// row still pushes into `ItemDetailView` via `coordinator.openProof`, as
+/// Event Detail's per-session Proof rows do. That is where a participant
 /// already reaches `TransparencyView`/`ParticipationSummaryView` for that
 /// detail — this screen does not construct a second, day-scoped entry point
 /// into those two surfaces.
@@ -40,11 +40,11 @@ struct DailySummaryView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
           recordSection
           submissionSection
         }
-        .padding(BeidDesign.Spacing.screenHorizontal)
+        .padding(DS.Space.pageMargin)
       }
     }
     .background(DS.Color.surfaceCanvas)
@@ -55,7 +55,7 @@ struct DailySummaryView: View {
   @ViewBuilder
   private var recordSection: some View {
     if todaysProofs.isEmpty {
-      BeidPanel {
+      BeidEmptyBlock {
         VStack(alignment: .leading, spacing: DS.Space.s) {
           Text(
             "No proofs yet today",
@@ -78,19 +78,17 @@ struct DailySummaryView: View {
           Text(recordCountText)
             .font(DS.Font.sectionTitle)
             .foregroundStyle(DS.Color.textPrimary)
-          BeidGlassGroup(spacing: DS.Space.s) {
-            VStack(spacing: DS.Space.s) {
-              ForEach(Array(todaysProofs.enumerated()), id: \.element.id) { index, proof in
-                Button {
-                  BeidDesign.haptic()
-                  coordinator.openProof(proof)
-                } label: {
-                  recordRow(for: proof)
-                }
-                .buttonStyle(.plain)
-                if index < todaysProofs.count - 1 {
-                  Divider()
-                }
+          VStack(spacing: DS.Space.s) {
+            ForEach(Array(todaysProofs.enumerated()), id: \.element.id) { index, proof in
+              Button {
+                BeidDesign.haptic()
+                coordinator.openProof(proof)
+              } label: {
+                recordRow(for: proof)
+              }
+              .buttonStyle(.plain)
+              if index < todaysProofs.count - 1 {
+                Divider()
               }
             }
           }
@@ -110,10 +108,6 @@ struct DailySummaryView: View {
           .foregroundStyle(DS.Color.textSecondary)
       }
       Spacer(minLength: DS.Space.s)
-      Image(systemName: "chevron.right")
-        .font(DS.Font.meta)
-        .foregroundStyle(DS.Color.textSecondary)
-        .accessibilityHidden(true)
     }
     .frame(minHeight: DS.Size.minHitTarget)
   }
@@ -184,14 +178,6 @@ struct DailySummaryView: View {
   .environmentObject(AppCoordinator())
 }
 
-#Preview("Empty (Dark)") {
-  NavigationStack {
-    DailySummaryView()
-  }
-  .environmentObject(AppCoordinator())
-  .preferredColorScheme(.dark)
-}
-
 #Preview("Populated") {
   let coordinator = AppCoordinator()
   coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
@@ -200,15 +186,4 @@ struct DailySummaryView: View {
     DailySummaryView()
   }
   .environmentObject(coordinator)
-}
-
-#Preview("Populated (Dark)") {
-  let coordinator = AppCoordinator()
-  coordinator.proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
-  coordinator.proofStore.add(Proof(eventName: "beid Meetup", date: Date().addingTimeInterval(-3_600), peersVerified: 1))
-  return NavigationStack {
-    DailySummaryView()
-  }
-  .environmentObject(coordinator)
-  .preferredColorScheme(.dark)
 }

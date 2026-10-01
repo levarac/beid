@@ -11,8 +11,8 @@ final class NearbyJoinUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["Sense Event"].waitForExistence(timeout: 5))
-    app.buttons["Sense Event"].tap()
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    app.buttons["home.scan"].tap()
 
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     XCTAssertTrue(receipt.waitForExistence(timeout: 5))

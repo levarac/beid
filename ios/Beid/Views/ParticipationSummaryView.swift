@@ -61,14 +61,12 @@ struct ParticipationSummaryView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
-          VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
-            header
-            BeidPanel { headlineRow }
-            BeidPanel { bandBuildupSection }
-          }
-          .padding(BeidDesign.Spacing.screenHorizontal)
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+          header
+          BeidPanel { headlineRow }
+          BeidPanel { bandBuildupSection }
         }
+        .padding(DS.Space.pageMargin)
       }
     }
     .background(DS.Color.surfaceCanvas)
@@ -101,7 +99,7 @@ struct ParticipationSummaryView: View {
     BeidMetricRow(
       label: headlineLabelKey,
       verbatimValue: mutualCountUnavailableText,
-      valueStyle: AnyShapeStyle(DS.Color.statusOff)
+      valueStyle: AnyShapeStyle(DS.Color.textSecondary)
     )
   }
 
@@ -150,7 +148,7 @@ struct ParticipationSummaryView: View {
     } else {
       Text(notYetAvailableText)
         .font(DS.Font.meta)
-        .foregroundStyle(DS.Color.statusOff)
+        .foregroundStyle(DS.Color.textSecondary)
     }
   }
 
@@ -202,23 +200,6 @@ struct ParticipationSummaryView: View {
       )
     )
   }
-}
-
-#Preview("With snapshot (Dark)") {
-  NavigationStack {
-    ParticipationSummaryView(
-      eventName: "ETHGlobal Tokyo",
-      aggregate: PreviewAggregateFactory.sessionAggregate(
-        observations: [
-          (windowIndex: 0, peerKey: "peer-1", displayId: "device-1"),
-          (windowIndex: 1, peerKey: "peer-2", displayId: "device-2"),
-          (windowIndex: 5, peerKey: "peer-3", displayId: "device-3"),
-        ],
-        windowsPerBand: 2
-      )
-    )
-  }
-  .preferredColorScheme(.dark)
 }
 
 #Preview("No snapshot yet") {

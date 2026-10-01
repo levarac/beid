@@ -29,5 +29,39 @@ struct LintFixturesFail: View {
     }
     .background(Color(.systemBackground)) // FAIL no_hardcoded_swiftui_color
     .tint(.blue) // FAIL no_hardcoded_swiftui_color
+    .preferredColorScheme(.dark) // FAIL no_appearance_override
+    .colorScheme(.dark) // FAIL no_appearance_override
+    .environment(\.colorScheme, .dark) // FAIL no_appearance_override
+  }
+
+  func forceDark(_ window: UIWindow) {
+    window.overrideUserInterfaceStyle = .dark // FAIL no_appearance_override
+  }
+}
+
+struct LintFixturesFailGlass: View {
+  let fill: Material = .init() // FAIL no_glass_or_material
+
+  var body: some View {
+    GlassEffectContainer { // FAIL no_glass_or_material
+      VStack {
+        Text("Glass")
+          .glassEffect(.regular, in: .capsule) // FAIL no_glass_or_material
+        Button("Glass") {}
+          .buttonStyle(.glass) // FAIL no_glass_or_material
+        Button("Glass prominent") {}
+          .buttonStyle(.glassProminent) // FAIL no_glass_or_material
+        Button("Glass type") {}
+          .buttonStyle(GlassButtonStyle()) // FAIL no_glass_or_material
+        Button("Glass prominent type") {}
+          .buttonStyle(GlassProminentButtonStyle()) // FAIL no_glass_or_material
+      }
+      .background(.ultraThinMaterial) // FAIL no_glass_or_material
+      .background(.thinMaterial) // FAIL no_glass_or_material
+      .background(.regularMaterial) // FAIL no_glass_or_material
+      .background(.thickMaterial) // FAIL no_glass_or_material
+      .background(.ultraThickMaterial) // FAIL no_glass_or_material
+      .background(.bar) // FAIL no_glass_or_material
+    }
   }
 }

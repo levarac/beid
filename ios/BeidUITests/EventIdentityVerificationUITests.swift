@@ -21,15 +21,22 @@ final class EventIdentityVerificationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
 
-    XCTAssertTrue(app.staticTexts["Event Found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
     XCTAssertFalse(identityVerificationRow.exists)
 
     let simulateSignalLost = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(simulateSignalLost.waitForExistence(timeout: 30))
+    XCTAssertFalse(identityVerificationRow.exists)
+    let cancel = app.buttons["Cancel"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
+    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
+    cancel.tap()
+    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertTrue(simulateSignalLost.isHittable, "Live recording must expose Signal Lost")
     XCTAssertFalse(identityVerificationRow.exists)
     simulateSignalLost.tap()
 

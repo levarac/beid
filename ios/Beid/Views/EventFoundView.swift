@@ -3,53 +3,36 @@
 
 import SwiftUI
 
-/// Screen 06a: Event Found — event card slides in.
+/// The observed, pre-recording session. Its first sighting is 05a; when the
+/// same real session has remained here for 20 seconds, the shared surface
+/// reveals 05a2's manual-entry rescue without resetting a timer on redraw.
 struct EventFoundView: View {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ObservedObject var sensing: SensingCoordinator
   let event: EventSession
   let onRetryVerification: () -> Void
 
-  @State private var appeared = false
-
   init(
+    sensing: SensingCoordinator,
     event: EventSession,
     onRetryVerification: @escaping () -> Void = {}
   ) {
+    self.sensing = sensing
     self.event = event
     self.onRetryVerification = onRetryVerification
   }
 
   var body: some View {
-    BeidStatusLayout(
-      systemImage: "sparkles",
-      title: "Event Found",
-      message: "Verification starts automatically — stay nearby",
-      accessory: {
-      EventCardView(event: event, badge: .detected) {
-        EventIdentityVerificationRow(
-          status: event.identityVerification,
-          onRetry: onRetryVerification
-        )
-      }
-        .offset(y: appeared ? 0 : 40)
-        .opacity(appeared ? 1 : 0)
-      }
+    SensingSessionSurface(
+      sensing: sensing,
+      event: event,
+      presentation: .detecting,
+      onRetryVerification: onRetryVerification
     )
-    // Sensing screen: DESIGN.md §5 "one motif accent per screen".
-    .tint(DS.Color.signalActive)
-    .onAppear {
-      withAnimation(reduceMotion ? nil : BeidDesign.Animation.entrance) {
-        appeared = true
-      }
-    }
+    .tint(DS.Color.actionInverse)
   }
 }
 
 #Preview {
-  EventFoundView(event: .demoSample)
-}
-
-#Preview("Dark") {
-  EventFoundView(event: .demoSample)
-    .preferredColorScheme(.dark)
+  let coordinator = AppCoordinator()
+  return EventFoundView(sensing: coordinator.sensingCoordinator, event: .demoSample)
 }

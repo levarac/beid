@@ -2,7 +2,7 @@
 #
 # Config-only for now: not wired into CI yet. Scoped to the app target;
 # DesignSystem/ is the one place raw values are allowed, so it is excluded
-# from every custom rule.
+# from every raw-value rule (no_glass_or_material applies to it too).
 #
 # Known-debt handling: pre-contract scaffold violations are recorded in the
 # checked-in, violation-level baseline TEMPLATE `lint/baseline.template.json`
@@ -121,3 +121,35 @@ custom_rules:
       - parameter
       - typeidentifier
     regex: '(withAnimation|\.animation)\(\s*\.(easeIn|easeOut|easeInOut|linear|spring|snappy|bouncy|smooth|interactiveSpring|interpolatingSpring|default)\b|\bAnimation\.(easeIn|easeOut|easeInOut|linear|spring|snappy|bouncy|smooth|interactiveSpring|interpolatingSpring)\b'
+
+  # Flat 2b (DESIGN.md §8): no glass, no system materials. Unlike the rules
+  # above there is no `excluded:` — DesignSystem/ may not use them either.
+  no_glass_or_material:
+    included: "ios/Beid/.*\\.swift"
+    name: "No glass or material surfaces"
+    message: "Flat 2b forbids glass and system materials (DESIGN.md §8). Use beidSurface(cornerRadius:) — bg + 1px line — or a DS.Color.* fill."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\.glassEffect\s*\(|\bGlassEffectContainer\b|\.buttonStyle\(\s*\.(glass|glassProminent)\b|\bGlass(Prominent)?ButtonStyle\b|\bMaterial\b|\.(ultraThin|thin|regular|thick|ultraThick)Material\b|\.bar\b'
+  # Single appearance (DESIGN.md §14, #632): nothing sets a second
+  # appearance, in previews or production. Bar-scoped
+  # `.toolbarColorScheme(...)` is not matched (§14 allows it on ink screens).
+  no_appearance_override:
+    included: "ios/Beid/.*\\.swift"
+    name: "No appearance override"
+    message: "The app has one appearance (DESIGN.md §14): no preferredColorScheme, colorScheme(_:), environment(\\.colorScheme, ...) or overrideUserInterfaceStyle. Ink screens use bar-scoped toolbarColorScheme."
+    severity: error
+    match_kinds:
+      - argument
+      - identifier
+      - keyword
+      - number
+      - parameter
+      - typeidentifier
+    regex: '\.preferredColorScheme\s*\(|\.colorScheme\s*\(|\\\.colorScheme\s*,|\boverrideUserInterfaceStyle\b'

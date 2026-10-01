@@ -126,7 +126,7 @@ struct SensingView: View {
 
       ScrollView {
         BeidAdaptiveContent {
-          VStack(spacing: BeidDesign.Spacing.section) {
+          VStack(spacing: DS.Space.l) {
             BeidStatusPill(state: .sensingAutomatically)
 
             radar
@@ -151,15 +151,15 @@ struct SensingView: View {
             }
           }
           .frame(maxWidth: .infinity)
-          .padding(.horizontal, BeidDesign.Spacing.screenHorizontal)
+          .padding(.horizontal, DS.Space.pageMargin)
           .padding(.vertical, DS.Space.l)
         }
       }
     }
-    // Sensing screen: DESIGN.md §5 "one motif accent per screen" — also
-    // what the radar rings' `.tint.opacity(...)` and the center glyph's
-    // default `.accentColor` resolve to.
-    .tint(DS.Color.signalActive)
+    // Sensing screen: actionPrimary tint — Flat 2b has one ink and no
+    // per-screen motif accents (DESIGN.md §5). The radar rings use this
+    // tint through `.tint.opacity(...)`.
+    .tint(DS.Color.actionPrimary)
     .onAppear { pulse = !reduceMotion }
     .safeAreaInset(edge: .bottom) {
       if isPreJoin {
@@ -177,7 +177,7 @@ struct SensingView: View {
           .padding(.vertical, DS.Space.s)
           .accessibilityIdentifier("scan.manual-entry")
         }
-        .background(.bar)
+        .beidBottomBar()
       }
     }
     .accessibilityIdentifier("scan.sensing")
@@ -227,8 +227,8 @@ struct SensingView: View {
   }
 
   /// DESIGN.md §15's error formula — what happened and one action — rendered
-  /// in the non-signal caution register (§5: `statusCaution` is for errors
-  /// that are not about BLE signal, which a refused join is not).
+  /// in `textPrimary`: Flat 2b has no error color, and the words carry the
+  /// meaning (DESIGN.md §5).
   /// One surface for one refusal.
   ///
   /// There were briefly two: this one, and a `BeidPanel` inside
@@ -240,15 +240,11 @@ struct SensingView: View {
   /// its accessibility identifier are kept here; its copy is not.
   private func joinRefusalNotice(_ message: LocalizedStringKey) -> some View {
     BeidPanel {
-      HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
-        Image(systemName: "exclamationmark.triangle.fill")
-          .foregroundStyle(DS.Color.statusCaution)
-        Text(message)
-          .font(DS.Font.supporting)
-          .foregroundStyle(DS.Color.textPrimary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      Text(message)
+        .font(DS.Font.supporting)
+        .foregroundStyle(DS.Color.textPrimary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("scan.join-refusal")
@@ -344,11 +340,11 @@ struct SensingView: View {
             .foregroundStyle(DS.Color.textPrimary)
 
           if card.eventIdHex != nil {
-            Label(verifiedLabel, systemImage: "checkmark.shield.fill")
+            Text(verbatim: verifiedLabel)
               .font(DS.Font.meta)
               .foregroundStyle(DS.Color.textSecondary)
           } else {
-            Label(waitingForVerificationLabel, systemImage: "clock")
+            Text(verbatim: waitingForVerificationLabel)
               .font(DS.Font.meta)
               .foregroundStyle(DS.Color.textSecondary)
           }
@@ -361,7 +357,7 @@ struct SensingView: View {
           }
 
           if selected {
-            Label(selectedLabel, systemImage: "checkmark.circle.fill")
+            Text(verbatim: selectedLabel)
               .font(DS.Font.meta)
               .foregroundStyle(DS.Color.textSecondary)
           }
@@ -480,12 +476,14 @@ struct SensingView: View {
           .animation(reduceMotion ? nil : pulseAnimation(delay: Double(index) * 0.5), value: pulse)
       }
 
-      BeidGlyph(
-        systemImage: "dot.radiowaves.left.and.right",
-        assetImage: "encounter-field-pulse",
-        tint: .accentColor,
-        size: DS.Size.radarCore
-      )
+      // Interim bordered roundel; #634 owns the final radar center.
+      Circle()
+        .fill(DS.Color.surfaceCanvas)
+        .overlay {
+          Circle().strokeBorder(DS.Color.strokeHairline, lineWidth: 1)
+        }
+        .frame(width: DS.Size.radarCore, height: DS.Size.radarCore)
+        .accessibilityHidden(true)
     }
     .frame(width: DS.Size.radarField, height: DS.Size.radarField)
   }
@@ -503,9 +501,449 @@ struct SensingView: View {
     .environmentObject(coordinator)
 }
 
-#Preview("Dark") {
-  let coordinator = AppCoordinator()
-  return SensingView(sensing: coordinator.sensingCoordinator)
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
+/// The live, joined-event portion of Flat 2b's 05 family. Values are read
+/// from the same coordinator that records the session. Figma's counts and
+/// event details are examples, never defaults for a production session.
+struct SensingSessionSurface: View {
+  enum Presentation: Equatable {
+    case detecting
+    case detectingLong
+    case detectingFirstTime
+    case steady
+
+    var showsEdges: Bool {
+      switch self {
+      case .detecting, .detectingLong, .detectingFirstTime: false
+      case .steady: true
+      }
+    }
+  }
+
+  @ObservedObject var sensing: SensingCoordinator
+  let event: EventSession
+  let presentation: Presentation
+  var diagnosticCaption: String? = nil
+  var onRetryVerification: () -> Void = {}
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 1)) { timeline in
+      let now = sensing.sensingPresentationNow(timeline.date)
+      GeometryReader { geometry in
+        let contentWidth = max(0, geometry.size.width - 2 * DS.Space.pageMargin)
+        ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
+            if presentation == .steady {
+              eventHeading
+            } else {
+              eventHeading.accessibilityIdentifier("scan.event-found")
+            }
+
+            if let eventSubtitle = eventSubtitle {
+              Text(verbatim: eventSubtitle)
+                .beidTextStyle(DS.Font.Library.body15)
+                .foregroundStyle(DS.Color.textSecondaryOnInk)
+                .padding(.top, DS.Space.s)
+            }
+
+            SensingRadarView(
+              peers: radarPeers,
+              mutualDeviceCount: Int(sensing.sessionAggregate?.mutualDeviceCount ?? 0),
+              observedWindowCount: observedWindowCount ?? 0,
+              showsEdges: presentation.showsEdges,
+              size: max(0, min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin))
+            )
+            // Keep the measured radar centered without widening the inset content.
+            .frame(width: contentWidth)
+            .padding(.top, DS.Space.m)
+
+            SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
+              .frame(width: contentWidth)
+              .padding(.top, DS.Space.l)
+
+            Rectangle()
+              .fill(DS.Color.strokeHairlineOnInk)
+              .frame(width: contentWidth, height: DS.Size.hairline)
+              .padding(.top, DS.Space.l)
+
+            metrics(at: now)
+              .padding(.top, DS.Space.m)
+
+            if EventIdentityVerificationPresentation.forStatus(event.identityVerification) != nil {
+              BeidPanel {
+                EventIdentityVerificationRow(
+                  status: event.identityVerification,
+                  onRetry: onRetryVerification
+                )
+              }
+              .padding(.top, DS.Space.m)
+            }
+
+            if let diagnosticCaption {
+              Text(verbatim: diagnosticCaption)
+                .beidTextStyle(DS.Font.Library.body13)
+                .foregroundStyle(DS.Color.textSecondaryOnInk)
+                .padding(.top, DS.Space.s)
+            }
+
+            Spacer(minLength: DS.Space.m)
+            footer(at: now)
+              .frame(maxWidth: .infinity)
+          }
+          .frame(minHeight: geometry.size.height, alignment: .top)
+          .padding(.horizontal, DS.Space.pageMargin)
+        }
+      }
+    }
+    .background(DS.Color.textPrimary.ignoresSafeArea())
+    .accessibilityIdentifier("scan.sensing-session")
+  }
+
+  private var eventHeading: some View {
+    Text(verbatim: event.name)
+      .beidTextStyle(DS.Font.Library.display46)
+      .foregroundStyle(DS.Color.labelOnActionPrimary)
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: 220, alignment: .leading)
+      .accessibilityAddTraits(.isHeader)
+  }
+
+  private var observedWindowCount: Int? {
+    guard let aggregate = sensing.sessionAggregate else { return nil }
+    // This is a sparse count of windows with an observation, including the
+    // currently open first window; it is not elapsed ENIN positions.
+    return Int(aggregate.windowCount)
+  }
+
+  private var eventSubtitle: String? {
+    let since = sensing.firstSightingAt?.formatted(date: .omitted, time: .shortened)
+    switch (event.venue, since) {
+    case (let venue?, let time?): return "\(venue) · since \(time)"
+    case (let venue?, nil): return venue
+    case (nil, let time?): return "Since \(time)"
+    case (nil, nil): return nil
+    }
+  }
+
+  private var radarPeers: [SensingRadarPeer] {
+    sensing.detectedDisplayIDs.sorted().map { id in
+      SensingRadarPeer(id: id, signalStrength: sensing.signalStrength(forNodeId: id))
+    }
+  }
+
+  private func metrics(at now: Date) -> some View {
+    let elapsed = sensing.firstSightingAt.map { max(0, Int(now.timeIntervalSince($0))) }
+    // The mutual count is shared's actual mutual scope. It is zero today
+    // because no production observation carries reciprocal evidence; it is
+    // never inferred from signal strength or the all-observation count.
+    var items = [
+      SensingMetric(value: String(sensing.sessionAggregate?.mutualDeviceCount ?? 0), label: "MUTUAL"),
+      SensingMetric(value: String(sensing.devicesVerified), label: "DETECTED")
+    ]
+    if let elapsed {
+      let isSearching = effectivePresentation(at: now) == .detectingLong
+      items.append(SensingMetric(
+        value: isSearching && elapsed < 60
+          ? String(format: "0:%02d", elapsed)
+          : "\(elapsed / 60)′",
+        label: isSearching ? "SEARCHING" : "ELAPSED"
+      ))
+    }
+    return HStack(alignment: .top, spacing: 0) {
+      ForEach(items) { item in
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+          Text(verbatim: item.value)
+            .beidTextStyle(DS.Font.Library.displayNumber40)
+            .foregroundStyle(DS.Color.labelOnActionPrimary)
+          Text(verbatim: item.label)
+            .beidTextStyle(DS.Font.Library.labelMono10)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(
+      "\(sensing.sessionAggregate?.mutualDeviceCount ?? 0) mutual, "
+        + "\(sensing.devicesVerified) detected, "
+        + "window \(observedWindowCount ?? 0)"
+    )
+  }
+
+  private func effectivePresentation(at now: Date) -> Presentation {
+    guard presentation == .detecting,
+      let firstSightingAt = sensing.firstSightingAt,
+      now.timeIntervalSince(firstSightingAt) >= 20
+    else { return presentation }
+    return .detectingLong
+  }
+
+  @ViewBuilder
+  private func footer(at now: Date) -> some View {
+    switch effectivePresentation(at: now) {
+    case .detecting:
+      Text("Looking for peers · stay nearby")
+        .beidTextStyle(DS.Font.Library.labelMono9)
+        .foregroundStyle(DS.Color.textSecondaryOnInk)
+    case .detectingLong:
+      NavigationLink {
+        EventCodeEntryView(mode: .scanFlow)
+      } label: {
+        BeidTextControlLabel(
+          "Not finding it? Enter event code",
+          glyph: .trailing("→", announcing: "Enter event code"),
+          labelColor: DS.Color.labelOnActionPrimary
+        )
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("scan.manual-entry")
+    case .detectingFirstTime:
+      // 15 About sensing is owned by Stream A and does not exist yet. The
+      // first-time Figma footer is omitted until its destination is real.
+      EmptyView()
+    case .steady:
+      EmptyView()
+    }
+  }
+}
+
+struct SensingMetric: Identifiable {
+  let value: String
+  let label: String
+  var id: String { label }
+}
+
+/// Six most recently observed windows. Each column represents one actual
+/// shared aggregate row; missing future slots stay a low neutral line.
+/// Gaps in ENIN indices are not filled as if observations happened there.
+struct SensingWindowBars: View {
+  let aggregate: BeidSharedKit.aggregation.SessionAggregate?
+  let firstSightingAt: Date?
+  var endsSession = false
+
+  private var peerCounts: [Int] {
+    guard let aggregate else { return [] }
+    return Array((0..<Int(aggregate.windowCount))
+      .compactMap { aggregate.windowAt(index: Int32($0)).map { Int($0.peerCount) } }
+      .suffix(6))
+  }
+
+  var body: some View {
+    VStack(spacing: DS.Space.s) {
+      GeometryReader { geometry in
+        let barGap: CGFloat = 6
+        HStack(alignment: .bottom, spacing: barGap) {
+          ForEach(0..<6, id: \.self) { index in
+            Rectangle()
+              .fill(color(at: index))
+              .frame(
+                width: max(0, (geometry.size.width - barGap * 5) / 6),
+                height: height(at: index)
+              )
+          }
+        }
+        .frame(maxHeight: .infinity, alignment: .bottom)
+      }
+      .frame(height: 40)
+
+      HStack {
+        if let firstSightingAt {
+          Text(firstSightingAt.formatted(date: .omitted, time: .shortened))
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+        }
+        Spacer()
+        Text(endsSession ? "END" : "NOW")
+          .foregroundStyle(DS.Color.labelOnActionPrimary)
+      }
+      .beidTextStyle(DS.Font.Library.labelMono10Tight)
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("window \(Int(aggregate?.windowCount ?? 0))")
+  }
+
+  private func color(at index: Int) -> Color {
+    guard index < peerCounts.count else { return DS.Color.strokeHairlineOnInk }
+    return index == peerCounts.count - 1
+      ? DS.Color.labelOnActionPrimary
+      : DS.Color.strokeHairlineOnInk
+  }
+
+  private func height(at index: Int) -> CGFloat {
+    guard index < peerCounts.count else { return DS.Space.xs }
+    return min(40, DS.Space.xs + CGFloat(peerCounts[index]) * 2)
+  }
+}
+
+/// Keeps the existing B005 discovery list available before an event is
+/// joined, and promotes an actual join refusal to frame 05d's layout.
+/// A clock that is off or could not be checked is not a refusal: it stays on
+/// this screen as `ClockPreflightNoticeView` above an enabled nearby list, as
+/// it did before the Flat 2b redesign and as it does on Android.
+struct SensingPrejoinRouter: View {
+  @ObservedObject var sensing: SensingCoordinator
+  let clockPreflight: ClockPreflightController
+
+  var body: some View {
+    if let reason = SensingCantJoinReason(joinRefusalKey: sensing.joinRefusalReasonKey) {
+      SensingCantJoinView(
+        reason: reason,
+        code: sensing.joinedEventCode,
+        event: nil,
+        candidate: nil
+      )
+    } else {
+      SensingView(sensing: sensing, clockPreflight: clockPreflight)
+    }
+  }
+}
+
+enum SensingCantJoinReason {
+  case refused(String)
+
+  init?(joinRefusalKey: String?) {
+    guard let joinRefusalKey else { return nil }
+    self = .refused(joinRefusalKey)
+  }
+
+  var status: String {
+    switch self {
+    case .refused: "Can't join"
+    }
+  }
+
+  var title: LocalizedStringKey {
+    switch self {
+    case .refused(let key):
+      switch key {
+      case "network_required": "No network connection"
+      case "event_not_found": "Code not registered"
+      case "code_mismatch": "Code mismatch"
+      case "event_not_active": "Event not open"
+      default: "Couldn't verify this event"
+      }
+    }
+  }
+
+  var message: LocalizedStringKey {
+    switch self {
+    case .refused(let key):
+      switch key {
+      case "network_required":
+        "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
+      case "event_not_found":
+        "No event is registered for that code. Check it with the event organizer."
+      case "code_mismatch":
+        "That code didn't match the event beid found. Check that you have the whole code."
+      case "event_not_active":
+        "That event isn't open to join right now."
+      case "verification_failed":
+        "beid couldn't verify that event. Check the code with the event organizer."
+      default:
+        "beid couldn't join that event. Check the code and try again."
+      }
+    }
+  }
+}
+
+/// Frame 05d. The illustrated registry rows are shown only when a caller
+/// supplies correlated event/candidate evidence; a real prejoin clock or
+/// refusal path commonly has neither, so it never claims sample values.
+struct SensingCantJoinView: View {
+  let reason: SensingCantJoinReason
+  let code: String?
+  let event: EventSession?
+  let candidate: NearbyEventCard?
+
+  var body: some View {
+    GeometryReader { geometry in
+      ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+          Text(verbatim: event?.name ?? code ?? "Can't join")
+            .beidTextStyle(DS.Font.Library.display46)
+            .foregroundStyle(DS.Color.labelOnActionPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 220, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+
+          if let venue = event?.venue {
+            Text(verbatim: "\(venue) · found nearby")
+              .beidTextStyle(DS.Font.Library.body15)
+              .foregroundStyle(DS.Color.textSecondaryOnInk)
+              .padding(.top, DS.Space.s)
+          }
+
+          Text("Why")
+            .beidTextStyle(DS.Font.Library.labelMono10)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .padding(.top, DS.Space.l)
+
+          Text(reason.title)
+            .beidTextStyle(DS.Font.Library.title19)
+            .foregroundStyle(DS.Color.labelOnActionPrimary)
+            .padding(.top, DS.Space.s)
+            .accessibilityIdentifier("scan.join-refusal")
+
+          Text(reason.message)
+            .beidTextStyle(DS.Font.Library.body15)
+            .foregroundStyle(DS.Color.textSecondaryOnInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, DS.Space.s)
+
+          if event != nil || candidate != nil {
+            eventIdentity
+              .padding(.top, DS.Space.xl)
+          }
+
+          Spacer(minLength: DS.Space.xl)
+          NavigationLink {
+            EventCodeEntryView(mode: .scanFlow)
+          } label: {
+            BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.plain)
+          .accessibilityIdentifier("scan.manual-entry")
+        }
+        .frame(minHeight: geometry.size.height, alignment: .top)
+        .padding(.horizontal, DS.Space.pageMargin)
+      }
+    }
+    .background(DS.Color.textPrimary.ignoresSafeArea())
+    .accessibilityIdentifier("scan.cant-join")
+  }
+
+  private var eventIdentity: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text("Event identity")
+        .beidTextStyle(DS.Font.Library.labelMono10)
+        .foregroundStyle(DS.Color.textSecondaryOnInk)
+        .padding(.bottom, DS.Space.s)
+
+      if let event {
+        if event.identityVerification == .verified {
+          identityRow("Registry", value: "Verified")
+        }
+        identityRow("Code", value: event.id)
+      }
+      if let candidate, candidate.joinActionEventCodeHashHex != nil {
+        identityRow("Open to join", value: "Yes")
+      }
+    }
+  }
+
+  private func identityRow(_ title: String, value: String) -> some View {
+    VStack(spacing: 0) {
+      Rectangle()
+        .fill(DS.Color.strokeHairlineOnInk)
+        .frame(height: DS.Size.hairline)
+      HStack {
+        Text(verbatim: title)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+        Spacer()
+        Text(verbatim: value)
+          .foregroundStyle(DS.Color.labelOnActionPrimary)
+      }
+      .beidTextStyle(DS.Font.Library.labelMono10)
+      .frame(minHeight: DS.Size.minHitTarget)
+    }
+  }
 }

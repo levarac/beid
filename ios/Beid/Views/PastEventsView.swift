@@ -14,7 +14,7 @@ import SwiftUI
 /// fixed in count.
 ///
 /// Deliberately reuses `AccountSheetView`'s own plain `List`/`Section`/
-/// `Label`/`Button` idiom, the same one `VenueDeviceOrganizerView`'s history
+/// `Button` idiom, the same one `VenueDeviceOrganizerView`'s history
 /// list already uses for a "past records, tap for detail/no detail" list.
 /// Does **not** use `EventCardView` — its `Badge` vocabulary
 /// (`.detected`/`.recording`/`.paused`) is tied to the live scan-phase
@@ -83,17 +83,13 @@ struct PastEventsView: View {
         onRejoin(eventCode)
       } label: {
         HStack(spacing: DS.Space.m) {
-          Label {
-            VStack(alignment: .leading, spacing: DS.Space.xs) {
-              Text(proof.eventName)
-                .font(DS.Font.cardTitle)
-                .foregroundStyle(DS.Color.textPrimary)
-              Text(proof.date.formatted(date: .abbreviated, time: .shortened))
-                .font(DS.Font.supporting)
-                .foregroundStyle(DS.Color.textSecondary)
-            }
-          } icon: {
-            Image(systemName: "clock.arrow.circlepath")
+          VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text(proof.eventName)
+              .font(DS.Font.cardTitle)
+              .foregroundStyle(DS.Color.textPrimary)
+            Text(proof.date.formatted(date: .abbreviated, time: .shortened))
+              .font(DS.Font.supporting)
+              .foregroundStyle(DS.Color.textSecondary)
           }
 
           Spacer()
@@ -104,7 +100,7 @@ struct PastEventsView: View {
               comment: "Trailing label on the Past Events row for the event this device is presently joined to — a plain state marker, not an external verification claim."
             )
             .font(DS.Font.meta)
-            .foregroundStyle(DS.Color.statusOn)
+            .foregroundStyle(DS.Color.textPrimary)
           }
         }
       }
@@ -132,13 +128,4 @@ struct PastEventsView: View {
   return NavigationStack {
     PastEventsView(sensingCoordinator: SensingCoordinator(), proofStore: proofStore, onRejoin: { _ in })
   }
-}
-
-#Preview("Dark") {
-  let proofStore = ProofStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("preview-past-events-dark-\(UUID().uuidString).json"))
-  proofStore.add(Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3, eventCode: "ETHTOKYO2026"))
-  return NavigationStack {
-    PastEventsView(sensingCoordinator: SensingCoordinator(), proofStore: proofStore, onRejoin: { _ in })
-  }
-  .preferredColorScheme(.dark)
 }

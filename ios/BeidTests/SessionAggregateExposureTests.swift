@@ -112,6 +112,31 @@ final class SessionAggregateExposureTests: XCTestCase {
     XCTAssertEqual(aggregate?.windowAt(index: 2)?.windowIndex, 3)
   }
 
+  func testFirstLiveObservationSuppliesWindowAndDisplayOnlySensingData() {
+    let coordinator = makeCoordinator()
+    let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    coordinator.startSensing(eventCode: "TEST-LIVE-WINDOW")
+
+    XCTAssertNil(coordinator.firstSightingAt)
+    XCTAssertTrue(coordinator.detectedDisplayIDs.isEmpty)
+    coordinator.handleDetection(
+      enin: 6_000_000,
+      rpid: DetectionFixture.rotatingRpid(device: 0, enin: 6_000_000),
+      detectedDisplayId: DetectionFixture.displayId(device: 0),
+      observedAt: observedAt
+    )
+
+    // The first window is still open; shared already exposes its observed row.
+    XCTAssertEqual(Int(coordinator.sessionAggregate?.windowCount ?? -1), 1)
+    XCTAssertEqual(coordinator.firstSightingAt, observedAt)
+    XCTAssertEqual(coordinator.detectedDisplayIDs, Set([DetectionFixture.displayId(device: 0)]))
+
+    coordinator.reset()
+    XCTAssertNil(coordinator.firstSightingAt)
+    XCTAssertTrue(coordinator.detectedDisplayIDs.isEmpty)
+    XCTAssertNil(coordinator.sessionAggregate)
+  }
+
   func testSessionAggregateResetsToNilOnSessionReset() {
     let coordinator = makeCoordinator()
     coordinator.startSensing(eventCode: "TEST-SESSION-AGGREGATE-RESET")

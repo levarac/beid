@@ -1,6 +1,526 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "PEERS PER OBSERVED WINDOW": {
+      "comment": "Heading for the Observation Detail bar chart. Each bar is a window with at least one recorded observation; gaps are not zero-filled.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PEERS PER OBSERVED WINDOW"
+          }
+        }
+      }
+    },
+    "SENSING DATA": {
+      "comment": "Section heading for measured values from one stored sensing session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SENSING DATA"
+          }
+        }
+      }
+    },
+    "PEERS OBSERVED": {
+      "comment": "Number of distinct per-event display IDs observed in one stored session; this does not mean mutual confirmation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PEERS OBSERVED"
+          }
+        }
+      }
+    },
+    "WINDOWS": {
+      "comment": "Number of windows containing recorded observations in this session, not elapsed time windows.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WINDOWS"
+          }
+        }
+      }
+    },
+    "observationDetail.openSession": {
+      "comment": "VoiceOver label for an Event Detail session row that opens that session's Observation Detail.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open observations for session %lld"
+          }
+        }
+      }
+    },
+    "observationDetail.chart.window": {
+      "comment": "VoiceOver label for one chart bar: ordinal observed window and distinct within-window peer count, not a mutual count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observed window %1$lld; peer count %2$lld"
+          }
+        }
+      }
+    },
+    "observationDetail.chart.windowAfterGap": {
+      "comment": "VoiceOver label for a chart bar after unobserved ENIN windows. The gap means no observation was recorded, not measured zero peers.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observed window %1$lld; peer count %2$lld; preceding unobserved window count %3$lld"
+          }
+        }
+      }
+    },
+    "home.header.counts": {
+      "comment": "Collection Home header: independently pluralized distinct event count, including the active event, and total stored Proof record count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@events@ · %#@proofs@"
+          },
+          "substitutions": {
+            "events": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg event"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg events"
+                    }
+                  }
+                }
+              }
+            },
+            "proofs": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proof"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proofs"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.account.accessibilityLabel": {
+      "comment": "VoiceOver label for the Collection Home account control. The argument is a shortened wallet address or the localized Account title.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account, %@"
+          }
+        }
+      }
+    },
+    "home.account.title": {
+      "comment": "Collection Home account control when no wallet address is available; opens the account sheet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "home.active.metrics": {
+      "comment": "Live active event metrics: mutual device count from SessionAggregate and current sensing window count. Zero mutual is a valid current outcome.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld mutual · window %2$lld"
+          }
+        }
+      }
+    },
+    "home.active.metrics.accessibilityLabel": {
+      "comment": "VoiceOver expansion of the active event metrics: mutual and detected are distinct live counts; window is the sensing window count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld mutual, %2$lld detected, window %3$lld"
+          }
+        }
+      }
+    },
+    "home.past.sessionCaption": {
+      "comment": "Past event row: latest session date followed by the independently pluralized number of stored sessions in this event group.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %#@sessions@"
+          },
+          "substitutions": {
+            "sessions": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg session"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg sessions"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.past.proofAction": {
+      "comment": "Trailing past event action. Count is stored Proof records in the event group; the arrow opens Event Detail.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proof →"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld proofs →"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.past.accessibilityLabel": {
+      "comment": "VoiceOver label for a past event row. First argument is the operator-supplied event name; second is the number of stored Proof records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %#@proofs@, open event"
+          },
+          "substitutions": {
+            "proofs": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proof"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg proofs"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "home.clock.networkInstructions.title": {
+      "comment": "Home clock help title when beid could not compare the device clock with network time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check your connection"
+          }
+        }
+      }
+    },
+    "home.clock.timeInstructions.title": {
+      "comment": "Home clock help title when network comparison found the device clock outside tolerance.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the time automatically"
+          }
+        }
+      }
+    },
+    "home.scan.action": {
+      "comment": "Primary Collection Home action: verb meaning start sensing nearby events, distinct from the Scan screen title.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan"
+          }
+        }
+      }
+    },
+    "home.empty.description": {
+      "comment": "Collection Home empty-state explanation. The English line break after show up matches the two-line design; other locales may wrap as needed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walk into an event — it will show up\nhere automatically."
+          }
+        }
+      }
+    },
+    "Events": {
+      "comment": "Title of the Collection Home screen.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Events"
+          }
+        }
+      }
+    },
+    "NOW · SENSING": {
+      "comment": "Eyebrow on the active event card, meaning sensing is currently running.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOW · SENSING"
+          }
+        }
+      }
+    },
+    "OPEN": {
+      "comment": "Action on the active event card; returns to the live sensing screen.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OPEN"
+          }
+        }
+      }
+    },
+    "Open sensing event": {
+      "comment": "VoiceOver description of the arrow on the active event OPEN action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open sensing event"
+          }
+        }
+      }
+    },
+    "PAST": {
+      "comment": "Section title for previously finalized events on Collection Home.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PAST"
+          }
+        }
+      }
+    },
+    "NO EVENTS YET": {
+      "comment": "Heading in Collection Home empty state when no event has been sensed or stored.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NO EVENTS YET"
+          }
+        }
+      }
+    },
+    "ENTER EVENT CODE": {
+      "comment": "Collection Home empty-state action to join an event by entering its code.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ENTER EVENT CODE"
+          }
+        }
+      }
+    },
+    "Enter event code": {
+      "comment": "VoiceOver description of the arrow on the event-code action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter event code"
+          }
+        }
+      }
+    },
+    "CLOCK OUT OF SYNC": {
+      "comment": "Home clock warning when the preflight comparison exceeds the allowed time tolerance.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLOCK OUT OF SYNC"
+          }
+        }
+      }
+    },
+    "CLOCK CHECK UNAVAILABLE": {
+      "comment": "Home clock warning when the preflight comparison could not determine clock accuracy.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CLOCK CHECK UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "Proofs need an accurate clock. Turn on “Set automatically” in Settings.": {
+      "comment": "Body of the Home clock warning after an over-tolerance verdict.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proofs need an accurate clock. Turn on “Set automatically” in Settings."
+          }
+        }
+      }
+    },
+    "beid couldn't compare the clock with the network. Check your connection, then try again.": {
+      "comment": "Body of the Home clock warning after an undeterminable verdict.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid couldn't compare the clock with the network. Check your connection, then try again."
+          }
+        }
+      }
+    },
+    "FIX": {
+      "comment": "Action on the Home clock warning; opens instructions and a Check again control.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FIX"
+          }
+        }
+      }
+    },
+    "Clock help": {
+      "comment": "VoiceOver description of the arrow on the Home clock FIX action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clock help"
+          }
+        }
+      }
+    },
+    "Connect to the network, then check the clock again before joining an event.": {
+      "comment": "Home clock help instructions after the clock comparison was undeterminable.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the network, then check the clock again before joining an event."
+          }
+        }
+      }
+    },
+    "Open Settings, choose General, then Date & Time, and turn on Set Automatically.": {
+      "comment": "Home clock help instructions after an over-tolerance verdict; the app cannot deep-link to Date & Time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings, choose General, then Date & Time, and turn on Set Automatically."
+          }
+        }
+      }
+    },
+    "Sensing continues in background": {
+      "comment": "Status on Collection Home while sensing continues after the Scan screen closes.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensing continues in background"
+          }
+        }
+      }
+    },
+    "Stop sensing": {
+      "comment": "Collection Home action that stops the active sensing session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop sensing"
+          }
+        }
+      }
+    },
+    "Bluetooth · off": {},
+    "Bluetooth\nis off": {},
+    "Enable\nBluetooth": {},
+    "I’ve turned it on": {
+      "comment": "Button: rechecks whether the user has switched Bluetooth back on."
+    },
+    "Proofs of presence, collected automatically while you are at an event. No codes, no taps.": {},
+    "Prove you\nwere there.": {},
+    "Setup · 1 / 1": {},
+    "V 1.0": {
+      "comment": "Version label in the Welcome screen header."
+    },
+    "You can change this anytime in Settings": {},
+    "beid can’t sense events or collect proofs while Bluetooth is off.": {},
+    "beid senses nearby events and people over Bluetooth Low Energy — that’s how it proves you were really there.": {},
     "%lld": {},
     "Account": {},
     "Active": {
@@ -16,9 +536,27 @@
     "Automatic": {},
     "Bluetooth": {},
     "Bluetooth is off": {},
-    "Cancel": {},
+    "Cancel": {
+      "comment": "Dismisses the Home event-code entry sheet without joining an event. Also used for other cancellation actions.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
     "Close": {
-      "comment": "Dismisses the current screen without taking further action. Used as the accessibility label for the scan flow's toolbar close (X) button, and as the button on the wallet-binding failure sheet when trying again cannot help (an unsupported smart-contract wallet)."
+      "comment": "Dismisses the current screen without taking further action. Used as the accessibility label for the scan flow's toolbar close (X) button, and as the button on the wallet-binding failure sheet when trying again cannot help (an unsupported smart-contract wallet).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
     },
     "Connect Wallet": {},
     "Connect Your Wallet": {},
@@ -29,6 +567,21 @@
     "Connected": {},
     "Connecting to wallet…": {},
     "Connection failed": {},
+    "COULD NOT JOIN EVENT": {
+      "comment": "Generic manual event join failure label. A failed join does not prove that the code was unrecognized."
+    },
+    "Codes are case-insensitive": {},
+    "Copy": {
+      "comment": "Button on the Account sheet: copies the connected wallet address to the clipboard. Verb, not a noun or a generic duplicate action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        }
+      }
+    },
     "Copy URI": {},
     "Copy address": {
       "comment": "Button: copies the connected wallet address to the clipboard, not a noun."
@@ -42,7 +595,17 @@
     "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again.": {},
     "beid can't trust event times while the clock is wrong. Turn on automatic date and time in Settings, then check again.": {},
     "beid couldn't compare the clock with the network, so event times can't be trusted yet. Check your connection, then try again.": {},
-    "Check again": {},
+    "Check again": {
+      "comment": "Re-runs the clock preflight comparison after the user follows the clock help instructions.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
     "Couldn't check this device's clock": {},
     "This device's clock is off": {},
     "demo.scenario.longDisplayNames.eventName": {
@@ -82,6 +645,7 @@
     "Done": {},
     "Enable Bluetooth": {},
     "Enter Event Code": {},
+    "Enter\nevent code": {},
     "Enter an event code to continue. Ask the event organizer for it.": {},
     "Enter event code instead": {},
     "ETHGlobal Tokyo": {
@@ -154,6 +718,9 @@
     },
     "Event code": {
       "comment": "Label for the text field where the user types the alphanumeric code for the event they want to join."
+    },
+    "Event code required": {
+      "comment": "Error label shown when Join Event is pressed without an event code."
     },
     "Events find you": {},
     "Get MetaMask": {
@@ -366,7 +933,14 @@
       }
     },
     "Open Settings": {},
+    "Only needed if an event didn’t appear automatically. Ask the organizer for the code.": {},
     "Pairing URI": {},
+    "Paste": {
+      "comment": "Button that pastes clipboard text: the event code (13) or a venue link (14b)."
+    },
+    "Paste event code": {
+      "comment": "VoiceOver label for the event-code clipboard action."
+    },
     "Peers": {},
     "Privacy": {},
     "Private by design": {},
@@ -411,7 +985,7 @@
     "Status": {},
     "Stored": {},
     "status.recordedOnDevice": {
-      "comment": "Label shown when a proof's sensing data is known to be locally signed and stored on this device (not yet sent anywhere). Used in two places: (1) the Transparency screen's Participation record tier, where it's one of three rows (Sent / Included in published data are separate, always-unavailable rows below it); (2) the Proof Detail screen's Status row, where it replaced a prior unconditional \"Verified\" claim that had no backing model (beid#240, DECISIONS 2026-08-20) — the device only has its own signature, which shows \"this device recorded this,\" nothing more. Refers to on-device storage, not a video/audio recording.",
+      "comment": "Transparency Participation record tier: this device has locally signed and stored sensing data, not sent it anywhere. This is not a claim of third-party verification. Refers to on-device storage, not video or audio recording.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -432,7 +1006,17 @@
     "Verified": {},
     "Verifying proof": {},
     "Waiting for wallet to approve…": {},
-    "Walk into an event — it will show up here automatically.": {},
+    "Walk into an event — it will show up here automatically.": {
+      "comment": "Collection Home empty-state explanation: nearby events appear automatically when sensing detects them.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walk into an event — it will show up here automatically."
+          }
+        }
+      }
+    },
     "Wallet": {},
     "Wallet not available": {},
     "This wallet can't be used right now. Try again in a moment.": {},
@@ -750,7 +1334,7 @@
       }
     },
     "Sent": {
-      "comment": "Sub-state row under \"Participation record\": whether this device's sensing data has been transmitted to a report server for this event. Available once at least one submission has reached the SUBMITTING or ACCEPTED durable state (beid#292); report-submission code exists in the app today but is gated off in production by the BeidReportSubmissionEnabled build setting, so this reflects genuinely stored state, not a permanently-unbuilt capability like the rows below it. Shows \"Not yet available\" (not a failed-send state) before any submission for this event has been attempted.",
+      "comment": "Participation-record delivery row. SUBMITTING is persisted before POST and displays delivery unconfirmed; Sent is shown only for ACCEPTED with a verified receipt stored.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -772,7 +1356,7 @@
       }
     },
     "Verified proof": {
-      "comment": "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification (a status that would include a pending sub-state once it exists). Always shows \"Not yet available\" today because no verifier exists yet in the product. Distinct from the existing, always-true \"Verified\" status shown on the Proof Detail screen, which is about local BLE self-evidence, not third-party verification.",
+      "comment": "Tier 3 of 3 on the Transparency screen: whether this device's participation has passed third-party verification. Always shows \"Not yet available\" today because no verifier exists yet. Proof Detail's Sealed status means a matching local SelfProofRecord exists, not third-party verification.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -823,6 +1407,17 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "sigil.accessibilitySummary": {
+      "comment": "VoiceOver summary spoken in place of the Proof Sigil, the generated circular mark on a proof. It replaces the whole drawing, so it is the only thing a VoiceOver user gets — keep all three numbers. The first number counts nearby people's devices whose presence was mutual (both devices confirmed each other); the second counts devices this device merely detected, without that confirmation; the two never overlap and together they are every device drawn. The third is how many time windows the whole mark spans, not a position or an index into them — \"window\" is the unit of recorded time, roughly a few seconds each, and is not a GUI window. On current builds the first number is always 0, because mutual confirmation is not measurable on the device yet and this project deliberately shows 0 rather than guessing; translate it as a real count of zero, never as \"unknown\" or \"not available\".",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld mutual, %2$lld detected, window %3$lld"
           }
         }
       }
@@ -1100,7 +1695,7 @@
       }
     },
     "collection.dailySummaryButton": {
-      "comment": "Accessibility label for the calendar-icon toolbar button on Collection Home that opens the Daily Summary screen (gh#291) — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's own navigation title, since this button's only purpose is opening that screen.",
+      "comment": "Visible Today text control on Collection Home that opens the Daily Summary screen — a day-scoped rollup of proofs collected on the current local calendar day. Same word as the Daily Summary screen's navigation title; it means the current day, not a to-do list.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -1347,6 +1942,146 @@
         }
       }
     },
+    "Attendance\nProof": {},
+    "METHOD": {},
+    "RECORD ID": {},
+    "STATUS": {},
+    "SIGNATURE": {},
+    "WITH": {},
+    "proofDetail.method.bluetooth": {
+      "comment": "Proof Detail method value for a Proof collected through Bluetooth sensing.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth sensing"
+          }
+        }
+      }
+    },
+    "proofDetail.status.recorded": {
+      "comment": "Proof Detail status when a Proof is stored locally but no matching self-proof signature record exists. Do not imply sealing or third-party verification.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded on device"
+          }
+        }
+      }
+    },
+    "proofDetail.signature.bound": {
+      "comment": "Proof Detail signature value shown only when a wallet BindingRecord belongs to this exact Proof.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bound to wallet"
+          }
+        }
+      }
+    },
+    "proofDetail.signature.selfSigned": {
+      "comment": "Proof Detail signature value when a matching owner-key SelfProofRecord exists, but no wallet binding exists. This does not mean third-party verification.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Self-signed on device"
+          }
+        }
+      }
+    },
+    "proofDetail.with.multipleSessions": {
+      "comment": "Proof Detail WITH value for an event with multiple recording sessions. The participation summary below lists each session separately; never show one session's counts as event-wide.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See each session"
+          }
+        }
+      }
+    },
+    "proofDetail.with.counts": {
+      "comment": "Proof Detail WITH value for one session. Device count and observed window count come from this Proof's durable aggregate snapshot, not an event-wide sum.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "proofDetail.with.peers": {
+      "comment": "Number of distinct nearby devices in this Proof's session aggregate; this does not imply mutual confirmation.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld peer"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld peers"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "proofDetail.with.windows": {
+      "comment": "Number of observed time windows in this Proof's session aggregate.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld window"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld windows"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "proofDetail.value.unavailable": {
+      "comment": "Proof Detail value when no matching signature record or session aggregate snapshot exists. No missing count should appear as zero.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet available"
+          }
+        }
+      }
+    },
+    "proofDetail.recordID.accessibility": {
+      "comment": "VoiceOver reads the complete Proof UUID even though the visible record ID is abbreviated.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record ID %@"
+          }
+        }
+      }
+    },
     "venue.serving.servingUntil": {
       "comment": "The value is a time of day. This instant is fixed by the permit and is exclusive - broadcasting stops at it, it does not continue through it. \"Broadcasting\" is the word the venue screen uses throughout; it is not a claim that the radio is confirmed on air, which the radio section states separately.",
       "localizations": {
@@ -1359,7 +2094,981 @@
       }
     },
     "Share support information": {},
-    "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {}
+    "Includes app version, recent states and failure reasons from this app session. Choose who to share it with.": {},
+    "Copied": {
+      "comment": "Feedback after the full wallet address has been copied."
+    },
+    "Copied address": {
+      "comment": "Accessibility label after copying the full wallet address."
+    },
+    "Disconnect": {
+      "comment": "Confirms disconnecting the wallet after the Account confirmation message."
+    },
+    "Disconnect wallet": {
+      "comment": "Destructive Account row that opens a confirmation before disconnecting the wallet."
+    },
+    "Disconnect wallet?": {
+      "comment": "Title of the wallet disconnection confirmation within the Account sheet."
+    },
+    "Keep connected": {
+      "comment": "Cancels wallet disconnection and returns to the Account sheet."
+    },
+    "Off · Fix": {
+      "comment": "Bluetooth-off status and action to open Settings in the Account sheet."
+    },
+    "Open Bluetooth Settings": {
+      "comment": "Accessibility label for the Account Bluetooth-off recovery control."
+    },
+    "Organizer tools": {
+      "comment": "Account navigation row opening venue operator tools."
+    },
+    "Sensing is paused until Bluetooth is on. Tap to open Settings.": {},
+    "Venue broadcast": {},
+    "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime.": {},
+    "About\nsensing": {},
+    "HOW IT WORKS": {},
+    "Phones exchange rotating anonymous IDs, not names or wallet addresses.": {},
+    "What we send": {},
+    "SENDING STATUS · ALL SAVED OBSERVATIONS": {},
+    "SENDING": {},
+    "About sensing": {},
+    "How it works": {},
+    "What\nwe send": {},
+    "The event you joined": {},
+    "The event’s identifier, so the organiser knows which event this belongs to.": {},
+    "The time window": {},
+    "Which five-minute stretch of the event this record covers, not the moment you arrived or left.": {},
+    "The anonymous IDs of the phones near you": {},
+    "Each phone announces an ID that changes on its own schedule. It is not a name, an account, or a device serial.": {},
+    "Your own anonymous ID for that window": {},
+    "The same kind of rotating ID, so the phones around you can be matched with this record.": {},
+    "A commitment for this event": {},
+    "A value derived from keys for this event. It can support a later ownership check without including your wallet address.": {},
+    "A signature from this phone": {},
+    "It proves the record was not changed after this phone made it.": {},
+    "WHAT WE SEND": {},
+    "WHAT WE DON’T SEND": {},
+    "Your location": {},
+    "beid never reads GPS, and no position is recorded or sent.": {},
+    "Your name, your account, or your wallet address": {},
+    "None of them are part of a record.": {},
+    "Anything you have not recorded": {},
+    "Records stay on this phone until sending is turned on for this build.": {},
+    "Saved observations are sent to the event operator.": {},
+    "aboutSensing.submission.enabled": {
+      "comment": "Status on About sensing when the report submission build flag is on. This only says the feature is enabled, not that a record was sent or accepted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending is turned on for this build."
+          }
+        }
+      }
+    },
+    "account.wallet.header": {
+      "comment": "Account sheet label naming the connected wallet provider.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet · Connected via %@"
+          }
+        }
+      }
+    },
+    "A saved pack is checked again every time it is loaded.": {},
+    "Asked to broadcast": {
+      "comment": "The radio request was made; the system has not confirmed that the device is on air."
+    },
+    "Asked to broadcast. The system has not confirmed it is on air.": {},
+    "beid does not have camera access, so it cannot scan. Turn it on in Settings, or paste the link instead.": {},
+    "Broadcasting could not start.": {},
+    "Broadcasting until 18:00": {},
+    "Camera access is on, but scanning is unavailable on this device — a Screen Time restriction can do this. Paste the link instead.": {},
+    "Camera could not start": {},
+    "Camera ready": {},
+    "Cannot broadcast": {},
+    "Checked. Deciding whether it can broadcast now.": {},
+    "Checking pack": {},
+    "Checking permission": {},
+    "Checking the pack.": {},
+    "Copy event ID": {
+      "comment": "Button: copies the full, unshortened event identifier to the system clipboard."
+    },
+    "Event": {},
+    "Event ID": {},
+    "Fetching the pack took too long. Check the network and try again.": {},
+    "Getting pack": {},
+    "Getting the pack.": {},
+    "iOS only": {},
+    "Link": {},
+    "Link names no source": {},
+    "Load a signed pack, check it, then broadcast it.": {},
+    "Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.": {},
+    "No camera access": {},
+    "No pack yet. Paste the link the organiser gave you, or scan its QR code.": {},
+    "Not a venue link": {},
+    "Not broadcasting": {},
+    "Not saved": {},
+    "Saved pack": {
+      "comment": "Section heading on Organizer tools for the venue pack stored on this device. Not a key: the venue device holds no key."
+    },
+    "Saved on this device": {
+      "comment": "Status of the stored venue pack: it was written to this device's storage. Not a claim that it was checked or is broadcasting."
+    },
+    "Could not read": {
+      "comment": "Status of the stored venue pack: the stored file could not be read and was set aside."
+    },
+    "No saved pack": {
+      "comment": "Status of the stored venue pack: nothing is stored on this device."
+    },
+    "Saved": {
+      "comment": "Row label: the date and time the venue pack was stored on this device."
+    },
+    "Organizer": {},
+    "Pack rejected": {},
+    "Pack unavailable": {},
+    "Paste the link": {},
+    "Paste venue link": {},
+    "Point at the organiser's QR code": {},
+    "Radio stopped": {},
+    "Scan QR code": {},
+    "Scanning unavailable": {},
+    "Source not supported": {},
+    "Stop broadcasting": {},
+    "That address sent us somewhere else, so it was not followed.": {},
+    "That file is larger than a pack may be.": {},
+    "That is not a venue link. Paste the whole link, including everything after the #.": {},
+    "The camera could not start. Paste the link instead.": {},
+    "The camera is ready.": {},
+    "The event record could not be reached, so it is unknown whether this may broadcast.": {},
+    "The event record could not be reached, so the pack was not checked.": {},
+    "The link and the pack do not agree. Ask the organiser for a current link.": {},
+    "The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "The pack could not be fetched.": {},
+    "The pack is not for the event this link named.": {},
+    "The part of this pack covering right now did not check out.": {},
+    "The radio refused this pack and nothing is going out.": {},
+    "This device cannot scan QR codes. Paste the link instead.": {},
+    "This device's clock is unavailable, so broadcasting cannot be scheduled.": {},
+    "This event has been updated. Ask the organiser for a current link.": {},
+    "This event has no record on chain.": {},
+    "This event needs an entry code. Broadcasting those is not supported yet.": {},
+    "This event's details were rejected.": {},
+    "This link names an event but does not say where to get its pack.": {},
+    "This link points somewhere this app cannot fetch from.": {},
+    "This pack came from a different event record than the one this app is set up for.": {},
+    "This pack could not be read.": {},
+    "This pack could not be saved. It stays on this device only until the app closes.": {},
+    "This pack covers no part of right now.": {},
+    "This pack is for a network this app does not support.": {},
+    "This pack's current period has ended. Refresh it.": {},
+    "Tools for the venue side. Attendees never need these.": {},
+    "Until": {},
+    "Use this link": {},
+    "Venue\nbroadcast": {
+      "comment": "Two-line heading for the venue operator broadcast screen."
+    },
+    "Organizer tools · iOS only": {},
+    "Cancel scan": {
+      "comment": "VoiceOver label for the scanner sheet Cancel control."
+    },
+    "The system has not confirmed it is on air.": {
+      "comment": "Venue radio disclosure: a request was sent to the system, but no confirmation of actual airtime is available."
+    },
+    "eventDetail.rejoin.accessibilityLabel": {
+      "comment": "VoiceOver label for rejoining the operator-named stored event by code.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejoin %@"
+          }
+        }
+      }
+    },
+    "eventDetail.observations.sessions": {
+      "comment": "Count of stored recording sessions in the event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OBSERVATIONS · %#@sessions@"
+          },
+          "substitutions": {
+            "sessions": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg SESSION"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg SESSIONS"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.session.title": {
+      "comment": "Ordinal label for a stored recording session, oldest first.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session %lld"
+          }
+        }
+      }
+    },
+    "eventDetail.session.measurements": {
+      "comment": "Independent per-session sensed-device and observation-window counts from the persisted shared aggregate.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@devices@ · %#@windows@"
+          },
+          "substitutions": {
+            "devices": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg device"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg devices"
+                    }
+                  }
+                }
+              }
+            },
+            "windows": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg window"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg windows"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.reports.count": {
+      "comment": "Fixed-plural REPORTS section label and count of stored canonical Observation submission records for this event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@reports@"
+          },
+          "substitutions": {
+            "reports": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "REPORTS · %arg"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "REPORTS · %arg"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.report.title": {
+      "comment": "Ordinal label for a stored canonical Observation submission record, oldest first.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report #%lld"
+          }
+        }
+      }
+    },
+    "eventDetail.report.stoppedMetadata": {
+      "comment": "Stored report digest and terminal local submission state; no operator rejection is implied.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Submission stopped"
+          }
+        }
+      }
+    },
+    "eventDetail.report.preparedMetadata": {
+      "comment": "Stored report digest and PREPARED local state; no network send has started.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · On device · not sent"
+          }
+        }
+      }
+    },
+    "eventDetail.report.submittingMetadata": {
+      "comment": "Stored report digest with no operator receipt yet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Receipt unavailable"
+          }
+        }
+      }
+    },
+    "eventDetail.report.missingReceiptMetadata": {
+      "comment": "Stored report digest when a state says accepted but no receipt is stored; no acceptance is claimed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Receipt unavailable"
+          }
+        }
+      }
+    },
+    "eventDetail.report.receiptMetadata": {
+      "comment": "Stored report digest with an operator receipt durably present.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Operator receipt on device"
+          }
+        }
+      }
+    },
+    "eventDetail.proofs.count": {
+      "comment": "Fixed-plural PROOFS section label and count of stored recording Proofs in this event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@proofs@"
+          },
+          "substitutions": {
+            "proofs": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "PROOFS · %arg"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "PROOFS · %arg"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "eventDetail.proof.title": {
+      "comment": "Opens the stored Proof for this numbered recording session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session %lld proof"
+          }
+        }
+      }
+    },
+    "eventDetail.proof.accessibilityLabel": {
+      "comment": "VoiceOver label for a Proof row; the state comes only from a matching self-proof signature record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open proof for session %lld, %@"
+          }
+        }
+      }
+    },
+    "eventDetail.proof.state.sealed": {
+      "comment": "Proof row state when a self-proof signature record exists for this exact stored Proof.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SEALED"
+          }
+        }
+      }
+    },
+    "eventDetail.proof.state.recorded": {
+      "comment": "Proof row state when no self-proof signature record exists for this exact stored Proof.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED ON DEVICE"
+          }
+        }
+      }
+    },
+    "REJOIN": {
+      "comment": "Action that rejoins this stored event by its code.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REJOIN"
+          }
+        }
+      }
+    },
+    "Measurements unavailable": {
+      "comment": "No persisted per-Proof aggregate snapshot is available for this session.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measurements unavailable"
+          }
+        }
+      }
+    },
+    "Reports": {
+      "comment": "Heading for stored operator-directed submission records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports"
+          }
+        }
+      }
+    },
+    "Reports unavailable on this device": {
+      "comment": "Stored submission records could not be read; this is not an empty result.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports unavailable on this device"
+          }
+        }
+      }
+    },
+    "Reports unavailable for this older proof": {
+      "comment": "Legacy Proof has no stored event code to scope submission records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports unavailable for this older proof"
+          }
+        }
+      }
+    },
+    "NO REPORTS YET": {
+      "comment": "Empty report-section title when no canonical Observation submission record is stored.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NO REPORTS YET"
+          }
+        }
+      }
+    },
+    "No reports for this event are stored on this device.": {
+      "comment": "Empty report-section body; says nothing about automatic sending.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No reports for this event are stored on this device."
+          }
+        }
+      }
+    },
+    "Session association unavailable": {
+      "comment": "Submission records do not persist a relation to recording sessions.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session association unavailable"
+          }
+        }
+      }
+    },
+    "Stopped": {
+      "comment": "A local report submission ended without an operator verdict.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped"
+          }
+        }
+      }
+    },
+    "Waiting for Bluetooth": {},
+    "A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "Prepared": {
+      "comment": "A canonical Observation is stored locally before sending.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepared"
+          }
+        }
+      }
+    },
+    "Submitting": {
+      "comment": "A report may have been sent; receipt lookup is pending.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitting"
+          }
+        }
+      }
+    },
+    "Status unavailable": {
+      "comment": "Submission status cannot be claimed without a stored receipt.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status unavailable"
+          }
+        }
+      }
+    },
+    "Receipt stored": {
+      "comment": "An operator acceptance receipt is stored on the device.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receipt stored"
+          }
+        }
+      }
+    },
+    "VERIFICATION UNAVAILABLE": {
+      "comment": "No third-party proof verification outcome exists for this stored Proof.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VERIFICATION UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "eventDetail.recordedDate": {
+      "comment": "Recording start date from the newest stored Proof; past event date and venue are not persisted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED %@"
+          }
+        }
+      }
+    },
+    "Reports unavailable for this event code": {
+      "comment": "A stored Proof has an invalid event code, so the app cannot safely scope submission records to this event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reports unavailable for this event code"
+          }
+        }
+      }
+    },
+    "reportDetail.stopped": {
+      "comment": "Terminal local submission state; it does not claim the operator rejected the Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SUBMISSION STOPPED"
+          }
+        }
+      }
+    },
+    "reportDetail.deliveryUnconfirmed": {
+      "comment": "The device has no durable evidence that the operator received this Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DELIVERY UNCONFIRMED"
+          }
+        }
+      }
+    },
+    "reportDetail.receiptUnavailable": {
+      "comment": "No verified acceptance receipt is stored for this report.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECEIPT UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "reportDetail.prepared": {
+      "comment": "The signed Observation was prepared and queued locally; sending has not begun.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PREPARED ON DEVICE"
+          }
+        }
+      }
+    },
+    "reportDetail.notSent": {
+      "comment": "The local report has not begun a network submission.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOT SENT"
+          }
+        }
+      }
+    },
+    "reportDetail.notYetAvailable": {
+      "comment": "A report status or capability has no durable result to show yet.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOT YET AVAILABLE"
+          }
+        }
+      }
+    },
+    "reportDetail.inProgress": {
+      "comment": "A submission attempt may be underway; the persisted state precedes the network POST.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SUBMISSION IN PROGRESS"
+          }
+        }
+      }
+    },
+    "reportDetail.operatorAccepted": {
+      "comment": "Shown only with a verified operator acceptance receipt stored on device.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ACCEPTED BY OPERATOR"
+          }
+        }
+      }
+    },
+    "reportDetail.receiptStored": {
+      "comment": "A verified operator acceptance receipt is stored on device.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STORED"
+          }
+        }
+      }
+    },
+    "reportDetail.statusUnavailable": {
+      "comment": "The state flag has no matching receipt; do not claim acceptance.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STATUS UNAVAILABLE"
+          }
+        }
+      }
+    },
+    "reportDetail.record": {
+      "comment": "Section heading for the selected durable submission record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORD"
+          }
+        }
+      }
+    },
+    "reportDetail.reportID": {
+      "comment": "Label for the durable UUID of one canonical Observation submission record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "REPORT ID"
+          }
+        }
+      }
+    },
+    "reportDetail.recorded": {
+      "comment": "Label for the one signed Observation stored in this report record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECORDED ON DEVICE"
+          }
+        }
+      }
+    },
+    "reportDetail.oneObservation": {
+      "comment": "Exactly one canonical signed Observation is stored in a report record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 OBSERVATION"
+          }
+        }
+      }
+    },
+    "reportDetail.mutual": {
+      "comment": "Reciprocal presence confirmation, which this record cannot currently establish.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MUTUAL OBSERVATION"
+          }
+        }
+      }
+    },
+    "reportDetail.sent": {
+      "comment": "Delivery state row; in-progress values explicitly say delivery is unconfirmed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SENT"
+          }
+        }
+      }
+    },
+    "reportDetail.acceptanceReceipt": {
+      "comment": "Verified operator receipt state for the selected report.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ACCEPTANCE RECEIPT"
+          }
+        }
+      }
+    },
+    "reportDetail.published": {
+      "comment": "Whether the report appears in published data, currently unavailable.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PUBLISHED"
+          }
+        }
+      }
+    },
+    "reportDetail.observations": {
+      "comment": "Section for the one signed canonical Observation in this record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OBSERVATIONS INCLUDED"
+          }
+        }
+      }
+    },
+    "reportDetail.sessionProof": {
+      "comment": "Section for the one stored Proof of the recording session this report was closed in. Not a verification or earned-reward claim.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SESSION PROOF"
+          }
+        }
+      }
+    },
+    "reportDetail.sessionProof.subtitle": {
+      "comment": "Report Detail proof row: the same local proof state Event Detail shows, then the shortened Proof record ID. No verification or mutual claim.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "reportDetail.sessionProof.accessibilityLabel": {
+      "comment": "VoiceOver label for the Report Detail proof row. The first value is the visible proof title; the state comes only from a matching self-proof signature record.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "proofDetail.fromReports": {
+      "comment": "Section listing the stored reports whose observation window was closed in this Proof's recording session. No count is shown.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FROM REPORTS"
+          }
+        }
+      }
+    },
+    "observationDetail.includedInReports": {
+      "comment": "Section listing the stored reports whose observation window was closed in this recording session. No count is shown.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "INCLUDED IN REPORTS"
+          }
+        }
+      }
+    },
+    "reportDetail.reportID.accessibility": {
+      "comment": "VoiceOver reads the full durable report UUID; the visible value is shortened.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report ID %@"
+          }
+        }
+      }
+    },
+    "reportDetail.observationDigest.accessibility": {
+      "comment": "VoiceOver reads the full digest of the selected signed Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observation digest %@"
+          }
+        }
+      }
+    },
+    "reportDetail.preparedAt": {
+      "comment": "Preparation time on this device, not a network send or operator acceptance time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PREPARED ON DEVICE · %@"
+          }
+        }
+      }
+    },
+    "Report unavailable on this device": {
+      "comment": "The selected durable report UUID could not be read from the shared store.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report unavailable on this device"
+          }
+        }
+      }
+    },
+    "1 signed observation": {
+      "comment": "One report record contains exactly one signed canonical Observation.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 signed observation"
+          }
+        }
+      }
+    },
+    "transparency.deliveryUnconfirmed": {
+      "comment": "Sent row while SUBMITTING is stored before POST; the device cannot yet claim that data left it.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In progress · delivery unconfirmed"
+          }
+        }
+      }
+    }
   },
   "version": "1.0"
 }

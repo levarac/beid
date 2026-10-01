@@ -14,9 +14,9 @@ struct ScanFlowView: View {
   /// (never blocking `.recording`) through two triggers that both funnel
   /// into `presentBindingSheetIfNeeded()` below:
   ///
-  /// 1. **Primary — `.onChange(of: sensing.entranceCeremonyFinished)`**:
-  ///    fires the moment `RecordingView`'s one-time entrance ceremony
-  ///    finishes, whether or not the app is foreground at that instant.
+  /// 1. **Primary — `.onChange(of: sensing.recordingSurfaceReady)`**:
+  ///    fires after `RecordingView` has mounted, whether or not the app is
+  ///    foreground at that instant.
   ///    Presenting while the user is already looking at the screen is
   ///    intended, not an interruption to avoid — owner decision
   ///    2026-08-18. DECISIONS 2026-07-30 already specified binding at
@@ -27,11 +27,12 @@ struct ScanFlowView: View {
   ///    wiring gap, it did not introduce a new policy.
   /// 2. **Safety net — `.onChange(of: scenePhase)`**: re-checks
   ///    `presentBindingSheetIfNeeded()` on return to foreground, covering a
-  ///    session that *did* background before the ceremony finished.
+  ///    session that *did* background before the surface mounted.
   ///    `presentBindingSheetIfNeeded()` re-checks `bindingState ==
   ///    .pendingConnect` and no-ops if the sheet is already up, so both
   ///    triggers firing is harmless.
   @State private var bindingSheetPresented = false
+  @State private var restoreBindingSheetAfterKeepSensing = false
 
   init(sensing: SensingCoordinator) {
     self.sensing = sensing
@@ -40,21 +41,62 @@ struct ScanFlowView: View {
   var body: some View {
     NavigationStack {
       content
-        .animation(BeidDesign.Animation.soft, value: sensing.phase)
-        .navigationTitle("Scan")
-        .navigationBarTitleDisplayMode(.large)
+        .animation(DS.Motion.screenTransition, value: sensing.phase)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(proofCollectedForDisplay == nil ? .visible : .hidden, for: .navigationBar)
+        .toolbarBackground(
+          usesInkGround ? DS.Color.textPrimary : DS.Color.surfaceCanvas,
+          for: .navigationBar
+        )
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(usesInkGround ? .dark : .light, for: .navigationBar)
         .toolbar {
-          ToolbarItem(placement: .topBarTrailing) {
-            Button {
-              BeidDesign.haptic()
-              coordinator.finishScan()
-            } label: {
-              Image(systemName: "xmark")
-                .foregroundStyle(DS.Color.textPrimary)
-                .frame(width: DS.Size.minHitTarget, height: DS.Size.minHitTarget)
-                .beidSurface(interactive: true, cornerRadius: DS.Radius.pill)
+          if proofCollectedForDisplay == nil {
+            ToolbarItem(placement: .topBarLeading) {
+              HStack(spacing: DS.Space.s) {
+                Circle()
+                  .fill(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
+                  .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+                  .accessibilityHidden(true)
+                Text(statusTitle)
+                  .beidTextStyle(DS.Font.Library.labelMono11)
+                  .foregroundStyle(
+                    usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary
+                  )
+              }
+              .fixedSize(horizontal: true, vertical: false)
+              .accessibilityElement(children: .combine)
             }
-            .accessibilityLabel("Close")
+            // #631 / 2026-09-25: suppress iOS 26's item glass; #630 removed
+            // branches that added glass, not this branch that removes it.
+            .beidWithoutSharedBackground()
+            ToolbarItem(placement: .topBarTrailing) {
+              if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
+                BeidTextControl(
+                  "Done",
+                  labelColor: DS.Color.textSecondaryOnInk,
+                  accessibilityLabel: "Done"
+                ) {
+                  if coordinator.sealedSnapshot != nil {
+                    coordinator.doneWithSealedRecord()
+                  } else {
+                    coordinator.finishScan()
+                  }
+                }
+              } else if coordinator.stopConfirmSnapshot == nil && !isStopConfirmScreenshotFixture {
+                BeidTextControl(
+                  "Close",
+                  labelColor: usesInkGround ? DS.Color.textSecondaryOnInk : DS.Color.textPrimary,
+                  accessibilityLabel: "Close"
+                ) {
+                  restoreBindingSheetAfterKeepSensing = bindingSheetPresented
+                  bindingSheetPresented = false
+                  coordinator.requestScanClose()
+                }
+              }
+            }
+            .beidWithoutSharedBackground()
           }
         }
     }
@@ -102,16 +144,13 @@ struct ScanFlowView: View {
       presentBindingSheetIfNeeded()
     }
     // Dismisses off `bindingState` itself, not off any one specific caller
-    // of `finishScan()`/`reset()`. `SensingCoordinator.resetSessionState()`
-    // (which `finishScan()` -> `reset()` always goes through, and which
-    // also runs at every fresh `.eventFound`) is the single choke point
+    // of `reset()`. `SensingCoordinator.resetSessionState()` (reached by
+    // confirmed stop, direct prejoin CLOSE, and every fresh `.eventFound`)
+    // is the single choke point
     // that sets `bindingState = .none`, from ANY prior state — driving
     // dismissal off that value change covers every current and future
-    // caller uniformly, including the Close button above (which no longer
-    // special-cases the binding sheet at all — it just calls
-    // `finishScan()` unconditionally and lets this handler keep
-    // `bindingSheetPresented` in sync) and the `scenePhase` background
-    // checkpoint path.
+    // caller uniformly, including a confirmed CLOSE that resets the
+    // session and the `scenePhase` background checkpoint path.
     //
     // Any transition INTO `.none`, from any prior state. Never fires
     // mid-attempt — `.connecting`/`.awaitingApproval`/`.bound`/`.failed`
@@ -122,32 +161,129 @@ struct ScanFlowView: View {
       guard case .none = newValue else { return }
       bindingSheetPresented = false
     }
-    // Presentation is chained to the entrance ceremony finishing, not
-    // directly to `bindingState` reaching `.pendingConnect` — §5.5 wants
-    // the one-time "Proof Collected" ceremony and the binding prompt
-    // sequenced one after the other, not the sheet's presentation
-    // animation starting on top of the ceremony's. `RecordingView.onAppear`
-    // marks this even when there's no ceremony to show at all (a resumed
-    // session), so this still fires promptly in that case rather than
-    // waiting on something that will never happen.
-    .onChange(of: sensing.entranceCeremonyFinished) { _, newValue in
+    // The sheet waits until RecordingView has mounted. This retains the
+    // presentation transaction boundary after removing its old ceremony.
+    .onChange(of: sensing.recordingSurfaceReady) { _, newValue in
       guard newValue else { return }
       presentBindingSheetIfNeeded()
     }
   }
 
   private func presentBindingSheetIfNeeded() {
+    guard coordinator.stopConfirmSnapshot == nil, coordinator.sealedSnapshot == nil,
+      coordinator.proofCollectedSnapshot == nil else { return }
     guard case .pendingConnect = sensing.bindingState else { return }
     bindingSheetPresented = true
   }
 
+  private var usesInkGround: Bool {
+    if proofCollectedForDisplay != nil { return false }
+    if coordinator.stopConfirmSnapshot != nil || coordinator.sealedSnapshot != nil { return true }
+    #if DEBUG
+    if sensing.sensingScreenshotFixture != nil { return true }
+    #endif
+    if sensing.joinRefusalReasonKey != nil { return true }
+    switch sensing.phase {
+    case .eventFound, .recording: return true
+    case .idle, .sensing, .signalLost: return false
+    }
+  }
+
+  private var statusTitle: String {
+    if let sealed = coordinator.sealedSnapshot {
+      return "Sealed · \(Int(sealed.aggregate?.windowCount ?? 0)) windows"
+    }
+    if coordinator.stopConfirmSnapshot != nil {
+      let count = Int(sensing.sessionAggregate?.windowCount ?? 0)
+      return count > 0 ? "Sensing · window \(count)" : "Sensing"
+    }
+    #if DEBUG
+    if sensing.sensingScreenshotFixture == .sealed {
+      return "Sealed · \(Int(sensing.sessionAggregate?.windowCount ?? 0)) windows"
+    }
+    if sensing.sensingScreenshotFixture == .cantJoin { return "Can't join" }
+    #endif
+    // A clock notice informs on the pre-join screen; only a refusal is
+    // "Can't join".
+    if sensing.joinRefusalReasonKey != nil { return "Can't join" }
+    switch sensing.phase {
+    case .eventFound, .recording:
+      let count = Int(sensing.sessionAggregate?.windowCount ?? 0)
+      return count > 0 ? "Sensing · window \(count)" : "Sensing"
+    case .idle, .sensing, .signalLost:
+      return "Sensing"
+    }
+  }
+
+  private var isSealedScreenshotFixture: Bool {
+    #if DEBUG
+    return sensing.sensingScreenshotFixture == .sealed
+    #else
+    return false
+    #endif
+  }
+
+  private var isStopConfirmScreenshotFixture: Bool {
+    #if DEBUG
+    return sensing.sensingScreenshotFixture == .stopConfirm
+    #else
+    return false
+    #endif
+  }
+
+  private var proofCollectedForDisplay: ProofCollectedSnapshot? {
+    if let snapshot = coordinator.proofCollectedSnapshot { return snapshot }
+    #if DEBUG
+    if sensing.sensingScreenshotFixture == .proofCollected {
+      return .screenshotFixture
+    }
+    #endif
+    return nil
+  }
+
   @ViewBuilder
   private var content: some View {
-    ScanFlowContent.view(
-      phase: sensing.phase,
-      sensing: sensing,
-      clockPreflight: coordinator.clockPreflight
-    )
+    if let collected = proofCollectedForDisplay {
+      ProofCollectedView(
+        snapshot: collected,
+        sigilInput: sensing.sigilInput(forProofId: collected.recordID)
+      ) {
+        if coordinator.proofCollectedSnapshot != nil {
+          coordinator.viewCollectionAfterProofCollected()
+        } else {
+          coordinator.finishScan()
+        }
+      }
+    } else if let sealed = coordinator.sealedSnapshot {
+      SensingSealedView(
+        snapshot: sealed,
+        sigilInput: sealed.recordID.flatMap { sensing.sigilInput(forProofId: $0) }
+      )
+    } else if let pending = coordinator.stopConfirmSnapshot {
+      SensingStopConfirmView(
+        sensing: sensing,
+        snapshot: pending,
+        onStop: {
+          restoreBindingSheetAfterKeepSensing = false
+          coordinator.confirmStopSensing()
+        },
+        onKeepSensing: {
+          coordinator.keepSensing()
+          guard restoreBindingSheetAfterKeepSensing else { return }
+          restoreBindingSheetAfterKeepSensing = false
+          Task { @MainActor in
+            await Task.yield()
+            presentBindingSheetIfNeeded()
+          }
+        }
+      )
+    } else {
+      ScanFlowContent.view(
+        phase: sensing.phase,
+        sensing: sensing,
+        clockPreflight: coordinator.clockPreflight
+      )
+    }
   }
 }
 
@@ -176,28 +312,58 @@ enum ScanFlowContent {
     }
   }
 
+  @MainActor
   @ViewBuilder
   static func view(
     phase: ScanPhase,
     sensing: SensingCoordinator,
-    clockPreflight: ClockPreflightController? = nil,
-    recordingCeremonyDwellNanos: UInt64 = 2_000_000_000
+    clockPreflight: ClockPreflightController? = nil
+  ) -> some View {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"),
+      let fixture = sensing.sensingScreenshotFixture,
+      let event = sensing.sensingScreenshotEvent {
+      screenshotView(fixture: fixture, event: event, sensing: sensing)
+    } else {
+      productionView(
+        phase: phase,
+        sensing: sensing,
+        clockPreflight: clockPreflight
+      )
+    }
+    #else
+    productionView(
+      phase: phase,
+      sensing: sensing,
+      clockPreflight: clockPreflight
+    )
+    #endif
+  }
+
+  @ViewBuilder
+  private static func productionView(
+    phase: ScanPhase,
+    sensing: SensingCoordinator,
+    clockPreflight: ClockPreflightController?
   ) -> some View {
     switch phase {
     case .idle, .sensing:
-      SensingView(sensing: sensing, clockPreflight: clockPreflight)
+      if let clockPreflight {
+        SensingPrejoinRouter(sensing: sensing, clockPreflight: clockPreflight)
+      } else {
+        SensingView(sensing: sensing)
+      }
     case .eventFound(let event):
       EventFoundView(
+        sensing: sensing,
         event: event,
         onRetryVerification: { sensing.retryEventIdentityVerification() }
       )
-    case .recording(let event, let peersVerified):
+    case .recording(let event, _):
       RecordingView(
         sensing: sensing,
         event: event,
-        peersVerified: peersVerified,
-        onRetryVerification: { sensing.retryEventIdentityVerification() },
-        ceremonyDwellNanos: recordingCeremonyDwellNanos
+        onRetryVerification: { sensing.retryEventIdentityVerification() }
       )
     case .signalLost(let event, let peersVerified):
       SignalLostView(
@@ -207,6 +373,62 @@ enum ScanFlowContent {
       )
     }
   }
+
+  #if DEBUG
+  @MainActor
+  @ViewBuilder
+  private static func screenshotView(
+    fixture: SensingScreenshotFixture,
+    event: EventSession,
+    sensing: SensingCoordinator
+  ) -> some View {
+    switch fixture {
+    case .sensing:
+      SensingSessionSurface(sensing: sensing, event: event, presentation: .steady)
+    case .detecting:
+      SensingSessionSurface(sensing: sensing, event: event, presentation: .detecting)
+    case .detectingLong:
+      SensingSessionSurface(sensing: sensing, event: event, presentation: .detectingLong)
+    case .detectingFirstTime:
+      SensingSessionSurface(sensing: sensing, event: event, presentation: .detectingFirstTime)
+    case .cantJoin:
+      // 05d is reached only by a join refusal: a clock notice never blocks.
+      SensingCantJoinView(
+        reason: .refused("event_not_active"),
+        code: event.id,
+        event: event,
+        candidate: NearbyEventCard(
+          beaconDisplayName: event.name,
+          eventIdHex: "fixture-event-id",
+          displayValidFromEpochSeconds: nil,
+          displayValidUntilEpochSeconds: nil,
+          eventCodeHashHex: "fixture-hash"
+        )
+      )
+    case .stopConfirm:
+      SensingStopConfirmView(
+        sensing: sensing,
+        snapshot: SensingStopConfirmSnapshot(
+          proofID: nil,
+          event: event
+        ),
+        onStop: {},
+        onKeepSensing: {}
+      )
+    case .sealed:
+      SensingSealedView(snapshot: SensingSealedSnapshot(
+        recordID: nil,
+        event: event,
+        aggregate: sensing.sessionAggregate,
+        detectedDeviceCount: sensing.devicesVerified,
+        firstSightingAt: sensing.firstSightingAt,
+        sealedAt: sensing.sensingPresentationNow(Date())
+      ))
+    case .proofCollected:
+      ProofCollectedView(snapshot: .screenshotFixture, onViewCollection: {})
+    }
+  }
+  #endif
 }
 
 /// A thin preview-only state observer. It deliberately delegates every phase
@@ -214,18 +436,11 @@ enum ScanFlowContent {
 /// views and routing as a real scan flow.
 struct ScanFlowPreviewHarness: View {
   @ObservedObject var sensing: SensingCoordinator
-  let recordingCeremonyDwellNanos: UInt64
-
-  init(sensing: SensingCoordinator, recordingCeremonyDwellNanos: UInt64 = 0) {
-    self.sensing = sensing
-    self.recordingCeremonyDwellNanos = recordingCeremonyDwellNanos
-  }
 
   var body: some View {
     ScanFlowContent.view(
       phase: sensing.phase,
-      sensing: sensing,
-      recordingCeremonyDwellNanos: recordingCeremonyDwellNanos
+      sensing: sensing
     )
   }
 }
@@ -233,13 +448,6 @@ struct ScanFlowPreviewHarness: View {
 #Preview("Sensing") {
   let coordinator = AppCoordinator()
   return ScanFlowView(sensing: coordinator.sensingCoordinator).environmentObject(coordinator)
-}
-
-#Preview("Sensing (Dark)") {
-  let coordinator = AppCoordinator()
-  return ScanFlowView(sensing: coordinator.sensingCoordinator)
-    .environmentObject(coordinator)
-    .preferredColorScheme(.dark)
 }
 
 #Preview("Signal Lost scenario") {

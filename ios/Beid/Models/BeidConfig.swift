@@ -57,6 +57,71 @@ enum BeidConfig {
     return Int(BeidSharedKit.sensing.defaultEventConfirmThreshold)
   }
 
+  // MARK: - Radar node signal strength (beid#652)
+  //
+  // Display-only tuning for the sensing radar's per-node signal strength.
+  // Nothing below is read by any record, signing, or submission path — see
+  // `NodeSignalStrength`, which explains why that is a property of the call
+  // graph rather than a rule this comment asks anyone to remember.
+
+  /// Exponential-moving-average weight applied to each new dBm sample:
+  /// `new = previous + alpha * (sample - previous)`. Lower is steadier and
+  /// slower to follow a real move; higher tracks faster and jitters more.
+  ///
+  /// **UNVERIFIED ON HARDWARE.** This value was chosen by reasoning, not
+  /// measured: no real-device run has been possible for this change. What
+  /// would settle it is a device-lab measurement (`tools/beid-lab-cli`,
+  /// beid#588) of RSSI traces from phones held still and phones walking, then
+  /// choosing the largest alpha at which a stationary node stops visibly
+  /// crawling on the radar. Until then, treat it as a placeholder that
+  /// happens to be in service.
+  static let nodeSignalSmoothingFactor: Double = 0.25
+
+  /// Floor on how often `SensingCoordinator.nodeSignalStrengths` is
+  /// republished, in seconds. The smoothed value updates on every sample;
+  /// only the republish — and so the redraw — is coalesced.
+  ///
+  /// Measured against the `timestamp` the Barnard event carries, never
+  /// `Date()` and never a `Timer`. That is deliberate: it keeps the whole
+  /// path deterministic and unit-testable with no clock seam and no async,
+  /// and it is why this is a plain number here rather than a scheduler
+  /// somewhere.
+  ///
+  /// **UNVERIFIED ON HARDWARE.** What would settle it is watching the radar
+  /// at a real gathering, where advertisement rates and node counts are what
+  /// they actually are, and lowering this until the motion reads as
+  /// continuous — or raising it if redraw cost shows up in a time profile.
+  static let nodeSignalRedrawMinimumInterval: TimeInterval = 0.5
+
+  /// Exclusive upper bound for a *usable* RSSI sample: a sample counts as a
+  /// measurement iff `rssi < nodeSignalUsableUpperBoundDbm`. Everything at or
+  /// above it — `0`, any positive value, `127` — leaves the node
+  /// `.unmeasured` and never reaches the smoother.
+  ///
+  /// **This is not tuning, and it must not be "simplified" away.** It exists
+  /// because of one proven behaviour in the pinned Barnard SDK (v0.9.2,
+  /// `61e2f0ba`): in `BarnardEngine.swift` the detection path reads
+  /// `let rssi = discoveredRssi[id] ?? 0`, while `discoveredRssi` is cleared
+  /// wholesale elsewhere in that file and a GATT exchange can still be in
+  /// flight across that clear. So `rssi: 0` reaches this app meaning *"never
+  /// measured"*, not *"0 dBm"*. 0 dBm is not a plausible BLE received power;
+  /// real values are negative. Barnard's own `isUsableRssi` (which rejects
+  /// exactly `127`, CoreBluetooth's unavailable marker) guards the
+  /// `.rssiUpdate` path but is **not** applied to that `?? 0` fallback, so
+  /// this app must reject the sentinel itself.
+  ///
+  /// Accepting `0` would place an unmeasured node at the radar's centre — the
+  /// strongest possible proximity claim, made from no measurement at all. See
+  /// `NodeSignalStrength.unmeasured`.
+  ///
+  /// **UNVERIFIED ON HARDWARE**, in the narrow sense that no real-device run
+  /// has confirmed how often the sentinel actually arrives. The bound itself
+  /// does not depend on that: it is read off the SDK source above, not
+  /// estimated. What a device run would settle is whether rejecting these
+  /// samples ever leaves a node visibly stuck at `.unmeasured` while it is
+  /// plainly nearby, which would point at the SDK, not at this number.
+  static let nodeSignalUsableUpperBoundDbm: Int = 0
+
   /// Resolves the Debug demo walkthrough requested by a launch argument.
   /// Invalid or incomplete input deliberately falls back to the App Review
   /// golden path, so an App Review/demo launch never becomes a blank screen.

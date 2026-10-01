@@ -27,22 +27,20 @@ struct SessionParticipationListView: View {
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
-        BeidGlassGroup(spacing: BeidDesign.Spacing.section) {
-          VStack(alignment: .leading, spacing: BeidDesign.Spacing.section) {
-            header
-            BeidPanel {
-              VStack(alignment: .leading, spacing: DS.Space.m) {
-                ForEach(Array(sessions.enumerated()), id: \.offset) { index, session in
-                  if index > 0 {
-                    Divider()
-                  }
-                  sessionRow(session)
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+          header
+          BeidPanel {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+              ForEach(Array(sessions.enumerated()), id: \.offset) { index, session in
+                if index > 0 {
+                  Divider()
                 }
+                sessionRow(session)
               }
             }
           }
-          .padding(BeidDesign.Spacing.screenHorizontal)
         }
+        .padding(DS.Space.pageMargin)
       }
     }
     .background(DS.Color.surfaceCanvas)
@@ -89,10 +87,6 @@ struct SessionParticipationListView: View {
           .foregroundStyle(DS.Color.textPrimary)
         Spacer(minLength: DS.Space.m)
         trailingValue
-        Image(systemName: "chevron.right")
-          .font(DS.Font.meta)
-          .foregroundStyle(DS.Color.textSecondary)
-          .accessibilityHidden(true)
       }
       .frame(minHeight: DS.Size.minHitTarget)
     }
@@ -109,7 +103,7 @@ struct SessionParticipationListView: View {
   private var trailingValue: some View {
     Text(mutualCountUnavailableText)
       .font(DS.Font.supporting)
-      .foregroundStyle(DS.Color.statusOff)
+      .foregroundStyle(DS.Color.textSecondary)
   }
 
   /// Shared verbatim (same key/defaultValue/comment) with
@@ -149,32 +143,4 @@ struct SessionParticipationListView: View {
       ]
     )
   }
-}
-
-#Preview("Multiple sessions (Dark)") {
-  NavigationStack {
-    SessionParticipationListView(
-      eventName: "ETHGlobal Tokyo",
-      sessions: [
-        (
-          proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 5, eventCode: "ETHTOKYO"),
-          aggregate: PreviewAggregateFactory.sessionAggregate(
-            observations: [
-              (windowIndex: 0, peerKey: "peer-1", displayId: "device-1"),
-              (windowIndex: 1, peerKey: "peer-2", displayId: "device-2"),
-            ],
-            windowsPerBand: 2
-          )
-        ),
-        (
-          proof: Proof(
-            eventName: "ETHGlobal Tokyo", date: Date().addingTimeInterval(-86400 * 5),
-            peersVerified: 3, eventCode: "ETHTOKYO"
-          ),
-          aggregate: nil
-        ),
-      ]
-    )
-  }
-  .preferredColorScheme(.dark)
 }

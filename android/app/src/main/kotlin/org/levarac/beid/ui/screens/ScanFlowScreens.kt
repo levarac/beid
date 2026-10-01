@@ -73,6 +73,7 @@ fun ScanFlowScreen(
     phase: ScanPhase,
     showEntranceCeremony: Boolean,
     onCeremonyFinished: () -> Unit,
+    showSimulateSignalLost: Boolean = false,
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
@@ -85,6 +86,7 @@ fun ScanFlowScreen(
             peersVerified = phase.peersVerified,
             showEntranceCeremony = showEntranceCeremony,
             onCeremonyFinished = onCeremonyFinished,
+            showSimulateSignalLost = showSimulateSignalLost,
             onSimulateSignalLost = onSimulateSignalLost,
             onStartWalletBinding = onStartWalletBinding,
         )
@@ -207,6 +209,7 @@ fun RecordingScreen(
     peersVerified: Int,
     showEntranceCeremony: Boolean,
     onCeremonyFinished: () -> Unit,
+    showSimulateSignalLost: Boolean = false,
     onSimulateSignalLost: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
     ceremonyDwellMillis: Long = 2000,
@@ -259,16 +262,18 @@ fun RecordingScreen(
                 value = peersVerified.toString(),
                 modifier = Modifier.testTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW),
             )
-            // Android has no real BLE signal-loss detection yet (mirrors iOS's own
-            // demo-only manual trigger) — this is the only way to reach SignalLost
-            // until real detection lands.
-            BeidSecondaryButton(
-                text = stringResource(R.string.event_join_simulate_signal_lost),
-                contentColor = BeidTheme.colors.proofSeal,
-                borderColor = BeidTheme.colors.proofSeal,
-                onClick = onSimulateSignalLost,
-                modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
-            )
+            // Debug builds only (beid#651), mirroring iOS's `#if DEBUG` gate in
+            // RecordingView.swift. The owner decided on 2026-09-22 not to build real
+            // signal-loss detection, so this is the only route to SignalLost.
+            if (showSimulateSignalLost) {
+                BeidSecondaryButton(
+                    text = stringResource(R.string.event_join_simulate_signal_lost),
+                    contentColor = BeidTheme.colors.proofSeal,
+                    borderColor = BeidTheme.colors.proofSeal,
+                    onClick = onSimulateSignalLost,
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
+                )
+            }
             BeidSecondaryButton(
                 text = stringResource(R.string.event_join_bind_wallet),
                 contentColor = BeidTheme.colors.proofSeal,

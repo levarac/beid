@@ -104,7 +104,7 @@
     <string name="event_join_status_pill_paused">Sensing paused</string>
     <!-- Verb: resumes a paused recording session in place, does not restart it. -->
     <string name="event_join_resume_sensing">Resume</string>
-    <!-- Manual affordance standing in for real signal-loss detection, which does not exist yet on Android. -->
+    <!-- Debug builds only (beid#651): manual trigger that pauses recording as if the event signal were lost. -->
     <string name="event_join_simulate_signal_lost">Simulate signal lost</string>
 
     <!-- Scan flow (beid#336): Sensing/Event Found/Recording/Signal Lost full-screen bodies shown inside EventJoinScreen once a session reaches EventJoinUiState.Sensing — mirrors iOS's ScanFlowView (screens 05-07/06d). -->

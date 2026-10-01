@@ -202,6 +202,30 @@ enum OwnerKeyOperationFailure: Identifiable, Equatable {
   var message: String { String(localized: "ownerKeyFailure.message", defaultValue: "beid could not access the key used for proofs. Proof-key operations are paused. Try again when your device is available.") }
 }
 
+#if DEBUG
+/// Screenshot-only screen selection. Requires both launch arguments; no
+/// Release build can select one, and none is written to persistent state.
+enum SensingScreenshotFixture: String {
+  case sensing = "05"
+  case detecting = "05a"
+  case detectingLong = "05a2"
+  case detectingFirstTime = "05a3"
+  case cantJoin = "05d"
+  case stopConfirm = "05e"
+  case sealed = "06"
+  case proofCollected = "07"
+
+  static var selected: SensingScreenshotFixture? {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+      let flagIndex = arguments.firstIndex(of: "-beid-sensing-shot"),
+      arguments.indices.contains(flagIndex + 1)
+    else { return nil }
+    return SensingScreenshotFixture(rawValue: arguments[flagIndex + 1])
+  }
+}
+#endif
+
 /// Wraps `BarnardEngine` (scan+advertise) and one `SensingCryptography`
 /// facade (per-event signing, owner-key signing) behind the app's `ScanPhase`
 /// state machine. The facade — not `BarnardIdentity` directly — is what this
@@ -245,26 +269,9 @@ final class SensingCoordinator: ObservableObject {
   /// `RegistryVerifiedJoinContext`. This display/session field is never itself
   /// authority for joining.
   @Published private(set) var joinedCanonicalEventIdHex: String?
-  /// Whether `RecordingView`'s one-time entrance ceremony (§5.5) has already
-  /// played for the current session. Lives here rather than as view-local
-  /// `@State` because `.recording` can be interrupted by `.signalLost` and
-  /// resumed (`resumeSensing()`), which recreates `RecordingView` — a flag
-  /// on the view itself would incorrectly replay the ceremony after every
-  /// resume. Reset alongside the rest of per-session state in
-  /// `resetSessionState()`.
-  @Published private(set) var recordingCeremonyShown = false
-  /// Whether `RecordingView`'s one-time entrance ceremony has finished
-  /// dwelling (or never needed to run at all — see
-  /// `markEntranceCeremonyFinished()`'s own doc comment) for the current
-  /// session. `ScanFlowView` (beid#222) chains the wallet-binding sheet's
-  /// auto-presentation to this rather than directly to `bindingState`
-  /// becoming `.pendingConnect`, so the ceremony and the binding prompt are
-  /// sequenced one after the other per §5.5, instead of the sheet's
-  /// presentation animation starting on top of the ceremony's — which also
-  /// closed a presentation-transaction race where a same-tick Close tap
-  /// left both the scan flow and the sheet stuck on screen. Reset alongside
-  /// the rest of per-session state in `resetSessionState()`.
-  @Published private(set) var entranceCeremonyFinished = false
+  /// The recording surface has mounted. Binding sheet auto-presentation waits
+  /// for this signal so its animation does not race the recording transition.
+  @Published private(set) var recordingSurfaceReady = false
   /// Distinct devices observed so far this session — the value carried as
   /// `peersVerified` into `.recording` and the stored `Proof`, and so the
   /// number that ends up inside a signed artifact.
@@ -307,6 +314,104 @@ final class SensingCoordinator: ObservableObject {
   /// every new observation (#109's "no subscription API, caller recomputes"
   /// contract — see `AggregationRuntime.sessionAggregate`).
   @Published private(set) var sessionAggregate: BeidSharedKit.aggregation.SessionAggregate?
+  /// First Barnard detection timestamp for this session. Presentation only:
+  /// it never enters a record, signature, or submission. A direct test/demo
+  /// detection without a timestamp leaves this nil instead of inventing one.
+  @Published private(set) var firstSightingAt: Date?
+  /// Stable display IDs actually resolved during this live session. The radar
+  /// needs the IDs even before a usable RSSI arrives; neither this set nor
+  /// signal strength is persisted. All peers remain detected-only until a
+  /// reciprocal observation source exists (DECISIONS 2026-09-26).
+  @Published private(set) var detectedDisplayIDs: Set<String> = []
+  /// Read-only linkage to the Proof created at the recording threshold.
+  /// A phase alone cannot establish that a durable Proof actually exists.
+  var currentProofID: UUID? { activeProofId }
+
+  /// Uses the live wall clock for display. A guarded screenshot fixture may
+  /// substitute a fixed instant so elapsed copy cannot race capture.
+  func sensingPresentationNow(_ liveNow: Date) -> Date {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"), let sensingScreenshotNow {
+      return sensingScreenshotNow
+    }
+    #endif
+    return liveNow
+  }
+
+  #if DEBUG
+  private var sensingScreenshotNow: Date?
+  private(set) var sensingScreenshotFixture: SensingScreenshotFixture?
+  private(set) var sensingScreenshotEvent: EventSession?
+
+  /// Deliberate UI-test fixture for the Figma screenshot tour. It injects
+  /// synthetic observations into the in-memory display aggregate only; no
+  /// Barnard, ledger, signature, proof store, or network path runs. Each
+  /// sample signal is display-only. Production uses Barnard timestamps and
+  /// actual RSSI and never calls this method.
+  @discardableResult
+  func injectSensingScreenshotFixture() -> Bool {
+    guard let fixture = SensingScreenshotFixture.selected else { return false }
+    resetSessionState()
+    sensingScreenshotFixture = fixture
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    let start = calendar.date(from: DateComponents(
+      year: 2026, month: 9, day: 26, hour: 10, minute: 0
+    )) ?? Date(timeIntervalSince1970: 1_800_000_000)
+    let elapsedSeconds: TimeInterval
+    switch fixture {
+    case .sensing, .stopConfirm: elapsedSeconds = 25 * 60
+    case .detecting: elapsedSeconds = 10
+    case .detectingFirstTime: elapsedSeconds = 2 * 60
+    case .detectingLong: elapsedSeconds = 24
+    case .cantJoin: elapsedSeconds = 0
+    case .sealed, .proofCollected: elapsedSeconds = 30 * 60
+    }
+    firstSightingAt = fixture == .cantJoin || fixture == .proofCollected ? nil : start
+    sensingScreenshotNow = start.addingTimeInterval(elapsedSeconds)
+
+    if fixture != .cantJoin && fixture != .proofCollected {
+      let peerCounts = fixture == .sensing || fixture == .stopConfirm || fixture == .sealed
+        ? [1, 4, 6, 9, 8, 13]
+        : [5]
+      for (window, peerCount) in peerCounts.enumerated() {
+        for peer in 0..<peerCount {
+          let displayID = String(format: "%08x", peer + 1)
+          _ = recordDeviceIdentity(
+            enin: 6_000_000 + window,
+            rpid: "tour-rpid-\(window)-\(peer)",
+            detectedDisplayId: displayID
+          )
+          // Screen capture has no radio; these illustrative negative
+          // values only place fixture nodes across the field. They cannot
+          // enter a record and are never used by the production path.
+          nodeSignalStrengths[displayID] = .measured(dBm: Double(-45 - peer * 3))
+        }
+      }
+    }
+
+    let event = EventSession(
+      id: "ETH-TOKYO-26",
+      name: "ETH Tokyo 2026",
+      venue: "Tokyo Big Sight",
+      identityVerification: fixture == .cantJoin ? .verified : .notChecked
+    )
+    sensingScreenshotEvent = event
+    switch fixture {
+    case .sensing, .stopConfirm, .sealed:
+      recordingSurfaceReady = true
+      phase = .recording(event: event, peersVerified: devicesVerified)
+    case .proofCollected:
+      phase = .idle
+    case .detecting, .detectingLong, .detectingFirstTime:
+      phase = .eventFound(event)
+    case .cantJoin:
+      phase = .sensing
+    }
+    return true
+  }
+  #endif
   /// Distinct proximity identifiers observed this session that never arrived
   /// with a `detectedDisplayId`, and so could not be attributed to a device.
   ///
@@ -339,6 +444,39 @@ final class SensingCoordinator: ObservableObject {
   /// so the difference is visible at the call site rather than discovered by
   /// whoever first wires #109 to iOS.
   @Published private(set) var unidentifiedRpidCount = 0
+
+  // MARK: - Radar node signal strength (beid#652, display only)
+
+  /// Sensing-time signal strength per node, keyed by normalized display id —
+  /// the same id the drawing's angle uses, so a node's radius and its angle
+  /// cannot end up describing two different devices.
+  ///
+  /// **Display only. No record, signing, or submission path reads this**, and
+  /// that is structural rather than promised: its only writer,
+  /// `handleSignalStrength`, is a sibling of `handleDetection` and not
+  /// reachable from it, so no RSSI value is ever in lexical scope inside the
+  /// recording call tree. See `NodeSignalStrength`.
+  ///
+  /// Republished at most once per `BeidConfig.nodeSignalRedrawMinimumInterval`
+  /// (see `handleSignalStrength`), so this is a *coalesced view* of
+  /// `smoothedNodeSignalDbm` below rather than its live value. Read it through
+  /// `signalStrength(forNodeId:)`, which is the one place that turns "no entry"
+  /// and "not measured yet" into a single answer.
+  ///
+  /// A node never appears here as `.unmeasured`: an entry exists only once a
+  /// usable sample has been smoothed into it. `.unmeasured` is what
+  /// `signalStrength(forNodeId:)` says about a key that is absent.
+  @Published private(set) var nodeSignalStrengths: [String: NodeSignalStrength] = [:]
+  /// Live smoothed dBm per node — updated on **every** usable sample, unlike
+  /// `nodeSignalStrengths`, which only republishes on the coalescing schedule.
+  /// Keeping the two apart is what lets the smoother stay accurate while the
+  /// redraw stays cheap; `nodeSignalStrengths` is a total projection of this
+  /// dictionary, so the two cannot drift.
+  private var smoothedNodeSignalDbm: [String: Double] = [:]
+  /// Event timestamp of the most recent `nodeSignalStrengths` republish, or
+  /// `nil` if none has happened this session. Sourced from the caller's
+  /// timestamp, never `Date()` — see `handleSignalStrength`.
+  private var lastNodeSignalPublishAt: Date?
 
   /// Fired once, the instant `.recording` begins and a `Proof` is created.
   var onProofCollected: ((Proof) -> Void)?
@@ -410,6 +548,111 @@ final class SensingCoordinator: ObservableObject {
   func sessionAggregateSnapshot(forProofId proofId: UUID) -> BeidSharedKit.aggregation.SessionAggregate? {
     sessionAggregateSnapshotStore.snapshot(proofId: proofId)
   }
+
+  /// beid#653: the stored Sigil input for `proofId`, or `nil`, which every
+  /// caller draws as the neutral ring (no row, an unreadable row, or a
+  /// session that could not be encoded). See `SigilPresenceStore`.
+  func sigilInput(forProofId proofId: UUID) -> BeidSharedKit.sigil.SigilInput? {
+    sigilPresenceStore.sigilInput(proofId: proofId)
+  }
+
+  /// beid#653: the in-progress record's Sigil (frame 04's active card), built
+  /// live from this session's observations by the same shared builder that
+  /// writes the stored row at session end, so the live and the sealed Sigil
+  /// cannot disagree. `nil` until the recording threshold creates a Proof,
+  /// and whenever shared cannot build one (for example more than 1,024 peers).
+  var liveSigilInput: BeidSharedKit.sigil.SigilInput? {
+    guard activeProofId != nil else { return nil }
+    let built = BeidSharedKit.sigil.buildSigilPresenceInput(
+      session: sigilPresenceSession,
+      observations: aggregationRuntime.observations
+    )
+    guard built.isSuccess else { return nil }
+    return built.input
+  }
+
+  /// Test-only: clears stored presence together with
+  /// `ProofStore.resetForUITesting()` (`AppCoordinator`).
+  func resetSigilPresenceForUITesting() {
+    sigilPresenceStore.resetForUITesting()
+  }
+
+  /// Read-only presentation lookups. The stores remain the sole owners of
+  /// these durable artifacts; neither a Proof signature state nor a connected
+  /// wallet substitutes for a matching record.
+  func selfProofRecord(forProofId proofId: UUID) -> SelfProofRecord? {
+    selfProofStore.record(forProofId: proofId)
+  }
+
+  func bindingRecord(forProofId proofId: UUID) -> BindingRecord? {
+    bindingRecordStore.record(forProofId: proofId)
+  }
+
+  #if DEBUG
+  /// Uses the production shared reducer and snapshot store for screenshot
+  /// fixtures. The initializer below routes these two frames to an isolated
+  /// temporary snapshot file, never the participant's normal store.
+  func injectEventDetailSnapshotForUITesting(proofId: UUID, deviceCount: Int, windowIndex: Int64) {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+          arguments.contains("-beid-event-detail-frame-08") ||
+          arguments.contains("-beid-event-detail-frame-08c") ||
+          arguments.contains("-beid-observation-frame-11") else { return }
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    for index in 0..<deviceCount {
+      _ = BeidSharedKit.aggregation.addAggregationObservation(
+        input: input, windowIndex: windowIndex + Int64(index % 3),
+        peerKey: "fixture-peer-\(proofId)-\(index)",
+        displayId: "fixture-device-\(index)", mutual: false
+      )
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input, windowsPerBand: 4
+    )
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      assertionFailure("Unable to persist isolated Event Detail aggregate fixture: \(error)")
+    }
+  }
+
+  /// Six observed rows, with one unobserved ENIN gap, for frame 11. The
+  /// isolated screenshot snapshot store is the only output; this never
+  /// enters Barnard, ProofStore, signing, or report submission.
+  func injectObservationDetailSnapshotForUITesting(
+    proofId: UUID,
+    firstWindowIndex: Int64
+  ) {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+          arguments.contains("-beid-observation-frame-11") else { return }
+    let input = BeidSharedKit.aggregation.createAggregationObservationInput()
+    let offsets: [Int64] = [0, 1, 2, 4, 5, 6]
+    let peersByWindow: [[Int]] = [
+      Array(0..<4), Array(4..<12), Array(12..<23),
+      Array(0..<19), Array(0..<16), Array(0..<13)
+    ]
+    for (position, peers) in peersByWindow.enumerated() {
+      for peer in peers {
+        _ = BeidSharedKit.aggregation.addAggregationObservation(
+          input: input,
+          windowIndex: firstWindowIndex + offsets[position],
+          peerKey: "fixture-rpid-\(proofId)-\(position)-\(peer)",
+          displayId: "fixture-device-\(peer)",
+          mutual: false
+        )
+      }
+    }
+    let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
+      input: input, windowsPerBand: 1
+    )
+    do {
+      try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+    } catch {
+      assertionFailure("Unable to persist isolated Observation Detail aggregate fixture: \(error)")
+    }
+  }
+  #endif
 
   /// Field diagnostics for the counting split (beid#154). `os.Logger` rather
   /// than `print` on purpose: these lines have to be readable from a real
@@ -504,6 +747,10 @@ final class SensingCoordinator: ObservableObject {
   private(set) var lastRelayDecision: ParticipantRelayDecision?
   private let sensingCryptography: any SensingCryptography
   private let reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?
+  /// beid#701: which Proof each closed window belongs to, for display only.
+  /// Written in `closeWindow` and never handed to `reportSubmissionRuntime`.
+  /// `nil` writes no links (previews and tests that do not inject one).
+  private let reportProofLinkStore: ReportProofLinkStore?
   private let eventIdentityVerificationSource: (any EventIdentityVerificationSource)?
   private let ownerKeyRestorationAcknowledgementDefaults: UserDefaults
   private var ownerKeyRestorationIdentityFingerprint: Data?
@@ -552,6 +799,16 @@ final class SensingCoordinator: ObservableObject {
   /// stake in `docs/specs/ledger-async-io.md` §4's startup-latency problem
   /// and needs no placeholder/background-load treatment.
   private let sessionAggregateSnapshotStore: SessionAggregateSnapshotStore
+  /// beid#653: per-record Sigil presence, on this device only and excluded
+  /// from backup. Written once at session end
+  /// (`persistSigilPresenceIfNeeded()`), beside the aggregate snapshot.
+  /// Nothing on the recording, signing or submission path reads it.
+  private let sigilPresenceStore: SigilPresenceStore
+  /// beid#653: this session's in-memory display id -> token map. Never
+  /// persisted, never logged; replaced in `resetSessionState()`.
+  private var sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
+  /// beid#653: the CSPRNG port that supplies Sigil presence tokens.
+  private let sigilPresenceTokenSource: any SigilPresenceTokenSource
   /// gh#156 Signal A (`docs/specs/owner-key-seed-read-failure.md` §8):
   /// non-nil once the owner key resolution behind `sensingCryptography` has
   /// quarantined an unreadable stored seed this session. `nil` both when
@@ -592,7 +849,18 @@ final class SensingCoordinator: ObservableObject {
   /// why the whole raw detection is queued rather than only its
   /// store-touching calls.
   private var queuedDetectionsWhileLoading:
-    [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?)] = []
+    [(enin: Int, rpid: String, detectedDisplayId: String?, reporterRpid: String?, observedAt: Date?)] = []
+  /// Signal-strength samples `handleSignalStrength` deferred while
+  /// `isLedgerLoading` was `true`. A separate queue on purpose (beid#652):
+  /// RSSI never joins the detection tuple above or reaches `handleDetection`.
+  /// `afterQueuedDetections` is how many detections were already queued when
+  /// the sample arrived, so the drain replays each sample right after the
+  /// detection it followed, as live delivery does. Publishing it at once
+  /// instead let the replayed detection's `beginEventFoundSessionState` wipe
+  /// it, leaving the node unmeasured (PR #716 review). Display state only:
+  /// nothing here is recorded, signed, or sent.
+  private var queuedSignalStrengthWhileLoading:
+    [(afterQueuedDetections: Int, rssi: Int, detectedDisplayId: String?, timestamp: Date)] = []
   /// Decision 1's background load/reconcile task (`beginLedgerLoad(...)`).
   /// Held so tests can deterministically await it
   /// (`waitForLedgerLoadToFinish()`), mirroring `demoTask`/
@@ -939,6 +1207,8 @@ final class SensingCoordinator: ObservableObject {
   convenience init(
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
+    reportSubmissionStore: ReportSubmissionStore? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     let sensingCryptography = BarnardSensingCryptography()
@@ -950,15 +1220,35 @@ final class SensingCoordinator: ObservableObject {
     #else
     allowInsecureLoopbackForTests = false
     #endif
+    let isEventDetailFixture: Bool
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    isEventDetailFixture = arguments.contains("-beid-ui-test") &&
+      (arguments.contains("-beid-event-detail-frame-08") ||
+        arguments.contains("-beid-event-detail-frame-08c") ||
+        arguments.contains("-beid-observation-frame-11"))
+    #else
+    isEventDetailFixture = false
+    #endif
+    let eventDetailSnapshotFileURL = isEventDetailFixture
+      ? FileManager.default.temporaryDirectory.appendingPathComponent(
+        "beid-event-detail-snapshots-\(UUID().uuidString).json"
+      ) : nil
+    let eventDetailSigilPresenceFileURL = isEventDetailFixture
+      ? FileManager.default.temporaryDirectory
+        .appendingPathComponent("beid-event-detail-sigil-presence-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("sigil-presence.json")
+      : nil
     self.init(
       windowReportFileURL: nil,
       selfProofFileURL: nil,
       selfProofCheckpointFileURL: nil,
       bindingRecordFileURL: nil,
-      sessionAggregateSnapshotFileURL: nil,
+      sessionAggregateSnapshotFileURL: eventDetailSnapshotFileURL,
+      sigilPresenceFileURL: eventDetailSigilPresenceFileURL,
       unsentWindowLedgerFileURL: nil,
       sensingCryptography: sensingCryptography,
-      reportSubmissionRuntime: ReportSubmissionRuntime.makeIfEnabled(
+      reportSubmissionRuntime: isEventDetailFixture ? nil : ReportSubmissionRuntime.makeIfEnabled(
         eventSigningCryptography: sensingCryptography,
         definitionProvider: registryClient.map {
           RegistryEventDefinitionContextProvider(
@@ -966,8 +1256,10 @@ final class SensingCoordinator: ObservableObject {
             allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
           )
         },
+        store: reportSubmissionStore,
         allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
       ),
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: registryClient.map {
         RegistryEventIdentityVerificationSource(client: $0)
       },
@@ -991,6 +1283,7 @@ final class SensingCoordinator: ObservableObject {
     loadingFromDirectory directory: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard
@@ -1001,9 +1294,11 @@ final class SensingCoordinator: ObservableObject {
       selfProofCheckpointFileURL: directory.appendingPathComponent("self-proof-checkpoint.json"),
       bindingRecordFileURL: directory.appendingPathComponent("binding-records.json"),
       sessionAggregateSnapshotFileURL: directory.appendingPathComponent("session-aggregate-snapshots.json"),
+      sigilPresenceFileURL: directory.appendingPathComponent("sigil-presence.json"),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       eventJoinControl: eventJoinControl,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults
@@ -1033,9 +1328,11 @@ final class SensingCoordinator: ObservableObject {
     selfProofCheckpointFileURL: URL?,
     bindingRecordFileURL: URL?,
     sessionAggregateSnapshotFileURL: URL?,
+    sigilPresenceFileURL: URL?,
     unsentWindowLedgerFileURL: URL?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)?,
+    reportProofLinkStore: ReportProofLinkStore?,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)?,
     eventJoinControl: (any EventJoinControlling)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
@@ -1049,9 +1346,11 @@ final class SensingCoordinator: ObservableObject {
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: Self.unloadedPlaceholderFileURL()),
       bindingRecordStore: BindingRecordStore(fileURL: bindingRecordFileURL),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: sessionAggregateSnapshotFileURL),
+      sigilPresenceStore: SigilPresenceStore(fileURL: sigilPresenceFileURL),
       unsentWindowLedgerRuntime: nil,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
       initialLedgerFailure: nil,
@@ -1237,9 +1536,12 @@ final class SensingCoordinator: ObservableObject {
     selfProofCheckpointStore: SelfProofCheckpointStore,
     bindingRecordStore: BindingRecordStore,
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
+    sigilPresenceStore: SigilPresenceStore? = nil,
+    sigilPresenceTokenSource: (any SigilPresenceTokenSource)? = nil,
     unsentWindowLedgerFileURL: URL,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
@@ -1264,9 +1566,12 @@ final class SensingCoordinator: ObservableObject {
       selfProofCheckpointStore: selfProofCheckpointStore,
       bindingRecordStore: bindingRecordStore,
       sessionAggregateSnapshotStore: sessionAggregateSnapshotStore,
+      sigilPresenceStore: sigilPresenceStore,
+      sigilPresenceTokenSource: sigilPresenceTokenSource,
       unsentWindowLedgerRuntime: runtime,
       sensingCryptography: sensingCryptography,
       reportSubmissionRuntime: reportSubmissionRuntime,
+      reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       nearbyDiscoveryClock: nearbyDiscoveryClock,
       eventJoinControl: eventJoinControl,
@@ -1284,9 +1589,12 @@ final class SensingCoordinator: ObservableObject {
     selfProofCheckpointStore: SelfProofCheckpointStore,
     bindingRecordStore: BindingRecordStore,
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore,
+    sigilPresenceStore: SigilPresenceStore? = nil,
+    sigilPresenceTokenSource: (any SigilPresenceTokenSource)? = nil,
     unsentWindowLedgerRuntime: (any UnsentWindowLedgerRuntimeProtocol)?,
     sensingCryptography: any SensingCryptography,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     initialLedgerFailure: Error? = nil,
@@ -1329,9 +1637,19 @@ final class SensingCoordinator: ObservableObject {
     self.selfProofCheckpointStore = selfProofCheckpointStore
     self.bindingRecordStore = bindingRecordStore
     self.sessionAggregateSnapshotStore = sessionAggregateSnapshotStore
+    // Production always passes its store (the private convenience init
+    // above). A caller that omits it — tests that do not look at presence —
+    // gets an isolated temporary file, never the device's real store.
+    self.sigilPresenceStore = sigilPresenceStore ?? SigilPresenceStore(
+      fileURL: FileManager.default.temporaryDirectory
+        .appendingPathComponent("beid-sigil-presence-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("sigil-presence.json")
+    )
+    self.sigilPresenceTokenSource = sigilPresenceTokenSource ?? SystemSigilPresenceTokenSource()
     self.unsentWindowLedgerRuntime = recoveredRuntime
     self.sensingCryptography = sensingCryptography
     self.reportSubmissionRuntime = reportSubmissionRuntime
+    self.reportProofLinkStore = reportProofLinkStore
     self.eventIdentityVerificationSource = eventIdentityVerificationSource
     self.ownerKeyRestorationAcknowledgementDefaults = ownerKeyRestorationAcknowledgementDefaults
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
@@ -1401,7 +1719,27 @@ final class SensingCoordinator: ObservableObject {
         enin: detection.enin,
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
-        reporterRpid: detection.reporterRpid
+        reporterRpid: detection.reporterRpid,
+        observedAt: detection.timestamp
+      )
+      // A SIBLING call, deliberately — not an extra argument to
+      // `handleDetection` above (beid#652). A detection carries an `rssi`
+      // this app used to drop here; routing it through its own function
+      // instead of into the recording call tree is what keeps signal
+      // strength out of lexical scope everywhere a record is built. Note it
+      // is not given `detection.enin`: the window index is record
+      // vocabulary. See `NodeSignalStrength`.
+      //
+      // Called AFTER `handleDetection`, and that order is load-bearing: a
+      // detection arriving in `.sensing` runs `beginEventFoundSessionState`
+      // synchronously, which calls `resetSessionState()` and clears the
+      // signal-strength state with the rest of the session. Applying this
+      // sample first would throw it away at the very transition where the
+      // radar most needs a radius for the device that caused it.
+      handleSignalStrength(
+        rssi: detection.rssi,
+        detectedDisplayId: detection.detectedDisplayId,
+        at: detection.timestamp
       )
     case .eventInfoEnvelopeV2(let envelopeEvent):
       handleObservedEventInfoEnvelopeV2(envelopeEvent)
@@ -1436,10 +1774,24 @@ final class SensingCoordinator: ObservableObject {
     //
     // Why each is ignored today: `.constraint` and `.error` are barnard's own
     // diagnostics, which this app surfaces through its sensing state rather
-    // than by reacting per event, and `.rssiUpdate` is signal strength, which
-    // no beid decision reads.
-    case .constraint, .error, .rssiUpdate:
+    // than by reacting per event, and reacting to them one at a time would
+    // duplicate that state machine.
+    //
+    // `.rssiUpdate` used to be in this list. It no longer is (beid#652): it
+    // is handled below, and it is handled by the same sibling function the
+    // `.detection` case calls, because it is the same kind of value — signal
+    // strength, used for display only, never for any decision. What has not
+    // changed is the part that mattered: no beid *decision* reads it. Being
+    // handled is not the same as being trusted, and nothing that records,
+    // signs, or submits may start reading it now that it has a home.
+    case .constraint, .error:
       break
+    case .rssiUpdate(let update):
+      handleSignalStrength(
+        rssi: update.rssi,
+        detectedDisplayId: update.detectedDisplayId,
+        at: update.timestamp
+      )
     }
   }
 
@@ -1459,7 +1811,8 @@ final class SensingCoordinator: ObservableObject {
     enin: Int,
     rpid: String,
     detectedDisplayId: String?,
-    reporterRpid: String? = nil
+    reporterRpid: String? = nil,
+    observedAt: Date? = nil
   ) {
     // beid#134 Decision 1: while the background load is still recovering
     // stores, queue the whole raw detection instead of processing it —
@@ -1474,7 +1827,8 @@ final class SensingCoordinator: ObservableObject {
           enin: enin,
           rpid: rpid,
           detectedDisplayId: detectedDisplayId,
-          reporterRpid: reporterRpid
+          reporterRpid: reporterRpid,
+          observedAt: observedAt
         )
       )
       return
@@ -1507,6 +1861,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .eventFound(let session):
       observe(
         enin: enin,
@@ -1515,6 +1870,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .recording(let session, _):
       observe(
         enin: enin,
@@ -1523,6 +1879,7 @@ final class SensingCoordinator: ObservableObject {
         reporterRpid: reporterRpid,
         for: session
       )
+      rememberFirstSighting(at: observedAt)
     case .idle, .signalLost:
       // `.signalLost` is frozen — real signal-loss *detection* doesn't
       // exist yet (only the demo-only manual trigger does), so this branch
@@ -1534,6 +1891,11 @@ final class SensingCoordinator: ObservableObject {
       // two phases as "ignored") is not duplicated here.
       break
     }
+  }
+
+  private func rememberFirstSighting(at timestamp: Date?) {
+    guard firstSightingAt == nil, let timestamp else { return }
+    firstSightingAt = timestamp
   }
 
   /// Records the detection against the running device count and window, then
@@ -1858,6 +2220,10 @@ final class SensingCoordinator: ObservableObject {
     // `.lowercased()` check owned here.
     let displayId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(detectedDisplayId: detectedDisplayId)
 
+    if let displayId, !detectedDisplayIDs.contains(displayId) {
+      detectedDisplayIDs.insert(displayId)
+    }
+
     if displayId == nil {
       if rpidsAwaitingDisplayId.insert(rpid).inserted {
         unidentifiedRpidCount = rpidsAwaitingDisplayId.count
@@ -1874,12 +2240,167 @@ final class SensingCoordinator: ObservableObject {
     }
 
     aggregationRuntime.recordObservation(windowIndex: enin, peerKey: rpid, displayId: displayId)
+    topUpSigilPresenceTokens()
     let aggregate = aggregationRuntime.sessionAggregate
     sessionAggregate = aggregate
     let updatedDeviceCount = Int(aggregate.deviceCount)
     guard updatedDeviceCount != devicesVerified else { return false }
     devicesVerified = updatedDeviceCount
     return true
+  }
+
+  // MARK: - Radar node signal strength (beid#652, display only)
+
+  /// The signal strength to draw for `nodeId`. **Always answers; never
+  /// returns `nil`.**
+  ///
+  /// This is THE decision point for "no signal yet". A node with no entry in
+  /// `nodeSignalStrengths` and a node explicitly not measured are the same
+  /// thing to every caller, and collapsing them here is the whole reason this
+  /// function exists: without it there would be two ways to say "no signal"
+  /// — an absent key and `.unmeasured` — and each consumer would have to know
+  /// which one it was looking at. One named function, one answer.
+  ///
+  /// `nodeId` must already be normalized
+  /// (`BeidSharedKit.sensing.normalizedDisplayIdOrNull`), like every other id
+  /// in this dictionary; an unknown id is not an error, it is `.unmeasured`.
+  func signalStrength(forNodeId nodeId: String) -> NodeSignalStrength {
+    nodeSignalStrengths[nodeId] ?? .unmeasured
+  }
+
+  /// Folds one RSSI sample into the display-only per-node signal strength.
+  ///
+  /// **A sibling of `handleDetection`, never a step inside it.** Both the
+  /// `.detection` and `.rssiUpdate` Barnard events route here, and nothing on
+  /// the recording path calls this or is called by it. That separation — not
+  /// this comment — is what guarantees signal strength never reaches a
+  /// record, a signature, or a submission. Do not add an `rssi` parameter to
+  /// `handleDetection`, `observe`, or `recordDeviceIdentity` to "simplify"
+  /// this away; the guarantee is the shape.
+  ///
+  /// **Takes no `enin`, deliberately.** The window index is record
+  /// vocabulary, and a display path that cannot name the window it belongs to
+  /// cannot be folded into a per-window record even by accident. Do not add
+  /// it back for symmetry with `handleDetection`.
+  ///
+  /// Not `private` for the same reason `handleDetection` is not: Barnard's
+  /// event structs have no public initializer, so `BeidTests` drives this
+  /// path by calling it with plain arguments.
+  ///
+  /// **Gated to the sensing phases**, mirroring `handleDetection`'s own
+  /// `.idle, .signalLost` branch rather than inventing a second shape. The
+  /// reason a reader will not reconstruct is `.signalLost`: that phase is a
+  /// *frozen* count, resumed only by an explicit `resumeSensing()`, and
+  /// `simulateSignalLost()` does not call `resetSessionState()`. Without this
+  /// gate the radar would keep its nodes moving while the count printed
+  /// beside them was frozen — one screen telling the user two different
+  /// things about whether anything is still happening. `.idle` is the same
+  /// argument with less at stake: nothing is drawn, so folding samples in is
+  /// at best wasted work and at worst state for the next session to inherit
+  /// if a reset is ever missed. It is also what makes the acceptance
+  /// criterion's "**sensing-time** signal strength" literally true rather
+  /// than approximately true.
+  ///
+  /// **This gate runs in the opposite direction to the one DESIGN.md §2
+  /// forbids, and must not be "fixed" by deleting it.** The Non-Negotiable is
+  /// that signal strength may not influence a decision. Here the *phase*
+  /// decides whether the *display* updates; signal strength still decides
+  /// nothing, and nothing downstream of it decides anything. Information
+  /// flows phase → display, never display → phase.
+  ///
+  /// Three things happen here, in order, and only the third is gated:
+  ///
+  /// 1. **Usability.** A sample is a measurement only if it is below
+  ///    `BeidConfig.nodeSignalUsableUpperBoundDbm`. `0` (Barnard's proven
+  ///    `discoveredRssi[id] ?? 0` sentinel), any positive value, and `127`
+  ///    (CoreBluetooth's unavailable marker) are not measurements: the node
+  ///    stays `.unmeasured` and the smoother never sees them. A rejected
+  ///    sample creates no entry at all, so it cannot later be mistaken for a
+  ///    measured one.
+  /// 2. **Smoothing**, on every usable sample. An exponential moving average,
+  ///    `new = previous + alpha * (sample - previous)`. The first usable
+  ///    sample seeds the value *directly* rather than ramping from zero — a
+  ///    ramp from 0 dBm would walk a node inward from the radar's centre,
+  ///    which is `NodeSignalStrength.unmeasured`'s failure mode in motion.
+  /// 3. **Republishing**, at most once per
+  ///    `BeidConfig.nodeSignalRedrawMinimumInterval`, decided purely from the
+  ///    `timestamp` the caller passes — not `Date()`, not a `Timer`, not a
+  ///    `Task`. No clock seam, no async, so the whole path is deterministic
+  ///    under test. A node's first transition out of `.unmeasured` always
+  ///    publishes immediately regardless of the interval: a node appearing is
+  ///    not jitter, and delaying it would leave a device visible in
+  ///    `devicesVerified` but missing a radius. That forced publish *does*
+  ///    rearm the interval, so a burst of arrivals can push an established
+  ///    node's next update back by up to one interval per new node. Chosen
+  ///    deliberately, not overlooked: a burst of arrivals is exactly when an
+  ///    extra redraw costs most, and the established nodes are meanwhile
+  ///    sitting at a radius that is at most one EMA step stale.
+  ///
+  /// The accepted trade-off of coalescing without a timer: **the last sample
+  /// before a node goes quiet may never be published.** That is deliberate. A
+  /// single sample moves an EMA by only `alpha`, and a node that stops
+  /// advertising expires shortly afterwards anyway, so the cost is a
+  /// marginally stale radius on a node that is already leaving — paid to
+  /// avoid a timer, and with it a second clock this path would have to stay
+  /// correct against.
+  func handleSignalStrength(rssi: Int, detectedDisplayId: String?, at timestamp: Date) {
+    // Deferred with, and replayed after, the detection it arrived beside; see
+    // `queuedSignalStrengthWhileLoading`.
+    guard !isLedgerLoading else {
+      queuedSignalStrengthWhileLoading.append(
+        (
+          afterQueuedDetections: queuedDetectionsWhileLoading.count,
+          rssi: rssi,
+          detectedDisplayId: detectedDisplayId,
+          timestamp: timestamp
+        )
+      )
+      return
+    }
+    switch phase {
+    case .sensing, .eventFound, .recording:
+      break
+    case .idle, .signalLost:
+      // See this function's doc comment: `.signalLost` is a frozen count, and
+      // a radar that kept moving underneath it would contradict the number
+      // next to it. The phase gates the display; the display gates nothing.
+      return
+    }
+
+    // Same `shared/` canonicalization `recordDeviceIdentity` uses (beid#231),
+    // so the radius and the angle key on one identity rather than two. A null
+    // display id (Barnard B003 unavailable) is not a node: it cannot be
+    // attributed to a device, so there is nothing to draw it on.
+    guard let nodeId = BeidSharedKit.sensing.normalizedDisplayIdOrNull(
+      detectedDisplayId: detectedDisplayId
+    ) else { return }
+    guard rssi < BeidConfig.nodeSignalUsableUpperBoundDbm else { return }
+
+    let sample = Double(rssi)
+    let isFirstMeasurement = smoothedNodeSignalDbm[nodeId] == nil
+    let smoothed: Double
+    if let previous = smoothedNodeSignalDbm[nodeId] {
+      smoothed = previous + BeidConfig.nodeSignalSmoothingFactor * (sample - previous)
+    } else {
+      smoothed = sample
+    }
+    smoothedNodeSignalDbm[nodeId] = smoothed
+
+    guard isFirstMeasurement || shouldRepublishNodeSignalStrengths(at: timestamp) else { return }
+    lastNodeSignalPublishAt = timestamp
+    nodeSignalStrengths = smoothedNodeSignalDbm.mapValues { NodeSignalStrength.measured(dBm: $0) }
+  }
+
+  /// Whether enough event time has passed since the last republish. Compares
+  /// the caller's event timestamps only, so it holds no clock of its own.
+  ///
+  /// A timestamp at or before the last publish — which a reordered or
+  /// replayed Barnard event can produce — yields a non-positive elapsed value
+  /// and so does not republish. That is the safe direction: it withholds a
+  /// redraw rather than admitting an out-of-order one.
+  private func shouldRepublishNodeSignalStrengths(at timestamp: Date) -> Bool {
+    guard let last = lastNodeSignalPublishAt else { return true }
+    return timestamp.timeIntervalSince(last) >= BeidConfig.nodeSignalRedrawMinimumInterval
   }
 
   /// Whether the co-presence arm is why an event just confirmed — used only
@@ -2428,23 +2949,9 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Marks the one-time entrance ceremony consumed so it never replays —
-  /// called once by `RecordingView` the first time it appears for this
-  /// session (including across a `resumeSensing()` cycle, since this flag
-  /// outlives the view instance).
-  func markRecordingCeremonyShown() {
-    recordingCeremonyShown = true
-  }
-
-  /// Marks the entrance ceremony's on-screen dwell as over — called by
-  /// `RecordingView` either once its 2-second "Proof Collected" dwell
-  /// timer completes, or immediately if there was no ceremony to show at
-  /// all this time (`recordingCeremonyShown` already `true`, e.g. after a
-  /// `resumeSensing()` cycle). Both paths converge here because
-  /// `ScanFlowView` only cares whether the ceremony is done occupying the
-  /// screen, not which of the two reasons made that true right now.
-  func markEntranceCeremonyFinished() {
-    entranceCeremonyFinished = true
+  /// Called by RecordingView after its first render in this session.
+  func markRecordingSurfaceReady() {
+    recordingSurfaceReady = true
   }
 
   @discardableResult
@@ -2455,6 +2962,7 @@ final class SensingCoordinator: ObservableObject {
   private func endSensing(stopEngine: Bool) -> SelfProofRecord? {
     let selfProof = finalizeSelfProofIfNeeded()
     persistSessionAggregateSnapshotIfNeeded()
+    persistSigilPresenceIfNeeded()
     closeFinalWindowIfNeeded()
     demoTask?.cancel()
     demoTask = nil
@@ -2475,11 +2983,29 @@ final class SensingCoordinator: ObservableObject {
   private func resetSessionState() {
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
+    sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
     sessionAggregate = nil
+    firstSightingAt = nil
+    detectedDisplayIDs = []
+    #if DEBUG
+    sensingScreenshotNow = nil
+    sensingScreenshotFixture = nil
+    sensingScreenshotEvent = nil
+    #endif
     demoDeviceSequence = 0
     rpidsAwaitingDisplayId = []
     devicesVerified = 0
     unidentifiedRpidCount = 0
+    // beid#652: display-only, but still per-session. A radius measured at
+    // last night's event must not be on screen at this morning's, and a
+    // stale `lastNodeSignalPublishAt` must not suppress the first redraw of
+    // the new session. All three fields are the same state and are cleared
+    // together; keeping the published projection and its source in step is
+    // what makes `nodeSignalStrengths` a total projection of
+    // `smoothedNodeSignalDbm` rather than a cache that can drift.
+    nodeSignalStrengths = [:]
+    smoothedNodeSignalDbm = [:]
+    lastNodeSignalPublishAt = nil
     currentWindowEnin = nil
     currentWindowId = nil
     currentWindowObservationReference = nil
@@ -2507,8 +3033,7 @@ final class SensingCoordinator: ObservableObject {
     activeProofId = nil
     pendingBindingMessage = nil
     bindingState = .none
-    recordingCeremonyShown = false
-    entranceCeremonyFinished = false
+    recordingSurfaceReady = false
   }
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
@@ -2562,6 +3087,34 @@ final class SensingCoordinator: ObservableObject {
     guard ProcessInfo.processInfo.arguments.contains("-beid-continuous-sensing-fixture") else {
       return
     }
+    isScanning = true
+    isAdvertising = true
+  }
+
+  /// Makes the Home frame fixture exercise the same phase and transport
+  /// properties that a real recording publishes. It never starts Barnard or
+  /// creates a Proof; AppCoordinator seeds the latter separately to verify
+  /// that the active group's stored Proof does not also appear under PAST.
+  func injectHomeRecordingForUITesting() {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04")
+    else { return }
+    let event = EventSession(id: "ACTIVE-EVENT", name: "ETH Tokyo 2026", venue: nil)
+    let fixtureAggregation = AggregationRuntime()
+    for window in 1...6 {
+      for peer in 1...7 {
+        fixtureAggregation.recordObservation(
+          windowIndex: window,
+          peerKey: "fixture-rpid-\(window)-\(peer)",
+          displayId: "fixture-device-\(peer)"
+        )
+      }
+    }
+    let aggregate = fixtureAggregation.sessionAggregate
+    sessionAggregate = aggregate
+    devicesVerified = Int(aggregate.deviceCount)
+    phase = .recording(event: event, peersVerified: devicesVerified)
     isScanning = true
     isAdvertising = true
   }
@@ -3864,6 +4417,19 @@ final class SensingCoordinator: ObservableObject {
     // submission runtime is independent of the legacy WindowReport bytes.
     let closingPeerRpids = currentWindowRpids
     let closingReporterRpid = currentWindowReporterRpid
+    // beid#701: link the window to this session's Proof before the capture
+    // exists, so a capture finalised after a relaunch is already linked. A
+    // window can only reach here after `.recording`, and `activeProofId` is
+    // cleared together with that state, so the Proof is this session's. No
+    // runtime means no report to join, so no link. A failed link write
+    // leaves the report unlinked for good and never holds up the capture.
+    if reportSubmissionRuntime != nil, let proofId = activeProofId, let reportProofLinkStore {
+      do {
+        try reportProofLinkStore.add(windowId: currentWindowId, proofId: proofId)
+      } catch {
+        Self.ledgerLog.error("Unable to persist a report-to-proof link; the report stays unlinked")
+      }
+    }
     reportSubmissionRuntime?.captureAndQueueWindow(
       id: currentWindowId,
       eventCode: eventCode,
@@ -4119,6 +4685,57 @@ final class SensingCoordinator: ObservableObject {
       try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
     } catch {
       Self.ledgerLog.error("Unable to persist the session aggregate snapshot: \(error, privacy: .public)")
+    }
+  }
+
+  // MARK: - Sigil presence (beid#653)
+
+  /// Supplies one CSPRNG token per display id first seen since the last call.
+  /// Shared decides which display ids need one and assigns them; this only
+  /// draws the bytes. A failed draw assigns nothing: the next observation
+  /// tries again, and a record left with an untokened peer is never written
+  /// (never a zero token).
+  ///
+  /// Reads nothing but the aggregation rows it shares with the counts, and
+  /// writes nothing but the in-memory session, so it adds no input to any
+  /// window report, ledger entry, signature or submission.
+  private func topUpSigilPresenceTokens() {
+    let observations = aggregationRuntime.observations
+    let needed = Int(
+      BeidSharedKit.sigil.sigilPresenceTokensNeeded(
+        session: sigilPresenceSession,
+        observations: observations
+      )
+    )
+    for _ in 0..<needed {
+      guard let token = sigilPresenceTokenSource.nextToken() else { return }
+      _ = BeidSharedKit.sigil.addSigilPresenceToken(
+        session: sigilPresenceSession,
+        observations: observations,
+        token: token
+      )
+    }
+  }
+
+  /// Stores this session's Sigil presence for its Proof, with the same gate
+  /// and the same best-effort failure handling as
+  /// `persistSessionAggregateSnapshotIfNeeded()`, and in the same position:
+  /// before `resetSessionState()` drops the session. The log line carries
+  /// only `SigilPresenceStoreError`, which has no payload by design.
+  private func persistSigilPresenceIfNeeded() {
+    guard let proofId = activeProofId, sessionAggregate != nil else { return }
+    do {
+      try sigilPresenceStore.persist(
+        session: sigilPresenceSession,
+        observations: aggregationRuntime.observations,
+        proofId: proofId
+      )
+    } catch let error as SigilPresenceStoreError {
+      Self.ledgerLog.error("Unable to persist the Sigil presence: \(String(describing: error), privacy: .public)")
+    } catch {
+      // A file-system error from the atomic write: logged by type only, so
+      // no path or payload reaches the log.
+      Self.ledgerLog.error("Unable to write the Sigil presence file: \(String(describing: type(of: error)), privacy: .public)")
     }
   }
 
@@ -4519,14 +5136,26 @@ final class SensingCoordinator: ObservableObject {
   /// store-touching calls.
   private func drainQueuedDetectionsAfterLoad() {
     let queued = queuedDetectionsWhileLoading
+    var signalSamples = queuedSignalStrengthWhileLoading[...]
     queuedDetectionsWhileLoading = []
-    for detection in queued {
+    queuedSignalStrengthWhileLoading = []
+    for (index, detection) in queued.enumerated() {
+      // Samples that arrived before this detection, in arrival order. RSSI
+      // goes only to its sibling handler, never into `handleDetection`.
+      while let sample = signalSamples.first, sample.afterQueuedDetections <= index {
+        signalSamples.removeFirst()
+        handleSignalStrength(rssi: sample.rssi, detectedDisplayId: sample.detectedDisplayId, at: sample.timestamp)
+      }
       handleDetection(
         enin: detection.enin,
         rpid: detection.rpid,
         detectedDisplayId: detection.detectedDisplayId,
-        reporterRpid: detection.reporterRpid
+        reporterRpid: detection.reporterRpid,
+        observedAt: detection.observedAt
       )
+    }
+    for sample in signalSamples {
+      handleSignalStrength(rssi: sample.rssi, detectedDisplayId: sample.detectedDisplayId, at: sample.timestamp)
     }
   }
 

@@ -6,6 +6,9 @@
 import SwiftUI
 
 struct LintFixturesPass: View {
+  // Reading the scheme is not an override; no_appearance_override must not flag it.
+  @Environment(\.colorScheme) private var colorScheme
+
   var body: some View {
     VStack(spacing: DS.Space.m) {
       Text("Sensing")
@@ -19,7 +22,7 @@ struct LintFixturesPass: View {
         .padding(.top, 1)
       Spacer(minLength: 0)
       RoundedRectangle(cornerRadius: DS.Radius.card)
-        .fill(DS.Color.surfaceRaised)
+        .fill(DS.Color.surfaceTile)
         // shadow with a token color and a blur radius — blur radius is not
         // a corner radius and must not trip no_hardcoded_radius.
         .shadow(color: DS.Color.strokeHairline, radius: 2)
@@ -30,5 +33,33 @@ struct LintFixturesPass: View {
     .animation(DS.Motion.proofResolve, value: UUID())
     .background(DS.Color.surfaceCanvas)
     .tint(DS.Color.actionPrimary)
+    // Bar-scoped glyph scheme (§14 ink screens); no_appearance_override must not flag it.
+    .toolbarColorScheme(.dark, for: .navigationBar)
+  }
+}
+
+// no_glass_or_material near-misses taken from ios/Beid: an argument label
+// ending in "Material" (ParticipantRelayVerifier), identifiers starting with
+// "bar" (SensingCoordinator, VenueBundleVerification) and `.barcode`
+// (VenueLinkScannerView).
+struct LintFixturesPassGlassNearMisses: View {
+  var body: some View {
+    Text("Flat")
+      .beidSurface(cornerRadius: DS.Radius.card)
+      .onAppear {
+        _ = Verifier.verify(randomnessSeedMaterial: nil)
+        _ = Self.barnardDefinition(from: nil)
+        _ = Self.barnardJoinMode(from: nil)
+        _ = Scanner(recognizedDataTypes: [.barcode(symbologies: [.qr])])
+      }
+  }
+
+  static func barnardDefinition(from context: String?) -> String? { context }
+
+  static func barnardJoinMode(from mode: String?) -> String? { mode }
+
+  func handle(_ item: RecognizedItem) {
+    guard case .barcode(let barcode) = item else { return }
+    _ = barcode
   }
 }
