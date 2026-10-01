@@ -351,11 +351,16 @@ the same name shadows them.
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
 - **Require executed hosted iOS evidence on the exact PR head SHA.**
-  The `iOS simulator` job runs on every PR open, push (`synchronize`), reopen,
-  and ready-for-review event, including drafts, with no PR path exclusions.
-  It checks out the PR head explicitly and builds/runs both `BeidTests` and
-  `BeidUITests` on a clean owned simulator. A missing, skipped, cancelled or
-  pre-start failed run is not passing evidence. Xcode Cloud `PR Build & Test`
+  The `iOS simulator` job is created on every PR open, push (`synchronize`),
+  reopen, and ready-for-review event, including drafts, with no workflow-level
+  PR path exclusions. It runs on every PR except one whose changed files are
+  all documentation (under `docs/` or ending in `.md`/`.mdx`, as
+  `scripts/ci_change_filter.py` defines it), which reports it as skipped; a
+  failed classification runs it. It checks out the PR head explicitly and
+  builds/runs both `BeidTests` and `BeidUITests` on a clean owned simulator.
+  A missing, cancelled or pre-start failed run is not passing evidence, and a
+  skipped run is evidence only for a documentation-only PR whose classification
+  job succeeded. Xcode Cloud `PR Build & Test`
   stays paused; its former file exclusions do not apply to this hosted gate.
   Xcode Cloud Internal/Release delivery is a separate concern. Required status
   checks remain operator-managed repository settings; workflow code alone
@@ -410,9 +415,12 @@ See [docs/delivery-ci.md](docs/delivery-ci.md) for the detailed PR CI and delive
 The PR workflow is `.github/workflows/pr-ci.yml`. Its changed-path classifier
 job and three named gates are:
 
-**Determine changed paths**: `actions/github-script` collects pull-request
-files or the `main` push comparison, and `scripts/ci_change_filter.py`
-classifies them. Documentation-only changes skip Android build and SwiftLint;
+**Determine changed paths**: `actions/github-script` collects the files of
+the compare range pinned to the event's own SHAs (pull-request base...head, or
+the `main` push before...after; never the PR's current file list, so a re-run
+classifies what it builds), and `scripts/ci_change_filter.py` classifies them.
+A list that reaches the compare API's 300-file cap is treated as truncated and
+fails closed. The iOS and lab CLI classification jobs run this same step. Documentation-only changes skip Android build and SwiftLint;
 Repository sanity always runs. Unknown paths, dependency/workflow/build-script
 changes, and classifier failures run the relevant or all gates fail-closed.
 

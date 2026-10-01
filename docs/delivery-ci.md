@@ -96,7 +96,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Xcode 26.5. It is not a PR status check or a signing/delivery lane.
 
   - **Xcode Cloud** — keep `PR Build & Test` paused. Hosted iOS now performs
-    the build plus unit/UI test role on every PR head without signing secrets;
+    the build plus unit/UI test role on every PR head except documentation-only
+    ones, without signing secrets;
     the old ASC file exclusions no longer determine whether hosted evidence
     is required. This does not replace trusted Internal/Release delivery,
     signing or real-device BLE tests. ASC workflow settings are operator-owned

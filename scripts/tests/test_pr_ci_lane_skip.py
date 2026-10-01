@@ -118,7 +118,10 @@ class LaneNamesTest(unittest.TestCase):
                 block = job_block(path, "changes")
                 self.assertIn("if: ${{ github.event_name == 'pull_request' }}", block)
                 self.assertIn("python3 scripts/ci_change_filter.py --input", block)
-                self.assertIn("github.rest.pulls.listFiles", block)
+                # Pinned to the event's own SHAs; the PR's current file list is
+                # deliberately not used (see test_pr_ci_changed_paths_collection).
+                self.assertIn("github.rest.repos.compareCommitsWithBasehead", block)
+                self.assertNotIn("pulls.listFiles", block)
                 self.assertIn("previous_filename", block)
                 self.assertIn("persist-credentials: false", block)
                 self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", block)
