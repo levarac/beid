@@ -1,11 +1,11 @@
-import json
-import os
 from pathlib import Path
+import unittest
+import os
 import subprocess
-import sys
 import tempfile
 import textwrap
-import unittest
+import json
+import sys
 
 
 WORKFLOW_PATH = Path(__file__).parents[2] / ".github/workflows/pr-ci-ios-macos.yml"
@@ -67,56 +67,68 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
     def test_simulator_helper_changes_trigger_the_lane(self) -> None:
         self.assertEqual(workflow_text().count('      - "scripts/ci_simulator.py"'), 1)
 
-    def test_every_device_operation_uses_only_the_create_steps_output(self) -> None:
+    def test_each_test_job_owns_one_clean_simulator_without_clones(self):
         text = workflow_text()
-        creation = step_block(text, "Create owned simulator")
-        self.assertIn("        id: simulator\n", creation)
-        self.assertIn('--name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"', creation)
-        self.assertIn('printf \'udid=%s\\n\' "$simulator_udid" >> "$GITHUB_OUTPUT"', creation)
-        for name in ("Boot owned simulator", "Build for testing",
-                     "Test without rebuilding", "Delete owned simulator"):
-            with self.subTest(step=name):
-                self.assertIn("SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}", step_block(text, name))
-        cleanup = step_block(text, "Delete owned simulator")
-        self.assertIn("if: ${{ always() && steps.simulator.outputs.udid != '' }}", cleanup)
+        self.assertIn("matrix:\n        group: [unit, ipad, interface]", text)
+        for name in ("Wait for test simulator readiness", "Test without rebuilding"):
+            self.assertIn("SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}", step_block(text, name))
+        self.assertIn("-parallel-testing-enabled NO", step_block(text, "Test without rebuilding"))
+        self.assertNotIn("simctl shutdown", text)
+        self.assertNotIn("simctl delete", text)
 
-    def test_cleanup_deletes_only_owned_udid_even_when_shutdown_fails(self) -> None:
-        block = step_block(workflow_text(), "Delete owned simulator")
+    def test_build_uses_measured_optimization_and_products_are_shared(self):
+        block = step_block(workflow_text(), "Build for testing")
+        self.assertIn("-configuration Debug", block)
+        self.assertIn("SWIFT_OPTIMIZATION_LEVEL=-O", block.split())
+        self.assertIn("tar -C", step_block(workflow_text(), "Package test products"))
+        self.assertNotIn("build-for-testing", step_block(workflow_text(), "Test without rebuilding"))
+
+    def test_compiled_manifest_and_test_selection_reach_xcode_unchanged(self):
+        block = step_block(workflow_text(), "Test without rebuilding")
         command = textwrap.dedent(block.split("        run: |\n", 1)[1])
-        owned = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
-        with tempfile.TemporaryDirectory() as temporary:
-            folder = Path(temporary)
-            calls = folder / "calls.jsonl"
-            fake = folder / "xcrun"
-            fake.write_text(
-                f"#!{sys.executable}\n"
-                "import json, os, sys\n"
-                "with open(os.environ['CALLS'], 'a') as calls:\n"
-                "    calls.write(json.dumps(sys.argv[1:]) + '\\n')\n"
-                "sys.exit(1 if sys.argv[2] == 'shutdown' else int(os.environ['DELETE_EXIT']))\n"
-            )
+        expected = {
+            "unit": ["-only-testing:BeidTests"],
+            "ipad": ["-only-testing:BeidUITests/BeidIPadLayoutTests"],
+            "interface": ["-only-testing:BeidUITests", "-skip-testing:BeidUITests/BeidIPadLayoutTests"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            products = root / "DerivedData/Build/Products"
+            products.mkdir(parents=True)
+            manifest = products / "Beid.xctestrun"
+            manifest.touch()
+            capture = root / "arguments.json"
+            fake = root / "xcodebuild"
+            fake.write_text(f"#!{sys.executable}\nimport json, os, sys\nopen(os.environ['CAPTURE'], 'w').write(json.dumps(sys.argv[1:]))\nsys.exit(65 if os.environ.get('FAIL_TESTS') else 0)\n")
             fake.chmod(0o755)
-            for delete_exit in (0, 1):
-                with self.subTest(delete_exit=delete_exit):
-                    calls.write_text("")
-                    result = subprocess.run(
-                        ["bash", "-c", command], capture_output=True, text=True,
-                        env={**os.environ, "PATH": str(folder) + os.pathsep + os.environ["PATH"],
-                             "SIMULATOR_UDID": owned, "CALLS": str(calls),
-                             "DELETE_EXIT": str(delete_exit)},
-                    )
-                    self.assertEqual(result.returncode, delete_exit, result.stderr)
-                    self.assertEqual([json.loads(line) for line in calls.read_text().splitlines()], [
-                        ["simctl", "shutdown", owned], ["simctl", "delete", owned],
-                    ])
+            environment = {**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                           "CI_OUTPUT_ROOT": str(root), "SIMULATOR_UDID": "owned", "CAPTURE": str(capture)}
+            for group, selectors in expected.items():
+                result = subprocess.run(["bash", "-c", command], cwd=WORKFLOW_PATH.parents[2],
+                                        env={**environment, "TEST_GROUP": group}, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                argv = json.loads(capture.read_text())
+                self.assertEqual(argv[argv.index("-xctestrun") + 1], str(manifest))
+                self.assertEqual([a for a in argv if a.startswith(("-only-testing:", "-skip-testing:"))], selectors)
+            result = subprocess.run(["bash", "-c", command], cwd=WORKFLOW_PATH.parents[2],
+                                    env={**environment, "TEST_GROUP": "unit", "FAIL_TESTS": "1"}, capture_output=True)
+            self.assertEqual(result.returncode, 65)
+            manifest.unlink()
+            result = subprocess.run(["bash", "-c", command], cwd=WORKFLOW_PATH.parents[2],
+                                    env={**environment, "TEST_GROUP": "unit"}, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
 
-    def test_debug_build_and_test_use_measured_optimization(self) -> None:
+    def test_required_aggregate_rejects_failed_cancelled_or_skipped_children(self):
         text = workflow_text()
-
-        for name in ("Build for testing", "Test without rebuilding"):
-            with self.subTest(step=name):
-                block = step_block(text, name)
-                self.assertEqual(block.count("SWIFT_OPTIMIZATION_LEVEL=-O"), 1)
+        self.assertIn("name: iOS simulator\n    if: always()\n    needs: [ios-simulator, ios-tests]", text)
+        block = step_block(text, "Require every build and test job to pass")
+        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
+        for build in ("success", "failure", "cancelled", "skipped"):
+            for tests in ("success", "failure", "cancelled", "skipped"):
+                result = subprocess.run(["bash", "-e", "-c", command],
+                                        env={**os.environ, "BUILD_RESULT": build, "TEST_RESULT": tests})
+                self.assertEqual(result.returncode == 0, build == tests == "success")
+        self.assertIn("set -euo pipefail", step_block(text, "Verify complete current-head evidence"))
 
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).

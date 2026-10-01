@@ -12,7 +12,7 @@ WORKFLOWS = ROOT / ".github/workflows"
 class PublicPrWorkflowTests(unittest.TestCase):
     def test_every_pr_job_uses_a_literal_hosted_runner(self):
         checked = 0
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             text = path.read_text()
             if not re.search(r"^  pull_request(?:_target)?:", text, re.M):
                 continue
@@ -41,6 +41,18 @@ class PublicPrWorkflowTests(unittest.TestCase):
                 self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", block)
                 self.assertIn("persist-credentials: false", block)
 
+    def test_every_checkout_discards_credentials(self):
+        checked = 0
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
+            if path.suffix not in {".yml", ".yaml"}:
+                continue
+            for step in re.split(r"(?m)^      - ", path.read_text())[1:]:
+                if re.search(r"(?:^|\n        )uses: actions/checkout@", step):
+                    with self.subTest(workflow=path.name, checkout=checked):
+                        self.assertIn("          persist-credentials: false\n", step)
+                    checked += 1
+        self.assertGreaterEqual(checked, 10)
+
     def test_macos_builds_pin_the_available_xcode(self):
         for name in ("pr-ci-ios-macos.yml", "main-ios-release-build.yml", "pr-ci-lab-cli.yml"):
             text = (WORKFLOWS / name).read_text()
@@ -48,7 +60,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
             self.assertNotIn("for app in /Applications/Xcode*.app", text)
 
     def test_public_pr_workflows_have_no_secrets(self):
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             text = path.read_text()
             if re.search(r"^  pull_request(?:_target)?:", text, re.M):
                 self.assertNotRegex(text, r"\$\{\{[^}]*secrets[.\[]", path.name)
@@ -57,12 +69,12 @@ class PublicPrWorkflowTests(unittest.TestCase):
         self.assertIn("not a passing comparison", text)
 
     def test_all_actions_are_pinned_and_annotated(self):
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             for action in re.findall(r"(?m)^\s+(?:- )?uses: (.+)$", path.read_text()):
                 self.assertRegex(action, r"^[\w/-]+@[0-9a-f]{40} # v[\w.]+$", path.name)
 
     def test_every_runner_is_hosted(self):
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             for runner in re.findall(r"(?m)^    runs-on: (.+)$", path.read_text()):
                 self.assertIn(runner, {"ubuntu-24.04", "ubuntu-24.04-arm", "macos-26"})
 
@@ -82,7 +94,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
         }
         found = set()
         secret = re.compile(r"\$\{\{[^}]*secrets[.\[]")
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             text = path.read_text()
             preamble, jobs = text.split("\njobs:\n", 1)
             self.assertNotRegex(preamble, secret, path.name)
@@ -102,11 +114,11 @@ class PublicPrWorkflowTests(unittest.TestCase):
     def test_ios_delivery_is_not_reachable_from_actions(self):
         for name in ("internal-testflight.yml", "release-testflight.yml"):
             self.assertFalse((WORKFLOWS / name).exists())
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             self.assertNotIn("build-and-upload-ios.sh", path.read_text())
 
     def test_default_permissions_are_read_only(self):
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             text = path.read_text()
             baseline = text.split("permissions:\n", 1)[1].split("\n\n", 1)[0]
             self.assertEqual(baseline.strip(), "contents: read", path.name)
@@ -115,7 +127,7 @@ class PublicPrWorkflowTests(unittest.TestCase):
             self.assertEqual(writes, expected, path.name)
 
     def test_privileged_pr_metadata_workflow_never_checks_out_code(self):
-        for path in WORKFLOWS.glob("*.yml"):
+        for path in sorted(p for p in WORKFLOWS.iterdir() if p.suffix in {".yml", ".yaml"}):
             text = path.read_text()
             if re.search(r"^  pull_request_target:", text, re.M):
                 self.assertNotIn("actions/checkout", text, path.name)

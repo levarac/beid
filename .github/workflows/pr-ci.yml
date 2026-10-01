@@ -114,7 +114,13 @@ jobs:
         working-directory: android
         run: |
           java -version
-          ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel
+          set -euo pipefail
+          mkdir -p build
+          ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug \
+            :app:compileDebugAndroidTestKotlin :app:dependencyInsight \
+            --dependency barnard --configuration debugRuntimeClasspath \
+            --no-daemon --parallel --max-workers=4 --console=plain \
+            | tee build/barnard-dependency-insight.log
       - name: Summarize Android test results
         if: always()
         run: |
@@ -132,15 +138,6 @@ jobs:
           if problems:
               raise SystemExit("\n".join(problems))
           PY
-      - name: Compile Android instrumented tests
-        working-directory: android
-        run: ./gradlew :app:compileDebugAndroidTestKotlin --no-daemon --no-parallel
-      - name: Capture Barnard dependency resolution
-        working-directory: android
-        run: |
-          mkdir -p build
-          ./gradlew :app:dependencyInsight --dependency barnard --configuration debugRuntimeClasspath --no-daemon > build/barnard-dependency-insight.log
-          cat build/barnard-dependency-insight.log
       - name: Verify resolved Barnard dependency provenance
         working-directory: android
         run: |

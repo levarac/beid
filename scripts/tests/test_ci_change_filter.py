@@ -1,9 +1,29 @@
 import unittest
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
 
 from scripts.ci_change_filter import classify
 
 
 class CIChangeFilterTests(unittest.TestCase):
+    def test_corrupt_or_missing_input_explicitly_enables_every_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.json"
+            for payload in (None, "{", json.dumps({"files": [3]}), "{}"):
+                with self.subTest(payload=payload):
+                    if payload is not None:
+                        path.write_text(payload)
+                    result = subprocess.run(
+                        [sys.executable, "scripts/ci_change_filter.py", "--input", str(path)],
+                        cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(dict(line.split("=") for line in result.stdout.splitlines()),
+                                     dict.fromkeys(("android", "lint", "labcli", "sanity", "error"), "true"))
+
     def test_docs_only_skips_expensive_lanes_but_keeps_sanity(self):
         self.assertEqual(
             classify(["README.md", "docs/ci.md"]),

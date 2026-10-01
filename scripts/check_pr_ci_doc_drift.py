@@ -27,6 +27,12 @@ GRADLE_TASK_RE = re.compile(r"(?<![\w\[:]):\w[\w:-]*\w")
 SCRIPT_PATH_RE = re.compile(r"scripts/\S+\.(?:sh|py)")
 BARE_SCRIPT_RE = re.compile(r"^(scripts/\S+\.(?:sh|py))$")
 
+# Join shell continuation lines before extracting native build/test commands.
+XCODE_TEST_RE = re.compile(r"(?m)^\s*xcodebuild\b[^\n]*?\b(build-for-testing|test-without-building)\b")
+SWIFT_BUILD_TEST_RE = re.compile(r"(?m)^\s*(swift (?:build -c release|test))\b")
+NATIVE_COMMANDS = {"xcodebuild build-for-testing", "xcodebuild test-without-building",
+                   "swift build -c release", "swift test"}
+
 DOC_BULLET_JOB_NAME_RE = re.compile(r"^\s*-\s+([A-Za-z][A-Za-z0-9 /]{1,40}?):\s")
 DOC_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 TOP_LEVEL_BULLET_RE = re.compile(r"^-\s")
@@ -121,6 +127,8 @@ def workflow_command_tokens(run_blocks):
     anywhere in a run: block, plus script paths that are a run: step's *entire*
     (single-line) content — i.e. the job is identified by that bare script
     invocation, the same way `scripts/lint.sh` identifies the SwiftLint job today.
+    Native xcodebuild build/test actions and Swift build/test invocations are
+    also checked after joining shell continuation lines.
     A script invoked with extra args/flags alongside other setup lines (e.g.
     prepare_testflight_notes.py inside the sanity job) is a supporting step, not
     a distinguishing token, so it is intentionally not swept in here.
@@ -128,6 +136,9 @@ def workflow_command_tokens(run_blocks):
     tokens = set()
     for block in run_blocks:
         tokens.update(GRADLE_TASK_RE.findall(block))
+        logical_lines = block.replace("\\\n", " ")
+        tokens.update("xcodebuild " + command for command in XCODE_TEST_RE.findall(logical_lines))
+        tokens.update(SWIFT_BUILD_TEST_RE.findall(logical_lines))
         non_empty_lines = [l for l in block.splitlines() if l.strip()]
         if len(non_empty_lines) == 1:
             bare = BARE_SCRIPT_RE.match(non_empty_lines[0].strip())
@@ -177,12 +188,15 @@ def reverse_check(job_names, section_text, workflow_text):
                 f"Fix: remove/correct it in AGENTS.md, or add the job to the workflow."
             )
 
+    native_tokens = workflow_command_tokens(collect_run_blocks(workflow_text))
     for code_span in DOC_INLINE_CODE_RE.findall(section_text):
         is_gradle_task = bool(GRADLE_TASK_RE.fullmatch(code_span))
         is_script_path = bool(SCRIPT_PATH_RE.fullmatch(code_span))
-        if not (is_gradle_task or is_script_path):
+        is_native_command = code_span in NATIVE_COMMANDS
+        if not (is_gradle_task or is_script_path or is_native_command):
             continue
-        if code_span not in workflow_text:
+        present = code_span in native_tokens if is_native_command else code_span in workflow_text
+        if not present:
             failures.append(
                 f"AGENTS.md's ### PR CI section quotes command token '{code_span}' that does "
                 f"not appear anywhere in the checked PR workflows. "

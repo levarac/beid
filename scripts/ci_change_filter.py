@@ -111,7 +111,7 @@ def main() -> int:
         result = classify(files)
     except Exception as error:  # fail closed if the detector input is unavailable/corrupt
         print(f"warning: CI change classification failed: {error}", file=sys.stderr)
-        result = {"android": True, "lint": True, "sanity": True, "error": True}
+        result = {"android": True, "lint": True, "labcli": True, "sanity": True, "error": True}
 
     for key, value in result.items():
         print(f"{key}={str(value).lower()}")

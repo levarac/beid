@@ -425,9 +425,13 @@ changes, and classifier failures run the relevant or all gates fail-closed.
   `scripts/check_pr_ci_doc_drift.py`, and
   `python3 -m unittest discover -s scripts/tests -t .`.
 
-The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
-`build-for-testing` and `test-without-building` execute the Beid unit and UI
-suites. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
+The separate `.github/workflows/pr-ci-ios-macos.yml` builds once in
+**Build iOS test products** with `xcodebuild build-for-testing`, then runs
+**iOS tests (${{ matrix.group }})** with `xcodebuild test-without-building` on
+three separate hosted Macs: unit tests, the iPad UI class, and all other UI
+classes. **iOS simulator** is the required aggregate: every child must pass,
+and `scripts/ci_ios_results.py` verifies complete current-head result evidence.
+`.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
 `ready_for_review`; neither has a PR workflow path filter. The lab CLI skips
@@ -439,8 +443,8 @@ drift check covers all three job lists and their distinguishing command tokens.
 
 All pull-request jobs use fixed GitHub-hosted runner labels. Determine changed
 paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
-`ubuntu-24.04`; SwiftLint, the iOS simulator lane and the lab
-CLI lane use `macos-26` with Xcode 26.5. The simulator uses iOS 26.5. SwiftLint needs Xcode SourceKit. Repository sanity
+`ubuntu-24.04`; the iOS simulator aggregate uses `ubuntu-24.04-arm`.
+SwiftLint, iOS build/test jobs, and the lab CLI use `macos-26` with Xcode 26.5. The simulator uses iOS 26.5. SwiftLint needs Xcode SourceKit. Repository sanity
 installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
 All pull requests run these checks without private credentials. The private
 Parallax comparison is explicitly reported as SKIPPED, never as a passing
