@@ -236,6 +236,7 @@ private final class StubOperatorServer {
   private var requestCount = 0
   private let transientPostFailures: Int
   private let terminalPostFailures: Int
+  private let terminalStatus: Int
   private var _postCount = 0
   private var _getCount = 0
   private var _postBodies: [Data] = []
@@ -288,6 +289,7 @@ private final class StubOperatorServer {
     transientPostFailures: Int = 0,
     holdResponses: Bool = false,
     terminalPostFailures: Int = 0,
+    terminalStatus: Int = 422,
     port: NWEndpoint.Port = .any
   ) throws {
     self.eventId = eventId
@@ -295,6 +297,7 @@ private final class StubOperatorServer {
     self.signingPublicKey = signingPublicKey
     self.transientPostFailures = transientPostFailures
     self.terminalPostFailures = terminalPostFailures
+    self.terminalStatus = terminalStatus
     self.holdResponses = holdResponses
     listener = try NWListener(using: .tcp, on: port)
   }
@@ -416,7 +419,7 @@ private final class StubOperatorServer {
       let shouldReject = _postCount <= terminalPostFailures
       lock.unlock()
       if shouldReject {
-        response = (422, Data(), nil)
+        response = (terminalStatus, Data(), nil)
       } else if shouldFail {
         response = (503, Data(), nil)
       } else {
@@ -655,6 +658,76 @@ private enum SubmissionTestWaitBudget {
 
 @MainActor
 final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
+  func testStoreWriteFailuresRearmAnotherOriginsPendingRetry() async throws {
+    for boundary in ["submitting", "receipt", "terminal"] {
+      let failing = try StubOperatorServer(
+        eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+        signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+        transientPostFailures: 10_000
+      )
+      let other = try StubOperatorServer(
+        eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+        signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+        holdResponses: boundary != "submitting",
+        terminalPostFailures: boundary == "terminal" ? 10_000 : 0,
+        terminalStatus: 400
+      )
+      defer { failing.stop(); other.stop() }
+      let failedEndpoint = try await failing.start()
+      let otherEndpoint = try await other.start()
+      let directory = try makeIsolatedDirectory(named: "beid-store-write-\(boundary)")
+      defer { try? FileManager.default.removeItem(at: directory) }
+      let fileURL = directory.appendingPathComponent("report-submissions.json")
+      let backupURL = directory.appendingPathComponent("preserved-submissions.json")
+      _ = try seedPendingRecords(count: 1, endpoint: failedEndpoint, fileURL: fileURL)
+      let next = try seedPendingRecords(count: 1, endpoint: otherEndpoint, fileURL: fileURL, creationOffset: 1)[0]
+      let scheduler = ManualReportSubmissionRetryScheduler()
+      let runtime = try XCTUnwrap(makeRuntime(
+        endpoint: failedEndpoint, receiptPublicKeyHex: receiptKeyHex,
+        cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+        retryScheduler: scheduler, now: { scheduler.now }
+      ))
+      defer { runtime.stop() }
+      // Preserve the real durable file, then replace its destination with a
+      // directory so the next atomic store write actually fails.
+      let blockWrites = {
+        try FileManager.default.moveItem(at: fileURL, to: backupURL)
+        try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false)
+      }
+      var blocked = false
+      if boundary == "submitting" {
+        scheduler.onSchedule = {
+          guard !blocked else { return }
+          do { try blockWrites(); blocked = true }
+          catch { XCTFail("could not set up store-write failure: \(error)") }
+        }
+      }
+      runtime.submitPending()
+      if boundary != "submitting" {
+        try await other.waitFor(postCount: 1)
+        try blockWrites()
+        blocked = true
+        other.releaseResponses()
+      }
+      try await waitUntil { blocked && runtime.activeSubmissionCountForTesting == 0 }
+      scheduler.onSchedule = nil
+      XCTAssertEqual(scheduler.entries.filter { !$0.cancelled }.count, 1,
+                     "\(boundary) write failure must preserve the other origin's wakeup")
+      XCTAssertEqual(scheduler.entries.last?.deadline, 2)
+      try FileManager.default.removeItem(at: fileURL)
+      try FileManager.default.moveItem(at: backupURL, to: fileURL)
+      scheduler.advance(by: 2)
+      try await waitUntil(diagnostics: { "\(boundary): \(failing.diagnostics); \(other.diagnostics)" }) {
+        let record = ReportSubmissionStore(fileURL: fileURL).records.first { $0.id == next.id }
+        return boundary == "terminal" ? record?.terminalErrorCode == "http_error" : record?.submissionState == .accepted
+      }
+      XCTAssertEqual(failing.postCount, 2, "the other origin retried without an external trigger")
+      XCTAssertEqual(other.postCount, boundary == "terminal" ? 2 : 1,
+                     "a stored receipt is looked up rather than posted again")
+      XCTAssertEqual(other.getCount, boundary == "submitting" ? 0 : 1)
+    }
+  }
+
   func testUnavailableOldestOperatorDoesNotBlockHealthyNewerOperator() async throws {
     let failing = try StubOperatorServer(
       eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
@@ -763,10 +836,18 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
   }
 
   func testGenuineHTTP422StopsOldestAndDrainsNextRecord() async throws {
+    try await assertTerminalDrain(status: 422, errorCode: "rejected")
+  }
+
+  func testHTTP400WithHTTPErrorIsTerminalAndDrainsNextRecord() async throws {
+    try await assertTerminalDrain(status: 400, errorCode: "http_error")
+  }
+
+  private func assertTerminalDrain(status: Int, errorCode: String) async throws {
     let server = try StubOperatorServer(
       eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
       signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
-      terminalPostFailures: 1
+      terminalPostFailures: 1, terminalStatus: status
     )
     defer { server.stop() }
     let endpoint = try await server.start()
@@ -786,7 +867,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       ReportSubmissionStore(fileURL: fileURL).records.first(where: { $0.id == records[1].id })?.submissionState == .accepted
     }
     let store = ReportSubmissionStore(fileURL: fileURL)
-    XCTAssertEqual(store.records.first(where: { $0.id == records[0].id })?.terminalErrorCode, "rejected")
+    XCTAssertEqual(store.records.first(where: { $0.id == records[0].id })?.terminalErrorCode, errorCode)
     XCTAssertEqual(store.records.first(where: { $0.id == records[1].id })?.terminalErrorCode, nil)
     XCTAssertEqual(server.postCount, 2)
     XCTAssertEqual(server.getCount, 0)

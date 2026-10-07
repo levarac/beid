@@ -598,8 +598,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       return $0.id.uuidString < $1.id.uuidString
     }
     for record in oldestFirst {
-      guard let origin = submissionOperatorOrigin(record.endpoint),
-            retryController.canBeginAttempt(operatorOrigin: origin, allowEarlyProbe: allowEarlyProbe) else { continue }
+      guard let origin = submissionOperatorOrigin(record.endpoint) else {
+        Self.log.error("Skipped a persisted submission with invalid operator origin")
+        continue
+      }
+      guard retryController.canBeginAttempt(operatorOrigin: origin, allowEarlyProbe: allowEarlyProbe) else { continue }
       guard let stored = ExportedKotlinPackages.org.levarac.parallax.submission
         .restoreStoredObservation(signedBytesHex: record.signedObservationHex) else {
         Self.log.error("Skipped a persisted submission with invalid queue bytes")
@@ -656,6 +659,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     } catch {
       inFlight.remove(record.id)
       Self.log.error("Unable to persist SUBMITTING state: \(String(describing: error), privacy: .public)")
+      retryController.schedulePendingRetry()
       return
     }
     post(
@@ -730,6 +734,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       shouldDrain = true
     } catch {
       Self.log.error("Unable to persist verified AcceptanceReceipt: \(String(describing: error), privacy: .public)")
+      retryController.schedulePendingRetry()
     }
   }
 
@@ -759,6 +764,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       shouldDrain = true
     } catch {
       Self.log.error("Unable to persist terminal submission failure: \(String(describing: error), privacy: .public)")
+      retryController.schedulePendingRetry()
     }
   }
 
