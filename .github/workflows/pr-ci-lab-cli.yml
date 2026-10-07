@@ -30,11 +30,80 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lab-cli:
-    name: beid-lab-cli build and test
+  changes:
+    name: Classify paths for lab CLI lane
+    # Pull requests only: main pushes and manual dispatch always run the lane.
+    # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
+    # required status contexts are keyed by job name.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
+    outputs:
+      labcli: ${{ steps.classify.outputs.labcli }}
+      lint: ${{ steps.classify.outputs.lint }}
+      error: ${{ steps.classify.outputs.error }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Collect changed paths
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const outputPath = `${process.env.RUNNER_TEMP}/beid-changed-files.json`;
+            // The compare API returns at most 300 files. A list that reaches the cap
+            // may be truncated, and a truncated list can look documentation-only.
+            const FILE_LIMIT = 300;
+            try {
+              // Pinned to this event's own SHAs, never to the pull request's current
+              // file list: a re-run of an older run must classify what it builds.
+              let basehead;
+              if (context.eventName === 'pull_request') {
+                const { base, head } = context.payload.pull_request;
+                basehead = `${base.sha}...${head.sha}`;
+              } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
+                basehead = `${context.payload.before}...${context.payload.after}`;
+              } else {
+                throw new Error(`unsupported or unbounded event: ${context.eventName}`);
+              }
+              let listed = 0;
+              const files = await github.paginate(
+                github.rest.repos.compareCommitsWithBasehead,
+                { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
+                response => {
+                  const page = response.data.files || [];
+                  listed += page.length;
+                  return page.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
+                },
+              );
+              if (listed >= FILE_LIMIT) {
+                throw new Error(`file list may be truncated at ${FILE_LIMIT} files (${listed} listed)`);
+              }
+              fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
+            } catch (error) {
+              core.warning(`changed-path collection failed; all checks will run: ${error.message}`);
+              fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
+            }
+
+      - name: Classify changed paths (fail closed)
+        id: classify
+        if: always()
+        run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
+
+  lab-cli:
+    name: beid-lab-cli build and test
+    needs: changes
+    # Still created on every PR head so the required context reports; a PR that
+    # touches neither the lab CLI nor the iOS app reports it as skipped. Fail
+    # closed: a failed classification runs the lane. `!cancelled()` rather than
+    # `always()` so a superseded run does not start a macOS job.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.labcli == 'true' || needs.changes.outputs.lint == 'true' || needs.changes.outputs.error == 'true') }}
     runs-on: macos-26
     timeout-minutes: 20
     steps:
@@ -43,41 +112,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      # The shared classifier skips irrelevant builds while still reporting
-      # this check on every PR. Collection or classification errors build.
-      - name: Collect changed paths
-        id: changed
-        if: always()
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        with:
-          script: |
-            const fs = require('fs');
-            const outputPath = `${process.env.RUNNER_TEMP}/beid-lab-cli-changed-files.json`;
-            try {
-              if (context.eventName !== 'pull_request') {
-                throw new Error(`classification only applies to pull_request, not ${context.eventName}`);
-              }
-              const files = await github.paginate(
-                github.rest.pulls.listFiles,
-                { owner: context.repo.owner, repo: context.repo.repo, pull_number: context.issue.number, per_page: 100 },
-                response => response.data.flatMap(file => [file.filename, file.previous_filename].filter(Boolean)),
-              );
-              fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
-            } catch (error) {
-              core.warning(`changed-path collection failed; the lab CLI job will run: ${error.message}`);
-              fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
-            }
-
-      - name: Classify (fail closed)
-        id: classify
-        if: always()
-        # A corrupt or missing input makes the classifier return every lane
-        # true, so a broken gate builds rather than silently skipping. A check
-        # that quietly stops checking is worse than one that costs a minute.
-        run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-lab-cli-changed-files.json" >> "$GITHUB_OUTPUT"
-
       - name: Verify the Barnard pin matches the app
-        if: ${{ steps.classify.outputs.labcli != 'false' }}
         # First, and outside the Swift build, because it is the failure that
         # invalidates everything the tool would otherwise measure: a lab CLI
         # resolving a different Barnard than the app ships produces numbers
@@ -85,11 +120,9 @@ jobs:
         run: python3 scripts/check_lab_cli_barnard_pin.py
 
       - name: Verify observe never connects to what it measures
-        if: ${{ steps.classify.outputs.labcli != 'false' }}
         run: python3 scripts/check_observe_never_connects.py
 
       - name: Build (release)
-        if: ${{ steps.classify.outputs.labcli != 'false' }}
         # Release rather than debug: it is what a lab host actually runs, and
         # it is the configuration whose advertising carries no debug local
         # name.
@@ -107,7 +140,6 @@ jobs:
           exit "$rc"
 
       - name: Test
-        if: ${{ steps.classify.outputs.labcli != 'false' }}
         working-directory: tools/beid-lab-cli
         # `BeidLabCliCore` imports Foundation only and `BeidLabCliBarnardTests`
         # is pure crypto, so nothing here needs a Bluetooth radio -- which is
@@ -154,7 +186,6 @@ jobs:
           exit "$rc"
 
       - name: Confirm --help runs from the built binary
-        if: ${{ steps.classify.outputs.labcli != 'false' }}
         # Cheap end-to-end proof that the executable target links and starts.
         # Everything else in this job tests a library.
         working-directory: tools/beid-lab-cli
