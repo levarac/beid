@@ -45,6 +45,40 @@ final class ManualReportSubmissionRetryScheduler: ReportSubmissionRetryScheduler
 
 @MainActor
 final class ReportSubmissionRetryTests: XCTestCase {
+  func testOriginIdentityNormalizesDefaultPortsAndSeparatesOperators() throws {
+    let origin = try XCTUnwrap(submissionOperatorOrigin("HTTPS://operator.example/event-a"))
+    XCTAssertEqual(origin, submissionOperatorOrigin("https://OPERATOR.example:443/event-b"))
+    XCTAssertNotEqual(origin, submissionOperatorOrigin("http://operator.example"))
+    XCTAssertNotEqual(origin, submissionOperatorOrigin("https://operator.example:8443"))
+    XCTAssertNotEqual(origin, submissionOperatorOrigin("https://other.example"))
+  }
+
+  func testIndependentOriginsKeepOneEarliestTimerAndSuccessOnlyResetsItsOwnBackoff() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
+    var callbacks = 0
+    XCTAssertTrue(controller.beginAttempt(operatorOrigin: "A"))
+    controller.retry(operatorOrigin: "A") { callbacks += 1 }
+    XCTAssertTrue(controller.beginAttempt(operatorOrigin: "B"))
+    controller.retry(operatorOrigin: "B") { callbacks += 1 }
+    XCTAssertEqual(scheduler.entries.filter { !$0.cancelled }.count, 1)
+    XCTAssertFalse(controller.beginAttempt(operatorOrigin: "A"))
+    controller.finish(operatorOrigin: "B")
+    XCTAssertFalse(controller.beginAttempt(operatorOrigin: "A"), "B success must preserve A's deadline")
+    XCTAssertEqual(scheduler.entries.last?.deadline, 2)
+    scheduler.entries[0].action()
+    XCTAssertEqual(callbacks, 0, "a rearmed shared timer invalidates the old callback")
+    scheduler.advance(by: 2)
+    XCTAssertEqual(callbacks, 1)
+    XCTAssertTrue(controller.beginAttempt(operatorOrigin: "A"))
+    controller.retry(operatorOrigin: "A") { callbacks += 1 }
+    XCTAssertEqual(scheduler.entries.last?.deadline, 6, "A retains its growing backoff")
+    controller.finish(operatorOrigin: "A")
+    XCTAssertTrue(controller.beginAttempt(operatorOrigin: "A"))
+    controller.retry(operatorOrigin: "A") {}
+    XCTAssertEqual(scheduler.entries.last?.deadline, 4, "A success resets A to the first two-second wait")
+  }
+
   func testBackoffGrowsToFiveMinutesAndEqualJitterNeverDropsBelowHalfTheDelay() {
     for fraction in [0.0, 1.0] {
       let scheduler = ManualReportSubmissionRetryScheduler()

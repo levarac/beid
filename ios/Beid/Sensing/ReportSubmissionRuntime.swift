@@ -150,9 +150,17 @@ private final class DefaultReportSubmissionRetryScheduler: ReportSubmissionRetry
   }
 }
 
+func submissionOperatorOrigin(_ endpoint: String) -> String? {
+  guard let url = URLComponents(string: endpoint),
+        let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(),
+        scheme == "https" || scheme == "http" else { return nil }
+  let port = url.port ?? (scheme == "https" ? 443 : 80)
+  return "\(scheme)://\(host):\(port)"
+}
+
 @MainActor
 final class ReportSubmissionRetryController {
-  // One retry budget covers the entire runtime, irrespective of queue size.
+  // One retry budget per origin, irrespective of that operator's queue size.
   // Saturate only the exponent: durable records remain retryable indefinitely.
   private static let maximumBackoffAttempt = 9
   private static let maximumDelay: TimeInterval = 300
@@ -166,7 +174,13 @@ final class ReportSubmissionRetryController {
   private let scheduler: any ReportSubmissionRetryScheduler
   private let now: () -> TimeInterval
   private let jitter: () -> Double
-  private var attempt = 0
+  private struct OperatorRetry {
+    var attempt = 0
+    var deadline: TimeInterval?
+  }
+
+  private var operators: [String: OperatorRetry] = [:]
+  private var retryAction: (@MainActor () -> Void)?
   private var scheduled: ScheduledRetry?
   private(set) var isStopped = false
 
@@ -180,32 +194,54 @@ final class ReportSubmissionRetryController {
     self.jitter = jitter
   }
 
-  func beginAttempt(allowEarlyProbe: Bool = false) -> Bool {
-    guard !isStopped else { return false }
-    if let retry = scheduled {
-      guard allowEarlyProbe || now() >= retry.deadline else { return false }
-      cancelScheduledRetry()
-    }
-    attempt = min(attempt + 1, Self.maximumBackoffAttempt)
+  func beginAttempt(operatorOrigin: String = "default", allowEarlyProbe: Bool = false) -> Bool {
+    guard canBeginAttempt(operatorOrigin: operatorOrigin, allowEarlyProbe: allowEarlyProbe) else { return false }
+    var state = operators[operatorOrigin] ?? OperatorRetry()
+    // The runtime owns the single device-wide slot. Suspend the wakeup while
+    // that slot is occupied, without erasing another operator's deadline.
+    cancelScheduledRetry()
+    state.deadline = nil
+    state.attempt = min(state.attempt + 1, Self.maximumBackoffAttempt)
+    operators[operatorOrigin] = state
     return true
   }
 
-  func retry(action: @escaping @MainActor () -> Void) {
-    guard !isStopped, attempt > 0 else { return }
-    let backoff = min(2 * pow(2, Double(attempt - 1)), Self.maximumDelay)
-    // Equal jitter keeps a non-zero minimum wait and spreads device retries.
-    let delay = backoff * (0.5 + 0.5 * jitter())
-    armRetry(deadline: now() + delay, action: action)
+  func canBeginAttempt(operatorOrigin: String, allowEarlyProbe: Bool = false) -> Bool {
+    guard !isStopped else { return false }
+    guard let deadline = operators[operatorOrigin]?.deadline else { return true }
+    return allowEarlyProbe || now() >= deadline
   }
 
-  func finish() {
-    cancelScheduledRetry()
-    attempt = 0
+  func retry(operatorOrigin: String = "default", action: @escaping @MainActor () -> Void) {
+    guard !isStopped, var state = operators[operatorOrigin], state.attempt > 0 else { return }
+    let backoff = min(2 * pow(2, Double(state.attempt - 1)), Self.maximumDelay)
+    // Equal jitter keeps a non-zero minimum wait and spreads device retries.
+    let delay = backoff * (0.5 + 0.5 * jitter())
+    state.deadline = now() + delay
+    operators[operatorOrigin] = state
+    retryAction = action
+    schedulePendingRetry()
+  }
+
+  func finish(operatorOrigin: String = "default") {
+    operators.removeValue(forKey: operatorOrigin)
+    schedulePendingRetry()
+  }
+
+  func schedulePendingRetry() {
+    guard !isStopped else { return }
+    guard let deadline = operators.values.compactMap(\.deadline).min(), let action = retryAction else {
+      cancelScheduledRetry()
+      return
+    }
+    if scheduled?.deadline != deadline { armRetry(deadline: deadline, action: action) }
   }
 
   func stop() {
     isStopped = true
     cancelScheduledRetry()
+    operators.removeAll()
+    retryAction = nil
   }
 
   private func cancelScheduledRetry() {
@@ -562,6 +598,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       return $0.id.uuidString < $1.id.uuidString
     }
     for record in oldestFirst {
+      guard let origin = submissionOperatorOrigin(record.endpoint),
+            retryController.canBeginAttempt(operatorOrigin: origin, allowEarlyProbe: allowEarlyProbe) else { continue }
       guard let stored = ExportedKotlinPackages.org.levarac.parallax.submission
         .restoreStoredObservation(signedBytesHex: record.signedObservationHex) else {
         Self.log.error("Skipped a persisted submission with invalid queue bytes")
@@ -576,7 +614,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         Self.log.error("Skipped a persisted submission with invalid queue metadata")
         continue
       }
-      guard retryController.beginAttempt(allowEarlyProbe: allowEarlyProbe) else { return }
+      guard retryController.beginAttempt(operatorOrigin: origin, allowEarlyProbe: allowEarlyProbe) else { continue }
       inFlight.insert(record.id)
       if record.submissionState == .submitting {
         lookupReceipt(
@@ -593,6 +631,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       }
       return
     }
+    retryController.schedulePendingRetry()
   }
 
   func stop() {
@@ -687,7 +726,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
           bytesFromKotlinByteArray: receipt.signedBytes.toByteArray()
         ).hexString
       )
-      retryController.finish()
+      if let origin = submissionOperatorOrigin(record.endpoint) { retryController.finish(operatorOrigin: origin) }
       shouldDrain = true
     } catch {
       Self.log.error("Unable to persist verified AcceptanceReceipt: \(String(describing: error), privacy: .public)")
@@ -703,8 +742,12 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       inFlight.remove(record.id)
       if shouldDrain { submitPending() }
     }
-    if result.isRetryable {
-      retryController.retry { [weak self] in self?.submitPending() }
+    let isNoResponseTransportFailure = result.statusCode == 0 && result.errorCode == "http_error"
+    if result.isRetryable || isNoResponseTransportFailure {
+      if let origin = submissionOperatorOrigin(record.endpoint) {
+        retryController.retry(operatorOrigin: origin) { [weak self] in self?.submitPending() }
+      }
+      shouldDrain = true
       return
     }
     do {
@@ -712,7 +755,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         for: record.id,
         code: result.errorCode ?? "submission_failed"
       )
-      retryController.finish()
+      if let origin = submissionOperatorOrigin(record.endpoint) { retryController.finish(operatorOrigin: origin) }
       shouldDrain = true
     } catch {
       Self.log.error("Unable to persist terminal submission failure: \(String(describing: error), privacy: .public)")
