@@ -384,6 +384,12 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.submissionState(forEventCode: eventCode)
   }
 
+  /// The existing foreground observer requests work without bypassing the
+  /// runtime's retry deadline or starting another sensing session.
+  func retryPendingSubmissionsOnForeground() {
+    reportSubmissionRuntime?.submitPending()
+  }
+
   /// Count-only windows durably marked as ineligible for canonical report
   /// submission. A disabled runtime remains an honest unavailable value.
   func excludedWindowCount(forEventCode eventCode: String) -> Int? {
@@ -1368,7 +1374,10 @@ final class SensingCoordinator: ObservableObject {
     reconcileSelfProofCheckpointIfNeeded()
   }
 
-  deinit {
+  isolated deinit {
+    // Stop on the owning actor before releasing the coordinator. Enqueueing
+    // this stop in the cleanup task lets an already queued retry run first.
+    reportSubmissionRuntime?.stop()
     let request = eventIdentityVerificationRequest
     let expiryTask = nearbyDiscoveryExpiryTask
     let eventJoinControl = engine
@@ -1380,12 +1389,10 @@ final class SensingCoordinator: ObservableObject {
     // `deinit` cannot hand `self` to a task.
     let relayControl = self.relayControl
     let cadenceTask = relayCadenceTask
-    let submissionRuntime = reportSubmissionRuntime
     Task { @MainActor in
       request?.cancel()
       expiryTask?.cancel()
       cadenceTask?.cancel()
-      submissionRuntime?.stop()
       if stopOwnedDiscoveryScan {
         eventJoinControl.stopDiscoveryScan()
       }

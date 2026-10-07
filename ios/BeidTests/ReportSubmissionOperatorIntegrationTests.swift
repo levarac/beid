@@ -660,6 +660,104 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     XCTAssertTrue(scheduler.entries.allSatisfy(\.cancelled))
   }
 
+  func testRetryableOutageBeyondSixAttemptsEventuallyStoresReceiptWithoutResigning() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey,
+      transientPostFailures: 6
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-long-outage")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let cryptography = TestSensingCryptography()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      retryScheduler: scheduler,
+      now: { scheduler.now }
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    for (index, delay) in [0.0, 2.0, 4.0, 8.0, 16.0, 32.0].enumerated() {
+      let scheduled = expectation(description: "retry remains scheduled after failure \(index + 1)")
+      scheduler.onSchedule = { scheduled.fulfill() }
+      if index == 0 {
+        try await driveOneRealWindow(coordinator: coordinator)
+      } else {
+        scheduler.advance(by: delay)
+      }
+      try await server.waitFor(postCount: index + 1)
+      await fulfillment(of: [scheduled], timeout: 5)
+    }
+    scheduler.onSchedule = nil
+    let pending = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).pendingRecords.first)
+    XCTAssertEqual(pending.submissionState, .submitting)
+    XCTAssertNil(pending.terminalErrorCode)
+    scheduler.advance(by: 64)
+    try await server.waitFor(postCount: 7, getCount: 6)
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
+    let accepted = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
+    XCTAssertEqual(accepted.signedObservationHex, pending.signedObservationHex)
+    XCTAssertTrue(server.postBodies.allSatisfy { $0 == server.postBodies.first })
+    XCTAssertEqual(server.postCount, 7, server.diagnostics)
+    XCTAssertEqual(server.getCount, 6, "every retry must look up the receipt before reposting")
+    XCTAssertNotNil(accepted.acceptanceReceiptHex)
+    XCTAssertTrue(scheduler.entries.allSatisfy(\.cancelled))
+  }
+
+  func testCoordinatorReleaseInvalidatesQueuedRuntimeRetryBeforeItCanSend() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey,
+      transientPostFailures: 1
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-teardown")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let scheduled = expectation(description: "retry pending before coordinator release")
+    scheduler.onSchedule = { scheduled.fulfill() }
+    let cryptography = TestSensingCryptography()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      retryScheduler: scheduler,
+      now: { scheduler.now }
+    ))
+    var coordinator: SensingCoordinator? = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    try await driveOneRealWindow(coordinator: XCTUnwrap(coordinator))
+    try await server.waitFor(postCount: 1)
+    await fulfillment(of: [scheduled], timeout: 5)
+    scheduler.onSchedule = nil
+    let entry = try XCTUnwrap(scheduler.entries.first)
+    weak var releasedCoordinator = coordinator
+    coordinator = nil
+    XCTAssertNil(releasedCoordinator)
+    XCTAssertTrue(entry.cancelled, "coordinator release must cancel the timer before yielding")
+    scheduler.now = 2
+    entry.action()
+    runtime.submitPending()
+    // Yield only after attempting the stale callback, so delayed cleanup
+    // cannot make a racy teardown pass by running before the assertion.
+    await Task.yield()
+    XCTAssertEqual(server.postCount, 1, server.diagnostics)
+    XCTAssertEqual(server.getCount, 0, server.diagnostics)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingRecords.first?.submissionState, .submitting)
+  }
+
   func testStoppingRuntimeCancelsRetryAndPreservesThePendingCapture() async throws {
     let server = try StubOperatorServer(
       eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
@@ -1115,6 +1213,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       fileURL: fileURL,
       retryScheduler: retryScheduler,
       now: now,
+      retryJitter: { 1 },
       allowInsecureLoopbackForTests: true
     )
   }

@@ -45,14 +45,45 @@ final class ManualReportSubmissionRetryScheduler: ReportSubmissionRetryScheduler
 
 @MainActor
 final class ReportSubmissionRetryTests: XCTestCase {
-  func testExponentialBackoffIsCappedAndStopsAfterSixAttempts() {
+  func testBackoffGrowsToFiveMinutesAndEqualJitterNeverDropsBelowHalfTheDelay() {
+    for fraction in [0.0, 1.0] {
+      let scheduler = ManualReportSubmissionRetryScheduler()
+      let controller = ReportSubmissionRetryController(
+        scheduler: scheduler, now: { scheduler.now }, jitter: { fraction }
+      )
+      let id = UUID()
+      for baseDelay in [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 300.0, 300.0] {
+        XCTAssertTrue(controller.beginAttempt(for: id))
+        controller.retry(for: id) {}
+        let delay = baseDelay * (0.5 + fraction * 0.5)
+        XCTAssertEqual(scheduler.entries.last?.deadline, scheduler.now + delay)
+        scheduler.advance(by: delay)
+      }
+    }
+  }
+
+  func testRetryableCaptureStillHasAScheduledRetryAfterSixFailures() {
     let scheduler = ManualReportSubmissionRetryScheduler()
-    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
+    let id = UUID()
+    var callbacks = 0
+    for delay in [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0] {
+      XCTAssertTrue(controller.beginAttempt(for: id), "a durable pending capture must remain retryable")
+      controller.retry(for: id) { callbacks += 1 }
+      XCTAssertEqual(scheduler.entries.last?.deadline, scheduler.now + delay)
+      scheduler.advance(by: delay)
+    }
+    XCTAssertEqual(callbacks, 7, "retryable failure must not strand the pending capture")
+  }
+
+  func testExponentialBackoffIsCappedWithoutLimitingAttempts() {
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
     let id = UUID()
     var retryCount = 0
     XCTAssertTrue(controller.beginAttempt(for: id))
 
-    for delay in [2.0, 4.0, 8.0, 8.0, 8.0] {
+    for delay in [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0] {
       controller.retry(for: id) { retryCount += 1 }
       XCTAssertEqual(scheduler.entries.last?.deadline, scheduler.now + delay)
       XCTAssertFalse(controller.beginAttempt(for: id), "app events must respect the retry deadline")
@@ -62,14 +93,15 @@ final class ReportSubmissionRetryTests: XCTestCase {
       XCTAssertTrue(controller.beginAttempt(for: id))
     }
     controller.retry(for: id) { retryCount += 1 }
-    XCTAssertEqual(retryCount, 5)
-    XCTAssertEqual(scheduler.entries.count, 5)
-    XCTAssertFalse(controller.beginAttempt(for: id), "the pending capture has exhausted its attempt budget")
+    XCTAssertEqual(retryCount, 7)
+    XCTAssertEqual(scheduler.entries.count, 8)
+    XCTAssertEqual(scheduler.entries.last?.deadline, scheduler.now + 256)
+    XCTAssertFalse(controller.beginAttempt(for: id), "app events must still respect capped backoff")
   }
 
   func testEventTriggeredAttemptInvalidatesAnAlreadyQueuedTimerCallback() {
     let scheduler = ManualReportSubmissionRetryScheduler()
-    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
     let id = UUID()
     var callbacks = 0
     XCTAssertTrue(controller.beginAttempt(for: id))
@@ -84,7 +116,7 @@ final class ReportSubmissionRetryTests: XCTestCase {
 
   func testEarlyTimerPreservesTheDeadlineWithoutConsumingAnotherAttempt() {
     let scheduler = ManualReportSubmissionRetryScheduler()
-    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
     let id = UUID()
     var callbacks = 0
     XCTAssertTrue(controller.beginAttempt(for: id))
@@ -104,7 +136,7 @@ final class ReportSubmissionRetryTests: XCTestCase {
 
   func testStopCancelsTimersAndIgnoresLateCallbacksAndFailures() {
     let scheduler = ManualReportSubmissionRetryScheduler()
-    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
     let id = UUID()
     var callbacks = 0
     XCTAssertTrue(controller.beginAttempt(for: id))
@@ -120,13 +152,15 @@ final class ReportSubmissionRetryTests: XCTestCase {
     XCTAssertFalse(controller.beginAttempt(for: id))
   }
 
-  func testAttemptBudgetsAreIndependentForEachPendingCapture() {
+  func testBackoffIsIndependentForEachPendingCapture() {
     let scheduler = ManualReportSubmissionRetryScheduler()
-    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
     let first = UUID()
     let second = UUID()
     for _ in 0..<6 { XCTAssertTrue(controller.beginAttempt(for: first)) }
+    controller.retry(for: first) {}
     XCTAssertFalse(controller.beginAttempt(for: first))
+    XCTAssertEqual(scheduler.entries.last?.deadline, 64)
     XCTAssertTrue(controller.beginAttempt(for: second))
     controller.retry(for: second) {}
     XCTAssertEqual(scheduler.entries.last?.deadline, 2)
@@ -134,7 +168,7 @@ final class ReportSubmissionRetryTests: XCTestCase {
 
   func testFinishingACaptureCancelsItsScheduledCallback() {
     let scheduler = ManualReportSubmissionRetryScheduler()
-    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now })
+    let controller = ReportSubmissionRetryController(scheduler: scheduler, now: { scheduler.now }, jitter: { 1 })
     let id = UUID()
     var callbacks = 0
     XCTAssertTrue(controller.beginAttempt(for: id))
@@ -149,7 +183,7 @@ final class ReportSubmissionRetryTests: XCTestCase {
   func testReleasingTheControllerCancelsTimersWithoutARetainCycle() {
     let scheduler = ManualReportSubmissionRetryScheduler()
     var controller: ReportSubmissionRetryController? = ReportSubmissionRetryController(
-      scheduler: scheduler, now: { scheduler.now }
+      scheduler: scheduler, now: { scheduler.now }, jitter: { 1 }
     )
     weak var releasedController = controller
     let id = UUID()

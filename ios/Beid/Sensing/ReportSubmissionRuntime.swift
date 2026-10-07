@@ -152,7 +152,10 @@ private final class DefaultReportSubmissionRetryScheduler: ReportSubmissionRetry
 
 @MainActor
 final class ReportSubmissionRetryController {
-  private static let maximumAttempts = 6
+  // Saturate only the backoff exponent. Retryable durable records must keep
+  // a wake-up scheduled even after a long outage, without overflowing Int.
+  private static let maximumBackoffAttempt = 9
+  private static let maximumDelay: TimeInterval = 300
 
   private struct ScheduledRetry {
     let token: UUID
@@ -162,30 +165,39 @@ final class ReportSubmissionRetryController {
 
   private let scheduler: any ReportSubmissionRetryScheduler
   private let now: () -> TimeInterval
+  private let jitter: () -> Double
   private var attempts: [UUID: Int] = [:]
   private var scheduled: [UUID: ScheduledRetry] = [:]
   private(set) var isStopped = false
 
-  init(scheduler: any ReportSubmissionRetryScheduler, now: @escaping () -> TimeInterval) {
+  init(
+    scheduler: any ReportSubmissionRetryScheduler,
+    now: @escaping () -> TimeInterval,
+    jitter: @escaping () -> Double = { Double.random(in: 0...1) }
+  ) {
     self.scheduler = scheduler
     self.now = now
+    self.jitter = jitter
   }
 
   func beginAttempt(for id: UUID) -> Bool {
-    guard !isStopped, attempts[id, default: 0] < Self.maximumAttempts else { return false }
+    guard !isStopped else { return false }
     if let retry = scheduled[id] {
       guard now() >= retry.deadline else { return false }
       retry.cancellation.cancel()
       scheduled.removeValue(forKey: id)
     }
-    attempts[id, default: 0] += 1
+    attempts[id] = min(attempts[id, default: 0] + 1, Self.maximumBackoffAttempt)
     return true
   }
 
   func retry(for id: UUID, action: @escaping @MainActor () -> Void) {
     let attempt = attempts[id, default: 0]
-    guard !isStopped, (1..<Self.maximumAttempts).contains(attempt) else { return }
-    let delay = min(2 * pow(2, Double(attempt - 1)), 8)
+    guard !isStopped, attempt > 0 else { return }
+    let backoff = min(2 * pow(2, Double(attempt - 1)), Self.maximumDelay)
+    // Equal jitter retains a non-zero minimum wait while spreading devices
+    // across half to all of the backoff interval after an operator outage.
+    let delay = backoff * (0.5 + 0.5 * jitter())
     armRetry(for: id, deadline: now() + delay, action: action)
   }
 
@@ -290,13 +302,14 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     client: ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionClient,
     retryScheduler: any ReportSubmissionRetryScheduler,
     now: @escaping () -> TimeInterval,
+    retryJitter: @escaping () -> Double,
     allowInsecureLoopbackForTests: Bool
   ) {
     self.eventSigningCryptography = eventSigningCryptography
     self.definitionProvider = definitionProvider
     self.store = store
     self.client = client
-    self.retryController = ReportSubmissionRetryController(scheduler: retryScheduler, now: now)
+    self.retryController = ReportSubmissionRetryController(scheduler: retryScheduler, now: now, jitter: retryJitter)
     self.allowInsecureLoopbackForTests = allowInsecureLoopbackForTests
   }
 
@@ -307,6 +320,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     fileURL: URL? = nil,
     retryScheduler: (any ReportSubmissionRetryScheduler)? = nil,
     now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+    retryJitter: @escaping () -> Double = { Double.random(in: 0...1) },
     allowInsecureLoopbackForTests: Bool = false
   ) -> ReportSubmissionRuntime? {
     guard isEnabled(bundle: bundle), let definitionProvider else { return nil }
@@ -318,6 +332,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       client: ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionClient(),
       retryScheduler: retryScheduler ?? DefaultReportSubmissionRetryScheduler(),
       now: now,
+      retryJitter: retryJitter,
       allowInsecureLoopbackForTests: allowInsecureLoopbackForTests
     )
   }
@@ -570,8 +585,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     inFlight.removeAll()
   }
 
-  deinit {
-    client.close()
+  isolated deinit {
+    stop()
   }
 
   private func beginPost(
