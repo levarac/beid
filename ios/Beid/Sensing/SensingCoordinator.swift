@@ -384,6 +384,12 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.submissionState(forEventCode: eventCode)
   }
 
+  /// The existing foreground observer permits one early recovery probe,
+  /// subject to the runtime's device-wide single-flight guard.
+  func retryPendingSubmissionsOnForeground() {
+    reportSubmissionRuntime?.submitPendingOnNaturalTrigger()
+  }
+
   /// Count-only windows durably marked as ineligible for canonical report
   /// submission. A disabled runtime remains an honest unavailable value.
   func excludedWindowCount(forEventCode eventCode: String) -> Int? {
@@ -907,7 +913,7 @@ final class SensingCoordinator: ObservableObject {
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
     if ProcessInfo.processInfo.arguments.contains("-beid-ui-test") {
-      return 2_000_000_000
+      return 6_000_000_000
     }
     #endif
     return 700_000_000
@@ -1368,7 +1374,10 @@ final class SensingCoordinator: ObservableObject {
     reconcileSelfProofCheckpointIfNeeded()
   }
 
-  deinit {
+  isolated deinit {
+    // Stop on the owning actor before releasing the coordinator. Enqueueing
+    // this stop in the cleanup task lets an already queued retry run first.
+    reportSubmissionRuntime?.stop()
     let request = eventIdentityVerificationRequest
     let expiryTask = nearbyDiscoveryExpiryTask
     let eventJoinControl = engine

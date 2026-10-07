@@ -99,6 +99,7 @@ struct ScanFlowView: View {
         sensing.checkpointOpenWindowForBackgrounding()
       }
       guard oldPhase != .active, newPhase == .active else { return }
+      sensing.retryPendingSubmissionsOnForeground()
       presentBindingSheetIfNeeded()
     }
     // Dismisses off `bindingState` itself, not off any one specific caller

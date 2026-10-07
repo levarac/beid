@@ -227,9 +227,36 @@ private final class StubOperatorServer {
   private let signingPublicKey: Data
   private var receipt: Data?
   private var startupError: Error?
+  private var isReady = false
+  private var isCancelled = false
+  private var isStopped = false
+  private var connections: [ObjectIdentifier: NWConnection] = [:]
+  private var connectionCount = 0
+  private var receivedByteCount = 0
+  private var requestCount = 0
+  private let transientPostFailures: Int
+  private let terminalPostFailures: Int
+  private let terminalStatus: Int
   private var _postCount = 0
   private var _getCount = 0
   private var _postBodies: [Data] = []
+  private var holdResponses: Bool
+  private var heldResponses: [(NWConnection, Data)] = []
+  private var activeRequests = 0
+  private var maximumActiveRequests = 0
+
+  var maximumInFlight: Int { lock.withLock { maximumActiveRequests } }
+
+  func holdNewResponses() { queue.sync { holdResponses = true } }
+
+  func releaseResponses() {
+    queue.sync {
+      holdResponses = false
+      let responses = heldResponses
+      heldResponses.removeAll()
+      for (connection, wire) in responses { send(wire, on: connection) }
+    }
+  }
 
   var postCount: Int {
     lock.lock()
@@ -249,25 +276,44 @@ private final class StubOperatorServer {
     return _postBodies
   }
 
+  var diagnostics: String {
+    lock.lock()
+    defer { lock.unlock() }
+    return "connections=\(connectionCount), bytes=\(receivedByteCount), requests=\(requestCount), POST=\(_postCount), GET=\(_getCount)"
+  }
+
   init(
     eventId: Data,
     signingPrivateKey: [UInt8],
-    signingPublicKey: Data
+    signingPublicKey: Data,
+    transientPostFailures: Int = 0,
+    holdResponses: Bool = false,
+    terminalPostFailures: Int = 0,
+    terminalStatus: Int = 422,
+    port: NWEndpoint.Port = .any
   ) throws {
     self.eventId = eventId
     self.signingPrivateKey = signingPrivateKey
     self.signingPublicKey = signingPublicKey
-    listener = try NWListener(using: .tcp, on: .any)
+    self.transientPostFailures = transientPostFailures
+    self.terminalPostFailures = terminalPostFailures
+    self.terminalStatus = terminalStatus
+    self.holdResponses = holdResponses
+    listener = try NWListener(using: .tcp, on: port)
   }
 
   func start() async throws -> URL {
     listener.stateUpdateHandler = { [weak self] state in
       guard let self else { return }
-      if case .failed(let error) = state {
-        self.lock.lock()
-        self.startupError = error
-        self.lock.unlock()
+      self.lock.lock()
+      defer { self.lock.unlock() }
+      if case .ready = state {
+        self.isReady = true
       }
+      if case .failed(let error) = state {
+        self.startupError = error
+      }
+      if case .cancelled = state { self.isCancelled = true }
     }
     listener.newConnectionHandler = { [weak self] connection in
       self?.accept(connection)
@@ -275,19 +321,34 @@ private final class StubOperatorServer {
     listener.start(queue: queue)
 
     for _ in 0..<100 {
-      if let error = startupError {
+      let status = lock.withLock { (isReady, startupError) }
+      if let error = status.1 {
         throw error
       }
-      if let port = listener.port, port.rawValue != 0 {
+      if status.0, let port = listener.port, port.rawValue != 0 {
         return try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.startTimedOut
+    throw StubOperatorError.startTimedOut(diagnostics: diagnostics)
   }
 
   func stop() {
     listener.cancel()
+    queue.sync {
+      isStopped = true
+      for connection in connections.values { connection.cancel() }
+      connections.removeAll()
+    }
+  }
+
+  func stopAndWait() async throws {
+    stop()
+    for _ in 0..<100 {
+      if lock.withLock({ isCancelled }) { return }
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    throw StubOperatorError.requestTimedOut(diagnostics: "listener did not release its port")
   }
 
   func waitFor(postCount expectedPosts: Int, getCount expectedGets: Int? = nil) async throws {
@@ -298,13 +359,22 @@ private final class StubOperatorServer {
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.requestTimedOut(
-      postCount: postCount,
-      getCount: getCount
-    )
+    throw StubOperatorError.requestTimedOut(diagnostics: diagnostics)
   }
 
   private func accept(_ connection: NWConnection) {
+    guard !isStopped else { connection.cancel(); return }
+    connections[ObjectIdentifier(connection)] = connection
+    lock.withLock { connectionCount += 1 }
+    connection.stateUpdateHandler = { [weak self, weak connection] state in
+      guard let self, let connection else { return }
+      switch state {
+      case .cancelled, .failed:
+        self.connections.removeValue(forKey: ObjectIdentifier(connection))
+      default:
+        break
+      }
+    }
     connection.start(queue: queue)
     receive(connection, bytes: Data())
   }
@@ -321,6 +391,7 @@ private final class StubOperatorServer {
 
       var accumulated = bytes
       if let data {
+        self.lock.withLock { self.receivedByteCount += data.count }
         accumulated.append(data)
       }
       if let request = self.parseRequest(accumulated) {
@@ -334,15 +405,28 @@ private final class StubOperatorServer {
   }
 
   private func respond(to request: HTTPRequest, on connection: NWConnection) {
+    lock.withLock {
+      requestCount += 1
+      activeRequests += 1
+      maximumActiveRequests = max(maximumActiveRequests, activeRequests)
+    }
     let response: (status: Int, body: Data, contentType: String?)
     if request.method == "POST", request.path == "/v1/observations" {
-      let generated = makeReceipt(observationBytes: request.body)
       lock.lock()
       _postCount += 1
       _postBodies.append(request.body)
-      receipt = generated
+      let shouldFail = _postCount <= transientPostFailures
+      let shouldReject = _postCount <= terminalPostFailures
       lock.unlock()
-      response = (201, generated, "application/vnd.levarac.acceptance-receipt+cose")
+      if shouldReject {
+        response = (terminalStatus, Data(), nil)
+      } else if shouldFail {
+        response = (503, Data(), nil)
+      } else {
+        let generated = makeReceipt(observationBytes: request.body)
+        lock.withLock { receipt = generated }
+        response = (201, generated, "application/vnd.levarac.acceptance-receipt+cose")
+      }
     } else if request.method == "GET", request.path.hasSuffix("/acceptance") {
       lock.lock()
       _getCount += 1
@@ -364,7 +448,16 @@ private final class StubOperatorServer {
     headers += "Content-Length: \(response.body.count)\r\nConnection: close\r\n\r\n"
     var wire = Data(headers.utf8)
     wire.append(response.body)
-    connection.send(content: wire, completion: .contentProcessed { _ in
+    if holdResponses {
+      heldResponses.append((connection, wire))
+    } else {
+      send(wire, on: connection)
+    }
+  }
+
+  private func send(_ wire: Data, on connection: NWConnection) {
+    connection.send(content: wire, completion: .contentProcessed { [weak self] _ in
+      self?.lock.withLock { self?.activeRequests -= 1 }
       connection.cancel()
     })
   }
@@ -459,18 +552,21 @@ private struct HTTPRequest {
 }
 
 private enum StubOperatorError: Error, CustomStringConvertible {
-  case startTimedOut
-  case requestTimedOut(postCount: Int, getCount: Int)
-  case submissionStateTimedOut(expected: String)
+  case startTimedOut(diagnostics: String)
+  case requestTimedOut(diagnostics: String)
+  case submissionStateTimedOut(expected: String, diagnostics: String)
+  case joinedStateTimedOut(expected: String, actual: String?, refusal: String)
 
   var description: String {
     switch self {
-    case .startTimedOut:
-      return "stub operator did not bind a loopback port"
-    case let .requestTimedOut(postCount, getCount):
-      return "stub operator request timeout: POST=\(postCount), GET=\(getCount)"
-    case let .submissionStateTimedOut(expected):
-      return "submission state timeout: expected \(expected)"
+    case .startTimedOut(let diagnostics):
+      return "stub operator did not become ready: \(diagnostics)"
+    case .requestTimedOut(let diagnostics):
+      return "stub operator request timeout: \(diagnostics)"
+    case let .submissionStateTimedOut(expected, diagnostics):
+      return "submission state timeout: expected \(expected); \(diagnostics)"
+    case let .joinedStateTimedOut(expected, actual, refusal):
+      return "join timeout: expected \(expected), actual \(actual ?? "nil"), refusal \(refusal)"
     }
   }
 }
@@ -555,8 +651,353 @@ private enum TestCbor {
   }
 }
 
+private enum SubmissionTestWaitBudget {
+  // One real receipt verification can exceed ten seconds on hosted runners.
+  static let recordCompletion: TimeInterval = 30
+}
+
 @MainActor
 final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
+  func testStoreWriteFailuresRearmAnotherOriginsPendingRetry() async throws {
+    for boundary in ["submitting", "receipt", "terminal"] {
+      let failing = try StubOperatorServer(
+        eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+        signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+        transientPostFailures: 10_000
+      )
+      let other = try StubOperatorServer(
+        eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+        signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+        holdResponses: boundary != "submitting",
+        terminalPostFailures: boundary == "terminal" ? 10_000 : 0,
+        terminalStatus: 400
+      )
+      defer { failing.stop(); other.stop() }
+      let failedEndpoint = try await failing.start()
+      let otherEndpoint = try await other.start()
+      let directory = try makeIsolatedDirectory(named: "beid-store-write-\(boundary)")
+      defer { try? FileManager.default.removeItem(at: directory) }
+      let fileURL = directory.appendingPathComponent("report-submissions.json")
+      let backupURL = directory.appendingPathComponent("preserved-submissions.json")
+      _ = try seedPendingRecords(count: 1, endpoint: failedEndpoint, fileURL: fileURL)
+      let next = try seedPendingRecords(count: 1, endpoint: otherEndpoint, fileURL: fileURL, creationOffset: 1)[0]
+      let scheduler = ManualReportSubmissionRetryScheduler()
+      let runtime = try XCTUnwrap(makeRuntime(
+        endpoint: failedEndpoint, receiptPublicKeyHex: receiptKeyHex,
+        cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+        retryScheduler: scheduler, now: { scheduler.now }
+      ))
+      defer { runtime.stop() }
+      // Preserve the real durable file, then replace its destination with a
+      // directory so the next atomic store write actually fails.
+      let blockWrites = {
+        try FileManager.default.moveItem(at: fileURL, to: backupURL)
+        try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false)
+      }
+      var blocked = false
+      if boundary == "submitting" {
+        scheduler.onSchedule = {
+          guard !blocked else { return }
+          do { try blockWrites(); blocked = true }
+          catch { XCTFail("could not set up store-write failure: \(error)") }
+        }
+      }
+      runtime.submitPending()
+      if boundary != "submitting" {
+        try await other.waitFor(postCount: 1)
+        try blockWrites()
+        blocked = true
+        other.releaseResponses()
+      }
+      try await waitUntil { blocked && runtime.activeSubmissionCountForTesting == 0 }
+      scheduler.onSchedule = nil
+      XCTAssertEqual(scheduler.entries.filter { !$0.cancelled }.count, 1,
+                     "\(boundary) write failure must preserve the other origin's wakeup")
+      XCTAssertEqual(scheduler.entries.last?.deadline, 2)
+      try FileManager.default.removeItem(at: fileURL)
+      try FileManager.default.moveItem(at: backupURL, to: fileURL)
+      scheduler.advance(by: 2)
+      try await waitUntil(diagnostics: { "\(boundary): \(failing.diagnostics); \(other.diagnostics)" }) {
+        let record = ReportSubmissionStore(fileURL: fileURL).records.first { $0.id == next.id }
+        return boundary == "terminal" ? record?.terminalErrorCode == "http_error" : record?.submissionState == .accepted
+      }
+      XCTAssertEqual(failing.postCount, 2, "the other origin retried without an external trigger")
+      XCTAssertEqual(other.postCount, boundary == "terminal" ? 2 : 1,
+                     "a stored receipt is looked up rather than posted again")
+      XCTAssertEqual(other.getCount, boundary == "submitting" ? 0 : 1)
+    }
+  }
+
+  func testUnavailableOldestOperatorDoesNotBlockHealthyNewerOperator() async throws {
+    let failing = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+      transientPostFailures: 10_000
+    )
+    let healthy = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey
+    )
+    defer { failing.stop(); healthy.stop() }
+    let failedEndpoint = try await failing.start()
+    let healthyEndpoint = try await healthy.start()
+    let directory = try makeIsolatedDirectory(named: "beid-independent-operators")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let oldest = try seedPendingRecords(count: 1, endpoint: failedEndpoint, fileURL: fileURL)[0]
+    let newer = try seedPendingRecords(count: 1, endpoint: healthyEndpoint, fileURL: fileURL, creationOffset: 1)[0]
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: failedEndpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      retryScheduler: scheduler, now: { scheduler.now }
+    ))
+    defer { runtime.stop() }
+    runtime.submitPending()
+    try await waitUntil(diagnostics: { "failing: \(failing.diagnostics); healthy: \(healthy.diagnostics)" }) {
+      ReportSubmissionStore(fileURL: fileURL).records.first(where: { $0.id == newer.id })?.submissionState == .accepted
+    }
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(store.pendingRecords.map(\.id), [oldest.id])
+    XCTAssertNil(store.pendingRecords.first?.terminalErrorCode)
+    XCTAssertEqual(failing.postCount, 1)
+    XCTAssertEqual(healthy.postCount, 1)
+    XCTAssertEqual(scheduler.now, 0, "healthy work drains without advancing the failed operator's timer")
+    XCTAssertEqual(scheduler.entries.filter { !$0.cancelled }.count, 1)
+    XCTAssertEqual(scheduler.entries.last?.deadline, 2, "healthy success must not reset another operator's backoff")
+  }
+
+  func testNoResponseTransportFailurePreservesQueueAndRetriesAfterConnectivityReturns() async throws {
+    let reservation = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey
+    )
+    let endpoint = try await reservation.start()
+    try await reservation.stopAndWait()
+    let directory = try makeIsolatedDirectory(named: "beid-offline-recovery")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let records = try seedPendingRecords(count: 2, endpoint: endpoint, fileURL: fileURL)
+
+    // A closed loopback port exercises the real URLSession/KMP mapping,
+    // rather than manufacturing a SubmissionResult in the test.
+    let client = ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionClient()
+    defer { client.close() }
+    let observation = try XCTUnwrap(
+      ExportedKotlinPackages.org.levarac.parallax.submission
+        .restoreStoredObservation(signedBytesHex: records[0].signedObservationHex)
+    )
+    let configuration = try makeConfiguration(endpoint: endpoint)
+    let result = await withCheckedContinuation {
+      (continuation: CheckedContinuation<ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionResult, Never>) in
+      client.submit(observation: observation, configuration: configuration) {
+        continuation.resume(returning: $0)
+      }
+    }
+    XCTAssertFalse(result.isSuccess)
+    XCTAssertEqual(result.statusCode, 0)
+    XCTAssertEqual(result.errorCode, "http_error")
+    XCTAssertFalse(result.isRetryable, "shared classification stays unchanged; iOS owns this recovery")
+
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      retryScheduler: scheduler, now: { scheduler.now }
+    ))
+    defer { runtime.stop() }
+    runtime.submitPending()
+    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 }
+    let offline = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(offline.pendingRecords.count, 2, "offline must not terminally drain the queue")
+    XCTAssertTrue(offline.records.allSatisfy { $0.terminalErrorCode == nil })
+    XCTAssertEqual(offline.records.first(where: { $0.id == records[0].id })?.submissionState, .submitting)
+    XCTAssertEqual(offline.records.first(where: { $0.id == records[1].id })?.submissionState, .prepared)
+    let retry = try XCTUnwrap(scheduler.entries.first, "offline must arm the shared retry gate")
+    XCTAssertEqual(retry.deadline, 2)
+
+    let server = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+      port: XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(try XCTUnwrap(endpoint.port))))
+    )
+    defer { server.stop() }
+    let recoveredEndpoint = try await server.start()
+    XCTAssertEqual(recoveredEndpoint, endpoint)
+    scheduler.advance(by: 2)
+    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.diagnostics }) {
+      ReportSubmissionStore(fileURL: fileURL).records.allSatisfy { $0.submissionState == .accepted }
+    }
+    XCTAssertEqual(server.postCount, 2)
+    XCTAssertEqual(server.getCount, 1, "check the oldest uncertain POST before reposting")
+    XCTAssertEqual(server.maximumInFlight, 1)
+    XCTAssertEqual(server.postBodies, try records.map { try XCTUnwrap(Data(hexEncoded: $0.signedObservationHex)) })
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).records.allSatisfy { $0.acceptanceReceiptHex != nil })
+  }
+
+  func testGenuineHTTP422StopsOldestAndDrainsNextRecord() async throws {
+    try await assertTerminalDrain(status: 422, errorCode: "rejected")
+  }
+
+  func testHTTP400WithHTTPErrorIsTerminalAndDrainsNextRecord() async throws {
+    try await assertTerminalDrain(status: 400, errorCode: "http_error")
+  }
+
+  private func assertTerminalDrain(status: Int, errorCode: String) async throws {
+    let server = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+      terminalPostFailures: 1, terminalStatus: status
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-terminal-drain")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let records = try seedPendingRecords(count: 2, endpoint: endpoint, fileURL: fileURL)
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      retryScheduler: scheduler, now: { scheduler.now }
+    ))
+    defer { runtime.stop() }
+    runtime.submitPending()
+    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.diagnostics }) {
+      ReportSubmissionStore(fileURL: fileURL).records.first(where: { $0.id == records[1].id })?.submissionState == .accepted
+    }
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    XCTAssertEqual(store.records.first(where: { $0.id == records[0].id })?.terminalErrorCode, errorCode)
+    XCTAssertEqual(store.records.first(where: { $0.id == records[1].id })?.terminalErrorCode, nil)
+    XCTAssertEqual(server.postCount, 2)
+    XCTAssertEqual(server.getCount, 0)
+    XCTAssertEqual(server.maximumInFlight, 1)
+    XCTAssertEqual(server.postBodies, try records.map { try XCTUnwrap(Data(hexEncoded: $0.signedObservationHex)) })
+    XCTAssertTrue(scheduler.entries.isEmpty, "a genuine terminal HTTP response must not back off")
+  }
+
+  func testForegroundAndNextCaptureProbeOnceBeforeBackoffWithoutOverlappingRequests() async throws {
+    let server = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+      transientPostFailures: 10
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-device-wide-natural-probes")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    _ = try seedPendingRecords(count: 1, endpoint: endpoint, fileURL: fileURL)
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      retryScheduler: scheduler, now: { scheduler.now }
+    ))
+    let coordinator = makeSubmissionCoordinator(cryptography: TestSensingCryptography(), runtime: runtime)
+    defer { withExtendedLifetime(coordinator) {} }
+    runtime.submitPending()
+    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 1 }
+    XCTAssertEqual(scheduler.now, 0)
+    server.holdNewResponses()
+    coordinator.retryPendingSubmissionsOnForeground()
+    coordinator.retryPendingSubmissionsOnForeground()
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 1, "foreground may probe before the deadline")
+    XCTAssertTrue(scheduler.entries[0].cancelled)
+    try await server.waitFor(postCount: 1, getCount: 1)
+    server.releaseResponses()
+    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 2 }
+    server.holdNewResponses()
+    runtime.captureAndQueueWindow(
+      id: UUID(), eventCode: "device-wide-outage", eventIdHex: eventIdHex, enin: 13,
+      peerRpids: ["01" + String(repeating: "bb", count: 16)],
+      reporterRpid: "01" + String(repeating: "aa", count: 16), participantCommitment: nil
+    )
+    runtime.submitPending()
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 1, "next capture may probe the oldest record once")
+    XCTAssertTrue(scheduler.entries[1].cancelled)
+    // Release on the server queue before yielding to the new capture's
+    // signing work; holding a real HTTP reply during that work can create
+    // the client's intentional four-second transport timeout.
+    server.releaseResponses()
+    try await server.waitFor(postCount: 2, getCount: 2)
+    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 3
+        && ReportSubmissionStore(fileURL: fileURL).pendingRecords.count == 2
+    }
+    XCTAssertEqual(server.postCount, 3)
+    XCTAssertEqual(server.getCount, 2)
+    XCTAssertEqual(server.maximumInFlight, 1)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingRecords.count, 2)
+    XCTAssertEqual(scheduler.entries.last?.deadline, 8, "natural probes advance rather than reset the shared backoff")
+    scheduler.now = 4
+    scheduler.entries[0].action()
+    scheduler.entries[1].action()
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 0, "cancelled callbacks cannot launch duplicate probes")
+  }
+
+  func testTwelvePendingRecordsDoNotMultiplyOneHourOfOutageRetries() async throws {
+    let one = try await attemptsDuringOneHourOfOutage(recordCount: 1)
+    let twelve = try await attemptsDuringOneHourOfOutage(recordCount: 12)
+    XCTAssertEqual(one.posts, 31)
+    XCTAssertEqual(one.gets, 30)
+    XCTAssertEqual(twelve.posts, one.posts, "one shared retry gate must cover every pending record")
+    XCTAssertEqual(twelve.gets, one.gets)
+    let two = try await attemptsDuringOneHourOfOutage(recordCount: 1, operatorCount: 2)
+    XCTAssertEqual(two.posts, 2 * one.posts)
+    XCTAssertEqual(two.gets, 2 * one.gets)
+    for count in two.counts {
+      XCTAssertEqual(count.posts, one.posts, "each origin progresses within its own bound")
+      XCTAssertEqual(count.gets, one.gets)
+    }
+
+  }
+
+  func testRecoveryDrainsThreeRecordsOldestFirstWithOnlyOneInFlight() async throws {
+    let server = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey,
+      transientPostFailures: 1,
+      holdResponses: true
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-device-wide-recovery")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let records = try seedPendingRecords(count: 3, endpoint: endpoint, fileURL: fileURL)
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      retryScheduler: scheduler, now: { scheduler.now }
+    ))
+    defer { runtime.stop() }
+    runtime.submitPending()
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 1)
+    runtime.submitPending()
+    XCTAssertEqual(runtime.activeSubmissionCountForTesting, 1, "natural calls must not open another flight")
+    try await server.waitFor(postCount: 1)
+    XCTAssertEqual(server.postBodies.first, Data(hexEncoded: records[0].signedObservationHex))
+    server.releaseResponses()
+    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && !scheduler.entries.isEmpty }
+    scheduler.advance(by: 2)
+    // Three real signature verifications drain serially; their total
+    // duration is independent of the retry deadline and HTTP timeout.
+    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: {
+      let states = ReportSubmissionStore(fileURL: fileURL).records.map { $0.submissionState.rawValue }
+      return "\(server.diagnostics), states=\(states), flights=\(runtime.activeSubmissionCountForTesting)"
+    }) {
+      ReportSubmissionStore(fileURL: fileURL).records.allSatisfy { $0.submissionState == .accepted }
+    }
+    XCTAssertEqual(server.maximumInFlight, 1)
+    XCTAssertEqual(server.postCount, 4)
+    let expected = try ([records[0]] + records).map { try XCTUnwrap(Data(hexEncoded: $0.signedObservationHex)) }
+    XCTAssertEqual(server.postBodies, expected, "the oldest failed record is retried before the serial drain")
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).records.count, 3)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).records.allSatisfy { $0.acceptanceReceiptHex != nil })
+  }
+
   private let eventIdHex = String(repeating: "11", count: 32)
   private let definitionDigestHex = String(repeating: "22", count: 32)
   private let receiptKeyHex = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
@@ -567,6 +1008,196 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     0x5c, 0x77, 0x8e, 0x4b, 0x8c, 0xef, 0x3c, 0xa7,
     0xab, 0xac, 0x09, 0xb9, 0x5c, 0x70, 0x9e, 0xe5
   ])
+
+  func testRetryableFailureRetriesAutomaticallyWithReceiptLookup() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey,
+      transientPostFailures: 1
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-retry")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let scheduled = expectation(description: "retryable HTTP 503 schedules an automatic retry")
+    scheduler.onSchedule = { scheduled.fulfill() }
+    let cryptography = TestSensingCryptography()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      retryScheduler: scheduler,
+      now: { scheduler.now }
+    ))
+    let coordinator = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    try await driveOneRealWindow(coordinator: coordinator)
+    try await server.waitFor(postCount: 1)
+    await fulfillment(of: [scheduled], timeout: 5)
+    scheduler.onSchedule = nil
+    let entry = try XCTUnwrap(scheduler.entries.first)
+
+    XCTAssertEqual(entry.deadline, 2)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState, .submitting)
+    runtime.submitPending()
+    XCTAssertEqual(server.postCount, 1)
+    XCTAssertEqual(server.getCount, 0)
+    scheduler.advance(by: 2)
+    runtime.submitPending()
+    runtime.submitPending()
+    entry.action()
+    try await server.waitFor(postCount: 2, getCount: 1)
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
+    XCTAssertEqual(server.postCount, 2, server.diagnostics)
+    XCTAssertEqual(server.getCount, 1, server.diagnostics)
+    XCTAssertEqual(server.postBodies[0], server.postBodies[1], "retry must reuse the exact signed bytes")
+    XCTAssertTrue(scheduler.entries.allSatisfy(\.cancelled))
+  }
+
+  func testRetryableOutageBeyondSixAttemptsEventuallyStoresReceiptWithoutResigning() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey,
+      transientPostFailures: 6
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-long-outage")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let cryptography = TestSensingCryptography()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      retryScheduler: scheduler,
+      now: { scheduler.now }
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    for (index, delay) in [0.0, 2.0, 4.0, 8.0, 16.0, 32.0].enumerated() {
+      let scheduled = expectation(description: "retry remains scheduled after failure \(index + 1)")
+      scheduler.onSchedule = { scheduled.fulfill() }
+      if index == 0 {
+        try await driveOneRealWindow(coordinator: coordinator)
+      } else {
+        scheduler.advance(by: delay)
+      }
+      try await server.waitFor(postCount: index + 1)
+      await fulfillment(of: [scheduled], timeout: 5)
+    }
+    scheduler.onSchedule = nil
+    let pending = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).pendingRecords.first)
+    XCTAssertEqual(pending.submissionState, .submitting)
+    XCTAssertNil(pending.terminalErrorCode)
+    scheduler.advance(by: 64)
+    try await server.waitFor(postCount: 7, getCount: 6)
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
+    let accepted = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
+    XCTAssertEqual(accepted.signedObservationHex, pending.signedObservationHex)
+    XCTAssertTrue(server.postBodies.allSatisfy { $0 == server.postBodies.first })
+    XCTAssertEqual(server.postCount, 7, server.diagnostics)
+    XCTAssertEqual(server.getCount, 6, "every retry must look up the receipt before reposting")
+    XCTAssertNotNil(accepted.acceptanceReceiptHex)
+    XCTAssertTrue(scheduler.entries.allSatisfy(\.cancelled))
+  }
+
+  func testCoordinatorReleaseInvalidatesQueuedRuntimeRetryBeforeItCanSend() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey,
+      transientPostFailures: 1
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-teardown")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let scheduled = expectation(description: "retry pending before coordinator release")
+    scheduler.onSchedule = { scheduled.fulfill() }
+    let cryptography = TestSensingCryptography()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      retryScheduler: scheduler,
+      now: { scheduler.now }
+    ))
+    var coordinator: SensingCoordinator? = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    try await driveOneRealWindow(coordinator: XCTUnwrap(coordinator))
+    try await server.waitFor(postCount: 1)
+    await fulfillment(of: [scheduled], timeout: 5)
+    scheduler.onSchedule = nil
+    let entry = try XCTUnwrap(scheduler.entries.first)
+    weak var releasedCoordinator = coordinator
+    coordinator = nil
+    XCTAssertNil(releasedCoordinator)
+    XCTAssertTrue(entry.cancelled, "coordinator release must cancel the timer before yielding")
+    scheduler.now = 2
+    entry.action()
+    runtime.submitPending()
+    // Yield only after attempting the stale callback, so delayed cleanup
+    // cannot make a racy teardown pass by running before the assertion.
+    await Task.yield()
+    XCTAssertEqual(server.postCount, 1, server.diagnostics)
+    XCTAssertEqual(server.getCount, 0, server.diagnostics)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingRecords.first?.submissionState, .submitting)
+  }
+
+  func testStoppingRuntimeCancelsRetryAndPreservesThePendingCapture() async throws {
+    let server = try StubOperatorServer(
+      eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey,
+      signingPublicKey: receiptPublicKey,
+      transientPostFailures: 1
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-report-submission-stop")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let scheduled = expectation(description: "retry is pending before runtime stop")
+    scheduler.onSchedule = { scheduled.fulfill() }
+    let cryptography = TestSensingCryptography()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint,
+      receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography,
+      fileURL: fileURL,
+      enabled: true,
+      retryScheduler: scheduler,
+      now: { scheduler.now }
+    ))
+    let coordinator = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    try await driveOneRealWindow(coordinator: coordinator)
+    try await server.waitFor(postCount: 1)
+    await fulfillment(of: [scheduled], timeout: 5)
+    scheduler.onSchedule = nil
+    let entry = try XCTUnwrap(scheduler.entries.first)
+
+    runtime.stop()
+    XCTAssertTrue(entry.cancelled)
+    scheduler.advance(by: 2)
+    entry.action()
+    runtime.submitPending()
+    XCTAssertEqual(server.postCount, 1, server.diagnostics)
+    XCTAssertEqual(server.getCount, 0, server.diagnostics)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingRecords.first?.submissionState, .submitting)
+    XCTAssertNil(ReportSubmissionStore(fileURL: fileURL).records.first?.terminalErrorCode)
+  }
 
   func testNormalRuntimeWindowCloseSubmitsAndStoresVerifiedReceipt() async throws {
     let server = try StubOperatorServer(
@@ -595,7 +1226,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     try await driveOneRealWindow(coordinator: coordinator)
 
     try await server.waitFor(postCount: 1)
-    try await waitForSubmissionState(.accepted, at: fileURL)
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
     let record = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
     let postedBody = try XCTUnwrap(server.postBodies.first)
     XCTAssertEqual(record.submissionState, .accepted)
@@ -693,6 +1324,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       sensingCryptography: cryptography,
       reportSubmissionRuntime: relaunchedRuntime
     )
+    // The relaunched app's owner must remain alive until the receipt is
+    // durable; releasing it intentionally cancels submission callbacks.
+    defer { withExtendedLifetime(relaunchedCoordinator) {} }
     await relaunchedCoordinator.waitForLedgerLoadToFinish()
 
     XCTAssertEqual(relaunchedCoordinator.phase, .idle)
@@ -700,7 +1334,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
 
     relaunchedProvider.resolveAll()
     try await server.waitFor(postCount: 1)
-    try await waitForSubmissionState(.accepted, at: fileURL)
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
     XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.isEmpty)
   }
 
@@ -784,6 +1418,10 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     try await driveOneRealWindow(coordinator: firstCoordinator)
     try await server.waitFor(postCount: 1)
 
+    // Quiesce the first process at the crash boundary before opening a
+    // second store/client over the same durable queue.
+    try await waitUntil { firstRuntime.activeSubmissionCountForTesting == 0 }
+    firstRuntime.stop()
     let crashedRecord = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
     let postedBody = try XCTUnwrap(server.postBodies.first)
     XCTAssertEqual(crashedRecord.submissionState, .submitting)
@@ -802,11 +1440,12 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       sensingCryptography: cryptography,
       reportSubmissionRuntime: relaunchedRuntime
     )
+    defer { withExtendedLifetime(relaunchedCoordinator) {} }
     await relaunchedCoordinator.waitForLedgerLoadToFinish()
 
     XCTAssertEqual(relaunchedCoordinator.phase, .idle)
     try await server.waitFor(postCount: 1, getCount: 1)
-    try await waitForSubmissionState(.accepted, at: fileURL)
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
     let restored = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
     XCTAssertEqual(restored.submissionState, .accepted)
     XCTAssertNotNil(restored.acceptanceReceiptHex)
@@ -846,7 +1485,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     )
     try await driveOneRealWindow(coordinator: coordinator)
     try await server.waitFor(postCount: 1)
-    try await waitForTerminalFailure(at: fileURL)
+    try await waitForTerminalFailure(at: fileURL, server: server)
 
     let record = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
     XCTAssertNil(record.acceptanceReceiptHex)
@@ -935,7 +1574,10 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     fileURL: URL,
     enabled: Bool,
     provider: (any EventDefinitionContextProvider)? = nil,
-    useDefaultProvider: Bool = true
+    useDefaultProvider: Bool = true,
+    retryScheduler: (any ReportSubmissionRetryScheduler)? = nil,
+    now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+    retryJitter: @escaping () -> Double = { 1 }
   ) throws -> ReportSubmissionRuntime? {
     let configuration = try XCTUnwrap(
       ExportedKotlinPackages.org.levarac.parallax.submission
@@ -976,6 +1618,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       eventSigningCryptography: cryptography,
       definitionProvider: resolvedProvider,
       fileURL: fileURL,
+      retryScheduler: retryScheduler,
+      now: now,
+      retryJitter: retryJitter,
       allowInsecureLoopbackForTests: true
     )
   }
@@ -1005,9 +1650,18 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
         eventIdHex: self.eventIdHex
       )
     }
-    // startSensing requests simulator permissions before configuring Barnard;
-    // let that callback finish before driving the real detection entry point.
-    try await Task.sleep(nanoseconds: 100_000_000)
+    let expectedEventId = eventIdHex ?? self.eventIdHex
+    for _ in 0..<1_000 {
+      if coordinator.relayGateJoinedEventIdHexForTesting == expectedEventId { break }
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    guard coordinator.relayGateJoinedEventIdHexForTesting == expectedEventId else {
+      throw StubOperatorError.joinedStateTimedOut(
+        expected: expectedEventId,
+        actual: coordinator.relayGateJoinedEventIdHexForTesting,
+        refusal: String(describing: coordinator.joinRefusal)
+      )
+    }
     let reporterRpid = "01" + String(repeating: "aa", count: 16)
     for index in 0..<BeidConfig.eventConfirmThreshold {
       let rpid = "01" + String(format: "%032x", index + 1)
@@ -1073,27 +1727,125 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     )
   }
 
+  private func attemptsDuringOneHourOfOutage(recordCount: Int, operatorCount: Int = 1) async throws -> (posts: Int, gets: Int, counts: [(posts: Int, gets: Int)]) {
+    let servers = try (0..<operatorCount).map { _ in
+      try StubOperatorServer(
+        eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+        signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+        transientPostFailures: 10_000
+      )
+    }
+    defer { servers.forEach { $0.stop() } }
+    var endpoints: [URL] = []
+    for server in servers { endpoints.append(try await server.start()) }
+    let endpoint = try XCTUnwrap(endpoints.first)
+    let directory = try makeIsolatedDirectory(named: "beid-device-wide-outage")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    for (index, endpoint) in endpoints.enumerated() {
+      _ = try seedPendingRecords(count: recordCount, endpoint: endpoint, fileURL: fileURL,
+                                creationOffset: index * recordCount)
+    }
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: TestSensingCryptography(), fileURL: fileURL, enabled: true,
+      retryScheduler: scheduler, now: { scheduler.now }, retryJitter: { 0 }
+    ))
+    defer { runtime.stop() }
+    runtime.submitPending()
+    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && !scheduler.entries.isEmpty }
+    while let next = scheduler.entries.filter({ !$0.cancelled }).map(\.deadline).min(), next <= 3_600 {
+      let scheduledCount = scheduler.entries.count
+      scheduler.advance(by: next - scheduler.now)
+      try await waitUntil {
+        runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count > scheduledCount
+      }
+    }
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingRecords.count, recordCount * operatorCount)
+    let counts = servers.map { (posts: $0.postCount, gets: $0.getCount) }
+    return (counts.reduce(0) { $0 + $1.posts }, counts.reduce(0) { $0 + $1.gets }, counts)
+  }
+
+  private func seedPendingRecords(count: Int, endpoint: URL, fileURL: URL, creationOffset: Int = 0) throws -> [ReportSubmissionRecord] {
+    let cryptography = TestSensingCryptography()
+    let configuration = try makeConfiguration(endpoint: endpoint)
+    let records = try (0..<count).map { index in
+      let id = UUID()
+      let eventCode = "device-wide-outage"
+      let evidence = try XCTUnwrap(
+        ExportedKotlinPackages.org.levarac.parallax.observation.createMutualSensingWindowEvidence(
+          idHex: id.hexString, eventIdHex: eventIdHex, eventDefinitionDigestHex: definitionDigestHex,
+          observerHex: cryptography.eventSigningPublicKey(eventCode: eventCode).hexString,
+          finalizedAt: 1_791_324_000 + Double(index),
+          reporterRpidHex: "01" + String(repeating: "aa", count: 16),
+          enin: Int64(index + 1), observedRpidHexes: ["01" + String(repeating: "bb", count: 16)],
+          rpidClaimHex: nil, participantCommitmentHex: nil, legacyPeerCount: nil
+        )
+      )
+      let eligible = try XCTUnwrap(
+        ExportedKotlinPackages.org.levarac.parallax.observation.prepareMutualSensingObservation(evidence: evidence)
+          as? ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible
+      )
+      let signature = cryptography.signWindowReport(
+        eventCode: eventCode,
+        bytes: Data(bytesFromKotlinByteArray: eligible.prepared.signatureStructure.toByteArray())
+      )
+      let stored = ExportedKotlinPackages.org.levarac.parallax.submission.storeSignedObservation(
+        signed: eligible.prepared.signWithCompactSignatureHex(rHex: signature.r.hexString, sHex: signature.s.hexString)
+      )
+      return ReportSubmissionRecord(
+        id: id, eventCode: eventCode, endpoint: endpoint.absoluteString, receiptPublicKeyHex: receiptKeyHex,
+        eventIdHex: eventIdHex, eventDefinitionDigestHex: definitionDigestHex, validFrom: nil, validUntil: nil,
+        signedObservationHex: Data(bytesFromKotlinByteArray: stored.signedBytes.toByteArray()).hexString,
+        observationDigestHex: Data(bytesFromKotlinByteArray: stored.observationDigest.toByteArray()).hexString,
+        operatorIdHex: Data(bytesFromKotlinByteArray: configuration.operatorId.toByteArray()).hexString,
+        createdAt: Date(timeIntervalSince1970: 1_791_324_000 + Double(index + creationOffset))
+      )
+    }
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    // Durable storage order can differ from creation order after resolution.
+    for record in records.reversed() { try store.add(record) }
+    return records
+  }
+
+  private func waitUntil(
+    timeout: TimeInterval = SubmissionTestWaitBudget.recordCompletion,
+    diagnostics: () -> String = { "condition timed out" },
+    _ predicate: () -> Bool
+  ) async throws {
+    for _ in 0..<Int(timeout / 0.01) {
+      if predicate() { return }
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    XCTFail("runtime did not reach the expected durable/idle state: \(diagnostics())")
+    throw StubOperatorError.submissionStateTimedOut(expected: "durable/idle", diagnostics: diagnostics())
+  }
+
   private func waitForSubmissionState(
     _ expected: ReportSubmissionState,
-    at fileURL: URL
+    at fileURL: URL,
+    server: StubOperatorServer
   ) async throws {
-    for _ in 0..<1_000 {
+    // Receipt verification uses real KMP cryptography after HTTP completes.
+    // Hosted runners may finish that computation after ten seconds.
+    for _ in 0..<Int(SubmissionTestWaitBudget.recordCompletion / 0.01) {
       if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == expected {
         return
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.submissionStateTimedOut(expected: expected.rawValue)
+    throw StubOperatorError.submissionStateTimedOut(expected: expected.rawValue, diagnostics: server.diagnostics)
   }
 
-  private func waitForTerminalFailure(at fileURL: URL) async throws {
-    for _ in 0..<1_000 {
+  private func waitForTerminalFailure(at fileURL: URL, server: StubOperatorServer) async throws {
+    for _ in 0..<Int(SubmissionTestWaitBudget.recordCompletion / 0.01) {
       if ReportSubmissionStore(fileURL: fileURL).records.first?.terminalErrorCode != nil {
         return
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.submissionStateTimedOut(expected: "terminal failure")
+    throw StubOperatorError.submissionStateTimedOut(expected: "terminal failure", diagnostics: server.diagnostics)
   }
 
   private func requiredEnvironment(
