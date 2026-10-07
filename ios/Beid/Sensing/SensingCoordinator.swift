@@ -384,10 +384,10 @@ final class SensingCoordinator: ObservableObject {
     reportSubmissionRuntime?.submissionState(forEventCode: eventCode)
   }
 
-  /// The existing foreground observer requests work without bypassing the
-  /// runtime's retry deadline or starting another sensing session.
+  /// The existing foreground observer permits one early recovery probe,
+  /// subject to the runtime's device-wide single-flight guard.
   func retryPendingSubmissionsOnForeground() {
-    reportSubmissionRuntime?.submitPending()
+    reportSubmissionRuntime?.submitPendingOnNaturalTrigger()
   }
 
   /// Count-only windows durably marked as ineligible for canonical report
