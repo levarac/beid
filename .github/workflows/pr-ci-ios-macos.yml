@@ -196,6 +196,7 @@ jobs:
           import json
           import pathlib
           import sys
+          import uuid
 
           summary_path = pathlib.Path(sys.argv[1])
           job_summary_path = pathlib.Path(sys.argv[2])
@@ -238,8 +239,8 @@ jobs:
           # The test step runs xcodebuild -quiet, which prints only the names
           # of failing tests. Surface each failure's message and location from
           # the result bundle so a red run can be diagnosed from the job log.
-          # Every line is indented so test output can never be read as a
-          # workflow command.
+          # Indentation is for readability; the runner trims whitespace.
+          # Disable workflow commands while printing untrusted test text.
           failures = summary.get("testFailures") or []
           if failures:
               lines = []
@@ -250,8 +251,13 @@ jobs:
                   lines.append(f"{target} {name}")
                   lines.extend(f"    {line}" for line in str(text).splitlines() or [""])
               print("Test failures:")
-              for line in lines:
-                  print(f"  {line}")
+              token = uuid.uuid4().hex
+              print(f"::stop-commands::{token}", flush=True)
+              try:
+                  for line in lines:
+                      print(f"  {line}")
+              finally:
+                  print(f"::{token}::", flush=True)
               with job_summary_path.open("a", encoding="utf-8") as output:
                   output.write("\n#### Failures\n\n```text\n")
                   for line in lines:
