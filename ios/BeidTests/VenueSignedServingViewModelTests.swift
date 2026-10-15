@@ -2141,6 +2141,32 @@ extension VenueSignedServingViewModelTests {
     XCTAssertEqual(makeOrganizerTools(store: unpreserved).savedPack, .unreadable)
   }
 
+  // T1 (view) — `OrganizerToolsView` itself renders `tools.savedPack` when
+  // there is no fixture. Every test above reads `OrganizerToolsObjects
+  // .savedPack` directly, so none of them would notice if the VIEW's own
+  // `savedPackFixture ?? tools.savedPack` were mutated to
+  // `savedPackFixture ?? .none` — the fixture branch never fires here
+  // (no `-beid-organizer-frame` argument), so that mutation would render
+  // `.none` even though a real record is saved.
+  func testOrganizerToolsViewRendersTheStoresRealStateWithNoFixture() throws {
+    XCTAssertFalse(
+      ProcessInfo.processInfo.arguments.contains("-beid-organizer-frame"),
+      "this test only proves something if it is not on the fixture branch"
+    )
+    let record = savedPackRecord()
+    store.store(record)
+    XCTAssertNotNil(store.record, "a stored pack must exist, or there is nothing for the view to render")
+
+    let tools = makeOrganizerTools(store: store)
+    let view = OrganizerToolsView(toolsForTesting: tools)
+
+    XCTAssertEqual(
+      view.savedPackForTesting,
+      .saved(source: record.sourceDescription, storedAt: record.storedAt),
+      "with no fixture, the view must render the store's real state, not a fixture default"
+    )
+  }
+
   // T2 — building 14 and reading its state fetches nothing, verifies nothing
   // and touches no radio.
   func testOrganizerToolsReadsStorageWithoutFetchingVerifyingOrBroadcasting() async throws {
