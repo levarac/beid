@@ -16,31 +16,29 @@ final class EventIdentityVerificationPresentationTests: XCTestCase {
 
     XCTAssertEqual(presentation.messageKey, "event.identityVerification.checking")
     XCTAssertEqual(presentation.defaultMessage, "Checking event registry…")
-    XCTAssertEqual(presentation.iconSystemName, "arrow.triangle.2.circlepath")
+    XCTAssertFalse(presentation.isVerified)
     XCTAssertEqual(
       presentation.statusAccessibilityIdentifier,
       "event-identity-verification-status-checking"
     )
     XCTAssertTrue(presentation.showsProgress)
     XCTAssertFalse(presentation.showsRetry)
-    XCTAssertFalse(presentation.usesProofSeal)
   }
 
-  func testVerifiedUsesProofSealWithoutAnEventName() {
+  func testVerifiedUsesVerifiedStateAndCopyWithoutAnEventName() {
     let presentation = try! XCTUnwrap(
       EventIdentityVerificationPresentation.forStatus(.verified)
     )
 
     XCTAssertEqual(presentation.messageKey, "event.identityVerification.verified")
     XCTAssertEqual(presentation.defaultMessage, "Event identity verified")
-    XCTAssertEqual(presentation.iconSystemName, "checkmark.seal.fill")
+    XCTAssertTrue(presentation.isVerified)
     XCTAssertEqual(
       presentation.statusAccessibilityIdentifier,
       "event-identity-verification-status-verified"
     )
     XCTAssertFalse(presentation.showsProgress)
     XCTAssertFalse(presentation.showsRetry)
-    XCTAssertTrue(presentation.usesProofSeal)
   }
 
   func testUnavailableAndNotFoundHaveDistinctNeutralRetryPresentations() {
@@ -56,26 +54,26 @@ final class EventIdentityVerificationPresentationTests: XCTestCase {
       unavailable.defaultMessage,
       "Event registry is temporarily unavailable."
     )
-    XCTAssertEqual(unavailable.iconSystemName, "questionmark.circle")
+    XCTAssertFalse(unavailable.isVerified)
     XCTAssertEqual(
       unavailable.statusAccessibilityIdentifier,
       "event-identity-verification-status-unavailable"
     )
     XCTAssertTrue(unavailable.showsRetry)
-    XCTAssertFalse(unavailable.usesProofSeal)
+    XCTAssertFalse(unavailable.showsProgress)
 
     XCTAssertEqual(notFound.messageKey, "event.identityVerification.notFound")
     XCTAssertEqual(
       notFound.defaultMessage,
       "No registry definition was found for this event."
     )
-    XCTAssertEqual(notFound.iconSystemName, "questionmark.circle")
+    XCTAssertFalse(notFound.isVerified)
     XCTAssertEqual(
       notFound.statusAccessibilityIdentifier,
       "event-identity-verification-status-not-found"
     )
     XCTAssertTrue(notFound.showsRetry)
-    XCTAssertFalse(notFound.usesProofSeal)
+    XCTAssertFalse(notFound.showsProgress)
   }
 
   func testStatusRowsUseStableIdentifiersAndNoForbiddenOrOverclaimingCopy() {

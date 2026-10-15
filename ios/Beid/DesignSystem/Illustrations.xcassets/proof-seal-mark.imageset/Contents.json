@@ -3,16 +3,6 @@
     {
       "filename" : "proof-seal-mark.svg",
       "idiom" : "universal"
-    },
-    {
-      "appearances" : [
-        {
-          "appearance" : "luminosity",
-          "value" : "dark"
-        }
-      ],
-      "filename" : "proof-seal-mark-dark.svg",
-      "idiom" : "universal"
     }
   ],
   "info" : {

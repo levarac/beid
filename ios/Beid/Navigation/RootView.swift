@@ -30,12 +30,12 @@ struct RootView: View {
     ))
     .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
     .tint(DS.Color.actionPrimary)
-    .animation(BeidDesign.Animation.soft, value: coordinator.screen)
+    .animation(DS.Motion.screenTransition, value: coordinator.screen)
     .fullScreenCover(isPresented: $coordinator.scanPresented) {
       ScanFlowView(sensing: coordinator.sensingCoordinator)
         .environmentObject(coordinator)
         .tint(DS.Color.actionPrimary)
-        .presentationBackground(.regularMaterial)
+        .presentationBackground(DS.Color.surfaceCanvas)
     }
   }
 }

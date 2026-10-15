@@ -48,6 +48,11 @@ final class AggregationRuntime {
     )
   }
 
+  /// The accumulated observations, for the Sigil presence builder only
+  /// (beid#653). Read-only by contract: nothing but `recordObservation` adds
+  /// to it, so the Sigil is built from exactly the rows the counts come from.
+  var observations: BeidSharedKit.aggregation.AggregationObservationInput { input }
+
   /// The current session aggregate, recomputed fresh over every observation
   /// recorded so far — matches #109's "no subscription API, caller
   /// recomputes" contract (a session's observation count is small, so

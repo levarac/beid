@@ -360,6 +360,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     bundle: Bundle = .main,
     eventSigningCryptography: any SensingCryptography,
     definitionProvider: (any EventDefinitionContextProvider)? = nil,
+    store: ReportSubmissionStore? = nil,
     fileURL: URL? = nil,
     retryScheduler: (any ReportSubmissionRetryScheduler)? = nil,
     now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
@@ -371,7 +372,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     return ReportSubmissionRuntime(
       eventSigningCryptography: eventSigningCryptography,
       definitionProvider: definitionProvider,
-      store: ReportSubmissionStore(fileURL: fileURL),
+      store: store ?? ReportSubmissionStore(fileURL: fileURL),
       client: ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionClient(),
       retryScheduler: retryScheduler ?? DefaultReportSubmissionRetryScheduler(),
       now: now,
