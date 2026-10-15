@@ -79,49 +79,58 @@ struct VenueScannerScreen: View {
   let onStartFailure: (String) -> Void
 
   var body: some View {
-    VStack(spacing: 0) {
-      HStack {
-        Button(action: onCancel) {
-          Text("Cancel")
+    NavigationStack {
+      VStack(spacing: 0) {
+        ZStack {
+          if isFixture {
+            DS.Color.strokeHairlineOnInk
+          } else {
+            VenueLinkScannerView(onScan: onScan, onStartFailure: onStartFailure)
+          }
+          RoundedRectangle(cornerRadius: DS.Radius.nowCard)
+            .strokeBorder(DS.Color.actionInverse, lineWidth: DS.Size.venueScannerGuideStroke)
+            .frame(width: DS.Size.venueScannerGuide, height: DS.Size.venueScannerGuide)
+            .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        Text("Point at the organiser's QR code")
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondaryOnInk)
+          .accessibilityIdentifier("venue.scanner.caption")
+          .frame(maxWidth: .infinity, minHeight: DS.Size.primaryButtonMinHeight * 2)
+      }
+      .foregroundStyle(DS.Color.actionInverse)
+      .background(DS.Color.textPrimary)
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(DS.Color.textPrimary, for: .navigationBar)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarColorScheme(.dark, for: .navigationBar)
+      .toolbar {
+        ToolbarItem(placement: .principal) {
+          Text("Scan QR code")
             .beidTextStyle(DS.Font.Library.labelMono11)
-            .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
-            .contentShape(Rectangle())
+            .foregroundStyle(DS.Color.actionInverse)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("venue.scanner.title")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Cancel scan")
-        .accessibilityIdentifier("Cancel scan")
-        Spacer()
-      }
-      .overlay {
-        Text("Scan QR code")
-          .beidTextStyle(DS.Font.Library.labelMono11)
-          .accessibilityAddTraits(.isHeader)
-          .accessibilityIdentifier("venue.scanner.title")
-      }
-      .frame(minHeight: DS.Size.primaryButtonMinHeight)
-      .padding(.horizontal, DS.Space.pageMargin)
-
-      ZStack {
-        if isFixture {
-          DS.Color.strokeHairlineOnInk
-        } else {
-          VenueLinkScannerView(onScan: onScan, onStartFailure: onStartFailure)
+        ToolbarItem(placement: .topBarTrailing) {
+          closeButton
+            .accessibilityLabel("Cancel scan")
+            .accessibilityIdentifier("Cancel scan")
         }
-        RoundedRectangle(cornerRadius: DS.Radius.nowCard)
-          .strokeBorder(DS.Color.actionInverse, lineWidth: DS.Size.venueScannerGuideStroke)
-          .frame(width: DS.Size.venueScannerGuide, height: DS.Size.venueScannerGuide)
-          .accessibilityHidden(true)
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-      Text("Point at the organiser's QR code")
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondaryOnInk)
-        .accessibilityIdentifier("venue.scanner.caption")
-        .frame(maxWidth: .infinity, minHeight: DS.Size.primaryButtonMinHeight * 2)
     }
-    .foregroundStyle(DS.Color.actionInverse)
-    .background(DS.Color.textPrimary)
+  }
+
+  /// The OS's own close item (DESIGN.md §12); below iOS 26 the standard
+  /// toolbar button with the OS's `xmark` symbol.
+  @ViewBuilder private var closeButton: some View {
+    if #available(iOS 26, *) {
+      Button(role: .close, action: onCancel)
+    } else {
+      Button("Close", systemImage: "xmark", action: onCancel)
+    }
   }
 }
 
