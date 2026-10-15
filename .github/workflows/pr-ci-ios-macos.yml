@@ -38,8 +38,81 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Classify paths for iOS lane
+    # Pull requests only: main pushes and manual dispatch always run the lane.
+    # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
+    # required status contexts are keyed by job name.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      android: ${{ steps.classify.outputs.android }}
+      lint: ${{ steps.classify.outputs.lint }}
+      error: ${{ steps.classify.outputs.error }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Collect changed paths
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const outputPath = `${process.env.RUNNER_TEMP}/beid-changed-files.json`;
+            // The compare API returns at most 300 files. A list that reaches the cap
+            // may be truncated, and a truncated list can look documentation-only.
+            const FILE_LIMIT = 300;
+            try {
+              // Pinned to this event's own SHAs, never to the pull request's current
+              // file list: a re-run of an older run must classify what it builds.
+              let basehead;
+              if (context.eventName === 'pull_request') {
+                const { base, head } = context.payload.pull_request;
+                basehead = `${base.sha}...${head.sha}`;
+              } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
+                basehead = `${context.payload.before}...${context.payload.after}`;
+              } else {
+                throw new Error(`unsupported or unbounded event: ${context.eventName}`);
+              }
+              let listed = 0;
+              const files = await github.paginate(
+                github.rest.repos.compareCommitsWithBasehead,
+                { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
+                response => {
+                  const page = response.data.files || [];
+                  listed += page.length;
+                  return page.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
+                },
+              );
+              if (listed >= FILE_LIMIT) {
+                throw new Error(`file list may be truncated at ${FILE_LIMIT} files (${listed} listed)`);
+              }
+              fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
+            } catch (error) {
+              core.warning(`changed-path collection failed; all checks will run: ${error.message}`);
+              fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
+            }
+
+      - name: Classify changed paths (fail closed)
+        id: classify
+        if: always()
+        run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
+
   ios-simulator:
     name: iOS simulator
+    needs: changes
+    # Still created on every PR head so the required context reports; a
+    # documentation-only PR reports it as skipped. Fail closed: a failed
+    # classification, or anything that can affect the shared KMP build
+    # (android, lint, error), runs the lane. `!cancelled()` rather than
+    # `always()` so a superseded run does not start a 25 minute macOS job.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.android == 'true' || needs.changes.outputs.lint == 'true' || needs.changes.outputs.error == 'true') }}
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26

@@ -38,27 +38,33 @@ jobs:
           script: |
             const fs = require('fs');
             const outputPath = `${process.env.RUNNER_TEMP}/beid-changed-files.json`;
+            // The compare API returns at most 300 files. A list that reaches the cap
+            // may be truncated, and a truncated list can look documentation-only.
+            const FILE_LIMIT = 300;
             try {
-              let files;
+              // Pinned to this event's own SHAs, never to the pull request's current
+              // file list: a re-run of an older run must classify what it builds.
+              let basehead;
               if (context.eventName === 'pull_request') {
-                files = await github.paginate(
-                  github.rest.pulls.listFiles,
-                  { owner: context.repo.owner, repo: context.repo.repo, pull_number: context.issue.number, per_page: 100 },
-                  response => response.data.flatMap(file => [file.filename, file.previous_filename].filter(Boolean)),
-                );
+                const { base, head } = context.payload.pull_request;
+                basehead = `${base.sha}...${head.sha}`;
               } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
-                files = await github.paginate(
-                  github.rest.repos.compareCommitsWithBasehead,
-                  {
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    basehead: `${context.payload.before}...${context.payload.after}`,
-                    per_page: 100,
-                  },
-                  response => response.data.files.flatMap(file => [file.filename, file.previous_filename].filter(Boolean)),
-                );
+                basehead = `${context.payload.before}...${context.payload.after}`;
               } else {
                 throw new Error(`unsupported or unbounded event: ${context.eventName}`);
+              }
+              let listed = 0;
+              const files = await github.paginate(
+                github.rest.repos.compareCommitsWithBasehead,
+                { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
+                response => {
+                  const page = response.data.files || [];
+                  listed += page.length;
+                  return page.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
+                },
+              );
+              if (listed >= FILE_LIMIT) {
+                throw new Error(`file list may be truncated at ${FILE_LIMIT} files (${listed} listed)`);
               }
               fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
             } catch (error) {
