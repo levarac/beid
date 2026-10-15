@@ -46,10 +46,16 @@ final class BeidIPadLayoutTests: XCTestCase {
     let resumedSenseEvent = app.buttons["home.scan"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
-    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30),
+      "Expected the transient sensing screen in \(orientation).\n\(app.debugDescription)"
+    )
     capture(named: "sensing-\(orientation)")
 
-    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.staticTexts["scan.event-found"].waitForExistence(timeout: 30),
+      "Expected the transient event-found screen in \(orientation).\n\(app.debugDescription)"
+    )
     capture(named: "event-found-\(orientation)")
 
     // Recording remains live until the user confirms stopping. Threshold
@@ -216,16 +222,31 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.launch()
 
     app.buttons["Get Started"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5),
+      "Expected Bluetooth permission after Get Started.\n\(app.debugDescription)"
+    )
     app.buttons["Allow Bluetooth"].tap()
 
     let senseEvent = app.buttons["home.scan"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      senseEvent.waitForExistence(timeout: 5),
+      "Expected Home after allowing Bluetooth.\n\(app.debugDescription)"
+    )
     senseEvent.tap()
-    XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
-    XCTAssertTrue(app.staticTexts["scan.event-found"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30),
+      "Expected the transient sensing screen after Scan.\n\(app.debugDescription)"
+    )
+    XCTAssertTrue(
+      app.staticTexts["scan.event-found"].waitForExistence(timeout: 30),
+      "Expected the transient event-found screen after sensing.\n\(app.debugDescription)"
+    )
 
-    XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(
+      app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 30),
+      "Expected recording after Event Found.\n\(app.debugDescription)"
+    )
     dismissBindingSheetToReachLiveRecording()
   }
 
@@ -253,7 +274,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     assertProofCollectedHeader()
     app.buttons["View collection"].tap()
 
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.buttons["home.scan"].waitForExistence(timeout: 5),
+      "Expected Home after closing recording.\n\(app.debugDescription)"
+    )
   }
 
   /// Opens the DemoEvent proof `navigateToCollectionWithProof` just left on
@@ -262,7 +286,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    XCTAssertTrue(
+      app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5),
+      "Expected Proof Detail after opening the DemoEvent proof.\n\(app.debugDescription)"
+    )
   }
 
   private func assertProofCollectedHeader() {
@@ -277,8 +304,8 @@ final class BeidIPadLayoutTests: XCTestCase {
   private func assertWelcomeLayout(named name: String) {
     let getStarted = app.buttons["Get Started"]
     let appWindow = app.windows.firstMatch
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
-    XCTAssertTrue(appWindow.exists)
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 5), "Expected Welcome CTA: \(name)")
+    XCTAssertTrue(appWindow.exists, "Expected an app window: \(name)")
     XCTAssertLessThan(
       getStarted.frame.width,
       appWindow.frame.width,

@@ -176,6 +176,86 @@ class EventJoinCoordinatorRescuePathTest {
     }
 
     /**
+     * Leaving the event is the other way a search ends, and it was the one
+     * that did not clean up after itself. [EventJoinCoordinator.leaveEvent]
+     * resets the scan phase and clears the nearby candidates — this class's
+     * own documentation says that leaving an event and ending the session are,
+     * today, the same act — but it did not clear the rescue clock. So a
+     * participant who joined an event and left it came back to the join
+     * surface and found the rescue route already standing, timed from a search
+     * that had ended before they ever joined, with the radio given no chance
+     * to look this time.
+     */
+    @Test
+    fun leavingTheEventWithdrawsTheStandingRescueOffer() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+        advanceTimeBy(RESCUE_ENTRY_DELAY_SECONDS * 1_000L + 1L)
+        runCurrent()
+
+        assertEquals(
+            NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
+            coordinator.nearbyEventSearchOutcome.value,
+            "precondition: the offer must be standing before leaving can be shown to withdraw it",
+        )
+
+        coordinator.leaveEvent()
+        runCurrent()
+
+        assertEquals(
+            NearbyEventSearchOutcome.SEARCHING,
+            coordinator.nearbyEventSearchOutcome.value,
+            "leaving an event must withdraw a standing rescue offer",
+        )
+    }
+
+    /**
+     * The consequence the previous test does not reach: the clock itself.
+     *
+     * Note what cannot be asserted here. `leaveEvent` stops neither transport
+     * — [FakeEventJoinEngine] mirrors Barnard 0.4 in that — so the scan is
+     * still running when the participant returns, this object does not own it,
+     * and every scan-ownership branch early-returns. Counting `startScanCalls`
+     * would therefore assert something false. What proves the countdown is
+     * live rather than merely silent is that it still *fires*: SEARCHING
+     * immediately after re-entry, and the offer back only after a further full
+     * threshold measured from the new search.
+     */
+    @Test
+    fun aSurfaceReenteredAfterLeavingAnEventIsTimedFromTheNewSearch() = runTest {
+        val engine = FakeEventJoinEngine()
+        val coordinator = coordinator(engine)
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+        advanceTimeBy(RESCUE_ENTRY_DELAY_SECONDS * 1_000L + 1L)
+        runCurrent()
+        coordinator.leaveEvent()
+        runCurrent()
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+
+        assertEquals(
+            NearbyEventSearchOutcome.SEARCHING,
+            coordinator.nearbyEventSearchOutcome.value,
+            "a search begun after leaving an event must be timed from when it began",
+        )
+
+        advanceTimeBy(RESCUE_ENTRY_DELAY_SECONDS * 1_000L + 1L)
+        runCurrent()
+
+        assertEquals(
+            NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED,
+            coordinator.nearbyEventSearchOutcome.value,
+            "and it must still be a live countdown, not one that was silently never restarted",
+        )
+    }
+
+    /**
      * The hole the countdown's position closes. A participant can arrive on
      * the join surface while a scan is already running and this object does
      * not own it — `stopNearbyEventDiscovery` declines to stop the radio while

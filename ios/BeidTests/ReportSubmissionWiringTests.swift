@@ -19,6 +19,13 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
 
   var captures: [Capture] = []
   var submitPendingCallCount = 0
+  var onStop: (() -> Void)?
+  private(set) var isStopped = false
+
+  func stop() {
+    isStopped = true
+    onStop?()
+  }
 
   func captureAndQueueWindow(
     id: UUID,
@@ -60,6 +67,50 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
 
 @MainActor
 final class ReportSubmissionWiringTests: XCTestCase {
+  func testReturningToForegroundRetriesPendingSubmissionsWithoutStartingSensing() {
+    let runtime = ReportSubmissionRuntimeSpy()
+    let coordinator = makeIsolatedSensingCoordinator(for: self, reportSubmissionRuntime: runtime)
+    coordinator.retryPendingSubmissionsOnForeground()
+    XCTAssertEqual(runtime.submitPendingCallCount, 1)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertTrue(runtime.captures.isEmpty)
+  }
+
+  func testCoordinatorTeardownStopsRuntimeBeforeAnAlreadyQueuedRetryCanRun() async {
+    let runtime = ReportSubmissionRuntimeSpy()
+    var coordinator: SensingCoordinator? = makeIsolatedSensingCoordinator(
+      for: self, reportSubmissionRuntime: runtime
+    )
+    await coordinator?.waitForLedgerLoadToFinish()
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    var submissionEffects = 0
+    _ = scheduler.schedule(after: 0) {
+      if !runtime.isStopped { submissionEffects += 1 }
+    }
+    weak var releasedCoordinator = coordinator
+    coordinator = nil
+    XCTAssertNil(releasedCoordinator)
+    // Deliver a callback already queued on MainActor without yielding to
+    // the coordinator's asynchronously scheduled cleanup first.
+    scheduler.entries[0].action()
+    XCTAssertTrue(runtime.isStopped, "teardown must invalidate submission callbacks synchronously")
+    XCTAssertEqual(submissionEffects, 0, "a retry must not take effect after its owner is released")
+  }
+
+  func testCoordinatorTeardownStopsItsSubmissionRuntime() async {
+    let runtime = ReportSubmissionRuntimeSpy()
+    let stopped = expectation(description: "coordinator teardown stops submission retries")
+    runtime.onStop = { stopped.fulfill() }
+    var coordinator: SensingCoordinator? = makeIsolatedSensingCoordinator(
+      for: self, reportSubmissionRuntime: runtime
+    )
+    await coordinator?.waitForLedgerLoadToFinish()
+    weak var releasedCoordinator = coordinator
+    coordinator = nil
+    XCTAssertNil(releasedCoordinator)
+    await fulfillment(of: [stopped], timeout: 1)
+  }
+
   func testCoordinatorForwardsExclusionCountAndKeepsDisabledRuntimeUnavailable() {
     let runtime = ReportSubmissionRuntimeSpy()
     runtime.excludedCountByEventCode["EVENTA"] = 2

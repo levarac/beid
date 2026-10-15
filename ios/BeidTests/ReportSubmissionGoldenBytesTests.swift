@@ -174,7 +174,11 @@ enum ReportSubmissionGoldenScenario {
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.submissionStateTimedOut(expected: ReportSubmissionState.accepted.rawValue)
+    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
+    throw StubOperatorError.submissionStateTimedOut(
+      expected: ReportSubmissionState.accepted.rawValue,
+      diagnostics: "last state \(actual ?? "nil")"
+    )
   }
 
   private static func makeSubmissionEnabledBundle(in directory: URL) throws -> Bundle {

@@ -1,31 +1,10 @@
-name: PR iOS CI (GitHub-hosted macOS, informational)
+name: PR iOS CI
 
 on:
-  # Informational lane; Xcode Cloud remains the merge verification gate.
-  # Keep the existing merge-candidate triggers (gh#479). Later pushes need
-  # separate exact-head evidence because synchronize is intentionally absent.
-  # PR code runs on an ephemeral GitHub-hosted runner with no signing secrets.
-  # Release device builds use the separate main-only workflow.
+  # Always report a status for every PR head, including drafts. Workflow-level
+  # path filters would leave a required context pending on unrelated changes.
   pull_request:
-    # Both events that produce a merge-candidate head, and neither of them is
-    # `synchronize`. `ready_for_review` alone would miss every PR opened
-    # directly as non-draft — measured on this repo, 13 of the 22 settled PRs
-    # in the last 25 never fired it, iOS-affecting ones among them. `opened`
-    # also fires for DRAFT pulls, so the job carries an explicit draft guard;
-    # `paths` and `types` cannot express "non-draft" on their own.
-    types: [opened, ready_for_review]
-    paths:
-      - ".github/workflows/pr-ci-ios-macos.yml"
-      - "ios/**"
-      - "shared/**"
-      - "android/build.gradle.kts"
-      - "android/settings.gradle.kts"
-      - "android/gradle.properties"
-      - "android/gradlew"
-      - "android/gradle/wrapper/**"
-      - "scripts/resolve_kmp_java_home.sh"
-      - "scripts/download_xcodegen.sh"
-      - "scripts/ci_simulator.py"
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     # Measure the merged result on main exactly once. Note the concurrency
     # group below is keyed on github.ref with cancel-in-progress, so two merges
@@ -51,25 +30,19 @@ on:
 permissions:
   contents: read
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+
 concurrency:
   group: pr-ios-macos-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   ios-simulator:
-    name: iOS simulator (GitHub-hosted macOS, informational)
+    name: iOS simulator
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
-    # Draft pulls skip this optional simulator job. `opened`
-    # above fires for drafts too, so this is where they are dropped. The
-    # event_name clause keeps `push` and `workflow_dispatch` unaffected, since
-    # `github.event.pull_request` is absent for them and would otherwise make
-    # the whole expression false. Note a draft `opened` still records a run
-    # whose job is *skipped* — a skipped row is the expected evidence there,
-    # whereas a draft push records nothing at all, `synchronize` not being a
-    # trigger.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     timeout-minutes: 45
     steps:
       - name: Initialize CI output path
@@ -80,6 +53,7 @@ jobs:
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Set up Java
@@ -98,40 +72,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
-
-          candidates=()
-          if [[ -n "${DEVELOPER_DIR:-}" ]]; then
-            candidates+=("$DEVELOPER_DIR")
-          fi
-          for app in /Applications/Xcode*.app; do
-            candidates+=("$app/Contents/Developer")
-          done
-
-          selected_developer_dir=""
-          for candidate in "${candidates[@]}"; do
-            if [[ ! -x "$candidate/usr/bin/xcodebuild" ]]; then
-              continue
-            fi
-            if DEVELOPER_DIR="$candidate" xcrun simctl list runtimes --json \
-              | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 26.5" for item in runtimes) else 1)'; then
-              selected_developer_dir="$candidate"
-              break
-            fi
-          done
-
-          if [[ -z "$selected_developer_dir" ]]; then
-            echo "error: no full Xcode installation with the iOS 26.5 runtime is available" >&2
-            exit 1
-          fi
-          export DEVELOPER_DIR="$selected_developer_dir"
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.5"
+          xcrun simctl list runtimes --json \
+            | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 26.5" for item in runtimes) else "iOS 26.5 runtime is unavailable")'
 
           kmp_java_home="$(scripts/resolve_kmp_java_home.sh)"
           "$kmp_java_home/bin/java" -version
           xcodebuild -version
 
           {
-            echo "DEVELOPER_DIR=$selected_developer_dir"
             echo "KMP_JAVA_HOME=$kmp_java_home"
             echo "JAVA_HOME=$kmp_java_home"
           } >> "$GITHUB_ENV"
@@ -246,6 +196,7 @@ jobs:
           import json
           import pathlib
           import sys
+          import uuid
 
           summary_path = pathlib.Path(sys.argv[1])
           job_summary_path = pathlib.Path(sys.argv[2])
@@ -285,8 +236,37 @@ jobs:
                   f"| {result} | {total} | {passed} | {failed} | {skipped} | {expected_failures} |\n"
               )
 
+          # The test step runs xcodebuild -quiet, which prints only the names
+          # of failing tests. Surface each failure's message and location from
+          # the result bundle so a red run can be diagnosed from the job log.
+          # Indentation is for readability; the runner trims whitespace.
+          # Disable workflow commands while printing untrusted test text.
+          failures = summary.get("testFailures") or []
+          if failures:
+              lines = []
+              for failure in failures:
+                  name = failure.get("testIdentifierString") or failure.get("testName") or "unknown test"
+                  target = failure.get("targetName") or "unknown target"
+                  text = failure.get("failureText") or "(no failure text)"
+                  lines.append(f"{target} {name}")
+                  lines.extend(f"    {line}" for line in str(text).splitlines() or [""])
+              print("Test failures:")
+              token = uuid.uuid4().hex
+              print(f"::stop-commands::{token}", flush=True)
+              try:
+                  for line in lines:
+                      print(f"  {line}")
+              finally:
+                  print(f"::{token}::", flush=True)
+              with job_summary_path.open("a", encoding="utf-8") as output:
+                  output.write("\n#### Failures\n\n```text\n")
+                  for line in lines:
+                      output.write(line.replace("```", "'''") + "\n")
+                  output.write("```\n")
+
           if total <= 0:
               raise SystemExit("xcresult contains zero tests")
+          print(f"iOS tests: result={result}, total={total}, passed={passed}, failed={failed}, skipped={skipped}, expected_failures={expected_failures}")
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY

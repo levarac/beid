@@ -2,6 +2,7 @@ name: PR CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
@@ -28,6 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Collect changed paths
@@ -78,6 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Report separate trusted Parallax comparison
         run: |
@@ -112,6 +115,23 @@ jobs:
         run: |
           java -version
           ./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel
+      - name: Summarize Android test results
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.run_local_tests import junit_directory, parse_junit_files, format_counts
+
+          problems = []
+          for task in (":shared:testAndroidHostTest", ":app:testDebugUnitTest"):
+              results = junit_directory(Path.cwd(), task)
+              counts = parse_junit_files(sorted(results.glob("**/*.xml")))
+              print(f"{task}: {format_counts(counts)}", flush=True)
+              if counts.warnings or counts.failed or counts.passed <= 0:
+                  problems.append(f"{task}: missing, invalid or failing test evidence")
+          if problems:
+              raise SystemExit("\n".join(problems))
+          PY
       - name: Compile Android instrumented tests
         working-directory: android
         run: ./gradlew :app:compileDebugAndroidTestKotlin --no-daemon --no-parallel
@@ -139,9 +159,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Select Xcode for SourceKit
-        run: echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
+        run: echo "DEVELOPER_DIR=/Applications/Xcode_26.5.app/Contents/Developer" >> "$GITHUB_ENV"
       - name: Install SwiftLint 0.65.0
         env:
           SWIFTLINT_SHA256: eb333bd76dfb5f46d21fdf3615fe39bb938956ca0b8e94c241c4b2db6e696b90
@@ -175,6 +196,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Set up Python
         env:

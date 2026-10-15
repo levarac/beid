@@ -8,7 +8,7 @@ dates). The contract every agent must know before touching delivery files:
 
 All pull-request jobs use literal GitHub-hosted labels: `ubuntu-24.04-arm`
 for classification/sanity, `ubuntu-24.04` for Android, and `macos-26` for
-SwiftLint, iOS and the lab CLI. No pull-request workflow receives secrets, including same-repository PRs.
+SwiftLint, iOS and the lab CLI (Xcode 26.5). No pull-request workflow receives secrets, including same-repository PRs.
 Removing persistent runner access before public cutover is a separate operator
 step; workflow edits alone cannot prevent a modified fork workflow from
 requesting a runner that remains registered. All Actions references use reviewed full commit SHA pins with tag comments.
@@ -48,122 +48,57 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     追加するたびに古くなり、しかもそれを検査するものが無い。drift 検出を説明する
     文書に、手で維持する数字を置かないこと
 
-  - **`.github/workflows/pr-ci-lab-cli.yml`(beid#588、2026-09-17 追加)** —
-    `tools/beid-lab-cli` (macOS の device-lab CLI) を
-    `swift build -c release` + `swift test` で検査する lane。job 名は
-    `beid-lab-cli build and test`。**required ではない**。GitHub-hosted `macos-26` 上で動き、**上の simulator lane とは別 workflow** である。理由は
-    2 つあり、どちらも意図的:
-    - この job は約 1 分で終わる。simulator lane の約 24 分に相乗りさせると、
-      simulator test に影響し得ない変更のために #479 が意図的に狭めた
-      trigger を広げることになる。**`pr-ci-ios-macos.yml` の `paths` に
-      `tools/**` を足してはならない**
-    - `synchronize` を**含む**。simulator lane が merge-candidate head を
-      1 回測るのに対し、こちらは author が回しながら見る fast feedback で
-      あり、`opened` だけでは 2 commit 目以降すべて stale になる。
-      同じ理由で draft guard も無い (1 分は draft から取り上げる価値が無く、
-      draft こそこの答えが欲しい時である)
-    job 内の step は `scripts/ci_change_filter.py` の `labcli` 出力で gate
-    される。`paths` が workflow を起動するかを決め、classifier が build する
-    価値があるかを決める — つまり `tools/beid-lab-cli` の「この変更は build が
-    要るか」の定義が YAML の glob と Python の規則に分裂せず 1 つで済む。
-    classification が壊れたら全 lane true に倒れる (fail closed) ので、
-    gate の故障は skip ではなく build になる。
-    **`tools/beid-lab-cli/` は Android lane と SwiftLint lane を起動しない** —
-    どの app target も link していない standalone SwiftPM package なので。
-    ただし `Package.resolved` の basename 規則からの除外は
-    `tools/beid-lab-cli/` だけに効く。`tools/` 配下の未分類の path は従来どおり
-    fail closed のままである。
+  - **`.github/workflows/pr-ci-lab-cli.yml`** — `beid-lab-cli build and test`
+    runs `swift build -c release` and `swift test` on standard `macos-26`
+    with Xcode 26.5. It reports on every PR, including drafts. The existing
+    `scripts/ci_change_filter.py` gates its build steps: documentation or
+    unrelated app-only changes skip compilation, while unknown paths and
+    collection/classification failures build. Main pushes retain the lab
+    path filter; manual dispatch always builds. This standalone package has
+    its own lane so its result does not wait for the simulator suite.
 
-  - **Xcode Cloud PR gate** — ASC's live `PR Build & Test` start condition is
-    the source for whether its iOS check is expected. On 2026-09-22 its
-    `DO_NOT_START_IF_ALL_FILES_MATCH` exclusions were `docs/`, `.github/`,
-    `*.md`, and `android/app/src/` ([#625](https://github.com/thegreeting/beid/issues/625)).
-    Android app source/resources/manifest/tests alone need no Xcode Cloud run;
-    a mixed PR with `shared/`, `ios/`, Android build inputs, or another
-    nonexcluded path still requires the iOS check. Re-read ASC before applying
-    this dated observation to a future PR. Do not exclude all of `android/`.
+  - **`.github/workflows/pr-ci-ios-macos.yml`** — `iOS simulator` is the
+    hosted iOS PR gate. `pull_request` includes `opened`, `synchronize`,
+    `reopened`, and `ready_for_review`, with no path filter or draft guard.
+    Thus every PR reports a status suitable for branch protection, including
+    documentation-only PRs. Main pushes retain their iOS/build-input path
+    filter, and `workflow_dispatch` supports deliberate verification.
+    All PR build lanes check out `github.event.pull_request.head.sha`
+    explicitly; push and manual events check out `github.sha`.
 
-  **2026-09-02 以降、native iOS の build / test は 2 系統ある。** どちらも
-  この subsection が正本で、他の文書は分担を複製せずここと実行定義を参照する。
+    The standard `macos-26` image uses `/Applications/Xcode_26.5.app` and
+    requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
+    simulator for each job and returns its UDID; only that device is booted,
+    tested and deleted, even on failure. Build-for-testing and
+    test-without-building run the complete Beid scheme (`BeidTests` and
+    `BeidUITests`) with `SWIFT_OPTIMIZATION_LEVEL=-O`. The structured xcresult
+    summary must contain nonzero tests, consistent counts and a passing result.
+    Superseded runs are cancelled; require a completed passing run for the
+    exact current PR head before merge.
 
-  - **Xcode Cloud** — trusted Internal/Release delivery remains here. Its PR
-    check is a merge criterion only when the PR is outside the ASC PR file
-    exclusions (see the Xcode Cloud PR gate bullet above). During
-    public cutover the PR workflow stays paused until its fork credential
-    boundary is verified. While paused, require executed hosted iOS evidence
-    on the exact review head for any PR outside those exclusions; a missing
-    Xcode Cloud check is not success.
-    Check current workflow state in ASC and exact-head results on GitHub.
-    Branch protection and required contexts are separate operator settings;
-    a clean merge state does not prove that an iOS check was required or ran.
-  - **`.github/workflows/pr-ci-ios-macos.yml`(#301、2026-09-02 追加)** —
-    GitHub-hosted `macos-26` 上の **informational-only** lane。job 名は
-    `iOS simulator (GitHub-hosted macOS, informational)`。**required ではない**。
-    **起動条件は次の 3 つだけであり、PR への push 毎ではない**
-    (#479、2026-09-10 に変更): (1) `pull_request` の `opened` と
-    `ready_for_review`、(2) `push` の `main`、(3) `workflow_dispatch`。
-    (1)(2) には従来どおり `paths` filter がかかり、`ios/` `shared/`
-    Android build 関連パスの変更でのみ起動する。`workflow_dispatch` に
-    `paths` は効かないので、手動実行は常に走る。`synchronize` を外した理由は、
-    この lane が 1 回あたり約 30 分かかりながら merge を gate せず、同じ head を
-    当時 Xcode Cloud の `Beid | PR Build & Test | Test - iOS` が約 12 分で
-    検証していたため。公開切替で PR workflow を停止する間は、後続 head の
-    hosted iOS 検証を別途必須とする。2026-09-26 の公開準備で PR lane を GitHub-hosted に移した。
-    以前の self-hosted 配信 runner との競合は現在の PR lane には当てはまらない。
-    過去の計測と訂正は #479 および変更履歴に残る。
-    Simulator は `scripts/ci_simulator.py` が実行ごとに一意の名前で新規作成し、
-    返された UDID だけを起動・テスト・削除に使う。既存端末の選択や erase は行わない。
-    iOS 26.5 runtime の対応機種から iPhone 18 Pro → 17 Pro → 16 Pro の順で選ぶ。
-    runtime またはこの優先リストの機種が無い場合は明示的に失敗し、他の機種には代替しない。
-    返された UDID が不正な場合は、作成時の一意な名前でその端末を削除してから失敗する。
-    simctl の失敗時は stderr も出力する。端末作成後は build/test が失敗した場合も `always()` で削除する。
-    **`opened` を入れてあるのは、`ready_for_review` が draft から上げた時に
-    しか発火しないため。** issue #479 の本文は `ready_for_review` 単独を
-    指定していたが、直近 25 本を timeline で数えると決着済み 22 本のうち
-    13 本が `ReadyForReviewEvent` を持たず (ios 直撃のものを含む)、それだと
-    PR の約 4 割しかカバーしない。非 draft で open された PR は open した
-    瞬間から merge 候補の head を持つので、`opened` を足す方が issue の
-    意図に沿う。**受け入れ基準 4 つは狭い方の集合でも満たせてしまうので、
-    基準の充足を正しさの証明として扱わないこと。**
-    **`opened` は draft PR でも発火するため、draft の除外は job 側の
-    `if` が担う** (`github.event_name != 'pull_request' ||
-    github.event.pull_request.draft == false`)。`paths` と `types` だけでは
-    「draft でない」を表現できない。`event_name` の節は必須で、これを外すと
-    `push` と `workflow_dispatch` では `github.event.pull_request` が存在せず
-    式全体が false になり、main の計測が止まる。
-    **PR で走ったことは、merge される head で走ったことを意味しない。**
-    `synchronize` が trigger でない以上、非 draft の PR はこの lane を
-    「open した時の head で 1 回」だけ走らせ、その後の push は head を
-    変えたまま再実行しない (un-draft 後も同じ)。したがって
-    **「PR でこの lane が緑だった」から merge 対象 commit の iOS 検証を
-    導いてはならない**。merged 版を担保するのは `main` への push の方で、
-    それは merge の後に走る。
-    **観測上の注意**: draft PR を open した時は run 自体は記録され、job が
-    `skipped` になる。draft PR への push は `synchronize` が trigger でない
-    ため run 自体が記録されない。「起動しない」の証拠はこの 2 つで形が違う。
-    **`skipped` の job が runner を占有する時間はゼロ秒**である (PR #486、
-    2026-09-10 に初観測。job が `steps=0` で `started_at` と `completed_at` が
-    同一)。上のコストモデルからすると、draft gate の価値はここにある —
-    draft PR はこの lane の計算資源を消費しない。
-    **`concurrency` は `github.ref` 単位で `cancel-in-progress: true` のまま**
-    なので、main への連続 merge では前の main run が cancel される。merge 毎に
-    run が「起動する」ことは保証されるが、**完走は保証されない**。
-    起動条件そのものは `scripts/tests` 配下の contract test が固定しており、
-    Repository sanity job の `python3 -m unittest discover -s scripts/tests -t .`
-    で毎 PR 実行される (この subsection が件数もファイル名も書かないのは
-    上と同じ理由 — 追加のたびに古くなるため)。
-    Release device build (`CODE_SIGNING_ALLOWED=NO`) は別の
-    `main-ios-release-build.yml` で main push 時に実行する。
-    Xcode Cloud への依存を段階的に減らすための実績積みの段階であり、
-    Xcode Cloud の設定・branch protection・他の workflow は変更していない。
+    Unsigned Release device compilation (`CODE_SIGNING_ALLOWED=NO`) remains
+    in `main-ios-release-build.yml` on main push/manual dispatch, also using
+    Xcode 26.5. It is not a PR status check or a signing/delivery lane.
 
-  **`scripts/check_pr_ci_doc_drift.py` はこの 2 本目を検査していない。**
-  同スクリプトは `.github/workflows/pr-ci.yml` のみを対象としており、
-  **iOS lane が変わってもこの記述は緑のまま古くなる**。lane を触る変更は、
-  検査に頼らずこの subsection を手で更新すること。#479 で
-  `scripts/tests` に追加した contract test が固定するのは iOS lane の
-  **起動条件だけ**であって、この subsection の散文ではない。起動条件以外は
-  依然として手で追随させる必要がある。
+  - **Xcode Cloud** — keep `PR Build & Test` paused. Hosted iOS now performs
+    the build plus unit/UI test role on every PR head without signing secrets;
+    the old ASC file exclusions no longer determine whether hosted evidence
+    is required. This does not replace trusted Internal/Release delivery,
+    signing or real-device BLE tests. ASC workflow settings are operator-owned
+    and are not changed by this CI migration.
+
+  **`scripts/check_pr_ci_doc_drift.py` checks all three PR build workflows**
+  against `AGENTS.md`, including the separate iOS and lab CLI job names and
+  distinguishing commands. Trigger, head checkout, hosted runner and secret
+  boundaries are guarded by the contract tests in `scripts/tests`.
+
+  Recommended required status checks on main: `Determine changed paths`,
+  `Android build`, `SwiftLint`, `Repository sanity`, `iOS simulator`, and
+  `beid-lab-cli build and test`. Android/lint may legitimately be skipped by
+  their changed-path classifier; iOS always executes. Do not require the
+  main-only delivery, trusted comparison or Release compilation jobs, nor the
+  release-notes metadata warning. Branch protection is a separate operator
+  change; this document does not claim it has been applied.
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、
   上の KMP review gate を免除しない。KMP の independent review は作業上の

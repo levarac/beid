@@ -185,10 +185,37 @@ final class StubOperatorServer {
   private let signingPublicKey: Data
   private var receipt: Data?
   private var startupError: Error?
+  private var isReady = false
+  private var isCancelled = false
+  private var isStopped = false
+  private var connections: [ObjectIdentifier: NWConnection] = [:]
+  private var connectionCount = 0
+  private var receivedByteCount = 0
+  private var requestCount = 0
+  private let transientPostFailures: Int
+  private let terminalPostFailures: Int
+  private let terminalStatus: Int
   private var _postCount = 0
   private var _getCount = 0
   private var _postBodies: [Data] = []
   private var _requestPaths: [String] = []
+  private var holdResponses: Bool
+  private var heldResponses: [(NWConnection, Data)] = []
+  private var activeRequests = 0
+  private var maximumActiveRequests = 0
+
+  var maximumInFlight: Int { lock.withLock { maximumActiveRequests } }
+
+  func holdNewResponses() { queue.sync { holdResponses = true } }
+
+  func releaseResponses() {
+    queue.sync {
+      holdResponses = false
+      let responses = heldResponses
+      heldResponses.removeAll()
+      for (connection, wire) in responses { send(wire, on: connection) }
+    }
+  }
 
   var postCount: Int {
     lock.lock()
@@ -215,25 +242,44 @@ final class StubOperatorServer {
     return _requestPaths
   }
 
+  var diagnostics: String {
+    lock.lock()
+    defer { lock.unlock() }
+    return "connections=\(connectionCount), bytes=\(receivedByteCount), requests=\(requestCount), POST=\(_postCount), GET=\(_getCount)"
+  }
+
   init(
     eventId: Data,
     signingPrivateKey: [UInt8],
-    signingPublicKey: Data
+    signingPublicKey: Data,
+    transientPostFailures: Int = 0,
+    holdResponses: Bool = false,
+    terminalPostFailures: Int = 0,
+    terminalStatus: Int = 422,
+    port: NWEndpoint.Port = .any
   ) throws {
     self.eventId = eventId
     self.signingPrivateKey = signingPrivateKey
     self.signingPublicKey = signingPublicKey
-    listener = try NWListener(using: .tcp, on: .any)
+    self.transientPostFailures = transientPostFailures
+    self.terminalPostFailures = terminalPostFailures
+    self.terminalStatus = terminalStatus
+    self.holdResponses = holdResponses
+    listener = try NWListener(using: .tcp, on: port)
   }
 
   func start() async throws -> URL {
     listener.stateUpdateHandler = { [weak self] state in
       guard let self else { return }
-      if case .failed(let error) = state {
-        self.lock.lock()
-        self.startupError = error
-        self.lock.unlock()
+      self.lock.lock()
+      defer { self.lock.unlock() }
+      if case .ready = state {
+        self.isReady = true
       }
+      if case .failed(let error) = state {
+        self.startupError = error
+      }
+      if case .cancelled = state { self.isCancelled = true }
     }
     listener.newConnectionHandler = { [weak self] connection in
       self?.accept(connection)
@@ -241,19 +287,34 @@ final class StubOperatorServer {
     listener.start(queue: queue)
 
     for _ in 0..<100 {
-      if let error = startupError {
+      let status = lock.withLock { (isReady, startupError) }
+      if let error = status.1 {
         throw error
       }
-      if let port = listener.port, port.rawValue != 0 {
+      if status.0, let port = listener.port, port.rawValue != 0 {
         return try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.startTimedOut
+    throw StubOperatorError.startTimedOut(diagnostics: diagnostics)
   }
 
   func stop() {
     listener.cancel()
+    queue.sync {
+      isStopped = true
+      for connection in connections.values { connection.cancel() }
+      connections.removeAll()
+    }
+  }
+
+  func stopAndWait() async throws {
+    stop()
+    for _ in 0..<100 {
+      if lock.withLock({ isCancelled }) { return }
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    throw StubOperatorError.requestTimedOut(diagnostics: "listener did not release its port")
   }
 
   func waitFor(postCount expectedPosts: Int, getCount expectedGets: Int? = nil) async throws {
@@ -264,13 +325,22 @@ final class StubOperatorServer {
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.requestTimedOut(
-      postCount: postCount,
-      getCount: getCount
-    )
+    throw StubOperatorError.requestTimedOut(diagnostics: diagnostics)
   }
 
   private func accept(_ connection: NWConnection) {
+    guard !isStopped else { connection.cancel(); return }
+    connections[ObjectIdentifier(connection)] = connection
+    lock.withLock { connectionCount += 1 }
+    connection.stateUpdateHandler = { [weak self, weak connection] state in
+      guard let self, let connection else { return }
+      switch state {
+      case .cancelled, .failed:
+        self.connections.removeValue(forKey: ObjectIdentifier(connection))
+      default:
+        break
+      }
+    }
     connection.start(queue: queue)
     receive(connection, bytes: Data())
   }
@@ -287,6 +357,7 @@ final class StubOperatorServer {
 
       var accumulated = bytes
       if let data {
+        self.lock.withLock { self.receivedByteCount += data.count }
         accumulated.append(data)
       }
       if let request = self.parseRequest(accumulated) {
@@ -300,18 +371,31 @@ final class StubOperatorServer {
   }
 
   private func respond(to request: HTTPRequest, on connection: NWConnection) {
+    lock.withLock {
+      requestCount += 1
+      activeRequests += 1
+      maximumActiveRequests = max(maximumActiveRequests, activeRequests)
+    }
     let response: (status: Int, body: Data, contentType: String?)
     lock.lock()
     _requestPaths.append(request.path)
     lock.unlock()
     if request.method == "POST", request.path == "/v1/observations" {
-      let generated = makeReceipt(observationBytes: request.body)
       lock.lock()
       _postCount += 1
       _postBodies.append(request.body)
-      receipt = generated
+      let shouldFail = _postCount <= transientPostFailures
+      let shouldReject = _postCount <= terminalPostFailures
       lock.unlock()
-      response = (201, generated, "application/vnd.levarac.acceptance-receipt+cose")
+      if shouldReject {
+        response = (terminalStatus, Data(), nil)
+      } else if shouldFail {
+        response = (503, Data(), nil)
+      } else {
+        let generated = makeReceipt(observationBytes: request.body)
+        lock.withLock { receipt = generated }
+        response = (201, generated, "application/vnd.levarac.acceptance-receipt+cose")
+      }
     } else if request.method == "GET", request.path.hasSuffix("/acceptance") {
       lock.lock()
       _getCount += 1
@@ -333,7 +417,16 @@ final class StubOperatorServer {
     headers += "Content-Length: \(response.body.count)\r\nConnection: close\r\n\r\n"
     var wire = Data(headers.utf8)
     wire.append(response.body)
-    connection.send(content: wire, completion: .contentProcessed { _ in
+    if holdResponses {
+      heldResponses.append((connection, wire))
+    } else {
+      send(wire, on: connection)
+    }
+  }
+
+  private func send(_ wire: Data, on connection: NWConnection) {
+    connection.send(content: wire, completion: .contentProcessed { [weak self] _ in
+      self?.lock.withLock { self?.activeRequests -= 1 }
       connection.cancel()
     })
   }
@@ -428,18 +521,21 @@ struct HTTPRequest {
 }
 
 enum StubOperatorError: Error, CustomStringConvertible {
-  case startTimedOut
-  case requestTimedOut(postCount: Int, getCount: Int)
-  case submissionStateTimedOut(expected: String)
+  case startTimedOut(diagnostics: String)
+  case requestTimedOut(diagnostics: String)
+  case submissionStateTimedOut(expected: String, diagnostics: String)
+  case joinedStateTimedOut(expected: String, actual: String?, refusal: String)
 
   var description: String {
     switch self {
-    case .startTimedOut:
-      return "stub operator did not bind a loopback port"
-    case let .requestTimedOut(postCount, getCount):
-      return "stub operator request timeout: POST=\(postCount), GET=\(getCount)"
-    case let .submissionStateTimedOut(expected):
-      return "submission state timeout: expected \(expected)"
+    case .startTimedOut(let diagnostics):
+      return "stub operator did not become ready: \(diagnostics)"
+    case .requestTimedOut(let diagnostics):
+      return "stub operator request timeout: \(diagnostics)"
+    case let .submissionStateTimedOut(expected, diagnostics):
+      return "submission state timeout: expected \(expected); \(diagnostics)"
+    case let .joinedStateTimedOut(expected, actual, refusal):
+      return "join timeout: expected \(expected), actual \(actual ?? "nil"), refusal \(refusal)"
     }
   }
 }
