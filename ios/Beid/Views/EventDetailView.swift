@@ -67,12 +67,9 @@ struct EventDetailView: View {
     .toolbar {
       if let eventCode {
         ToolbarItem(placement: .topBarTrailing) {
-          Button("REJOIN") {
+          Button("Rejoin", systemImage: "arrow.clockwise") {
             Task { await coordinator.rejoinPastEventResolvingCanonicalId(code: eventCode) }
           }
-          .beidTextStyle(DS.Font.Library.labelMono11)
-          .frame(minWidth: DS.Size.minHitTarget, minHeight: DS.Size.minHitTarget)
-          .contentShape(Rectangle())
           .disabled(sensing.joinedEventCode != nil)
           .accessibilityLabel(String(
             localized: "eventDetail.rejoin.accessibilityLabel",
@@ -81,7 +78,6 @@ struct EventDetailView: View {
           ))
           .accessibilityIdentifier("event-detail.rejoin")
         }
-        .beidWithoutSharedBackground()
       }
     }
     .accessibilityIdentifier("event-detail")
