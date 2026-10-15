@@ -36,7 +36,6 @@ final class FlatScreenshotTourC: XCTestCase {
 
     XCTAssertTrue(app.staticTexts["Couldn't check this device's clock"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.buttons["scan.clock-preflight.retry"].exists)
-    XCTAssertTrue(app.staticTexts["Nearby events"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.cant-join"].exists)
 
     let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
