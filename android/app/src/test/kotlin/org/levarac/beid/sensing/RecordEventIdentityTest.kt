@@ -73,6 +73,8 @@ class RecordEventIdentityTest {
         store.updatePeersVerified(id, 4)
         val reloaded = ProofRecordStore(file)
         assertEquals(4, reloaded.records.single().peersVerified)
+        assertNull(reloaded.records.single().eventName)
+        assertNull(reloaded.records.single().eventIdHex)
         val saved = Json.parseToJsonElement(file.readText()).jsonObject
             .getValue("records").jsonArray.single().jsonObject
         assertNull(saved["eventName"]?.jsonPrimitive?.contentOrNull)

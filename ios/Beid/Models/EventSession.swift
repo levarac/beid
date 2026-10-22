@@ -10,10 +10,8 @@ struct EventSession: Equatable, Identifiable {
   /// The event code (e.g. "ETHTOKYO2026") — what `BarnardEngine
   /// .joinEvent`/`.configure` already key on.
   let id: String
-  /// The display value carried by the card. Real sensing sessions keep this
-  /// equal to the raw event code; registry verification never replaces it
-  /// with a definition display name. Demo fixtures may retain their existing
-  /// review presentation.
+  /// The signed envelope name retained at join, or the raw code when no name
+  /// was available. Later identity checks preserve this session's display value.
   let name: String
   /// e.g. "Tokyo Big Sight". `nil` when the source (real or demo) has no
   /// venue to report — rendered as an absent line, never a placeholder.

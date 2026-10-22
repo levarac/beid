@@ -102,7 +102,7 @@ class EventJoinCoordinatorHooksTest {
         val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, FakeSensingCryptography(), nearbyRegistry = registry)
         val calls = mutableListOf<Triple<UUID, String, Int>>()
-        coordinator.onProofCollected = { proofId, eventCode, peersVerified -> calls += Triple(proofId, eventCode, peersVerified) }
+        coordinator.onProofCollected = { proofId, session, peersVerified -> calls += Triple(proofId, session.eventCode, peersVerified) }
 
         joinPromotedVectorEvent(coordinator, engine, registry)
         confirmRecording(engine)

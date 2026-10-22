@@ -154,6 +154,8 @@ public class NearbyEventCandidate internal constructor(
     public val registryResolutionFailureCount: Int,
     public val registryRetryAtEpochMillis: Long?,
     rawEnvelopeContainer: ByteArray?,
+    /** Name supplied with the native-verified retained envelope, never a v1 hint. */
+    public val radioVerifiedEventName: String? = null,
 ) {
     private val eventCodeHashBytes: ByteArray = eventCodeHash.copyOf()
     private val rawEnvelopeContainerBytes: ByteArray? = rawEnvelopeContainer?.copyOf()
@@ -272,6 +274,7 @@ public class NearbyEventDiscoveryStore internal constructor() {
      * [receiverStates]: dropped on TTL expiry and on reset, never persisted.
      */
     internal val rawEnvelopeContainers: MutableMap<EventHash, ByteArray> = mutableMapOf()
+    internal val rawEnvelopeNames: MutableMap<EventHash, String> = mutableMapOf()
 
     /**
      * How many B005 v2 containers this session saw that barnard could not
@@ -531,7 +534,10 @@ public fun recordNearbyEventRadioSelfVerifiedEnvelope(
     val mayReplaceContainer = !registryVerified || agreesWithRegistry
     val containerChanged = mayReplaceContainer &&
         !store.rawEnvelopeContainers[hash].contentEqualsOrNull(rawContainer)
-    if (containerChanged) store.rawEnvelopeContainers[hash] = rawContainer.copyOf()
+    if (containerChanged) {
+        store.rawEnvelopeContainers[hash] = rawContainer.copyOf()
+        store.rawEnvelopeNames[hash] = eventDisplayName
+    }
     // Folded in so a caller cannot record an agreeing envelope and forget to
     // promote it. A hash resolves against the registry exactly once, so an
     // envelope arriving after that completion has no callback left to ride on,
@@ -1014,6 +1020,7 @@ public fun resetNearbyEventDiscovery(
     store.registry.clear()
     store.receiverStates.clear()
     store.rawEnvelopeContainers.clear()
+    store.rawEnvelopeNames.clear()
     store.unverifiedEnvelopeCount = 0
     store.additionalNamesOmittedAtEpochMillis = null
     store.additionalEventsOmittedAtEpochMillis = null
@@ -1071,6 +1078,7 @@ private fun expireAt(store: NearbyEventDiscoveryStore, nowEpochMillis: Long): Bo
         store.registry.keys.retainAll(liveHashes)
         store.receiverStates.keys.retainAll(liveHashes)
         store.rawEnvelopeContainers.keys.retainAll(liveHashes)
+        store.rawEnvelopeNames.keys.retainAll(liveHashes)
         changed = true
     }
 
@@ -1124,6 +1132,7 @@ private fun NearbyEventDiscoveryStore.buildSnapshot(): NearbyEventCandidates {
                 registryResolutionFailureCount = registry[eventHash]?.failedResolutionCount ?: 0,
                 registryRetryAtEpochMillis = registry[eventHash]?.nextRetryAtEpochMillis,
                 rawEnvelopeContainer = rawEnvelopeContainers[eventHash],
+                radioVerifiedEventName = rawEnvelopeNames[eventHash],
             )
         }
 

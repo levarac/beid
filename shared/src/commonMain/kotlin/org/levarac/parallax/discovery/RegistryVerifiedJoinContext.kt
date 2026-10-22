@@ -164,6 +164,13 @@ public class RegistryVerifiedJoinContext private constructor(
      * doc for why that is a deliberate difference and not an omission.
      */
     public val definition: EventDefinitionContext?,
+    /**
+     * Name of the retained, native-verified envelope this nearby join stands on.
+     * Operator-lookup definitions carry no name; never substitute a hint or code.
+     * Copying this display metadata into a historical record does not persist
+     * or restore the join capability itself.
+     */
+    public val eventName: String?,
 ) {
     public companion object {
         /**
@@ -196,6 +203,7 @@ public class RegistryVerifiedJoinContext private constructor(
                 definitionHashHex = canonicalDefinitionHashHex,
                 registryBlockHashHex = candidate.registryBlockHashHex ?: return null,
                 definition = null,
+                eventName = candidate.radioVerifiedEventName,
             )
         }
 
@@ -233,6 +241,7 @@ public class RegistryVerifiedJoinContext private constructor(
                 definitionHashHex = canonicalDefinitionHashHex,
                 registryBlockHashHex = resolution.blockHashHex ?: return null,
                 definition = definition,
+                eventName = null,
             )
         }
     }
