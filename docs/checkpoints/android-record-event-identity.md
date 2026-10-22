@@ -4,7 +4,7 @@ Initial inventory: `64debe97`.
 
 | Family | Class | Current iOS | Current Android | Invariant | Owner | Shared authority | Licensing test | Native callers | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Joined event display metadata | C | `EventSession` carries a name, currently the code for real sessions | `ScanEventSession` carries only a code | A name belongs to the retained, native-verified B005 envelope. Unauthenticated hints and registry-disagreeing envelopes cannot replace it. Missing names and historical identifiers stay absent. | P1-3 implementation slice | `NearbyEventDiscoveryStore`, `RegistryVerifiedJoinContext` | `RecordEventIdentityTest.verifiedNameObtainedAtJoinIsShownAfterRecordStoreReload` | Android `ScanEventSession` / `ProofRecordingBridge`; iOS `SensingCoordinator` | Android persistence JVM verified; iOS runtime unverified |
+| Joined event display metadata | C | `EventSession` carries a name, currently the code for real sessions | `ScanEventSession` carries only a code | A name belongs to the retained, native-verified B005 envelope. Unauthenticated hints and registry-disagreeing envelopes cannot replace it. Missing names and historical identifiers stay absent. | Android record event identity | `NearbyEventDiscoveryStore`, `RegistryVerifiedJoinContext` | `RecordEventIdentityTest.verifiedNameObtainedAtJoinIsShownAfterRecordStoreReload` | Android `ScanEventSession` / `ProofRecordingBridge`; iOS `SensingCoordinator` | Android persistence JVM verified; iOS runtime unverified |
 
 Barnard owns signature verification. Shared code retains the name supplied
 with that verification result alongside the exact envelope bytes, under the
