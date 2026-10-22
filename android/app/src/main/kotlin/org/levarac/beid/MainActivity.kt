@@ -122,6 +122,11 @@ open class MainActivity : ComponentActivity() {
         eventJoinCoordinator?.drainPendingSubmissionsOnForeground()
     }
 
+    override fun onStop() {
+        eventJoinCoordinator?.checkpointSession()
+        super.onStop()
+    }
+
     /**
      * The scenario root, and the invariant it exists to hold.
      *

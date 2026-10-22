@@ -35,6 +35,8 @@ import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
+import org.levarac.beid.persistence.SessionCheckpoint
+import org.levarac.beid.persistence.SessionCheckpointStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.BuildConfig
 import org.levarac.beid.registry.RegistryDependencies
@@ -156,6 +158,9 @@ class EventJoinCoordinator internal constructor(
 
     private val accounting = ScanDeviceAccounting()
     private var aggregationRuntime = AggregationRuntime()
+    private val sessionCheckpointStore = ledgerFilesDir?.let {
+        SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(it))
+    }
 
     internal fun sessionAggregateSnapshot(proofId: UUID) = sessionAggregateSnapshotStore?.snapshot(proofId)
 
@@ -316,22 +321,11 @@ class EventJoinCoordinator internal constructor(
      *
      * **Why this exact position (immediately after [activeProofId] is
      * assigned in [onPhaseDecided], before any other side effect) matters:**
-     * Android's self-proof persistence is
-     * [org.levarac.beid.persistence.SelfProofRecordStore], and it is written
-     * from exactly one place: `finalizeSelfProofIfNeeded`, reached from
-     * [leaveEvent]/[dispose]. iOS additionally checkpoints mid-session
-     * (`SelfProofCheckpointStore`, driven by
-     * `SensingCoordinator.checkpointSelfProofStateIfNeeded` and reconciled by
-     * `reconcileSelfProofCheckpointIfNeeded`), so it survives a process kill
-     * that Android does not — the loss PR #314 disclosed. The difference is
-     * *when the write happens*, not whether a store exists; measured
-     * 2026-09-10, and the way to re-check it is to look at what calls
-     * `SelfProofRecordStore.add`. Firing this at
-     * the earliest possible point lets a future consumer (this issue's own
-     * still-open ledger-writer fork decision) create its durable row for
-     * the session right away, degrading the worst-case loss from "the
-     * session disappears entirely" to "the session is recorded, only its
-     * self-proof is missing."
+     * The collection row is persisted by this callback before the first
+     * recording checkpoint. Subsequent detections and Activity backgrounding
+     * checkpoint its self-proof range and shared aggregate without signing or
+     * ending the live session. Foreground recovery can then finalize that same
+     * proof identity after a process death, like iOS's checkpoint path.
      *
      * **Threading, verified (not assumed):** always Android's main thread.
      * This fires from [onPhaseDecided], called from [handleDetection],
@@ -915,6 +909,7 @@ class EventJoinCoordinator internal constructor(
             eventConfirmThreshold = BeidConfig.eventConfirmThreshold,
         )
         onPhaseDecided(previousPhase)
+        checkpointSession()
         windowAccumulator?.observe(
             enin = enin,
             rpid = rpid,
@@ -1015,7 +1010,6 @@ class EventJoinCoordinator internal constructor(
         joinVerificationOwner = null
         windowAccumulator?.close()
         finalizeSelfProofIfNeeded()
-        persistSessionAggregateSnapshotIfNeeded()
         engine.leaveEvent()
         stopParticipantRelay()
         discoveryOnlyScanOwned = false
@@ -1046,30 +1040,93 @@ class EventJoinCoordinator internal constructor(
      * [leaveEvent] already ran) finds nothing to do.
      */
     private fun finalizeSelfProofIfNeeded(): SelfProofRecord? {
-        val proofId = activeProofId ?: return null
-        val eventCode = currentRecordingSession()?.eventCode ?: return null
-        val start = accounting.firstWindowEnin ?: return null
-        val end = accounting.lastWindowEnin ?: return null
+        val checkpoint = currentSessionCheckpoint() ?: return null
+        persistSessionCheckpoint(checkpoint)
+        return try {
+            finalizeSessionCheckpoint(checkpoint)
+        } catch (error: Exception) {
+            logSessionCheckpointFailure("finalize", error)
+            null
+        }
+    }
 
-        val eventIdHash = EventIdHash.compute(eventCode)
-        val eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(eventCode)
-        val ownerPublicKey = sensingCryptography.ownerPublicKey()
-        val signature = sensingCryptography.signSelfProof(eventIdHash, eventSigningPublicKey, start, end)
-            ?: return null
+    /** Saves evidence only: no window close, signature, phase change, or radio effect. */
+    internal fun checkpointSession() {
+        if (disposed) return
+        currentSessionCheckpoint()?.let(::persistSessionCheckpoint)
+    }
 
-        val record = SelfProofRecord(
-            proofId = proofId,
-            eventCode = eventCode,
-            eventIdHash = eventIdHash,
-            eventSigningPublicKey = eventSigningPublicKey,
-            eninStart = start,
-            eninEnd = end,
-            ownerPublicKey = ownerPublicKey,
-            signature = signature,
+    private fun currentSessionCheckpoint(): SessionCheckpoint? {
+        return SessionCheckpoint(
+            proofId = activeProofId ?: return null,
+            eventCode = currentRecordingSession()?.eventCode ?: return null,
+            eninStart = accounting.firstWindowEnin ?: return null,
+            eninEnd = accounting.lastWindowEnin ?: return null,
+            aggregate = aggregationRuntime.sessionAggregate,
         )
-        selfProofRecordStore.add(record)
+    }
+
+    private fun persistSessionCheckpoint(checkpoint: SessionCheckpoint) {
+        try {
+            sessionCheckpointStore?.persist(checkpoint)
+        } catch (error: Exception) {
+            logSessionCheckpointFailure("write", error)
+        }
+    }
+
+    private fun finalizeSessionCheckpoint(checkpoint: SessionCheckpoint): SelfProofRecord? {
+        check(!selfProofRecordStore.isPersistenceSuspended) { "self_proof_persistence_suspended" }
+        val proofId = checkpoint.proofId
+        val record = selfProofRecordStore.recordForProofId(proofId) ?: run {
+            val eventIdHash = EventIdHash.compute(checkpoint.eventCode)
+            val eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(checkpoint.eventCode)
+            val ownerPublicKey = sensingCryptography.ownerPublicKey()
+            val signature = sensingCryptography.signSelfProof(
+                eventIdHash, eventSigningPublicKey, checkpoint.eninStart, checkpoint.eninEnd,
+            ) ?: return null
+            SelfProofRecord(
+                proofId = proofId,
+                eventCode = checkpoint.eventCode,
+                eventIdHash = eventIdHash,
+                eventSigningPublicKey = eventSigningPublicKey,
+                eninStart = checkpoint.eninStart,
+                eninEnd = checkpoint.eninEnd,
+                ownerPublicKey = ownerPublicKey,
+                signature = signature,
+            ).also(selfProofRecordStore::add)
+        }
         onProofSignatureStateChanged?.invoke(proofId, true, bindingRecordStore.recordForProofId(proofId) != null)
+        sessionAggregateSnapshotStore?.let { snapshots ->
+            // A stale checkpoint can outlive a completed graceful finalization.
+            // Finished aggregates are immutable; preserve the authoritative one.
+            if (snapshots.snapshot(proofId) == null) snapshots.persist(proofId, checkpoint.aggregate)
+        }
+        // Both final artifacts are durable before their recovery input is removed.
+        sessionCheckpointStore?.clear(proofId)
         return record
+    }
+
+    private fun reconcileSessionCheckpoints() {
+        val store = sessionCheckpointStore ?: return
+        val proofIds = try {
+            store.proofIds()
+        } catch (error: Exception) {
+            logSessionCheckpointFailure("load", error)
+            return
+        }
+        for (proofId in proofIds) {
+            // Background/foreground of the same instance must not end recording.
+            if (proofId == activeProofId) continue
+            try {
+                store.load(proofId)?.let(::finalizeSessionCheckpoint)
+            } catch (error: Exception) {
+                logSessionCheckpointFailure("recover", error)
+            }
+        }
+    }
+
+    private fun logSessionCheckpointFailure(operation: String, error: Exception) {
+        joinDiagnostics("session_checkpoint_${operation}_failed type=${error.javaClass.simpleName}")
     }
 
     private fun resetSessionState() {
@@ -1079,15 +1136,6 @@ class EventJoinCoordinator internal constructor(
         bindingState = EventBindingState.None
         pendingBindingMessage = null
         recordingCeremonyShown = false
-    }
-
-    private fun persistSessionAggregateSnapshotIfNeeded() {
-        val proofId = activeProofId ?: return
-        try {
-            sessionAggregateSnapshotStore?.persist(proofId, aggregationRuntime.sessionAggregate)
-        } catch (_: Exception) {
-            // This is display convenience data; teardown must remain authoritative.
-        }
     }
 
     // MARK: - Wallet connect+binding (mirrors iOS's `SensingCoordinator`
@@ -1193,6 +1241,10 @@ class EventJoinCoordinator internal constructor(
 
     /** Foreground trigger reuses the process-owned runtime and therefore its single-flight drain. */
     fun drainPendingSubmissionsOnForeground() {
+        if (disposed) return
+        // MainActivity has connected the collection callbacks by this point.
+        // Signing failures retain checkpoints without breaking construction.
+        reconcileSessionCheckpoints()
         windowObservationRuntime?.drainPendingSubmissions()
     }
 
@@ -1322,7 +1374,6 @@ class EventJoinCoordinator internal constructor(
         disposed = true
         joinVerificationOwner = null
         finalizeSelfProofIfNeeded()
-        persistSessionAggregateSnapshotIfNeeded()
         stopParticipantRelay()
         discoveryOnlyScanOwned = false
         endRescueEntryCountdown()
