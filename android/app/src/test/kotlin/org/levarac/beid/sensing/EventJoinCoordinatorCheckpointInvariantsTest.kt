@@ -16,6 +16,8 @@ import org.levarac.beid.wireProofRecording
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -94,6 +96,61 @@ class EventJoinCoordinatorCheckpointInvariantsTest {
         } finally {
             live.dispose()
             otherActivity.dispose()
+        }
+    }
+
+    @Test
+    fun checkpointEncoderRejectsInvertedRangeWithoutReplacingDurableBytes() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-inverted-encoder").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val live = coordinator(directory, engine, registry)
+        try {
+            joinPromotedVectorEvent(live, engine, registry)
+            repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
+            live.checkpointSession()
+            val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+            val proofId = checkpoints.proofIds().single()
+            val durable = checkpoints.load(proofId)!!
+            val file = File(SessionCheckpointStore.defaultDirectory(directory), "$proofId.json")
+            val bytes = file.readBytes()
+            assertFailsWith<IllegalArgumentException> {
+                checkpoints.persist(durable.copy(eninEnd = 6))
+            }
+            assertTrue(bytes.contentEquals(file.readBytes()), "rejected ranges must leave durable bytes untouched")
+            assertEquals(7L, checkpoints.load(proofId)?.eninEnd)
+        } finally {
+            live.dispose()
+        }
+    }
+
+    @Test
+    fun checkpointAndSignatureEndRemainAtTheMaximumObservedEnin() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-monotonic-range").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val live = coordinator(directory, engine, registry)
+        try {
+            joinPromotedVectorEvent(live, engine, registry)
+            repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
+            live.checkpointSession()
+            val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+            val proofId = checkpoints.proofIds().single()
+            for (enin in listOf(9L, 6L, 8L)) {
+                engine.emitDetection(enin = enin, rpid = "peer-$enin", detectedDisplayId = "peer-$enin")
+                live.checkpointSession()
+                val checkpoint = assertNotNull(runCatching { checkpoints.load(proofId) }.getOrNull(),
+                    "every encoded checkpoint must remain loadable after backward observations")
+                assertEquals(7L, checkpoint.eninStart)
+                assertEquals(9L, checkpoint.eninEnd, "checkpoint range must not move backward")
+            }
+            live.leaveEvent()
+            val record = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single()
+            assertEquals(7L, record.eninStart)
+            assertEquals(9L, record.eninEnd)
+            assertTrue(checkpoints.proofIds().isEmpty())
+        } finally {
+            live.dispose()
         }
     }
 
