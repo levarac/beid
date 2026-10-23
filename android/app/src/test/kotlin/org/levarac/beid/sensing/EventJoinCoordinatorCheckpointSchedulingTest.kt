@@ -27,6 +27,39 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointSchedulingTest {
     @Test
+    fun saturatedOutOfOrderEninsDoNotRewriteAnUnchangedCheckpoint() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-saturated-out-of-order").toFile()
+        val engine = FakeEventJoinEngine()
+        val writes = mutableListOf<SessionCheckpoint>()
+        val coordinator = recording(directory, engine) { writes += it }
+        try {
+            repeat(99_997) {
+                engine.emitDetection(enin = 7, rpid = "peer-0", detectedDisplayId = "device-0")
+            }
+            engine.emitDetection(enin = 9, rpid = "peer-0", detectedDisplayId = "device-0")
+            runCurrent()
+            advanceTimeBy(2_000)
+            runCurrent()
+            assertEquals(listOf(9L), writes.map { it.eninEnd })
+            assertEquals(100_000, writes.single().aggregate.observationCount)
+            for (enin in listOf(8L, 6L, 7L, 8L, 6L)) {
+                engine.emitDetection(enin = enin, rpid = "peer-0", detectedDisplayId = "device-0")
+                runCurrent()
+                advanceTimeBy(2_000)
+                runCurrent()
+            }
+            assertEquals(listOf(9L), writes.map { it.eninEnd }, "older accounting cursors cannot change the saved range")
+            engine.emitDetection(enin = 10, rpid = "peer-0", detectedDisplayId = "device-0")
+            runCurrent()
+            advanceTimeBy(2_000)
+            runCurrent()
+            assertEquals(listOf(9L, 10L), writes.map { it.eninEnd }, "a larger range must still schedule a checkpoint")
+        } finally {
+            coordinator.dispose()
+        }
+    }
+
+    @Test
     fun detectionsAfterObservationLimitDoNotScheduleMoreDurableWrites() = runTest {
         val directory = Files.createTempDirectory("checkpoint-saturated").toFile()
         val engine = FakeEventJoinEngine()
