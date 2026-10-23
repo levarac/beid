@@ -33,6 +33,7 @@ import org.levarac.parallax.discovery.operatorLookupJoinEligibility
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
+import org.levarac.beid.persistence.ConflictingSessionAggregateSnapshotException
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
@@ -1095,8 +1096,18 @@ class EventJoinCoordinator internal constructor(
             sessionAggregateSnapshotStore?.let { snapshots ->
                 // Finished metrics must survive even when signing is unavailable.
                 // A stale recovery input must not replace an authoritative aggregate.
-                if (snapshots.snapshot(proofId) == null) snapshots.persist(proofId, checkpoint.aggregate)
+                snapshots.persist(proofId, checkpoint.aggregate)
             }
+        }
+        if (aggregatePersistence.exceptionOrNull() is ConflictingSessionAggregateSnapshotException) {
+            // The final aggregate is authoritative even if its signature was unavailable
+            // and the latest checkpoint write failed. Never sign the older recovery input.
+            val existing = selfProofRecordStore.recordForProofId(proofId)
+            if (existing != null) {
+                onProofSignatureStateChanged?.invoke(proofId, true, bindingRecordStore.recordForProofId(proofId) != null)
+            }
+            sessionCheckpointStore?.clear(proofId)
+            return existing
         }
         val record = selfProofRecordStore.recordForProofId(proofId) ?: run {
             val eventIdHash = EventIdHash.compute(checkpoint.eventCode)

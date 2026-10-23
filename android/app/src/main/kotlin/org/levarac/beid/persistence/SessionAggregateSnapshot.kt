@@ -15,6 +15,8 @@ data class SessionAggregateSnapshotRecord(
     val snapshotText: String,
 )
 
+internal class ConflictingSessionAggregateSnapshotException : IllegalStateException("conflicting_snapshot")
+
 /** Durable one-snapshot-per-proof store using the shared canonical codec. */
 class SessionAggregateSnapshotStore(file: File) {
     private val store = JsonRecordFileStore(
@@ -33,7 +35,7 @@ class SessionAggregateSnapshotStore(file: File) {
         check(encoded.isSuccess && encoded.snapshotText != null) { "aggregate_not_successful" }
         val existing = store.recordMatching { it.proofId == proofId }
         if (existing != null) {
-            check(existing.snapshotText == encoded.snapshotText) { "conflicting_snapshot" }
+            if (existing.snapshotText != encoded.snapshotText) throw ConflictingSessionAggregateSnapshotException()
             return
         }
         store.addRecord(SessionAggregateSnapshotRecord(proofId, encoded.snapshotText!!))
