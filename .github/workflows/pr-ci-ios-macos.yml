@@ -43,7 +43,9 @@ jobs:
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
-    timeout-minutes: 45
+    # 45 was cut off at 45m40s on PRs #738 and #739 (2026-10-15) with no test
+    # failing; the suite had simply grown past it.
+    timeout-minutes: 60
     steps:
       - name: Initialize CI output path
         shell: bash
