@@ -28,7 +28,7 @@ final class JoinRefusalUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
 

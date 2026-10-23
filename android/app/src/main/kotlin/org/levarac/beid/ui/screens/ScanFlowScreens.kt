@@ -58,21 +58,16 @@ import org.levarac.beid.ui.theme.BeidTheme
  * is a plain `Column`, the same embedded-content shape the `ScanPhaseDetail`
  * composable this replaces already used.
  *
- * **Data gap vs. iOS, stated once here for all four screens:** Android's
- * [ScanEventSession] is `data class ScanEventSession(val eventCode: String)`
- * — it carries none of iOS's richer `EventSession` (display name, identity
- * verification status). These screens show only what that model actually
- * has; they do not invent an event name or fake a verification-retry
- * affordance. [EventFoundScreen] and the steady-state [RecordingScreen]
- * accordingly show no event-identity content beyond what their design
- * calls for; [SignalLostScreen] is the one screen whose copy needs "the
- * event," and it uses the one real field, `eventCode`.
+ * [ScanEventSession] carries an optional name and canonical ID from verified
+ * join. Missing display metadata stays absent; these screens do not invent
+ * a name or expose an identity-verification retry state they do not own.
  */
 @Composable
 fun ScanFlowScreen(
     phase: ScanPhase,
     showEntranceCeremony: Boolean,
     onCeremonyFinished: () -> Unit,
+    showSimulateSignalLost: Boolean = false,
     onSimulateSignalLost: () -> Unit,
     onResumeSensing: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
@@ -85,6 +80,7 @@ fun ScanFlowScreen(
             peersVerified = phase.peersVerified,
             showEntranceCeremony = showEntranceCeremony,
             onCeremonyFinished = onCeremonyFinished,
+            showSimulateSignalLost = showSimulateSignalLost,
             onSimulateSignalLost = onSimulateSignalLost,
             onStartWalletBinding = onStartWalletBinding,
         )
@@ -207,6 +203,7 @@ fun RecordingScreen(
     peersVerified: Int,
     showEntranceCeremony: Boolean,
     onCeremonyFinished: () -> Unit,
+    showSimulateSignalLost: Boolean = false,
     onSimulateSignalLost: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
     ceremonyDwellMillis: Long = 2000,
@@ -227,6 +224,15 @@ fun RecordingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
     ) {
+        session.eventName?.let { eventName ->
+            Text(
+                text = eventName,
+                style = MaterialTheme.typography.titleLarge,
+                color = BeidTheme.colors.textPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().semantics { heading() },
+            )
+        }
         if (showCeremony) {
             BeidHeroHeader(
                 title = stringResource(R.string.scan_recording_ceremony_title),
@@ -259,16 +265,18 @@ fun RecordingScreen(
                 value = peersVerified.toString(),
                 modifier = Modifier.testTag(EventJoinScreenTestTags.PEERS_VERIFIED_ROW),
             )
-            // Android has no real BLE signal-loss detection yet (mirrors iOS's own
-            // demo-only manual trigger) — this is the only way to reach SignalLost
-            // until real detection lands.
-            BeidSecondaryButton(
-                text = stringResource(R.string.event_join_simulate_signal_lost),
-                contentColor = BeidTheme.colors.proofSeal,
-                borderColor = BeidTheme.colors.proofSeal,
-                onClick = onSimulateSignalLost,
-                modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
-            )
+            // Debug builds only (beid#651), mirroring iOS's `#if DEBUG` gate in
+            // RecordingView.swift. The owner decided on 2026-09-22 not to build real
+            // signal-loss detection, so this is the only route to SignalLost.
+            if (showSimulateSignalLost) {
+                BeidSecondaryButton(
+                    text = stringResource(R.string.event_join_simulate_signal_lost),
+                    contentColor = BeidTheme.colors.proofSeal,
+                    borderColor = BeidTheme.colors.proofSeal,
+                    onClick = onSimulateSignalLost,
+                    modifier = Modifier.testTag(EventJoinScreenTestTags.SIMULATE_SIGNAL_LOST_BUTTON),
+                )
+            }
             BeidSecondaryButton(
                 text = stringResource(R.string.event_join_bind_wallet),
                 contentColor = BeidTheme.colors.proofSeal,
@@ -299,7 +307,7 @@ fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSens
         BeidHeroHeader(
             icon = Icons.Filled.Warning,
             title = stringResource(R.string.scan_signal_lost_title),
-            subtitle = stringResource(R.string.scan_signal_lost_message, session.eventCode),
+            subtitle = stringResource(R.string.scan_signal_lost_message, session.eventName ?: session.eventCode),
             tint = BeidTheme.colors.signalWarning,
         )
         BeidStatusPill(

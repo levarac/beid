@@ -11,11 +11,10 @@ struct BluetoothDeniedView: View {
 
   var body: some View {
     BeidStatusLayout(
-      systemImage: "hand.raised.slash",
       title: "Bluetooth permission required",
       message: "This feature requires Bluetooth permission.",
       footer: {
-        BeidPrimaryButton("Open Settings", systemImage: "gearshape") {
+        BeidPrimaryButton("Open Settings") {
           UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
         }
       }

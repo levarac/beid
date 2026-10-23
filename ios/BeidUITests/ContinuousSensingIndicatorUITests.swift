@@ -20,7 +20,7 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["Sense Event"]
+    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
     XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
@@ -29,10 +29,13 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
 
     let indicator = app.staticTexts["Sensing continues in background"]
     XCTAssertTrue(indicator.waitForExistence(timeout: 5))
-    let stopButton = app.buttons["Stop sensing"]
+    let stopButton = app.buttons["collection.stop-sensing"]
     XCTAssertTrue(stopButton.exists)
+    XCTAssertTrue(stopButton.isHittable)
+    XCTAssertTrue(senseEvent.isHittable, "Scan stays available while sensing continues")
 
     stopButton.tap()
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists, "prejoin Home Stop needs no Proof confirmation")
     XCTAssertFalse(indicator.waitForExistence(timeout: 5))
     XCTAssertFalse(stopButton.exists)
   }

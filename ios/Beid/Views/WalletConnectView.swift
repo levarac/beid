@@ -5,8 +5,8 @@ import SwiftUI
 
 /// Wallet step in the `.walletFirst` `OnboardingMode` order. Direct
 /// app-to-app connection via `WalletConnectPairingView` — see
-/// ios/README.md "WalletConnect". Not a motif-accent screen (§5): every
-/// tint here is `DS.Color.actionPrimary`, same as the rest of onboarding.
+/// ios/README.md "WalletConnect". Every tint here is
+/// `DS.Color.actionPrimary`, as on every screen (DESIGN.md §5).
 struct WalletConnectView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
@@ -150,10 +150,8 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   private var notConfiguredContent: some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
-        systemImage: "exclamationmark.triangle.fill",
         title: "Wallet not available",
-        subtitle: "This wallet can't be used right now. Try again in a moment.",
-        tint: DS.Color.actionPrimary
+        subtitle: "This wallet can't be used right now. Try again in a moment."
       )
       BeidSecondaryButton(title: "Start Over") {
         chooseAnotherWallet()
@@ -169,14 +167,12 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   private var providerSelectionContent: some View {
     VStack(spacing: DS.Space.s) {
       BeidHeroHeader(
-        systemImage: "wallet.pass.fill",
         title: "Connect Your Wallet",
-        subtitle: "beid uses your wallet to sign proofs of event attendance.",
-        tint: DS.Color.actionPrimary
+        subtitle: "beid uses your wallet to sign proofs of event attendance."
       )
 
       VStack(spacing: DS.Space.s) {
-        BeidPrimaryButton("Connect with MetaMask", systemImage: "wallet.pass") {
+        BeidPrimaryButton("Connect with MetaMask") {
           hasStarted = true
         }
         .tint(DS.Color.actionPrimary)
@@ -199,15 +195,12 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   private func restoredContent(hint: CachedWalletHint) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
-        systemImage: "wallet.pass.fill",
         title: "Continue with your wallet",
-        subtitle: LocalizedStringKey(restoredHintSubtitle(hint: hint)),
-        tint: DS.Color.actionPrimary
+        subtitle: LocalizedStringKey(restoredHintSubtitle(hint: hint))
       )
       VStack(spacing: DS.Space.s) {
         BeidPrimaryButton(
-          LocalizedStringKey(continueAsButtonTitle(hint: hint)),
-          systemImage: "wallet.pass"
+          LocalizedStringKey(continueAsButtonTitle(hint: hint))
         ) {
           hasStarted = true
           Task { await client.connect() }
@@ -230,10 +223,8 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   private var connectingContent: some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
-        systemImage: "wallet.pass.fill",
         title: "Connect Your Wallet",
-        subtitle: nil,
-        tint: DS.Color.actionPrimary
+        subtitle: nil
       )
       ProgressView()
         .tint(DS.Color.actionPrimary)
@@ -281,20 +272,16 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
 
   private func connectedContent(address: String) -> some View {
     BeidHeroHeader(
-      systemImage: "checkmark.circle.fill",
       title: "Connected",
-      subtitle: nil,
-      tint: DS.Color.actionPrimary
+      subtitle: nil
     )
   }
 
   private func failedContent(message: String) -> some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
-        systemImage: "xmark.octagon.fill",
         title: "Connection failed",
-        subtitle: "beid couldn't connect to your wallet. Check your connection and try again.",
-        tint: DS.Color.actionPrimary
+        subtitle: "beid couldn't connect to your wallet. Check your connection and try again."
       )
       Text(verbatim: message)
         .font(DS.Font.meta)
@@ -325,13 +312,11 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   private var walletNotInstalledContent: some View {
     VStack(spacing: DS.Space.l) {
       BeidHeroHeader(
-        systemImage: "wallet.pass.fill",
         title: "MetaMask is not installed",
-        subtitle: "Install MetaMask to connect directly.",
-        tint: DS.Color.actionPrimary
+        subtitle: "Install MetaMask to connect directly."
       )
       VStack(spacing: DS.Space.s) {
-        BeidPrimaryButton("Get MetaMask", systemImage: "arrow.up.right.square") {
+        BeidPrimaryButton("Get MetaMask") {
           openURL(MetaMaskConnector.appStoreURL)
         }
         .tint(DS.Color.actionPrimary)
@@ -443,12 +428,6 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
 
 #Preview {
   WalletConnectView().environmentObject(AppCoordinator())
-}
-
-#Preview("Dark") {
-  WalletConnectView()
-    .environmentObject(AppCoordinator())
-    .preferredColorScheme(.dark)
 }
 
 #if DEBUG

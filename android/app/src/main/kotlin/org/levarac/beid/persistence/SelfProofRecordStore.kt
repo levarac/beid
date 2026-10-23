@@ -11,7 +11,11 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 
 /** On-device JSON store for owner-key-signed self-proofs — same pattern as [BindingRecordStore]. See [SelfProofRecord]. */
-class SelfProofRecordStore(file: File) {
+class SelfProofRecordStore(internal val file: File) {
+    internal var serialization: StoreWriteSerialization
+        get() = store.serialization
+        set(value) { store.serialization = value }
+
     private val store = JsonRecordFileStore(
         file = file,
         schemaVersion = SCHEMA_VERSION,
@@ -26,6 +30,9 @@ class SelfProofRecordStore(file: File) {
 
     /** A `Proof` gets at most one self-proof, so the first match is the only match. */
     fun recordForProofId(proofId: UUID): SelfProofRecord? = store.recordMatching { it.proofId == proofId }
+
+    internal fun readBackRecordForProofId(id: UUID): SelfProofRecord? =
+        store.readBackRecordMatching { it.proofId == id }
 
     companion object {
         const val SCHEMA_VERSION = 1

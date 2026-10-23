@@ -3,7 +3,7 @@
 
 import SwiftUI
 
-/// Shared event-summary panel: icon + name + optional venue + a status
+/// Shared event-summary panel: name + optional venue + a status
 /// badge + a trailing caption slot. Used by `EventFoundView`,
 /// `RecordingView`, and `SignalLostView` — see
 /// `docs/specs/scan-slice2-redesign.md` §5.1/§6 "New eventCard component".
@@ -29,29 +29,17 @@ struct EventCardView<Caption: View>: View {
 
   var body: some View {
     BeidPanel {
-      VStack(alignment: .leading, spacing: BeidDesign.Spacing.content) {
+      VStack(alignment: .leading, spacing: DS.Space.m) {
         HStack(alignment: .top, spacing: DS.Space.m) {
-          Image(systemName: "calendar")
-            .font(DS.Font.cardTitle)
-            .foregroundStyle(.tint)
-            .symbolRenderingMode(.hierarchical)
-            .frame(width: BeidDesign.Size.bulletIcon, height: BeidDesign.Size.bulletIcon)
-            .beidSurface(cornerRadius: BeidDesign.Radius.control, fallback: .thinMaterial)
-            .accessibilityHidden(true)
-
           VStack(alignment: .leading, spacing: DS.Space.xs) {
             Text(event.name)
               .font(DS.Font.cardTitle)
               .fixedSize(horizontal: false, vertical: true)
 
             if let venue = event.venue {
-              Label {
-                Text(venue)
-              } icon: {
-                Image(systemName: "mappin.and.ellipse")
-              }
-              .font(DS.Font.meta)
-              .foregroundStyle(DS.Color.textSecondary)
+              Text(venue)
+                .font(DS.Font.meta)
+                .foregroundStyle(DS.Color.textSecondary)
             }
           }
 
@@ -96,7 +84,7 @@ struct EventCardView<Caption: View>: View {
       .foregroundStyle(DS.Color.textSecondary)
   }
   .padding()
-  .tint(DS.Color.signalActive)
+  .tint(DS.Color.actionPrimary)
 }
 
 #Preview("Recording") {
@@ -106,16 +94,15 @@ struct EventCardView<Caption: View>: View {
       .foregroundStyle(DS.Color.textSecondary)
   }
   .padding()
-  .tint(DS.Color.proofSeal)
+  .tint(DS.Color.actionPrimary)
 }
 
-#Preview("Paused (Dark)") {
+#Preview("Paused") {
   EventCardView(event: .demoSample, badge: .paused) {
     BeidMetricRow(label: "detail.devicesSensed.label", verbatimValue: "5")
   }
   .padding()
-  .tint(DS.Color.signalWarning)
-  .preferredColorScheme(.dark)
+  .tint(DS.Color.actionPrimary)
 }
 
 #Preview("No venue, long name") {
@@ -128,5 +115,5 @@ struct EventCardView<Caption: View>: View {
       .foregroundStyle(DS.Color.textSecondary)
   }
   .padding()
-  .tint(DS.Color.proofSeal)
+  .tint(DS.Color.actionPrimary)
 }

@@ -156,6 +156,47 @@ class EventJoinCoordinatorSelfProofTest {
         assertTrue(hasBindingAtLeaveTime, "the binding recorded earlier this session must still be reported")
     }
 
+    /**
+     * Pins beid#650: leave ends the recording session but not discovery.
+     * The scan pre-join discovery started is never stopped, a newly seen
+     * event still becomes a joinable card that can be joined again, and the
+     * left session's self-proof is persisted exactly once.
+     */
+    @Test
+    fun leaveEventEndsTheRecordingSessionButNotDiscovery() = runTest {
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val store = SelfProofRecordStore(newTempRecordFile("self-proofs"))
+        val coordinator = coordinator(engine, FakeSensingCryptography(), selfProofRecordStore = store, nearbyRegistry = registry)
+        coordinator.requestBluetoothPermission {}
+
+        joinPromotedVectorEvent(coordinator, engine, registry)
+        confirmRecording(engine)
+        coordinator.leaveEvent()
+
+        assertEquals(0, engine.stopScanCalls, "leave must not stop the scan")
+        assertTrue(engine.engineState.isScanning, "discovery is still live after leave")
+        val record = requireNotNull(store.records.singleOrNull()) { "expected exactly one self-proof record after leave" }
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, record.eventCode)
+
+        // No unrelated hint in between: the fake registry holds one pending completion.
+        promoteVectorCandidate(engine, registry)
+        val card = coordinator.nearbyEventCards.value.singleOrNull {
+            it.eventCodeHashHex == NearbyEventPromotionFixture.EVENT_CODE_HASH
+        }
+        requireNotNull(card) { "the event seen after leave must surface as a card" }
+        assertEquals(NearbyEventPromotionFixture.EVENT_ID_HEX, card.eventIdHex, "the card must be joinable")
+
+        coordinator.joinNearbyEvent(NearbyEventPromotionFixture.EVENT_CODE_HASH)
+        runCurrent()
+
+        assertTrue(coordinator.state.value is EventJoinUiState.Sensing, "the card joined again after leave")
+        assertEquals(1, store.records.size, "re-joining alone must not persist a second self-proof")
+        assertEquals(record, store.records.single())
+        assertEquals(0, engine.stopScanCalls)
+        assertTrue(engine.engineState.isScanning)
+    }
+
     private fun confirmRecording(engine: FakeEventJoinEngine) {
         engine.emitDetection(enin = 1, rpid = "aa", detectedDisplayId = "device-1")
         engine.emitDetection(enin = 2, rpid = "bb", detectedDisplayId = "device-2")

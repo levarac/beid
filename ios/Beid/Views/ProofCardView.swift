@@ -49,7 +49,7 @@ struct ProofCardView: View {
     }
     .padding(DS.Space.m)
     .frame(maxWidth: .infinity, alignment: .top)
-    .beidSurface(interactive: true, cornerRadius: BeidDesign.Radius.card)
+    .beidSurface(cornerRadius: DS.Radius.card)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilityLabelText)
   }
@@ -83,13 +83,6 @@ struct ProofCardView: View {
     .padding()
 }
 
-#Preview("Dark") {
-  ProofCardView(proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3))
-    .frame(width: 160)
-    .padding()
-    .preferredColorScheme(.dark)
-}
-
 #Preview("Multiple sessions") {
   ProofCardView(
     proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3),
@@ -97,14 +90,4 @@ struct ProofCardView: View {
   )
   .frame(width: 160)
   .padding()
-}
-
-#Preview("Multiple sessions (Dark)") {
-  ProofCardView(
-    proof: Proof(eventName: "ETHGlobal Tokyo", date: Date(), peersVerified: 3),
-    sessionCount: 3
-  )
-  .frame(width: 160)
-  .padding()
-  .preferredColorScheme(.dark)
 }

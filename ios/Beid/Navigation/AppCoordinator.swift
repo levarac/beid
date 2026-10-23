@@ -5,6 +5,32 @@ import BeidSharedKit
 import Combine
 import Foundation
 
+#if DEBUG
+/// Two screenshot-only samples; production code never compiles this type.
+enum EventCodeScreenshotFixture {
+  case entry
+  case error
+
+  var code: String {
+    switch self {
+    case .entry: return "ETH-TOKYO-26"
+    case .error: return "ETH-TOKY0-26"
+    }
+  }
+
+  var hasError: Bool {
+    if case .error = self { return true }
+    return false
+  }
+}
+
+private struct HomeClockFixtureDateSource: TrustedDateSource {
+  func fetchDateHeader() async -> String? {
+    "Wed, 16 Sep 2026 11:58:53 GMT"
+  }
+}
+#endif
+
 /// Root state machine for onboarding + the collection home. Order of the
 /// wallet step is decided once at init from `OnboardingMode.current`; see
 /// README "Onboarding flag".
@@ -21,16 +47,47 @@ final class AppCoordinator: ObservableObject {
   /// assign it directly) and is never read on that path.
   @Published private(set) var liveWalletAddress: LiveWalletAddress?
   @Published var scanPresented = false
+  @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
+  private enum ScanStopIntent {
+    case keepAutomaticTransport
+    case stopAutomaticTransport
+  }
+  private var pendingStopIntent: ScanStopIntent?
+  @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
+  @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
+  #if DEBUG
+  /// Frame 09's display-only sample. It never enters ProofStore or a
+  /// signing/reporting store, and is set only by the UI-test launch gate.
+  private(set) var proofDetailScreenshotPresentation: ProofDetailPresentation?
+  #endif
   @Published var accountSheetPresented = false
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
+  /// Home's 04b code sheet. Closing it cancels a pending lookup, whatever
+  /// closed it: swipe-to-dismiss writes `false` through the sheet's binding
+  /// and runs no other code, so the cancellation lives on the write itself,
+  /// synchronously, as `AccountSheetView`'s custom binding does for its sheet
+  /// (PR #716 review). A completed join also closes it; the extra bump then
+  /// has no attempt left to supersede.
+  @Published var homeEventCodeSheetPresented = false {
+    didSet {
+      if oldValue, !homeEventCodeSheetPresented {
+        cancelPendingJoinAttempt()
+      }
+    }
+  }
   @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
   let onboardingMode = OnboardingMode.current
   let proofStore: ProofStore
+  /// Shared by the report producer and every reader in this app process.
+  let reportSubmissionStore: ReportSubmissionStore
+  /// beid#701's report-to-Proof table. Written only by `sensingCoordinator`
+  /// at window close; screens read it. Never reaches the submission runtime.
+  let reportProofLinkStore: ReportProofLinkStore
   let registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient?
   let sensingCoordinator: SensingCoordinator
   let supportDiagnostics: SupportDiagnostics
@@ -43,6 +100,18 @@ final class AppCoordinator: ObservableObject {
 
   private static let hasCompletedOnboardingKey = "beid.hasCompletedOnboarding"
 
+  #if DEBUG
+  /// Screen 13/13b samples are reachable only by UI tests bearing both the
+  /// general test gate and the frame-specific launch argument.
+  nonisolated static var eventCodeScreenshotFixture: EventCodeScreenshotFixture? {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test") else { return nil }
+    if arguments.contains("-beid-shot-13b") { return .error }
+    if arguments.contains("-beid-shot-13") { return .entry }
+    return nil
+  }
+  #endif
+
   /// `registryClient` defaults to the production, Info.plist-driven
   /// resolution (`RegistryDependencies.createClient()`), evaluated fresh at
   /// each call site with no override — mirroring `walletConnector`/
@@ -54,6 +123,9 @@ final class AppCoordinator: ObservableObject {
   init(
     walletConnector: (any WalletConnector)? = nil,
     proofStore: ProofStore? = nil,
+    sensingCoordinator injectedSensingCoordinator: SensingCoordinator? = nil,
+    reportSubmissionStore: ReportSubmissionStore? = nil,
+    reportProofLinkStore: ReportProofLinkStore? = nil,
     registryClient: ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? =
       RegistryDependencies.createClient(),
     userDefaults: UserDefaults = .standard,
@@ -61,25 +133,92 @@ final class AppCoordinator: ObservableObject {
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
   ) {
     let bluetoothMonitor = BluetoothMonitor()
-    self.registryClient = registryClient
-    self.joinDiagnosticLog = joinDiagnosticLog
-#if DEBUG
-    if NearbyJoinUITestFixture.isEnabled {
-      self.sensingCoordinator = NearbyJoinUITestFixture.makeCoordinator()
+    let reportStore: ReportSubmissionStore
+    #if DEBUG
+    let reportArguments = ProcessInfo.processInfo.arguments
+    if reportArguments.contains("-beid-ui-test") &&
+      (reportArguments.contains("-beid-event-detail-frame-08") ||
+        reportArguments.contains("-beid-event-detail-frame-08c"))
+    {
+      // Screenshot records stay in an isolated file that normal launches cannot read.
+      let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "beid-event-detail-reports-\(UUID().uuidString).json"
+      )
+      reportStore = ReportSubmissionStore(fileURL: reportURL)
     } else {
-      self.sensingCoordinator = SensingCoordinator(registryClient: registryClient, joinDiagnosticLog: joinDiagnosticLog)
+      reportStore = reportSubmissionStore ?? ReportSubmissionStore()
     }
-#else
-    self.sensingCoordinator = SensingCoordinator(registryClient: registryClient, joinDiagnosticLog: joinDiagnosticLog)
-#endif
+    #else
+    reportStore = reportSubmissionStore ?? ReportSubmissionStore()
+    #endif
+    let linkStore: ReportProofLinkStore
+    #if DEBUG
+    if let reportProofLinkStore {
+      linkStore = reportProofLinkStore
+    } else if reportArguments.contains("-beid-ui-test") {
+      // Every UI-test launch starts from its own empty link file, so no UI
+      // test reads a previous launch's links or ever writes the real file.
+      let linkURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "beid-report-proof-links-\(UUID().uuidString).json"
+      )
+      linkStore = ReportProofLinkStore(fileURL: linkURL)
+    } else {
+      linkStore = ReportProofLinkStore()
+    }
+    #else
+    linkStore = reportProofLinkStore ?? ReportProofLinkStore()
+    #endif
+    self.registryClient = registryClient
+    self.reportSubmissionStore = reportStore
+    self.joinDiagnosticLog = joinDiagnosticLog
+    self.reportProofLinkStore = linkStore
+    // An injected coordinator (tests) wins over the nearby-join UI fixture.
+    if let injectedSensingCoordinator {
+      self.sensingCoordinator = injectedSensingCoordinator
+    } else {
+      #if DEBUG
+      if NearbyJoinUITestFixture.isEnabled {
+        self.sensingCoordinator = NearbyJoinUITestFixture.makeCoordinator()
+      } else {
+        self.sensingCoordinator = SensingCoordinator(
+          registryClient: registryClient, reportSubmissionStore: reportStore,
+          reportProofLinkStore: linkStore,
+          joinDiagnosticLog: joinDiagnosticLog
+        )
+      }
+      #else
+      self.sensingCoordinator = SensingCoordinator(
+        registryClient: registryClient, reportSubmissionStore: reportStore,
+        reportProofLinkStore: linkStore,
+        joinDiagnosticLog: joinDiagnosticLog
+      )
+      #endif
+    }
     self.supportDiagnostics = SupportDiagnostics(
       phases: sensingCoordinator.$phase.eraseToAnyPublisher(),
       refusalReasons: sensingCoordinator.$joinRefusalReasonKey.eraseToAnyPublisher(),
       ownerKeyFailures: sensingCoordinator.$ownerKeyOperationFailure.eraseToAnyPublisher()
     )
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"), arguments.contains("-beid-home-frame-04c") {
+      // A three-minute wall-clock skew passes through the real controller
+      // and shared verdict. The fixture never injects a presentation key.
+      self.clockPreflight = ClockPreflightController(
+        source: HomeClockFixtureDateSource(),
+        wallMillis: { 1_789_559_933_000 + 180_000 },
+        monotonicMillis: { 1_000 }
+      )
+    } else {
+      self.clockPreflight = ClockPreflightController(
+        source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())
+      )
+    }
+    #else
     self.clockPreflight = ClockPreflightController(
       source: OperatorDateHeaderSource(origin: Self.clockPreflightOrigin())
     )
+    #endif
     self.walletConnector = walletConnector
     self.proofStore = proofStore ?? ProofStore()
     self.userDefaults = userDefaults
@@ -91,17 +230,33 @@ final class AppCoordinator: ObservableObject {
       // UI tests run without a real CoreBluetooth daemon. Keep their existing
       // onboarding contract deterministic while production and normal Debug
       // launches continue to wait for the real authorization callback.
-      self.permissionEvaluation = { .granted }
+      let bluetoothOffFixture = ProcessInfo.processInfo.arguments.contains(
+        "-beid-bluetooth-off-fixture"
+      )
+      self.permissionEvaluation = { bluetoothOffFixture ? .poweredOff : .granted }
     } else {
       self.permissionEvaluation = permissionEvaluation
     }
     #else
     self.permissionEvaluation = permissionEvaluation
     #endif
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"),
+      ProcessInfo.processInfo.arguments.contains("-beid-account-connected-fixture")
+    {
+      // Display-only Account screenshot fixture. It cannot stand in for a
+      // live connector address on the binding path (beid#315).
+      walletAddress = "0x7aF31234567890abcdef1234567890abcdef9E2b"
+    }
+    #endif
     if proofStore == nil, shouldResetProofStoreForUITesting {
       self.proofStore.resetForUITesting()
+      // beid#653: stored presence belongs to records; it is reset with them.
+      self.sensingCoordinator.resetSigilPresenceForUITesting()
+      seedHomeFrameForUITesting()
+      seedEventDetailFrameForUITesting()
     }
-    sensingCoordinator.onProofCollected = { [weak self] proof in
+    self.sensingCoordinator.onProofCollected = { [weak self] proof in
       self?.proofStore.add(proof)
     }
     if hasCompletedOnboardingPersisted {
@@ -140,6 +295,119 @@ final class AppCoordinator: ObservableObject {
     return ProcessInfo.processInfo.arguments.contains("-beid-ui-test")
     #else
     return false
+    #endif
+  }
+
+  /// Deterministic Home screenshot data, available only to a Debug UI-test
+  /// launch. Production and ordinary Debug launches still read the real
+  /// ProofStore and sensing state. 04 deliberately includes a stored Proof
+  /// for the active event: the Home list must hide that entire event group.
+  private func seedHomeFrameForUITesting() {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test") else { return }
+    let isEvents = arguments.contains("-beid-home-frame-04")
+    let isEmpty = arguments.contains("-beid-home-frame-04b")
+    let isClock = arguments.contains("-beid-home-frame-04c")
+    guard isEvents || isEmpty || isClock else { return }
+
+    walletAddress = "0x7aF3c2D451eA0B7684f6A23D87c9e910f13b9E2b"
+    guard !isEmpty else { return }
+    proofStore.add(Proof(
+      eventName: "DeFi Summit Singapore", date: Date(timeIntervalSince1970: 1_726_315_200),
+      peersVerified: 2, eventCode: "DEFI-SINGAPORE"
+    ))
+    proofStore.add(Proof(
+      eventName: "ETH Denver 2025", date: Date(timeIntervalSince1970: 1_740_751_200),
+      peersVerified: 3, eventCode: "ETH-DENVER"
+    ))
+    proofStore.add(Proof(
+      eventName: "DevCon Bangkok 2025", date: Date(timeIntervalSince1970: 1_763_380_800),
+      peersVerified: 3, eventCode: "DEVCON-BANGKOK"
+    ))
+    proofStore.add(Proof(
+      eventName: "DevCon Bangkok 2025", date: Date(timeIntervalSince1970: 1_763_467_200),
+      peersVerified: 4, eventCode: "DEVCON-BANGKOK"
+    ))
+    proofStore.add(Proof(
+      eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: 1_774_526_400),
+      peersVerified: 4, eventCode: "ACTIVE-EVENT"
+    ))
+    if isEvents {
+      sensingCoordinator.injectHomeRecordingForUITesting()
+    }
+    #endif
+  }
+
+  /// Screens 08/08c/11 use real Proof grouping and the shared aggregate codec.
+  /// Their submission metadata lives at an isolated temporary URL, so a
+  /// synthetic PREPARED fixture cannot be read or sent by a normal launch.
+  private func seedEventDetailFrameForUITesting() {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    guard arguments.contains("-beid-ui-test") else { return }
+    let hasReport = arguments.contains("-beid-event-detail-frame-08")
+    let noReports = arguments.contains("-beid-event-detail-frame-08c")
+    let observationDetail = arguments.contains("-beid-observation-frame-11")
+    guard hasReport || noReports || observationDetail else { return }
+
+    let eventCode = "ETHTOKYO2026"
+    let starts: [TimeInterval] = [1_774_486_920, 1_774_498_500, 1_774_510_200]
+    let deviceCounts = [23, 18, 31]
+    for (index, start) in starts.enumerated() {
+      let proof = Proof(
+        id: UUID(uuidString: "00000000-0000-4000-8000-00000000063\(index + 1)")!,
+        eventName: "ETH Tokyo 2026", date: Date(timeIntervalSince1970: start),
+        peersVerified: 0, eventCode: eventCode
+      )
+      proofStore.add(proof)
+      // 08c and 11 deliberately omit one snapshot so the single unavailable
+      // state is testable. The 11 fixture's first session has six sparse,
+      // measured-count windows; no signed/report artifact is made for it.
+      if observationDetail && index == 0 {
+        sensingCoordinator.injectObservationDetailSnapshotForUITesting(
+          proofId: proof.id, firstWindowIndex: Int64(start / 900)
+        )
+      } else if hasReport || index < 2 {
+        sensingCoordinator.injectEventDetailSnapshotForUITesting(
+          proofId: proof.id, deviceCount: deviceCounts[index], windowIndex: Int64(start / 900)
+        )
+      }
+    }
+
+    if hasReport {
+      let record = ReportSubmissionRecord(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000639")!,
+        eventCode: eventCode,
+        endpoint: "https://example.invalid/observations",
+        receiptPublicKeyHex: String(repeating: "a", count: 64),
+        eventIdHex: String(repeating: "b", count: 64),
+        eventDefinitionDigestHex: String(repeating: "c", count: 64),
+        validFrom: nil,
+        validUntil: nil,
+        signedObservationHex: "d28440a04040",
+        observationDigestHex: String(repeating: "d", count: 64),
+        submissionState: .prepared,
+        createdAt: Date(timeIntervalSince1970: starts[0])
+      )
+      do {
+        try reportSubmissionStore.add(record)
+      } catch {
+        assertionFailure("Unable to seed isolated Event Detail submission fixture: \(error)")
+      }
+      // beid#701: links the report to Session 1 only, in the isolated link
+      // file every UI-test launch gets. Sessions 2 and 3 stay unlinked.
+      if arguments.contains("-beid-report-links-701") {
+        do {
+          try reportProofLinkStore.add(
+            windowId: record.id,
+            proofId: UUID(uuidString: "00000000-0000-4000-8000-000000000631")!
+          )
+        } catch {
+          assertionFailure("Unable to seed isolated report-to-proof link fixture: \(error)")
+        }
+      }
+    }
     #endif
   }
 
@@ -431,6 +699,16 @@ final class AppCoordinator: ObservableObject {
     )
   }
 
+  /// Home's 04b entry has its own sheet flag so the Account sheet cannot
+  /// race to present its private wrapper for the same coordinator binding.
+  func joinEventFromHomeResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
+    let outcome = await joinEventFromAccountSheetResolvingCanonicalId(code: code)
+    if case .completed(nil) = outcome {
+      homeEventCodeSheetPresented = false
+    }
+    return outcome
+  }
+
   /// Manual rescue from the nearby-event scan surface. It preserves the same
   /// operator-lookup evidence path as every other typed-code join, then starts
   /// sensing inside the already-presented scan flow only after selection
@@ -626,7 +904,43 @@ final class AppCoordinator: ObservableObject {
   }
 
   func startScan() {
+    stopConfirmSnapshot = nil
+    pendingStopIntent = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
+    #if DEBUG
+    proofDetailScreenshotPresentation = nil
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      let shotIndex = arguments.firstIndex(of: "-beid-sensing-shot"),
+      arguments.indices.contains(shotIndex + 1),
+      arguments[shotIndex + 1] == "09"
+    {
+      proofDetailScreenshotPresentation = ProofDetailPresentation(
+        method: "Bluetooth Sensing",
+        hasSelfProof: true,
+        hasBinding: true,
+        deviceCount: 15,
+        windowCount: 6,
+        sessionCount: 1
+      )
+      selectedProof = Proof(
+        id: UUID(uuidString: "9C410000-0000-4000-8000-00000000E2A7")!,
+        eventName: "ETH Tokyo 2026",
+        date: Date(timeIntervalSince1970: 1_800_000_000),
+        peersVerified: 0
+      )
+      return
+    }
+    #endif
     scanPresented = true
+    #if DEBUG
+    if sensingCoordinator.injectSensingScreenshotFixture() {
+      // Gated by -beid-ui-test and a known frame code inside the fixture.
+      // A tour capture must not race a network clock check or BLE discovery.
+      return
+    }
+    #endif
     Task { await clockPreflight.check() }
 #if DEBUG
     if NearbyJoinUITestFixture.isEnabled { return }
@@ -651,16 +965,162 @@ final class AppCoordinator: ObservableObject {
     sensingCoordinator.startNearbyEventDiscovery()
   }
 
+  /// Frame 04c moves the clock notice to Home. Other launch points continue
+  /// checking independently because a clock can change after Home appeared.
+  func checkClockOnHome() async {
+    #if DEBUG
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04") || arguments.contains("-beid-home-frame-04b") {
+      // Screenshot fixtures 04 and 04b represent the no-warning states;
+      // avoid a live network result changing their pixels between runs.
+      return
+    }
+    #endif
+    await clockPreflight.check()
+  }
+
+  /// Legacy close entry point. It follows the same Proof gate as every new
+  /// caller, so no caller can bypass the confirmation for an actual Proof.
   func finishScan() {
+    requestScanClose()
+  }
+
+  private func resetAndDismissScan(intent: ScanStopIntent) {
+    stopConfirmSnapshot = nil
+    pendingStopIntent = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
-    sensingCoordinator.reset()
+    switch intent {
+    case .keepAutomaticTransport:
+      sensingCoordinator.reset()
+    case .stopAutomaticTransport:
+      sensingCoordinator.stopSensing()
+    }
+  }
+
+  /// Scan CLOSE preserves automatic operation after ending this session.
+  /// A stored Proof still passes through 05e before finalization.
+  func requestScanClose() {
+    requestScanClose(intent: .keepAutomaticTransport)
+  }
+
+  /// Home Stop sensing uses the same Proof gate and 05e confirmation, but
+  /// stops automatic transport after confirmation or immediately prejoin.
+  func requestHomeStopSensing() {
+    requestScanClose(intent: .stopAutomaticTransport)
+  }
+
+  private func requestScanClose(intent: ScanStopIntent) {
+    guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
+      stopConfirmSnapshot == nil else { return }
+    guard let proofID = sensingCoordinator.currentProofID,
+      proofStore.proof(withId: proofID) != nil
+    else {
+      resetAndDismissScan(intent: intent)
+      return
+    }
+    let event: EventSession
+    switch sensingCoordinator.phase {
+    case .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+      event = currentEvent
+    case .idle, .sensing, .eventFound:
+      resetAndDismissScan(intent: intent)
+      return
+    }
+    stopConfirmSnapshot = SensingStopConfirmSnapshot(
+      proofID: proofID,
+      event: event
+    )
+    pendingStopIntent = intent
+    scanPresented = true
+  }
+
+  func keepSensing() {
+    stopConfirmSnapshot = nil
+    pendingStopIntent = nil
+  }
+
+  /// The single confirmed finalization entry for Scan CLOSE and Home Stop.
+  /// Clear the pending confirmation before ending the session so a repeated
+  /// tap cannot finalize again. Scan keeps automatic transport; Home stops it.
+  /// A nil return keeps the Proof but dismisses without a sealed claim.
+  func confirmStopSensing() {
+    guard let snapshot = stopConfirmSnapshot, let proofID = snapshot.proofID,
+      let intent = pendingStopIntent else { return }
+    stopConfirmSnapshot = nil
+    pendingStopIntent = nil
+    guard sensingCoordinator.currentProofID == proofID else {
+      // A newer session may have taken this slot while 05e was open. Keep
+      // that live session visible; only an externally reset session exits.
+      if sensingCoordinator.currentProofID == nil { scanPresented = false }
+      return
+    }
+    guard proofStore.proof(withId: proofID) != nil else {
+      // Still sensing, but the record vanished: return to the live screen
+      // without finalizing or making a sealed claim.
+      return
+    }
+    let aggregate = sensingCoordinator.sessionAggregate
+    let detectedDeviceCount = sensingCoordinator.devicesVerified
+    let firstSightingAt = sensingCoordinator.firstSightingAt
+    cancelPendingJoinAttempt()
+    sensingCoordinator.stopNearbyEventDiscovery()
+    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
+    let selfProof: SelfProofRecord?
+    switch intent {
+    case .keepAutomaticTransport:
+      selfProof = sensingCoordinator.reset()
+    case .stopAutomaticTransport:
+      selfProof = sensingCoordinator.stopSensing()
+    }
+    guard selfProof?.proofId == proofID else {
+      scanPresented = false
+      return
+    }
+    sealedSnapshot = SensingSealedSnapshot(
+      recordID: proofID,
+      event: snapshot.event,
+      aggregate: aggregate,
+      detectedDeviceCount: detectedDeviceCount,
+      firstSightingAt: firstSightingAt,
+      sealedAt: sealedAt
+    )
+  }
+
+  /// DONE advances from the sealed frame to persistent frame 07. The record
+  /// is looked up again so its fields come from the actual stored Proof.
+  func doneWithSealedRecord() {
+    guard let sealedSnapshot, let recordID = sealedSnapshot.recordID else { return }
+    guard let proof = proofStore.proof(withId: recordID) else {
+      // A record removed since finalization cannot support frame 07's claim.
+      self.sealedSnapshot = nil
+      scanPresented = false
+      return
+    }
+    proofCollectedSnapshot = ProofCollectedSnapshot(
+      proof: proof,
+      detectedPeerCount: sealedSnapshot.detectedDeviceCount,
+      observedWindowCount: sealedSnapshot.aggregate.map { Int($0.windowCount) }
+    )
+    self.sealedSnapshot = nil
+  }
+
+  func viewCollectionAfterProofCollected() {
+    guard proofCollectedSnapshot != nil else { return }
+    proofCollectedSnapshot = nil
+    scanPresented = false
   }
 
   // MARK: - Item detail
 
   func openProof(_ proof: Proof) {
+    #if DEBUG
+    proofDetailScreenshotPresentation = nil
+    #endif
     selectedProof = proof
   }
 }

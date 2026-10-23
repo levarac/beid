@@ -279,6 +279,49 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
     XCTAssertNil(coordinator.sensingCoordinator.joinedCanonicalEventIdHex)
   }
 
+  /// PR #716 review (Codex, P2): Home's 04b sheet presents through
+  /// `$coordinator.homeEventCodeSheetPresented`, so swipe-to-dismiss writes
+  /// `false` to that property and runs no other code. This test performs
+  /// exactly that write -- not the toolbar Cancel button's explicit
+  /// `cancelPendingAccountSheetJoinAttempt()` -- so it stays RED for as long
+  /// as dismissing the sheet leaves a suspended lookup free to join.
+  func testDismissingHomeEventCodeSheetWhileSuspendedSupersedesTheInFlightAttempt() async throws {
+    let coordinator = AppCoordinator(registryClient: nil)
+    let relay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
+    coordinator.homeEventCodeSheetPresented = true
+
+    async let outcome = coordinator.joinEventFromHomeResolvingCanonicalId(code: "abandoned")
+    await relay.waitUntilSuspended()
+    coordinator.homeEventCodeSheetPresented = false
+    await relay.resume(returning: "0x" + String(repeating: "aa", count: 32))
+
+    let resolvedOutcome = await outcome
+    XCTAssertEqual(resolvedOutcome, .superseded)
+    XCTAssertNil(coordinator.sensingCoordinator.joinedCanonicalEventIdHex)
+  }
+
+  /// Vacuity guard for the test above: with the sheet left open, the same
+  /// suspended Home attempt runs to completion, so `.superseded` there is
+  /// caused by the dismissal and not by this setup.
+  func testHomeEventCodeSheetAttemptCompletesWhenTheSheetStaysOpen() async throws {
+    let coordinator = AppCoordinator(registryClient: nil)
+    let relay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
+    coordinator.homeEventCodeSheetPresented = true
+
+    async let outcome = coordinator.joinEventFromHomeResolvingCanonicalId(code: "kept")
+    await relay.waitUntilSuspended()
+    await relay.resume(returning: "0x" + String(repeating: "aa", count: 32))
+
+    let resolvedOutcome = await outcome
+    XCTAssertNotEqual(resolvedOutcome, .superseded)
+  }
+
   private func makeCoordinator(
     eventCodeLookupUrlTemplate: String?,
     joinDiagnosticLog: @escaping (String) -> Void = { _ in }

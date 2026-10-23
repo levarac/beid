@@ -22,6 +22,17 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>beid Lab uses Bluetooth for the device harness.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>BricolageGrotesque-Display60ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display52ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display46ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display40ExtraBold.ttf</string>
+		<string>BricolageGrotesque-Display34ExtraBold.ttf</string>
+		<string>DMSans-Bold.ttf</string>
+		<string>DMSans-Regular.ttf</string>
+		<string>DMMono-Medium.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

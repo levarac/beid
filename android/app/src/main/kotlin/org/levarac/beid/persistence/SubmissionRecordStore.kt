@@ -20,6 +20,10 @@ import kotlinx.serialization.json.put
  * (`UnsentWindowLedgerStore`) — this store never duplicates that state.
  */
 internal class SubmissionRecordStore(file: File) {
+    internal var serialization: StoreWriteSerialization
+        get() = store.serialization
+        set(value) { store.serialization = value }
+
     private val store = JsonRecordFileStore(
         file = file,
         schemaVersion = SCHEMA_VERSION,
