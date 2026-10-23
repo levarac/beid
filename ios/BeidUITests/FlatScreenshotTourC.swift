@@ -25,16 +25,16 @@ final class FlatScreenshotTourC: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-clock-preflight-fixture"]
     app.launch()
     let getStarted = app.buttons["Get Started"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+    getStarted.assertHittable()
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
+    allowBluetooth.assertHittable()
     allowBluetooth.tap()
     let senseEvent = app.buttons["home.scan"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 10))
+    senseEvent.assertHittable()
     senseEvent.tap()
 
-    XCTAssertTrue(app.staticTexts["Couldn't check this device's clock"].waitForExistence(timeout: 10))
+    app.staticTexts["Couldn't check this device's clock"].assertExists()
     XCTAssertTrue(app.buttons["scan.clock-preflight.retry"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["scan.cant-join"].exists)
 
@@ -51,10 +51,9 @@ final class FlatScreenshotTourC: XCTestCase {
   func testShot_11_ObservationDetail() {
     let app = launchObservationFixture()
     let row = app.buttons["event-detail.observation.1"]
-    XCTAssertTrue(row.waitForExistence(timeout: 5))
-    if !row.isHittable { app.swipeUp() }
+    row.scrollToHittable(in: app)
     row.tap()
-    XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
+    app.staticTexts["observation-detail.title"].assertHittable()
     XCTAssertTrue(app.staticTexts["PEERS PER OBSERVED WINDOW"].exists)
     XCTAssertTrue(app.staticTexts["23"].exists)
     XCTAssertTrue(app.staticTexts["6"].exists)
@@ -71,10 +70,9 @@ final class FlatScreenshotTourC: XCTestCase {
   func testObservationDetailWithMissingSnapshotShowsOneUnavailableState() {
     let app = launchObservationFixture()
     let row = app.buttons["event-detail.observation.3"]
-    XCTAssertTrue(row.waitForExistence(timeout: 5))
-    if !row.isHittable { app.swipeUp() }
+    row.scrollToHittable(in: app)
     row.tap()
-    XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
+    app.staticTexts["observation-detail.title"].assertHittable()
     XCTAssertTrue(app.staticTexts["observation-detail.unavailable"].exists)
     XCTAssertFalse(app.staticTexts["PEERS PER OBSERVED WINDOW"].exists)
     XCTAssertFalse(app.staticTexts["PEERS OBSERVED"].exists)
@@ -90,24 +88,23 @@ final class FlatScreenshotTourC: XCTestCase {
     openReportDetail(app)
 
     let session = app.descendants(matching: .any)["report-detail.session"]
-    for _ in 0..<5 where !session.isHittable { app.swipeUp() }
-    XCTAssertTrue(session.waitForExistence(timeout: 5))
+    session.scrollToHittable(in: app)
     XCTAssertTrue(session.label.contains("Session 1"), session.label)
     // Not a link: 11 opens 12, so a 12 → 11 link would cycle without end.
     XCTAssertFalse(app.buttons["report-detail.session"].exists)
 
     XCTAssertTrue(app.staticTexts["SESSION PROOF"].exists)
     let proofRow = app.buttons["report-detail.session-proof"]
-    for _ in 0..<5 where !proofRow.isHittable { app.swipeUp() }
-    XCTAssertTrue(proofRow.waitForExistence(timeout: 5))
+    proofRow.scrollToHittable(in: app)
     XCTAssertTrue(proofRow.label.contains("Session 1 proof"), proofRow.label)
     XCTAssertFalse(app.descendants(matching: .any).matching(
       NSPredicate(format: "label CONTAINS[c] %@", "verif")
     ).firstMatch.exists)
     attachScreenshot("12-linked")
 
+    proofRow.assertHittable()
     proofRow.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    app.staticTexts["proof.detail.title"].assertHittable()
     assertFromReportsListsTheLinkedReport(app)
   }
 
@@ -115,15 +112,15 @@ final class FlatScreenshotTourC: XCTestCase {
     let app = launchEventDetailFixture(extraArguments: ["-beid-report-links-701"])
     openSession(1, in: app)
     let included = app.staticTexts["INCLUDED IN REPORTS"]
-    for _ in 0..<5 where !included.isHittable { app.swipeUp() }
-    XCTAssertTrue(included.waitForExistence(timeout: 5))
+    included.scrollToHittable(in: app)
     let report = app.buttons["observation-detail.report.\(Self.linkedReportID)"]
     XCTAssertTrue(report.exists)
     XCTAssertTrue(report.label.contains("Report #1"), report.label)
     attachScreenshot("11-linked")
 
+    app.navigationBars.buttons.element(boundBy: 0).assertHittable()
     app.navigationBars.buttons.element(boundBy: 0).tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    app.staticTexts["event-detail.heading"].assertHittable()
     openSession(2, in: app)
     for _ in 0..<3 { app.swipeUp() }
     XCTAssertFalse(app.staticTexts["INCLUDED IN REPORTS"].exists)
@@ -133,10 +130,9 @@ final class FlatScreenshotTourC: XCTestCase {
   func testLinkedProofDetailFromEventDetailListsItsReport() {
     let app = launchEventDetailFixture(extraArguments: ["-beid-report-links-701"])
     let proof = app.buttons["event-detail.proof.1"]
-    for _ in 0..<5 where !proof.isHittable { app.swipeUp() }
-    XCTAssertTrue(proof.waitForExistence(timeout: 5))
+    proof.scrollToHittable(in: app)
     proof.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    app.staticTexts["proof.detail.title"].assertHittable()
     assertFromReportsListsTheLinkedReport(app)
     attachScreenshot("09-linked")
   }
@@ -152,12 +148,12 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertFalse(app.staticTexts["SESSION PROOF"].exists)
     XCTAssertFalse(app.buttons["report-detail.session-proof"].exists)
 
+    app.navigationBars.buttons.element(boundBy: 0).assertHittable()
     app.navigationBars.buttons.element(boundBy: 0).tap()
     let proof = app.buttons["event-detail.proof.1"]
-    for _ in 0..<5 where !proof.isHittable { app.swipeUp() }
-    XCTAssertTrue(proof.waitForExistence(timeout: 5))
+    proof.scrollToHittable(in: app)
     proof.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
+    app.staticTexts["proof.detail.title"].assertHittable()
     for _ in 0..<3 { app.swipeUp() }
     XCTAssertFalse(app.staticTexts["FROM REPORTS"].exists)
   }
@@ -168,8 +164,7 @@ final class FlatScreenshotTourC: XCTestCase {
     line: UInt = #line
   ) {
     let heading = app.staticTexts["FROM REPORTS"]
-    for _ in 0..<5 where !heading.isHittable { app.swipeUp() }
-    XCTAssertTrue(heading.waitForExistence(timeout: 5), file: file, line: line)
+    heading.scrollToHittable(in: app, file: file, line: line)
     let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
     XCTAssertTrue(report.exists, file: file, line: line)
     XCTAssertTrue(report.label.contains("Report #1"), report.label, file: file, line: line)
@@ -177,21 +172,19 @@ final class FlatScreenshotTourC: XCTestCase {
 
   private func openReportDetail(_ app: XCUIApplication) {
     let report = app.buttons["event-detail.report.\(Self.linkedReportID)"]
-    for _ in 0..<5 where !report.isHittable { app.swipeUp() }
-    XCTAssertTrue(report.waitForExistence(timeout: 5))
+    report.scrollToHittable(in: app)
     report.tap()
     let heading = app.staticTexts["report-detail.heading"]
-    XCTAssertTrue(heading.waitForExistence(timeout: 5))
+    heading.assertHittable()
     XCTAssertEqual(heading.label, "Report #1")
   }
 
   private func openSession(_ number: Int, in app: XCUIApplication) {
     let row = app.buttons["event-detail.observation.\(number)"]
-    XCTAssertTrue(row.waitForExistence(timeout: 5))
-    if !row.isHittable { app.swipeUp() }
+    row.scrollToHittable(in: app)
     row.tap()
     let title = app.staticTexts["observation-detail.title"]
-    XCTAssertTrue(title.waitForExistence(timeout: 5))
+    title.assertHittable()
     XCTAssertEqual(title.label, "Session \(number)")
   }
 
@@ -208,16 +201,16 @@ final class FlatScreenshotTourC: XCTestCase {
     app.launchArguments = arguments
     app.launch()
     let getStarted = app.buttons["Get Started"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
+    getStarted.assertHittable()
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10))
+    allowBluetooth.assertHittable()
     allowBluetooth.tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 10))
+    app.buttons["home.scan"].assertExists()
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
-    XCTAssertTrue(event.waitForExistence(timeout: 10))
+    event.assertHittable()
     event.tap()
-    XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
+    app.staticTexts["event-detail.heading"].assertHittable()
     return app
   }
 
@@ -234,18 +227,18 @@ final class FlatScreenshotTourC: XCTestCase {
     app.launch()
 
     let getStarted = app.buttons["Get Started"]
-    XCTAssertTrue(getStarted.waitForExistence(timeout: 10), file: file, line: line)
+    getStarted.assertHittable(file: file, line: line)
     getStarted.tap()
 
     let allowBluetooth = app.buttons["Allow Bluetooth"]
-    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 10), file: file, line: line)
+    allowBluetooth.assertHittable(file: file, line: line)
     allowBluetooth.tap()
 
     let senseEvent = app.buttons["home.scan"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 10), file: file, line: line)
+    senseEvent.assertHittable(file: file, line: line)
     senseEvent.tap()
 
-    XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].waitForExistence(timeout: 10), file: file, line: line)
+    app.staticTexts["ETH Tokyo 2026"].assertExists(file: file, line: line)
     if code == "07" {
       XCTAssertTrue(app.buttons["View collection"].exists, file: file, line: line)
       let recordID = app.staticTexts["proof-collected.record-id"]
