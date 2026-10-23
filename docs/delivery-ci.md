@@ -67,14 +67,34 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Thus every PR creates the `iOS simulator` context for branch protection.
     A `Classify paths for iOS lane` job runs the same collection step and
     `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
-    job-level `if:` and runs when the classifier reports `android`, `lint` or
-    `error` (Android changes can affect the shared KMP build). A
-    documentation-only PR therefore reports `iOS simulator` as skipped, which
-    GitHub treats as passing for a required check, and a failed classification
-    job runs the lane. The lane uses `!cancelled()` rather than `always()` so a
-    superseded run does not start a macOS job. Main pushes retain their
-    iOS/build-input path filter and always run the lane, and
-    `workflow_dispatch` supports deliberate verification and is never skipped.
+    job-level `if:` driven by an independent `ios` output. Documentation-only
+    and Android-app-only PRs report `iOS simulator` as skipped, which GitHub
+    treats as passing for a required check. The only non-documentation
+    exclusions are `android/app/**` and the standalone `tools/beid-lab-cli/**`.
+    `android/settings.gradle.kts` includes only `:app` and `:shared`, with the
+    latter mapped to `../shared`; `shared/build.gradle.kts` has no dependency
+    on `:app`. `ios/project.yml` invokes only the shared Swift Export task,
+    while `android/app/build.gradle.kts` depends on shared in the other
+    direction. Gradle may configure app, but the iOS task does not compile it.
+    There are no other Android-only modules or version catalogs today.
+    New Android modules and catalogs are unclassified and run iOS.
+
+    iOS-affecting inputs include `ios/**`, `shared/**`,
+    `android/build.gradle.kts`, `android/settings.gradle.kts`,
+    `android/gradle.properties`, `android/gradlew`, `android/gradle/wrapper/**`,
+    and any version catalog (including `android/gradle/libs.versions.toml`).
+    Workflow and script changes run conservatively, including the iOS workflow,
+    classifier, JDK resolver, XcodeGen downloader/generation guard and simulator
+    helper. Documentation retains the shared classifier's existing definition
+    (`docs/**`, `.md`, `.mdx`, after force-all build-input rules).
+    Unknown or malformed paths, empty lists, renames, deletions, missing or
+    unrecognized API file metadata, truncated comparisons and API errors run
+    iOS. Rename/deletion metadata affects only iOS; lab CLI selection is
+    unchanged. Failed classification or a missing iOS output also runs iOS.
+    The lane uses `!cancelled()` so a superseded run does not start a macOS job.
+    Main pushes retain their iOS/build-input path filter (including catalogs,
+    classifier and generation guard) and always run the lane; manual dispatch
+    always runs it.
     The two classification jobs have their own names, distinct from
     `Determine changed paths`, because required contexts are keyed by job name;
     do not add them to the required list.
@@ -96,8 +116,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Xcode 26.5. It is not a PR status check or a signing/delivery lane.
 
   - **Xcode Cloud** — keep `PR Build & Test` paused. Hosted iOS now performs
-    the build plus unit/UI test role on every PR head except documentation-only
-    ones, without signing secrets;
+    the build plus unit/UI test role on every iOS-affecting PR head,
+    without signing secrets;
     the old ASC file exclusions no longer determine whether hosted evidence
     is required. This does not replace trusted Internal/Release delivery,
     signing or real-device BLE tests. ASC workflow settings are operator-owned

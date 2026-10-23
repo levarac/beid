@@ -360,13 +360,14 @@ the same name shadows them.
   The `iOS simulator` job is created on every PR open, push (`synchronize`),
   reopen, and ready-for-review event, including drafts, with no workflow-level
   PR path exclusions. It runs on every PR except one whose changed files are
-  all documentation (under `docs/` or ending in `.md`/`.mdx`, as
-  `scripts/ci_change_filter.py` defines it), which reports it as skipped; a
-  failed classification runs it. It checks out the PR head explicitly and
+  documentation or verified independent inputs (`android/app/**` and the
+  standalone `tools/beid-lab-cli/**`, as `scripts/ci_change_filter.py` defines
+  it), which reports it as skipped. Renames, deletions and unsafe metadata run
+  it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
   builds/runs both `BeidTests` and `BeidUITests` on a clean owned simulator.
   A missing, cancelled or pre-start failed run is not passing evidence, and a
-  skipped run is evidence only for a documentation-only PR whose classification
-  job succeeded. Xcode Cloud `PR Build & Test`
+  skipped run is evidence only for a PR whose successful classification job
+  found no iOS-affecting changes. Xcode Cloud `PR Build & Test`
   stays paused; its former file exclusions do not apply to this hosted gate.
   Xcode Cloud Internal/Release delivery is a separate concern. Required status
   checks remain operator-managed repository settings; workflow code alone
@@ -448,9 +449,20 @@ including drafts, with `opened`, `synchronize`, `reopened`, and
 contexts are always created. Each workflow has its own small classification
 job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that
 runs the same collection step and `scripts/ci_change_filter.py` as Determine
-changed paths. Both lanes are skipped, and report as skipped, on a
-documentation-only PR. The iOS lane runs when the classifier reports android,
-lint or error; the lab CLI lane runs when it reports labcli, lint or error;
+changed paths. Both lanes report as skipped on a documentation-only PR. The iOS lane uses
+its independent ios output and also skips Android-app-only changes. Only
+`android/app/**` and standalone `tools/beid-lab-cli/**` are excluded beyond
+documentation. `android/settings.gradle.kts` includes only app and shared;
+`shared/build.gradle.kts` has no app dependency, and `ios/project.yml` invokes
+only the shared Swift Export task. App depends on shared, not the reverse;
+Gradle configuration of app does not compile app in the iOS task graph.
+All iOS/shared code, shared Gradle configuration and wrapper, version catalogs,
+workflow/script changes (including the classifier, JDK resolver, XcodeGen
+downloader/generation guard and simulator helper), and unknown paths run iOS.
+There are no version catalogs or additional Android modules today; future
+catalogs/modules run conservatively. Renames, deletions, malformed/missing API
+metadata, empty/truncated lists and API errors run iOS. A missing ios output
+also runs it. Lab CLI selection is unchanged: labcli, lint or error runs it;
 a failed classification runs both. Main pushes and manual dispatch always run
 both lanes.
 All PR build checkouts use the explicit PR head SHA.
