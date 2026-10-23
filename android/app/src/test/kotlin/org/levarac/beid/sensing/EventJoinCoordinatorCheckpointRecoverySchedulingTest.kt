@@ -26,6 +26,54 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointRecoverySchedulingTest {
     @Test
+    fun signingLeavesSessionLockFreeAndConcurrentFinalizationKeepsOneSelfProof() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-sign-commit-race").toFile()
+        seedCheckpoint(directory)
+        val store = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+        val checkpoint = store.load(store.proofIds().single())!!
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val crypto = object : FakeSensingCryptography() {
+            override fun signSelfProof(
+                eventIdHash: ByteArray, eventSigningPublicKey: ByteArray, eninStart: Long, eninEnd: Long,
+            ): SensingRecoverableSignature? {
+                entered.countDown()
+                check(release.await(30, TimeUnit.SECONDS))
+                return super.signSelfProof(eventIdHash, eventSigningPublicKey, eninStart, eninEnd)
+            }
+        }
+        val recovered = coordinator(directory, cryptography = crypto)
+        val concurrent = coordinator(directory)
+        val worker = Executors.newSingleThreadExecutor()
+        val boundary = Executors.newSingleThreadExecutor()
+        try {
+            recovered.drainPendingSubmissionsOnForeground()
+            val recovery = worker.submit { testScheduler.runCurrent() }
+            assertTrue(entered.await(30, TimeUnit.SECONDS))
+            boundary.submit { recovered.checkpointSerialization.serialized { } }.get(2, TimeUnit.SECONDS)
+            // Finalize the exact same retained proof after the first sign started,
+            // before its commit; production recovery uses this same entry point.
+            val finalize = EventJoinCoordinator::class.java.getDeclaredMethod(
+                "finalizeSessionCheckpoint", SessionCheckpoint::class.java, Boolean::class.javaPrimitiveType)
+            finalize.isAccessible = true
+            finalize.invoke(concurrent, checkpoint, true)
+            val winner = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single()
+            release.countDown()
+            recovery.get(30, TimeUnit.SECONDS)
+            assertEquals(listOf(winner), SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records)
+            assertTrue(store.proofIds().isEmpty())
+        } finally {
+            release.countDown()
+            worker.shutdown()
+            worker.awaitTermination(30, TimeUnit.SECONDS)
+            boundary.shutdown()
+            boundary.awaitTermination(30, TimeUnit.SECONDS)
+            recovered.dispose()
+            concurrent.dispose()
+        }
+    }
+
+    @Test
     fun draftPersistCompletesWhileRecoveryIsSigning() = runTest {
         val directory = Files.createTempDirectory("draft-during-signing").toFile()
         seedCheckpoint(directory)
@@ -123,7 +171,7 @@ class EventJoinCoordinatorCheckpointRecoverySchedulingTest {
     }
 
     @Test
-    fun recoveryWaitsForCheckpointIoAndFinalizationWaitsForRecovery() = runTest {
+    fun recoveryWaitsForCheckpointIoButFinalizationDoesNotWaitForSigning() = runTest {
         val directory = Files.createTempDirectory("checkpoint-recovery-serialization").toFile()
         seedCheckpoint(directory)
         val callingThread = Thread.currentThread()
@@ -178,8 +226,8 @@ class EventJoinCoordinatorCheckpointRecoverySchedulingTest {
                 live.leaveEvent()
             }
             assertTrue(finalizationStarted.await(30, TimeUnit.SECONDS))
-            assertFalse(finalize.isDone, "finalization must wait for recovery's store/signing transaction")
-            assertEquals(listOf(3), counts.toList())
+            finalize.get(5, TimeUnit.SECONDS)
+            assertEquals(listOf(3, 4), counts.toList())
             releaseRecovery.countDown()
             writes.get(30, TimeUnit.SECONDS)
             finalize.get(30, TimeUnit.SECONDS)
@@ -292,19 +340,9 @@ class EventJoinCoordinatorCheckpointRecoverySchedulingTest {
                 if (finalize) live.leaveEvent() else live.checkpointSession()
             }
             assertTrue(boundaryStarted.await(30, TimeUnit.SECONDS))
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-            while (boundaryThread.get().state !in setOf(Thread.State.BLOCKED, Thread.State.WAITING) &&
-                System.nanoTime() < deadline) Thread.yield()
-            assertTrue(boundaryThread.get().state in setOf(Thread.State.BLOCKED, Thread.State.WAITING),
-                "the boundary must be waiting before the first signature is released")
-            assertFalse(flush.isDone)
+            flush.get(5, TimeUnit.SECONDS)
+            assertTrue(completed.filter { it < 9L }.isEmpty(), "boundary must finish while recovery is still signing")
             releaseFirstSign.countDown()
-            try {
-                flush.get(5, TimeUnit.SECONDS)
-            } catch (error: java.util.concurrent.TimeoutException) {
-                throw AssertionError("the boundary must finish after one recovered checkpoint, before later signatures", error)
-            }
-            assertEquals(listOf(1L), completed.filter { it < 9L })
             releaseLaterSigns.countDown()
             recovery.get(30, TimeUnit.SECONDS)
             live.leaveEvent()
