@@ -98,11 +98,7 @@ internal class SessionCheckpointWriter(
 
     private fun write(snapshot: () -> SessionCheckpoint): SessionCheckpoint {
         val checkpoint = snapshot()
-        try {
-            persist(checkpoint)
-        } catch (error: Exception) {
-            onFailure(error)
-        }
+        persist(checkpoint)
         return checkpoint
     }
 

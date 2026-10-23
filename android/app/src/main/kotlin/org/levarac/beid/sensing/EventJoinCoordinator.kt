@@ -35,7 +35,6 @@ import org.levarac.parallax.discovery.operatorLookupJoinEligibility
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
-import org.levarac.beid.persistence.ConflictingSessionAggregateSnapshotException
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
@@ -1072,7 +1071,14 @@ class EventJoinCoordinator internal constructor(
                 finalizeSessionCheckpoint(snapshot())
             } else {
                 // Recovery cannot interleave between the flush and final-artifact writes.
-                writer.serialized { finalizeSessionCheckpoint(writer.flush(snapshot)) }
+                writer.serialized {
+                    try {
+                        writer.flush(snapshot)
+                    } catch (error: Exception) {
+                        logSessionCheckpointFailure("write", error)
+                    }
+                    finalizeSessionCheckpoint(sessionCheckpointStore!!.load(activeProofId!!) ?: snapshot())
+                }
             }
         } catch (error: Exception) {
             logSessionCheckpointFailure("finalize", error)
@@ -1083,7 +1089,11 @@ class EventJoinCoordinator internal constructor(
     /** Saves evidence only: no window close, signature, phase change, or radio effect. */
     internal fun checkpointSession() {
         if (disposed) return
-        sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::flush) }
+        try {
+            sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::flush) }
+        } catch (error: Exception) {
+            logSessionCheckpointFailure("write", error)
+        }
     }
 
     private fun currentSessionCheckpoint(): (() -> SessionCheckpoint)? {
@@ -1097,6 +1107,8 @@ class EventJoinCoordinator internal constructor(
         }
     }
 
+    // The signed range may under-claim back to the last durable checkpoint; it is
+    // never inverted, never over-claimed, and never cuts short a live session.
     private fun finalizeSessionCheckpoint(checkpoint: SessionCheckpoint): SelfProofRecord? {
         check(!selfProofRecordStore.isPersistenceSuspended) { "self_proof_persistence_suspended" }
         val proofId = checkpoint.proofId
@@ -1106,16 +1118,6 @@ class EventJoinCoordinator internal constructor(
                 // A stale recovery input must not replace an authoritative aggregate.
                 snapshots.persist(proofId, checkpoint.aggregate)
             }
-        }
-        if (aggregatePersistence.exceptionOrNull() is ConflictingSessionAggregateSnapshotException) {
-            // The final aggregate is authoritative even if its signature was unavailable
-            // and the latest checkpoint write failed. Never sign the older recovery input.
-            val existing = selfProofRecordStore.recordForProofId(proofId)
-            if (existing != null) {
-                onProofSignatureStateChanged?.invoke(proofId, true, bindingRecordStore.recordForProofId(proofId) != null)
-            }
-            sessionCheckpointStore?.clear(proofId)
-            return existing
         }
         val record = selfProofRecordStore.recordForProofId(proofId) ?: run {
             val eventIdHash = EventIdHash.compute(checkpoint.eventCode)
