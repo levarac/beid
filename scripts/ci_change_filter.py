@@ -64,7 +64,7 @@ def _is_force_all(path: str) -> bool:
     )
 
 
-def classify(files: Iterable[str]) -> dict[str, bool]:
+def _classify_product_lanes(files: Iterable[str]) -> dict[str, bool]:
     paths = sorted({path[2:] if path.startswith("./") else path for path in files if path})
     if not paths:
         return {"android": True, "lint": True, "labcli": True, "sanity": True, "error": True}
@@ -98,6 +98,32 @@ def classify(files: Iterable[str]) -> dict[str, bool]:
     return {"android": android, "lint": lint, "labcli": labcli, "sanity": True, "error": False}
 
 
+def classify(files: Iterable[str]) -> dict[str, bool]:
+    paths = list(files)
+    result = _classify_product_lanes(paths)
+    # Only proven independent inputs may skip iOS. settings.gradle.kts includes
+    # :app and :shared; shared has no project dependency on :app, and Xcode
+    # invokes only :shared:embedSwiftExportForXcode. No other Android module or
+    # build input is exempt. A future version catalog therefore runs iOS too.
+    result["ios"] = not paths or any(_affects_ios(path) for path in paths)
+    return result
+
+
+def _affects_ios(path: str) -> bool:
+    normalized = path[2:] if path.startswith("./") else path
+    if (not normalized or normalized.startswith("/")
+            or any(part in {"", ".", ".."} for part in normalized.split("/"))
+            or any(ord(char) < 32 for char in normalized)):
+        return True
+    if normalized.startswith("android/app/"):
+        return False
+    if _is_force_all(normalized):
+        return True
+    if _is_documentation(normalized) or _is_lab_cli(normalized):
+        return False
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=pathlib.Path)
@@ -109,9 +135,11 @@ def main() -> int:
         if not isinstance(files, list) or not all(isinstance(path, str) for path in files):
             raise ValueError("files must be a list of strings")
         result = classify(files)
+        if payload.get("ios_force_run", False) is not False:
+            result["ios"] = True
     except Exception as error:  # fail closed if the detector input is unavailable/corrupt
         print(f"warning: CI change classification failed: {error}", file=sys.stderr)
-        result = {"android": True, "lint": True, "sanity": True, "error": True}
+        result = {"android": True, "lint": True, "labcli": True, "ios": True, "sanity": True, "error": True}
 
     for key, value in result.items():
         print(f"{key}={str(value).lower()}")

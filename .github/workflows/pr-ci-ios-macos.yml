@@ -20,6 +20,9 @@ on:
       - "android/gradle.properties"
       - "android/gradlew"
       - "android/gradle/wrapper/**"
+      - "android/gradle/*.toml"
+      - "scripts/ci_change_filter.py"
+      - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
@@ -50,8 +53,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      android: ${{ steps.classify.outputs.android }}
-      lint: ${{ steps.classify.outputs.lint }}
+      ios: ${{ steps.classify.outputs.ios }}
       error: ${{ steps.classify.outputs.error }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -81,19 +83,26 @@ jobs:
                 throw new Error(`unsupported or unbounded event: ${context.eventName}`);
               }
               let listed = 0;
+              let iosForceRun = false;
               const files = await github.paginate(
                 github.rest.repos.compareCommitsWithBasehead,
                 { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
                 response => {
                   const page = response.data.files || [];
                   listed += page.length;
+                  // Renames, deletions and incomplete metadata are never safe
+                  // evidence for skipping iOS, even inside excluded directories.
+                  iosForceRun ||= !Array.isArray(response.data.files) || page.some(file =>
+                    !['added', 'modified'].includes(file.status) ||
+                    typeof file.filename !== 'string' || !file.filename ||
+                    Boolean(file.previous_filename));
                   return page.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
                 },
               );
               if (listed >= FILE_LIMIT) {
                 throw new Error(`file list may be truncated at ${FILE_LIMIT} files (${listed} listed)`);
               }
-              fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
+              fs.writeFileSync(outputPath, JSON.stringify(iosForceRun ? { files, ios_force_run: true } : { files }), 'utf8');
             } catch (error) {
               core.warning(`changed-path collection failed; all checks will run: ${error.message}`);
               fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
@@ -108,11 +117,10 @@ jobs:
     name: iOS simulator
     needs: changes
     # Still created on every PR head so the required context reports; a
-    # documentation-only PR reports it as skipped. Fail closed: a failed
-    # classification, or anything that can affect the shared KMP build
-    # (android, lint, error), runs the lane. `!cancelled()` rather than
-    # `always()` so a superseded run does not start a 25 minute macOS job.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.android == 'true' || needs.changes.outputs.lint == 'true' || needs.changes.outputs.error == 'true') }}
+    # docs-only or Android-app-only PR reports it as skipped. Fail closed:
+    # unsafe diff metadata, unknown paths, or failed/missing classification
+    # runs the lane. `!cancelled()` avoids starting a superseded macOS job.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26

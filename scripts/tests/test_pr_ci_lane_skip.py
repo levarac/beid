@@ -214,6 +214,25 @@ class FailClosedTest(unittest.TestCase):
             with self.subTest(lane=lane):
                 self.assertTrue(lane_runs(lane, outputs=outputs))
 
+    def test_unsafe_metadata_overrides_an_android_app_skip_through_the_cli(self):
+        for marker in (True, None, "false"):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as folder:
+                source = Path(folder) / "files.json"
+                source.write_text(json.dumps({"files": ANDROID_ONLY, "ios_force_run": marker}))
+                result = subprocess.run(
+                    [sys.executable, "scripts/ci_change_filter.py", "--input", str(source)],
+                    cwd=ROOT, capture_output=True, text=True, check=True,
+                )
+                outputs = dict(line.split("=", 1) for line in result.stdout.splitlines())
+                self.assertTrue(lane_runs("ios", outputs=outputs))
+
+    def test_malformed_paths_and_missing_ios_output_run_ios(self):
+        for path in ("", "/android/app/Foo.kt", "android/app/../settings.gradle.kts",
+                     "android/app//Foo.kt", "android/app/Foo\n.kt"):
+            with self.subTest(path=path):
+                self.assertTrue(lane_runs("ios", files=[path]))
+        self.assertTrue(lane_runs("ios", outputs={"error": "false"}))
+
     def test_empty_file_list_runs_both_lanes(self):
         for lane in LANES:
             with self.subTest(lane=lane):

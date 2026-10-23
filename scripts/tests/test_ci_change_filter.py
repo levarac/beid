@@ -7,7 +7,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_docs_only_skips_expensive_lanes_but_keeps_sanity(self):
         self.assertEqual(
             classify(["README.md", "docs/ci.md"]),
-            {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False, "ios": False},
         )
 
     def test_android_change_runs_android_only(self):
@@ -31,7 +31,7 @@ class CIChangeFilterTests(unittest.TestCase):
             result = classify([path])
             self.assertEqual(
                 result,
-                {"android": True, "lint": True, "labcli": True, "sanity": True, "error": False},
+                {"android": True, "lint": True, "labcli": True, "sanity": True, "error": False, "ios": True},
             )
 
     def test_mixed_paths_are_union_of_relevant_lanes(self):
@@ -48,7 +48,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_missing_or_empty_input_fails_closed(self):
         self.assertEqual(
             classify([]),
-            {"android": True, "lint": True, "labcli": True, "sanity": True, "error": True},
+            {"android": True, "lint": True, "labcli": True, "sanity": True, "error": True, "ios": True},
         )
 
 
@@ -58,7 +58,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_lab_cli_change_runs_only_its_own_job(self):
         self.assertEqual(
             classify(["tools/beid-lab-cli/Sources/BeidLabCliCore/LabLine.swift"]),
-            {"android": False, "lint": False, "labcli": True, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": True, "sanity": True, "error": False, "ios": False},
         )
 
     def test_lab_cli_package_resolved_does_not_force_every_lane(self):
@@ -69,7 +69,7 @@ class CIChangeFilterTests(unittest.TestCase):
         # would run the Android build.
         self.assertEqual(
             classify(["tools/beid-lab-cli/Package.resolved"]),
-            {"android": False, "lint": False, "labcli": True, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": True, "sanity": True, "error": False, "ios": False},
         )
         # The app's own pin is unaffected by that exemption.
         self.assertEqual(classify(["ios/Package.resolved"])["android"], True)
@@ -77,7 +77,7 @@ class CIChangeFilterTests(unittest.TestCase):
     def test_lab_cli_docs_need_no_build(self):
         self.assertEqual(
             classify(["tools/beid-lab-cli/README.md"]),
-            {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False},
+            {"android": False, "lint": False, "labcli": False, "sanity": True, "error": False, "ios": False},
         )
 
     def test_a_lab_cli_change_beside_a_product_change_runs_both(self):

@@ -54,19 +54,26 @@ jobs:
                 throw new Error(`unsupported or unbounded event: ${context.eventName}`);
               }
               let listed = 0;
+              let iosForceRun = false;
               const files = await github.paginate(
                 github.rest.repos.compareCommitsWithBasehead,
                 { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
                 response => {
                   const page = response.data.files || [];
                   listed += page.length;
+                  // Renames, deletions and incomplete metadata are never safe
+                  // evidence for skipping iOS, even inside excluded directories.
+                  iosForceRun ||= !Array.isArray(response.data.files) || page.some(file =>
+                    !['added', 'modified'].includes(file.status) ||
+                    typeof file.filename !== 'string' || !file.filename ||
+                    Boolean(file.previous_filename));
                   return page.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
                 },
               );
               if (listed >= FILE_LIMIT) {
                 throw new Error(`file list may be truncated at ${FILE_LIMIT} files (${listed} listed)`);
               }
-              fs.writeFileSync(outputPath, JSON.stringify({ files }), 'utf8');
+              fs.writeFileSync(outputPath, JSON.stringify(iosForceRun ? { files, ios_force_run: true } : { files }), 'utf8');
             } catch (error) {
               core.warning(`changed-path collection failed; all checks will run: ${error.message}`);
               fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
