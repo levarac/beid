@@ -1091,7 +1091,15 @@ class EventJoinCoordinator internal constructor(
                     } catch (error: Exception) {
                         logSessionCheckpointFailure("write", error)
                     }
-                    finalizeSessionCheckpoint(sessionCheckpointStore!!.load(proofId) ?: snapshot())
+                    var checkpointReadable = true
+                    val durable = try {
+                        sessionCheckpointStore!!.load(proofId)
+                    } catch (error: Exception) {
+                        logSessionCheckpointFailure("load", error)
+                        checkpointReadable = false
+                        null
+                    }
+                    finalizeSessionCheckpoint(durable ?: snapshot(), clearCheckpoint = checkpointReadable)
                 }
             }
         } catch (error: Exception) {
@@ -1125,7 +1133,10 @@ class EventJoinCoordinator internal constructor(
 
     // The signed range may under-claim back to the last durable checkpoint; it is
     // never inverted, never over-claimed, and never cuts short a live session.
-    private fun finalizeSessionCheckpoint(checkpoint: SessionCheckpoint): SelfProofRecord? {
+    private fun finalizeSessionCheckpoint(
+        checkpoint: SessionCheckpoint,
+        clearCheckpoint: Boolean = true,
+    ): SelfProofRecord? {
         val proofId = checkpoint.proofId
         val aggregatePersistence = runCatching {
             sessionAggregateSnapshotStore?.let { snapshots ->
@@ -1157,7 +1168,8 @@ class EventJoinCoordinator internal constructor(
         // A failed aggregate write must retain the checkpoint, independently of signing.
         aggregatePersistence.getOrThrow()
         // Both final artifacts are durable before their recovery input is removed.
-        sessionCheckpointStore?.clear(proofId)
+        // A live session can finish from memory while unknown recovery bytes stay intact.
+        if (clearCheckpoint) sessionCheckpointStore?.clear(proofId)
         return record
     }
 
