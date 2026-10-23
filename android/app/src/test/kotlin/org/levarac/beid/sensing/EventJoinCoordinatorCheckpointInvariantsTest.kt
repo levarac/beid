@@ -23,6 +23,52 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointInvariantsTest {
     @Test
+    fun finalizationReplacesTheProofRecordFileOnce() = proofRecordWriteCount(missingRow = false)
+
+    @Test
+    fun recoveryOfAMissingRowReplacesTheProofRecordFileOnce() = proofRecordWriteCount(missingRow = true)
+
+    private fun proofRecordWriteCount(missingRow: Boolean) = runTest {
+        val directory = Files.createTempDirectory("checkpoint-proof-write-count").toFile()
+        val moves = java.util.concurrent.atomic.AtomicInteger()
+        val file = object : File(ProofRecordStore.defaultFile(directory).path) {
+            override fun toPath(): java.nio.file.Path {
+                moves.incrementAndGet()
+                return super.toPath()
+            }
+        }
+        val owner = SessionCheckpointRuntimeOwner()
+        val records = ProofRecordStore(file)
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val live = coordinator(directory, engine, registry, checkpointRuntimeOwner = owner)
+        wireProofRecording(live, ProofRecordingBridge(records))
+        try {
+            if (missingRow) {
+                val runtime = AggregationRuntime()
+                runtime.recordObservation(7, "peer", "device")
+                val checkpoint = org.levarac.beid.persistence.SessionCheckpoint(
+                    java.util.UUID(0, 1), "event", 7, 7, runtime.snapshotAggregate()())
+                SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory)).persist(checkpoint)
+                moves.set(0)
+                live.drainPendingSubmissionsOnForeground()
+                runCurrent()
+            } else {
+                joinPromotedVectorEvent(live, engine, registry)
+                repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
+                moves.set(0)
+                live.leaveEvent()
+            }
+            assertEquals(1, moves.get(), "signature persistence must replace the proof-record file once")
+            assertTrue(records.recordsFlow.value.single().hasSelfProof)
+            assertTrue(ProofRecordStore(ProofRecordStore.defaultFile(directory)).records.single().hasSelfProof)
+            assertTrue(SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory)).proofIds().isEmpty())
+        } finally {
+            live.dispose()
+        }
+    }
+
+    @Test
     fun overlappingRecoveryPreservesNewProofRowsAndPeerUpdates() = runTest {
         val directory = Files.createTempDirectory("checkpoint-shared-proof-rows").toFile()
         val engine = FakeEventJoinEngine()
