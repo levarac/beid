@@ -12,6 +12,10 @@ import kotlinx.serialization.json.put
 
 /** On-device JSON store for owner-key-signed self-proofs — same pattern as [BindingRecordStore]. See [SelfProofRecord]. */
 class SelfProofRecordStore(internal val file: File) {
+    internal var serialization: StoreWriteSerialization
+        get() = store.serialization
+        set(value) { store.serialization = value }
+
     private val store = JsonRecordFileStore(
         file = file,
         schemaVersion = SCHEMA_VERSION,

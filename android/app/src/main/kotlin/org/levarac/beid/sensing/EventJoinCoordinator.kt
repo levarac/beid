@@ -123,7 +123,7 @@ class EventJoinCoordinator internal constructor(
     private val registryClient: RegistryClient? = null,
     private val sensingCryptography: SensingCryptography,
     selfProofRecordStore: SelfProofRecordStore,
-    private val bindingRecordStore: BindingRecordStore,
+    bindingRecordStore: BindingRecordStore,
     private val randomSource: OwnerKeyRandomSource = SecureRandomOwnerKeySource(),
     ledgerFilesDir: File? = null,
     sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null,
@@ -146,7 +146,7 @@ class EventJoinCoordinator internal constructor(
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.NotDetermined,
     checkpointDispatcher: CoroutineDispatcher = Dispatchers.IO,
     checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
-    checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
+    private val checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -157,13 +157,17 @@ class EventJoinCoordinator internal constructor(
         selfProofRecordStore = ProcessSessionCheckpointRuntimeOwner.selfProofStore(
             SelfProofRecordStore.defaultFile(activity.filesDir),
         ),
-        bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(activity.filesDir)),
+        bindingRecordStore = ProcessSessionCheckpointRuntimeOwner.bindingStore(BindingRecordStore.defaultFile(activity.filesDir)),
         ledgerFilesDir = activity.filesDir,
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
         initialBluetoothPermissionState = currentBluetoothPermissionState(activity),
     )
 
     private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
+    private val bindingRecordStore = checkpointRuntimeOwner.bindingStore(bindingRecordStore.file, bindingRecordStore)
+    internal val checkpointSerialization = checkpointRuntimeOwner.serializationForFile(this.selfProofRecordStore.file)
+    internal fun sharedProofRecordingBridge(bridge: ProofRecordingBridge): ProofRecordingBridge =
+        bridge.shared(checkpointRuntimeOwner)
     internal val sessionAggregateSnapshotStore = sessionAggregateSnapshotStore?.let {
         checkpointRuntimeOwner.aggregateStore(it.file, it)
     } ?: ledgerFilesDir?.let {
@@ -1082,7 +1086,7 @@ class EventJoinCoordinator internal constructor(
             val snapshot = currentSessionCheckpoint() ?: return null
             val writer = sessionCheckpointWriter
             if (writer == null) {
-                finalizeSessionCheckpoint(snapshot())
+                checkpointSerialization.serialized { finalizeSessionCheckpoint(snapshot()) }
             } else {
                 // Recovery cannot interleave between the flush and final-artifact writes.
                 writer.serialized {
@@ -1302,8 +1306,10 @@ class EventJoinCoordinator internal constructor(
             walletSignatureHex = walletSignatureHex,
             deviceSignature = ackSignature,
         )
-        bindingRecordStore.add(record)
-        onProofSignatureStateChanged?.invoke(proofId, selfProofRecordStore.recordForProofId(proofId) != null, true)
+        checkpointSerialization.serialized {
+            bindingRecordStore.add(record)
+            onProofSignatureStateChanged?.invoke(proofId, selfProofRecordStore.recordForProofId(proofId) != null, true)
+        }
         bindingState = EventBindingState.Bound(record)
         pendingBindingMessage = null
         return BindingCompletionResult.Bound(record)
@@ -1476,7 +1482,9 @@ class EventJoinCoordinator internal constructor(
     }
 }
 
-private val ProcessWindowObservationRuntimeOwner = WindowObservationRuntimeOwner()
+private val ProcessWindowObservationRuntimeOwner = WindowObservationRuntimeOwner(
+    checkpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
+)
 
 /** Every live session in this process, across Activity instances. */
 internal val ProcessSessionCheckpointProofs = ConcurrentHashMap.newKeySet<UUID>()

@@ -53,7 +53,7 @@ class EventJoinCoordinatorStaleCheckpointTest {
 
         val cryptography = FakeSensingCryptography()
         val recovered = coordinator(directory, cryptography = cryptography)
-        val records = ProofRecordStore(ProofRecordStore.defaultFile(directory))
+        val records = ProcessSessionCheckpointRuntimeOwner.proofRecordStore(ProofRecordStore.defaultFile(directory))
         wireProofRecording(recovered, ProofRecordingBridge(records))
         try {
             repeat(2) {

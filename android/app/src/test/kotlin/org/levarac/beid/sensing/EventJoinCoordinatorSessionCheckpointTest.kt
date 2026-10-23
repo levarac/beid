@@ -45,7 +45,7 @@ class EventJoinCoordinatorSessionCheckpointTest {
         engine.onEvent = null
         simulateCheckpointProcessDeath(directory)
         val recovered = coordinator(directory)
-        val reloadedRecords = ProofRecordStore(ProofRecordStore.defaultFile(directory))
+        val reloadedRecords = ProcessSessionCheckpointRuntimeOwner.proofRecordStore(ProofRecordStore.defaultFile(directory))
         wireProofRecording(recovered, ProofRecordingBridge(reloadedRecords))
         recovered.drainPendingSubmissionsOnForeground()
         runCurrent()

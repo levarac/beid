@@ -8,6 +8,9 @@ import org.levarac.beid.persistence.SubmissionRecord
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.persistence.WindowObservationDraftStore
+import org.levarac.beid.persistence.SessionCheckpointStore
+import org.levarac.beid.persistence.StoreWriteSerialization
+import org.levarac.beid.persistence.DirectStoreWrites
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.eventJoinFailureReasonForRegistryErrorCode
 import org.levarac.beid.shared.report.UnsentWindowLedger
@@ -126,6 +129,7 @@ internal class WindowObservationRuntime internal constructor(
 internal class WindowObservationRuntimeOwner(
     private val newWindowId: () -> UUID = UUID::randomUUID,
     private val ledgerInstanceId: () -> String = { UUID.randomUUID().toHex() },
+    private val checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = SessionCheckpointRuntimeOwner(),
 ) {
     private var activeRuntime: WindowObservationRuntime? = null
     private var activeFilesPath: String? = null
@@ -154,15 +158,15 @@ internal class WindowObservationRuntimeOwner(
         }
         val contextState = WindowObservationContextState()
         val observationDirectory = File(filesDir, "canonical-observations-v1")
-        val submissionRecordStore = SubmissionRecordStore(SubmissionRecordStore.defaultFile(filesDir))
+        val submissionRecordStore = checkpointRuntimeOwner.submissionStore(SubmissionRecordStore.defaultFile(filesDir))
         lateinit var drain: WindowObservationSubmissionDrain
         val accumulator = WindowObservationAccumulator(
             context = { contextState.value },
             cryptography = cryptography,
-            ledgerStore = UnsentWindowLedgerStore.recoveringCorruptSnapshot(
+            ledgerStore = checkpointRuntimeOwner.ledgerStore(
                 UnsentWindowLedgerStore.defaultFile(filesDir),
-            ).store,
-            draftStore = WindowObservationDraftStore(
+            ),
+            draftStore = checkpointRuntimeOwner.draftStore(
                 WindowObservationDraftStore.defaultFile(filesDir),
             ),
             submissionRecordStore = submissionRecordStore,
@@ -170,6 +174,7 @@ internal class WindowObservationRuntimeOwner(
             nowEpochSeconds = nowEpochSeconds,
             newWindowId = newWindowId,
             ledgerInstanceId = ledgerInstanceId,
+            artifactSerialization = checkpointRuntimeOwner.serialization(SessionCheckpointStore.defaultDirectory(filesDir)),
             // The writer's own ledger writes (open/close/relaunch reconcile)
             // can coincidentally durably-confirm a submission before the
             // drain ever asks for one — see [SubmissionEmissionOrigin]'s doc.
@@ -217,6 +222,7 @@ internal class WindowObservationAccumulator(
     private val draftStore: WindowObservationDraftStore,
     private val observationDirectory: File,
     private val nowEpochSeconds: () -> Double,
+    private val artifactSerialization: StoreWriteSerialization = DirectStoreWrites,
     /**
      * Defaults to a sibling of [observationDirectory] so that every existing
      * test — one temp directory per test, ledger/draft/observations all
@@ -613,12 +619,12 @@ internal class WindowObservationAccumulator(
         return file.readBytes()
     }
 
-    private fun persistObservation(windowIdHex: String, digest: String, bytes: ByteArray) {
+    private fun persistObservation(windowIdHex: String, digest: String, bytes: ByteArray) = artifactSerialization.serialized {
         if (!observationDirectory.exists()) check(observationDirectory.mkdirs())
         val destination = observationDirectory.resolve("$windowIdHex--$digest.cose")
         if (destination.exists()) {
             check(destination.readBytes().contentEquals(bytes))
-            return
+            return@serialized
         }
         val temporary = File.createTempFile("observation-", ".tmp", observationDirectory)
         try {

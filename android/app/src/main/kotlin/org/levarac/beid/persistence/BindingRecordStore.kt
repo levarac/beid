@@ -14,7 +14,11 @@ import kotlinx.serialization.json.put
  * as iOS's `BindingRecordStore` (flat JSON, no server call, atomic write).
  * See [BindingRecord].
  */
-class BindingRecordStore(file: File) {
+class BindingRecordStore(internal val file: File) {
+    internal var serialization: StoreWriteSerialization
+        get() = store.serialization
+        set(value) { store.serialization = value }
+
     private val store = JsonRecordFileStore(
         file = file,
         schemaVersion = SCHEMA_VERSION,

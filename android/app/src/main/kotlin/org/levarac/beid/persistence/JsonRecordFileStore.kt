@@ -41,6 +41,7 @@ internal class JsonRecordFileStore<T>(
     private val toJson: (T) -> JsonObject,
     private val fromJson: (JsonObject) -> T,
 ) {
+    internal var serialization: StoreWriteSerialization = DirectStoreWrites
     private val lock = Any()
 
     var records: List<T> = emptyList()
@@ -59,9 +60,9 @@ internal class JsonRecordFileStore<T>(
         synchronized(lock) { load() }
     }
 
-    fun addRecord(record: T) {
+    fun addRecord(record: T) = serialization.serialized {
         synchronized(lock) {
-            if (isPersistenceSuspended) return
+            if (isPersistenceSuspended) return@synchronized
             val updated = records + record
             save(updated)
             records = updated
@@ -76,15 +77,15 @@ internal class JsonRecordFileStore<T>(
      * or if [isPersistenceSuspended] — saving would overwrite bytes this
      * instance never actually captured.
      */
-    fun updateRecord(predicate: (T) -> Boolean, transform: (T) -> T): Boolean {
+    fun updateRecord(predicate: (T) -> Boolean, transform: (T) -> T): Boolean = serialization.serialized {
         synchronized(lock) {
-            if (isPersistenceSuspended) return false
+            if (isPersistenceSuspended) return@synchronized false
             val index = records.indexOfFirst(predicate)
-            if (index == -1) return false
+            if (index == -1) return@synchronized false
             val updated = records.toMutableList().also { it[index] = transform(it[index]) }
             save(updated)
             records = updated
-            return true
+            true
         }
     }
 

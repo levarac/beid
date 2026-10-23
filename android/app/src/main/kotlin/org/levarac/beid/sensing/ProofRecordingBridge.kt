@@ -36,6 +36,9 @@ class ProofRecordingBridge(
     private val proofRecordStore: ProofRecordStore,
     private val now: () -> Instant = Instant::now,
 ) {
+    internal fun shared(owner: SessionCheckpointRuntimeOwner) =
+        ProofRecordingBridge(owner.proofRecordStore(proofRecordStore.file, proofRecordStore), now)
+
     fun onProofCollected(proofId: UUID, eventCode: String, peersVerified: Int) {
         proofRecordStore.add(
             ProofRecord(

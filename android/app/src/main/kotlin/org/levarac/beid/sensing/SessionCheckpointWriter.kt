@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.levarac.beid.persistence.SessionCheckpoint
+import org.levarac.beid.persistence.StoreWriteSerialization
 
 /**
  * One pending immutable observation prefix, not one job or aggregate per detection.
@@ -99,12 +100,12 @@ internal class SessionCheckpointWriter(
 }
 
 /** Shared by every writer touching the same checkpoint directory in this process. */
-internal class SessionCheckpointSerialization {
+internal class SessionCheckpointSerialization : StoreWriteSerialization {
     private val writeLock = ReentrantLock()
     private val boundaryWaiters = AtomicInteger()
     private val boundaryFinished = writeLock.newCondition()
 
-    fun <T> serialized(action: () -> T): T {
+    override fun <T> serialized(action: () -> T): T {
         boundaryWaiters.incrementAndGet()
         return writeLock.withLock {
             try {
