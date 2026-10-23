@@ -33,9 +33,12 @@ import org.levarac.beid.persistence.ProofRecordStore
  * keep this reasoning attached to the call sites it protects.
  */
 class ProofRecordingBridge(
-    private val proofRecordStore: ProofRecordStore,
+    internal val proofRecordStore: ProofRecordStore,
     private val now: () -> Instant = Instant::now,
 ) {
+    internal fun shared(owner: SessionCheckpointRuntimeOwner) =
+        ProofRecordingBridge(owner.proofRecordStore(proofRecordStore.file, proofRecordStore), now)
+
     fun onProofCollected(proofId: UUID, session: ScanEventSession, peersVerified: Int) {
         proofRecordStore.add(
             ProofRecord(
@@ -52,6 +55,9 @@ class ProofRecordingBridge(
     fun onPeersVerifiedChanged(proofId: UUID, peersVerified: Int) {
         proofRecordStore.updatePeersVerified(proofId, peersVerified)
     }
+
+    /** The coordinator has committed signature state; this path only notifies readers. */
+    internal fun onProofSignatureStatePersisted() = proofRecordStore.notifyRecordsChanged()
 
     fun onProofSignatureStateChanged(proofId: UUID, hasSelfProof: Boolean, hasBinding: Boolean) {
         proofRecordStore.updateSignatureState(proofId, hasSelfProof, hasBinding)

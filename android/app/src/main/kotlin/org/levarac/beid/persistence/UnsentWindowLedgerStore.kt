@@ -43,6 +43,7 @@ internal class UnsentWindowLedgerStore private constructor(
     private val file: File,
     validateOnConstruction: Boolean,
 ) {
+    internal var serialization: StoreWriteSerialization = DirectStoreWrites
     constructor(file: File) : this(file, validateOnConstruction = true)
 
     private val persistenceLock = lockFor(canonicalPathKey(file))
@@ -60,62 +61,64 @@ internal class UnsentWindowLedgerStore private constructor(
      * ignored so a delayed write cannot replace a newer durable revision.
      */
     fun persist(transition: UnsentWindowLedgerTransition): Long =
-        synchronized(persistenceLock) {
-            require(transition.isSuccess && transition.changed) {
-                "A successful changed ledger transition is required"
-            }
-            val snapshotText = requireNotNull(transition.snapshotText) {
-                "Changed ledger transition has no snapshot"
-            }
-            val decoded = decodeUnsentWindowLedgerSnapshot(snapshotText)
-            require(decoded.isSuccess && decoded.persistenceRevision == transition.persistenceRevision) {
-                "Transition revision does not match its canonical snapshot"
-            }
+        serialization.serialized {
+            synchronized(persistenceLock) {
+                require(transition.isSuccess && transition.changed) {
+                    "A successful changed ledger transition is required"
+                }
+                val snapshotText = requireNotNull(transition.snapshotText) {
+                    "Changed ledger transition has no snapshot"
+                }
+                val decoded = decodeUnsentWindowLedgerSnapshot(snapshotText)
+                require(decoded.isSuccess && decoded.persistenceRevision == transition.persistenceRevision) {
+                    "Transition revision does not match its canonical snapshot"
+                }
 
-            val incomingRevision = transition.persistenceRevision
-            val durableRevision = durableRevision()
-            if (incomingRevision < durableRevision) {
-                return@synchronized durableRevision
-            }
-            if (incomingRevision == durableRevision) {
-                val existing = if (file.exists()) {
-                    file.readText(StandardCharsets.UTF_8)
-                } else {
-                    null
+                val incomingRevision = transition.persistenceRevision
+                val durableRevision = durableRevision()
+                if (incomingRevision < durableRevision) {
+                    return@synchronized durableRevision
                 }
-                if (existing != snapshotText) {
-                    throw IOException("Conflicting snapshot for persisted revision $incomingRevision")
+                if (incomingRevision == durableRevision) {
+                    val existing = if (file.exists()) {
+                        file.readText(StandardCharsets.UTF_8)
+                    } else {
+                        null
+                    }
+                    if (existing != snapshotText) {
+                        throw IOException("Conflicting snapshot for persisted revision $incomingRevision")
+                    }
+                    return@synchronized durableRevision
                 }
-                return@synchronized durableRevision
-            }
 
-            val parent = requireNotNull(file.absoluteFile.parentFile)
-            if (!parent.exists() && !parent.mkdirs()) {
-                throw IOException("Unable to create ledger snapshot directory")
-            }
-            val temporary = File.createTempFile("${file.name}.", ".tmp", parent)
-            try {
-                FileOutputStream(temporary).use { output ->
-                    output.write(snapshotText.toByteArray(StandardCharsets.UTF_8))
-                    output.fd.sync()
+                val parent = requireNotNull(file.absoluteFile.parentFile)
+                if (!parent.exists() && !parent.mkdirs()) {
+                    throw IOException("Unable to create ledger snapshot directory")
                 }
+                val temporary = File.createTempFile("${file.name}.", ".tmp", parent)
                 try {
-                    Files.move(
-                        temporary.toPath(),
-                        file.toPath(),
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING,
-                    )
-                } catch (error: AtomicMoveNotSupportedException) {
-                    throw IOException("Ledger storage does not support atomic replacement", error)
+                    FileOutputStream(temporary).use { output ->
+                        output.write(snapshotText.toByteArray(StandardCharsets.UTF_8))
+                        output.fd.sync()
+                    }
+                    try {
+                        Files.move(
+                            temporary.toPath(),
+                            file.toPath(),
+                            StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING,
+                        )
+                    } catch (error: AtomicMoveNotSupportedException) {
+                        throw IOException("Ledger storage does not support atomic replacement", error)
+                    }
+                } finally {
+                    if (temporary.exists()) {
+                        temporary.delete()
+                    }
                 }
-            } finally {
-                if (temporary.exists()) {
-                    temporary.delete()
-                }
-            }
 
-            incomingRevision
+                incomingRevision
+            }
         }
 
     fun load(): UnsentWindowLedgerLoadResult? = synchronized(persistenceLock) {
