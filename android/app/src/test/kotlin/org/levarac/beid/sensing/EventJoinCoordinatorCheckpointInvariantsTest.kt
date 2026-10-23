@@ -23,6 +23,44 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointInvariantsTest {
     @Test
+    fun overlappingRecoveryPreservesNewProofRowsAndPeerUpdates() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-shared-proof-rows").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val live = coordinator(directory, engine, registry, FakeSensingCryptography(selfProofSignatureResult = null))
+        val records = ProofRecordStore(ProofRecordStore.defaultFile(directory))
+        val bridge = ProofRecordingBridge(records)
+        wireProofRecording(live, bridge)
+        joinPromotedVectorEvent(live, engine, registry)
+        repeat(3) { engine.emitDetection(enin = 7, rpid = "old-$it", detectedDisplayId = "old-$it") }
+        val oldId = records.records.single().id
+        live.leaveEvent()
+
+        // A second Activity loads its collection before the first Activity's next writes.
+        val recovery = coordinator(directory)
+        wireProofRecording(recovery, ProofRecordingBridge(ProofRecordStore(ProofRecordStore.defaultFile(directory))))
+        try {
+            bridge.onPeersVerifiedChanged(oldId, 17)
+            joinPromotedVectorEvent(live, engine, registry)
+            repeat(4) { engine.emitDetection(enin = 8, rpid = "new-$it", detectedDisplayId = "new-$it") }
+            val newId = records.records.single { it.id != oldId }.id
+            bridge.onPeersVerifiedChanged(newId, 23)
+            recovery.drainPendingSubmissionsOnForeground()
+            runCurrent()
+
+            val durable = ProofRecordStore(ProofRecordStore.defaultFile(directory))
+            assertEquals(setOf(oldId, newId), durable.records.map { it.id }.toSet(),
+                "recovery must not rewrite a stale collection over a newer proof")
+            assertEquals(17, durable.recordForId(oldId)?.peersVerified)
+            assertEquals(23, durable.recordForId(newId)?.peersVerified)
+            assertTrue(durable.recordForId(oldId)?.hasSelfProof == true)
+        } finally {
+            live.dispose()
+            recovery.dispose()
+        }
+    }
+
+    @Test
     fun corruptCheckpointFallsBackToMemoryOnLeave() = unreadableCheckpointFallsBackToMemory("corrupt checkpoint", false)
 
     @Test
