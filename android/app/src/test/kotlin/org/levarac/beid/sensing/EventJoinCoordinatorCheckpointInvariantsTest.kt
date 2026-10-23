@@ -23,6 +23,38 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointInvariantsTest {
     @Test
+    fun overlappingCoordinatorsKeepBothFinalizedRecordsAndAggregates() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-shared-stores").toFile()
+        val firstEngine = FakeEventJoinEngine()
+        val secondEngine = FakeEventJoinEngine()
+        val firstRegistry = FakeNearbyEventRegistry()
+        val secondRegistry = FakeNearbyEventRegistry()
+        val first = coordinator(directory, firstEngine, firstRegistry)
+        val second = coordinator(directory, secondEngine, secondRegistry)
+        try {
+            joinPromotedVectorEvent(first, firstEngine, firstRegistry)
+            repeat(3) { firstEngine.emitDetection(enin = 7, rpid = "first-$it", detectedDisplayId = "first-$it") }
+            joinPromotedVectorEvent(second, secondEngine, secondRegistry)
+            repeat(4) { secondEngine.emitDetection(enin = 8, rpid = "second-$it", detectedDisplayId = "second-$it") }
+            first.checkpointSession()
+            second.checkpointSession()
+            val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+            val ids = checkpoints.proofIds().toSet()
+            assertEquals(2, ids.size)
+            first.leaveEvent()
+            second.leaveEvent()
+            assertEquals(ids, SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.map { it.proofId }.toSet())
+            val snapshots = SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(directory))
+            assertEquals(ids, snapshots.records.map { it.proofId }.toSet())
+            assertEquals(listOf(3, 4), ids.map { snapshots.snapshot(it)!!.observationCount }.sorted())
+            assertTrue(checkpoints.proofIds().isEmpty())
+        } finally {
+            first.dispose()
+            second.dispose()
+        }
+    }
+
+    @Test
     fun suspendedSelfProofStoreStillPersistsAggregateAndRetainsCheckpointUntilReadBack() = runTest {
         val directory = Files.createTempDirectory("checkpoint-suspended-proof-store").toFile()
         val proofFile = SelfProofRecordStore.defaultFile(directory)
