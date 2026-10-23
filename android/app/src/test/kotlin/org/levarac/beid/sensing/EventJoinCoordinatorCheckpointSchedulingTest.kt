@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
+import org.levarac.beid.shared.aggregation.encodeSessionAggregateSnapshot
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.persistence.SessionCheckpointStore
@@ -47,6 +48,72 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
                 runCurrent()
             }
             assertEquals(listOf(100_000), counts, "rejected observations must cause zero additional durable writes")
+        } finally {
+            coordinator.dispose()
+        }
+    }
+
+    @Test
+    fun recordingConfirmedAfterSaturationStillSchedulesItsFirstCheckpoint() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-saturated-confirmation").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val writes = mutableListOf<SessionCheckpoint>()
+        val coordinator = coordinator(directory, engine, registry) { writes += it }
+        try {
+            joinPromotedVectorEvent(coordinator, engine, registry)
+            repeat(100_000) {
+                engine.emitDetection(enin = 7, rpid = "peer-0", detectedDisplayId = "device-0")
+            }
+            assertIs<ScanPhase.EventFound>((coordinator.state.value as EventJoinUiState.Sensing).phase)
+            repeat(2) {
+                engine.emitDetection(enin = 7, rpid = "confirm-$it", detectedDisplayId = "confirm-$it")
+            }
+            assertIs<ScanPhase.Recording>((coordinator.state.value as EventJoinUiState.Sensing).phase)
+            runCurrent()
+            advanceTimeBy(2_000)
+            runCurrent()
+            assertEquals(1, writes.size, "creating the proof identity must schedule its recovery input")
+            assertEquals(100_000, writes.single().aggregate.observationCount)
+            assertEquals(7L, writes.single().eninStart)
+            assertEquals(7L, writes.single().eninEnd)
+        } finally {
+            coordinator.dispose()
+        }
+    }
+
+    @Test
+    fun saturatedObservationsCheckpointOnlyWhenTheEninBoundaryChanges() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-saturated-boundary").toFile()
+        val engine = FakeEventJoinEngine()
+        val writes = mutableListOf<SessionCheckpoint>()
+        val coordinator = recording(directory, engine) { writes += it }
+        try {
+            repeat(99_997) {
+                engine.emitDetection(enin = 7, rpid = "peer-0", detectedDisplayId = "device-0")
+            }
+            runCurrent()
+            advanceTimeBy(2_000)
+            runCurrent()
+            assertEquals(listOf(7L), writes.map { it.eninEnd })
+            assertEquals(100_000, writes.single().aggregate.observationCount)
+
+            engine.emitDetection(enin = 8, rpid = "peer-0", detectedDisplayId = "device-0")
+            runCurrent()
+            advanceTimeBy(2_000)
+            runCurrent()
+            assertEquals(listOf(7L, 8L), writes.map { it.eninEnd }, "the new proof range must survive process death")
+            assertEquals(
+                encodeSessionAggregateSnapshot(writes.first().aggregate).snapshotText,
+                encodeSessionAggregateSnapshot(writes.last().aggregate).snapshotText,
+            )
+            assertEquals(7L, writes.last().eninStart)
+            repeat(5) {
+                engine.emitDetection(enin = 8, rpid = "peer-0", detectedDisplayId = "device-0")
+                advanceTimeBy(2_000)
+                runCurrent()
+            }
+            assertEquals(2, writes.size, "unchanged saturated checkpoints must not be rewritten")
         } finally {
             coordinator.dispose()
         }
