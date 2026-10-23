@@ -4,6 +4,8 @@ import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
@@ -32,6 +34,9 @@ class EventJoinCoordinatorSessionCheckpointTest {
         engine.emitDetection(enin = 7, rpid = "aa", detectedDisplayId = "device-1")
         engine.emitDetection(enin = 7, rpid = "bb", detectedDisplayId = "device-2")
         engine.emitDetection(enin = 7, rpid = "cc", detectedDisplayId = "device-3")
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
         assertIs<ScanPhase.Recording>((first.state.value as EventJoinUiState.Sensing).phase)
         val proofId = records.records.single().id
         assertTrue(SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.isEmpty())
@@ -245,6 +250,7 @@ class EventJoinCoordinatorSessionCheckpointTest {
         engine.emitDetection(enin = 7, rpid = "bb", detectedDisplayId = "device-2")
         engine.emitDetection(enin = 7, rpid = "cc", detectedDisplayId = "device-3")
         assertIs<ScanPhase.Recording>((first.state.value as EventJoinUiState.Sensing).phase)
+        first.checkpointSession()
         return first
     }
 
@@ -265,5 +271,6 @@ class EventJoinCoordinatorSessionCheckpointTest {
         selfProofRecordStore = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)),
         bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(directory)),
         ledgerFilesDir = directory,
+        checkpointDispatcher = StandardTestDispatcher(testScheduler),
     )
 }

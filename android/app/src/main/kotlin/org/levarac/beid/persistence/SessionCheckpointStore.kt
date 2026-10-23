@@ -23,8 +23,9 @@ internal data class SessionCheckpoint(
 )
 
 /**
- * Main-thread storage adapter over the existing atomic record writer and shared
- * aggregate codec. One file per proof keeps an unrecoverable older session from
+ * Storage adapter over the existing atomic record writer and shared aggregate
+ * codec, serialized by the native checkpoint writer including boundary flushes.
+ * One file per proof keeps an unrecoverable older session from
  * being overwritten when a new session starts. Window ledger/draft evidence is
  * independent and continues through its existing shared recovery path.
  */

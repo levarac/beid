@@ -2,8 +2,13 @@ package org.levarac.beid.sensing
 
 import java.io.File
 import java.nio.file.Files
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -11,8 +16,10 @@ import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
 import org.levarac.beid.persistence.SessionCheckpointStore
+import org.levarac.beid.persistence.SessionCheckpoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -22,32 +29,116 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
     fun detectionBurstCoalescesWritesWithoutCheckpointIoOnTheCallingThread() = runTest {
         val directory = Files.createTempDirectory("checkpoint-burst").toFile()
         val engine = FakeEventJoinEngine()
-        val coordinator = recording(directory, engine)
         val store = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
-        fun bytes() = store.proofIds().singleOrNull()?.let {
-            File(SessionCheckpointStore.defaultDirectory(directory), "$it.json").readText()
+        val callingThread = Thread.currentThread()
+        val writes = Collections.synchronizedList(mutableListOf<Thread>())
+        val coordinator = recording(directory, engine) {
+            store.persist(it)
+            writes += Thread.currentThread()
         }
-        var previous = bytes()
-        var writesDuringCallbacks = 0
-        repeat(25) {
-            engine.emitDetection(enin = 8, rpid = "burst-$it", detectedDisplayId = "burst-device-$it")
-            val next = bytes()
-            if (next != previous) writesDuringCallbacks++
-            previous = next
+        val worker = Executors.newSingleThreadExecutor()
+        try {
+            fun bytes() = store.proofIds().singleOrNull()?.let {
+                File(SessionCheckpointStore.defaultDirectory(directory), "$it.json").readText()
+            }
+            var previous = bytes()
+            var writesDuringCallbacks = 0
+            repeat(25) {
+                engine.emitDetection(enin = 8, rpid = "burst-$it", detectedDisplayId = "burst-device-$it")
+                val next = bytes()
+                if (next != previous) writesDuringCallbacks++
+                previous = next
+            }
+            assertTrue(writesDuringCallbacks <= 1, "25 detections in one interval must coalesce; writes=$writesDuringCallbacks")
+            assertEquals(0, writesDuringCallbacks, "checkpoint I/O must wait for the writer dispatcher")
+            assertTrue(store.proofIds().isEmpty())
+            worker.submit { testScheduler.runCurrent() }.get(30, TimeUnit.SECONDS)
+            advanceTimeBy(999)
+            runCurrent()
+            assertTrue(store.proofIds().isEmpty())
+            worker.submit {
+                testScheduler.advanceTimeBy(1)
+                testScheduler.runCurrent()
+            }.get(30, TimeUnit.SECONDS)
+            val checkpoint = store.load(store.proofIds().single())!!
+            assertEquals(28, checkpoint.aggregate.observationCount)
+            assertEquals(8L, checkpoint.eninEnd)
+            assertEquals(1, writes.size, "one actual durable write for the entire interval")
+            assertTrue(writes.all { it !== callingThread }, "serialization and fsync must run off the callback thread")
+            repeat(25) { engine.emitDetection(enin = 9, rpid = "next-$it", detectedDisplayId = "next-$it") }
+            worker.submit {
+                testScheduler.runCurrent()
+                testScheduler.advanceTimeBy(999)
+                testScheduler.runCurrent()
+            }.get(30, TimeUnit.SECONDS)
+            assertEquals(1, writes.size)
+            worker.submit {
+                testScheduler.advanceTimeBy(1)
+                testScheduler.runCurrent()
+            }.get(30, TimeUnit.SECONDS)
+            assertEquals(2, writes.size)
+            assertEquals(53, store.load(checkpoint.proofId)?.aggregate?.observationCount)
+            assertTrue(writes.all { it !== callingThread })
+        } finally {
+            coordinator.dispose()
+            worker.shutdownNow()
         }
-        assertTrue(writesDuringCallbacks <= 1, "25 detections in one interval must coalesce; writes=$writesDuringCallbacks")
-        assertEquals(0, writesDuringCallbacks, "checkpoint I/O must wait for the writer dispatcher")
-        assertTrue(store.proofIds().isEmpty())
-        runCurrent()
-        advanceTimeBy(999)
-        runCurrent()
-        assertTrue(store.proofIds().isEmpty())
-        advanceTimeBy(1)
-        runCurrent()
-        val checkpoint = store.load(store.proofIds().single())!!
-        assertEquals(28, checkpoint.aggregate.observationCount)
-        assertEquals(8L, checkpoint.eninEnd)
-        coordinator.dispose()
+    }
+
+    @Test
+    fun inFlightOlderWriteFinishesBeforeBoundaryFlushAndCannotRecreateFinalizedInput() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-inflight-order").toFile()
+        val engine = FakeEventJoinEngine()
+        val store = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+        val oldWriteEntered = CountDownLatch(1)
+        val releaseOldWrite = CountDownLatch(1)
+        val flushStarted = CountDownLatch(1)
+        val counts = Collections.synchronizedList(mutableListOf<Int>())
+        val coordinator = recording(directory, engine) {
+            if (it.aggregate.observationCount == 3) {
+                oldWriteEntered.countDown()
+                check(releaseOldWrite.await(30, TimeUnit.SECONDS))
+            }
+            store.persist(it)
+            counts += it.aggregate.observationCount
+        }
+        val worker = Executors.newSingleThreadExecutor()
+        val boundary = Executors.newSingleThreadExecutor()
+        try {
+            val olderWrite = worker.submit {
+                testScheduler.runCurrent()
+                testScheduler.advanceTimeBy(1_000)
+                testScheduler.runCurrent()
+            }
+            assertTrue(oldWriteEntered.await(30, TimeUnit.SECONDS))
+            // This callback must return while old checkpoint I/O is still blocked.
+            engine.emitDetection(enin = 8, rpid = "four", detectedDisplayId = "four")
+            val flush = boundary.submit {
+                flushStarted.countDown()
+                coordinator.checkpointSession()
+            }
+            assertTrue(flushStarted.await(30, TimeUnit.SECONDS))
+            assertFalse(flush.isDone, "onStop must wait for durable completion")
+            releaseOldWrite.countDown()
+            olderWrite.get(30, TimeUnit.SECONDS)
+            flush.get(30, TimeUnit.SECONDS)
+            val proofId = store.proofIds().single()
+            assertEquals(listOf(3, 4), counts.toList(), "an older in-flight write must precede the boundary's latest write")
+            assertEquals(4, store.load(proofId)?.aggregate?.observationCount)
+            assertEquals(8L, store.load(proofId)?.eninEnd)
+            coordinator.leaveEvent()
+            advanceTimeBy(10_000)
+            runCurrent()
+            assertTrue(store.proofIds().isEmpty())
+            assertEquals(1, SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.size)
+            assertEquals(4, SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(directory))
+                .snapshot(proofId)?.observationCount)
+        } finally {
+            releaseOldWrite.countDown()
+            coordinator.dispose()
+            worker.shutdownNow()
+            boundary.shutdownNow()
+        }
     }
 
     @Test
@@ -106,9 +197,13 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
         assertTrue(store.proofIds().isEmpty())
     }
 
-    private fun TestScope.recording(directory: File, engine: FakeEventJoinEngine): EventJoinCoordinator {
+    private fun TestScope.recording(
+        directory: File,
+        engine: FakeEventJoinEngine,
+        persistence: ((SessionCheckpoint) -> Unit)? = null,
+    ): EventJoinCoordinator {
         val registry = FakeNearbyEventRegistry()
-        val coordinator = coordinator(directory, engine, registry)
+        val coordinator = coordinator(directory, engine, registry, persistence)
         joinPromotedVectorEvent(coordinator, engine, registry)
         repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "device-$it") }
         assertIs<ScanPhase.Recording>((coordinator.state.value as EventJoinUiState.Sensing).phase)
@@ -119,6 +214,7 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
         directory: File,
         engine: FakeEventJoinEngine = FakeEventJoinEngine(),
         registry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
+        persistence: ((SessionCheckpoint) -> Unit)? = null,
     ) = EventJoinCoordinator(
         engine = engine,
         nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
@@ -128,5 +224,7 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
         selfProofRecordStore = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)),
         bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(directory)),
         ledgerFilesDir = directory,
+        checkpointDispatcher = StandardTestDispatcher(testScheduler),
+        checkpointPersistence = persistence,
     )
 }

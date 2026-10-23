@@ -6,6 +6,7 @@ import java.io.File
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -142,6 +143,8 @@ class EventJoinCoordinator internal constructor(
     joinRegistry: EventJoinRegistry? = null,
     private val joinDiagnostics: (String) -> Unit = ::logRuntimeDiagnostic,
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.NotDetermined,
+    checkpointDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -160,6 +163,14 @@ class EventJoinCoordinator internal constructor(
     private var aggregationRuntime = AggregationRuntime()
     private val sessionCheckpointStore = ledgerFilesDir?.let {
         SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(it))
+    }
+    private val sessionCheckpointWriter = sessionCheckpointStore?.let { store ->
+        SessionCheckpointWriter(
+            scope = coroutineScope,
+            dispatcher = checkpointDispatcher,
+            persist = checkpointPersistence ?: store::persist,
+            onFailure = { logSessionCheckpointFailure("write", it) },
+        )
     }
 
     internal fun sessionAggregateSnapshot(proofId: UUID) = sessionAggregateSnapshotStore?.snapshot(proofId)
@@ -909,7 +920,7 @@ class EventJoinCoordinator internal constructor(
             eventConfirmThreshold = BeidConfig.eventConfirmThreshold,
         )
         onPhaseDecided(previousPhase)
-        checkpointSession()
+        sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::schedule) }
         windowAccumulator?.observe(
             enin = enin,
             rpid = rpid,
@@ -1040,8 +1051,9 @@ class EventJoinCoordinator internal constructor(
      * [leaveEvent] already ran) finds nothing to do.
      */
     private fun finalizeSelfProofIfNeeded(): SelfProofRecord? {
-        val checkpoint = currentSessionCheckpoint() ?: return null
-        persistSessionCheckpoint(checkpoint)
+        val snapshot = currentSessionCheckpoint() ?: return null
+        // Flush removes older queued work before final artifacts can clear recovery input.
+        val checkpoint = sessionCheckpointWriter?.flush(snapshot) ?: snapshot()
         return try {
             finalizeSessionCheckpoint(checkpoint)
         } catch (error: Exception) {
@@ -1053,24 +1065,17 @@ class EventJoinCoordinator internal constructor(
     /** Saves evidence only: no window close, signature, phase change, or radio effect. */
     internal fun checkpointSession() {
         if (disposed) return
-        currentSessionCheckpoint()?.let(::persistSessionCheckpoint)
+        sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::flush) }
     }
 
-    private fun currentSessionCheckpoint(): SessionCheckpoint? {
-        return SessionCheckpoint(
-            proofId = activeProofId ?: return null,
-            eventCode = currentRecordingSession()?.eventCode ?: return null,
-            eninStart = accounting.firstWindowEnin ?: return null,
-            eninEnd = accounting.lastWindowEnin ?: return null,
-            aggregate = aggregationRuntime.sessionAggregate,
-        )
-    }
-
-    private fun persistSessionCheckpoint(checkpoint: SessionCheckpoint) {
-        try {
-            sessionCheckpointStore?.persist(checkpoint)
-        } catch (error: Exception) {
-            logSessionCheckpointFailure("write", error)
+    private fun currentSessionCheckpoint(): (() -> SessionCheckpoint)? {
+        val proofId = activeProofId ?: return null
+        val eventCode = currentRecordingSession()?.eventCode ?: return null
+        val eninStart = accounting.firstWindowEnin ?: return null
+        val eninEnd = accounting.lastWindowEnin ?: return null
+        val aggregate = aggregationRuntime.snapshotAggregate()
+        return {
+            SessionCheckpoint(proofId, eventCode, eninStart, eninEnd, aggregate())
         }
     }
 
@@ -1378,6 +1383,7 @@ class EventJoinCoordinator internal constructor(
         disposed = true
         joinVerificationOwner = null
         finalizeSelfProofIfNeeded()
+        sessionCheckpointWriter?.close()
         stopParticipantRelay()
         discoveryOnlyScanOwned = false
         endRescueEntryCountdown()
