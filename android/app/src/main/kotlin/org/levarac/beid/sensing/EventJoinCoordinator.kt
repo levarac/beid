@@ -914,7 +914,7 @@ class EventJoinCoordinator internal constructor(
 
         val previousProofId = activeProofId
         val previousEninStart = accounting.firstWindowEnin
-        val previousEninEnd = accounting.lastWindowEnin
+        val previousEninEnd = checkpointEninEnd
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
         checkpointEninEnd = maxOf(checkpointEninEnd ?: enin, enin)
         if (BuildConfig.DEBUG) {
@@ -942,7 +942,7 @@ class EventJoinCoordinator internal constructor(
         onPhaseDecided(previousPhase)
         // The proof identity and range can change even when the aggregate is full.
         val checkpointChanged = observationAccepted || previousProofId != activeProofId ||
-            previousEninStart != accounting.firstWindowEnin || previousEninEnd != accounting.lastWindowEnin
+            previousEninStart != accounting.firstWindowEnin || previousEninEnd != checkpointEninEnd
         if (checkpointChanged) {
             sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::schedule) }
         }
