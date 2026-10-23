@@ -126,6 +126,38 @@ class EventJoinCoordinatorSessionCheckpointTest {
     }
 
     @Test
+    fun finishedUnsignedRecordKeepsItsAggregateAndCheckpointForSignatureRetry() = runTest {
+        val directory = Files.createTempDirectory("unsigned-finished-aggregate").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val first = coordinator(directory, engine, registry, FakeSensingCryptography(selfProofSignatureResult = null))
+        val records = ProofRecordStore(ProofRecordStore.defaultFile(directory))
+        wireProofRecording(first, ProofRecordingBridge(records))
+        joinPromotedVectorEvent(first, engine, registry)
+        repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "device-$it") }
+        val proofId = records.records.single().id
+
+        first.leaveEvent()
+        first.dispose()
+        assertTrue(selfProofs(directory).records.isEmpty())
+        assertEquals(listOf(proofId), SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory)).proofIds())
+        val aggregate = assertNotNull(snapshots(directory).snapshot(proofId), "finished metrics must not depend on signing")
+        assertEquals(3, aggregate.observationCount)
+        assertEquals(3, aggregate.deviceCount)
+        assertEquals(1, aggregate.windowCount)
+
+        val recovered = coordinator(directory)
+        wireProofRecording(recovered, ProofRecordingBridge(ProofRecordStore(ProofRecordStore.defaultFile(directory))))
+        recovered.drainPendingSubmissionsOnForeground()
+        recovered.drainPendingSubmissionsOnForeground()
+        recovered.dispose()
+        assertEquals(proofId, selfProofs(directory).records.single().proofId)
+        assertEquals(1, ProofRecordStore(ProofRecordStore.defaultFile(directory)).records.size)
+        assertEquals(3, snapshots(directory).snapshot(proofId)?.observationCount)
+        assertTrue(SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory)).proofIds().isEmpty())
+    }
+
+    @Test
     fun failedSignatureKeepsTheCheckpointForTheNextCoordinator() = runTest {
         val directory = Files.createTempDirectory("unsigned-checkpoint").toFile()
         recording(directory)
