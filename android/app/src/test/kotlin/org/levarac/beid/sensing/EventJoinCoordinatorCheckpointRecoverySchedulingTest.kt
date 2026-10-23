@@ -160,6 +160,132 @@ class EventJoinCoordinatorCheckpointRecoverySchedulingTest {
         }
     }
 
+    @Test
+    fun foregroundFlushWaitsForOnlyOneRetainedCheckpointAndMatchesSerialRecovery() = runTest {
+        boundaryWaitsForOnlyOneRetainedCheckpoint(finalize = false)
+    }
+
+    @Test
+    fun finalizationWaitsForOnlyOneRetainedCheckpointAndMatchesSerialRecovery() = runTest {
+        boundaryWaitsForOnlyOneRetainedCheckpoint(finalize = true)
+    }
+
+    private fun TestScope.boundaryWaitsForOnlyOneRetainedCheckpoint(finalize: Boolean) {
+        val directory = Files.createTempDirectory("checkpoint-recovery-backlog").toFile()
+        val seedDirectory = File(directory, "seed")
+        seedCheckpoint(seedDirectory)
+        val seedStore = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(seedDirectory))
+        val template = seedStore.load(seedStore.proofIds().single())!!
+        val templateRecord = ProofRecordStore(ProofRecordStore.defaultFile(seedDirectory)).records.single()
+        val retained = (1L..3L).map { template.copy(proofId = UUID(0, it), eninStart = it, eninEnd = it) }
+        fun seed(target: File) {
+            val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(target))
+            val records = ProofRecordStore(ProofRecordStore.defaultFile(target))
+            retained.forEach {
+                checkpoints.persist(it)
+                records.add(templateRecord.copy(id = it.proofId))
+            }
+        }
+        fun recording(target: File, cryptography: FakeSensingCryptography): Pair<EventJoinCoordinator, ProofRecordStore> {
+            seed(target)
+            val engine = FakeEventJoinEngine()
+            val registry = FakeNearbyEventRegistry()
+            val live = coordinator(target, engine, registry, cryptography)
+            val records = ProofRecordStore(ProofRecordStore.defaultFile(target))
+            wireProofRecording(live, ProofRecordingBridge(records))
+            joinPromotedVectorEvent(live, engine, registry)
+            repeat(3) { engine.emitDetection(enin = 9, rpid = "live-$it", detectedDisplayId = "live-$it") }
+            engine.emitDetection(enin = 10, rpid = "four", detectedDisplayId = "four")
+            return live to records
+        }
+        fun evidence(target: File): List<Pair<List<Any>, String>> {
+            val aggregates = SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(target))
+            return SelfProofRecordStore(SelfProofRecordStore.defaultFile(target)).records.sortedBy { it.eninStart }.map {
+                listOf(it.eventCode, it.eventIdHashHex, it.eventSigningPublicKeyHex, it.eninStart, it.eninEnd,
+                    it.ownerPublicKeyHex, it.signatureRHex, it.signatureSHex, it.signatureV) to aggregates.records.single { row -> row.proofId == it.proofId }.snapshotText
+            }
+        }
+        val serialDirectory = File(directory, "serial")
+        val (serial, serialRecords) = recording(serialDirectory, FakeSensingCryptography())
+        serial.drainPendingSubmissionsOnForeground()
+        testScheduler.runCurrent()
+        if (finalize) serial.leaveEvent() else serial.checkpointSession()
+        serial.leaveEvent()
+        serial.dispose()
+        val expected = evidence(serialDirectory)
+        assertEquals(4, expected.size)
+        assertTrue(serialRecords.recordsFlow.value.all { it.hasSelfProof })
+
+        val firstSignEntered = CountDownLatch(1)
+        val releaseFirstSign = CountDownLatch(1)
+        val releaseLaterSigns = CountDownLatch(1)
+        val completed = Collections.synchronizedList(mutableListOf<Long>())
+        val slowCryptography = object : FakeSensingCryptography() {
+            override fun signSelfProof(
+                eventIdHash: ByteArray, eventSigningPublicKey: ByteArray, eninStart: Long, eninEnd: Long,
+            ): SensingRecoverableSignature? {
+                if (eninStart == 1L) {
+                    firstSignEntered.countDown()
+                    check(releaseFirstSign.await(30, TimeUnit.SECONDS))
+                } else if (eninStart < 9L) {
+                    check(releaseLaterSigns.await(30, TimeUnit.SECONDS))
+                }
+                return super.signSelfProof(eventIdHash, eventSigningPublicKey, eninStart, eninEnd).also {
+                    completed += eninStart
+                }
+            }
+        }
+        val concurrentDirectory = File(directory, "concurrent")
+        val (live, records) = recording(concurrentDirectory, slowCryptography)
+        val worker = Executors.newSingleThreadExecutor()
+        val boundary = Executors.newSingleThreadExecutor()
+        val boundaryStarted = CountDownLatch(1)
+        val boundaryThread = java.util.concurrent.atomic.AtomicReference<Thread>()
+        try {
+            live.drainPendingSubmissionsOnForeground()
+            val recovery = worker.submit { testScheduler.runCurrent() }
+            assertTrue(firstSignEntered.await(30, TimeUnit.SECONDS))
+            val flush = boundary.submit {
+                boundaryThread.set(Thread.currentThread())
+                boundaryStarted.countDown()
+                if (finalize) live.leaveEvent() else live.checkpointSession()
+            }
+            assertTrue(boundaryStarted.await(30, TimeUnit.SECONDS))
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (boundaryThread.get().state !in setOf(Thread.State.BLOCKED, Thread.State.WAITING) &&
+                System.nanoTime() < deadline) Thread.yield()
+            assertTrue(boundaryThread.get().state in setOf(Thread.State.BLOCKED, Thread.State.WAITING),
+                "the boundary must be waiting before the first signature is released")
+            assertFalse(flush.isDone)
+            releaseFirstSign.countDown()
+            try {
+                flush.get(5, TimeUnit.SECONDS)
+            } catch (error: java.util.concurrent.TimeoutException) {
+                throw AssertionError("the boundary must finish after one recovered checkpoint, before later signatures", error)
+            }
+            assertEquals(listOf(1L), completed.filter { it < 9L })
+            releaseLaterSigns.countDown()
+            recovery.get(30, TimeUnit.SECONDS)
+            live.leaveEvent()
+            assertEquals(expected, evidence(concurrentDirectory), "concurrent recovery must equal the serial result")
+            assertEquals(4, records.recordsFlow.value.size)
+            assertTrue(records.recordsFlow.value.all { it.hasSelfProof }, "recovery must reach the existing records flow")
+            live.drainPendingSubmissionsOnForeground()
+            worker.submit { testScheduler.runCurrent() }.get(30, TimeUnit.SECONDS)
+            assertEquals(expected, evidence(concurrentDirectory))
+            assertEquals(4, completed.size, "each proof must be signed once")
+            assertTrue(SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(concurrentDirectory)).proofIds().isEmpty())
+        } finally {
+            releaseFirstSign.countDown()
+            releaseLaterSigns.countDown()
+            worker.shutdown()
+            assertTrue(worker.awaitTermination(30, TimeUnit.SECONDS))
+            boundary.shutdown()
+            assertTrue(boundary.awaitTermination(30, TimeUnit.SECONDS))
+            live.dispose()
+        }
+    }
+
     private fun TestScope.seedCheckpoint(directory: File) {
         val engine = FakeEventJoinEngine()
         val registry = FakeNearbyEventRegistry()
