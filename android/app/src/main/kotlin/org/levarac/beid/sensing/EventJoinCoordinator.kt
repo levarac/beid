@@ -900,6 +900,9 @@ class EventJoinCoordinator internal constructor(
         // already does.
         if (_state.value !is EventJoinUiState.Sensing) return
 
+        val previousProofId = activeProofId
+        val previousEninStart = accounting.firstWindowEnin
+        val previousEninEnd = accounting.lastWindowEnin
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
         if (BuildConfig.DEBUG) {
             logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
@@ -924,7 +927,10 @@ class EventJoinCoordinator internal constructor(
             eventConfirmThreshold = BeidConfig.eventConfirmThreshold,
         )
         onPhaseDecided(previousPhase)
-        if (observationAccepted) {
+        // The proof identity and range can change even when the aggregate is full.
+        val checkpointChanged = observationAccepted || previousProofId != activeProofId ||
+            previousEninStart != accounting.firstWindowEnin || previousEninEnd != accounting.lastWindowEnin
+        if (checkpointChanged) {
             sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::schedule) }
         }
         windowAccumulator?.observe(
