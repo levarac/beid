@@ -360,9 +360,9 @@ the same name shadows them.
   The `iOS simulator` job is created on every PR open, push (`synchronize`),
   reopen, and ready-for-review event, including drafts, with no workflow-level
   PR path exclusions. It runs on every PR except one whose changed files are
-  documentation or verified independent inputs (`android/app/**` and the
-  standalone `tools/beid-lab-cli/**`, as `scripts/ci_change_filter.py` defines
-  it), which reports it as skipped. Renames, deletions and unsafe metadata run
+  documentation or verified independent inputs (`android/app/src/**` after
+  build-input rules, and standalone `tools/beid-lab-cli/**`, as
+  `scripts/ci_change_filter.py` defines it), which reports it as skipped. Renames, deletions and unsafe metadata run
   it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
   builds/runs both `BeidTests` and `BeidUITests` on a clean owned simulator.
   A missing, cancelled or pre-start failed run is not passing evidence, and a
@@ -450,12 +450,18 @@ contexts are always created. Each workflow has its own small classification
 job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that
 runs the same collection step and `scripts/ci_change_filter.py` as Determine
 changed paths. Both lanes report as skipped on a documentation-only PR. The iOS lane uses
-its independent ios output and also skips Android-app-only changes. Only
-`android/app/**` and standalone `tools/beid-lab-cli/**` are excluded beyond
-documentation. `android/settings.gradle.kts` includes only app and shared;
+its independent ios output and also skips changes limited to Android app
+sources and resources. Only `android/app/src/**` after build-input rules and
+standalone `tools/beid-lab-cli/**` are excluded beyond documentation.
+`android/settings.gradle.kts` includes only app and shared;
 `shared/build.gradle.kts` has no app dependency, and `ios/project.yml` invokes
 only the shared Swift Export task. App depends on shared, not the reverse;
-Gradle configuration of app does not compile app in the iOS task graph.
+Gradle configures app even for that shared-only task. App build inputs still
+run iOS: build/settings scripts, `gradle.properties`, `proguard-rules.pro`,
+other configuration inputs, any `*.gradle(.kts)` and `buildSrc`/`build-logic`
+paths. Other app paths outside `src/**` run conservatively. No app source or
+resource is currently read by the build scripts during configuration; adding
+such a read must also add a build-input rule before the exemption.
 All iOS/shared code, shared Gradle configuration and wrapper, version catalogs,
 workflow/script changes (including the classifier, JDK resolver, XcodeGen
 downloader/generation guard and simulator helper), and unknown paths run iOS.

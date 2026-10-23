@@ -68,14 +68,21 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     A `Classify paths for iOS lane` job runs the same collection step and
     `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
     job-level `if:` driven by an independent `ios` output. Documentation-only
-    and Android-app-only PRs report `iOS simulator` as skipped, which GitHub
-    treats as passing for a required check. The only non-documentation
-    exclusions are `android/app/**` and the standalone `tools/beid-lab-cli/**`.
+    PRs and PRs limited to Android app sources/resources report `iOS simulator`
+    as skipped, which GitHub treats as passing for a required check. The only
+    non-documentation exclusions are `android/app/src/**` (after build-input
+    rules) and the standalone `tools/beid-lab-cli/**`.
     `android/settings.gradle.kts` includes only `:app` and `:shared`, with the
     latter mapped to `../shared`; `shared/build.gradle.kts` has no dependency
     on `:app`. `ios/project.yml` invokes only the shared Swift Export task,
     while `android/app/build.gradle.kts` depends on shared in the other
-    direction. Gradle may configure app, but the iOS task does not compile it.
+    direction. Gradle configures app even for that shared-only task, so app
+    build inputs still run iOS: build/settings scripts, `gradle.properties`,
+    `proguard-rules.pro`, other configuration inputs, any `*.gradle(.kts)` and
+    `buildSrc`/`build-logic` paths. App paths outside `src/**` run conservatively.
+    No app source/resource is currently read by the build scripts during
+    configuration; adding such a read must also add a build-input rule before
+    the source/resource exemption.
     There are no other Android-only modules or version catalogs today.
     New Android modules and catalogs are unclassified and run iOS.
 

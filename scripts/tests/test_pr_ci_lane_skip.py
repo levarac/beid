@@ -159,13 +159,13 @@ class NonDocumentationPullRequestTest(unittest.TestCase):
 
     def test_android_app_only_skips_ios(self):
         for files in (ANDROID_ONLY, DOCS_ONLY + ANDROID_ONLY,
-                      ["android/app/build.gradle.kts"],
                       ["android/app/src/main/$(touch injected).kt"]):
             with self.subTest(files=files):
                 self.assertFalse(lane_runs("ios", files=files))
 
     def test_shared_build_inputs_and_unknown_android_modules_run_ios(self):
-        for path in ("android/build.gradle.kts", "android/settings.gradle.kts",
+        for path in ("android/app/build.gradle.kts", "android/app/proguard-rules.pro",
+                     "android/build.gradle.kts", "android/settings.gradle.kts",
                      "android/gradle.properties", "android/gradlew",
                      "android/gradle/wrapper/gradle-wrapper.jar",
                      "android/gradle/libs.versions.toml", "android/new-module/Foo.kt",

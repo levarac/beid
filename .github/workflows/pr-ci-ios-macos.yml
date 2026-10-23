@@ -117,8 +117,8 @@ jobs:
     name: iOS simulator
     needs: changes
     # Still created on every PR head so the required context reports; a
-    # docs-only or Android-app-only PR reports it as skipped. Fail closed:
-    # unsafe diff metadata, unknown paths, or failed/missing classification
+    # PR limited to docs or Android app sources/resources reports it as skipped.
+    # Fail closed: unsafe diff metadata, unknown paths, or failed/missing classification
     # runs the lane. `!cancelled()` avoids starting a superseded macOS job.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
     # Keep PR code on disposable hosted runners; repository variables must

@@ -49,6 +49,8 @@ def _is_force_all(path: str) -> bool:
         normalized.startswith(".github/workflows/")
         or normalized.startswith("scripts/")
         or normalized.startswith("gradle/")
+        or basename.endswith((".gradle", ".gradle.kts"))
+        or any(part in {"buildSrc", "build-logic"} for part in normalized.split("/"))
         or basename in {
             "build.gradle",
             "build.gradle.kts",
@@ -102,9 +104,9 @@ def classify(files: Iterable[str]) -> dict[str, bool]:
     paths = list(files)
     result = _classify_product_lanes(paths)
     # Only proven independent inputs may skip iOS. settings.gradle.kts includes
-    # :app and :shared; shared has no project dependency on :app, and Xcode
-    # invokes only :shared:embedSwiftExportForXcode. No other Android module or
-    # build input is exempt. A future version catalog therefore runs iOS too.
+    # :app and :shared, so Gradle configures both even when Xcode invokes only
+    # :shared:embedSwiftExportForXcode. Only app sources/resources are exempt;
+    # app build scripts and their configuration inputs must still run iOS.
     result["ios"] = not paths or any(_affects_ios(path) for path in paths)
     return result
 
@@ -115,10 +117,12 @@ def _affects_ios(path: str) -> bool:
             or any(part in {"", ".", ".."} for part in normalized.split("/"))
             or any(ord(char) < 32 for char in normalized)):
         return True
-    if normalized.startswith("android/app/"):
-        return False
     if _is_force_all(normalized):
         return True
+    # No app/src input is currently read by the build scripts at configuration
+    # time. If one is introduced, classify it as a build input before this rule.
+    if normalized.startswith("android/app/src/"):
+        return False
     if _is_documentation(normalized) or _is_lab_cli(normalized):
         return False
     return True

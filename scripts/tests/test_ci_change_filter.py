@@ -16,6 +16,39 @@ class CIChangeFilterTests(unittest.TestCase):
         self.assertEqual(result["lint"], False)
         self.assertEqual(result["sanity"], True)
 
+    def test_android_app_build_inputs_run_ios(self):
+        for path in (
+            "android/app/build.gradle.kts",
+            "android/app/build.gradle",
+            "android/app/settings.gradle.kts",
+            "android/app/settings.gradle",
+            "android/app/gradle.properties",
+            "android/app/proguard-rules.pro",
+            "android/app/config/inputs.json",
+            "android/app/config/custom.gradle.kts",
+            "android/app/config/custom.gradle",
+            "android/app/buildSrc/src/main/kotlin/Plugin.kt",
+            "android/app/build-logic/src/main/kotlin/Plugin.kt",
+            "android/app/src/main/custom.gradle.kts",
+            "android/app/src/main/custom.gradle",
+            "android/app/src/main/gradle.properties",
+            "android/app/src/buildSrc/src/main/kotlin/Plugin.kt",
+            "android/app/src/build-logic/src/main/kotlin/Plugin.kt",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(classify([path])["ios"])
+
+    def test_android_app_sources_and_resources_skip_ios(self):
+        for path in (
+            "android/app/src/main/kotlin/org/levarac/beid/MainActivity.kt",
+            "android/app/src/main/AndroidManifest.xml",
+            "android/app/src/main/res/values/strings.xml",
+            "android/app/src/test/kotlin/PolicyTest.kt",
+            "android/app/src/androidTest/kotlin/DeviceTest.kt",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(classify([path])["ios"])
+
     def test_shared_change_runs_both_product_lanes(self):
         result = classify(["shared/src/commonMain/kotlin/Policy.kt"])
         self.assertEqual(result["android"], True)
