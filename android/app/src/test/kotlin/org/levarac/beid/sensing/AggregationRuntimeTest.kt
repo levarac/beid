@@ -16,6 +16,23 @@ import org.levarac.beid.shared.jointestsupport.aggregationParityFixtureJson
 
 class AggregationRuntimeTest {
     @Test
+    fun deferredSnapshotsKeepTheirAcceptedPrefixAfterMoreDetectionsAndReset() {
+        val runtime = AggregationRuntime()
+        assertTrue(runtime.recordObservation(7, "one", "device-one"))
+        val first = runtime.snapshotAggregate()
+        assertTrue(runtime.recordObservation(8, "two", "device-two"))
+        val second = runtime.snapshotAggregate()
+        runtime.reset()
+        assertTrue(runtime.recordObservation(9, "three", "device-three"))
+        assertEquals(1, first().observationCount)
+        assertEquals(1, first().windowCount)
+        assertEquals(2, second().observationCount)
+        assertEquals(2, second().deviceCount)
+        assertEquals(2, second().windowCount)
+        assertEquals(1, runtime.sessionAggregate.observationCount)
+    }
+
+    @Test
     fun checkedNativeParityFixtureMatchesExpectedAggregate() {
         val runtime = AggregationRuntime()
         Json.parseToJsonElement(aggregationParityFixtureJson()).jsonArray.forEach { row ->

@@ -45,7 +45,11 @@ import kotlinx.serialization.json.put
  * commit `1c7db20` (an unsynchronized read racing a write across threads),
  * caught in review before it shipped rather than after.
  */
-class ProofRecordStore(file: File) {
+class ProofRecordStore(internal val file: File) {
+    internal var serialization: StoreWriteSerialization
+        get() = store.serialization
+        set(value) { store.serialization = value }
+
     private val store = JsonRecordFileStore(
         file = file,
         schemaVersion = SCHEMA_VERSION,
@@ -61,7 +65,7 @@ class ProofRecordStore(file: File) {
     private val _recordsFlow = MutableStateFlow(store.records)
     val recordsFlow: StateFlow<List<ProofRecord>> = _recordsFlow.asStateFlow()
 
-    fun add(record: ProofRecord) {
+    fun add(record: ProofRecord) = serialization.serialized {
         synchronized(lock) {
             store.addRecord(record)
             _recordsFlow.value = store.records
@@ -69,7 +73,7 @@ class ProofRecordStore(file: File) {
     }
 
     /** Grows a recording proof's peer count in place, mirroring iOS's `ProofStore.updatePeersVerified(for:to:)`. */
-    fun updatePeersVerified(id: UUID, peersVerified: Int) {
+    fun updatePeersVerified(id: UUID, peersVerified: Int) = serialization.serialized {
         synchronized(lock) {
             store.updateRecord(
                 predicate = { it.id == id },
@@ -80,17 +84,34 @@ class ProofRecordStore(file: File) {
     }
 
     /** Sets a proof's derived signature status once self-proof/binding evidence exists, mirroring iOS's `ProofStore.updateSignatureState(for:to:)`. */
-    fun updateSignatureState(id: UUID, hasSelfProof: Boolean, hasBinding: Boolean) {
+    fun updateSignatureState(
+        id: UUID,
+        hasSelfProof: Boolean,
+        hasBinding: Boolean,
+        eventName: String? = null,
+        eventIdHex: String? = null,
+    ) = serialization.serialized {
         synchronized(lock) {
             store.updateRecord(
                 predicate = { it.id == id },
-                transform = { it.copy(hasSelfProof = hasSelfProof, hasBinding = hasBinding) },
+                // Recover missing verified metadata in the same durable replacement.
+                // Existing identity survives checkpoints that predate these fields.
+                transform = { it.copy(hasSelfProof = hasSelfProof, hasBinding = hasBinding,
+                    eventName = it.eventName ?: eventName, eventIdHex = it.eventIdHex ?: eventIdHex) },
             )
             _recordsFlow.value = store.records
         }
     }
 
+    /** Publishes already persisted records without rewriting their file. */
+    internal fun notifyRecordsChanged() = serialization.serialized {
+        synchronized(lock) { _recordsFlow.value = store.records }
+    }
+
     fun recordForId(id: UUID): ProofRecord? = store.recordMatching { it.id == id }
+
+    internal fun readBackRecordForId(id: UUID): ProofRecord? =
+        store.readBackRecordMatching { it.id == id }
 
     companion object {
         const val SCHEMA_VERSION = 1

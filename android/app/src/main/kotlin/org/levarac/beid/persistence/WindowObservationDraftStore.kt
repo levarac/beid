@@ -29,10 +29,11 @@ import org.levarac.beid.shared.report.encodeWindowObservationDraftSnapshot
  * one writer, and a later write always supersedes an earlier one.
  */
 internal class WindowObservationDraftStore(private val file: File) {
+    internal var serialization: StoreWriteSerialization = DirectStoreWrites
     private val persistenceLock = lockFor(canonicalPathKey(file))
 
     /** Atomically replaces the durable draft with [draft]'s canonical text. */
-    fun persist(draft: WindowObservationDraft) {
+    fun persist(draft: WindowObservationDraft) = serialization.serialized {
         synchronized(persistenceLock) {
             val snapshotText = encodeWindowObservationDraftSnapshot(draft)
             val parent = requireNotNull(file.absoluteFile.parentFile)
@@ -71,18 +72,20 @@ internal class WindowObservationDraftStore(private val file: File) {
      * decode into an empty draft, which would claim the device observed
      * nothing in a window where it may have observed a room full of people.
      */
-    fun load(): WindowObservationDraft? = synchronized(persistenceLock) {
-        if (!file.exists()) {
-            return@synchronized null
+    fun load(): WindowObservationDraft? = serialization.serialized {
+        synchronized(persistenceLock) {
+            if (!file.exists()) {
+                return@synchronized null
+            }
+            val decoded = decodeWindowObservationDraftSnapshot(
+                file.readText(StandardCharsets.UTF_8),
+            )
+            if (!decoded.isSuccess) {
+                CorruptSnapshotQuarantine.quarantine(file)
+                return@synchronized null
+            }
+            decoded.draft
         }
-        val decoded = decodeWindowObservationDraftSnapshot(
-            file.readText(StandardCharsets.UTF_8),
-        )
-        if (!decoded.isSuccess) {
-            CorruptSnapshotQuarantine.quarantine(file)
-            return@synchronized null
-        }
-        decoded.draft
     }
 
     /**
@@ -95,7 +98,7 @@ internal class WindowObservationDraftStore(private val file: File) {
      * diagnosis worth keeping the bytes for. Deleting it would erase the only
      * record that observations were lost.
      */
-    fun quarantineUnusable() {
+    fun quarantineUnusable() = serialization.serialized {
         synchronized(persistenceLock) {
             if (file.exists()) {
                 CorruptSnapshotQuarantine.quarantine(file)
@@ -104,7 +107,7 @@ internal class WindowObservationDraftStore(private val file: File) {
     }
 
     /** Removes the durable draft once its window no longer needs recovering. */
-    fun clear() {
+    fun clear() = serialization.serialized {
         synchronized(persistenceLock) {
             if (file.exists() && !file.delete() && file.exists()) {
                 throw IOException("Unable to clear the observation draft")

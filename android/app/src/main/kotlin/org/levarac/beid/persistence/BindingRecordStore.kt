@@ -14,7 +14,11 @@ import kotlinx.serialization.json.put
  * as iOS's `BindingRecordStore` (flat JSON, no server call, atomic write).
  * See [BindingRecord].
  */
-class BindingRecordStore(file: File) {
+class BindingRecordStore(internal val file: File) {
+    internal var serialization: StoreWriteSerialization
+        get() = store.serialization
+        set(value) { store.serialization = value }
+
     private val store = JsonRecordFileStore(
         file = file,
         schemaVersion = SCHEMA_VERSION,
@@ -29,6 +33,9 @@ class BindingRecordStore(file: File) {
 
     /** A `Proof` is bound at most once, so the first match is the only match. */
     fun recordForProofId(proofId: UUID): BindingRecord? = store.recordMatching { it.proofId == proofId }
+
+    internal fun readBackRecordForProofId(id: UUID): BindingRecord? =
+        store.readBackRecordMatching { it.proofId == id }
 
     companion object {
         const val SCHEMA_VERSION = 1
