@@ -357,11 +357,17 @@ the same name shadows them.
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
 - **Require executed hosted iOS evidence on the exact PR head SHA.**
-  The `iOS simulator` job runs on every PR open, push (`synchronize`), reopen,
-  and ready-for-review event, including drafts, with no PR path exclusions.
-  It checks out the PR head explicitly and builds/runs both `BeidTests` and
-  `BeidUITests` on a clean owned simulator. A missing, skipped, cancelled or
-  pre-start failed run is not passing evidence. Xcode Cloud `PR Build & Test`
+  The `iOS simulator` job is created on every PR open, push (`synchronize`),
+  reopen, and ready-for-review event, including drafts, with no workflow-level
+  PR path exclusions. It runs on every PR except one whose changed files are
+  documentation or verified independent inputs (`android/app/src/**` after
+  build-input rules, and standalone `tools/beid-lab-cli/**`, as
+  `scripts/ci_change_filter.py` defines it), which reports it as skipped. Renames, deletions and unsafe metadata run
+  it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
+  builds/runs both `BeidTests` and `BeidUITests` on a clean owned simulator.
+  A missing, cancelled or pre-start failed run is not passing evidence, and a
+  skipped run is evidence only for a PR whose successful classification job
+  found no iOS-affecting changes. Xcode Cloud `PR Build & Test`
   stays paused; its former file exclusions do not apply to this hosted gate.
   Xcode Cloud Internal/Release delivery is a separate concern. Required status
   checks remain operator-managed repository settings; workflow code alone
@@ -416,9 +422,12 @@ See [docs/delivery-ci.md](docs/delivery-ci.md) for the detailed PR CI and delive
 The PR workflow is `.github/workflows/pr-ci.yml`. Its changed-path classifier
 job and three named gates are:
 
-**Determine changed paths**: `actions/github-script` collects pull-request
-files or the `main` push comparison, and `scripts/ci_change_filter.py`
-classifies them. Documentation-only changes skip Android build and SwiftLint;
+**Determine changed paths**: `actions/github-script` collects the files of
+the compare range pinned to the event's own SHAs (pull-request base...head, or
+the `main` push before...after; never the PR's current file list, so a re-run
+classifies what it builds), and `scripts/ci_change_filter.py` classifies them.
+A list that reaches the compare API's 300-file cap is treated as truncated and
+fails closed. The iOS and lab CLI classification jobs run this same step. Documentation-only changes skip Android build and SwiftLint;
 Repository sanity always runs. Unknown paths, dependency/workflow/build-script
 changes, and classifier failures run the relevant or all gates fail-closed.
 
@@ -436,8 +445,32 @@ The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
 suites. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
-`ready_for_review`; neither has a PR workflow path filter. The lab CLI skips
-irrelevant build steps through the existing fail-closed path classifier.
+`ready_for_review`; neither has a PR workflow path filter, so the required
+contexts are always created. Each workflow has its own small classification
+job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that
+runs the same collection step and `scripts/ci_change_filter.py` as Determine
+changed paths. Both lanes report as skipped on a documentation-only PR. The iOS lane uses
+its independent ios output and also skips changes limited to Android app
+sources and resources. Only `android/app/src/**` after build-input rules and
+standalone `tools/beid-lab-cli/**` are excluded beyond documentation.
+`android/settings.gradle.kts` includes only app and shared;
+`shared/build.gradle.kts` has no app dependency, and `ios/project.yml` invokes
+only the shared Swift Export task. App depends on shared, not the reverse;
+Gradle configures app even for that shared-only task. App build inputs still
+run iOS: build/settings scripts, `gradle.properties`, `proguard-rules.pro`,
+other configuration inputs, any `*.gradle(.kts)` and `buildSrc`/`build-logic`
+paths. Other app paths outside `src/**` run conservatively. No app source or
+resource is currently read by the build scripts during configuration; adding
+such a read must also add a build-input rule before the exemption.
+All iOS/shared code, shared Gradle configuration and wrapper, version catalogs,
+workflow/script changes (including the classifier, JDK resolver, XcodeGen
+downloader/generation guard and simulator helper), and unknown paths run iOS.
+There are no version catalogs or additional Android modules today; future
+catalogs/modules run conservatively. Renames, deletions, malformed/missing API
+metadata, empty/truncated lists and API errors run iOS. A missing ios output
+also runs it. Lab CLI selection is unchanged: labcli, lint or error runs it;
+a failed classification runs both. Main pushes and manual dispatch always run
+both lanes.
 All PR build checkouts use the explicit PR head SHA.
 
 These three workflows remain the execution source of truth; the documentation
