@@ -26,6 +26,33 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointSchedulingTest {
     @Test
+    fun detectionsAfterObservationLimitDoNotScheduleMoreDurableWrites() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-saturated").toFile()
+        val engine = FakeEventJoinEngine()
+        val counts = mutableListOf<Int>()
+        // Count the durable-write boundary without writing a 100,000-observation file.
+        val coordinator = recording(directory, engine) { counts += it.aggregate.observationCount }
+        try {
+            repeat(99_997) {
+                engine.emitDetection(enin = 7, rpid = "peer-0", detectedDisplayId = "device-0")
+            }
+            runCurrent()
+            advanceTimeBy(2_000)
+            runCurrent()
+            assertEquals(listOf(100_000), counts)
+
+            repeat(5) {
+                engine.emitDetection(enin = 7, rpid = "peer-0", detectedDisplayId = "device-0")
+                advanceTimeBy(2_000)
+                runCurrent()
+            }
+            assertEquals(listOf(100_000), counts, "rejected observations must cause zero additional durable writes")
+        } finally {
+            coordinator.dispose()
+        }
+    }
+
+    @Test
     fun detectionBurstCoalescesWritesWithoutCheckpointIoOnTheCallingThread() = runTest {
         val directory = Files.createTempDirectory("checkpoint-burst").toFile()
         val engine = FakeEventJoinEngine()
