@@ -1077,6 +1077,13 @@ class EventJoinCoordinator internal constructor(
     private fun finalizeSessionCheckpoint(checkpoint: SessionCheckpoint): SelfProofRecord? {
         check(!selfProofRecordStore.isPersistenceSuspended) { "self_proof_persistence_suspended" }
         val proofId = checkpoint.proofId
+        val aggregatePersistence = runCatching {
+            sessionAggregateSnapshotStore?.let { snapshots ->
+                // Finished metrics must survive even when signing is unavailable.
+                // A stale recovery input must not replace an authoritative aggregate.
+                if (snapshots.snapshot(proofId) == null) snapshots.persist(proofId, checkpoint.aggregate)
+            }
+        }
         val record = selfProofRecordStore.recordForProofId(proofId) ?: run {
             val eventIdHash = EventIdHash.compute(checkpoint.eventCode)
             val eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(checkpoint.eventCode)
@@ -1096,11 +1103,8 @@ class EventJoinCoordinator internal constructor(
             ).also(selfProofRecordStore::add)
         }
         onProofSignatureStateChanged?.invoke(proofId, true, bindingRecordStore.recordForProofId(proofId) != null)
-        sessionAggregateSnapshotStore?.let { snapshots ->
-            // A stale checkpoint can outlive a completed graceful finalization.
-            // Finished aggregates are immutable; preserve the authoritative one.
-            if (snapshots.snapshot(proofId) == null) snapshots.persist(proofId, checkpoint.aggregate)
-        }
+        // A failed aggregate write must retain the checkpoint, independently of signing.
+        aggregatePersistence.getOrThrow()
         // Both final artifacts are durable before their recovery input is removed.
         sessionCheckpointStore?.clear(proofId)
         return record
