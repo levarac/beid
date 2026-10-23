@@ -122,13 +122,11 @@ class EventJoinCoordinator internal constructor(
     private val coroutineScope: CoroutineScope,
     private val registryClient: RegistryClient? = null,
     private val sensingCryptography: SensingCryptography,
-    private val selfProofRecordStore: SelfProofRecordStore,
+    selfProofRecordStore: SelfProofRecordStore,
     private val bindingRecordStore: BindingRecordStore,
     private val randomSource: OwnerKeyRandomSource = SecureRandomOwnerKeySource(),
     ledgerFilesDir: File? = null,
-    internal val sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = ledgerFilesDir?.let {
-        SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(it))
-    },
+    sessionAggregateSnapshotStore: SessionAggregateSnapshotStore? = null,
     injectedWindowAccumulator: WindowObservationAccumulator? = null,
     windowObservationRuntimeOwner: WindowObservationRuntimeOwner? = null,
     /**
@@ -148,6 +146,7 @@ class EventJoinCoordinator internal constructor(
     initialBluetoothPermissionState: BluetoothPermissionState = BluetoothPermissionState.NotDetermined,
     checkpointDispatcher: CoroutineDispatcher = Dispatchers.IO,
     checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
+    checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
 ) : EventJoinSession {
     constructor(activity: Activity) : this(
         engine = BarnardEventJoinEngine(activity),
@@ -155,18 +154,27 @@ class EventJoinCoordinator internal constructor(
         coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
         registryClient = RegistryDependencies.createClient(),
         sensingCryptography = BarnardSensingCryptography(activity.applicationContext),
-        selfProofRecordStore = SelfProofRecordStore(SelfProofRecordStore.defaultFile(activity.filesDir)),
+        selfProofRecordStore = ProcessSessionCheckpointRuntimeOwner.selfProofStore(
+            SelfProofRecordStore.defaultFile(activity.filesDir),
+        ),
         bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(activity.filesDir)),
         ledgerFilesDir = activity.filesDir,
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
         initialBluetoothPermissionState = currentBluetoothPermissionState(activity),
     )
 
+    private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
+    internal val sessionAggregateSnapshotStore = sessionAggregateSnapshotStore?.let {
+        checkpointRuntimeOwner.aggregateStore(it.file, it)
+    } ?: ledgerFilesDir?.let {
+        checkpointRuntimeOwner.aggregateStore(SessionAggregateSnapshotStore.defaultFile(it))
+    }
+
     private val accounting = ScanDeviceAccounting()
     private var checkpointEninEnd: Long? = null
     private var aggregationRuntime = AggregationRuntime()
     private val sessionCheckpointStore = ledgerFilesDir?.let {
-        SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(it))
+        checkpointRuntimeOwner.checkpointStore(SessionCheckpointStore.defaultDirectory(it))
     }
     private val sessionCheckpointWriter = sessionCheckpointStore?.let { store ->
         SessionCheckpointWriter(
@@ -174,6 +182,7 @@ class EventJoinCoordinator internal constructor(
             dispatcher = checkpointDispatcher,
             persist = checkpointPersistence ?: store::persist,
             onFailure = { logSessionCheckpointFailure("write", it) },
+            serialization = checkpointRuntimeOwner.serialization(SessionCheckpointStore.defaultDirectory(requireNotNull(ledgerFilesDir))),
         )
     }
 

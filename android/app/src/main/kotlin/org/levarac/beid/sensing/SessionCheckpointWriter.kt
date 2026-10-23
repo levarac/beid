@@ -25,11 +25,9 @@ internal class SessionCheckpointWriter(
     private val dispatcher: CoroutineDispatcher,
     private val persist: (SessionCheckpoint) -> Unit,
     private val onFailure: (Exception) -> Unit,
+    private val serialization: SessionCheckpointSerialization = SessionCheckpointSerialization(),
 ) {
     private val pendingLock = Any()
-    private val writeLock = ReentrantLock()
-    private val boundaryWaiters = AtomicInteger()
-    private val boundaryFinished = writeLock.newCondition()
     private var pending: (() -> SessionCheckpoint)? = null
     private val signals = Channel<Unit>(Channel.CONFLATED)
     private var recoveryJob: Job? = null
@@ -79,22 +77,9 @@ internal class SessionCheckpointWriter(
      * lock first; simply releasing a monitor between sessions does not ensure this.
      * Reentrant so finalization can include its flush in the same transaction.
      */
-    fun <T> serialized(action: () -> T): T {
-        boundaryWaiters.incrementAndGet()
-        return writeLock.withLock {
-            try {
-                action()
-            } finally {
-                boundaryWaiters.decrementAndGet()
-                boundaryFinished.signalAll()
-            }
-        }
-    }
+    fun <T> serialized(action: () -> T): T = serialization.serialized(action)
 
-    private fun <T> backgroundTransaction(action: () -> T): T = writeLock.withLock {
-        while (boundaryWaiters.get() > 0) boundaryFinished.await()
-        action()
-    }
+    private fun <T> backgroundTransaction(action: () -> T): T = serialization.backgroundTransaction(action)
 
     private fun write(snapshot: () -> SessionCheckpoint): SessionCheckpoint {
         val checkpoint = snapshot()
@@ -111,4 +96,29 @@ internal class SessionCheckpointWriter(
             signals.cancel()
         }
     }
+}
+
+/** Shared by every writer touching the same checkpoint directory in this process. */
+internal class SessionCheckpointSerialization {
+    private val writeLock = ReentrantLock()
+    private val boundaryWaiters = AtomicInteger()
+    private val boundaryFinished = writeLock.newCondition()
+
+    fun <T> serialized(action: () -> T): T {
+        boundaryWaiters.incrementAndGet()
+        return writeLock.withLock {
+            try {
+                action()
+            } finally {
+                boundaryWaiters.decrementAndGet()
+                boundaryFinished.signalAll()
+            }
+        }
+    }
+
+    fun <T> backgroundTransaction(action: () -> T): T = writeLock.withLock {
+        while (boundaryWaiters.get() > 0) boundaryFinished.await()
+        action()
+    }
+
 }

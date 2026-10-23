@@ -18,7 +18,7 @@ data class SessionAggregateSnapshotRecord(
 internal class ConflictingSessionAggregateSnapshotException : IllegalStateException("conflicting_snapshot")
 
 /** Durable one-snapshot-per-proof store using the shared canonical codec. */
-class SessionAggregateSnapshotStore(file: File) {
+class SessionAggregateSnapshotStore(internal val file: File) {
     private val store = JsonRecordFileStore(
         file = file,
         schemaVersion = SCHEMA_VERSION,

@@ -79,7 +79,7 @@ class EventJoinCoordinatorCheckpointInvariantsTest {
         assertFalse(records.recordsFlow.value.single().hasSelfProof)
 
         assertTrue(proofFile.delete())
-        val recovered = coordinator(directory)
+        val recovered = coordinator(directory, checkpointRuntimeOwner = SessionCheckpointRuntimeOwner())
         try {
             recovered.drainPendingSubmissionsOnForeground()
             runCurrent()
@@ -191,6 +191,7 @@ class EventJoinCoordinatorCheckpointInvariantsTest {
         engine: FakeEventJoinEngine = FakeEventJoinEngine(),
         registry: FakeNearbyEventRegistry = FakeNearbyEventRegistry(),
         cryptography: FakeSensingCryptography = FakeSensingCryptography(),
+        checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
     ) = EventJoinCoordinator(
         engine = engine,
         nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS + testScheduler.currentTime },
@@ -201,5 +202,6 @@ class EventJoinCoordinatorCheckpointInvariantsTest {
         bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(directory)),
         ledgerFilesDir = directory,
         checkpointDispatcher = StandardTestDispatcher(testScheduler),
+        checkpointRuntimeOwner = checkpointRuntimeOwner,
     )
 }
