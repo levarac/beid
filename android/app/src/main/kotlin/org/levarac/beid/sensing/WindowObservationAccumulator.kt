@@ -174,7 +174,6 @@ internal class WindowObservationRuntimeOwner(
             nowEpochSeconds = nowEpochSeconds,
             newWindowId = newWindowId,
             ledgerInstanceId = ledgerInstanceId,
-            artifactSerialization = checkpointRuntimeOwner.serialization(SessionCheckpointStore.defaultDirectory(filesDir)),
             // The writer's own ledger writes (open/close/relaunch reconcile)
             // can coincidentally durably-confirm a submission before the
             // drain ever asks for one — see [SubmissionEmissionOrigin]'s doc.
@@ -222,7 +221,7 @@ internal class WindowObservationAccumulator(
     private val draftStore: WindowObservationDraftStore,
     private val observationDirectory: File,
     private val nowEpochSeconds: () -> Double,
-    private val artifactSerialization: StoreWriteSerialization = DirectStoreWrites,
+    private val artifactSerialization: StoreWriteSerialization = ObservationFileSerialization(),
     /**
      * Defaults to a sibling of [observationDirectory] so that every existing
      * test — one temp directory per test, ledger/draft/observations all
@@ -837,3 +836,9 @@ internal class WindowObservationAccumulator(
 private fun UUID.toHex(): String = "%016x%016x".format(mostSignificantBits, leastSignificantBits)
 
 private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+/** Canonical-file commits are independent of session artifacts. */
+private class ObservationFileSerialization : StoreWriteSerialization {
+    private val lock = Any()
+    override fun <T> serialized(action: () -> T): T = synchronized(lock, action)
+}

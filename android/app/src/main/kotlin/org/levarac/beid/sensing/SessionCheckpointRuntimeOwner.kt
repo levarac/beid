@@ -37,21 +37,19 @@ internal class SessionCheckpointRuntimeOwner {
     @Synchronized
     fun submissionStore(file: File): SubmissionRecordStore =
         submissions.getOrPut(file.canonicalPath) {
-            SubmissionRecordStore(file).also { it.serialization = serializationForFile(file) }
+            SubmissionRecordStore(file)
         }
 
     @Synchronized
     fun ledgerStore(file: File): UnsentWindowLedgerStore =
         ledgers.getOrPut(file.canonicalPath) {
-            UnsentWindowLedgerStore.recoveringCorruptSnapshot(file).store.also {
-                it.serialization = serializationForFile(file)
-            }
+            UnsentWindowLedgerStore.recoveringCorruptSnapshot(file).store
         }
 
     @Synchronized
     fun draftStore(file: File): WindowObservationDraftStore =
         drafts.getOrPut(file.canonicalPath) {
-            WindowObservationDraftStore(file).also { it.serialization = serializationForFile(file) }
+            WindowObservationDraftStore(file)
         }
 
     fun serializationForFile(file: File): SessionCheckpointSerialization =
