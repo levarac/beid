@@ -56,11 +56,6 @@ private final class RecordingRegistryLookup {
   }
 }
 
-private enum SubmissionTestWaitBudget {
-  // One real receipt verification can exceed ten seconds on hosted runners.
-  static let recordCompletion: TimeInterval = 30
-}
-
 @MainActor
 final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
   func testStoreWriteFailuresRearmAnotherOriginsPendingRetry() async throws {
@@ -230,7 +225,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     let recoveredEndpoint = try await server.start()
     XCTAssertEqual(recoveredEndpoint, endpoint)
     scheduler.advance(by: 2)
-    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.diagnostics }) {
+    try await waitUntil(timeout: SubmissionTestWait.timeout * Double(records.count), diagnostics: { server.diagnostics }) {
       ReportSubmissionStore(fileURL: fileURL).records.allSatisfy { $0.submissionState == .accepted }
     }
     XCTAssertEqual(server.postCount, 2)
@@ -268,7 +263,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     defer { runtime.stop() }
     runtime.submitPending()
-    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.diagnostics }) {
+    try await waitUntil(timeout: SubmissionTestWait.timeout * Double(records.count), diagnostics: { server.diagnostics }) {
       ReportSubmissionStore(fileURL: fileURL).records.first(where: { $0.id == records[1].id })?.submissionState == .accepted
     }
     let store = ReportSubmissionStore(fileURL: fileURL)
@@ -389,7 +384,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     scheduler.advance(by: 2)
     // Three real signature verifications drain serially; their total
     // duration is independent of the retry deadline and HTTP timeout.
-    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: {
+    try await waitUntil(timeout: SubmissionTestWait.timeout * Double(records.count), diagnostics: {
       let states = ReportSubmissionStore(fileURL: fileURL).records.map { $0.submissionState.rawValue }
       return "\(server.diagnostics), states=\(states), flights=\(runtime.activeSubmissionCountForTesting)"
     }) {
@@ -1056,17 +1051,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       )
     }
     let expectedEventId = eventIdHex ?? self.eventIdHex
-    for _ in 0..<1_000 {
-      if coordinator.relayGateJoinedEventIdHexForTesting == expectedEventId { break }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    guard coordinator.relayGateJoinedEventIdHexForTesting == expectedEventId else {
-      throw StubOperatorError.joinedStateTimedOut(
-        expected: expectedEventId,
-        actual: coordinator.relayGateJoinedEventIdHexForTesting,
-        refusal: String(describing: coordinator.joinRefusal)
-      )
-    }
+    try await waitForSubmissionJoin(coordinator, eventIdHex: expectedEventId)
     let reporterRpid = "01" + String(repeating: "aa", count: 16)
     for index in 0..<BeidConfig.eventConfirmThreshold {
       let rpid = "01" + String(format: "%032x", index + 1)
@@ -1215,14 +1200,11 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
   }
 
   private func waitUntil(
-    timeout: TimeInterval = SubmissionTestWaitBudget.recordCompletion,
+    timeout: TimeInterval = SubmissionTestWait.timeout,
     diagnostics: () -> String = { "condition timed out" },
     _ predicate: () -> Bool
   ) async throws {
-    for _ in 0..<Int(timeout / 0.01) {
-      if predicate() { return }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
+    if try await SubmissionTestWait.until(timeout: timeout, predicate) { return }
     XCTFail("runtime did not reach the expected durable/idle state: \(diagnostics())")
     throw StubOperatorError.submissionStateTimedOut(expected: "durable/idle", diagnostics: diagnostics())
   }
@@ -1232,25 +1214,16 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     at fileURL: URL,
     server: StubOperatorServer
   ) async throws {
-    // Receipt verification uses real KMP cryptography after HTTP completes.
-    // Hosted runners may finish that computation after ten seconds.
-    for _ in 0..<Int(SubmissionTestWaitBudget.recordCompletion / 0.01) {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == expected {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    throw StubOperatorError.submissionStateTimedOut(expected: expected.rawValue, diagnostics: server.diagnostics)
+    try await waitForStoredSubmissionState(expected, at: fileURL, server: server)
   }
 
   private func waitForTerminalFailure(at fileURL: URL, server: StubOperatorServer) async throws {
-    for _ in 0..<Int(SubmissionTestWaitBudget.recordCompletion / 0.01) {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.terminalErrorCode != nil {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    throw StubOperatorError.submissionStateTimedOut(expected: "terminal failure", diagnostics: server.diagnostics)
+    if try await SubmissionTestWait.until({
+      ReportSubmissionStore(fileURL: fileURL).records.first?.terminalErrorCode != nil
+    }) { return }
+    throw StubOperatorError.submissionStateTimedOut(
+      expected: "terminal failure", diagnostics: "after \(SubmissionTestWait.timeout)s; \(server.diagnostics)"
+    )
   }
 
   private func requiredEnvironment(

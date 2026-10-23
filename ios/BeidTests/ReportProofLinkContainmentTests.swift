@@ -158,9 +158,8 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     coordinator.useDemoEventMode = false
 
     coordinator.startSensing(eventCode: "verified-definition-event", eventIdHex: eventIdHex)
-    // Let the permission grant and registry read admit the join first, as
-    // `ReportSubmissionOperatorIntegrationTests.driveOneRealWindow` does.
-    try await Task.sleep(nanoseconds: 100_000_000)
+    // Detection is meaningful only after permission and registry admission.
+    try await waitForSubmissionJoin(coordinator, eventIdHex: eventIdHex)
     let reporterRpid = "01" + String(repeating: "aa", count: 16)
     for index in 0..<BeidConfig.eventConfirmThreshold {
       coordinator.handleDetection(
@@ -179,6 +178,15 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     try await server.waitFor(postCount: 1)
 
     #if DEBUG
+    let postFinished = try await SubmissionTestWait.until { runtime.activeSubmissionCountForTesting == 0 }
+    guard postFinished else {
+      throw StubOperatorError.submissionStateTimedOut(
+        expected: "original POST callback idle before relaunch",
+        diagnostics: server.diagnostics
+      )
+    }
+    // Model process death only after the first receipt was verified but not persisted.
+    runtime.stop()
     let relaunched = try makeRuntime(
       endpoint: endpoint,
       cryptography: cryptography,
@@ -187,7 +195,7 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     )
     relaunched.submitPending()
     try await server.waitFor(postCount: 1, getCount: 1)
-    try await waitForAcceptedRecord(at: submissionFileURL)
+    try await waitForStoredSubmissionState(.accepted, at: submissionFileURL, server: server)
     withExtendedLifetime(relaunched) {}
     #endif
     withExtendedLifetime(runtime) {}
@@ -359,19 +367,5 @@ final class ReportProofLinkContainmentTests: XCTestCase {
       fileURL: fileURL,
       allowInsecureLoopbackForTests: true
     ))
-  }
-
-  private func waitForAcceptedRecord(at fileURL: URL) async throws {
-    for _ in 0..<1_000 {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
-    throw StubOperatorError.submissionStateTimedOut(
-      expected: ReportSubmissionState.accepted.rawValue,
-      diagnostics: "last state \(actual ?? "nil")"
-    )
   }
 }

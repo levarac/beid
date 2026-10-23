@@ -245,7 +245,7 @@ final class StubOperatorServer {
   var diagnostics: String {
     lock.lock()
     defer { lock.unlock() }
-    return "connections=\(connectionCount), bytes=\(receivedByteCount), requests=\(requestCount), POST=\(_postCount), GET=\(_getCount)"
+    return "ready=\(isReady), error=\(String(describing: startupError)), connections=\(connectionCount), bytes=\(receivedByteCount), requests=\(requestCount), POST=\(_postCount), GET=\(_getCount)"
   }
 
   init(
@@ -286,17 +286,15 @@ final class StubOperatorServer {
     }
     listener.start(queue: queue)
 
-    for _ in 0..<100 {
-      let status = lock.withLock { (isReady, startupError) }
-      if let error = status.1 {
-        throw error
-      }
-      if status.0, let port = listener.port, port.rawValue != 0 {
-        return try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
+    let ready = try await SubmissionTestWait.until {
+      let status = self.lock.withLock { (self.isReady, self.startupError) }
+      if let error = status.1 { throw error }
+      return status.0 && self.listener.port.map { $0.rawValue != 0 } == true
     }
-    throw StubOperatorError.startTimedOut(diagnostics: diagnostics)
+    if ready, let port = listener.port {
+      return try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
+    }
+    throw StubOperatorError.startTimedOut(diagnostics: "after \(SubmissionTestWait.timeout)s; \(diagnostics)")
   }
 
   func stop() {
@@ -310,22 +308,23 @@ final class StubOperatorServer {
 
   func stopAndWait() async throws {
     stop()
-    for _ in 0..<100 {
-      if lock.withLock({ isCancelled }) { return }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    throw StubOperatorError.requestTimedOut(diagnostics: "listener did not release its port")
+    if try await SubmissionTestWait.until({ self.lock.withLock { self.isCancelled } }) { return }
+    throw StubOperatorError.requestTimedOut(
+      diagnostics: "listener did not release its port within \(SubmissionTestWait.timeout)s; \(diagnostics)"
+    )
   }
 
   func waitFor(postCount expectedPosts: Int, getCount expectedGets: Int? = nil) async throws {
-    for _ in 0..<1_000 {
-      if postCount >= expectedPosts,
-         expectedGets.map({ getCount >= $0 }) ?? true {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
+    if try await SubmissionTestWait.until({
+      self.postCount >= expectedPosts && (expectedGets.map { self.getCount >= $0 } ?? true)
+    }) { return }
+    let progress = lock.withLock {
+      connectionCount == 0 ? "no connection arrived" : "connection arrived but expected requests did not complete"
     }
-    throw StubOperatorError.requestTimedOut(diagnostics: diagnostics)
+    throw StubOperatorError.requestTimedOut(
+      diagnostics: "after \(SubmissionTestWait.timeout)s: \(progress); expected POST>=\(expectedPosts), " +
+        "GET>=\(expectedGets ?? 0); \(diagnostics)"
+    )
   }
 
   private func accept(_ connection: NWConnection) {
@@ -512,6 +511,36 @@ final class StubOperatorServer {
     startupError = error
     lock.unlock()
   }
+}
+
+@MainActor
+func waitForStoredSubmissionState(
+  _ expected: ReportSubmissionState,
+  at fileURL: URL,
+  server: StubOperatorServer
+) async throws {
+  var lastState: String?
+  if try await SubmissionTestWait.until({
+    let state = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState
+    lastState = state?.rawValue
+    return state == expected
+  }) { return }
+  throw StubOperatorError.submissionStateTimedOut(
+    expected: expected.rawValue,
+    diagnostics: "after \(SubmissionTestWait.timeout)s; last state \(lastState ?? "no record"); \(server.diagnostics)"
+  )
+}
+
+@MainActor
+func waitForSubmissionJoin(_ coordinator: SensingCoordinator, eventIdHex: String) async throws {
+  if try await SubmissionTestWait.until({
+    coordinator.relayGateJoinedEventIdHexForTesting == eventIdHex
+  }) { return }
+  throw StubOperatorError.joinedStateTimedOut(
+    expected: eventIdHex,
+    actual: coordinator.relayGateJoinedEventIdHexForTesting,
+    refusal: "after \(SubmissionTestWait.timeout)s; \(String(describing: coordinator.joinRefusal))"
+  )
 }
 
 struct HTTPRequest {
