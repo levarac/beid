@@ -34,6 +34,9 @@ class BindingRecordStore(internal val file: File) {
     /** A `Proof` is bound at most once, so the first match is the only match. */
     fun recordForProofId(proofId: UUID): BindingRecord? = store.recordMatching { it.proofId == proofId }
 
+    internal fun readBackRecordForProofId(id: UUID): BindingRecord? =
+        store.readBackRecordMatching { it.proofId == id }
+
     companion object {
         const val SCHEMA_VERSION = 1
 

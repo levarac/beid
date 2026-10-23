@@ -50,6 +50,9 @@ class SessionAggregateSnapshotStore(internal val file: File) {
         return decodeSessionAggregateSnapshot(record.snapshotText).aggregate
     }
 
+    internal fun readBackRecordForProofId(id: UUID): SessionAggregateSnapshotRecord? =
+        store.readBackRecordMatching { it.proofId == id }
+
     companion object {
         const val SCHEMA_VERSION = 1
         fun defaultFile(filesDir: File): File = File(filesDir, "session-aggregate-snapshots-v1.json")

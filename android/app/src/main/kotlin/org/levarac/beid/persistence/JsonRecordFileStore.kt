@@ -89,34 +89,31 @@ internal class JsonRecordFileStore<T>(
         }
     }
 
+    /** Reads durable bytes without replacing this process owner's cached records. */
+    fun readBackRecordMatching(predicate: (T) -> Boolean): T? = synchronized(lock) {
+        if (isPersistenceSuspended) null else readPersistedRecords()?.singleOrNull(predicate)
+    }
+
     private fun load() {
-        if (!file.exists()) return
-        val root = try {
-            Json.parseToJsonElement(file.readText(Charsets.UTF_8)).jsonObject
-        } catch (_: Exception) {
-            isPersistenceSuspended = true
-            return
-        }
-        val version = root["schemaVersion"]?.jsonPrimitive?.int
-        if (version != schemaVersion) {
-            // An unrecognized (or missing) schemaVersion is neither
-            // definitely corrupt nor definitely garbage — same reasoning as
-            // iOS's `RecordSchemaEnvelope.UnsupportedSchemaVersion`: leave
-            // the file in place and stop writing, rather than guess.
-            isPersistenceSuspended = true
-            return
-        }
-        val recordsJson = root["records"]?.jsonArray
-        if (recordsJson == null) {
-            isPersistenceSuspended = true
-            return
-        }
-        records = try {
-            recordsJson.map { fromJson(it.jsonObject) }
-        } catch (_: Exception) {
-            isPersistenceSuspended = true
+        val loaded = readPersistedRecords()
+        isPersistenceSuspended = loaded == null
+        records = loaded.orEmpty()
+    }
+
+    private fun readPersistedRecords(): List<T>? = try {
+        if (!file.exists()) {
             emptyList()
+        } else {
+            val root = Json.parseToJsonElement(file.readText(Charsets.UTF_8)).jsonObject
+            // Unknown versions and undecodable bytes stay untouched for later repair.
+            if (root["schemaVersion"]?.jsonPrimitive?.int != schemaVersion) {
+                null
+            } else {
+                root["records"]?.jsonArray?.map { fromJson(it.jsonObject) }
+            }
         }
+    } catch (_: Exception) {
+        null
     }
 
     // Publish memory only after the atomic durable write succeeds. A failed

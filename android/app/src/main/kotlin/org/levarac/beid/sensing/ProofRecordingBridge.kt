@@ -33,7 +33,7 @@ import org.levarac.beid.persistence.ProofRecordStore
  * keep this reasoning attached to the call sites it protects.
  */
 class ProofRecordingBridge(
-    private val proofRecordStore: ProofRecordStore,
+    internal val proofRecordStore: ProofRecordStore,
     private val now: () -> Instant = Instant::now,
 ) {
     internal fun shared(owner: SessionCheckpointRuntimeOwner) =

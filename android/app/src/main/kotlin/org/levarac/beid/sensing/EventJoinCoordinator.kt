@@ -36,6 +36,8 @@ import org.levarac.parallax.discovery.operatorLookupJoinEligibility
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
+import org.levarac.beid.persistence.ProofRecord
+import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.SelfProofRecord
 import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SessionAggregateSnapshotStore
@@ -165,9 +167,11 @@ class EventJoinCoordinator internal constructor(
 
     private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
     private val bindingRecordStore = checkpointRuntimeOwner.bindingStore(bindingRecordStore.file, bindingRecordStore)
+    private var proofRecordStore: ProofRecordStore? = null
+    private val proofRecordsFile = ledgerFilesDir?.let(ProofRecordStore::defaultFile)
     internal val checkpointSerialization = checkpointRuntimeOwner.serializationForFile(this.selfProofRecordStore.file)
     internal fun sharedProofRecordingBridge(bridge: ProofRecordingBridge): ProofRecordingBridge =
-        bridge.shared(checkpointRuntimeOwner)
+        bridge.shared(checkpointRuntimeOwner).also { proofRecordStore = it.proofRecordStore }
     internal val sessionAggregateSnapshotStore = sessionAggregateSnapshotStore?.let {
         checkpointRuntimeOwner.aggregateStore(it.file, it)
     } ?: ledgerFilesDir?.let {
@@ -1168,12 +1172,37 @@ class EventJoinCoordinator internal constructor(
             ).also(selfProofRecordStore::add)
         }
         val record = selfProofRecordStore.recordForProofId(proofId) ?: return null
-        onProofSignatureStateChanged?.invoke(proofId, true, bindingRecordStore.recordForProofId(proofId) != null)
+        val binding = bindingRecordStore.recordForProofId(proofId)
+        val rows = proofRecordStore ?: proofRecordsFile?.let {
+            checkpointRuntimeOwner.proofRecordStore(it).also { shared -> proofRecordStore = shared }
+        }
+        rows?.let {
+            if (it.recordForId(proofId) == null) {
+                // Older checkpoints contain no collection timestamp. The signed
+                // artifact supplies one only when reconstructing a missing row.
+                it.add(ProofRecord(proofId, checkpoint.eventCode, record.signedAt, checkpoint.aggregate.deviceCount))
+            }
+            it.updateSignatureState(proofId, true, binding != null)
+        }
+        onProofSignatureStateChanged?.invoke(proofId, true, binding != null)
         // A failed aggregate write must retain the checkpoint, independently of signing.
         aggregatePersistence.getOrThrow()
-        // Both final artifacts are durable before their recovery input is removed.
-        // A live session can finish from memory while unknown recovery bytes stay intact.
-        if (clearCheckpoint) sessionCheckpointStore?.clear(proofId)
+        // Cached presence or a suspended store's no-op is not durable evidence.
+        // Read every derived artifact from disk under the same session transaction.
+        if (clearCheckpoint && sessionCheckpointStore != null) {
+            val snapshots = requireNotNull(sessionAggregateSnapshotStore)
+            val collection = requireNotNull(rows)
+            check(!selfProofRecordStore.isPersistenceSuspended && !snapshots.isPersistenceSuspended &&
+                !collection.isPersistenceSuspended && !bindingRecordStore.isPersistenceSuspended)
+            check(selfProofRecordStore.readBackRecordForProofId(proofId) == record)
+            val aggregateRecord = requireNotNull(snapshots.records.singleOrNull { it.proofId == proofId })
+            check(snapshots.readBackRecordForProofId(proofId) == aggregateRecord)
+            if (binding != null) check(bindingRecordStore.readBackRecordForProofId(proofId) == binding)
+            val row = requireNotNull(collection.recordForId(proofId))
+            check(row.eventCode == checkpoint.eventCode && row.hasSelfProof && row.hasBinding == (binding != null))
+            check(collection.readBackRecordForId(proofId) == row)
+            sessionCheckpointStore.clear(proofId)
+        }
         return record
     }
 

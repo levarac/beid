@@ -31,6 +31,9 @@ class SelfProofRecordStore(internal val file: File) {
     /** A `Proof` gets at most one self-proof, so the first match is the only match. */
     fun recordForProofId(proofId: UUID): SelfProofRecord? = store.recordMatching { it.proofId == proofId }
 
+    internal fun readBackRecordForProofId(id: UUID): SelfProofRecord? =
+        store.readBackRecordMatching { it.proofId == id }
+
     companion object {
         const val SCHEMA_VERSION = 1
 

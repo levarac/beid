@@ -95,6 +95,9 @@ class ProofRecordStore(internal val file: File) {
 
     fun recordForId(id: UUID): ProofRecord? = store.recordMatching { it.id == id }
 
+    internal fun readBackRecordForId(id: UUID): ProofRecord? =
+        store.readBackRecordMatching { it.id == id }
+
     companion object {
         const val SCHEMA_VERSION = 1
 
