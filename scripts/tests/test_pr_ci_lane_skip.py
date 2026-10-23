@@ -152,10 +152,27 @@ class DocsOnlyPullRequestTest(unittest.TestCase):
 
 
 class NonDocumentationPullRequestTest(unittest.TestCase):
-    def test_ios_lane_runs_for_android_ios_shared_workflow_and_unknown_changes(self):
-        for files in (ANDROID_ONLY, IOS_ONLY, SHARED, WORKFLOW_EDIT, UNKNOWN, DOCS_ONLY + ANDROID_ONLY):
+    def test_ios_lane_runs_for_ios_shared_workflow_and_unknown_changes(self):
+        for files in (IOS_ONLY, SHARED, WORKFLOW_EDIT, UNKNOWN):
             with self.subTest(files=files):
                 self.assertTrue(lane_runs("ios", files=files))
+
+    def test_android_app_only_skips_ios(self):
+        for files in (ANDROID_ONLY, DOCS_ONLY + ANDROID_ONLY,
+                      ["android/app/build.gradle.kts"],
+                      ["android/app/src/main/$(touch injected).kt"]):
+            with self.subTest(files=files):
+                self.assertFalse(lane_runs("ios", files=files))
+
+    def test_shared_build_inputs_and_unknown_android_modules_run_ios(self):
+        for path in ("android/build.gradle.kts", "android/settings.gradle.kts",
+                     "android/gradle.properties", "android/gradlew",
+                     "android/gradle/wrapper/gradle-wrapper.jar",
+                     "android/gradle/libs.versions.toml", "android/new-module/Foo.kt",
+                     "scripts/xcodegen_generate_checked.sh", "scripts/ci_simulator.py",
+                     "scripts/download_xcodegen.sh", "scripts/resolve_kmp_java_home.sh"):
+            with self.subTest(path=path):
+                self.assertTrue(lane_runs("ios", files=[path]))
 
     def test_lab_cli_lane_runs_for_lab_cli_ios_shared_workflow_and_unknown_changes(self):
         for files in (LAB_CLI_ONLY, IOS_ONLY, SHARED, WORKFLOW_EDIT, UNKNOWN, DOCS_ONLY + LAB_CLI_ONLY):

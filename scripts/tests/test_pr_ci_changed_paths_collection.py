@@ -16,6 +16,7 @@ import unittest
 from pathlib import Path
 
 from scripts.ci_change_filter import classify
+from scripts.tests.test_pr_ci_lane_skip import lane_runs
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
@@ -83,6 +84,9 @@ class CollectionStepTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             (folder / "harness.js").write_text(HARNESS, encoding="utf-8")
+            for page in scenario.get("pages", []):
+                for entry in page:
+                    entry.setdefault("status", "modified")
             (folder / "scenario.json").write_text(json.dumps(scenario), encoding="utf-8")
             (folder / "script.js").write_text(collection_script(name), encoding="utf-8")
             result = subprocess.run(
@@ -142,6 +146,29 @@ class CollectionStepTest(unittest.TestCase):
             "pages": [[{"filename": "docs/new.md", "previous_filename": "ios/Old.swift"}]],
         })
         self.assertEqual(result["output"]["files"], ["docs/new.md", "ios/Old.swift"])
+
+    def test_unsafe_file_metadata_runs_ios_even_for_excluded_paths(self):
+        for entry in (
+            {"filename": "shared/New.kt", "previous_filename": "android/app/Old.kt", "status": "renamed"},
+            {"filename": "android/app/New.kt", "previous_filename": "android/app/Old.kt", "status": "renamed"},
+            {"filename": "android/app/Old.kt", "status": "removed"},
+            {"filename": "docs/old.md", "status": "removed"},
+            {"filename": "android/app/New.kt", "status": None},
+            {"filename": "android/app/New.kt", "status": "unexpected"},
+            {"filename": ""},
+        ):
+            with self.subTest(entry=entry):
+                result = self.run_script("pr-ci-ios-macos.yml", {
+                    "context": pull_request("b" * 40, "a" * 40), "pages": [[entry]],
+                })
+                self.assertTrue(result["output"].get("ios_force_run", False))
+
+    def test_android_app_collection_reaches_the_ios_skip_condition(self):
+        result = self.run_script("pr-ci-ios-macos.yml", {
+            "context": pull_request("b" * 40, "a" * 40),
+            "pages": [[{"filename": "android/app/src/main/Foo.kt"}]],
+        })
+        self.assertFalse(lane_runs("ios", files=result["output"]["files"]))
 
     def test_push_uses_before_and_after(self):
         result = self.run_script("pr-ci.yml", {
