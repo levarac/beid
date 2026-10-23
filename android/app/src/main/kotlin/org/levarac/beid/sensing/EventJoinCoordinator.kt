@@ -280,7 +280,7 @@ class EventJoinCoordinator internal constructor(
     /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
     private var scanPhase: ScanPhase = ScanPhase.Idle
     private var discoveryOnlyScanOwned = false
-    private var disposed = false
+    @Volatile private var disposed = false
 
     /**
      * Identity of the join verification currently allowed to finish (beid#374).
@@ -308,7 +308,7 @@ class EventJoinCoordinator internal constructor(
      * iOS's `activeProofId`. `null` means no self-proof/binding is due at
      * session end: the session never reached `Recording`.
      */
-    private var activeProofId: UUID? = null
+    @Volatile private var activeProofId: UUID? = null
 
     /** Wallet connect+binding lifecycle for the currently recording event — see [EventBindingState]. */
     private val _bindingState = MutableStateFlow<EventBindingState>(EventBindingState.None)
@@ -391,6 +391,9 @@ class EventJoinCoordinator internal constructor(
      * once at construction.
      *
      * **Threading, verified per call site (not assumed):**
+     * - Foreground checkpoint recovery invokes this on the checkpoint worker.
+     *   Its store writes stay off main, and ProofRecordingBridge publishes the
+     *   recovered record through the thread-safe ProofRecordStore.recordsFlow.
      * - [finalizeSelfProofIfNeeded]'s two call sites are ordinary method
      *   calls, not Barnard callbacks: [leaveEvent] is invoked from
      *   `AccountScreen.kt`'s "Leave Event" button
@@ -1054,10 +1057,14 @@ class EventJoinCoordinator internal constructor(
      */
     private fun finalizeSelfProofIfNeeded(): SelfProofRecord? {
         val snapshot = currentSessionCheckpoint() ?: return null
-        // Flush removes older queued work before final artifacts can clear recovery input.
-        val checkpoint = sessionCheckpointWriter?.flush(snapshot) ?: snapshot()
         return try {
-            finalizeSessionCheckpoint(checkpoint)
+            val writer = sessionCheckpointWriter
+            if (writer == null) {
+                finalizeSessionCheckpoint(snapshot())
+            } else {
+                // Recovery cannot interleave between the flush and final-artifact writes.
+                writer.serialized { finalizeSessionCheckpoint(writer.flush(snapshot)) }
+            }
         } catch (error: Exception) {
             logSessionCheckpointFailure("finalize", error)
             null
@@ -1255,7 +1262,9 @@ class EventJoinCoordinator internal constructor(
         if (disposed) return
         // MainActivity has connected the collection callbacks by this point.
         // Signing failures retain checkpoints without breaking construction.
-        reconcileSessionCheckpoints()
+        sessionCheckpointWriter?.reconcile {
+            if (!disposed) reconcileSessionCheckpoints()
+        }
         windowObservationRuntime?.drainPendingSubmissions()
     }
 

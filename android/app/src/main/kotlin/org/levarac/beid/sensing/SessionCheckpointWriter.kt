@@ -2,8 +2,10 @@ package org.levarac.beid.sensing
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.levarac.beid.persistence.SessionCheckpoint
 
@@ -11,11 +13,12 @@ import org.levarac.beid.persistence.SessionCheckpoint
  * One pending immutable observation prefix, not one job or aggregate per detection.
  * Scheduling never takes the I/O lock. Boundary flushes wait for an in-flight
  * write, discard queued older work, and durably save the caller's latest prefix.
- * Callers serialize schedule/flush/close on the Activity's main thread.
+ * Recovery and finalization share that I/O lock, including signing and removal
+ * of recovery input. Callers schedule work and boundary flushes on main.
  */
 internal class SessionCheckpointWriter(
-    scope: CoroutineScope,
-    dispatcher: CoroutineDispatcher,
+    private val scope: CoroutineScope,
+    private val dispatcher: CoroutineDispatcher,
     private val persist: (SessionCheckpoint) -> Unit,
     private val onFailure: (Exception) -> Unit,
 ) {
@@ -23,6 +26,7 @@ internal class SessionCheckpointWriter(
     private val writeLock = Any()
     private var pending: (() -> SessionCheckpoint)? = null
     private val signals = Channel<Unit>(Channel.CONFLATED)
+    private var recoveryJob: Job? = null
     private val job = scope.launch(dispatcher) {
         for (signal in signals) {
             delay(1_000)
@@ -50,6 +54,20 @@ internal class SessionCheckpointWriter(
         write(snapshot)
     }
 
+    /** One foreground recovery at a time; no checkpoint/store work on the caller. */
+    fun reconcile(action: () -> Unit) {
+        if (recoveryJob?.isActive == true) return
+        recoveryJob = scope.launch(dispatcher) {
+            synchronized(writeLock) {
+                coroutineContext.ensureActive()
+                action()
+            }
+        }
+    }
+
+    /** Keeps the boundary flush and final artifacts in the same transaction as recovery. */
+    fun <T> serialized(action: () -> T): T = synchronized(writeLock) { action() }
+
     private fun write(snapshot: () -> SessionCheckpoint): SessionCheckpoint {
         val checkpoint = snapshot()
         try {
@@ -62,6 +80,11 @@ internal class SessionCheckpointWriter(
 
     fun close() {
         job.cancel()
-        signals.cancel()
+        recoveryJob?.cancel()
+        // A running synchronous recovery must finish before disposal returns.
+        synchronized(writeLock) {
+            synchronized(pendingLock) { pending = null }
+            signals.cancel()
+        }
     }
 }

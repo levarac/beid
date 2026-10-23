@@ -193,7 +193,9 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
         engine.onEvent = null // Process death immediately after onStop, without teardown.
         val recovered = coordinator(directory)
         recovered.drainPendingSubmissionsOnForeground()
+        runCurrent()
         recovered.drainPendingSubmissionsOnForeground()
+        runCurrent()
         recovered.dispose()
         assertEquals(proofId, SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single().proofId)
         assertEquals(5, SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(directory))
@@ -216,6 +218,7 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
         coordinator.dispose()
         val recovered = coordinator(directory)
         recovered.drainPendingSubmissionsOnForeground()
+        runCurrent()
         recovered.dispose()
         val record = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single()
         assertEquals(8L, record.eninEnd)
