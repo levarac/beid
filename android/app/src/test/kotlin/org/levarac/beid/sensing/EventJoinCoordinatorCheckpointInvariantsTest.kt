@@ -23,6 +23,50 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointInvariantsTest {
     @Test
+    fun corruptCheckpointFallsBackToMemoryOnLeave() = unreadableCheckpointFallsBackToMemory("corrupt checkpoint", false)
+
+    @Test
+    fun corruptCheckpointFallsBackToMemoryOnDispose() = unreadableCheckpointFallsBackToMemory("corrupt checkpoint", true)
+
+    @Test
+    fun unsupportedCheckpointFallsBackToMemoryOnLeave() =
+        unreadableCheckpointFallsBackToMemory("""{"schemaVersion":99,"records":[]}""", false)
+
+    @Test
+    fun unsupportedCheckpointFallsBackToMemoryOnDispose() =
+        unreadableCheckpointFallsBackToMemory("""{"schemaVersion":99,"records":[]}""", true)
+
+    private fun unreadableCheckpointFallsBackToMemory(unreadable: String, dispose: Boolean) = runTest {
+        val directory = Files.createTempDirectory("checkpoint-unreadable-live").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val live = coordinator(directory, engine, registry)
+        val records = ProofRecordStore(ProofRecordStore.defaultFile(directory))
+        wireProofRecording(live, ProofRecordingBridge(records))
+        try {
+            joinPromotedVectorEvent(live, engine, registry)
+            repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
+            live.checkpointSession()
+            val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+            val proofId = checkpoints.proofIds().single()
+            val file = File(SessionCheckpointStore.defaultDirectory(directory), "$proofId.json")
+            file.writeText(unreadable)
+            engine.emitDetection(enin = 9, rpid = "last", detectedDisplayId = "last")
+            if (dispose) live.dispose() else live.leaveEvent()
+            assertEquals(unreadable, file.readText(), "unreadable recovery input must remain untouched")
+            val signed = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single()
+            assertEquals(proofId, signed.proofId)
+            assertEquals(7L, signed.eninStart)
+            assertEquals(9L, signed.eninEnd)
+            assertEquals(4, SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(directory))
+                .snapshot(proofId)?.observationCount)
+            assertTrue(records.recordsFlow.value.single().hasSelfProof)
+        } finally {
+            live.dispose()
+        }
+    }
+
+    @Test
     fun overlappingCoordinatorsKeepBothFinalizedRecordsAndAggregates() = runTest {
         val directory = Files.createTempDirectory("checkpoint-shared-stores").toFile()
         val firstEngine = FakeEventJoinEngine()
