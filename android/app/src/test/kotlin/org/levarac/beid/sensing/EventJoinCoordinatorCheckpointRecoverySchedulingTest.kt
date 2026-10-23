@@ -26,6 +26,47 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorCheckpointRecoverySchedulingTest {
     @Test
+    fun draftPersistCompletesWhileRecoveryIsSigning() = runTest {
+        val directory = Files.createTempDirectory("draft-during-signing").toFile()
+        seedCheckpoint(directory)
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val crypto = object : FakeSensingCryptography() {
+            override fun signSelfProof(
+                eventIdHash: ByteArray, eventSigningPublicKey: ByteArray, eninStart: Long, eninEnd: Long,
+            ): SensingRecoverableSignature? {
+                entered.countDown()
+                check(release.await(30, TimeUnit.SECONDS))
+                return super.signSelfProof(eventIdHash, eventSigningPublicKey, eninStart, eninEnd)
+            }
+        }
+        val recovered = coordinator(directory, cryptography = crypto)
+        val worker = Executors.newSingleThreadExecutor()
+        val watchdog = Executors.newSingleThreadScheduledExecutor()
+        val draft = ProcessSessionCheckpointRuntimeOwner.draftStore(
+            org.levarac.beid.persistence.WindowObservationDraftStore.defaultFile(directory))
+        try {
+            recovered.drainPendingSubmissionsOnForeground()
+            val recovery = worker.submit { testScheduler.runCurrent() }
+            assertTrue(entered.await(30, TimeUnit.SECONDS))
+            // Release a broken implementation without deadlocking the test's main thread.
+            watchdog.schedule({ release.countDown() }, 3, TimeUnit.SECONDS)
+            draft.persist(org.levarac.beid.shared.report.createWindowObservationDraft(
+                "00112233-4455-6677-8899-aabbccddeeff", 7, "event", "21".repeat(32),
+                "22".repeat(32), "ab".repeat(32), "01" + "10".repeat(15)).draft!!)
+            assertEquals(1L, release.count, "main-thread draft persistence must not wait for signing")
+            release.countDown()
+            recovery.get(30, TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+            worker.shutdown()
+            worker.awaitTermination(30, TimeUnit.SECONDS)
+            watchdog.shutdownNow()
+            recovered.dispose()
+        }
+    }
+
+    @Test
     fun foregroundDefersCheckpointReadsSigningAndRecordUpdatesAndPublishesRecoveredRecords() = runTest {
         val directory = Files.createTempDirectory("checkpoint-foreground-dispatch").toFile()
         seedCheckpoint(directory)
