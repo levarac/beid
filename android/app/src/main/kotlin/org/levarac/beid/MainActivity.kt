@@ -254,7 +254,7 @@ internal fun wireProofRecording(coordinator: EventJoinCoordinator, bridge: Proof
     coordinator.onPeersVerifiedChanged = { id, peers ->
         coordinator.checkpointSerialization.serialized { shared.onPeersVerifiedChanged(id, peers) }
     }
-    coordinator.onProofSignatureStateChanged = { id, selfProof, binding ->
-        coordinator.checkpointSerialization.serialized { shared.onProofSignatureStateChanged(id, selfProof, binding) }
+    coordinator.onProofSignatureStateChanged = { _, _, _ ->
+        shared.onProofSignatureStatePersisted()
     }
 }

@@ -54,6 +54,9 @@ class ProofRecordingBridge(
         proofRecordStore.updatePeersVerified(proofId, peersVerified)
     }
 
+    /** The coordinator has committed signature state; this path only notifies readers. */
+    internal fun onProofSignatureStatePersisted() = proofRecordStore.notifyRecordsChanged()
+
     fun onProofSignatureStateChanged(proofId: UUID, hasSelfProof: Boolean, hasBinding: Boolean) {
         proofRecordStore.updateSignatureState(proofId, hasSelfProof, hasBinding)
     }

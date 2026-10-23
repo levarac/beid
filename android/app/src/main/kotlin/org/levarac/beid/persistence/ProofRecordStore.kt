@@ -93,6 +93,11 @@ class ProofRecordStore(internal val file: File) {
         }
     }
 
+    /** Publishes already persisted records without rewriting their file. */
+    internal fun notifyRecordsChanged() = serialization.serialized {
+        synchronized(lock) { _recordsFlow.value = store.records }
+    }
+
     fun recordForId(id: UUID): ProofRecord? = store.recordMatching { it.id == id }
 
     internal fun readBackRecordForId(id: UUID): ProofRecord? =

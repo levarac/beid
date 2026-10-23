@@ -1185,9 +1185,11 @@ class EventJoinCoordinator internal constructor(
                 if (it.recordForId(proofId) == null) {
                     // Older checkpoints contain no collection timestamp. The signed
                     // artifact supplies one only when reconstructing a missing row.
-                    it.add(ProofRecord(proofId, checkpoint.eventCode, record.signedAt, checkpoint.aggregate.deviceCount))
+                    it.add(ProofRecord(proofId, checkpoint.eventCode, record.signedAt, checkpoint.aggregate.deviceCount,
+                        hasSelfProof = true, hasBinding = binding != null))
+                } else {
+                    it.updateSignatureState(proofId, true, binding != null)
                 }
-                it.updateSignatureState(proofId, true, binding != null)
             }
             onProofSignatureStateChanged?.invoke(proofId, true, binding != null)
             // A failed aggregate write must retain the checkpoint, independently of signing.
@@ -1342,7 +1344,9 @@ class EventJoinCoordinator internal constructor(
         )
         checkpointSerialization.serialized {
             bindingRecordStore.add(record)
-            onProofSignatureStateChanged?.invoke(proofId, selfProofRecordStore.recordForProofId(proofId) != null, true)
+            val hasSelfProof = selfProofRecordStore.recordForProofId(proofId) != null
+            proofRecordStore?.updateSignatureState(proofId, hasSelfProof, true)
+            onProofSignatureStateChanged?.invoke(proofId, hasSelfProof, true)
         }
         bindingState = EventBindingState.Bound(record)
         pendingBindingMessage = null
