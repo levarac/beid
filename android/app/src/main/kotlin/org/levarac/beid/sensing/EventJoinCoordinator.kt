@@ -303,6 +303,7 @@ class EventJoinCoordinator internal constructor(
 
     /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
     private var scanPhase: ScanPhase = ScanPhase.Idle
+    private var scanEventSession = ScanEventSession(UNKNOWN_EVENT_CODE)
     private var discoveryOnlyScanOwned = false
     @Volatile private var disposed = false
 
@@ -383,7 +384,7 @@ class EventJoinCoordinator internal constructor(
      * `coroutineScope.launch { }` wrapping fixed in `1c7db20` — do not assume
      * the two share a dispatcher just because both are Barnard-adjacent.
      */
-    var onProofCollected: ((proofId: UUID, eventCode: String, peersVerified: Int) -> Unit)? = null
+    var onProofCollected: ((proofId: UUID, session: ScanEventSession, peersVerified: Int) -> Unit)? = null
 
     /**
      * Fired every time [scanPhase] stays [ScanPhase.Recording] across a
@@ -812,11 +813,18 @@ class EventJoinCoordinator internal constructor(
         discoveryOnlyScanOwned = false
         startParticipantRelay()
         republishRelayGateState(joinedEventIdHex = context.eventIdHex)
-        startSensing()
+        startSensing(
+            ScanEventSession(
+                eventCode = context.joinCode,
+                eventName = context.eventName,
+                eventIdHex = context.eventIdHex,
+            ),
+        )
     }
 
-    private fun startSensing() {
+    private fun startSensing(session: ScanEventSession) {
         resetSessionState()
+        scanEventSession = session
         scanPhase = applyStartSensing()
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }
@@ -937,7 +945,7 @@ class EventJoinCoordinator internal constructor(
             is ScanPhase.EventFound -> phase.session
             is ScanPhase.Recording -> phase.session
             is ScanPhase.SignalLost -> phase.session
-            ScanPhase.Sensing -> ScanEventSession(eventCode = engine.getCurrentEventCode() ?: UNKNOWN_EVENT_CODE)
+            ScanPhase.Sensing -> scanEventSession
             ScanPhase.Idle -> ScanEventSession(eventCode = UNKNOWN_EVENT_CODE)
         }
 
@@ -986,7 +994,7 @@ class EventJoinCoordinator internal constructor(
         }
         activeProofId = UUID.randomUUID()
         ProcessSessionCheckpointProofs.add(activeProofId!!)
-        onProofCollected?.invoke(activeProofId!!, recording.session.eventCode, recording.peersVerified)
+        onProofCollected?.invoke(activeProofId!!, recording.session, recording.peersVerified)
         bindingState = EventBindingState.PendingConnect(recording.session)
     }
 
@@ -1132,12 +1140,13 @@ class EventJoinCoordinator internal constructor(
 
     private fun currentSessionCheckpoint(): (() -> SessionCheckpoint)? {
         val proofId = activeProofId ?: return null
-        val eventCode = currentRecordingSession()?.eventCode ?: return null
+        val session = currentRecordingSession() ?: return null
         val eninStart = accounting.firstWindowEnin ?: return null
         val eninEnd = checkpointEninEnd ?: return null
         val aggregate = aggregationRuntime.snapshotAggregate()
         return {
-            SessionCheckpoint(proofId, eventCode, eninStart, eninEnd, aggregate())
+            SessionCheckpoint(proofId, session.eventCode, eninStart, eninEnd, aggregate(),
+                eventName = session.eventName, eventIdHex = session.eventIdHex)
         }
     }
 
@@ -1186,9 +1195,11 @@ class EventJoinCoordinator internal constructor(
                     // Older checkpoints contain no collection timestamp. The signed
                     // artifact supplies one only when reconstructing a missing row.
                     it.add(ProofRecord(proofId, checkpoint.eventCode, record.signedAt, checkpoint.aggregate.deviceCount,
-                        hasSelfProof = true, hasBinding = binding != null))
+                        hasSelfProof = true, hasBinding = binding != null,
+                        eventName = checkpoint.eventName, eventIdHex = checkpoint.eventIdHex))
                 } else {
-                    it.updateSignatureState(proofId, true, binding != null)
+                    it.updateSignatureState(proofId, true, binding != null,
+                        eventName = checkpoint.eventName, eventIdHex = checkpoint.eventIdHex)
                 }
             }
             onProofSignatureStateChanged?.invoke(proofId, true, binding != null)

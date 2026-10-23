@@ -43,7 +43,9 @@ jobs:
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
-    timeout-minutes: 45
+    # The serial unit and UI suites (959 tests) take 28-39 minutes after a
+    # 9-14 minute build; 45 minutes cancelled most runs from 2026-10-15 on.
+    timeout-minutes: 60
     steps:
       - name: Initialize CI output path
         shell: bash

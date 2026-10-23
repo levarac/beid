@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.util.UUID
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
@@ -23,6 +24,9 @@ internal data class SessionCheckpoint(
     val eninStart: Long,
     val eninEnd: Long,
     val aggregate: SessionAggregate,
+    /** Verified join metadata; checkpoints written before this addition omit it. */
+    val eventName: String? = null,
+    val eventIdHex: String? = null,
 )
 
 /**
@@ -103,6 +107,8 @@ internal class SessionCheckpointStore(private val directory: File) {
                 put("eninStart", checkpoint.eninStart)
                 put("eninEnd", checkpoint.eninEnd)
                 put("aggregateSnapshot", requireNotNull(encoded.snapshotText))
+                checkpoint.eventName?.let { put("eventName", it) }
+                checkpoint.eventIdHex?.let { put("eventIdHex", it) }
             }
         }
 
@@ -120,6 +126,8 @@ internal class SessionCheckpointStore(private val directory: File) {
                 eninStart = start,
                 eninEnd = end,
                 aggregate = requireNotNull(aggregate.aggregate),
+                eventName = json["eventName"]?.jsonPrimitive?.contentOrNull,
+                eventIdHex = json["eventIdHex"]?.jsonPrimitive?.contentOrNull,
             )
         }
     }

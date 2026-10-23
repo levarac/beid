@@ -87,10 +87,19 @@ fun RecordDetailScreen(record: ProofRecord, aggregate: org.levarac.beid.shared.a
     BeidScreen(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Column(verticalArrangement = Arrangement.spacedBy(BeidSpacing.xs)) {
             Text(
-                text = record.eventCode,
+                text = record.eventName ?: record.eventCode,
                 style = MaterialTheme.typography.headlineLarge,
                 color = BeidTheme.colors.textPrimary,
             )
+            if (record.eventName != null) {
+                record.eventIdHex?.let { eventId ->
+                    Text(
+                        text = eventId,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BeidTheme.colors.textSecondary,
+                    )
+                }
+            }
             Text(
                 text = recordDateFormatter.format(record.createdAt),
                 style = MaterialTheme.typography.bodyMedium,

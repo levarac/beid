@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -83,11 +84,20 @@ class ProofRecordStore(internal val file: File) {
     }
 
     /** Sets a proof's derived signature status once self-proof/binding evidence exists, mirroring iOS's `ProofStore.updateSignatureState(for:to:)`. */
-    fun updateSignatureState(id: UUID, hasSelfProof: Boolean, hasBinding: Boolean) = serialization.serialized {
+    fun updateSignatureState(
+        id: UUID,
+        hasSelfProof: Boolean,
+        hasBinding: Boolean,
+        eventName: String? = null,
+        eventIdHex: String? = null,
+    ) = serialization.serialized {
         synchronized(lock) {
             store.updateRecord(
                 predicate = { it.id == id },
-                transform = { it.copy(hasSelfProof = hasSelfProof, hasBinding = hasBinding) },
+                // Recover missing verified metadata in the same durable replacement.
+                // Existing identity survives checkpoints that predate these fields.
+                transform = { it.copy(hasSelfProof = hasSelfProof, hasBinding = hasBinding,
+                    eventName = it.eventName ?: eventName, eventIdHex = it.eventIdHex ?: eventIdHex) },
             )
             _recordsFlow.value = store.records
         }
@@ -115,6 +125,8 @@ class ProofRecordStore(internal val file: File) {
             put("peersVerified", record.peersVerified)
             put("hasSelfProof", record.hasSelfProof)
             put("hasBinding", record.hasBinding)
+            record.eventName?.let { put("eventName", it) }
+            record.eventIdHex?.let { put("eventIdHex", it) }
         }
 
         private fun fromJson(json: JsonObject): ProofRecord = ProofRecord(
@@ -124,6 +136,8 @@ class ProofRecordStore(internal val file: File) {
             peersVerified = json.getValue("peersVerified").jsonPrimitive.int,
             hasSelfProof = json.getValue("hasSelfProof").jsonPrimitive.boolean,
             hasBinding = json.getValue("hasBinding").jsonPrimitive.boolean,
+            eventName = json["eventName"]?.jsonPrimitive?.contentOrNull,
+            eventIdHex = json["eventIdHex"]?.jsonPrimitive?.contentOrNull,
         )
     }
 }

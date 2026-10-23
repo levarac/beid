@@ -39,11 +39,13 @@ class ProofRecordingBridge(
     internal fun shared(owner: SessionCheckpointRuntimeOwner) =
         ProofRecordingBridge(owner.proofRecordStore(proofRecordStore.file, proofRecordStore), now)
 
-    fun onProofCollected(proofId: UUID, eventCode: String, peersVerified: Int) {
+    fun onProofCollected(proofId: UUID, session: ScanEventSession, peersVerified: Int) {
         proofRecordStore.add(
             ProofRecord(
                 id = proofId,
-                eventCode = eventCode,
+                eventCode = session.eventCode,
+                eventName = session.eventName,
+                eventIdHex = session.eventIdHex,
                 createdAt = now(),
                 peersVerified = peersVerified,
             ),
