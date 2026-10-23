@@ -57,6 +57,8 @@ data class RecordListItem(
     val createdAt: Instant,
     val peersVerified: Int,
     val signatureStatus: RecordSignatureStatus,
+    /** Keep a real name intact even when its text happens to look like a hex ID. */
+    val eventName: String? = null,
 )
 
 enum class RecordSignatureStatus { NotSigned, SelfProof, Bound }
@@ -71,7 +73,8 @@ private fun String.toRecordDisplayLabel(): String = if (matches(EventCodeHexPatt
 
 fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
     id = id,
-    eventLabel = eventCode,
+    eventLabel = eventName ?: eventCode,
+    eventName = eventName,
     createdAt = createdAt,
     peersVerified = peersVerified,
     signatureStatus = when {
@@ -92,10 +95,8 @@ fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
  * `PastEventsView.swift` doc comment sets for its own reduced slice):
  * - No grouping by event and no artwork/gradient. The separate Today entry
  *   added by #342 remains available without changing these read-only rows.
- * - Production rows have no event display name — Android has no session-type
- *   field to source one from yet, so [toRecordListItem] uses the raw
- *   [ProofRecord.eventCode]. Read-only scenarios may supply an intentionally
- *   long display label without creating a persistable [ProofRecord].
+ * - Production rows use the optional name retained at verified join. Older
+ *   records and joins without a name keep their event-code presentation.
  * - Production signature status is mapped from [ProofRecord.hasSelfProof]/
  *   [ProofRecord.hasBinding] record *presence*, never a ported
  *   `ProofSignatureState`/wallet-`personal_sign` mirror — that mechanism is
@@ -194,7 +195,7 @@ internal val recordDateFormatter: DateTimeFormatter =
 
 @Composable
 private fun RecordRow(record: RecordListItem, onClick: () -> Unit) {
-    val displayLabel = record.eventLabel.toRecordDisplayLabel()
+    val displayLabel = record.eventName ?: record.eventLabel.toRecordDisplayLabel()
     BeidPanel(
         modifier = Modifier
             .clickable(onClick = onClick)

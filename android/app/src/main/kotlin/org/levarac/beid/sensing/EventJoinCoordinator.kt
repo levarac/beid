@@ -263,6 +263,7 @@ class EventJoinCoordinator internal constructor(
 
     /** Source of truth for the current [ScanPhase] — mirrors [_state]'s payload once `Sensing` is reached. */
     private var scanPhase: ScanPhase = ScanPhase.Idle
+    private var scanEventSession = ScanEventSession(UNKNOWN_EVENT_CODE)
     private var discoveryOnlyScanOwned = false
     private var disposed = false
 
@@ -354,7 +355,7 @@ class EventJoinCoordinator internal constructor(
      * `coroutineScope.launch { }` wrapping fixed in `1c7db20` — do not assume
      * the two share a dispatcher just because both are Barnard-adjacent.
      */
-    var onProofCollected: ((proofId: UUID, eventCode: String, peersVerified: Int) -> Unit)? = null
+    var onProofCollected: ((proofId: UUID, session: ScanEventSession, peersVerified: Int) -> Unit)? = null
 
     /**
      * Fired every time [scanPhase] stays [ScanPhase.Recording] across a
@@ -780,11 +781,18 @@ class EventJoinCoordinator internal constructor(
         discoveryOnlyScanOwned = false
         startParticipantRelay()
         republishRelayGateState(joinedEventIdHex = context.eventIdHex)
-        startSensing()
+        startSensing(
+            ScanEventSession(
+                eventCode = context.joinCode,
+                eventName = context.eventName,
+                eventIdHex = context.eventIdHex,
+            ),
+        )
     }
 
-    private fun startSensing() {
+    private fun startSensing(session: ScanEventSession) {
         resetSessionState()
+        scanEventSession = session
         scanPhase = applyStartSensing()
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }
@@ -901,7 +909,7 @@ class EventJoinCoordinator internal constructor(
             is ScanPhase.EventFound -> phase.session
             is ScanPhase.Recording -> phase.session
             is ScanPhase.SignalLost -> phase.session
-            ScanPhase.Sensing -> ScanEventSession(eventCode = engine.getCurrentEventCode() ?: UNKNOWN_EVENT_CODE)
+            ScanPhase.Sensing -> scanEventSession
             ScanPhase.Idle -> ScanEventSession(eventCode = UNKNOWN_EVENT_CODE)
         }
 
@@ -943,7 +951,7 @@ class EventJoinCoordinator internal constructor(
             return
         }
         activeProofId = UUID.randomUUID()
-        onProofCollected?.invoke(activeProofId!!, recording.session.eventCode, recording.peersVerified)
+        onProofCollected?.invoke(activeProofId!!, recording.session, recording.peersVerified)
         bindingState = EventBindingState.PendingConnect(recording.session)
     }
 
