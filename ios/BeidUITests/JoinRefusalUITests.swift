@@ -3,7 +3,7 @@
 
 import XCTest
 
-/// Runtime proof for beid#430. The fixture drives the actual SensingView with
+/// Runtime proof for beid#430. The fixture drives the actual scan flow with
 /// one typed refusal; the existing coordinator tests cover the other cases.
 ///
 /// The original version of this comment said the View renders every refusal at
@@ -40,18 +40,21 @@ final class JoinRefusalUITests: XCTestCase {
     let refusalTitle = app.staticTexts[
       "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
     ]
-    app.scrollViews["scan.sensing"].assertHittable()
+    // A refusal replaces the sensing screen; it is not a panel inside it.
+    let refusalPanel = app.scrollViews["scan.cant-join"]
+    refusalPanel.assertHittable()
     refusalTitle.scrollToHittable(in: app)
 
     app.buttons["Close"].assertHittable()
     app.buttons["Close"].tap()
+    refusalPanel.assertDisappears()
     refusalTitle.assertDisappears()
 
     // A fresh scan starts after finishScan() reset the coordinator session, so
     // this proves the user-visible refusal was cleared rather than left stale.
     senseEvent.assertHittable()
     senseEvent.tap()
-    app.scrollViews["scan.sensing"].assertHittable()
+    refusalPanel.assertHittable()
     refusalTitle.scrollToHittable(in: app)
   }
 }
