@@ -1110,7 +1110,6 @@ class EventJoinCoordinator internal constructor(
     // The signed range may under-claim back to the last durable checkpoint; it is
     // never inverted, never over-claimed, and never cuts short a live session.
     private fun finalizeSessionCheckpoint(checkpoint: SessionCheckpoint): SelfProofRecord? {
-        check(!selfProofRecordStore.isPersistenceSuspended) { "self_proof_persistence_suspended" }
         val proofId = checkpoint.proofId
         val aggregatePersistence = runCatching {
             sessionAggregateSnapshotStore?.let { snapshots ->
@@ -1119,7 +1118,7 @@ class EventJoinCoordinator internal constructor(
                 snapshots.persist(proofId, checkpoint.aggregate)
             }
         }
-        val record = selfProofRecordStore.recordForProofId(proofId) ?: run {
+        if (selfProofRecordStore.recordForProofId(proofId) == null) {
             val eventIdHash = EventIdHash.compute(checkpoint.eventCode)
             val eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(checkpoint.eventCode)
             val ownerPublicKey = sensingCryptography.ownerPublicKey()
@@ -1137,6 +1136,7 @@ class EventJoinCoordinator internal constructor(
                 signature = signature,
             ).also(selfProofRecordStore::add)
         }
+        val record = selfProofRecordStore.recordForProofId(proofId) ?: return null
         onProofSignatureStateChanged?.invoke(proofId, true, bindingRecordStore.recordForProofId(proofId) != null)
         // A failed aggregate write must retain the checkpoint, independently of signing.
         aggregatePersistence.getOrThrow()
