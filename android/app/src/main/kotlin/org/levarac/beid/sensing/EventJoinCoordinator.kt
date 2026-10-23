@@ -189,6 +189,9 @@ class EventJoinCoordinator internal constructor(
             scope = coroutineScope,
             dispatcher = checkpointDispatcher,
             persist = checkpointPersistence ?: store::persist,
+            preparePersist = { checkpoint ->
+                checkpointPersistence?.let { persist -> { persist(checkpoint) } } ?: store.preparePersist(checkpoint)
+            },
             onFailure = { logSessionCheckpointFailure("write", it) },
             serialization = checkpointRuntimeOwner.serialization(SessionCheckpointStore.defaultDirectory(requireNotNull(ledgerFilesDir))),
         )
@@ -1090,25 +1093,24 @@ class EventJoinCoordinator internal constructor(
             val snapshot = currentSessionCheckpoint() ?: return null
             val writer = sessionCheckpointWriter
             if (writer == null) {
-                checkpointSerialization.serialized { finalizeSessionCheckpoint(snapshot()) }
+                finalizeSessionCheckpoint(snapshot())
             } else {
-                // Recovery cannot interleave between the flush and final-artifact writes.
-                writer.serialized {
+                try {
+                    writer.flush(snapshot)
+                } catch (error: Exception) {
+                    logSessionCheckpointFailure("write", error)
+                }
+                var checkpointReadable = true
+                val durable = writer.serialized {
                     try {
-                        writer.flush(snapshot)
-                    } catch (error: Exception) {
-                        logSessionCheckpointFailure("write", error)
-                    }
-                    var checkpointReadable = true
-                    val durable = try {
                         sessionCheckpointStore!!.load(proofId)
                     } catch (error: Exception) {
                         logSessionCheckpointFailure("load", error)
                         checkpointReadable = false
                         null
                     }
-                    finalizeSessionCheckpoint(durable ?: snapshot(), clearCheckpoint = checkpointReadable)
                 }
+                finalizeSessionCheckpoint(durable ?: snapshot(), clearCheckpoint = checkpointReadable)
             }
         } catch (error: Exception) {
             logSessionCheckpointFailure("finalize", error)
@@ -1146,64 +1148,68 @@ class EventJoinCoordinator internal constructor(
         clearCheckpoint: Boolean = true,
     ): SelfProofRecord? {
         val proofId = checkpoint.proofId
-        val aggregatePersistence = runCatching {
-            sessionAggregateSnapshotStore?.let { snapshots ->
-                // Finished metrics must survive even when signing is unavailable.
-                // A stale recovery input must not replace an authoritative aggregate.
-                snapshots.persist(proofId, checkpoint.aggregate)
+        val preparedAggregate = runCatching {
+            sessionAggregateSnapshotStore?.prepare(proofId, checkpoint.aggregate)
+        }
+        val preparedProof = runCatching {
+            if (selfProofRecordStore.recordForProofId(proofId) != null) null else {
+                val eventIdHash = EventIdHash.compute(checkpoint.eventCode)
+                val eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(checkpoint.eventCode)
+                val ownerPublicKey = sensingCryptography.ownerPublicKey()
+                sensingCryptography.signSelfProof(
+                    eventIdHash, eventSigningPublicKey, checkpoint.eninStart, checkpoint.eninEnd,
+                )?.let { signature ->
+                    SelfProofRecord(
+                        proofId = proofId, eventCode = checkpoint.eventCode,
+                        eventIdHash = eventIdHash, eventSigningPublicKey = eventSigningPublicKey,
+                        eninStart = checkpoint.eninStart, eninEnd = checkpoint.eninEnd,
+                        ownerPublicKey = ownerPublicKey, signature = signature,
+                    )
+                }
             }
         }
-        if (selfProofRecordStore.recordForProofId(proofId) == null) {
-            val eventIdHash = EventIdHash.compute(checkpoint.eventCode)
-            val eventSigningPublicKey = sensingCryptography.eventSigningPublicKey(checkpoint.eventCode)
-            val ownerPublicKey = sensingCryptography.ownerPublicKey()
-            val signature = sensingCryptography.signSelfProof(
-                eventIdHash, eventSigningPublicKey, checkpoint.eninStart, checkpoint.eninEnd,
-            ) ?: return null
-            SelfProofRecord(
-                proofId = proofId,
-                eventCode = checkpoint.eventCode,
-                eventIdHash = eventIdHash,
-                eventSigningPublicKey = eventSigningPublicKey,
-                eninStart = checkpoint.eninStart,
-                eninEnd = checkpoint.eninEnd,
-                ownerPublicKey = ownerPublicKey,
-                signature = signature,
-            ).also(selfProofRecordStore::add)
-        }
-        val record = selfProofRecordStore.recordForProofId(proofId) ?: return null
-        val binding = bindingRecordStore.recordForProofId(proofId)
-        val rows = proofRecordStore ?: proofRecordsFile?.let {
-            checkpointRuntimeOwner.proofRecordStore(it).also { shared -> proofRecordStore = shared }
-        }
-        rows?.let {
-            if (it.recordForId(proofId) == null) {
-                // Older checkpoints contain no collection timestamp. The signed
-                // artifact supplies one only when reconstructing a missing row.
-                it.add(ProofRecord(proofId, checkpoint.eventCode, record.signedAt, checkpoint.aggregate.deviceCount))
+        return checkpointSerialization.serialized {
+            val aggregatePersistence = preparedAggregate.mapCatching { prepared ->
+                prepared?.let { sessionAggregateSnapshotStore!!.persistPrepared(it) }
             }
-            it.updateSignatureState(proofId, true, binding != null)
+            // Another finalizer may have committed while this one was signing.
+            if (selfProofRecordStore.recordForProofId(proofId) == null) {
+                preparedProof.getOrThrow()?.also(selfProofRecordStore::add) ?: return@serialized null
+            }
+            val record = selfProofRecordStore.recordForProofId(proofId) ?: return@serialized null
+            val binding = bindingRecordStore.recordForProofId(proofId)
+            val rows = proofRecordStore ?: proofRecordsFile?.let {
+                checkpointRuntimeOwner.proofRecordStore(it).also { shared -> proofRecordStore = shared }
+            }
+            rows?.let {
+                if (it.recordForId(proofId) == null) {
+                    // Older checkpoints contain no collection timestamp. The signed
+                    // artifact supplies one only when reconstructing a missing row.
+                    it.add(ProofRecord(proofId, checkpoint.eventCode, record.signedAt, checkpoint.aggregate.deviceCount))
+                }
+                it.updateSignatureState(proofId, true, binding != null)
+            }
+            onProofSignatureStateChanged?.invoke(proofId, true, binding != null)
+            // A failed aggregate write must retain the checkpoint, independently of signing.
+            aggregatePersistence.getOrThrow()
+            // Cached presence or a suspended store's no-op is not durable evidence.
+            // Read every derived artifact from disk under the same session transaction.
+            if (clearCheckpoint && sessionCheckpointStore != null) {
+                val snapshots = requireNotNull(sessionAggregateSnapshotStore)
+                val collection = requireNotNull(rows)
+                check(!selfProofRecordStore.isPersistenceSuspended && !snapshots.isPersistenceSuspended &&
+                    !collection.isPersistenceSuspended && !bindingRecordStore.isPersistenceSuspended)
+                check(selfProofRecordStore.readBackRecordForProofId(proofId) == record)
+                val aggregateRecord = requireNotNull(snapshots.records.singleOrNull { it.proofId == proofId })
+                check(snapshots.readBackRecordForProofId(proofId) == aggregateRecord)
+                if (binding != null) check(bindingRecordStore.readBackRecordForProofId(proofId) == binding)
+                val row = requireNotNull(collection.recordForId(proofId))
+                check(row.eventCode == checkpoint.eventCode && row.hasSelfProof && row.hasBinding == (binding != null))
+                check(collection.readBackRecordForId(proofId) == row)
+                sessionCheckpointStore.clear(proofId)
+            }
+            record
         }
-        onProofSignatureStateChanged?.invoke(proofId, true, binding != null)
-        // A failed aggregate write must retain the checkpoint, independently of signing.
-        aggregatePersistence.getOrThrow()
-        // Cached presence or a suspended store's no-op is not durable evidence.
-        // Read every derived artifact from disk under the same session transaction.
-        if (clearCheckpoint && sessionCheckpointStore != null) {
-            val snapshots = requireNotNull(sessionAggregateSnapshotStore)
-            val collection = requireNotNull(rows)
-            check(!selfProofRecordStore.isPersistenceSuspended && !snapshots.isPersistenceSuspended &&
-                !collection.isPersistenceSuspended && !bindingRecordStore.isPersistenceSuspended)
-            check(selfProofRecordStore.readBackRecordForProofId(proofId) == record)
-            val aggregateRecord = requireNotNull(snapshots.records.singleOrNull { it.proofId == proofId })
-            check(snapshots.readBackRecordForProofId(proofId) == aggregateRecord)
-            if (binding != null) check(bindingRecordStore.readBackRecordForProofId(proofId) == binding)
-            val row = requireNotNull(collection.recordForId(proofId))
-            check(row.eventCode == checkpoint.eventCode && row.hasSelfProof && row.hasBinding == (binding != null))
-            check(collection.readBackRecordForId(proofId) == row)
-            sessionCheckpointStore.clear(proofId)
-        }
-        return record
     }
 
     private suspend fun reconcileSessionCheckpoints() {
@@ -1220,14 +1226,13 @@ class EventJoinCoordinator internal constructor(
             recoveryContext.ensureActive()
             writer.recover {
                 recoveryContext.ensureActive()
-                // Recheck after taking the lock: a boundary may have finalized it.
-                // No Activity instance may finalize another instance's live proof.
-                if (!disposed && proofId !in ProcessSessionCheckpointProofs) {
-                    try {
-                        store.load(proofId)?.let(::finalizeSessionCheckpoint)
-                    } catch (error: Exception) {
-                        logSessionCheckpointFailure("recover", error)
+                try {
+                    val checkpoint = writer.serialized {
+                        if (!disposed && proofId !in ProcessSessionCheckpointProofs) store.load(proofId) else null
                     }
+                    checkpoint?.let(::finalizeSessionCheckpoint)
+                } catch (error: Exception) {
+                    logSessionCheckpointFailure("recover", error)
                 }
             }
         }

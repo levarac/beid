@@ -2,6 +2,8 @@ package org.levarac.beid.persistence
 
 import java.io.File
 import java.io.IOException
+import java.io.FileOutputStream
+import java.nio.file.StandardCopyOption
 import java.nio.file.Files
 import java.util.UUID
 import kotlinx.serialization.json.JsonObject
@@ -9,6 +11,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.levarac.beid.shared.aggregation.SessionAggregate
 import org.levarac.beid.shared.aggregation.decodeSessionAggregateSnapshot
 import org.levarac.beid.shared.aggregation.encodeSessionAggregateSnapshot
@@ -38,11 +41,32 @@ internal class SessionCheckpointStore(private val directory: File) {
         }.sortedBy(UUID::toString)
     }
 
-    fun persist(checkpoint: SessionCheckpoint) {
+    fun persist(checkpoint: SessionCheckpoint) = preparePersist(checkpoint)()
+
+    /** Validate and encode the immutable prefix before entering the commit domain. */
+    fun preparePersist(checkpoint: SessionCheckpoint): () -> Unit {
+        val bytes = buildJsonObject {
+            put("schemaVersion", 1)
+            putJsonArray("records") { add(toJson(checkpoint)) }
+        }.toString().toByteArray(Charsets.UTF_8)
+        return { persistEncoded(checkpoint, bytes) }
+    }
+
+    private fun persistEncoded(checkpoint: SessionCheckpoint, bytes: ByteArray) {
+        // Validate existing bytes before replacing them; unreadable evidence survives.
         val store = open(checkpoint.proofId)
         check(store.records.size <= 1 && store.records.all { it.proofId == checkpoint.proofId })
-        if (!store.updateRecord({ it.proofId == checkpoint.proofId }) { checkpoint }) {
-            store.addRecord(checkpoint)
+        if (!directory.exists()) check(directory.mkdirs())
+        val temporary = File.createTempFile("checkpoint-", ".tmp", directory)
+        try {
+            FileOutputStream(temporary).use { output ->
+                output.write(bytes)
+                output.fd.sync()
+            }
+            Files.move(temporary.toPath(), file(checkpoint.proofId).toPath(),
+                StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            if (temporary.exists()) temporary.delete()
         }
     }
 

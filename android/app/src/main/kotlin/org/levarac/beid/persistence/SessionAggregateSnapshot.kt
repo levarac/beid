@@ -33,16 +33,22 @@ class SessionAggregateSnapshotStore(internal val file: File) {
     val records: List<SessionAggregateSnapshotRecord> get() = store.records
     val isPersistenceSuspended: Boolean get() = store.isPersistenceSuspended
 
-    fun persist(proofId: UUID, aggregate: SessionAggregate) {
-        check(!store.isPersistenceSuspended) { "persistence_suspended" }
+    fun persist(proofId: UUID, aggregate: SessionAggregate) = persistPrepared(prepare(proofId, aggregate))
+
+    internal fun prepare(proofId: UUID, aggregate: SessionAggregate): SessionAggregateSnapshotRecord {
         val encoded = encodeSessionAggregateSnapshot(aggregate)
         check(encoded.isSuccess && encoded.snapshotText != null) { "aggregate_not_successful" }
-        val existing = store.recordMatching { it.proofId == proofId }
+        return SessionAggregateSnapshotRecord(proofId, encoded.snapshotText!!)
+    }
+
+    internal fun persistPrepared(record: SessionAggregateSnapshotRecord) {
+        check(!store.isPersistenceSuspended) { "persistence_suspended" }
+        val existing = store.recordMatching { it.proofId == record.proofId }
         if (existing != null) {
-            if (existing.snapshotText != encoded.snapshotText) throw ConflictingSessionAggregateSnapshotException()
+            if (existing.snapshotText != record.snapshotText) throw ConflictingSessionAggregateSnapshotException()
             return
         }
-        store.addRecord(SessionAggregateSnapshotRecord(proofId, encoded.snapshotText!!))
+        store.addRecord(record)
     }
 
     fun snapshot(proofId: UUID): SessionAggregate? {
