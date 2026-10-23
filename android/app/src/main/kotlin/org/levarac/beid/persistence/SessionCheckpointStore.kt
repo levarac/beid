@@ -70,6 +70,7 @@ internal class SessionCheckpointStore(private val directory: File) {
         fun defaultDirectory(filesDir: File) = File(filesDir, "session-checkpoints-v1")
 
         private fun toJson(checkpoint: SessionCheckpoint): JsonObject {
+            require(checkpoint.eninStart >= 0 && checkpoint.eninEnd >= checkpoint.eninStart)
             val encoded = encodeSessionAggregateSnapshot(checkpoint.aggregate)
             check(encoded.isSuccess) { "invalid_session_aggregate" }
             return buildJsonObject {

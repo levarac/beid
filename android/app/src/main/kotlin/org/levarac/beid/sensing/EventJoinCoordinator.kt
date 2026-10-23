@@ -163,6 +163,7 @@ class EventJoinCoordinator internal constructor(
     )
 
     private val accounting = ScanDeviceAccounting()
+    private var checkpointEninEnd: Long? = null
     private var aggregationRuntime = AggregationRuntime()
     private val sessionCheckpointStore = ledgerFilesDir?.let {
         SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(it))
@@ -906,6 +907,7 @@ class EventJoinCoordinator internal constructor(
         val previousEninStart = accounting.firstWindowEnin
         val previousEninEnd = accounting.lastWindowEnin
         val distinctDeviceCountChanged = accounting.record(enin = enin, rpid = rpid, detectedDisplayId = detectedDisplayId)
+        checkpointEninEnd = maxOf(checkpointEninEnd ?: enin, enin)
         if (BuildConfig.DEBUG) {
             logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
         }
@@ -1105,7 +1107,7 @@ class EventJoinCoordinator internal constructor(
         val proofId = activeProofId ?: return null
         val eventCode = currentRecordingSession()?.eventCode ?: return null
         val eninStart = accounting.firstWindowEnin ?: return null
-        val eninEnd = accounting.lastWindowEnin ?: return null
+        val eninEnd = checkpointEninEnd ?: return null
         val aggregate = aggregationRuntime.snapshotAggregate()
         return {
             SessionCheckpoint(proofId, eventCode, eninStart, eninEnd, aggregate())
@@ -1183,6 +1185,7 @@ class EventJoinCoordinator internal constructor(
 
     private fun resetSessionState() {
         accounting.reset()
+        checkpointEninEnd = null
         aggregationRuntime = AggregationRuntime()
         activeProofId = null
         bindingState = EventBindingState.None
