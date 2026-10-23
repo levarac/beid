@@ -20,6 +20,9 @@ on:
       - "android/gradle.properties"
       - "android/gradlew"
       - "android/gradle/wrapper/**"
+      - "android/gradle/*.toml"
+      - "scripts/ci_change_filter.py"
+      - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
@@ -38,8 +41,93 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Classify paths for iOS lane
+    # Pull requests only: main pushes and manual dispatch always run the lane.
+    # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
+    # required status contexts are keyed by job name.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ios: ${{ steps.classify.outputs.ios }}
+      error: ${{ steps.classify.outputs.error }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Collect changed paths
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const outputPath = `${process.env.RUNNER_TEMP}/beid-changed-files.json`;
+            // The compare API returns at most 300 files. A list that reaches the cap
+            // may be truncated, and a truncated list can look documentation-only.
+            const FILE_LIMIT = 300;
+            try {
+              // Pinned to this event's own SHAs, never to the pull request's current
+              // file list: a re-run of an older run must classify what it builds.
+              let basehead;
+              if (context.eventName === 'pull_request') {
+                const { base, head } = context.payload.pull_request;
+                basehead = `${base.sha}...${head.sha}`;
+              } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
+                basehead = `${context.payload.before}...${context.payload.after}`;
+              } else {
+                throw new Error(`unsupported or unbounded event: ${context.eventName}`);
+              }
+              let listed = 0;
+              let firstPage = true;
+              let iosForceRun = false;
+              const files = await github.paginate(
+                github.rest.repos.compareCommitsWithBasehead,
+                { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
+                response => {
+                  // Compare pagination is by commit; files exist only on page 1.
+                  if (!firstPage) return [];
+                  firstPage = false;
+                  const page = response.data.files;
+                  if (!Array.isArray(page)) {
+                    throw new Error('first compare page is missing a files array');
+                  }
+                  listed = page.length;
+                  // Renames, deletions and incomplete metadata are never safe
+                  // evidence for skipping iOS, even inside excluded directories.
+                  iosForceRun ||= page.some(file =>
+                    !['added', 'modified'].includes(file.status) ||
+                    typeof file.filename !== 'string' || !file.filename ||
+                    Boolean(file.previous_filename));
+                  return page.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
+                },
+              );
+              if (listed >= FILE_LIMIT) {
+                throw new Error(`file list may be truncated at ${FILE_LIMIT} files (${listed} listed)`);
+              }
+              fs.writeFileSync(outputPath, JSON.stringify(iosForceRun ? { files, ios_force_run: true } : { files }), 'utf8');
+            } catch (error) {
+              core.warning(`changed-path collection failed; all checks will run: ${error.message}`);
+              fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
+            }
+
+      - name: Classify changed paths (fail closed)
+        id: classify
+        if: always()
+        run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
+
   ios-simulator:
     name: iOS simulator
+    needs: changes
+    # Still created on every PR head so the required context reports; a
+    # PR limited to docs or Android app sources/resources reports it as skipped.
+    # Fail closed: unsafe diff metadata, unknown paths, or failed/missing classification
+    # runs the lane. `!cancelled()` avoids starting a superseded macOS job.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
