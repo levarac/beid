@@ -900,7 +900,7 @@ class EventJoinCoordinator internal constructor(
         if (BuildConfig.DEBUG) {
             logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
         }
-        aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
+        val observationAccepted = aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
 
         val session = when (val phase = scanPhase) {
             is ScanPhase.EventFound -> phase.session
@@ -920,7 +920,9 @@ class EventJoinCoordinator internal constructor(
             eventConfirmThreshold = BeidConfig.eventConfirmThreshold,
         )
         onPhaseDecided(previousPhase)
-        sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::schedule) }
+        if (observationAccepted) {
+            sessionCheckpointWriter?.let { writer -> currentSessionCheckpoint()?.let(writer::schedule) }
+        }
         windowAccumulator?.observe(
             enin = enin,
             rpid = rpid,
