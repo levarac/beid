@@ -6,6 +6,8 @@ import java.io.File
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -1141,8 +1143,10 @@ class EventJoinCoordinator internal constructor(
         return record
     }
 
-    private fun reconcileSessionCheckpoints() {
+    private suspend fun reconcileSessionCheckpoints() {
         val store = sessionCheckpointStore ?: return
+        val writer = sessionCheckpointWriter ?: return
+        val recoveryContext = currentCoroutineContext()
         val proofIds = try {
             store.proofIds()
         } catch (error: Exception) {
@@ -1150,12 +1154,18 @@ class EventJoinCoordinator internal constructor(
             return
         }
         for (proofId in proofIds) {
-            // Background/foreground of the same instance must not end recording.
-            if (proofId == activeProofId) continue
-            try {
-                store.load(proofId)?.let(::finalizeSessionCheckpoint)
-            } catch (error: Exception) {
-                logSessionCheckpointFailure("recover", error)
+            recoveryContext.ensureActive()
+            writer.recover {
+                recoveryContext.ensureActive()
+                // Recheck after taking the lock: a boundary may have finalized it.
+                // Foregrounding the same instance must never end its active session.
+                if (!disposed && proofId != activeProofId) {
+                    try {
+                        store.load(proofId)?.let(::finalizeSessionCheckpoint)
+                    } catch (error: Exception) {
+                        logSessionCheckpointFailure("recover", error)
+                    }
+                }
             }
         }
     }
