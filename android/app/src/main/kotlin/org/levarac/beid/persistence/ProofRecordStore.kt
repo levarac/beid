@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -103,6 +104,8 @@ class ProofRecordStore(file: File) {
             put("peersVerified", record.peersVerified)
             put("hasSelfProof", record.hasSelfProof)
             put("hasBinding", record.hasBinding)
+            record.eventName?.let { put("eventName", it) }
+            record.eventIdHex?.let { put("eventIdHex", it) }
         }
 
         private fun fromJson(json: JsonObject): ProofRecord = ProofRecord(
@@ -112,6 +115,8 @@ class ProofRecordStore(file: File) {
             peersVerified = json.getValue("peersVerified").jsonPrimitive.int,
             hasSelfProof = json.getValue("hasSelfProof").jsonPrimitive.boolean,
             hasBinding = json.getValue("hasBinding").jsonPrimitive.boolean,
+            eventName = json["eventName"]?.jsonPrimitive?.contentOrNull,
+            eventIdHex = json["eventIdHex"]?.jsonPrimitive?.contentOrNull,
         )
     }
 }

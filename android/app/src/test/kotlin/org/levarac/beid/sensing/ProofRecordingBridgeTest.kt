@@ -33,7 +33,7 @@ class ProofRecordingBridgeTest {
         val bridge = ProofRecordingBridge(store, now = { Instant.parse("2026-01-01T00:00:00Z") })
         val proofId = UUID.randomUUID()
 
-        bridge.onProofCollected(proofId, eventCode = "ETHTOKYO2026", peersVerified = 2)
+        bridge.onProofCollected(proofId, session = ScanEventSession("ETHTOKYO2026"), peersVerified = 2)
 
         val record = store.recordForId(proofId)
         assertNotNull(record)
@@ -49,7 +49,7 @@ class ProofRecordingBridgeTest {
         val store = store()
         val bridge = ProofRecordingBridge(store)
         val proofId = UUID.randomUUID()
-        bridge.onProofCollected(proofId, eventCode = "ETHTOKYO2026", peersVerified = 1)
+        bridge.onProofCollected(proofId, session = ScanEventSession("ETHTOKYO2026"), peersVerified = 1)
 
         bridge.onPeersVerifiedChanged(proofId, peersVerified = 6)
 
@@ -61,7 +61,7 @@ class ProofRecordingBridgeTest {
         val store = store()
         val bridge = ProofRecordingBridge(store)
         val proofId = UUID.randomUUID()
-        bridge.onProofCollected(proofId, eventCode = "ETHTOKYO2026", peersVerified = 1)
+        bridge.onProofCollected(proofId, session = ScanEventSession("ETHTOKYO2026"), peersVerified = 1)
 
         bridge.onProofSignatureStateChanged(proofId, hasSelfProof = true, hasBinding = false)
 
@@ -86,7 +86,7 @@ class ProofRecordingBridgeTest {
         val executor = Executors.newFixedThreadPool(threadCount)
         try {
             val futures = ids.mapIndexed { index, id ->
-                executor.submit { bridge.onProofCollected(id, eventCode = "EVENT-$index", peersVerified = index) }
+                executor.submit { bridge.onProofCollected(id, session = ScanEventSession("EVENT-$index"), peersVerified = index) }
             }
             futures.forEach { it.get(10, TimeUnit.SECONDS) }
         } finally {
