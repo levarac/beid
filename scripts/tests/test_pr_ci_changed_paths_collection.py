@@ -35,7 +35,8 @@ const github = {
     if (endpoint !== 'COMPARE') throw new Error('unexpected endpoint');
     calls.push(params);
     if (scenario.apiError) throw new Error(scenario.apiError);
-    return scenario.pages.flatMap(files => mapper({ data: { files } }));
+    // Compare pages paginate commits; only the first response has files.
+    return scenario.pages.flatMap(files => mapper({ data: files === null ? {} : { files } }));
   },
 };
 const warnings = [];
@@ -85,8 +86,9 @@ class CollectionStepTest(unittest.TestCase):
             folder = Path(folder)
             (folder / "harness.js").write_text(HARNESS, encoding="utf-8")
             for page in scenario.get("pages", []):
-                for entry in page:
-                    entry.setdefault("status", "modified")
+                if isinstance(page, list):
+                    for entry in page:
+                        entry.setdefault("status", "modified")
             (folder / "scenario.json").write_text(json.dumps(scenario), encoding="utf-8")
             (folder / "script.js").write_text(collection_script(name), encoding="utf-8")
             result = subprocess.run(
@@ -170,6 +172,41 @@ class CollectionStepTest(unittest.TestCase):
         })
         self.assertFalse(lane_runs("ios", files=result["output"]["files"]))
 
+    def test_later_commit_pages_without_files_preserve_the_ios_skip(self):
+        for name in NAMES:
+            for path in ("docs/guide.md", "android/app/src/main/Foo.kt"):
+                with self.subTest(workflow=name, path=path):
+                    result = self.run_script(name, {
+                        "context": pull_request("b" * 40, "a" * 40),
+                        "pages": [[{"filename": path}], None, None],
+                    })
+                    self.assertEqual(result["output"], {"files": [path]})
+                    self.assertFalse(lane_runs("ios", files=result["output"]["files"]))
+                    self.assertEqual(result["warnings"], [])
+
+    def test_missing_or_invalid_first_page_files_run_ios(self):
+        for name in NAMES:
+            for first_page in (None, [], {}, "invalid"):
+                with self.subTest(workflow=name, first_page=first_page):
+                    result = self.run_script(name, {
+                        "context": pull_request("b" * 40, "a" * 40),
+                        "pages": [first_page, None],
+                    })
+                    output = result["output"]
+                    self.assertTrue(
+                        "error" in output or output.get("ios_force_run", False)
+                        or classify(output["files"])["ios"]
+                    )
+
+    def test_unsafe_first_page_metadata_still_runs_ios_with_later_pages(self):
+        for name in NAMES:
+            with self.subTest(workflow=name):
+                result = self.run_script(name, {
+                    "context": pull_request("b" * 40, "a" * 40),
+                    "pages": [[{"filename": "docs/old.md", "status": "removed"}], None],
+                })
+                self.assertTrue(result["output"].get("ios_force_run", False))
+
     def test_push_uses_before_and_after(self):
         result = self.run_script("pr-ci.yml", {
             "context": {"eventName": "push", "payload": {"before": "1" * 40, "after": "2" * 40}},
@@ -194,7 +231,7 @@ class CollectionStepTest(unittest.TestCase):
                 # 300 is the compare API's file cap: a full list may hide more.
                 result = self.run_script(name, {
                     "context": pull_request("b" * 40, "a" * 40),
-                    "pages": [entries(100, "a"), entries(100, "b"), entries(100, "c")],
+                    "pages": [entries(300), None],
                 })
                 self.assertIn("error", result["output"])
                 self.assertNotIn("files", result["output"])
@@ -203,9 +240,11 @@ class CollectionStepTest(unittest.TestCase):
     def test_a_list_just_under_the_cap_is_used(self):
         result = self.run_script("pr-ci.yml", {
             "context": pull_request("b" * 40, "a" * 40),
-            "pages": [entries(100, "a"), entries(100, "b"), entries(99, "c")],
+            "pages": [entries(299), None],
         })
         self.assertEqual(len(result["output"]["files"]), 299)
+        self.assertNotIn("ios_force_run", result["output"])
+        self.assertEqual(result["warnings"], [])
 
     def test_renames_do_not_inflate_the_truncation_count(self):
         pages = [[{"filename": f"docs/n{i}.md", "previous_filename": f"docs/o{i}.md"} for i in range(150)]]

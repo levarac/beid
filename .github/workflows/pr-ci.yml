@@ -54,16 +54,23 @@ jobs:
                 throw new Error(`unsupported or unbounded event: ${context.eventName}`);
               }
               let listed = 0;
+              let firstPage = true;
               let iosForceRun = false;
               const files = await github.paginate(
                 github.rest.repos.compareCommitsWithBasehead,
                 { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
                 response => {
-                  const page = response.data.files || [];
-                  listed += page.length;
+                  // Compare pagination is by commit; files exist only on page 1.
+                  if (!firstPage) return [];
+                  firstPage = false;
+                  const page = response.data.files;
+                  if (!Array.isArray(page)) {
+                    throw new Error('first compare page is missing a files array');
+                  }
+                  listed = page.length;
                   // Renames, deletions and incomplete metadata are never safe
                   // evidence for skipping iOS, even inside excluded directories.
-                  iosForceRun ||= !Array.isArray(response.data.files) || page.some(file =>
+                  iosForceRun ||= page.some(file =>
                     !['added', 'modified'].includes(file.status) ||
                     typeof file.filename !== 'string' || !file.filename ||
                     Boolean(file.previous_filename));

@@ -96,7 +96,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     (`docs/**`, `.md`, `.mdx`, after force-all build-input rules).
     Unknown or malformed paths, empty lists, renames, deletions, missing or
     unrecognized API file metadata, truncated comparisons and API errors run
-    iOS. Rename/deletion metadata affects only iOS; lab CLI selection is
+    iOS. Compare pagination is by commit; file metadata is validated only on
+    the first page, which contains all changed files (up to the 300-file cap).
+    Later pages without a files array do not force iOS to run. A missing,
+    malformed or empty first-page file list and the 300-file cap still run iOS.
+    Rename/deletion metadata affects only iOS; lab CLI selection is
     unchanged. Failed classification or a missing iOS output also runs iOS.
     The lane uses `!cancelled()` so a superseded run does not start a macOS job.
     Main pushes retain their iOS/build-input path filter (including catalogs,
