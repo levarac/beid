@@ -56,6 +56,47 @@ class EventJoinCoordinatorCheckpointInvariantsTest {
         }
     }
 
+    @Test
+    fun anotherCoordinatorSkipsALiveProofUntilItsOwnerAttemptsFinalization() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-live-owner").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val live = coordinator(directory, engine, registry, FakeSensingCryptography(selfProofSignatureResult = null))
+        joinPromotedVectorEvent(live, engine, registry)
+        repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
+        live.checkpointSession()
+        val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+        val proofId = checkpoints.proofIds().single()
+        val cryptography = FakeSensingCryptography()
+        val otherActivity = coordinator(directory, cryptography = cryptography)
+        try {
+            repeat(2) {
+                otherActivity.drainPendingSubmissionsOnForeground()
+                runCurrent()
+            }
+            assertTrue(cryptography.calls.isEmpty(), "another Activity must not sign a live proof")
+            assertTrue(SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.isEmpty())
+            assertEquals(listOf(proofId), checkpoints.proofIds())
+
+            engine.emitDetection(enin = 8, rpid = "four", detectedDisplayId = "four")
+            live.checkpointSession()
+            assertEquals(8L, checkpoints.load(proofId)?.eninEnd, "the live session must continue")
+            live.leaveEvent() // No signature: ownership must still end after this attempt.
+            assertEquals(listOf(proofId), checkpoints.proofIds())
+            otherActivity.drainPendingSubmissionsOnForeground()
+            runCurrent()
+            val record = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single()
+            assertEquals(proofId, record.proofId)
+            assertEquals(7L, record.eninStart)
+            assertEquals(8L, record.eninEnd)
+            assertEquals(1, cryptography.calls.count { it is FakeSensingCryptography.Call.SignSelfProof })
+            assertTrue(checkpoints.proofIds().isEmpty())
+        } finally {
+            live.dispose()
+            otherActivity.dispose()
+        }
+    }
+
     private fun TestScope.coordinator(
         directory: File,
         engine: FakeEventJoinEngine = FakeEventJoinEngine(),
