@@ -17,13 +17,12 @@ import org.levarac.beid.persistence.SessionCheckpointStore
 import org.levarac.beid.wireProofRecording
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinCoordinatorStaleCheckpointTest {
     @Test
-    fun failedLatestCheckpointAndUnavailableSignatureCannotSignAnOlderAggregateOnRecovery() = runTest {
+    fun failedFinalFlushUsesDurableCheckpointForAggregateAndRecoveredSignature() = runTest {
         val directory = Files.createTempDirectory("checkpoint-stale-unsigned").toFile()
         val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
         val engine = FakeEventJoinEngine()
@@ -49,7 +48,7 @@ class EventJoinCoordinatorStaleCheckpointTest {
         assertEquals(7L, checkpoints.load(proofId)?.eninEnd)
         val aggregateFile = SessionAggregateSnapshotStore.defaultFile(directory)
         val persistedAggregate = aggregateFile.readBytes()
-        assertEquals(4, SessionAggregateSnapshotStore(aggregateFile).snapshot(proofId)?.observationCount)
+        assertEquals(3, SessionAggregateSnapshotStore(aggregateFile).snapshot(proofId)?.observationCount)
         assertTrue(SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.isEmpty())
 
         val cryptography = FakeSensingCryptography()
@@ -61,15 +60,68 @@ class EventJoinCoordinatorStaleCheckpointTest {
                 recovered.drainPendingSubmissionsOnForeground()
                 runCurrent()
             }
-            assertTrue(cryptography.calls.isEmpty(), "stale recovery input must be rejected before key lookup or signing")
-            assertTrue(SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.isEmpty())
+            val signed = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single()
+            assertEquals(7L, signed.eninStart)
+            assertEquals(7L, signed.eninEnd)
+            assertEquals(1, cryptography.calls.count { it is FakeSensingCryptography.Call.SignSelfProof })
             assertTrue(persistedAggregate.contentEquals(aggregateFile.readBytes()), "the authoritative aggregate must win unchanged")
-            assertEquals(4, SessionAggregateSnapshotStore(aggregateFile).snapshot(proofId)?.observationCount)
-            assertTrue(checkpoints.proofIds().isEmpty(), "discard the superseded checkpoint instead of retrying its signature")
+            assertEquals(3, SessionAggregateSnapshotStore(aggregateFile).snapshot(proofId)?.observationCount)
+            assertTrue(checkpoints.proofIds().isEmpty(), "remove recovery input after durable artifacts")
             assertEquals(proofId, records.recordsFlow.value.single().id)
-            assertFalse(records.recordsFlow.value.single().hasSelfProof)
+            assertTrue(records.recordsFlow.value.single().hasSelfProof)
         } finally {
             recovered.dispose()
+        }
+    }
+
+    @Test
+    fun failedFinalFlushWithIdenticalAggregateSignsOnlyTheDurableRange() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-equal-aggregate").toFile()
+        val checkpoints = SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory))
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        var failedWrites = 0
+        val live = coordinator(directory, engine, registry) {
+            if (it.eninEnd == 8L) {
+                failedWrites++
+                throw IOException("final range write unavailable")
+            }
+            checkpoints.persist(it)
+        }
+        try {
+            joinPromotedVectorEvent(live, engine, registry)
+            repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
+            repeat(99_997) { engine.emitDetection(enin = 7, rpid = "peer-0", detectedDisplayId = "peer-0") }
+            live.checkpointSession()
+            val proofId = checkpoints.proofIds().single()
+            val durable = checkpoints.load(proofId)!!
+            engine.emitDetection(enin = 8, rpid = "peer-0", detectedDisplayId = "peer-0")
+            live.leaveEvent()
+            assertEquals(1, failedWrites)
+            val signed = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single()
+            assertEquals(7L, signed.eninStart)
+            assertEquals(7L, signed.eninEnd, "an identical aggregate cannot authorize an unpersisted range")
+            assertEquals(durable.aggregate.observationCount,
+                SessionAggregateSnapshotStore(SessionAggregateSnapshotStore.defaultFile(directory)).snapshot(proofId)?.observationCount)
+            assertTrue(checkpoints.proofIds().isEmpty())
+        } finally {
+            live.dispose()
+        }
+    }
+
+    @Test
+    fun failedFirstFlushWithoutCheckpointFallsBackToMemory() = runTest {
+        val directory = Files.createTempDirectory("checkpoint-missing-fallback").toFile()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val live = coordinator(directory, engine, registry) { throw IOException("no checkpoint yet") }
+        try {
+            joinPromotedVectorEvent(live, engine, registry)
+            repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
+            live.leaveEvent()
+            assertEquals(7L, SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)).records.single().eninEnd)
+        } finally {
+            live.dispose()
         }
     }
 

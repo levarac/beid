@@ -133,7 +133,8 @@ class EventJoinCoordinatorSessionCheckpointTest {
         assertEquals(listOf(record), selfProofs(directory).records)
         assertTrue(cryptography.calls.none { it is FakeSensingCryptography.Call.SignSelfProof })
         assertEquals(4, snapshots(directory).snapshot(record.proofId)?.observationCount)
-        assertTrue(SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory)).proofIds().isEmpty())
+        assertEquals(listOf(record.proofId), SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory)).proofIds(),
+            "a conflicting aggregate must retain recovery input")
     }
 
     @Test
