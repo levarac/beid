@@ -258,6 +258,7 @@ class EventJoinCoordinatorCheckpointSchedulingTest {
         assertEquals(9L, store.load(proofId)?.eninEnd)
 
         engine.onEvent = null // Process death immediately after onStop, without teardown.
+        simulateCheckpointProcessDeath(directory)
         val recovered = coordinator(directory)
         recovered.drainPendingSubmissionsOnForeground()
         runCurrent()

@@ -43,6 +43,7 @@ class EventJoinCoordinatorSessionCheckpointTest {
 
         // No leave/dispose: the process disappeared after its recording checkpoint.
         engine.onEvent = null
+        simulateCheckpointProcessDeath(directory)
         val recovered = coordinator(directory)
         val reloadedRecords = ProofRecordStore(ProofRecordStore.defaultFile(directory))
         wireProofRecording(recovered, ProofRecordingBridge(reloadedRecords))
@@ -96,6 +97,7 @@ class EventJoinCoordinatorSessionCheckpointTest {
         engine.emitDetection(enin = 8, rpid = "dd", detectedDisplayId = "device-4")
         first.checkpointSession()
         engine.onEvent = null
+        simulateCheckpointProcessDeath(directory)
         val recovered = coordinator(directory)
         recovered.drainPendingSubmissionsOnForeground()
         runCurrent()
@@ -175,6 +177,7 @@ class EventJoinCoordinatorSessionCheckpointTest {
     fun failedSignatureKeepsTheCheckpointForTheNextCoordinator() = runTest {
         val directory = Files.createTempDirectory("unsigned-checkpoint").toFile()
         recording(directory)
+        simulateCheckpointProcessDeath(directory)
         val unavailable = coordinator(directory, cryptography = FakeSensingCryptography(selfProofSignatureResult = null))
         unavailable.drainPendingSubmissionsOnForeground()
         runCurrent()
@@ -195,6 +198,7 @@ class EventJoinCoordinatorSessionCheckpointTest {
     fun failedAggregatePersistenceRetainsRecoveryInputWithoutDuplicatingTheSignedRecord() = runTest {
         val directory = Files.createTempDirectory("aggregate-checkpoint-retry").toFile()
         recording(directory)
+        simulateCheckpointProcessDeath(directory)
         val aggregateFile = SessionAggregateSnapshotStore.defaultFile(directory)
         assertTrue(aggregateFile.mkdir(), "block the final aggregate store with a directory")
         val blocked = coordinator(directory)
@@ -220,6 +224,7 @@ class EventJoinCoordinatorSessionCheckpointTest {
     fun unreadableCheckpointIsPreservedAndCanBeRetriedAfterRepair() = runTest {
         val directory = Files.createTempDirectory("corrupt-session-checkpoint").toFile()
         recording(directory)
+        simulateCheckpointProcessDeath(directory)
         val file = SessionCheckpointStore.defaultDirectory(directory).listFiles()!!.single()
         val valid = file.readBytes()
         file.writeText("unreadable checkpoint")
@@ -289,4 +294,10 @@ class EventJoinCoordinatorSessionCheckpointTest {
         ledgerFilesDir = directory,
         checkpointDispatcher = StandardTestDispatcher(testScheduler),
     )
+}
+
+/** Process death destroys live ownership as well as the old Activity instance. */
+internal fun simulateCheckpointProcessDeath(directory: File) {
+    SessionCheckpointStore(SessionCheckpointStore.defaultDirectory(directory)).proofIds()
+        .forEach(ProcessSessionCheckpointProofs::remove)
 }

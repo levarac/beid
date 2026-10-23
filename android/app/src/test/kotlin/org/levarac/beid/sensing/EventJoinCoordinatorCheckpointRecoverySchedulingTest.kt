@@ -295,6 +295,7 @@ class EventJoinCoordinatorCheckpointRecoverySchedulingTest {
         repeat(3) { engine.emitDetection(enin = 7, rpid = "peer-$it", detectedDisplayId = "peer-$it") }
         first.checkpointSession()
         engine.onEvent = null // Process death, without graceful finalization.
+        simulateCheckpointProcessDeath(directory)
     }
 
     private fun TestScope.coordinator(

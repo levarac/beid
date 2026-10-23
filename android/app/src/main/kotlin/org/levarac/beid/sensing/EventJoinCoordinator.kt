@@ -5,6 +5,7 @@ import android.util.Log
 import java.io.File
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -962,6 +963,7 @@ class EventJoinCoordinator internal constructor(
             return
         }
         activeProofId = UUID.randomUUID()
+        ProcessSessionCheckpointProofs.add(activeProofId!!)
         onProofCollected?.invoke(activeProofId!!, recording.session.eventCode, recording.peersVerified)
         bindingState = EventBindingState.PendingConnect(recording.session)
     }
@@ -1064,8 +1066,9 @@ class EventJoinCoordinator internal constructor(
      * [leaveEvent] already ran) finds nothing to do.
      */
     private fun finalizeSelfProofIfNeeded(): SelfProofRecord? {
-        val snapshot = currentSessionCheckpoint() ?: return null
+        val proofId = activeProofId ?: return null
         return try {
+            val snapshot = currentSessionCheckpoint() ?: return null
             val writer = sessionCheckpointWriter
             if (writer == null) {
                 finalizeSessionCheckpoint(snapshot())
@@ -1077,12 +1080,14 @@ class EventJoinCoordinator internal constructor(
                     } catch (error: Exception) {
                         logSessionCheckpointFailure("write", error)
                     }
-                    finalizeSessionCheckpoint(sessionCheckpointStore!!.load(activeProofId!!) ?: snapshot())
+                    finalizeSessionCheckpoint(sessionCheckpointStore!!.load(proofId) ?: snapshot())
                 }
             }
         } catch (error: Exception) {
             logSessionCheckpointFailure("finalize", error)
             null
+        } finally {
+            ProcessSessionCheckpointProofs.remove(proofId)
         }
     }
 
@@ -1160,8 +1165,8 @@ class EventJoinCoordinator internal constructor(
             writer.recover {
                 recoveryContext.ensureActive()
                 // Recheck after taking the lock: a boundary may have finalized it.
-                // Foregrounding the same instance must never end its active session.
-                if (!disposed && proofId != activeProofId) {
+                // No Activity instance may finalize another instance's live proof.
+                if (!disposed && proofId !in ProcessSessionCheckpointProofs) {
                     try {
                         store.load(proofId)?.let(::finalizeSessionCheckpoint)
                     } catch (error: Exception) {
@@ -1448,6 +1453,9 @@ class EventJoinCoordinator internal constructor(
 }
 
 private val ProcessWindowObservationRuntimeOwner = WindowObservationRuntimeOwner()
+
+/** Every live session in this process, across Activity instances. */
+internal val ProcessSessionCheckpointProofs = ConcurrentHashMap.newKeySet<UUID>()
 
 private const val WINDOW_RECOVERY_LOG_TAG = "BeidWindowRecovery"
 
