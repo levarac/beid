@@ -1,10 +1,12 @@
 name: PR iOS CI
+# Display only: execution mode is selected once below from the immutable event file.
+run-name: "iOS simulator (${{ github.event_name == 'pull_request' && github.event.pull_request.labels != null && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui') && 'smoke' || 'full' }}) — ${{ github.event_name }} — ${{ github.ref_name }}"
 
 on:
   # Always report a status for every PR head, including drafts. Workflow-level
   # path filters would leave a required context pending on unrelated changes.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
   push:
     # Measure the merged result on main exactly once. Note the concurrency
     # group below is keyed on github.ref with cancel-in-progress, so two merges
@@ -26,9 +28,15 @@ on:
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
+      - "scripts/ios_ui_smoke.py"
+      - "scripts/run_local_tests.py"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
+  # 03:23 UTC avoids the busy top of the hour; scheduled workflows use main,
+  # the default branch. Its separate group cannot cancel a main push.
+  schedule:
+    - cron: "23 3 * * *"
 
 permissions:
   contents: read
@@ -37,13 +45,13 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
 
 concurrency:
-  group: pr-ios-macos-${{ github.ref }}
+  group: pr-ios-macos-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: true
 
 jobs:
   changes:
     name: Classify paths for iOS lane
-    # Pull requests only: main pushes and manual dispatch always run the lane.
+    # Pull requests only: main pushes, nightly and manual dispatch always run the lane.
     # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
     # required status contexts are keyed by job name.
     if: ${{ github.event_name == 'pull_request' }}
@@ -145,6 +153,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Determine test mode
+        id: test-mode
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.ios_ui_smoke mode \
+            --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Set up Java
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -249,9 +267,17 @@ jobs:
       - name: Test without rebuilding
         shell: bash
         env:
+          TEST_MODE: ${{ steps.test-mode.outputs.mode }}
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
         run: |
           set -euo pipefail
+          # Materialize before reading: a parser failure must stop the test step.
+          python3 -m scripts.ios_ui_smoke arguments --mode "$TEST_MODE" \
+            > "$CI_OUTPUT_ROOT/test-arguments.txt"
+          test_args=(SWIFT_OPTIMIZATION_LEVEL=-O)
+          while IFS= read -r argument; do
+            test_args+=("$argument")
+          done < "$CI_OUTPUT_ROOT/test-arguments.txt"
           xcodebuild -quiet \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
@@ -260,7 +286,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
-            SWIFT_OPTIMIZATION_LEVEL=-O \
+            "${test_args[@]}" \
             test-without-building
 
       - name: Summarize structured test results
@@ -360,6 +386,22 @@ jobs:
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY
+
+      - name: Verify UI execution and bundle durations
+        if: always()
+        shell: bash
+        env:
+          TEST_MODE: ${{ steps.test-mode.outputs.mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_OUTPUT_ROOT"
+          # Inspect Xcode 26.5's per-node fields; retain the schema with the JSON.
+          xcrun xcresulttool get test-results tests --schema \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" > "$CI_OUTPUT_ROOT/test-tree-schema.json"
+          xcrun xcresulttool get test-results tests \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/test-tree.json"
+          python3 -m scripts.ios_ui_smoke verify --mode "$TEST_MODE" \
+            --tests-json "$CI_OUTPUT_ROOT/test-tree.json" --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Delete owned simulator
         if: ${{ always() && steps.simulator.outputs.udid != '' }}
