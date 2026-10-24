@@ -17,7 +17,16 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
 - **この subsection が repository の PR CI lane 分担の正本。** 実行定義は
   `.github/workflows/pr-ci.yml` にある。現在の `pr-ci` はすべての PR と
-  `main` への push で、GitHub-hosted Linux/macOS 上に次の gate を実行する。
+  `main` への push、および `merge_group` の `checks_requested` で、
+  GitHub-hosted Linux/macOS 上に次の gate を実行する。
+  All three PR build workflows accept `merge_group` without workflow-level
+  path filters. In `pr-ci.yml`, Determine changed paths compares the event's
+  `merge_group.base_sha...head_sha` using the existing compare/classifier path.
+  Android build and SwiftLint may skip only when successful classification
+  proves them unaffected; Repository sanity always runs. Missing SHAs, API
+  failures, truncated lists and classifier failures run all three gates. This
+  is the smallest extension of the existing pinned comparison, and keeps the
+  required Determine changed paths context reporting on the merge result.
   - Android build: `:shared:testAndroidHostTest`、
     `:app:testDebugUnitTest`、`:app:assembleDebug`、
     `:app:compileDebugAndroidTestKotlin` (instrumented test source を
@@ -58,8 +67,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     and is skipped (reported as skipped) otherwise, for example on a
     documentation-only PR. A failed classification job runs the lane. Main
     pushes retain the lab path filter and always build; manual dispatch always
-    builds. This standalone package has its own lane so its result does not
-    wait for the simulator suite.
+    builds. On `merge_group`, the optional classifier is skipped and the
+    required build/test job always executes, including documentation-only
+    changes. Reusing the existing non-PR condition is simpler than another
+    comparison path. This standalone package has its own lane so its result
+    does not wait for the simulator suite.
 
   - **`.github/workflows/pr-ci-ios-macos.yml`** — `iOS simulator` is the
     hosted iOS PR gate. `pull_request` includes `opened`, `synchronize`,
@@ -107,13 +119,18 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Main pushes retain their iOS/build-input path filter (including catalogs,
     classifier and generation guard) and always run the lane; manual dispatch
     always runs it. Nightly on main runs at 03:23 UTC, away from the busy top
-    of the hour. Its concurrency group is separate from push-to-main, so they
-    do not cancel each other.
+    of the hour. All three workflows' concurrency groups include event name
+    and ref (or PR number). A queue ref identifies its entry, so queue runs,
+    PR synchronizations, main pushes, nightly and dispatch runs cannot cancel
+    each other; same-event/ref superseded runs still cancel.
     The two classification jobs have their own names, distinct from
     `Determine changed paths`, because required contexts are keyed by job name;
     do not add them to the required list.
     All PR build lanes check out `github.event.pull_request.head.sha`
-    explicitly; push and manual events check out `github.sha`.
+    explicitly; other events check out `github.sha`. On `merge_group`,
+    GitHub defines `github.sha` as the merge-group head SHA and `github.ref`
+    as its ref, so the existing checkout expression builds the merge result
+    rather than a PR head. See [GitHub's event reference](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group).
 
     The standard `macos-26` image uses `/Applications/Xcode_26.5.app` and
     requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
@@ -122,8 +139,13 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     test-without-building use `SWIFT_OPTIMIZATION_LEVEL=-O`. Every test run
     executes all `BeidTests`. Ordinary `pull_request` events also execute only
     `ios/ci/ui-smoke-tests.txt`; when the event payload's labels include
-    `ci:full-ui`, the complete `BeidUITests` suite runs. Push, nightly and
-    manual events always run full. Mode is selected once from the event file,
+    `ci:full-ui`, the complete `BeidUITests` suite runs. Merge groups, push,
+    nightly and manual events always run full. On `merge_group`, the optional
+    classifier is skipped and the required iOS job always executes, including
+    documentation-only changes. This reuses the existing non-PR condition and
+    guarantees full-suite evidence for the merge result. The existing run-name
+    expression also displays full because only PR events can select smoke.
+    Mode is selected once from the event file,
     never the live API; a re-run therefore retains the original mode. The run
     name displays mode, and the summary records mode, per-bundle counts and
     summed xcresult Test Case durations (numeric `durationInSeconds` or the
@@ -133,18 +155,21 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     entries, and repository sanity checks every method against its Swift class.
     Smoke selection includes `-only-testing:BeidTests` and one exact UI method
     argument per entry. No mode skips the job or a test step; only the existing
-    path classifier may skip it. The structured xcresult summary must contain
+    path classifier may skip PR runs. The structured xcresult summary must contain
     nonzero tests, consistent counts and a passing result. A second check reads
     the test tree: smoke UI cases must equal the list exactly and all be Passed;
     full mode must also execute and pass every listed case. Skipped listed
     tests, missing/renamed cases, and duplicate UI cases fail the job.
-    Superseded runs are cancelled. Merge requires a completed full-mode pass
-    of `iOS simulator` on the exact current PR head. Update the branch first,
-    then add `ci:full-ui` to request it; `labeled` triggers a run on that head.
-    The workflow works before the label is created; label creation is separate.
-    A smoke pass or a path-classifier skip is not full-suite merge evidence.
-    If a classifier skip prevents a full PR run, dispatch this workflow on the
-    same branch head and verify the full-mode result before merge.
+    With the main merge queue enabled, the merge step is to add the PR to
+    the queue after its required PR checks pass. A completed full-mode pass of
+    `iOS simulator` on the queue's exact merge result satisfies the full-suite
+    merge requirement; a PR smoke pass or path-classifier skip does not supply
+    that evidence. Queue runs never skip the iOS job for paths. For an earlier
+    full run before queueing, update the PR and then add `ci:full-ui`;
+    `labeled` triggers a run on that head. Re-runs preserve the event's labels.
+    If classification skips that PR run, dispatch the workflow on the same
+    branch head for pre-queue full evidence. The workflow works before the
+    label is created; label creation and queue settings are separate.
 
     Unsigned Release device compilation (`CODE_SIGNING_ALLOWED=NO`) remains
     in `main-ios-release-build.yml` on main push/manual dispatch, also using
@@ -172,6 +197,17 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
   main-only delivery, trusted comparison or Release compilation jobs, nor the
   release-notes metadata warning. Branch protection is a separate operator
   change; this document does not claim it has been applied.
+
+  Proposed operator settings after these workflows reach main: target the
+  exact `main` branch (no wildcard), enable `Require merge queue`, choose
+  merge method `merge` (merge commit), build concurrency `1`, Only merge
+  non-failing pull requests enabled, status check timeout `120` minutes, and
+  merge limits minimum/maximum `1` PR. Enable Allow merge commits in repository
+  settings and retain all six required status checks above with GitHub Actions
+  as their source. Queue build concurrency starts at one to limit concurrent
+  full macOS suites; it does not serialize jobs within a run. These settings
+  are a proposal and have not been changed by this work. See [GitHub's merge
+  queue settings](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
 - GitHub branch protection は approving review を merge 条件にしない。
   これは 2026-07-27 のオーナー判断による repository setting であり、
   上の KMP review gate を免除しない。KMP の independent review は作業上の

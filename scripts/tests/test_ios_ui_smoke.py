@@ -55,6 +55,22 @@ class SmokeContractTest(unittest.TestCase):
             with self.subTest(event=event, payload=payload):
                 self.assertEqual(self.tool.compute_mode(event, payload), expected)
 
+    def test_merge_group_checks_requested_always_selects_full(self):
+        payload = {"action": "checks_requested", "merge_group": {
+            "base_sha": "b" * 40, "head_sha": "a" * 40,
+            "head_ref": "refs/heads/gh-readonly-queue/main/pr-42-aaaa",
+        }}
+        self.assertEqual(self.tool.compute_mode("merge_group", payload), "full")
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as folder:
+            event = Path(folder) / "event.json"
+            event.write_text(json.dumps(payload))
+            result = subprocess.run([
+                sys.executable, "-m", "scripts.ios_ui_smoke", "mode",
+                "--event-name", "merge_group", "--event-path", str(event),
+            ], cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "mode=full")
+
     def test_list_parser_accepts_crlf_blank_comments_and_trailing_space(self):
         self.assertEqual(self.tool.parse_smoke_list(
             f"# reason\r\n \r\n {ONE}  \r\n{TWO}\t # reason\r\n"), [ONE, TWO])

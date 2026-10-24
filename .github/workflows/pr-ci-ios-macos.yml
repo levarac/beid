@@ -7,6 +7,8 @@ on:
   # path filters would leave a required context pending on unrelated changes.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
+  merge_group:
+    types: [checks_requested]
   push:
     # Measure the merged result on main exactly once. Note the concurrency
     # group below is keyed on github.ref with cancel-in-progress, so two merges
@@ -45,13 +47,14 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
 
 concurrency:
-  group: pr-ios-macos-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
+  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   changes:
     name: Classify paths for iOS lane
-    # Pull requests only: main pushes, nightly and manual dispatch always run the lane.
+    # Pull requests only: merge groups, main pushes, nightly and manual runs bypass classification.
     # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
     # required status contexts are keyed by job name.
     if: ${{ github.event_name == 'pull_request' }}
@@ -85,6 +88,12 @@ jobs:
               if (context.eventName === 'pull_request') {
                 const { base, head } = context.payload.pull_request;
                 basehead = `${base.sha}...${head.sha}`;
+              } else if (context.eventName === 'merge_group') {
+                const { base_sha, head_sha } = context.payload.merge_group || {};
+                if (!/^[0-9a-f]{40}$/i.test(base_sha || '') || !/^[0-9a-f]{40}$/i.test(head_sha || '')) {
+                  throw new Error('merge group is missing valid base/head SHAs');
+                }
+                basehead = `${base_sha}...${head_sha}`;
               } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
                 basehead = `${context.payload.before}...${context.payload.after}`;
               } else {
@@ -134,7 +143,8 @@ jobs:
     # Still created on every PR head so the required context reports; a
     # PR limited to docs or Android app sources/resources reports it as skipped.
     # Fail closed: unsafe diff metadata, unknown paths, or failed/missing classification
-    # runs the lane. `!cancelled()` avoids starting a superseded macOS job.
+    # runs the lane. Merge groups always run the full suite, even for docs-only changes.
+    # `!cancelled()` avoids starting a superseded macOS job.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
