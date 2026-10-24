@@ -179,8 +179,13 @@ final class FlatScreenshotTourD: XCTestCase {
     app.buttons["Scan QR code"].tap()
     _ = app.staticTexts["venue.scanner.title"].waitForExistence(timeout: 5)
     attachScreenshot("14d")
-    XCTAssertTrue(app.staticTexts["venue.scanner.title"].exists)
-    assertMinimumHitTarget(app.buttons["Cancel scan"])
+    XCTAssertTrue(app.navigationBars.staticTexts["venue.scanner.title"].exists)
+    // The OS's close item (DESIGN.md §12, #732): its size is the OS's, so this
+    // pins that it sits in the real navigation bar and can be tapped.
+    let cancel = app.navigationBars.buttons["Cancel scan"]
+    XCTAssertTrue(cancel.exists)
+    XCTAssertTrue(cancel.isHittable)
+    XCTAssertEqual(cancel.label, "Cancel scan")
     XCTAssertTrue(app.staticTexts["venue.scanner.caption"].exists)
   }
 
