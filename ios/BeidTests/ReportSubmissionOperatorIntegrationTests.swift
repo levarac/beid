@@ -1313,3 +1313,145 @@ private extension UUID {
     return withUnsafeBytes(of: &copy) { Data($0).hexString }
   }
 }
+
+/// Exercise the timeout text through the real iOS transport, including a
+/// deliberately silent client, a different operator, and a closed port.
+@MainActor
+final class StubOperatorDiagnosticsTests: XCTestCase {
+  private let receiptKeyHex = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+
+  func testTimeoutNamesClientThatNeverAttemptsARequest() async throws {
+    let server = try makeServer()
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let message = try await timeoutMessage(server)
+    assertCase("never-attempted", in: message, server: server)
+    assertListener(endpoint, state: "ready", in: message)
+    XCTAssertTrue(message.contains("firstAttempt=never"), message)
+  }
+
+  func testTimeoutNamesAttemptToDifferentURLAndItsHTTPOutcome() async throws {
+    let server = try makeServer()
+    let other = try makeServer(transientPostFailures: 1)
+    defer { server.stop(); other.stop() }
+    let endpoint = try await server.start()
+    let otherEndpoint = try await other.start()
+    let result = try await submit(to: otherEndpoint)
+    XCTAssertEqual(result.statusCode, 503)
+    let message = try await timeoutMessage(server)
+    assertCase("attempted-different-url", in: message, server: server)
+    assertListener(endpoint, state: "ready", in: message)
+    XCTAssertTrue(message.contains("url=\(otherEndpoint.absoluteString)/v1/observations"), message)
+    XCTAssertTrue(message.contains("HTTP=503"), message)
+    XCTAssertFalse(message.contains("firstAttempt=never"), message)
+  }
+
+  func testTimeoutNamesFailedConnectionToRightURLAndNativeError() async throws {
+    let server = try makeServer()
+    let endpoint = try await server.start()
+    try await server.stopAndWait()
+    let result = try await submit(to: endpoint)
+    XCTAssertEqual(result.statusCode, 0)
+    let message = try await timeoutMessage(server)
+    assertCase("attempted-right-url-failed", in: message, server: server)
+    assertListener(endpoint, state: "cancelled", in: message)
+    XCTAssertTrue(message.contains("url=\(endpoint.absoluteString)/v1/observations"), message)
+    XCTAssertTrue(message.contains("error=NSURLErrorDomain/"), message)
+  }
+
+  func testTimeoutNamesConnectedClientStillWaitingForResponse() async throws {
+    let server = try makeServer(holdResponses: true)
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let client = ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionClient()
+    defer { client.close() }
+    client.submit(observation: try observation(), configuration: try configuration(endpoint)) { _ in }
+    try await server.waitFor(postCount: 1)
+    let message = try await timeoutMessage(server, expectedPosts: 2)
+    assertCase("connected-but-slow", in: message, server: server)
+    assertListener(endpoint, state: "ready", in: message)
+    XCTAssertTrue(message.contains("outcome=pending"), message)
+  }
+
+  func testStateTimeoutIncludesCompletedHTTPStatusAndSameTimeline() async throws {
+    let server = try makeServer()
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let result = try await submit(to: endpoint)
+    XCTAssertTrue(result.isSuccess)
+    let message = try await timeoutMessage(server, expectedPosts: 2)
+    assertCase("connected-but-slow", in: message, server: server)
+    assertListener(endpoint, state: "ready", in: message)
+    XCTAssertTrue(message.contains("HTTP=201"), message)
+    XCTAssertTrue(message.contains("phase=completed"), message)
+  }
+
+  private func makeServer(
+    transientPostFailures: Int = 0, holdResponses: Bool = false
+  ) throws -> StubOperatorServer {
+    try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: ReportSubmissionGoldenScenario.eventIdHex)),
+      signingPrivateKey: [UInt8](repeating: 0, count: 31) + [2],
+      signingPublicKey: XCTUnwrap(Data(hexEncoded: receiptKeyHex)),
+      transientPostFailures: transientPostFailures, holdResponses: holdResponses
+    )
+  }
+
+  private func observation() throws -> ExportedKotlinPackages.org.levarac.parallax.submission.StoredObservationV1 {
+    try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.submission.restoreStoredObservation(
+      signedBytesHex: ReportSubmissionGoldenScenario.goldenSignedObservationHex
+    ))
+  }
+
+  private func configuration(_ endpoint: URL) throws
+    -> ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionOperatorConfiguration {
+    try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionOperatorConfiguration(
+      endpoint: endpoint.absoluteString, receiptPublicKeyHex: receiptKeyHex,
+      eventIdHex: ReportSubmissionGoldenScenario.eventIdHex,
+      eventDefinitionDigestHex: ReportSubmissionGoldenScenario.definitionDigestHex,
+      validFrom: nil, validUntil: nil, allowInsecureLoopbackForTests: true
+    ))
+  }
+
+  private func submit(to endpoint: URL) async throws
+    -> ExportedKotlinPackages.org.levarac.parallax.submission.SubmissionResult {
+    let client = ExportedKotlinPackages.org.levarac.parallax.submission.createSubmissionClient()
+    defer { client.close() }
+    let stored = try observation()
+    let config = try configuration(endpoint)
+    return await withCheckedContinuation { continuation in
+      client.submit(observation: stored, configuration: config) { continuation.resume(returning: $0) }
+    }
+  }
+
+  private func timeoutMessage(_ server: StubOperatorServer, expectedPosts: Int = 1) async throws -> String {
+    do {
+      try await server.waitFor(postCount: expectedPosts, timeout: 0)
+      XCTFail("the deliberately unmet request count must time out")
+      return ""
+    } catch let error as StubOperatorError {
+      let message = error.description
+      XCTAssertTrue(message.hasPrefix("stub operator request timeout:"), message)
+      return message
+    }
+  }
+
+  private func assertCase(_ name: String, in message: String, server: StubOperatorServer) {
+    XCTAssertTrue(message.contains("case=\(name)"), message)
+    let stateMessage = StubOperatorError.submissionStateTimedOut(
+      expected: "ACCEPTED", diagnostics: server.diagnostics
+    ).description
+    XCTAssertTrue(stateMessage.contains("case=\(name)"), stateMessage)
+    XCTAssertTrue(stateMessage.contains("ready@+"), stateMessage)
+  }
+
+  private func assertListener(_ endpoint: URL, state: String, in message: String) {
+    XCTAssertTrue(message.contains("listenerURL=\(endpoint.absoluteString)"), message)
+    XCTAssertTrue(message.contains("readyPort=\(endpoint.port!)"), message)
+    XCTAssertTrue(message.contains("listenerEndpoint="), message)
+    XCTAssertTrue(message.contains("listenerPort="), message)
+    XCTAssertTrue(message.contains("listenerState=\(state)"), message)
+    XCTAssertTrue(message.contains("ready@+"), message)
+    XCTAssertTrue(message.contains("timeout@+"), message)
+  }
+}
