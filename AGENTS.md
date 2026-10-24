@@ -356,7 +356,7 @@ the same name shadows them.
 
   **A cost constraint quietly rewrote a correctness practice, and it looked
   reasonable at the time.**
-- **Require executed hosted iOS evidence on the exact PR head SHA.**
+- **Require executed hosted iOS evidence on the exact validated SHA.**
   The `iOS simulator` job is created on every PR open, push (`synchronize`),
   reopen, ready-for-review, and labeled event, including drafts, with no
   workflow-level PR path exclusions. It runs on every PR except one whose changed files are
@@ -366,12 +366,14 @@ the same name shadows them.
   it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
   builds both bundles on a clean owned simulator. Ordinary PR runs execute all
   `BeidTests` plus `ios/ci/ui-smoke-tests.txt`; a `ci:full-ui` label in the event
-  payload selects the full UI suite. All other events run full, including main
-  pushes, nightly and manual dispatch. Before merge, require a completed
-  full-mode pass of `iOS simulator` on the exact current PR head. Update the
-  branch first, then add `ci:full-ui` to request it (`labeled` starts a run;
-  removing the label does not). Re-runs retain their original payload mode.
-  A smoke pass or classifier skip is not a full-mode pass.
+  payload selects the full UI suite. All other events run full, including
+  `merge_group`, main pushes, nightly and manual dispatch. With the main merge
+  queue enabled, the merge step is to add the PR to the queue; the queue's
+  completed full-mode `iOS simulator` pass on the exact merge result satisfies
+  the merge requirement. The queue lane never skips for paths. For a full run
+  before queueing, add `ci:full-ui` after the final PR update (`labeled` starts
+  a run; removing the label does not). Re-runs retain their original payload
+  mode. A smoke pass or classifier skip is not a full-mode pass.
   A missing, cancelled or pre-start failed run is not passing evidence, and a
   skipped run is evidence only for a PR whose successful classification job
   found no iOS-affecting changes. Xcode Cloud `PR Build & Test`
@@ -426,17 +428,24 @@ See [docs/delivery-ci.md](docs/delivery-ci.md) for the detailed PR CI and delive
 
 ### PR CI
 
+All three PR build workflows also trigger on `merge_group` with
+`types: [checks_requested]`, without workflow-level path filters. Required
+checks therefore report on the queue's merge result as well as on PR heads.
 The PR workflow is `.github/workflows/pr-ci.yml`. Its changed-path classifier
 job and three named gates are:
 
 **Determine changed paths**: `actions/github-script` collects the files of
-the compare range pinned to the event's own SHAs (pull-request base...head, or
-the `main` push before...after; never the PR's current file list, so a re-run
-classifies what it builds), and `scripts/ci_change_filter.py` classifies them.
+the compare range pinned to the event's own SHAs (pull-request base...head,
+`main` push before...after, or merge-group base_sha...head_sha; never the PR's
+current file list, so a re-run classifies what it builds), and `scripts/ci_change_filter.py` classifies them.
 A list that reaches the compare API's 300-file cap is treated as truncated and
 fails closed. The iOS and lab CLI classification jobs run this same step. Documentation-only changes skip Android build and SwiftLint;
 Repository sanity always runs. Unknown paths, dependency/workflow/build-script
 changes, and classifier failures run the relevant or all gates fail-closed.
+On `merge_group`, Determine changed paths always runs; Android build and
+SwiftLint use that classification, and Repository sanity always runs. An
+unaffected Android/lint gate may report skipped only after successful
+classification; failed collection or classification runs all three gates.
 
 **Android build**: `:shared:testAndroidHostTest`, `:app:testDebugUnitTest`,
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
@@ -450,15 +459,19 @@ changes, and classifier failures run the relevant or all gates fail-closed.
 The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
 `build-for-testing` compiles both bundles; `test-without-building` executes all
 `BeidTests` plus the checked-in UI smoke list on ordinary PR events. A payload
-label `ci:full-ui` selects the full UI suite; main pushes, nightly (03:23 UTC,
-separate concurrency group) and manual runs are full. The xcresult tree must
-prove exactly the listed UI cases Passed in smoke mode and every listed case
+label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
+nightly (03:23 UTC, separate concurrency group) and manual runs are full.
+The xcresult tree must prove exactly the listed UI cases Passed in smoke mode and every listed case
 Passed in full mode; skipped listed tests fail. Summary counts and per-bundle
 durations come from xcresult Test Case nodes, summed without suite totals.
-Merge requires a full-mode `iOS simulator` pass on the exact head: update the
-branch, then add `ci:full-ui`; a smoke pass or skip does not satisfy this rule.
-The label need not exist for ordinary smoke runs. Only the existing path
-classifier may skip the job. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
+With the main merge queue enabled, add the PR to the queue to merge. Its
+full-mode `iOS simulator` pass on the exact merge result satisfies the merge
+requirement. Add `ci:full-ui` after updating the PR to request a full run before
+queueing; a PR smoke pass or skip is not full-suite evidence. The label need
+not exist for ordinary smoke runs. The existing path classifier may skip PR
+runs; merge groups always run the lane in full mode.
+
+`.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
 `ready_for_review`; iOS also includes `labeled`, never `unlabeled`. Neither has
@@ -486,9 +499,17 @@ There are no version catalogs or additional Android modules today; future
 catalogs/modules run conservatively. Renames, deletions, malformed/missing API
 metadata, empty/truncated lists and API errors run iOS. A missing ios output
 also runs it. Lab CLI selection is unchanged: labcli, lint or error runs it;
-a failed classification runs both. Main pushes and manual dispatch always run
-both lanes.
-All PR build checkouts use the explicit PR head SHA.
+a failed classification runs both. The optional iOS/lab CLI classifiers run
+only on PRs; merge groups bypass them and always execute both lanes. This
+reuses the existing non-PR path and ensures full iOS merge-result evidence,
+without adding another classification gate. Main pushes and manual dispatch
+also always run both lanes.
+All PR build checkouts use the explicit PR head SHA; merge groups use
+`github.sha`, which GitHub defines as the merge-group head SHA. The iOS run
+name displays full on merge groups. Concurrency groups include the event name
+and ref (or PR number); queue refs identify distinct entries, so PR updates,
+main pushes, nightly runs and other queue entries cannot cancel a queue run.
+Same-event/ref superseded runs still cancel.
 
 These three workflows remain the execution source of truth; the documentation
 drift check covers all three job lists and their distinguishing command tokens.
@@ -506,9 +527,16 @@ uses Xcode Cloud Internal/Release; no Actions job invokes iOS signing.
 The main-only unsigned Release build also uses `macos-26` with Xcode 26.5;
 release metadata checks use `ubuntu-24.04`. Recommend requiring `Determine
 changed paths`, `Android build`, `SwiftLint`, `Repository sanity`, `iOS
-simulator`, and `beid-lab-cli build and test` on main. The operator owns those
-settings and removal of persistent runner access; changing workflows does not
-revoke runner access or configure branch protection.
+simulator`, and `beid-lab-cli build and test` on main. After these workflows
+reach main,
+the operator can enable `Require merge queue` on the exact `main` rule. The
+proposed queue configuration is merge method `merge` (merge commit), build
+concurrency `1`, only merge non-failing pull requests enabled, status check
+timeout `120` minutes, and merge limits minimum/maximum `1` PR. Keep the six
+checks above required with GitHub Actions as their source and enable Allow
+merge commits. This is a proposal, not an applied setting. The operator owns
+those settings and removal of persistent runner access; changing workflows
+does not revoke runner access or configure branch protection.
 
 ## PR と issue の紐付け (Development 欄)
 

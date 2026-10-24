@@ -3,6 +3,8 @@ name: PR CI
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
   push:
     branches:
       - main
@@ -11,7 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
+  group: pr-ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -48,6 +51,12 @@ jobs:
               if (context.eventName === 'pull_request') {
                 const { base, head } = context.payload.pull_request;
                 basehead = `${base.sha}...${head.sha}`;
+              } else if (context.eventName === 'merge_group') {
+                const { base_sha, head_sha } = context.payload.merge_group || {};
+                if (!/^[0-9a-f]{40}$/i.test(base_sha || '') || !/^[0-9a-f]{40}$/i.test(head_sha || '')) {
+                  throw new Error('merge group is missing valid base/head SHAs');
+                }
+                basehead = `${base_sha}...${head_sha}`;
               } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
                 basehead = `${context.payload.before}...${context.payload.after}`;
               } else {
