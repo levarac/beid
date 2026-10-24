@@ -114,7 +114,9 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
         blocked = true
         other.releaseResponses()
       }
-      try await waitUntil { blocked && runtime.activeSubmissionCountForTesting == 0 }
+      try await waitUntil(diagnostics: { "\(failing.timeoutDiagnostics); \(other.timeoutDiagnostics)" }) {
+        blocked && runtime.activeSubmissionCountForTesting == 0
+      }
       scheduler.onSchedule = nil
       XCTAssertEqual(scheduler.entries.filter { !$0.cancelled }.count, 1,
                      "\(boundary) write failure must preserve the other origin's wakeup")
@@ -122,7 +124,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       try FileManager.default.removeItem(at: fileURL)
       try FileManager.default.moveItem(at: backupURL, to: fileURL)
       scheduler.advance(by: 2)
-      try await waitUntil(diagnostics: { "\(boundary): \(failing.diagnostics); \(other.diagnostics)" }) {
+      try await waitUntil(diagnostics: { "\(boundary): \(failing.timeoutDiagnostics); \(other.timeoutDiagnostics)" }) {
         let record = ReportSubmissionStore(fileURL: fileURL).records.first { $0.id == next.id }
         return boundary == "terminal" ? record?.terminalErrorCode == "http_error" : record?.submissionState == .accepted
       }
@@ -159,7 +161,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     defer { runtime.stop() }
     runtime.submitPending()
-    try await waitUntil(diagnostics: { "failing: \(failing.diagnostics); healthy: \(healthy.diagnostics)" }) {
+    try await waitUntil(diagnostics: { "failing: \(failing.timeoutDiagnostics); healthy: \(healthy.timeoutDiagnostics)" }) {
       ReportSubmissionStore(fileURL: fileURL).records.first(where: { $0.id == newer.id })?.submissionState == .accepted
     }
     let store = ReportSubmissionStore(fileURL: fileURL)
@@ -212,7 +214,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     defer { runtime.stop() }
     runtime.submitPending()
-    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 }
+    try await waitUntil(diagnostics: { reservation.timeoutDiagnostics }) { runtime.activeSubmissionCountForTesting == 0 }
     let offline = ReportSubmissionStore(fileURL: fileURL)
     XCTAssertEqual(offline.pendingRecords.count, 2, "offline must not terminally drain the queue")
     XCTAssertTrue(offline.records.allSatisfy { $0.terminalErrorCode == nil })
@@ -230,7 +232,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     let recoveredEndpoint = try await server.start()
     XCTAssertEqual(recoveredEndpoint, endpoint)
     scheduler.advance(by: 2)
-    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.diagnostics }) {
+    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.timeoutDiagnostics }) {
       ReportSubmissionStore(fileURL: fileURL).records.allSatisfy { $0.submissionState == .accepted }
     }
     XCTAssertEqual(server.postCount, 2)
@@ -268,7 +270,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     defer { runtime.stop() }
     runtime.submitPending()
-    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.diagnostics }) {
+    try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: { server.timeoutDiagnostics }) {
       ReportSubmissionStore(fileURL: fileURL).records.first(where: { $0.id == records[1].id })?.submissionState == .accepted
     }
     let store = ReportSubmissionStore(fileURL: fileURL)
@@ -302,7 +304,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     let coordinator = makeSubmissionCoordinator(cryptography: TestSensingCryptography(), runtime: runtime)
     defer { withExtendedLifetime(coordinator) {} }
     runtime.submitPending()
-    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 1 }
+    try await waitUntil(diagnostics: { server.timeoutDiagnostics }) { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 1 }
     XCTAssertEqual(scheduler.now, 0)
     server.holdNewResponses()
     coordinator.retryPendingSubmissionsOnForeground()
@@ -311,7 +313,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     XCTAssertTrue(scheduler.entries[0].cancelled)
     try await server.waitFor(postCount: 1, getCount: 1)
     server.releaseResponses()
-    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 2 }
+    try await waitUntil(diagnostics: { server.timeoutDiagnostics }) { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 2 }
     server.holdNewResponses()
     runtime.captureAndQueueWindow(
       id: UUID(), eventCode: "device-wide-outage", eventIdHex: eventIdHex, enin: 13,
@@ -326,7 +328,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     // the client's intentional four-second transport timeout.
     server.releaseResponses()
     try await server.waitFor(postCount: 2, getCount: 2)
-    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 3
+    try await waitUntil(diagnostics: { server.timeoutDiagnostics }) { runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count == 3
         && ReportSubmissionStore(fileURL: fileURL).pendingRecords.count == 2
     }
     XCTAssertEqual(server.postCount, 3)
@@ -385,13 +387,13 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     try await server.waitFor(postCount: 1)
     XCTAssertEqual(server.postBodies.first, Data(hexEncoded: records[0].signedObservationHex))
     server.releaseResponses()
-    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && !scheduler.entries.isEmpty }
+    try await waitUntil(diagnostics: { server.timeoutDiagnostics }) { runtime.activeSubmissionCountForTesting == 0 && !scheduler.entries.isEmpty }
     scheduler.advance(by: 2)
     // Three real signature verifications drain serially; their total
     // duration is independent of the retry deadline and HTTP timeout.
     try await waitUntil(timeout: SubmissionTestWaitBudget.recordCompletion * Double(records.count), diagnostics: {
       let states = ReportSubmissionStore(fileURL: fileURL).records.map { $0.submissionState.rawValue }
-      return "\(server.diagnostics), states=\(states), flights=\(runtime.activeSubmissionCountForTesting)"
+      return "\(server.timeoutDiagnostics), states=\(states), flights=\(runtime.activeSubmissionCountForTesting)"
     }) {
       ReportSubmissionStore(fileURL: fileURL).records.allSatisfy { $0.submissionState == .accepted }
     }
@@ -825,7 +827,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
 
     // Quiesce the first process at the crash boundary before opening a
     // second store/client over the same durable queue.
-    try await waitUntil { firstRuntime.activeSubmissionCountForTesting == 0 }
+    try await waitUntil(diagnostics: { server.timeoutDiagnostics }) { firstRuntime.activeSubmissionCountForTesting == 0 }
     firstRuntime.stop()
     let crashedRecord = try XCTUnwrap(ReportSubmissionStore(fileURL: fileURL).records.first)
     let postedBody = try XCTUnwrap(server.postBodies.first)
@@ -1159,11 +1161,12 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     ))
     defer { runtime.stop() }
     runtime.submitPending()
-    try await waitUntil { runtime.activeSubmissionCountForTesting == 0 && !scheduler.entries.isEmpty }
+    let diagnostics = { servers.map(\.timeoutDiagnostics).joined(separator: "; ") }
+    try await waitUntil(diagnostics: diagnostics) { runtime.activeSubmissionCountForTesting == 0 && !scheduler.entries.isEmpty }
     while let next = scheduler.entries.filter({ !$0.cancelled }).map(\.deadline).min(), next <= 3_600 {
       let scheduledCount = scheduler.entries.count
       scheduler.advance(by: next - scheduler.now)
-      try await waitUntil {
+      try await waitUntil(diagnostics: diagnostics) {
         runtime.activeSubmissionCountForTesting == 0 && scheduler.entries.count > scheduledCount
       }
     }
@@ -1216,7 +1219,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
 
   private func waitUntil(
     timeout: TimeInterval = SubmissionTestWaitBudget.recordCompletion,
-    diagnostics: () -> String = { "condition timed out" },
+    diagnostics: () -> String,
     _ predicate: () -> Bool
   ) async throws {
     for _ in 0..<Int(timeout / 0.01) {
@@ -1240,7 +1243,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.submissionStateTimedOut(expected: expected.rawValue, diagnostics: server.diagnostics)
+    throw StubOperatorError.submissionStateTimedOut(expected: expected.rawValue, diagnostics: server.timeoutDiagnostics)
   }
 
   private func waitForTerminalFailure(at fileURL: URL, server: StubOperatorServer) async throws {
@@ -1250,7 +1253,7 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.submissionStateTimedOut(expected: "terminal failure", diagnostics: server.diagnostics)
+    throw StubOperatorError.submissionStateTimedOut(expected: "terminal failure", diagnostics: server.timeoutDiagnostics)
   }
 
   private func requiredEnvironment(

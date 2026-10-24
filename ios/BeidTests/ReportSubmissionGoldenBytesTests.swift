@@ -155,7 +155,7 @@ enum ReportSubmissionGoldenScenario {
     if hostedWaits {
       try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
     } else {
-      try await waitForAcceptedRecord(at: fileURL)
+      try await waitForAcceptedRecord(at: fileURL, server: server)
     }
     // The runtime's own callbacks hold it weakly; keep it alive until its
     // receipt write has landed.
@@ -174,7 +174,7 @@ enum ReportSubmissionGoldenScenario {
     )
   }
 
-  private static func waitForAcceptedRecord(at fileURL: URL) async throws {
+  private static func waitForAcceptedRecord(at fileURL: URL, server: StubOperatorServer) async throws {
     for _ in 0..<1_000 {
       if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
         return
@@ -184,7 +184,7 @@ enum ReportSubmissionGoldenScenario {
     let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
     throw StubOperatorError.submissionStateTimedOut(
       expected: ReportSubmissionState.accepted.rawValue,
-      diagnostics: "last state \(actual ?? "nil")"
+      diagnostics: "last state \(actual ?? "nil"); \(server.timeoutDiagnostics)"
     )
   }
 
