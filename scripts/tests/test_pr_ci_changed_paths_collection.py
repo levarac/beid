@@ -16,7 +16,9 @@ import unittest
 from pathlib import Path
 
 from scripts.ci_change_filter import classify
-from scripts.tests.test_pr_ci_lane_skip import lane_runs
+from scripts.tests.test_pr_ci_lane_skip import (
+    PR_CI, evaluate, job_block, job_condition, lane_runs,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github/workflows"
@@ -214,6 +216,63 @@ class CollectionStepTest(unittest.TestCase):
         })
         self.assertEqual(result["calls"][0]["basehead"], f"{'1' * 40}...{'2' * 40}")
         self.assertEqual(result["output"], {"files": ["docs/f0.md"]})
+
+    def test_merge_group_compares_its_own_base_and_head(self):
+        context = {"eventName": "merge_group", "payload": {"merge_group": {
+            "base_sha": "b" * 40, "head_sha": "a" * 40,
+        }}}
+        result = self.run_script("pr-ci.yml", {"context": context, "pages": [entries(1)]})
+        self.assertEqual(len(result["calls"]), 1)
+        self.assertEqual(result["calls"][0]["basehead"], f"{'b' * 40}...{'a' * 40}")
+        self.assertEqual(result["output"], {"files": ["docs/f0.md"]})
+        # The required classifier must itself report on every queue result.
+        self.assertNotRegex(job_block(PR_CI, "changes"), r"(?m)^    if:")
+        self.assertIn("if: always()", job_block(PR_CI, "changes"))
+        self.assert_queue_jobs(result, expected={"android": False, "lint": False, "sanity": True})
+
+    def assert_queue_jobs(self, result, expected):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "files.json"
+            source.write_text(json.dumps(result["output"]))
+            child = subprocess.run([
+                "python3", "scripts/ci_change_filter.py", "--input", str(source),
+            ], cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(child.returncode, 0, child.stderr)
+        outputs = dict(line.split("=", 1) for line in child.stdout.splitlines())
+        for job, runs in expected.items():
+            for classification in ("success", "failure"):
+                with self.subTest(job=job, classification=classification):
+                    self.assertEqual(evaluate(
+                        job_condition(PR_CI, job), event="merge_group",
+                        changes_result=classification, outputs=outputs,
+                    ), runs if classification == "success" else True)
+
+    def test_merge_group_unknown_and_failed_comparisons_run_all_required_jobs(self):
+        context = {"eventName": "merge_group", "payload": {"merge_group": {
+            "base_sha": "b" * 40, "head_sha": "a" * 40,
+        }}}
+        for case, scenario in (
+            ("unknown path", {"pages": [[{"filename": "unknown/feature.toml"}]]}),
+            ("API failure", {"pages": [], "apiError": "rate limited"}),
+            ("truncated", {"pages": [entries(300)]}),
+            ("missing files", {"pages": [None]}),
+            ("empty files", {"pages": [[]]}),
+        ):
+            with self.subTest(case=case):
+                result = self.run_script("pr-ci.yml", {"context": context, **scenario})
+                self.assertEqual(len(result["calls"]), 1)
+                self.assert_queue_jobs(result, expected={"android": True, "lint": True, "sanity": True})
+
+    def test_missing_merge_group_shas_fail_closed_without_an_api_call(self):
+        for group in ({}, {"base_sha": "b" * 40}, {"head_sha": "a" * 40}):
+            with self.subTest(group=group):
+                result = self.run_script("pr-ci.yml", {
+                    "context": {"eventName": "merge_group", "payload": {"merge_group": group}},
+                    "pages": [entries(1)],
+                })
+                self.assertEqual(result["calls"], [])
+                self.assertIn("error", result["output"])
+                self.assert_queue_jobs(result, expected={"android": True, "lint": True, "sanity": True})
 
     def test_unbounded_events_fail_closed(self):
         for context in (

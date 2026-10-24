@@ -101,7 +101,7 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
     def test_concurrency_still_cancels_superseded_runs(self) -> None:
         text = workflow_text()
 
-        self.assertIn("  group: pr-ios-macos-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}\n", text)
+        self.assertIn("  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}\n", text)
         self.assertIn("  cancel-in-progress: true\n", text)
 
 

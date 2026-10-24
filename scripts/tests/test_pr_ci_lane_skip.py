@@ -62,7 +62,7 @@ def evaluate(condition: str, *, event: str, changes_result: str, outputs: dict, 
         # An output that was never set is the empty string, as in Actions.
         return repr(values.get(match.group(0), ""))
 
-    expression = condition.replace("!cancelled()", "(not CANCELLED)")
+    expression = condition.replace("!cancelled()", "(not CANCELLED)").replace("always()", "True")
     expression = re.sub(r"\b(?:github|needs)(?:\.[\w]+)+", lookup, expression)
     expression = expression.replace("&&", " and ").replace("||", " or ")
     expression = re.sub(r"!(?!=)", " not ", expression)
@@ -248,8 +248,8 @@ class FailClosedTest(unittest.TestCase):
 
 
 class NonPullRequestEventTest(unittest.TestCase):
-    def test_main_push_and_manual_dispatch_always_run_both_lanes(self):
-        for event in ("push", "workflow_dispatch"):
+    def test_push_manual_and_merge_group_always_run_both_lanes(self):
+        for event in ("push", "workflow_dispatch", "merge_group"):
             for lane in LANES:
                 # The classification job is skipped off pull requests.
                 for outputs in ({}, outputs_for(DOCS_ONLY)):
@@ -257,6 +257,25 @@ class NonPullRequestEventTest(unittest.TestCase):
                         self.assertTrue(lane_runs(
                             lane, event=event, changes_result="skipped", outputs=outputs,
                         ))
+
+
+class MergeGroupLaneTest(unittest.TestCase):
+    def test_merge_group_runs_both_lanes_regardless_of_classifier_result(self):
+        for result in ("success", "failure", "skipped", "cancelled"):
+            for lane in LANES:
+                for outputs in ({}, outputs_for(DOCS_ONLY)):
+                    with self.subTest(lane=lane, result=result, outputs=outputs):
+                        self.assertTrue(lane_runs(
+                            lane, event="merge_group", changes_result=result, outputs=outputs,
+                        ))
+
+    def test_optional_classifiers_are_skipped_for_merge_group(self):
+        for path in (IOS, LAB_CLI):
+            with self.subTest(workflow=path.name):
+                self.assertFalse(evaluate(
+                    job_condition(path, "changes"), event="merge_group",
+                    changes_result="skipped", outputs={},
+                ))
 
 
 if __name__ == "__main__":
