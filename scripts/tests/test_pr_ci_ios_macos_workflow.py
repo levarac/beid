@@ -132,6 +132,53 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertNotIn("Build Release for device", directives)
         self.assertNotIn("generic/platform=iOS", directives)
 
+    def test_mode_is_selected_once_and_cannot_skip_testing(self):
+        text = workflow_text()
+        self.assertIn("      - name: Determine test mode\n", text)
+        mode = step_block(text, "Determine test mode")
+        self.assertIn("id: test-mode", mode)
+        self.assertIn('python3 -m scripts.ios_ui_smoke mode', mode)
+        self.assertIn('"$GITHUB_EVENT_PATH"', mode)
+        self.assertNotIn("if:", mode)
+        self.assertEqual(text.count("scripts.ios_ui_smoke mode"), 1)
+        run = step_block(text, "Test without rebuilding")
+        self.assertNotIn("if:", run)
+        self.assertIn("TEST_MODE: ${{ steps.test-mode.outputs.mode }}", run)
+        self.assertIn('scripts.ios_ui_smoke arguments', run)
+        self.assertIn('"${test_args[@]}"', run)
+        check = step_block(text, "Verify UI execution and bundle durations")
+        self.assertIn("if: always()", check)
+        self.assertIn("TEST_MODE: ${{ steps.test-mode.outputs.mode }}", check)
+        self.assertIn('xcresulttool get test-results tests', check)
+        self.assertIn('scripts.ios_ui_smoke verify', check)
+        self.assertNotIn("continue-on-error", text)
+
+    def test_selection_shell_passes_exact_arguments_in_both_modes(self):
+        block = step_block(workflow_text(), "Test without rebuilding")
+        self.assertIn("scripts.ios_ui_smoke arguments", block)
+        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
+        root = WORKFLOW_PATH.parents[2]
+        with tempfile.TemporaryDirectory(dir=root / "build") as temporary:
+            folder = Path(temporary)
+            fake = folder / "xcodebuild"
+            fake.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                            "print(json.dumps(sys.argv[1:]))\n"
+                            "sys.exit(int(os.environ.get('XCODE_EXIT', '0')))\n")
+            fake.chmod(0o755)
+            for mode, child_exit in (("smoke", 0), ("full", 0), ("smoke", 65)):
+                result = subprocess.run(["bash", "-c", command], cwd=root, text=True,
+                    capture_output=True, env={**os.environ,
+                        "PATH": str(folder) + os.pathsep + os.environ["PATH"],
+                        "CI_OUTPUT_ROOT": str(folder), "SIMULATOR_UDID": "owned",
+                        "TEST_MODE": mode, "XCODE_EXIT": str(child_exit)})
+                self.assertEqual(result.returncode, child_exit, result.stderr)
+                argv = json.loads(result.stdout)
+                selections = [item for item in argv if item.startswith("-only-testing:")]
+                from scripts.ios_ui_smoke import parse_smoke_list
+                listed = parse_smoke_list((root / "ios/ci/ui-smoke-tests.txt").read_text())
+                self.assertEqual(selections, (["-only-testing:BeidTests"] +
+                    [f"-only-testing:{test}" for test in listed]) if mode == "smoke" else [])
+
 
 class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
     def test_release_build_command_moved_unchanged(self) -> None:
