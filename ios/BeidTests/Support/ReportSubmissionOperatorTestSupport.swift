@@ -268,7 +268,7 @@ final class StubOperatorServer {
     listener = try NWListener(using: .tcp, on: port)
   }
 
-  func start() async throws -> URL {
+  func start(timeout: TimeInterval? = nil) async throws -> URL {
     listener.stateUpdateHandler = { [weak self] state in
       guard let self else { return }
       self.lock.lock()
@@ -285,6 +285,18 @@ final class StubOperatorServer {
       self?.accept(connection)
     }
     listener.start(queue: queue)
+
+    if let timeout {
+      let ready = try await SubmissionTestWait.until(timeout: timeout) {
+        let status = self.lock.withLock { (self.isReady, self.startupError) }
+        if let error = status.1 { throw error }
+        return status.0 && self.listener.port.map { $0.rawValue != 0 } == true
+      }
+      guard ready, let port = listener.port else {
+        throw StubOperatorError.startTimedOut(diagnostics: "after \(timeout)s; \(diagnostics)")
+      }
+      return try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
+    }
 
     for _ in 0..<100 {
       let status = lock.withLock { (isReady, startupError) }
@@ -317,7 +329,24 @@ final class StubOperatorServer {
     throw StubOperatorError.requestTimedOut(diagnostics: "listener did not release its port")
   }
 
-  func waitFor(postCount expectedPosts: Int, getCount expectedGets: Int? = nil) async throws {
+  func waitFor(
+    postCount expectedPosts: Int,
+    getCount expectedGets: Int? = nil,
+    timeout: TimeInterval? = nil
+  ) async throws {
+    if let timeout {
+      if try await SubmissionTestWait.until(timeout: timeout, {
+        self.postCount >= expectedPosts && (expectedGets.map { self.getCount >= $0 } ?? true)
+      }) { return }
+      let progress = lock.withLock {
+        connectionCount == 0 ? "no connection arrived" : "connection arrived but expected requests did not complete"
+      }
+      throw StubOperatorError.requestTimedOut(
+        diagnostics: "after \(timeout)s: \(progress); expected POST>=\(expectedPosts), " +
+          "GET>=\(expectedGets ?? 0); \(diagnostics)"
+      )
+    }
+
     for _ in 0..<1_000 {
       if postCount >= expectedPosts,
          expectedGets.map({ getCount >= $0 }) ?? true {
@@ -512,6 +541,36 @@ final class StubOperatorServer {
     startupError = error
     lock.unlock()
   }
+}
+
+@MainActor
+func waitForStoredSubmissionState(
+  _ expected: ReportSubmissionState,
+  at fileURL: URL,
+  server: StubOperatorServer
+) async throws {
+  var lastState: String?
+  if try await SubmissionTestWait.until({
+    let state = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState
+    lastState = state?.rawValue
+    return state == expected
+  }) { return }
+  throw StubOperatorError.submissionStateTimedOut(
+    expected: expected.rawValue,
+    diagnostics: "after \(SubmissionTestWait.timeout)s; last state \(lastState ?? "no record"); \(server.diagnostics)"
+  )
+}
+
+@MainActor
+func waitForSubmissionJoin(_ coordinator: SensingCoordinator, eventIdHex: String) async throws {
+  if try await SubmissionTestWait.until({
+    coordinator.relayGateJoinedEventIdHexForTesting == eventIdHex
+  }) { return }
+  throw StubOperatorError.joinedStateTimedOut(
+    expected: eventIdHex,
+    actual: coordinator.relayGateJoinedEventIdHexForTesting,
+    refusal: "after \(SubmissionTestWait.timeout)s; \(String(describing: coordinator.joinRefusal))"
+  )
 }
 
 struct HTTPRequest {
