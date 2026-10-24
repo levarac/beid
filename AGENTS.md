@@ -358,13 +358,20 @@ the same name shadows them.
   reasonable at the time.**
 - **Require executed hosted iOS evidence on the exact PR head SHA.**
   The `iOS simulator` job is created on every PR open, push (`synchronize`),
-  reopen, and ready-for-review event, including drafts, with no workflow-level
-  PR path exclusions. It runs on every PR except one whose changed files are
+  reopen, ready-for-review, and labeled event, including drafts, with no
+  workflow-level PR path exclusions. It runs on every PR except one whose changed files are
   documentation or verified independent inputs (`android/app/src/**` after
   build-input rules, and standalone `tools/beid-lab-cli/**`, as
   `scripts/ci_change_filter.py` defines it), which reports it as skipped. Renames, deletions and unsafe metadata run
   it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
-  builds/runs both `BeidTests` and `BeidUITests` on a clean owned simulator.
+  builds both bundles on a clean owned simulator. Ordinary PR runs execute all
+  `BeidTests` plus `ios/ci/ui-smoke-tests.txt`; a `ci:full-ui` label in the event
+  payload selects the full UI suite. All other events run full, including main
+  pushes, nightly and manual dispatch. Before merge, require a completed
+  full-mode pass of `iOS simulator` on the exact current PR head. Update the
+  branch first, then add `ci:full-ui` to request it (`labeled` starts a run;
+  removing the label does not). Re-runs retain their original payload mode.
+  A smoke pass or classifier skip is not a full-mode pass.
   A missing, cancelled or pre-start failed run is not passing evidence, and a
   skipped run is evidence only for a PR whose successful classification job
   found no iOS-affecting changes. Xcode Cloud `PR Build & Test`
@@ -441,12 +448,22 @@ changes, and classifier failures run the relevant or all gates fail-closed.
   `python3 -m unittest discover -s scripts/tests -t .`.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
-`build-for-testing` and `test-without-building` execute the Beid unit and UI
-suites. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
+`build-for-testing` compiles both bundles; `test-without-building` executes all
+`BeidTests` plus the checked-in UI smoke list on ordinary PR events. A payload
+label `ci:full-ui` selects the full UI suite; main pushes, nightly (03:23 UTC,
+separate concurrency group) and manual runs are full. The xcresult tree must
+prove exactly the listed UI cases Passed in smoke mode and every listed case
+Passed in full mode; skipped listed tests fail. Summary counts and per-bundle
+durations come from xcresult Test Case nodes, summed without suite totals.
+Merge requires a full-mode `iOS simulator` pass on the exact head: update the
+branch, then add `ci:full-ui`; a smoke pass or skip does not satisfy this rule.
+The label need not exist for ordinary smoke runs. Only the existing path
+classifier may skip the job. `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
 including drafts, with `opened`, `synchronize`, `reopened`, and
-`ready_for_review`; neither has a PR workflow path filter, so the required
-contexts are always created. Each workflow has its own small classification
+`ready_for_review`; iOS also includes `labeled`, never `unlabeled`. Neither has
+a PR workflow path filter, so the required contexts are always created.
+Each workflow has its own small classification
 job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that
 runs the same collection step and `scripts/ci_change_filter.py` as Determine
 changed paths. Both lanes report as skipped on a documentation-only PR. The iOS lane uses

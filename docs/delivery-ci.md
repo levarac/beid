@@ -63,7 +63,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   - **`.github/workflows/pr-ci-ios-macos.yml`** — `iOS simulator` is the
     hosted iOS PR gate. `pull_request` includes `opened`, `synchronize`,
-    `reopened`, and `ready_for_review`, with no path filter or draft guard.
+    `reopened`, `ready_for_review`, and `labeled` (not `unlabeled`), with no
+    path filter or draft guard.
     Thus every PR creates the `iOS simulator` context for branch protection.
     A `Classify paths for iOS lane` job runs the same collection step and
     `scripts/ci_change_filter.py` as `Determine changed paths`; the lane has a
@@ -105,7 +106,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The lane uses `!cancelled()` so a superseded run does not start a macOS job.
     Main pushes retain their iOS/build-input path filter (including catalogs,
     classifier and generation guard) and always run the lane; manual dispatch
-    always runs it.
+    always runs it. Nightly on main runs at 03:23 UTC, away from the busy top
+    of the hour. Its concurrency group is separate from push-to-main, so they
+    do not cancel each other.
     The two classification jobs have their own names, distinct from
     `Determine changed paths`, because required contexts are keyed by job name;
     do not add them to the required list.
@@ -116,18 +119,40 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     requires the iOS 26.5 runtime. `scripts/ci_simulator.py` creates a new
     simulator for each job and returns its UDID; only that device is booted,
     tested and deleted, even on failure. Build-for-testing and
-    test-without-building run the complete Beid scheme (`BeidTests` and
-    `BeidUITests`) with `SWIFT_OPTIMIZATION_LEVEL=-O`. The structured xcresult
-    summary must contain nonzero tests, consistent counts and a passing result.
-    Superseded runs are cancelled; require a completed passing run for the
-    exact current PR head before merge.
+    test-without-building use `SWIFT_OPTIMIZATION_LEVEL=-O`. Every test run
+    executes all `BeidTests`. Ordinary `pull_request` events also execute only
+    `ios/ci/ui-smoke-tests.txt`; when the event payload's labels include
+    `ci:full-ui`, the complete `BeidUITests` suite runs. Push, nightly and
+    manual events always run full. Mode is selected once from the event file,
+    never the live API; a re-run therefore retains the original mode. The run
+    name displays mode, and the summary records mode, per-bundle counts and
+    summed xcresult Test Case durations (numeric `durationInSeconds` or the
+    human-readable `duration`, excluding suite totals, not elapsed wall time).
+    Missing duration evidence fails verification rather than reporting zero.
+    The list stays outside all XcodeGen source roots, rejects empty/duplicate
+    entries, and repository sanity checks every method against its Swift class.
+    Smoke selection includes `-only-testing:BeidTests` and one exact UI method
+    argument per entry. No mode skips the job or a test step; only the existing
+    path classifier may skip it. The structured xcresult summary must contain
+    nonzero tests, consistent counts and a passing result. A second check reads
+    the test tree: smoke UI cases must equal the list exactly and all be Passed;
+    full mode must also execute and pass every listed case. Skipped listed
+    tests, missing/renamed cases, and duplicate UI cases fail the job.
+    Superseded runs are cancelled. Merge requires a completed full-mode pass
+    of `iOS simulator` on the exact current PR head. Update the branch first,
+    then add `ci:full-ui` to request it; `labeled` triggers a run on that head.
+    The workflow works before the label is created; label creation is separate.
+    A smoke pass or a path-classifier skip is not full-suite merge evidence.
+    If a classifier skip prevents a full PR run, dispatch this workflow on the
+    same branch head and verify the full-mode result before merge.
 
     Unsigned Release device compilation (`CODE_SIGNING_ALLOWED=NO`) remains
     in `main-ios-release-build.yml` on main push/manual dispatch, also using
     Xcode 26.5. It is not a PR status check or a signing/delivery lane.
 
   - **Xcode Cloud** — keep `PR Build & Test` paused. Hosted iOS now performs
-    the build plus unit/UI test role on every iOS-affecting PR head,
+    the build plus unit/UI smoke role on ordinary iOS-affecting PR heads and
+    the full UI role on labeled PR heads,
     without signing secrets;
     the old ASC file exclusions no longer determine whether hosted evidence
     is required. This does not replace trusted Internal/Release delivery,
