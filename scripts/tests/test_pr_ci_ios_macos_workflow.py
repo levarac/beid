@@ -158,6 +158,7 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertIn("scripts.ios_ui_smoke arguments", block)
         command = textwrap.dedent(block.split("        run: |\n", 1)[1])
         root = WORKFLOW_PATH.parents[2]
+        (root / "build").mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root / "build") as temporary:
             folder = Path(temporary)
             fake = folder / "xcodebuild"

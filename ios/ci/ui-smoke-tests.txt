@@ -1,0 +1,18 @@
+# Ordinary PR UI smoke set. One exact XCTest identifier per line; comments allowed.
+# Keep outside project.yml source roots. Full runs must also execute every entry.
+# Welcome: follows HOW IT WORKS through sensing information and disclosure.
+BeidUITests/FlatScreenshotTourA/testWelcomeHowItWorksOpensAboutSensingAndWhatWeSend
+# Home: completes onboarding and opens/cancels event-code entry from an empty collection.
+BeidUITests/FlatScreenshotTourB/testShot_04b_Empty
+# Join: submits an event code and observes the same Account row become disabled.
+BeidUITests/EventMembershipUITests/testJoinEventRowDisablesImmediatelyAfterJoining
+# Sensing: closes Scan, checks background sensing, and stops it from Home.
+BeidUITests/ContinuousSensingIndicatorUITests/testHomeShowsContinuousSensingAndClearsAfterStop
+# Refusal: checks the typed network refusal and its reset through visible-screen waits.
+BeidUITests/JoinRefusalUITests/testJoinRefusalPanelIsVisibleAndClearsWhenScanCloses
+# Records: opens a past-event row, checks report state, and reaches Proof detail.
+BeidUITests/FlatScreenshotTourB/testShot_08_EventDetail
+# Record detail: missing observation bytes show one unavailable state, not invented metrics.
+BeidUITests/FlatScreenshotTourC/testObservationDetailWithMissingSnapshotShowsOneUnavailableState
+# Permissions/settings: Bluetooth-off onboarding offers Open Settings.
+BeidUITests/FlatScreenshotTourA/testShot_03_BluetoothOff

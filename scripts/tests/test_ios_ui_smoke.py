@@ -2,6 +2,7 @@
 
 import importlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -31,6 +32,7 @@ def tree(ui=None, unit=True):
 
 class SmokeContractTest(unittest.TestCase):
     def setUp(self):
+        (ROOT / "build").mkdir(exist_ok=True)
         self.assertTrue((ROOT / "scripts/ios_ui_smoke.py").is_file(),
                         "missing smoke mode/selection/evidence implementation")
         self.tool = importlib.import_module("scripts.ios_ui_smoke")
@@ -132,14 +134,20 @@ class SmokeContractTest(unittest.TestCase):
                 self.tool.validate_results("smoke", [ONE, TWO], payload)
 
     def test_checked_in_list_is_six_to_ten_real_methods_outside_xcodegen_sources(self):
-        import yaml
         selected = self.tool.parse_smoke_list(LIST.read_text())
         self.assertTrue(6 <= len(selected) <= 10)
         self.tool.validate_sources(selected, ROOT / "ios/BeidUITests")
-        project = yaml.safe_load((ROOT / "ios/project.yml").read_text())
-        for target in project["targets"].values():
-            for source in target.get("sources", []):
-                source = source if isinstance(source, str) else source["path"]
+        # The sanity suite is stdlib-only; accept the source entry forms used
+        # by project.yml and fail if a new form needs an explicit parser update.
+        project = (ROOT / "ios/project.yml").read_text()
+        blocks = re.findall(r"^    sources:\n((?:(?: {6,}.*|)\n)*)", project, re.M)
+        self.assertTrue(blocks)
+        for block in blocks:
+            entries = re.findall(r"^      - (.+)$", block, re.M)
+            self.assertTrue(entries)
+            for entry in entries:
+                source = entry.removeprefix("path: ")
+                self.assertRegex(source, r"^[./A-Za-z0-9_-]+$")
                 directory = (ROOT / "ios" / source).resolve()
                 self.assertFalse(LIST.resolve().is_relative_to(directory), source)
         self.assertNotIn("ui-smoke-tests.txt", (ROOT / "ios/Beid.xcodeproj/project.pbxproj").read_text())
