@@ -182,7 +182,7 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     guard postFinished else {
       throw StubOperatorError.submissionStateTimedOut(
         expected: "original POST callback idle before relaunch",
-        diagnostics: server.diagnostics
+        diagnostics: server.timeoutDiagnostics
       )
     }
     // Model process death only after the first receipt was verified but not persisted.
