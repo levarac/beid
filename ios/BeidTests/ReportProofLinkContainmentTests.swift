@@ -126,7 +126,7 @@ final class ReportProofLinkContainmentTests: XCTestCase {
       signingPublicKey: try XCTUnwrap(goldenData(fromHex: receiptKeyHex))
     )
     defer { server.stop() }
-    let endpoint = try await server.start()
+    let endpoint = try await server.start(timeout: SubmissionTestWait.timeout)
     let submissionFileURL = directory.appendingPathComponent("report-submissions.json")
     let linkFileURL = directory.appendingPathComponent("report-proof-links.json")
     let cryptography = SignatureInputRecordingCryptography(wrapping: TestSensingCryptography())
@@ -175,7 +175,7 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     }
     let proofId = try XCTUnwrap(coordinator.currentProofID)
     _ = coordinator.stopSensing()
-    try await server.waitFor(postCount: 1)
+    try await server.waitFor(postCount: 1, timeout: SubmissionTestWait.timeout)
 
     #if DEBUG
     let postFinished = try await SubmissionTestWait.until { runtime.activeSubmissionCountForTesting == 0 }
@@ -194,7 +194,7 @@ final class ReportProofLinkContainmentTests: XCTestCase {
       bundleDirectory: directory
     )
     relaunched.submitPending()
-    try await server.waitFor(postCount: 1, getCount: 1)
+    try await server.waitFor(postCount: 1, getCount: 1, timeout: SubmissionTestWait.timeout)
     try await waitForStoredSubmissionState(.accepted, at: submissionFileURL, server: server)
     withExtendedLifetime(relaunched) {}
     #endif

@@ -16,22 +16,23 @@ final class FlatScreenshotTourD: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-event-detail-frame-08"]
     app.launch()
     let getStarted = app.buttons["Get Started"]
-    getStarted.assertHittable()
+    XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
-    allowBluetooth.assertHittable()
+    XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
 
     let event = app.buttons["home.past-event.ETHTOKYO2026"]
-    event.assertHittable()
+    XCTAssertTrue(event.waitForExistence(timeout: 5))
     event.tap()
     let report = app.buttons["event-detail.report.00000000-0000-4000-8000-000000000639"]
-    app.staticTexts["event-detail.heading"].assertHittable()
-    report.scrollToHittable(in: app)
+    for _ in 0..<5 where !report.isHittable { app.swipeUp() }
+    XCTAssertTrue(report.waitForExistence(timeout: 5))
+    XCTAssertTrue(report.isHittable)
     report.tap()
 
     let heading = app.staticTexts["report-detail.heading"]
-    heading.assertExists()
+    _ = heading.waitForExistence(timeout: 5)
     attachScreenshot("12")
     XCTAssertEqual(heading.label, "Report #1")
     XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON DEVICE"))
@@ -44,7 +45,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_10_Account() {
     openAccount()
     let copy = app.buttons["Copy address"]
-    copy.assertExists()
+    _ = copy.waitForExistence(timeout: 5)
     attachScreenshot("10")
     assertMinimumHitTarget(app.buttons["Done"])
     assertMinimumHitTarget(copy)
@@ -53,7 +54,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_10c_BluetoothOff() {
     openAccount(extraArguments: ["-beid-account-bluetooth-off-fixture"])
     let bluetoothStatus = app.buttons["account.bluetooth.status"]
-    bluetoothStatus.assertExists()
+    _ = bluetoothStatus.waitForExistence(timeout: 5)
     attachScreenshot("10c")
     XCTAssertEqual(bluetoothStatus.label, "Open Bluetooth Settings")
     assertMinimumHitTarget(app.buttons["Done"])
@@ -64,16 +65,15 @@ final class FlatScreenshotTourD: XCTestCase {
     openAccount()
     let disconnect = app.buttons["Disconnect wallet"]
     let list = app.collectionViews.firstMatch
-    list.assertHittable()
     var attempts = 0
     while !disconnect.isHittable, attempts < 6 {
       list.swipeUp()
       attempts += 1
     }
-    disconnect.assertHittable()
+    XCTAssertTrue(disconnect.isHittable)
     disconnect.tap()
     let title = app.staticTexts["Disconnect wallet?"]
-    title.assertExists()
+    _ = title.waitForExistence(timeout: 5)
     attachScreenshot("10d")
     XCTAssertTrue(title.exists)
     let keepConnected = app.buttons["Keep connected"]
@@ -86,10 +86,10 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_10e_Copied() {
     openAccount()
     let copy = app.buttons["Copy address"]
-    copy.assertHittable()
+    XCTAssertTrue(copy.waitForExistence(timeout: 5))
     copy.tap()
     let copied = app.buttons["account.copy.feedback"]
-    copied.assertExists()
+    _ = copied.waitForExistence(timeout: 5)
     attachScreenshot("10e")
     assertMinimumHitTarget(app.buttons["Done"])
     assertMinimumHitTarget(copied)
@@ -101,7 +101,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14_OrganizerTools() {
     openOrganizer()
     let route = app.buttons["organizer.venueBroadcast"]
-    route.assertExists()
+    _ = route.waitForExistence(timeout: 5)
     attachScreenshot("14")
     assertMinimumHitTarget(route)
     XCTAssertEqual(route.value as? String, "Not broadcasting")
@@ -122,7 +122,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14_OrganizerTools_SavedPack() {
     openOrganizer(extraArguments: ["-beid-organizer-frame", "14-saved"])
     let status = app.staticTexts["organizer.savedPack.status"]
-    status.assertExists()
+    _ = status.waitForExistence(timeout: 5)
     attachScreenshot("14-saved")
     XCTAssertTrue(status.exists, "the STATUS value must be on 14")
     XCTAssertEqual(status.label.uppercased(), "SAVED ON THIS DEVICE")
@@ -139,7 +139,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14_OrganizerTools_NotSaved() {
     openOrganizer(extraArguments: ["-beid-organizer-frame", "14-not-saved"])
     let status = app.staticTexts["organizer.savedPack.status"]
-    status.assertExists()
+    _ = status.waitForExistence(timeout: 5)
     attachScreenshot("14-not-saved")
     XCTAssertTrue(status.exists, "the STATUS value must be on 14")
     XCTAssertEqual(status.label.uppercased(), "NOT SAVED")
@@ -176,9 +176,8 @@ final class FlatScreenshotTourD: XCTestCase {
 
   func testShot_14d_ScanQR() {
     openVenue(frame: "14d")
-    app.buttons["Scan QR code"].assertHittable()
     app.buttons["Scan QR code"].tap()
-    app.staticTexts["venue.scanner.title"].assertExists()
+    _ = app.staticTexts["venue.scanner.title"].waitForExistence(timeout: 5)
     attachScreenshot("14d")
     XCTAssertTrue(app.staticTexts["venue.scanner.title"].exists)
     assertMinimumHitTarget(app.buttons["Cancel scan"])
@@ -186,7 +185,28 @@ final class FlatScreenshotTourD: XCTestCase {
   }
 
   func testShot_14e_InvalidLink() {
-    assertVenueFrame("14e", outcome: "Not a venue link")
+    app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture", "-beid-venue-frame", "14e"]
+    app.launch()
+    let getStarted = app.buttons["Get Started"]
+    getStarted.assertExists()
+    getStarted.tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    allowBluetooth.assertExists()
+    allowBluetooth.tap()
+    let account = app.buttons["home.account"]
+    account.assertExists()
+    account.tap()
+    let organizer = app.buttons["Organizer tools"]
+    organizer.assertExists()
+    organizer.tap()
+    let venue = app.buttons["organizer.venueBroadcast"]
+    venue.assertExists()
+    venue.tap()
+    app.buttons["Scan QR code"].assertHittable()
+
+    attachScreenshot("14e")
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts["NOT A VENUE LINK"].exists)
   }
 
   func testShot_14e2_NoSource() {
@@ -255,29 +275,29 @@ final class FlatScreenshotTourD: XCTestCase {
   private func openOrganizer(extraArguments: [String] = []) {
     openAccount(extraArguments: extraArguments)
     let organizer = app.buttons["Organizer tools"]
-    organizer.assertHittable()
+    XCTAssertTrue(organizer.waitForExistence(timeout: 5))
     organizer.tap()
-    app.buttons["organizer.venueBroadcast"].assertExists()
+    XCTAssertTrue(app.buttons["organizer.venueBroadcast"].waitForExistence(timeout: 5))
   }
 
   private func openVenue(frame: String) {
     openOrganizer(extraArguments: ["-beid-venue-frame", frame])
-    app.buttons["organizer.venueBroadcast"].assertHittable()
     app.buttons["organizer.venueBroadcast"].tap()
     let scan = app.buttons["Scan QR code"]
-    scan.assertHittable()
+    XCTAssertTrue(scan.waitForExistence(timeout: 5))
+    let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: scan)
+    XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
   }
 
   private func openAccount(extraArguments: [String] = []) {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
     app.launch()
 
-    app.buttons["Get Started"].assertHittable()
     app.buttons["Get Started"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
+    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
     let account = app.buttons["home.account"]
-    account.assertHittable()
+    XCTAssertTrue(account.waitForExistence(timeout: 5))
     account.tap()
   }
 

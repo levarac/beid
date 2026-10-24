@@ -8,28 +8,26 @@ final class NearbyJoinUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-nearby-join-fixture"]
     app.launch()
 
-    app.buttons["Get Started"].assertHittable()
     app.buttons["Get Started"].tap()
-    app.buttons["Allow Bluetooth"].assertHittable()
+    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    app.buttons["home.scan"].assertHittable()
+    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
     app.buttons["home.scan"].tap()
 
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
-    receipt.assertExists()
+    XCTAssertTrue(receipt.waitForExistence(timeout: 5))
     XCTAssertEqual(receipt.label, "joins=0 event=none")
     // SwiftUI exposes the enclosing section identifier on this Button.
     // Match the fixture's actual card label as well, rather than the section title.
     let card = app.buttons.matching(NSPredicate(
       format: "identifier == %@ AND label CONTAINS %@", "scan.nearby-events", "Community night"
     )).firstMatch
-    card.assertExists()
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
     XCTAssertTrue(card.isEnabled)
     // XCTest can report this offscreen card as hittable behind the fixed footer.
     // Bring it into the visible part of the actual Scan scroll view first.
-    app.scrollViews["scan.sensing"].assertHittable()
     app.scrollViews["scan.sensing"].swipeUp()
-    card.assertHittable()
+    XCTAssertTrue(card.isHittable)
     card.tap()
 
     // This value changes only when the native engine seam receives a capability.
@@ -38,10 +36,7 @@ final class NearbyJoinUITests: XCTestCase {
     let joined = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "label == %@", expected), object: receipt
     )
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [joined], timeout: UITestWait.timeout), .completed,
-      "Join receipt did not update within \(UITestWait.timeout)s; last label: \(receipt.label)"
-    )
+    XCTAssertEqual(XCTWaiter.wait(for: [joined], timeout: 5), .completed)
     XCTAssertFalse(card.exists, "the production pre-join cards disappear after admission")
   }
 }

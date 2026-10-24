@@ -102,14 +102,17 @@ enum ReportSubmissionGoldenScenario {
   /// Seeds the fixed capture as a pending capture in `directory`, lets a real
   /// `ReportSubmissionRuntime` prepare, sign and POST it to a loopback
   /// operator, and returns the bytes it produced.
-  static func run(in directory: URL) async throws -> ReportSubmissionGoldenBytes {
+  static func run(
+    in directory: URL,
+    hostedWaits: Bool = false
+  ) async throws -> ReportSubmissionGoldenBytes {
     let server = try StubOperatorServer(
       eventId: try XCTUnwrap(goldenData(fromHex: eventIdHex)),
       signingPrivateKey: receiptPrivateKey,
       signingPublicKey: try XCTUnwrap(goldenData(fromHex: receiptKeyHex))
     )
     defer { server.stop() }
-    let endpoint = try await server.start()
+    let endpoint = try await server.start(timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
     let fileURL = directory.appendingPathComponent("report-submissions.json")
 
     try ReportSubmissionStore(fileURL: fileURL).addPendingCapture(
@@ -148,8 +151,12 @@ enum ReportSubmissionGoldenScenario {
     ))
 
     runtime.submitPending()
-    try await server.waitFor(postCount: 1)
-    try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
+    try await server.waitFor(postCount: 1, timeout: hostedWaits ? SubmissionTestWait.timeout : nil)
+    if hostedWaits {
+      try await waitForStoredSubmissionState(.accepted, at: fileURL, server: server)
+    } else {
+      try await waitForAcceptedRecord(at: fileURL)
+    }
     // The runtime's own callbacks hold it weakly; keep it alive until its
     // receipt write has landed.
     withExtendedLifetime(runtime) {}
@@ -164,6 +171,20 @@ enum ReportSubmissionGoldenScenario {
       signatureInputHex: goldenHex(signatureInput),
       signedObservationHex: record.signedObservationHex.lowercased(),
       postBodyHex: goldenHex(postBody)
+    )
+  }
+
+  private static func waitForAcceptedRecord(at fileURL: URL) async throws {
+    for _ in 0..<1_000 {
+      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
+        return
+      }
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
+    throw StubOperatorError.submissionStateTimedOut(
+      expected: ReportSubmissionState.accepted.rawValue,
+      diagnostics: "last state \(actual ?? "nil")"
     )
   }
 

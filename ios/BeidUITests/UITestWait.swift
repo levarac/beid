@@ -13,7 +13,7 @@ extension XCUIElement {
   func assertExists(file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertTrue(
       waitForExistence(timeout: UITestWait.timeout),
-      "Element did not appear within \(UITestWait.timeout)s: \(identifier); \(self)",
+      "Element did not appear within \(UITestWait.timeout)s: \(exists ? identifier : "<absent>")",
       file: file, line: line
     )
   }
@@ -24,8 +24,8 @@ extension XCUIElement {
     )
     XCTAssertEqual(
       XCTWaiter.wait(for: [visible], timeout: UITestWait.timeout), .completed,
-      "Element did not become hittable within \(UITestWait.timeout)s: \(identifier); " +
-        "exists=\(exists), hittable=\(isHittable); \(self)",
+      "Element did not become hittable within \(UITestWait.timeout)s: \(exists ? identifier : "<absent>"); " +
+        "exists=\(exists), hittable=\(exists && isHittable)",
       file: file, line: line
     )
   }
@@ -36,7 +36,7 @@ extension XCUIElement {
     )
     XCTAssertEqual(
       XCTWaiter.wait(for: [absent], timeout: UITestWait.timeout), .completed,
-      "Element remained present after \(UITestWait.timeout)s: \(identifier); \(self)",
+      "Element remained present after \(UITestWait.timeout)s: \(exists ? identifier : "<absent>")",
       file: file, line: line
     )
   }
