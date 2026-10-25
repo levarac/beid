@@ -102,12 +102,17 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
                     ])
 
     def test_debug_build_and_test_use_measured_optimization(self) -> None:
-        text = workflow_text()
-
-        for name in ("Build for testing",):
-            with self.subTest(step=name):
-                block = step_block(text, name)
-                self.assertEqual(block.count("SWIFT_OPTIMIZATION_LEVEL=-O"), 1)
+        data = workflow_data(workflow_text())
+        for job, name in (("ios-build", "Build for testing"),
+                          ("ios-unit", "Test without rebuilding"),
+                          ("ios-ui", "Test without rebuilding")):
+            with self.subTest(job=job):
+                command = named_step(data, job, name)["run"].replace("\\\n", " ")
+                lexer = shlex.shlex(command, posix=True, punctuation_chars="();")
+                lexer.whitespace_split = True
+                values = [match[1] for word in lexer
+                          if (match := re.fullmatch(r"SWIFT_OPTIMIZATION_LEVEL=(.*)", word))]
+                self.assertEqual(values, ["-O"])
 
     def test_simulator_lane_no_longer_builds_release_for_device(self) -> None:
         """The Release-for-device build moved out (gh#479).
