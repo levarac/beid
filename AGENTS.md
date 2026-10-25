@@ -461,8 +461,8 @@ classification; failed collection or classification runs all three gates.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` keeps **iOS simulator**
 as a final `always()` aggregate (5 minutes, Linux), needing the classifier,
-**iOS simulator build** (25 minutes), **iOS unit tests** (20 minutes), and
-**iOS UI shard ${{ matrix.shard }}** (20 minutes per shard). The macOS jobs use
+**iOS simulator build** (30 minutes), **iOS unit tests** (30 minutes), and
+**iOS UI shard ${{ matrix.shard }}** (30 minutes per shard). The macOS jobs use
 the same Xcode 26.5 selection. One `build-for-testing` compiles both bundles;
 a gzip tar of `.xctestrun` and `Build/Products` preserves executable bits and
 symlinks, excludes dSYMs/compiler-only files, and reports its byte/MiB size in

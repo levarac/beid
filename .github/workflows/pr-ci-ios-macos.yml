@@ -144,8 +144,8 @@ jobs:
     # Same fail-closed classifier condition as the former serial job.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
     runs-on: macos-26
-    # Measured build 10-14 min; allow setup, enumeration and artifact transfer.
-    timeout-minutes: 25
+    # Hosted build including upload took 17m52s; allow setup/transfer variance.
+    timeout-minutes: 30
     outputs:
       mode: ${{ steps.test-mode.outputs.mode }}
       ui-shards: ${{ steps.plan.outputs.ui-shards }}
@@ -338,8 +338,8 @@ jobs:
     name: iOS unit tests
     needs: ios-build
     runs-on: macos-26
-    # Unit 6-9.4 min / half full UI about 10.5 min, plus download and boot.
-    timeout-minutes: 20
+    # Hosted unit tests took 905s (19m49s job); allow setup and hosted variance.
+    timeout-minutes: 30
     env:
       TEST_MODE: ${{ needs.ios-build.outputs.mode }}
       TEST_BUNDLE: BeidTests
@@ -462,8 +462,8 @@ jobs:
     name: iOS UI shard ${{ matrix.shard }}
     needs: ios-build
     runs-on: macos-26
-    # Unit 6-9.4 min / half full UI about 10.5 min, plus download and boot.
-    timeout-minutes: 20
+    # Half full UI is about 10 min by count; allow large hosted variance.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

@@ -137,10 +137,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     `iOS unit tests` and `iOS UI shard ${{ matrix.shard }}` → `iOS simulator`.
     The aggregate explicitly needs the classifier, build, unit and UI matrix,
     runs with `always()` on Linux, and retains the only required iOS name.
-    Classifier timeout remains 10 minutes; build is 25 minutes, each test job
-    20 minutes, aggregate 5 minutes. These allow margin over observed build
-    10–14 minutes, unit 6–9.4 minutes and estimated half-UI 10.5 minutes plus
-    setup/transfer. Matrix fail-fast is disabled so one failure cannot hide
+    Classifier timeout remains 10 minutes; build and each test job are
+    30 minutes, aggregate 5 minutes. These allow margin over the first hosted
+    split run's 17m52s build (including upload), 905s unit test time (19m49s job),
+    and estimated half-UI about 10 minutes, plus hosted setup/transfer variance.
+    Matrix fail-fast is disabled so one failure cannot hide
     another shard's evidence. The standard `macos-26` image uses
     `/Applications/Xcode_26.5.app` and iOS 26.5 in every build/test job.
 

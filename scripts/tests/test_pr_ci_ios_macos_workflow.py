@@ -151,10 +151,10 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         ui = job_block(IOS, "ios-ui")
         aggregate = job_block(IOS, "ios-simulator")
         self.assertIn("needs: changes", build)
-        self.assertIn("timeout-minutes: 25", build)
+        self.assertIn("timeout-minutes: 30", build)
         for block in (unit, ui):
             self.assertIn("needs: ios-build", block)
-            self.assertIn("timeout-minutes: 20", block)
+            self.assertIn("timeout-minutes: 30", block)
             self.assertIn("runs-on: macos-26", block)
             self.assertIn("Create owned simulator", block)
             self.assertIn("Delete owned simulator", block)
