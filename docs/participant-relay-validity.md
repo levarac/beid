@@ -22,7 +22,7 @@ Both hosts pin Barnard 0.9.2 (`61e2f0bacde14d78b18278bf743f587380f76cba`):
   the corresponding `RegistryVerified` fields are `Long`, but admission uses
   `private val ENIN_RANGE = 0L..0xFFFF_FFFFL` and rejects any field outside it.
   Its verified B005 envelope also exposes the fields as `Long`.
-- [Parallax mutual-sensing profile](https://github.com/levarac/parallax/blob/6fe165fd0146df4925fd1b59c236fe729dac7b29/protocol/spec/v0.1/mutual-sensing.md):
+- [Parallax mutual-sensing profile](https://github.com/levarac/parallax/blob/6fe165f/protocol/spec/v0.1/mutual-sensing.md):
   `enin` is `uint`; “All `uint` values in this profile are limited to
   `0..9007199254740991`.” This is the Observation profile, not B005 field
   width. The cited revision is the source pin in
