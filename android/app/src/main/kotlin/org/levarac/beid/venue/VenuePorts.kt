@@ -24,8 +24,15 @@ internal sealed interface VenueImportOutcome {
     data class NotReady(val reason: String) : VenueImportOutcome
 }
 
+internal enum class VenueImportStage { GETTING, CHECKING }
+
+/** Presentation progress only; the event named by a link is not a verified pack. */
+internal data class VenueImportProgress(val eventIdHex: String, val stage: VenueImportStage)
+
 internal fun interface VenuePackImporter {
     suspend fun import(link: String): VenueImportOutcome
+
+    suspend fun import(link: String, onProgress: (VenueImportProgress) -> Unit): VenueImportOutcome = import(link)
 }
 
 internal interface VenueRadio {

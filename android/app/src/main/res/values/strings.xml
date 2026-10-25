@@ -205,4 +205,45 @@
     <string name="account_support_share">Share support information</string>
     <string name="account_support_description">Includes app version, recent states and failure reasons from this app session. Choose who to share it with.</string>
     <string name="account_support_unavailable">Sharing is unavailable. Try again later.</string>
+
+    <!-- Venue pack and link input (Android side of beid#597). -->
+    <string name="venue_title">Venue broadcast</string>
+    <string name="venue_current_pack">Current pack</string>
+    <string name="venue_no_pack">No pack yet. Paste the link the organiser gave you, or scan its QR code.</string>
+    <string name="venue_link_label">Venue link</string>
+    <string name="venue_use_link">Use this link</string>
+    <string name="venue_scan">Scan QR code</string>
+    <string name="venue_scanning">Reading QR code…</string>
+    <string name="venue_scan_unavailable">QR scanning is not available in this build. Paste the link instead.</string>
+    <string name="venue_start">Start broadcasting</string>
+    <string name="venue_refresh">Refresh pack</string>
+    <string name="venue_stop">Stop</string>
+    <string name="venue_ready">Ready</string>
+    <string name="venue_requested">Asked to broadcast</string>
+    <string name="venue_requested_until">Requested until %1$s</string>
+    <string name="venue_radio_unconfirmed">The system has not confirmed it is on air.</string>
+    <string name="venue_valid">Valid %1$s – %2$s</string>
+    <string name="venue_pending_pack">New pack checked. Refresh to use it.</string>
+    <string name="venue_link_event">Link event: %1$s</string>
+    <string name="venue_getting">Getting the pack.</string>
+    <string name="venue_checking">Checking the pack.</string>
+    <string name="venue_waiting_bluetooth">Waiting for Bluetooth permission.</string>
+    <string name="venue_checked">Pack checked. Start broadcasting when ready.</string>
+    <string name="venue_link_unreadable">That is not a venue link. Paste the whole link, including everything after the #.</string>
+    <string name="venue_address_missing">This link names an event but does not say where to get its pack.</string>
+    <string name="venue_address_unsupported">The pack must use a secure HTTPS address.</string>
+    <string name="venue_fetch_failed">The pack could not be downloaded. Try again.</string>
+    <string name="venue_link_pack_mismatch">The link and the pack do not agree. Ask the organiser for a current link.</string>
+    <string name="venue_verification_failed">The pack could not be verified.</string>
+    <string name="venue_not_started">This event has not started yet.</string>
+    <string name="venue_expired">This pack’s current period has ended. Refresh it.</string>
+    <string name="venue_no_current_period">This pack covers no part of right now.</string>
+    <string name="venue_period_rejected">The part of this pack covering right now did not check out.</string>
+    <string name="venue_event_updated">This event has been updated. Ask the organiser for a current link.</string>
+    <string name="venue_clock_unavailable">This device’s clock is unavailable, so broadcasting cannot be scheduled.</string>
+    <string name="venue_record_unavailable">The event record could not be reached, so permission to broadcast could not be checked.</string>
+    <string name="venue_cannot_broadcast">This pack cannot broadcast now. Ask the organiser for a current link.</string>
+    <string name="venue_bluetooth_permission">Bluetooth permission is needed to broadcast.</string>
+    <string name="venue_radio_failed">The radio could not start.</string>
+    <string name="venue_stopped">Broadcast stopped.</string>
 </resources>
