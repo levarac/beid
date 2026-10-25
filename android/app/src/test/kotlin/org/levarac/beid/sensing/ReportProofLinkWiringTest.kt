@@ -1,0 +1,267 @@
+package org.levarac.beid.sensing
+
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.time.Instant
+import java.util.UUID
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
+import org.levarac.beid.persistence.BindingRecordStore
+import org.levarac.beid.persistence.DirectStoreWrites
+import org.levarac.beid.persistence.ProofRecord
+import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.persistence.ReportProofLinkContract
+import org.levarac.beid.persistence.SelfProofRecordStore
+import org.levarac.beid.persistence.SubmissionRecordStore
+import org.levarac.beid.persistence.UnsentWindowLedgerStore
+import org.levarac.beid.persistence.WindowObservationDraftStore
+import org.levarac.beid.shared.report.UnsentWindowSubmission
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ReportProofLinkWiringTest {
+    @Test
+    fun explicitCloseLinksExactlyOnceAndSurvivesRestart() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        val accumulator = accumulator(directory, store)
+        observe(accumulator, 6_000_000, PROOF)
+        assertEquals(emptyList(), store.links(), "opening is not the link writer")
+        assertTrue(accumulator.close())
+        assertTrue(accumulator.close())
+        assertEquals(listOf(WINDOW to PROOF), ReportProofLinkContract(linkFile(directory)).links())
+        assertNotNull(SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)).recordFor(WINDOW.toString()))
+    }
+
+    @Test
+    fun eninBoundaryLinksTheClosingWindowBeforeOpeningTheNextOne() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        val accumulator = accumulator(directory, store)
+        observe(accumulator, 6_000_000, PROOF)
+        observe(accumulator, 6_000_001, PROOF)
+        assertEquals(listOf(WINDOW to PROOF), store.links())
+    }
+
+    @Test
+    fun sessionsInTheSameEninKeepTheirOwnProofIdentity() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        val accumulator = accumulator(directory, store)
+        observe(accumulator, 6_000_000, PROOF)
+        accumulator.close()
+        observe(accumulator, 6_000_000, OTHER_PROOF)
+        accumulator.close()
+        assertEquals(listOf(WINDOW to PROOF, OTHER_WINDOW to OTHER_PROOF), store.links())
+    }
+
+    @Test
+    fun writeFailureLeavesTheQueueAndSignedBytesIdenticalToNoStore() {
+        val baseline = completedWithoutLinks()
+        val directory = directory()
+        var writes = 0
+        val store = ReportProofLinkContract(linkFile(directory)) { _, _ -> writes++; throw IOException("injected") }
+        closeRecordingWindow(accumulator(directory, store))
+        assertEquals(1, writes)
+        assertEquals(emptyList(), store.links())
+        assertSameSubmissionFiles(baseline, directory)
+    }
+
+    @Test
+    fun successfulLinkLeavesTheQueueAndSignedBytesIdenticalToNoStore() {
+        val baseline = completedWithoutLinks()
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        closeRecordingWindow(accumulator(directory, store))
+        assertEquals(listOf(WINDOW to PROOF), store.links())
+        assertTrue(linkFile(directory).readText().contains(PROOF.toString()))
+        assertSameSubmissionFiles(baseline, directory)
+    }
+
+    @Test
+    fun unreadableFileLeavesTheQueueAndSignedBytesIdenticalToNoStore() {
+        val baseline = completedWithoutLinks()
+        val directory = directory()
+        linkFile(directory).writeText("unreadable")
+        val store = ReportProofLinkContract(linkFile(directory))
+        closeRecordingWindow(accumulator(directory, store))
+        assertEquals("unreadable", linkFile(directory).readText())
+        assertSameSubmissionFiles(baseline, directory)
+    }
+
+    @Test
+    fun existingRecordsAndRecoveredDraftsDoNotInferLinks() {
+        val directory = completedWithoutLinks()
+        val proofFile = ProofRecordStore.defaultFile(directory)
+        val oldProof = ProofRecord(PROOF, "event", Instant.EPOCH, peersVerified = 3)
+        ProofRecordStore(proofFile).add(oldProof)
+        val proofBytes = proofFile.readBytes()
+        val before = submissionFiles(directory)
+        val store = ReportProofLinkContract(linkFile(directory))
+        accumulator(directory, store).recoverAfterRelaunch()
+        assertEquals(emptyList(), store.links())
+        assertFalse(linkFile(directory).exists())
+        assertEquals(listOf(oldProof), ProofRecordStore(proofFile).records)
+        assertContentEquals(proofBytes, proofFile.readBytes())
+        // Recovery may update the ledger revision; records and signed artifacts stay exact.
+        before.filterKeys { it != "ledger.snapshot" }.forEach { (path, bytes) ->
+            assertContentEquals(bytes, directory.resolve(path).readBytes(), path)
+        }
+
+        val draftDirectory = directory()
+        observe(accumulator(draftDirectory, null), 6_000_000, PROOF)
+        val draftStore = ReportProofLinkContract(linkFile(draftDirectory))
+        accumulator(draftDirectory, draftStore).recoverAfterRelaunch()
+        assertEquals(emptyList(), draftStore.links(), "a recovered draft has no proven session identity")
+        assertEquals(1, draftDirectory.resolve("observations").listFiles()!!.size)
+    }
+
+    @Test
+    fun missingProofAndNonRecordingInputStayUnlinked() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        val accumulator = accumulator(directory, store)
+        accumulator.observe(6_000_000, PEER, REPORTER, recording = false)
+        accumulator.close()
+        assertEquals(emptyList(), store.links())
+        accumulator.observe(6_000_000, PEER, REPORTER, recording = true)
+        accumulator.close()
+        assertEquals(emptyList(), store.links(), "never invent a Proof for legacy callers")
+    }
+
+    @Test
+    fun productionCoordinatorLinksTheProofItCollected() = runTest {
+        val directory = directory()
+        val engine = FakeEventJoinEngine()
+        val registry = FakeNearbyEventRegistry()
+        val coordinator = EventJoinCoordinator(
+            engine = engine, nearbyRegistry = registry, coroutineScope = backgroundScope,
+            nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS },
+            sensingCryptography = SigningCryptography(),
+            selfProofRecordStore = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)),
+            bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(directory)),
+            ledgerFilesDir = directory, checkpointDispatcher = StandardTestDispatcher(testScheduler),
+        )
+        val proofs = mutableListOf<UUID>()
+        coordinator.onProofCollected = { id, _, _ -> proofs += id }
+        repeat(2) {
+            joinPromotedVectorEvent(coordinator, engine, registry)
+            repeat(3) { index -> engine.emitDetection(6_000_000, PEER, "device-$index", REPORTER) }
+            assertEquals(it + 1, proofs.size)
+            coordinator.leaveEvent()
+        }
+        coordinator.dispose()
+        val links = ReportProofLinkContract(linkFile(directory)).links()
+        assertEquals(2, links.size)
+        assertEquals(proofs, links.map { it.second })
+        val records = SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)).records
+        assertEquals(records.map { it.windowId }.toSet(), links.map { it.first.toString() }.toSet())
+    }
+
+    @Test
+    fun retainedWindowNeverTakesAReplacementCoordinatorsProof() = runTest {
+        val directory = directory()
+        val owner = WindowObservationRuntimeOwner(newWindowId = { WINDOW })
+        val proofs = mutableListOf<UUID>()
+        repeat(2) { index ->
+            val engine = FakeEventJoinEngine()
+            val registry = FakeNearbyEventRegistry()
+            val coordinator = EventJoinCoordinator(
+                engine = engine, nearbyRegistry = registry, coroutineScope = backgroundScope,
+                nowEpochMillis = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS },
+                sensingCryptography = SigningCryptography(),
+                selfProofRecordStore = SelfProofRecordStore(SelfProofRecordStore.defaultFile(directory)),
+                bindingRecordStore = BindingRecordStore(BindingRecordStore.defaultFile(directory)),
+                ledgerFilesDir = directory, windowObservationRuntimeOwner = owner,
+                checkpointDispatcher = StandardTestDispatcher(testScheduler),
+            )
+            coordinator.onProofCollected = { id, _, _ -> proofs += id }
+            joinPromotedVectorEvent(coordinator, engine, registry)
+            repeat(3) { device -> engine.emitDetection(6_000_000, PEER, "device-$device", REPORTER) }
+            assertEquals(index + 1, proofs.size)
+            if (index == 1) coordinator.leaveEvent()
+            coordinator.dispose()
+        }
+        assertTrue(proofs[0] != proofs[1])
+        assertEquals(listOf(WINDOW to proofs[0]), ReportProofLinkContract(linkFile(directory)).links(),
+            "an Activity replacement does not transfer the retained window to the new session")
+    }
+
+    private fun completedWithoutLinks(): File = directory().also {
+        val accumulator = accumulator(it, null)
+        // The pre-link call path has neither a store nor a Proof argument.
+        accumulator.observe(6_000_000, PEER, REPORTER, recording = true)
+        assertTrue(accumulator.close())
+    }
+    private fun closeRecordingWindow(accumulator: WindowObservationAccumulator) {
+        observe(accumulator, 6_000_000, PROOF)
+        assertTrue(accumulator.close())
+    }
+
+    private fun assertSameSubmissionFiles(baseline: File, actual: File) {
+        val expected = submissionFiles(baseline)
+        val found = submissionFiles(actual)
+        assertEquals(expected.keys, found.keys)
+        assertEquals(3, expected.size, "ledger, submission records and signed Observation must all exist")
+        expected.forEach { (path, bytes) -> assertContentEquals(bytes, found.getValue(path), path) }
+    }
+
+    private fun submissionFiles(directory: File): Map<String, ByteArray> = directory.walkTopDown()
+        .filter { it.isFile && (it.name == "ledger.snapshot" || it.name == "submission-records-v1.json" || it.extension == "cose") }
+        .associate { it.relativeTo(directory).path to it.readBytes() }
+
+    /** Assert missing APIs at runtime so the test-only commit has executable RED evidence. */
+    private fun accumulator(directory: File, store: ReportProofLinkContract?): WindowObservationAccumulator {
+        val constructor = assertNotNull(WindowObservationAccumulator::class.java.declaredConstructors.singleOrNull {
+            it.parameterCount == 13 && it.parameterTypes.last().simpleName == "ReportProofLinkStore"
+        }, "the accumulator needs an isolated link-store dependency")
+        val ids = ArrayDeque(listOf(WINDOW, OTHER_WINDOW))
+        val context: () -> WindowObservationContext? = { WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32)) }
+        val now: () -> Double = { 1_800_000_000.75 }
+        val newId: () -> UUID = { ids.removeFirst() }
+        val ledgerId: () -> String = { "000102030405060708090a0b0c0d0e0f" }
+        val emitted: (UnsentWindowSubmission, SubmissionEmissionOrigin) -> Unit = { _, _ -> }
+        val closed: () -> Unit = {}
+        return constructor.newInstance(context, SigningCryptography(), UnsentWindowLedgerStore(directory.resolve("ledger.snapshot")),
+            WindowObservationDraftStore(directory.resolve("draft.snapshot")), directory.resolve("observations"), now,
+            DirectStoreWrites, SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)), newId, ledgerId,
+            emitted, closed, store?.instance) as WindowObservationAccumulator
+    }
+
+    private fun observe(accumulator: WindowObservationAccumulator, enin: Long, proofId: UUID) {
+        val observe = assertNotNull(WindowObservationAccumulator::class.java.methods.singleOrNull {
+            it.name == "observe" && it.parameterCount == 6
+        }, "observations must carry the known active Proof only to the native accumulator")
+        observe.invoke(accumulator, enin, PEER, REPORTER, true, "event", proofId)
+    }
+
+    private fun directory(): File = Files.createTempDirectory("report-link-wiring").toFile()
+    private fun linkFile(directory: File): File = directory.resolve("report-proof-links.json")
+
+    private class SigningCryptography : FakeSensingCryptography(eventSigningPublicKeyResult = PUBLIC_KEY.hexBytes()) {
+        override fun signWindowReport(eventCode: String, bytes: ByteArray): SensingRecoverableSignature {
+            val (r, s) = TestSecp256k1.sign(MessageDigest.getInstance("SHA-256").digest(bytes), 1)
+            return SensingRecoverableSignature(r, s, 0)
+        }
+    }
+
+    private companion object {
+        val WINDOW: UUID = UUID.fromString("00112233-4455-6677-8899-aabbccddeeff")
+        val OTHER_WINDOW: UUID = UUID.fromString("11112233-4455-6677-8899-aabbccddeeff")
+        val PROOF: UUID = UUID.fromString("22222222-2222-2222-2222-222222222222")
+        val OTHER_PROOF: UUID = UUID.fromString("33333333-3333-3333-3333-333333333333")
+        const val PUBLIC_KEY = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        const val REPORTER = "0110101010101010101010101010101010"
+        const val PEER = "0111111111111111111111111111111111"
+    }
+}
+
+private fun String.hexBytes(): ByteArray = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
