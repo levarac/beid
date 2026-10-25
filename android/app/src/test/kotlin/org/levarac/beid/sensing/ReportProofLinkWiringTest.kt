@@ -27,26 +27,31 @@ import org.levarac.beid.persistence.WindowObservationDraftStore
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportProofLinkWiringTest {
     @Test
-    fun explicitCloseLinksExactlyOnceAndSurvivesRestart() {
+    fun openingLinksExactlyOnceBeforeCloseAndSurvivesRestart() {
         val directory = directory()
         val store = ReportProofLinkContract(linkFile(directory))
         val accumulator = accumulator(directory, store)
         observe(accumulator, 6_000_000, PROOF)
-        assertEquals(emptyList(), store.links(), "opening is not the link writer")
+        assertEquals(listOf(WINDOW to PROOF), store.links(), "the durable open must already have its link")
+        assertNotNull(WindowObservationDraftStore(directory.resolve("draft.snapshot")).load())
+        assertNotNull(SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)).recordFor(WINDOW.toString()))
+        val original = linkFile(directory).readBytes()
         assertTrue(accumulator.close())
         assertTrue(accumulator.close())
+        assertContentEquals(original, linkFile(directory).readBytes())
         assertEquals(listOf(WINDOW to PROOF), ReportProofLinkContract(linkFile(directory)).links())
         assertNotNull(SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)).recordFor(WINDOW.toString()))
     }
 
     @Test
-    fun eninBoundaryLinksTheClosingWindowBeforeOpeningTheNextOne() {
+    fun eninBoundaryLinksEachWindowAtItsOwnOpen() {
         val directory = directory()
         val store = ReportProofLinkContract(linkFile(directory))
         val accumulator = accumulator(directory, store)
         observe(accumulator, 6_000_000, PROOF)
-        observe(accumulator, 6_000_001, PROOF)
         assertEquals(listOf(WINDOW to PROOF), store.links())
+        observe(accumulator, 6_000_001, PROOF)
+        assertEquals(listOf(WINDOW to PROOF, OTHER_WINDOW to PROOF), store.links())
     }
 
     @Test
@@ -62,13 +67,24 @@ class ReportProofLinkWiringTest {
     }
 
     @Test
-    fun writeFailureLeavesTheQueueAndSignedBytesIdenticalToNoStore() {
+    fun writeFailureAtOpenLeavesTheDraftQueueSigningAndDrainUnchanged() {
         val baseline = completedWithoutLinks()
         val directory = directory()
         var writes = 0
         val store = ReportProofLinkContract(linkFile(directory)) { _, _ -> writes++; throw IOException("injected") }
-        closeRecordingWindow(accumulator(directory, store))
+        var drainTriggers = 0
+        val accumulator = accumulator(directory, store, onWindowClosed = { drainTriggers++ })
+        observe(accumulator, 6_000_000, PROOF)
+        assertEquals(1, writes, "the failing write must have happened at open")
+        assertNotNull(WindowObservationDraftStore(directory.resolve("draft.snapshot")).load())
+        assertNotNull(SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)).recordFor(WINDOW.toString()))
+        assertFalse(directory.resolve("observations").exists(), "open does not sign")
+        assertEquals(0, drainTriggers)
+        // A later detection and close must never retry failed display metadata.
+        observe(accumulator, 6_000_000, PROOF)
+        assertTrue(accumulator.close())
         assertEquals(1, writes)
+        assertEquals(1, drainTriggers)
         assertEquals(emptyList(), store.links())
         assertSameSubmissionFiles(baseline, directory)
     }
@@ -123,6 +139,40 @@ class ReportProofLinkWiringTest {
     }
 
     @Test
+    fun crashAfterOpenPreservesTheLinkWithoutWritingDuringDraftRecovery() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        observe(accumulator(directory, store), 6_000_000, PROOF)
+        // Simulate process death: the live accumulator is never closed.
+        assertNotNull(WindowObservationDraftStore(directory.resolve("draft.snapshot")).load())
+        val original = linkFile(directory).readBytes()
+        var recoveryWrites = 0
+        val restarted = ReportProofLinkContract(linkFile(directory)) { _, _ ->
+            recoveryWrites++
+            throw IOException("recovery must not write links")
+        }
+        accumulator(directory, restarted).recoverAfterRelaunch()
+        assertEquals(0, recoveryWrites)
+        assertEquals(listOf(WINDOW to PROOF), restarted.links())
+        assertContentEquals(original, linkFile(directory).readBytes())
+        assertEquals(1, directory.resolve("observations").listFiles()!!.size)
+        assertEquals(null, WindowObservationDraftStore(directory.resolve("draft.snapshot")).load())
+    }
+
+    @Test
+    fun restoredDraftWithoutAnOpenTimeRowStaysUnlinked() {
+        val directory = directory()
+        observe(accumulator(directory, null), 6_000_000, PROOF)
+        var recoveryWrites = 0
+        val store = ReportProofLinkContract(linkFile(directory)) { _, _ -> recoveryWrites++ }
+        accumulator(directory, store).recoverAfterRelaunch()
+        assertEquals(0, recoveryWrites)
+        assertEquals(emptyList(), store.links())
+        assertFalse(linkFile(directory).exists())
+        assertEquals(1, directory.resolve("observations").listFiles()!!.size)
+    }
+
+    @Test
     fun missingProofAndNonRecordingInputStayUnlinked() {
         val directory = directory()
         val store = ReportProofLinkContract(linkFile(directory))
@@ -167,7 +217,8 @@ class ReportProofLinkWiringTest {
     @Test
     fun retainedWindowNeverTakesAReplacementCoordinatorsProof() = runTest {
         val directory = directory()
-        val owner = WindowObservationRuntimeOwner(newWindowId = { WINDOW })
+        val ids = ArrayDeque(listOf(WINDOW, OTHER_WINDOW))
+        val owner = WindowObservationRuntimeOwner(newWindowId = { ids.removeFirst() })
         val proofs = mutableListOf<UUID>()
         repeat(2) { index ->
             val engine = FakeEventJoinEngine()
@@ -185,11 +236,19 @@ class ReportProofLinkWiringTest {
             joinPromotedVectorEvent(coordinator, engine, registry)
             repeat(3) { device -> engine.emitDetection(6_000_000, PEER, "device-$device", REPORTER) }
             assertEquals(index + 1, proofs.size)
-            if (index == 1) coordinator.leaveEvent()
+            assertEquals(listOf(WINDOW to proofs[0]), ReportProofLinkContract(linkFile(directory)).links(),
+                "the retained window belongs to A before either coordinator closes it")
+            if (index == 1) {
+                engine.emitDetection(6_000_001, PEER, "next-window", REPORTER)
+                assertEquals(listOf(WINDOW to proofs[0], OTHER_WINDOW to proofs[1]),
+                    ReportProofLinkContract(linkFile(directory)).links())
+                coordinator.leaveEvent()
+            }
             coordinator.dispose()
         }
         assertTrue(proofs[0] != proofs[1])
-        assertEquals(listOf(WINDOW to proofs[0]), ReportProofLinkContract(linkFile(directory)).links(),
+        assertEquals(listOf(WINDOW to proofs[0], OTHER_WINDOW to proofs[1]),
+            ReportProofLinkContract(linkFile(directory)).links(),
             "an Activity replacement does not transfer the retained window to the new session")
     }
 
@@ -216,7 +275,11 @@ class ReportProofLinkWiringTest {
         .filter { it.isFile && (it.name == "ledger.snapshot" || it.name == "submission-records-v1.json" || it.extension == "cose") }
         .associate { it.relativeTo(directory).path to it.readBytes() }
 
-    private fun accumulator(directory: File, store: ReportProofLinkContract?): WindowObservationAccumulator {
+    private fun accumulator(
+        directory: File,
+        store: ReportProofLinkContract?,
+        onWindowClosed: () -> Unit = {},
+    ): WindowObservationAccumulator {
         val ids = ArrayDeque(listOf(WINDOW, OTHER_WINDOW))
         return WindowObservationAccumulator(
             context = { WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32)) },
@@ -228,6 +291,7 @@ class ReportProofLinkWiringTest {
             newWindowId = { ids.removeFirst() },
             ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
             reportProofLinkStore = store?.instance,
+            onWindowClosed = onWindowClosed,
         )
     }
 
