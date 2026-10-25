@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -9,24 +10,13 @@ import textwrap
 import unittest
 
 
+from scripts.tests.workflow_yaml import named_step, workflow_data
+
+
 WORKFLOW_PATH = Path(__file__).parents[2] / ".github/workflows/pr-ci-ios-macos.yml"
 RELEASE_WORKFLOW_PATH = (
     Path(__file__).parents[2] / ".github/workflows/main-ios-release-build.yml"
 )
-
-# The exact invocation, kept as a literal so the move is checked byte-for-byte
-# rather than by step name. A lookalike step with the same name and different
-# flags is precisely what a name match hides.
-RELEASE_BUILD_COMMAND = """          xcodebuild \\
-            -project ios/Beid.xcodeproj \\
-            -scheme Beid \\
-            -configuration Release \\
-            -destination "generic/platform=iOS" \\
-            -sdk iphoneos \\
-            build \\
-            CODE_SIGNING_ALLOWED=NO
-"""
-
 
 def workflow_text() -> str:
     return WORKFLOW_PATH.read_text(encoding="utf-8")
@@ -207,33 +197,30 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
 
 class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
     def test_release_build_command_moved_unchanged(self) -> None:
-        block = step_block(
-            release_workflow_text(), "Build Release for device"
-        )
-
-        self.assertIn(RELEASE_BUILD_COMMAND, block)
-        # Informational: it produces no artefact and gates nothing, so nothing
-        # downstream can come to depend on it without that being a visible edit.
-        self.assertNotIn("upload-artifact", release_workflow_text())
-        self.assertNotIn("needs:", release_workflow_text())
+        data = workflow_data(release_workflow_text())
+        step = named_step(data, "ios-release-build", "Build Release for device")
+        words = shlex.split(step["run"].replace("\\\n", " "), comments=True)
+        self.assertIn("xcodebuild", words)
+        self.assertEqual(words[words.index("xcodebuild"):], [
+            "xcodebuild", "-project", "ios/Beid.xcodeproj", "-scheme", "Beid",
+            "-configuration", "Release", "-destination", "generic/platform=iOS",
+            "-sdk", "iphoneos", "build", "CODE_SIGNING_ALLOWED=NO",
+        ])
+        for job in data["jobs"].values():
+            self.assertNotIn("needs", job)
+            for item in job.get("steps", []):
+                self.assertFalse(item.get("uses", "").startswith("actions/upload-artifact@"))
 
     def test_release_workflow_runs_only_on_main_and_on_demand(self) -> None:
-        """Push-to-main is the only trigger it gains.
-
-        A `pull_request` trigger here would re-create the cost the move
-        removed, on the same single runner, while looking like a separate
-        lane.
-        """
-        text = release_workflow_text()
-
-        directives = without_comments(text)
-
-        self.assertIn("  push:\n    branches: [main]\n", directives)
-        self.assertIn("  workflow_dispatch:\n", directives)
-        self.assertNotIn("pull_request", directives)
+        events = workflow_data(release_workflow_text())["on"]
+        self.assertEqual(set(events), {"push", "workflow_dispatch"})
+        self.assertEqual(events["push"]["branches"], ["main"])
+        self.assertNotIn("tags", events["push"])
+        self.assertNotIn("branches-ignore", events["push"])
 
     def test_release_workflow_uses_a_hosted_runner(self) -> None:
-        self.assertIn("runs-on: macos-26", release_workflow_text())
+        jobs = workflow_data(release_workflow_text())["jobs"]
+        self.assertEqual(jobs["ios-release-build"]["runs-on"], "macos-26")
 
 
 if __name__ == "__main__":
