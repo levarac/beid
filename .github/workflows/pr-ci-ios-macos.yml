@@ -28,6 +28,7 @@ on:
       - "scripts/ci_change_filter.py"
       - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/gradle_task_summary.awk"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
       - "scripts/ios_ui_smoke.py"
@@ -231,6 +232,8 @@ jobs:
             ${{ runner.temp }}/beid-gradle/wrapper/dists
             ${{ runner.temp }}/beid-gradle/caches/modules-2
             ~/.konan
+            ${{ runner.temp }}/beid-gradle/caches/*/kotlin-dsl
+            ${{ runner.temp }}/beid-gradle/caches/*/groovy-dsl
           key: beid-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', '**/gradle-wrapper.*', '**/gradlew*', '**/*.toml', 'scripts/resolve_kmp_java_home.sh', '.github/workflows/pr-ci-ios-macos.yml') }}
           restore-keys: |
             beid-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-
@@ -408,6 +411,8 @@ jobs:
             ${{ runner.temp }}/beid-gradle/wrapper/dists
             ${{ runner.temp }}/beid-gradle/caches/modules-2
             ~/.konan
+            ${{ runner.temp }}/beid-gradle/caches/*/kotlin-dsl
+            ${{ runner.temp }}/beid-gradle/caches/*/groovy-dsl
 
       - name: Save swift-packages cache
         if: ${{ success() && steps.swift-packages.outputs.cache-hit != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}

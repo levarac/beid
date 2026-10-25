@@ -30,17 +30,18 @@ targets:
       - Beid
     preBuildScripts:
       - name: Build BeidSharedKit
-        shell: /bin/sh
+        shell: /bin/bash
         basedOnDependencyAnalysis: false
         script: |
-          set -eu
+          set -euo pipefail
           KMP_JAVA_HOME="$("$SRCROOT/../scripts/resolve_kmp_java_home.sh")"
           export JAVA_HOME="$KMP_JAVA_HOME"
           export PATH="$JAVA_HOME/bin:$PATH"
           echo "Using KMP JDK: $JAVA_HOME"
           "$JAVA_HOME/bin/java" -version
           cd "$SRCROOT/../android"
-          ./gradlew :shared:embedSwiftExportForXcode --no-daemon
+          ./gradlew :shared:embedSwiftExportForXcode --no-daemon --console=plain 2>&1 \
+            | awk -f "$SRCROOT/../scripts/gradle_task_summary.awk"
     dependencies:
       - package: Barnard
         product: Barnard
@@ -214,15 +215,16 @@ targets:
       - Lab
     preBuildScripts:
       - name: Build BeidSharedKit
-        shell: /bin/sh
+        shell: /bin/bash
         basedOnDependencyAnalysis: false
         script: |
-          set -eu
+          set -euo pipefail
           KMP_JAVA_HOME="$("$SRCROOT/../scripts/resolve_kmp_java_home.sh")"
           export JAVA_HOME="$KMP_JAVA_HOME"
           export PATH="$JAVA_HOME/bin:$PATH"
           cd "$SRCROOT/../android"
-          ./gradlew :shared:embedSwiftExportForXcode --no-daemon
+          ./gradlew :shared:embedSwiftExportForXcode --no-daemon --console=plain 2>&1 \
+            | awk -f "$SRCROOT/../scripts/gradle_task_summary.awk"
     dependencies:
       - package: Barnard
         product: Barnard

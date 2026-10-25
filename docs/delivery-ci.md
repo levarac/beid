@@ -228,10 +228,17 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     - Dependencies: a dedicated `$RUNNER_TEMP/beid-gradle` home's
       `wrapper/dists` and `caches/modules-2`, plus `~/.konan` (Kotlin/Native
       distributions, downloaded native dependencies and platform caches).
+      The dependency cache also retains `caches/*/kotlin-dsl` and
+      `caches/*/groovy-dsl`, the compiled build scripts. Restoring downloaded
+      artifacts alone repeats script compilation on every job. These add about
+      4.3 MiB uncompressed, without project execution history. The whole version
+      directory, generated API JARs, transforms, file-hash state and project
+      `.gradle` are excluded. Existing prefix hits remain compatible and seed
+      the missing DSL entries on the next successful save.
       The key hashes all Gradle scripts/properties/wrappers, TOML catalogs,
       `scripts/resolve_kmp_java_home.sh` and this workflow. The JDK resolver is
-      the only repository script called by the Xcode build phases; Gradle
-      invokes no repository scripts. Unrelated Python edits do not invalidate
+      the only repository script affecting dependency setup; the task-summary
+      filter only streams logs. Unrelated Python edits do not invalidate
       dependencies. A toolchain prefix restores the latest compatible entry
       when the exact key misses. Gradle verifies module artifacts and native
       toolchains use versioned directories; configuration is still evaluated.
@@ -274,7 +281,10 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     packs this run's products and executes every planned test on fresh owned
     simulators. Build logs now hide shell-script environments and include
     verbose phase/Gradle output plus `-showBuildTimingSummary`; timing sums can
-    overlap and are not a substitute for job wall clocks. Cache corruption is
+    overlap and are not a substitute for job wall clocks. Both Beid and BeidLab
+    use plain Gradle output and print one task-outcome line, including zero
+    `FROM-CACHE` counts. Repeated task headers are counted once; `pipefail`
+    preserves Gradle failures through the streaming filter. Cache corruption is
     a failure to investigate, never a reason to accept old test evidence.
     Cache misses/eviction rebuild from pinned dependencies. Cache entry sizes
     and restore/save time must be checked on hosted runs: the repository's
@@ -318,17 +328,42 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     handoff cannot recover minutes. Simulator boot could overlap downloads,
     but only saves those few seconds here; no simulator-state reuse is added.
 
-    Hosted measurement must compare cold and warm full runs, including a new
-    source tree restoring a compatible prefix (not only a same-head rerun),
-    checking cache-hit/size/transfer lines and the new package/Gradle/build
-    timings as well as the unchanged executed evidence. A cold run should
-    resemble the 11.3–19.2 minute baseline plus roughly 0.5–2 minutes for cache
-    save/lookup overhead. A warm run is hypothesized at about 7–18 minutes:
-    package fetching 0.3–1 minute saved, Gradle/native downloads and reusable
-    build tasks 2–4 minutes saved, less 0.2–0.8 minutes restore overhead.
-    These ranges are unverified, not measurements or percentile estimates;
-    uncached Swift/link, boot and enumeration costs remain. If native tasks
-    are not cacheable or transfer costs dominate, savings can be near zero.
+    Hosted run 40177765095 at dc26afff (Xcode 26.5) measured 14.3 minutes
+    for build-for-testing cold and 14.9 minutes with exact hits on the original
+    three caches. Its shared build phase took 579 seconds. Those measurements
+    establish no hosted saving for the original cache paths.
+
+    Local profiling on 2026-10-25 used Gradle 8.14 / Kotlin Gradle plugin
+    2.2.20, Xcode 27.1 and Debug iphonesimulator arm64 build settings extracted
+    with xcodebuild. A fresh worktree-local Gradle home and a private copy of
+    the existing Konan distribution kept the global caches untouched. The
+    first invocation took 1335.5 seconds; after deleting shared/build, it took
+    228.5 seconds, with both Kotlin compilations and the static link FROM-CACHE.
+    Swift export and its SwiftPM build re-executed: the pinned plugin disables
+    caching for these experimental task types. Native static caches did not
+    change. GRADLE_OPTS enabled the build cache even through an actual Xcode
+    script phase; changing to --build-cache alone is not the fix.
+
+    Fresh homes restoring only the original CI paths took 310.2 and 190.6
+    seconds; the variation is why the first cold/warm difference is not a
+    hosted saving forecast. Adding only the compiled DSL caches took 130.5
+    seconds. Compared with the repeated baseline, settings evaluation fell
+    from 45.7 to 18.5 seconds. The same three native tasks were FROM-CACHE;
+    Swift export and its SwiftPM build still executed. Both comparisons began
+    without project .gradle or shared/build. All 19 object members of the final
+    library, exported symbols, Swift modules and headers matched; only archive
+    metadata and four source-index files differed.
+
+    A larger prototype also retained generated-gradle-jars and transforms. It
+    took 107.2 seconds but added about 1.25 GiB uncompressed, for only 23.3
+    seconds less than the small-cache run before transfer costs. It is not
+    retained. The selected 4.3 MiB addition is expected to save roughly 20-40
+    seconds of hosted setup, based on the 27.2-second settings reduction;
+    this is a forecast, not a hosted result. Xcode/JDK versions, machine load
+    and transfer speeds differ. Hosted full-mode execution on the final SHA,
+    including restore/save time and the shared 10 GB cache budget, remains
+    required.
+
     Under 25 minutes for the full lane needs a build below roughly 7 minutes
     with attempt 1's 17.3-minute longest test job, or below roughly 5.7 minutes
     with attempt 2's 19.1-minute job. No claim is made that this reaches it,
