@@ -179,17 +179,8 @@ class EventJoinSubmissionConfigurationTest {
             ): NearbyEventRegistryRequest {
                 this@OneReadRegistry.resolveEventDefinition(eventIdHex, useTimeEpochSeconds) { answer, _ ->
                     completion(
-                        NearbyEventDefinitionVerification(
-                            isSuccess = answer?.isSuccess == true,
-                            joinMode = answer?.context?.joinMode,
-                            eventIdHex = answer?.context?.eventIdHex,
-                            eventCodeHashHex = answer?.context?.eventCodeHashHex,
-                            validFromEpochSeconds = answer?.context?.validFrom?.value,
-                            validUntilEpochSeconds = answer?.context?.validUntil?.value,
-                            keySetDigestHex = answer?.context?.definition?.keySetDigestHex,
-                            definitionHashHex = answer?.definitionHashHex,
-                            blockHashHex = answer?.blockHashHex,
-                        ),
+                        answer?.let { NearbyEventDefinitionVerification.fromResolution(it) }
+                            ?: NearbyEventDefinitionVerification(false, null, null, null, null, null),
                     )
                 }
                 return NearbyEventRegistryRequest {}
