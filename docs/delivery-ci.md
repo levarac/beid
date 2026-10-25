@@ -223,14 +223,19 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     duplicate, extra, missing or skipped UI cases all fail closed.
 
     Build caches are confined to `iOS simulator build`; test jobs and the
-    aggregate never restore caches. Three exact-key caches use the existing
+    aggregate never restore caches. Three caches use the existing
     `actions/cache` v4 SHA with separate restore/save actions:
     - Dependencies: a dedicated `$RUNNER_TEMP/beid-gradle` home's
       `wrapper/dists` and `caches/modules-2`, plus `~/.konan` (Kotlin/Native
       distributions, downloaded native dependencies and platform caches).
       The key hashes all Gradle scripts/properties/wrappers, TOML catalogs,
-      repository scripts and this workflow. Gradle configuration is still
-      evaluated; compiled project outputs are not in this dependency cache.
+      `scripts/resolve_kmp_java_home.sh` and this workflow. The JDK resolver is
+      the only repository script called by the Xcode build phases; Gradle
+      invokes no repository scripts. Unrelated Python edits do not invalidate
+      dependencies. A toolchain prefix restores the latest compatible entry
+      when the exact key misses. Gradle verifies module artifacts and native
+      toolchains use versioned directories; configuration is still evaluated.
+      Compiled project outputs are not in this dependency cache.
     - Swift packages: `$RUNNER_TEMP/beid-swift-packages`, including checkouts,
       repositories and binary artifacts. Its key hashes every Package.resolved
       and Package.swift, project.yml, the generated project and this workflow.
@@ -239,20 +244,27 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
       same directory and forbids automatic resolution to other versions.
     - Gradle build outputs: only the dedicated home's `caches/build-cache-1`,
       with `org.gradle.caching=true`. Its key includes the complete checked-out
-      Git tree, so every tracked build input, including native/shared source,
-      build configuration and scripts, invalidates it. Gradle still evaluates
-      task inputs; a hit never skips the Xcode invocation or its KMP phase.
+      Git tree, with a toolchain prefix restore for newer trees. Gradle selects
+      content-addressed task outputs by their full input hashes, so changed
+      inputs rebuild while unchanged tasks can reuse an older tree's outputs.
+      A hit never skips the Xcode invocation or its KMP phase.
       This home is populated only by build-for-testing, never by test tasks;
       it cannot import Android/host test-task results from another lane.
 
     All three keys also include a namespace version, runner OS/architecture
     and a fingerprint of the selected Xcode build, simulator SDK build, full
-    JDK version and macOS build. There are no prefix restore keys. Separate
+    JDK version and macOS build. Dependencies and Gradle build outputs restore
+    only through that complete prefix; Swift packages remain exact-key only.
+    No fallback crosses toolchains. Separate
     save steps run only after successful build, enumeration and upload, only
-    on a miss and only for non-PR events or a PR whose head repository equals
-    this repository. Fork PRs are restore-only, use no private credentials,
+    on an exact-key miss (including a prefix hit). Dependencies and Swift
+    packages save for non-PR events or a PR whose head repository equals this
+    repository. Gradle build outputs save only on pushes to main, schedules,
+    or same-repository PRs; never merge groups, fork PRs or manual dispatches.
+    Fork PRs are restore-only, use no private credentials,
     and retain GitHub's PR cache-ref isolation; no pull_request_target build
-    is introduced. Same-repository PR and merge-group caches remain ref-scoped;
+    is introduced. PR caches and any merge-group dependency/package saves
+    remain ref-scoped;
     default-branch caches can seed other refs, whose caches cannot seed main.
     Workflow guards do not make arbitrary fork code trusted. GitHub's cache
     scope is the additional boundary against a fork editing its own workflow.
@@ -266,8 +278,23 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     a failure to investigate, never a reason to accept old test evidence.
     Cache misses/eviction rebuild from pinned dependencies. Cache entry sizes
     and restore/save time must be checked on hosted runs: the repository's
-    10 GB cache budget is shared with other lanes, and exact source-tree
-    entries can churn. Bump the namespace to invalidate a suspected bad cache.
+    10 GB cache budget is shared with other lanes, and source-tree entries
+    still consume one entry per saved tree. Gradle's
+    [automatic cleanup](https://docs.gradle.org/8.14/userguide/directory_layout.html#dir:gradle_user_home:cache_cleanup)
+    expires build-cache entries after seven days without access, with a
+    default 24-hour cleanup interval. General user-home cleanup normally runs
+    on daemon shutdown, or after the session with `--no-daemon` (already used
+    by these Xcode phases). Gradle 8.14's `DirectoryBuildCache.close()` also
+    closes its persistent cache, whose `DefaultCacheCoordinator.close()` checks
+    for eligible cleanup; the build-scoped controller closes it at build end.
+    A still-live daemon alone does not suppress that local-cache check, but
+    the 24-hour interval can defer deletion. Age retention does not impose a
+    size bound: before saving, a
+    `du -sk` check skips empty/missing directories and those above 524288 KiB
+    (512 MiB). This caps each newly saved build-cache directory without
+    changing Gradle retention or deleting in-use entries. It does not cap
+    total repository cache usage. Bump the namespace to invalidate a suspected
+    bad cache.
 
     Baseline for this cache change: run 40166483245, head 198f7a11, attempts
     1/2. Build jobs were 680/1153 seconds: setup and runtime selection 16/43,
@@ -291,7 +318,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     handoff cannot recover minutes. Simulator boot could overlap downloads,
     but only saves those few seconds here; no simulator-state reuse is added.
 
-    Hosted measurement must compare cold and warm full runs on one head,
+    Hosted measurement must compare cold and warm full runs, including a new
+    source tree restoring a compatible prefix (not only a same-head rerun),
     checking cache-hit/size/transfer lines and the new package/Gradle/build
     timings as well as the unchanged executed evidence. A cold run should
     resemble the 11.3–19.2 minute baseline plus roughly 0.5–2 minutes for cache

@@ -474,15 +474,21 @@ full uses two UI jobs. Both modes run all `BeidTests` across two unit shards
 in parallel with UI. Unit selectors use whole classes, so every
 `ReportSubmissionOperatorIntegrationTests` method stays in one job.
 
-The build job alone restores three exact-key caches: Gradle wrapper/dependencies
+The build job alone restores three caches: Gradle wrapper/dependencies
 and `~/.konan`, locked Swift package checkouts/binary artifacts, and a dedicated
 Gradle build-cache directory populated only by build-for-testing (never test
-tasks). Dependency keys hash their build scripts/lockfiles; the Gradle output
-key includes the complete checked-out Git tree. All include OS/architecture
-and the selected Xcode/SDK/JDK/macOS fingerprint. No prefix fallback is used.
+tasks). Dependency keys hash build scripts/lockfiles and the build's JDK resolver,
+not unrelated repository scripts; the Gradle output key includes the complete
+checked-out Git tree. All include OS/architecture and the selected
+Xcode/SDK/JDK/macOS fingerprint. Dependencies and Gradle outputs use that
+complete prefix to restore older compatible entries; Swift stays exact-key.
 Fork PRs may restore but cannot save; saves require successful build,
 enumeration and artifact upload, a miss, and a same-repository PR or non-PR
-event. No test results, simulator state, DerivedData or final shared frameworks
+event. Gradle output saves additionally require a main push, schedule or
+same-repository PR (never merge groups), and a nonempty directory no larger
+than 512 MiB. Gradle's seven-day unused-entry cleanup is age-based, not a size
+limit; the build already uses `--no-daemon`. No test results, simulator state,
+DerivedData or final shared frameworks
 are cached, and cache hits never skip build, enumeration or test execution.
 Package resolution has its own locked step; verbose build phase timing hides
 shell-script environments. See `docs/delivery-ci.md` for paths, invalidation,
