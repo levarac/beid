@@ -117,6 +117,8 @@ internal class VenueController(
         nextOperation()
         radio.stop()
         mutableState.value = mutableState.value.copy(
+            pack = mutableState.value.pendingPack ?: mutableState.value.pack,
+            pendingPack = null,
             isImporting = false, isStarting = false, isBroadcasting = false, message = VenueNotice.STOPPED,
         )
     }
