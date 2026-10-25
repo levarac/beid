@@ -12,6 +12,18 @@ from unittest.mock import patch
 from scripts.tests.test_ios_ui_smoke import tree, ONE, TWO
 
 ROOT = Path(__file__).parents[2]
+UNIT_ONE = 'BeidTests/ReportSubmissionOperatorIntegrationTests/testOne'
+UNIT_TWO = 'BeidTests/ReportSubmissionOperatorIntegrationTests/testTwo'
+UNIT_THREE = 'BeidTests/OtherTests/testThree'
+UNITS = [UNIT_ONE, UNIT_TWO, UNIT_THREE]
+
+
+def unit_tree(identifiers):
+    return {'testNodes': [{'nodeType': 'Unit test bundle', 'name': 'BeidTests',
+            'children': [{'nodeType': 'Test Case', 'nodeIdentifier': t.removeprefix('BeidTests/') + '()',
+                          'name': t.rsplit('/', 1)[1] + '()', 'result': 'Passed',
+                          'durationInSeconds': 1.25} for t in identifiers]}]}
+
 
 
 class IosShardTests(unittest.TestCase):
@@ -59,12 +71,12 @@ class IosShardTests(unittest.TestCase):
 
     def test_plan_smoke_uses_one_shard_and_full_uses_two(self):
         for mode, count in (('smoke', 1), ('full', 2)):
-            plan = self.tool.make_plan(mode, [ONE, TWO], [ONE], {ONE: 2, TWO: 3}, 3)
+            plan = self.tool.make_plan(mode, [ONE, TWO], [ONE], {ONE: 2, TWO: 3}, 3, unit_tests=UNITS, unit_durations={})
             self.assertEqual(len(plan['shards']), count)
             self.assertEqual(plan['full_tests'], [ONE, TWO])
             self.tool.validate_partition([ONE] if mode == 'smoke' else [ONE, TWO], plan['shards'])
         with self.assertRaises(ValueError):
-            self.tool.make_plan('smoke', [ONE], [TWO], {}, 3)
+            self.tool.make_plan('smoke', [ONE], [TWO], {}, 3, unit_tests=UNITS, unit_durations={})
 
     def test_aggregate_trusts_only_successful_classifier_for_skip(self):
         base = {'changes': {'result': 'success', 'outputs': {'ios': 'false', 'error': 'false'}}}
@@ -89,11 +101,11 @@ class IosShardTests(unittest.TestCase):
             self.tool.require_success({})
 
     def test_union_requires_every_built_ui_case_and_rejects_duplicates_and_skips(self):
-        plan = self.tool.make_plan('full', [ONE, TWO], [ONE], {}, 3)
-        unit_tree = tree()['testNodes'][0]['children'][0]
+        plan = self.tool.make_plan('full', [ONE, TWO], [ONE], {}, 3, unit_tests=UNITS, unit_durations={})
         ui_tree = tree(unit=False)
         ui_children = ui_tree['testNodes'][0]['children'][0]['children'][0]['children']
-        reports = [self.tool.make_report('unit', 'full', 'BeidTests', {'testNodes': [unit_tree]}, 1)]
+        reports = [self.tool.make_report(f'unit-{i}', 'full', 'BeidTests', unit_tree(shard), 1)
+                   for i, shard in enumerate(plan['unit']['shards'], 1)]
         for i, case in enumerate(ui_children, 1):
             part = tree(ui=[case], unit=False)
             reports.append(self.tool.make_report(f'ui-{i}', 'full', 'BeidUITests', part, 1))
@@ -106,6 +118,46 @@ class IosShardTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.tool.make_report('ui-1', 'full', 'BeidUITests', tree(ui=[ui_children[0]], unit=False), 1)
 
+    def test_unit_plan_groups_classes_and_uses_recorded_method_durations(self):
+        durations = dict(zip(UNITS, [9, 8, 15]))
+        for mode in ('smoke', 'full'):
+            plan = self.tool.make_plan(mode, [ONE, TWO], [ONE], {}, 3,
+                                      unit_tests=UNITS, unit_durations=durations)
+            unit = plan['unit']
+            self.assertEqual(unit['granularity'], 'class')
+            self.assertEqual(unit['shards'], [[UNIT_ONE, UNIT_TWO], [UNIT_THREE]])
+            self.assertEqual(unit['estimated_seconds'], [17, 15])
+            self.assertEqual(unit['selectors'], [
+                ['BeidTests/ReportSubmissionOperatorIntegrationTests'], ['BeidTests/OtherTests']])
+            self.tool.validate_partition(UNITS, unit['shards'])
+            reverse = self.tool.make_plan(mode, [ONE, TWO], [ONE], {}, 3,
+                                         unit_tests=UNITS[::-1], unit_durations=durations)
+            self.assertEqual(unit, reverse['unit'])
+        self.assertEqual(self.tool.parse_enumeration('\n'.join(UNITS), 'BeidTests'), sorted(UNITS))
+
+    def test_unit_union_missing_duplicate_wrong_assignment_and_split_class_fail(self):
+        plan = self.tool.make_plan('full', [ONE, TWO], [ONE], {}, 3,
+                                  unit_tests=UNITS, unit_durations={})
+        reports = [self.tool.make_report(f'unit-{i}', 'full', 'BeidTests', unit_tree(shard), 1)
+                   for i, shard in enumerate(plan['unit']['shards'], 1)]
+        ui_cases = tree(unit=False)['testNodes'][0]['children'][0]['children'][0]['children']
+        reports += [self.tool.make_report(f'ui-{i}', 'full', 'BeidUITests',
+                    tree(ui=[case], unit=False), 1) for i, case in enumerate(ui_cases, 1)]
+        self.tool.verify_reports(plan, reports)
+        for bad in (reports[1:], reports + [reports[0]],
+                    [{**reports[0], 'job': 'unit-2'}, {**reports[1], 'job': 'unit-1'}, *reports[2:]],
+                    [self.tool.make_report('unit-1', 'full', 'BeidTests', unit_tree([UNIT_ONE]), 1),
+                     *reports[1:]]):
+            with self.subTest(bad=bad[:1]), self.assertRaises(ValueError):
+                self.tool.verify_reports(plan, bad)
+        from copy import deepcopy
+        for shards in ([[UNIT_ONE], [UNIT_THREE]], [[UNIT_ONE, UNIT_TWO], [UNIT_TWO, UNIT_THREE]],
+                       [[UNIT_ONE], [UNIT_TWO, UNIT_THREE]]):
+            bad_plan = deepcopy(plan)
+            bad_plan['unit']['shards'] = shards
+            with self.assertRaises(ValueError):
+                self.tool.verify_reports(bad_plan, reports)
+
     def test_summary_counts_are_structured_consistent_and_nonzero(self):
         summary = dict(result='Passed', totalTestCount=1, passedTests=1, failedTests=0,
                        skippedTests=0, expectedFailures=0)
@@ -117,7 +169,7 @@ class IosShardTests(unittest.TestCase):
 
     def run_rerun_aggregate(self, root, mode, unit_attempt, latest_results=None,
                             missing_job=None, wrong_plan=False):
-        plan = self.tool.make_plan(mode, [ONE, TWO], [ONE], {}, 3)
+        plan = self.tool.make_plan(mode, [ONE, TWO], [ONE], {}, 3, unit_tests=UNITS, unit_durations={})
         (root / 'plan').mkdir()
         (root / 'plan/plan.json').write_text(json.dumps(plan))
         needs = {job: {'result': 'success'} for job in ('ios-build', 'ios-unit', 'ios-ui')}
@@ -125,9 +177,9 @@ class IosShardTests(unittest.TestCase):
         for job, result in (latest_results or {}).items():
             needs[job]['result'] = result
         (root / 'needs.json').write_text(json.dumps(needs))
-        unit = {'testNodes': [tree()['testNodes'][0]['children'][0]]}
         ui_cases = tree(unit=False)['testNodes'][0]['children'][0]['children'][0]['children']
-        entries = [('unit', 'BeidTests', unit, unit_attempt)]
+        entries = [(f'unit-{i}', 'BeidTests', unit_tree(shard), unit_attempt if i == 1 else 1)
+                   for i, shard in enumerate(plan['unit']['shards'], 1)]
         for i, shard in enumerate(plan['shards'], 1):
             cases = [case for case in ui_cases
                      if f"BeidUITests/{case['nodeIdentifier'].removesuffix('()')}" in shard]
@@ -156,8 +208,9 @@ class IosShardTests(unittest.TestCase):
                 code, summary = self.run_rerun_aggregate(Path(temp), mode, unit_attempt=2)
                 self.assertEqual(code, 0, summary)
                 self.assertIn('| Job | Attempt | Bundle |', summary)
-                self.assertIn('| unit | 2 | BeidTests |', summary)
+                self.assertIn('| unit-1 | 2 | BeidTests |', summary)
                 self.assertIn('| ui-1 | 1 | BeidUITests |', summary)
+                self.assertIn('| unit-2 | 1 | BeidTests |', summary)
 
     def test_latest_failed_job_rejects_older_successful_evidence(self):
         for job, attempt in itertools.product(('ios-build', 'ios-unit', 'ios-ui'), (1, 2)):
@@ -169,7 +222,7 @@ class IosShardTests(unittest.TestCase):
                 self.assertIn('Evidence verification failed', summary)
 
     def test_partial_rerun_success_requires_evidence_matching_plan(self):
-        for missing_job, wrong_plan in (('unit', False), ('ui-1', False), (None, True)):
+        for missing_job, wrong_plan in (('unit-1', False), ('unit-2', False), ('ui-1', False), (None, True)):
             with self.subTest(missing=missing_job, mismatch=wrong_plan), tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
                 code, summary = self.run_rerun_aggregate(
                     Path(temp), 'full', unit_attempt=2, missing_job=missing_job, wrong_plan=wrong_plan)
@@ -236,6 +289,7 @@ class IosShardTests(unittest.TestCase):
             (root / 'Products/Beid.xctestrun').touch()
             (root / 'plan').mkdir()
             (root / 'plan/ui-2.txt').write_text(TWO + '\n')
+            (root / 'plan/unit-2.txt').write_text('BeidTests/OtherTests\n')
             fake = root / 'xcodebuild'
             fake.write_text(f'#!{sys.executable}\nimport json, os, sys\n'
                             'print(json.dumps(sys.argv[1:]))\n'
@@ -246,12 +300,12 @@ class IosShardTests(unittest.TestCase):
                 script = textwrap.dedent(block.split('        run: |\n', 1)[1])
                 result = subprocess.run(['bash', '-c', script], capture_output=True, text=True,
                     env={**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
-                         'CI_OUTPUT_ROOT': str(root), 'SIMULATOR_UDID': 'owned', 'UI_SHARD': '2',
+                         'CI_OUTPUT_ROOT': str(root), 'SIMULATOR_UDID': 'owned', 'UI_SHARD': '2', 'UNIT_SHARD': '2',
                          'TEST_MODE': mode, 'CHILD_EXIT': str(code)})
                 self.assertEqual(result.returncode, code, result.stderr)
                 argv = json.loads(result.stdout)
                 self.assertEqual([a for a in argv if a.startswith('-only-testing:')],
-                                 ['-only-testing:BeidTests' if job == 'unit' else '-only-testing:' + TWO])
+                                 ['-only-testing:BeidTests/OtherTests' if job == 'unit' else '-only-testing:' + TWO])
                 self.assertNotIn('-project', argv)
                 self.assertNotIn('-derivedDataPath', argv)
                 self.assertEqual(argv[argv.index('-parallel-testing-enabled') + 1], 'NO')
@@ -269,10 +323,10 @@ class IosShardTests(unittest.TestCase):
                 result='Passed', totalTestCount=1, passedTests=0, failedTests=0,
                 skippedTests=0, expectedFailures=1)))
             result = subprocess.run([sys.executable, '-m', 'scripts.ios_test_shards', 'report',
-                '--mode', 'full', '--bundle', 'BeidTests', '--job', 'unit', '--run-attempt', '2',
+                '--mode', 'full', '--bundle', 'BeidTests', '--job', 'unit-1', '--run-attempt', '2',
                 '--root', str(root), '--summary', str(root / 'summary.md')],
                 cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads((root / 'report.json').read_text())['skipped'], 1)
             self.assertEqual(json.loads((root / 'report.json').read_text())['run_attempt'], 2)
-            self.assertIn('| unit | 2 | BeidTests |', (root / 'summary.md').read_text())
+            self.assertIn('| unit-1 | 2 | BeidTests |', (root / 'summary.md').read_text())

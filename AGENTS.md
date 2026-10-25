@@ -461,7 +461,7 @@ classification; failed collection or classification runs all three gates.
 
 The separate `.github/workflows/pr-ci-ios-macos.yml` keeps **iOS simulator**
 as a final `always()` aggregate (5 minutes, Linux), needing the classifier,
-**iOS simulator build** (30 minutes), **iOS unit tests** (30 minutes), and
+**iOS simulator build** (30 minutes), **iOS unit shard ${{ matrix.shard }}** (30 minutes per shard), and
 **iOS UI shard ${{ matrix.shard }}** (30 minutes per shard). The macOS jobs use
 the same Xcode 26.5 selection. One `build-for-testing` compiles both bundles;
 a gzip tar of `.xctestrun` and `Build/Products` preserves executable bits and
@@ -470,23 +470,33 @@ the build summary. No intermediates, dependency caches or DerivedData tree is
 uploaded. `test-without-building -xctestrun` downloads those products without
 rebuilding; each job owns a fresh simulator and separate result path outside
 DerivedData. Smoke uses one UI job to avoid extra startup for eight cases;
-full uses two UI jobs in parallel with all `BeidTests` in the unit job.
+full uses two UI jobs. Both modes run all `BeidTests` across two unit shards
+in parallel with UI. Unit selectors use whole classes, so every
+`ReportSubmissionOperatorIntegrationTests` method stays in one job.
 
 Mode is computed once from the event payload and passed as a build output.
 Ordinary PRs use the smoke list; `ci:full-ui`, merge groups, main pushes,
 nightly (03:23 UTC, separate concurrency group) and manual runs select full.
-`scripts/ios_test_shards.py` partitions the built UI enumeration using longest
-measured duration first and stable identifier ties; unknown tests go to the
-lighter shard. The duration data is `ios/ci/ui-test-durations.tsv`, outside
-XcodeGen sources. Source run 40076919260 retained only a 66-case/1412.663-second
-bundle total, no per-test values or xcresult artifact: the initial equal-mean
-fallback is explicitly an estimate, not verified duration balance. Replace it
-with measured rows from the new per-job evidence artifacts before claiming
-that requirement is met. Build archive size and transfer overhead also await
-hosted execution. The build alone exceeds the 10-minute required-check budget.
+`scripts/ios_test_shards.py` partitions the built unit and UI enumerations using
+longest measured duration first and stable identifier ties. Unit class weights
+sum their methods' recorded durations; unknown methods use a bundle-mean
+estimate. UI unknown tests go to the lighter shard. The per-test duration data
+is `ios/ci/ui-test-durations.tsv` (66 rows) and
+`ios/ci/unit-test-durations.tsv` (898 rows), outside XcodeGen sources, extracted
+from run 40163436992 attempt 1's raw test trees. The resulting unit shards have
+20/878 cases in 1/94 classes, estimated 500.287/263.331 seconds; full UI has
+33/33 cases, estimated 683.658/680.883 seconds. These are case-duration sums,
+not hosted job wall clocks. Each unit and UI shard union must match its built
+inventory exactly, and unit classes cannot span shards. Missing, duplicate or
+misassigned unit evidence fails just as UI evidence does. Partial reruns can
+replace one unit shard's run-scoped evidence while retaining the other jobs.
+The observed build/setup overhead still puts full mode around 32.3 minutes;
+smoke is about 24.0 minutes using its successful unit timing, or 28.1 with the
+full run's higher unit overhead. These estimates do not establish the under-25
+minute target; the new graph still needs hosted execution.
 
 The aggregate passes without tests only for the existing explicit classifier
-bypass. Otherwise build, unit and the entire UI matrix must succeed; skipped,
+bypass. Otherwise build and the entire unit and UI matrices must succeed; skipped,
 cancelled, failed or missing needed jobs fail. Missing/duplicate reports,
 mode mismatches, missing durations, corrupt counts, UI skips and incorrect
 shard unions also fail. Across all shard results, smoke cases must equal the

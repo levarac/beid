@@ -13,14 +13,15 @@ import sys
 import tarfile
 
 from scripts.ios_ui_smoke import (
-    IDENTIFIER, case_duration, parse_smoke_list, validate_results,
+    case_duration, parse_smoke_list, validate_results,
 )
 from scripts.run_local_tests import parse_xcresult_tests
 
-# Only a bundle total survived in the source run. This is an estimate for
-# UNKNOWN tests, not a per-test measurement. Replace with case measurements
-# from the evidence artifacts after the first hosted split run.
+# Unknown UI cases retain the original bundle-mean estimate. Unit estimates
+# use the measured bundle mean; neither fallback claims a per-case measurement.
 FALLBACK_SECONDS = 1412.663 / 66
+UNIT_FALLBACK_SECONDS = 763.6182074546814 / 898
+IDENTIFIER = re.compile(r'Beid(?:UI)?Tests/[A-Za-z_]\w*/test\w+')
 
 
 def parse_durations(text):
@@ -40,22 +41,22 @@ def parse_durations(text):
     return durations
 
 
-def parse_enumeration(text):
+def parse_enumeration(text, bundle='BeidUITests'):
     # xcodebuild -enumerate-tests -test-enumeration-style flat -format text
     # emits identifiers usable verbatim by -only-testing. Target/class headings
     # are not methods. Reject malformed method-like lines rather than drop them.
     tests = []
     for line in text.splitlines():
         line = line.strip().removesuffix('()')
-        if not line.startswith('BeidUITests/'):
+        if not line.startswith(bundle + '/'):
             continue
         if line.count('/') < 2:
             continue
         if not IDENTIFIER.fullmatch(line):
-            raise ValueError(f'invalid enumerated UI method: {line!r}')
+            raise ValueError(f'invalid enumerated method: {line!r}')
         tests.append(line)
     if not tests or len(tests) != len(set(tests)):
-        raise ValueError('build enumeration has no UI cases or duplicate cases')
+        raise ValueError('build enumeration has no cases or duplicate cases')
     return sorted(tests)
 
 
@@ -87,13 +88,45 @@ def split_tests(tests, durations, count, fallback=FALLBACK_SECONDS):
     return shards
 
 
-def make_plan(mode, full_tests, smoke, durations, fallback=FALLBACK_SECONDS):
+def make_unit_plan(tests, durations):
+    # Class selection avoids method-selection quirks and keeps shared stubs in
+    # ReportSubmissionOperatorIntegrationTests within one process/simulator.
+    validate_partition(tests, [tests])
+    classes = {}
+    for test in sorted(tests):
+        if not test.startswith('BeidTests/') or not IDENTIFIER.fullmatch(test):
+            raise ValueError('invalid unit method')
+        classes.setdefault(test.rsplit('/', 1)[0], []).append(test)
+    weights = {name: sum(durations.get(t, UNIT_FALLBACK_SECONDS) for t in methods)
+               for name, methods in classes.items()}
+    selectors = split_tests(list(classes), weights, 2)
+    shards = [sorted(t for name in shard for t in classes[name]) for shard in selectors]
+    validate_partition(tests, shards)
+    return dict(granularity='class', full_tests=sorted(tests), shards=shards, selectors=selectors,
+                estimated_seconds=[sum(weights[name] for name in shard) for shard in selectors],
+                unmeasured=sorted(set(tests) - durations.keys()))
+
+
+def validate_unit_plan(unit):
+    if unit['granularity'] != 'class' or len(unit['shards']) != 2:
+        raise ValueError('unit plan must have two class-level shards')
+    validate_partition(unit['full_tests'], unit['shards'])
+    seen = set()
+    for shard, selectors in zip(unit['shards'], unit['selectors'], strict=True):
+        classes = sorted({test.rsplit('/', 1)[0] for test in shard})
+        if not shard or classes != selectors or seen.intersection(classes):
+            raise ValueError('unit class missing, duplicated or split across shards')
+        seen.update(classes)
+
+
+def make_plan(mode, full_tests, smoke, durations, fallback=FALLBACK_SECONDS,
+              *, unit_tests, unit_durations):
     if mode not in ('smoke', 'full') or not set(smoke) <= set(full_tests):
         raise ValueError('invalid mode or smoke list missing from build')
     selected = smoke if mode == 'smoke' else full_tests
     shards = split_tests(selected, durations, 1 if mode == 'smoke' else 2, fallback)
     validate_partition(full_tests, [full_tests])
-    return dict(mode=mode, full_tests=sorted(full_tests), smoke=smoke, shards=shards,
+    return dict(unit=make_unit_plan(unit_tests, unit_durations), mode=mode, full_tests=sorted(full_tests), smoke=smoke, shards=shards,
                 estimated_seconds=[sum(durations.get(t, fallback) for t in s) for s in shards],
                 unmeasured=sorted(set(selected) - durations.keys()))
 
@@ -163,23 +196,24 @@ def make_report(job, mode, bundle, payload, run_attempt):
 
 
 def verify_reports(plan, reports):
-    expected_jobs = {'unit', *(f'ui-{i}' for i in range(1, len(plan['shards']) + 1))}
+    validate_unit_plan(plan['unit'])
+    expected_jobs = {'unit-1', 'unit-2', *(f'ui-{i}' for i in range(1, len(plan['shards']) + 1))}
     if Counter(r['job'] for r in reports) != Counter(expected_jobs):
         raise ValueError('missing, duplicate or unexpected job evidence')
     validate_partition(plan['smoke'] if plan['mode'] == 'smoke' else plan['full_tests'], plan['shards'])
     combined = []
     for report in reports:
         job = report['job']
-        bundle = 'BeidTests' if job == 'unit' else 'BeidUITests'
+        bundle = 'BeidTests' if job.startswith('unit-') else 'BeidUITests'
         if report['mode'] != plan['mode'] or report['bundle'] != bundle:
             raise ValueError('job mode or bundle mismatch')
         # Recompute from the raw tree: reports cannot claim better counts.
         if make_report(job, plan['mode'], bundle, report['tree'], report['run_attempt']) != report:
             raise ValueError('report differs from raw test evidence')
-        if job != 'unit':
-            shard = plan['shards'][int(job.split('-')[1]) - 1]
-            if Counter(c['identifier'] for c in report['cases']) != Counter(shard):
-                raise ValueError('executed UI cases differ from assigned shard')
+        shards = plan['unit']['shards'] if bundle == 'BeidTests' else plan['shards']
+        shard = shards[int(job.split('-')[1]) - 1]
+        if Counter(c['identifier'] for c in report['cases']) != Counter(shard):
+            raise ValueError('executed cases differ from assigned shard')
         combined.append(report['tree'])
     # Retain the previous exact smoke comparison and full listed-test check,
     # now across all jobs; full additionally requires every discovered case.
@@ -236,6 +270,8 @@ def main():
     plan = sub.add_parser('plan')
     plan.add_argument('--mode', choices=('smoke', 'full'), required=True)
     plan.add_argument('--enumeration', type=Path, required=True)
+    plan.add_argument('--unit-enumeration', type=Path, required=True)
+    plan.add_argument('--unit-durations', type=Path, default=Path('ios/ci/unit-test-durations.tsv'))
     plan.add_argument('--durations', type=Path, default=Path('ios/ci/ui-test-durations.tsv'))
     plan.add_argument('--smoke', type=Path, default=Path('ios/ci/ui-smoke-tests.txt'))
     plan.add_argument('--output', type=Path, required=True)
@@ -259,13 +295,24 @@ def main():
     try:
         if args.command == 'plan':
             result = make_plan(args.mode, parse_enumeration(args.enumeration.read_text()),
-                               parse_smoke_list(args.smoke.read_text()), parse_durations(args.durations.read_text()))
+                               parse_smoke_list(args.smoke.read_text()), parse_durations(args.durations.read_text()),
+                               unit_tests=parse_enumeration(args.unit_enumeration.read_text(), 'BeidTests'),
+                               unit_durations=parse_durations(args.unit_durations.read_text()))
+            validate_unit_plan(result['unit'])
             args.output.mkdir(parents=True, exist_ok=True)
             (args.output / 'plan.json').write_text(json.dumps(result, indent=2) + '\n')
             for i, shard in enumerate(result['shards'], 1):
                 (args.output / f'ui-{i}.txt').write_text('\n'.join(shard) + '\n')
+            for i, selectors in enumerate(result['unit']['selectors'], 1):
+                (args.output / f'unit-{i}.txt').write_text('\n'.join(selectors) + '\n')
+            print('unit-shards=[1, 2]')
+            print(json.dumps(dict(bundle='BeidTests', granularity='class',
+                                  classes_per_shard=[len(s) for s in result['unit']['selectors']],
+                                  cases_per_shard=[len(s) for s in result['unit']['shards']],
+                                  estimated_seconds=result['unit']['estimated_seconds'],
+                                  unmeasured_cases=len(result['unit']['unmeasured']))), file=sys.stderr)
             print('ui-shards=' + json.dumps(list(range(1, len(result['shards']) + 1))))
-            print(json.dumps(dict(mode=result['mode'], cases_per_shard=[len(s) for s in result['shards']],
+            print(json.dumps(dict(bundle='BeidUITests', mode=result['mode'], cases_per_shard=[len(s) for s in result['shards']],
                                   estimated_seconds=result['estimated_seconds'],
                                   unmeasured_cases=len(result['unmeasured']))), file=sys.stderr)
         elif args.command == 'pack':
@@ -304,7 +351,7 @@ def main():
             if args.mode != plan['mode']:
                 raise ValueError('build mode does not match plan')
             verify_reports(plan, reports)
-            print('All needed jobs succeeded; executed UI union matches the build plan.')
+            print('All needed jobs succeeded; executed unit and UI unions match the build plan.')
         return 0
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f'iOS parallel evidence failed: {error}', file=sys.stderr)

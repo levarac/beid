@@ -134,25 +134,30 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     rather than a PR head. See [GitHub's event reference](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group).
 
     The job graph is classifier → `iOS simulator build` → parallel
-    `iOS unit tests` and `iOS UI shard ${{ matrix.shard }}` → `iOS simulator`.
-    The aggregate explicitly needs the classifier, build, unit and UI matrix,
+    `iOS unit shard ${{ matrix.shard }}` and `iOS UI shard ${{ matrix.shard }}` → `iOS simulator`.
+    The aggregate explicitly needs the classifier, build, unit and UI matrices,
     runs with `always()` on Linux, and retains the only required iOS name.
     Classifier timeout remains 10 minutes; build and each test job are
-    30 minutes, aggregate 5 minutes. These allow margin over the first hosted
-    split run's 17m52s build (including upload), 905s unit test time (19m49s job),
-    and estimated half-UI about 10 minutes, plus hosted setup/transfer variance.
+    30 minutes, aggregate 5 minutes. Run 40163436992 attempt 1 measured a
+    913-second build, 1122-second unit job and 1069/837-second UI jobs. The new
+    unit shards retain the same 30-minute timeout and fresh-simulator ownership.
     Matrix fail-fast is disabled so one failure cannot hide
     another shard's evidence. The standard `macos-26` image uses
     `/Applications/Xcode_26.5.app` and iOS 26.5 in every build/test job.
 
     One `build-for-testing` uses `SWIFT_OPTIMIZATION_LEVEL=-O`, then enumerates
-    the compiled UI tests with `test-without-building -enumerate-tests`.
+    both compiled test bundles with `test-without-building -enumerate-tests`.
     `scripts/ios_test_shards.py` creates deterministic longest-duration-first
     shards, with identifier tie breaks and unknown cases assigned to the
     lighter shard. Empty/duplicate inventories and non-exact shard unions fail.
     Full has two UI jobs; smoke has one, since eight cases do not justify a
     second artifact download and simulator startup. Both run alongside the
-    complete BeidTests job. Xcode's own parallel testing is disabled: each test
+    two BeidTests shards in both modes. Unit partitioning selects whole classes,
+    weights each class by the sum of its methods' measured durations, and uses
+    stable class identifier ties. ReportSubmissionOperatorIntegrationTests stays
+    together. The plan records both method inventories and class selectors;
+    both unit shard union and class ownership must be exact. Xcode's own
+    parallel testing is disabled: each test
     job creates, boots, tests and deletes only its owned simulator. Result
     bundles and JSON paths live outside DerivedData and include job/shard IDs.
 
@@ -174,21 +179,24 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Current `needs` results must all succeed, even if older passing evidence
     exists; every successful job's evidence must exist and match the plan.
 
-    `ios/ci/ui-test-durations.tsv` is outside XcodeGen source roots. Source
-    run 40076919260 attempt 1 (2026-10-24) uploaded no xcresult, and its quiet
-    log contains only the bundle total: 66 cases, 1412.663 seconds. No per-test
-    measurement can be recovered from it. The seed therefore contains no
-    invented per-test rows; unknown cases use the observed mean as an estimate.
-    With 66 cases this gives two 33-case estimates of 706.332 seconds each,
-    not proven balance. Replace the seed with actual case durations from the
-    new `ios-evidence-*` reports before claiming measured-duration balance.
+    `ios/ci/ui-test-durations.tsv` and `ios/ci/unit-test-durations.tsv` are
+    outside XcodeGen source roots. Both contain per-test durationInSeconds
+    extracted from raw Test Case nodes in run 40163436992 attempt 1's evidence,
+    with the source run recorded in comments: 66 UI rows (1364.541 seconds) and
+    898 unit rows (763.618 seconds, including three existing skipped/expected
+    cases). Full UI balances to 33/33 cases at 683.658/680.883 seconds; smoke
+    selects eight cases at 132.211 seconds. Unit classes split 1/94 with 20/878
+    cases at 500.287/263.331 seconds. The 500.287-second integration class is
+    deliberately indivisible. Unknown methods retain estimated bundle-mean
+    weights and remain visible as unmeasured; these sums exclude suite totals
+    and do not predict simulator startup or artifact transfer by themselves.
     UI source inspection found no inter-test data/order prerequisite: each
     method launches with `-beid-ui-test`; onboarding restoration is bypassed,
     ProofStore/presence reset, report-link and venue files isolated per launch.
     The proof relaunch regression stays within one test method, not across
     tests. No app code or test ordering change is needed for the partition.
 
-    Every test run executes all BeidTests once in the unit job. Ordinary
+    Every test run assigns all BeidTests exactly once across two unit jobs. Ordinary
     `pull_request` events select `ios/ci/ui-smoke-tests.txt`; the payload label
     `ci:full-ui` selects full UI coverage. Merge groups, push, nightly and manual
     events always select full. Mode is computed once from the immutable event
@@ -200,25 +208,34 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Each job reports mode, bundle counts and summed xcresult Test Case durations
     (numeric `durationInSeconds` or human-readable `duration`, no suite totals).
     The aggregate prints a table across jobs, recomputes evidence from the raw
-    trees, and compares the UI union only after downloading every shard report.
+    trees, and compares both bundle unions after downloading every shard report.
+    Each unit shard must execute exactly its assigned methods; missing, extra,
+    duplicated or misassigned unit methods fail. Existing unit skip/expected
+    failure accounting is preserved. A partial rerun of one unit shard reuses
+    the other shard and UI reports from the same run; attempt numbers may differ.
     Smoke must equal the list exactly with every case Passed; full must execute
     every built UI case, including every smoke entry, exactly once and Passed.
     The aggregate succeeds only for a successful PR classifier's explicit
-    `ios=false` with no error, or successful build, unit and all UI jobs plus
+    `ios=false` with no error, or successful build, all unit and all UI jobs plus
     valid evidence. Failed/missing classification cannot authorize a bypass.
     Failed, cancelled, skipped or missing needed jobs; missing/duplicate shard
     reports; wrong mode/bundle; zero/inconsistent counts; missing durations;
     duplicate, extra, missing or skipped UI cases all fail closed.
 
-    Expected full wall time is roughly 28–36 minutes versus about 44 today;
-    smoke is roughly 22–32 versus about 27, subject to unmeasured artifact
-    transfer, simulator startup and queue delays. The latest full source run
-    took about 54 minutes, showing substantial variation from the 44-minute
-    baseline. These are estimates, not
-    hosted p50 evidence. Build alone remains 10–14 minutes, so this change
-    cannot meet the under-10-minute required-context budget. Build p50 under
-    15 minutes is also unproven with packaging added; further build work is
-    required to establish both budgets.
+    Wall-clock projections retain measured job overhead rather than halving
+    whole jobs. In full run 40163436992, UI job overhead (job wall minus case
+    sums) was 335.950/205.510 seconds, and unit overhead was 358.382 seconds.
+    Conservatively using the slower UI overhead for the new longest UI shard,
+    full is 15.2 min build + max(14.3 min unit, 17.0 min UI) + 0.1 min
+    aggregate = about 32.3 min. Smoke run 40160114025's successful 14.6-minute
+    unit job projects to 10.2 min after removing the 263.331 seconds assigned
+    to the other shard: 13.7 min build + max(10.2 min unit, 7.3 min UI) +
+    0.1 min aggregate = about 24.0 min. With the full run's higher unit
+    overhead, smoke is about 28.1 min. These are single-run-based estimates;
+    queue delays, host variance, new class-selection execution and per-shard
+    startup/transfer remain unmeasured. The under-25-minute full target remains
+    unmet, and even smoke needs hosted confirmation. Build alone is 13.7–15.2
+    minutes in these runs and still exceeds the under-10-minute context budget.
     With the main merge queue enabled, the merge step is to add the PR to
     the queue after its required PR checks pass. A completed full-mode pass of
     `iOS simulator` on the queue's exact merge result satisfies the full-suite

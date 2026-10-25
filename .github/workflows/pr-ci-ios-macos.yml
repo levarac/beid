@@ -149,6 +149,7 @@ jobs:
     outputs:
       mode: ${{ steps.test-mode.outputs.mode }}
       ui-shards: ${{ steps.plan.outputs.ui-shards }}
+      unit-shards: ${{ steps.plan.outputs.unit-shards }}
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -273,7 +274,7 @@ jobs:
             SWIFT_OPTIMIZATION_LEVEL=-O \
             build-for-testing
 
-      - name: Enumerate built UI tests and plan shards
+      - name: Enumerate built tests and plan shards
         id: plan
         shell: bash
         env:
@@ -288,8 +289,15 @@ jobs:
             -only-testing:BeidUITests -enumerate-tests \
             -test-enumeration-style flat -test-enumeration-format text \
             -test-enumeration-output-path "$CI_OUTPUT_ROOT/ui-enumeration.txt"
+          xcodebuild -quiet test-without-building -xctestrun "${runs[0]}" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -only-testing:BeidTests -enumerate-tests \
+            -test-enumeration-style flat -test-enumeration-format text \
+            -test-enumeration-output-path "$CI_OUTPUT_ROOT/unit-enumeration.txt"
           python3 -m scripts.ios_test_shards plan --mode "$TEST_MODE" \
             --enumeration "$CI_OUTPUT_ROOT/ui-enumeration.txt" \
+            --unit-enumeration "$CI_OUTPUT_ROOT/unit-enumeration.txt" \
+            --unit-durations ios/ci/unit-test-durations.tsv \
             --durations ios/ci/ui-test-durations.tsv --output "$CI_OUTPUT_ROOT/plan" >> "$GITHUB_OUTPUT"
 
       - name: Pack portable test products and report size
@@ -337,22 +345,27 @@ jobs:
           xcrun simctl delete "$SIMULATOR_UDID"
 
   ios-unit:
-    name: iOS unit tests
+    name: iOS unit shard ${{ matrix.shard }}
     needs: ios-build
     runs-on: macos-26
-    # Hosted unit tests took 905s (19m49s job); allow setup and hosted variance.
+    # Each class-level shard owns a fresh simulator; retain the 30-minute limit.
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.ios-build.outputs.unit-shards) }}
     env:
       TEST_MODE: ${{ needs.ios-build.outputs.mode }}
       TEST_BUNDLE: BeidTests
-      EVIDENCE_JOB: unit
+      EVIDENCE_JOB: unit-${{ matrix.shard }}
+      UNIT_SHARD: ${{ matrix.shard }}
     steps:
       - name: Initialize CI output path
         shell: bash
         run: |
           set -euo pipefail
-          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}" >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}"
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UNIT_SHARD:-0}" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UNIT_SHARD:-0}"
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -392,7 +405,7 @@ jobs:
         run: |
           set -euo pipefail
           simulator_udid="$(python3 scripts/ci_simulator.py \
-            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}")"
+            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UNIT_SHARD:-0}")"
           printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
 
       # A newly created device is already clean. Never erase or reuse one
@@ -416,7 +429,10 @@ jobs:
           runs=("$CI_OUTPUT_ROOT/Products/"*.xctestrun)
           test "${#runs[@]}" -eq 1
           test_args=(SWIFT_OPTIMIZATION_LEVEL=-O)
-          test_args+=("-only-testing:BeidTests")
+          test -s "$CI_OUTPUT_ROOT/plan/unit-$UNIT_SHARD.txt"
+          while IFS= read -r identifier; do
+            test_args+=("-only-testing:$identifier")
+          done < "$CI_OUTPUT_ROOT/plan/unit-$UNIT_SHARD.txt"
           xcodebuild -quiet \
             -xctestrun "${runs[0]}" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
@@ -465,7 +481,7 @@ jobs:
     name: iOS UI shard ${{ matrix.shard }}
     needs: ios-build
     runs-on: macos-26
-    # Half full UI is about 10 min by count; allow large hosted variance.
+    # Measured-duration shards; retain allowance for hosted setup/transfer variance.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -632,7 +648,7 @@ jobs:
           pattern: ios-evidence-*
           path: ${{ env.CI_OUTPUT_ROOT }}/evidence
 
-      - name: Verify all jobs and UI union
+      - name: Verify all jobs and test unions
         if: always()
         shell: bash
         run: |
