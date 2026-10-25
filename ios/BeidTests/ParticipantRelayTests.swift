@@ -49,6 +49,57 @@ final class ParticipantRelayTests: XCTestCase {
 
   // MARK: - The gate
 
+  func testValidityEndIsClampedToTheUnsigned32BitBoundary() {
+    for through: Int64 in [4_294_967_295, 4_294_967_296] {
+      let result = participantRelayVerification(
+        state: gateState(joinedEventIdHex: eventIdHex),
+        signedEnvelopeHex: envelopeHex,
+        eventCodeHashHex: hashHex,
+        eventId: hexBytes(eventIdHex),
+        validFromEnin: 0,
+        validThroughEnin: through,
+        currentEnin: 0,
+        relayExpiresAtEnin: 1,
+        agreesWithDefinition: { _ in true }
+      )
+      guard case .registryVerified(_, let start, let end, let expiry) = result else {
+        return XCTFail("expected a representable relay validity, got \(result)")
+      }
+      XCTAssertEqual(start, 0)
+      XCTAssertEqual(end, 4_294_967_295)
+      XCTAssertEqual(expiry, 1)
+    }
+  }
+
+  func testSignedExpiryAtTheUnsigned32BitMaximumIsPreserved() {
+    let result = participantRelayVerification(
+      state: gateState(joinedEventIdHex: eventIdHex),
+      signedEnvelopeHex: envelopeHex,
+      eventCodeHashHex: hashHex,
+      eventId: hexBytes(eventIdHex),
+      validFromEnin: 0,
+      validThroughEnin: 4_294_967_295,
+      currentEnin: 0,
+      relayExpiresAtEnin: 4_294_967_295,
+      agreesWithDefinition: { _ in true }
+    )
+    guard case .registryVerified(_, _, _, let expiry) = result else {
+      return XCTFail("expected the maximum signed expiry to be preserved, got \(result)")
+    }
+    XCTAssertEqual(expiry, 4_294_967_295)
+  }
+
+  func testRelayValidityUsesTheSharedBoundary() throws {
+    let resources = try XCTUnwrap(Bundle(for: ParticipantRelayTests.self).resourceURL)
+    let source = try String(
+      contentsOf: resources.appendingPathComponent("Beid/Sensing/ParticipantRelayVerifier.swift"),
+      encoding: .utf8
+    )
+    XCTAssertTrue(source.contains("BeidSharedKit.event.participantRelayValidity("))
+    XCTAssertFalse(source.contains("UInt32.max"))
+    XCTAssertFalse(source.contains("max(0, validFromEnin)"))
+  }
+
   func testRegistryVerifiedEnvelopeForTheJoinedEventRelays() {
     let result = verification(state: gateState(joinedEventIdHex: eventIdHex))
 
