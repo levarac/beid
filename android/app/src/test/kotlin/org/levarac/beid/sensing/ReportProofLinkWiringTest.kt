@@ -16,7 +16,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.levarac.beid.persistence.BindingRecordStore
-import org.levarac.beid.persistence.DirectStoreWrites
 import org.levarac.beid.persistence.ProofRecord
 import org.levarac.beid.persistence.ProofRecordStore
 import org.levarac.beid.persistence.ReportProofLinkContract
@@ -24,7 +23,6 @@ import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.persistence.WindowObservationDraftStore
-import org.levarac.beid.shared.report.UnsentWindowSubmission
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportProofLinkWiringTest {
@@ -218,29 +216,23 @@ class ReportProofLinkWiringTest {
         .filter { it.isFile && (it.name == "ledger.snapshot" || it.name == "submission-records-v1.json" || it.extension == "cose") }
         .associate { it.relativeTo(directory).path to it.readBytes() }
 
-    /** Assert missing APIs at runtime so the test-only commit has executable RED evidence. */
     private fun accumulator(directory: File, store: ReportProofLinkContract?): WindowObservationAccumulator {
-        val constructor = assertNotNull(WindowObservationAccumulator::class.java.declaredConstructors.singleOrNull {
-            it.parameterCount == 13 && it.parameterTypes.last().simpleName == "ReportProofLinkStore"
-        }, "the accumulator needs an isolated link-store dependency")
         val ids = ArrayDeque(listOf(WINDOW, OTHER_WINDOW))
-        val context: () -> WindowObservationContext? = { WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32)) }
-        val now: () -> Double = { 1_800_000_000.75 }
-        val newId: () -> UUID = { ids.removeFirst() }
-        val ledgerId: () -> String = { "000102030405060708090a0b0c0d0e0f" }
-        val emitted: (UnsentWindowSubmission, SubmissionEmissionOrigin) -> Unit = { _, _ -> }
-        val closed: () -> Unit = {}
-        return constructor.newInstance(context, SigningCryptography(), UnsentWindowLedgerStore(directory.resolve("ledger.snapshot")),
-            WindowObservationDraftStore(directory.resolve("draft.snapshot")), directory.resolve("observations"), now,
-            DirectStoreWrites, SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)), newId, ledgerId,
-            emitted, closed, store?.instance) as WindowObservationAccumulator
+        return WindowObservationAccumulator(
+            context = { WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32)) },
+            cryptography = SigningCryptography(),
+            ledgerStore = UnsentWindowLedgerStore(directory.resolve("ledger.snapshot")),
+            draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
+            observationDirectory = directory.resolve("observations"),
+            nowEpochSeconds = { 1_800_000_000.75 },
+            newWindowId = { ids.removeFirst() },
+            ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
+            reportProofLinkStore = store?.instance,
+        )
     }
 
     private fun observe(accumulator: WindowObservationAccumulator, enin: Long, proofId: UUID) {
-        val observe = assertNotNull(WindowObservationAccumulator::class.java.methods.singleOrNull {
-            it.name == "observe" && it.parameterCount == 6
-        }, "observations must carry the known active Proof only to the native accumulator")
-        observe.invoke(accumulator, enin, PEER, REPORTER, true, "event", proofId)
+        accumulator.observe(enin, PEER, REPORTER, recording = true, eventCode = "event", proofId = proofId)
     }
 
     private fun directory(): File = Files.createTempDirectory("report-link-wiring").toFile()
