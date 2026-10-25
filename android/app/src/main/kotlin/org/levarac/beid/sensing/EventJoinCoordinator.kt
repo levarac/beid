@@ -334,6 +334,12 @@ class EventJoinCoordinator internal constructor(
      * session end: the session never reached `Recording`.
      */
     @Volatile private var activeProofId: UUID? = null
+    private var firstSightingAt: java.time.Instant? = null
+
+    override val currentProofId: UUID? get() = activeProofId
+    override fun hasStoredProof(proofId: UUID): Boolean = proofRecordStore?.recordForId(proofId) != null
+    private val _scanSessionMetrics = MutableStateFlow<() -> ScanSessionMetrics>({ ScanSessionMetrics() })
+    override val scanSessionMetrics: StateFlow<() -> ScanSessionMetrics> = _scanSessionMetrics.asStateFlow()
 
     /** Wallet connect+binding lifecycle for the currently recording event — see [EventBindingState]. */
     private val _bindingState = MutableStateFlow<EventBindingState>(EventBindingState.None)
@@ -931,6 +937,8 @@ class EventJoinCoordinator internal constructor(
         // already does.
         if (_state.value !is EventJoinUiState.Sensing) return
 
+        if (firstSightingAt == null) firstSightingAt = java.time.Instant.ofEpochMilli(nowEpochMillis())
+
         val previousProofId = activeProofId
         val previousEninStart = accounting.firstWindowEnin
         val previousEninEnd = checkpointEninEnd
@@ -940,6 +948,13 @@ class EventJoinCoordinator internal constructor(
             logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
         }
         val observationAccepted = aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
+        val aggregateSnapshot = aggregationRuntime.snapshotAggregate()
+        val since = firstSightingAt
+        val detected = accounting.distinctDeviceCount
+        _scanSessionMetrics.value = {
+            val aggregate = aggregateSnapshot()
+            ScanSessionMetrics(since, aggregate.mutualDeviceCount, detected, aggregate.windowCount)
+        }
 
         val session = when (val phase = scanPhase) {
             is ScanPhase.EventFound -> phase.session
@@ -1256,6 +1271,8 @@ class EventJoinCoordinator internal constructor(
     }
 
     private fun resetSessionState() {
+        firstSightingAt = null
+        _scanSessionMetrics.value = { ScanSessionMetrics() }
         accounting.reset()
         checkpointEninEnd = null
         aggregationRuntime = AggregationRuntime()

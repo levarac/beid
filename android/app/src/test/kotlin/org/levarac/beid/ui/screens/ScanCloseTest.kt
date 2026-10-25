@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.semantics.SemanticsActions
 import java.io.File
 import java.util.UUID
@@ -131,18 +132,19 @@ class ScanCloseTest {
 
             compose.onNodeWithText("Close").assertIsDisplayed().performClick()
 
-            compose.onNodeWithText("Stop sensing?").assertIsDisplayed()
-            compose.onNodeWithText("Stop sensing to seal and keep what you've recorded on this phone. You can sense this event again later.").assertIsDisplayed()
-            compose.onNodeWithText("SO FAR").assertIsDisplayed()
+            compose.onNodeWithText("Stop sensing?").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("Stop sensing to seal and keep what you've recorded on this phone. You can sense this event again later.")
+                .performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("SO FAR").performScrollTo().assertIsDisplayed()
             listOf("MUTUAL", "DETECTED", "WINDOWS").forEach {
-                compose.onNodeWithText(it).assertIsDisplayed()
+                compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
             }
             assertEquals(0, leaveCalls)
             assertEquals(0, proofs.records.size)
             val liveState = coordinator.state.value
             val originalProof = collected.single()
             if (keepSensing) {
-                compose.onNodeWithText("Keep sensing").assertIsDisplayed().performClick()
+                compose.onNodeWithText("Keep sensing").performScrollTo().assertIsDisplayed().performClick()
                 compose.onNodeWithText("Stop sensing?").assertDoesNotExist()
                 assertEquals(liveState, coordinator.state.value)
                 assertEquals(originalProof, records.records.single().id)
@@ -159,7 +161,7 @@ class ScanCloseTest {
                 assertEquals(2, collected.size)
             }
             val beforeConfirm = coordinator.state.value
-            val confirm = compose.onNodeWithText("Stop and keep record").assertIsDisplayed()
+            val confirm = compose.onNodeWithText("Stop and keep record").performScrollTo().assertIsDisplayed()
                 .fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
             // Invoke the same captured callback twice, including after its screen disappears.
             compose.runOnIdle { confirm(); confirm() }

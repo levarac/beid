@@ -8,7 +8,14 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import java.io.File
+import java.time.Instant
+import java.util.UUID
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.levarac.beid.sensing.EventJoinSession
+import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.sensing.ScanSessionMetrics
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -27,27 +34,47 @@ import org.robolectric.annotation.GraphicsMode
 class ScanCloseScreenshotTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun captureScanWithClose() {
+    @Test fun captureScanWithClose() = capture("scan-sensing-close.png", confirmation = false)
+
+    @Test fun captureStopConfirmation() = capture("scan-stop-confirm.png", confirmation = true)
+
+    private fun capture(filename: String, confirmation: Boolean) {
         val directory = System.getProperty("beid.scanScreenshotDir").orEmpty()
         assumeTrue("Screenshot output is opt-in", directory.isNotBlank())
+        val event = ScanEventSession(eventCode = "ABC123", eventName = "beid gathering")
+        val fake = FakeEventJoinSession(EventJoinUiState.Sensing(
+            if (confirmation) ScanPhase.Recording(event, 12) else ScanPhase.Sensing,
+        ))
+        val session = object : EventJoinSession by fake {
+            override val currentProofId = UUID.fromString("00112233-4455-6677-8899-aabbccddeeff")
+            override fun hasStoredProof(proofId: UUID) = proofId == currentProofId
+            override val scanSessionMetrics = MutableStateFlow<() -> ScanSessionMetrics>({ ScanSessionMetrics(
+                firstSightingAt = Instant.parse("2026-10-25T09:30:00Z"),
+                mutualDeviceCount = 4, detectedDeviceCount = 12, windowCount = 3,
+            ) })
+        }
+        val model = EventJoinViewModel(session)
         lateinit var view: ComposeView
         compose.runOnUiThread {
             view = ComposeView(compose.activity)
             compose.activity.setContentView(view)
             view.setContent {
                 BeidAppTheme {
-                    EventJoinContent(
-                        state = EventJoinScreenState(sessionState = EventJoinUiState.Sensing(ScanPhase.Sensing)),
+                    EventJoinScreen(
+                        viewModel = model,
                         onOpenAccount = {},
-                        onJoinNearbyEvent = {},
-                        onOpenSettings = {},
-                        onSimulateSignalLost = {},
-                        onResumeSensing = {},
+                        onOpenManualEventCode = {},
                     )
                 }
             }
         }
         compose.onNodeWithText("Close").assertIsDisplayed()
+        if (confirmation) {
+            compose.onNodeWithText("Close").performClick()
+            compose.onNodeWithText("Stop sensing?").assertIsDisplayed()
+            compose.onNodeWithText("Stop and keep record").assertIsDisplayed()
+            compose.onNodeWithText("Keep sensing").assertIsDisplayed()
+        }
         compose.runOnIdle {
             view.measure(
                 View.MeasureSpec.makeMeasureSpec(412, View.MeasureSpec.EXACTLY),
@@ -56,7 +83,7 @@ class ScanCloseScreenshotTest {
             view.layout(0, 0, 412, 892)
             val bitmap = Bitmap.createBitmap(412, 892, Bitmap.Config.ARGB_8888)
             view.draw(Canvas(bitmap))
-            val output = File(directory, "scan-sensing-close.png")
+            val output = File(directory, filename)
             output.parentFile.mkdirs()
             output.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             bitmap.recycle()

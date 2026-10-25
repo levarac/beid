@@ -3,6 +3,7 @@ package org.levarac.beid.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,6 +12,9 @@ import kotlinx.coroutines.launch
 import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinSession
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.sensing.ScanPhase
+import org.levarac.beid.sensing.ScanSessionMetrics
 import org.levarac.beid.shared.clock.ClockPreflightState
 import org.levarac.beid.shared.event.EventJoinFailureReason
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
@@ -35,6 +39,9 @@ sealed class EventJoinFieldError {
     data class JoinFailed(val reason: EventJoinFailureReason) : EventJoinFieldError()
 }
 
+/** Identity held by 05e while the live session continues sensing. */
+data class ScanStopConfirmation(val proofId: UUID, val event: ScanEventSession)
+
 /** Everything [org.levarac.beid.ui.screens.EventJoinScreen] needs to render, combined into one flow. */
 data class EventJoinScreenState(
     val eventCode: String = "",
@@ -52,6 +59,8 @@ data class EventJoinScreenState(
      * answer; the notice renders only the two states the participant must be told.
      */
     val clockPreflight: ClockPreflightState? = null,
+    val stopConfirmation: ScanStopConfirmation? = null,
+    val scanSessionMetrics: ScanSessionMetrics = ScanSessionMetrics(),
 )
 
 /**
@@ -81,6 +90,13 @@ class EventJoinViewModel(
                 preflight.state.collect { state -> _uiState.update { it.copy(clockPreflight = state) } }
             }
             viewModelScope.launch { preflight.check() }
+        }
+        viewModelScope.launch {
+            session.scanSessionMetrics.collect { metrics ->
+                if (_uiState.value.stopConfirmation != null) {
+                    _uiState.update { it.copy(scanSessionMetrics = metrics()) }
+                }
+            }
         }
         viewModelScope.launch {
             session.state.collect { sessionState ->
@@ -193,6 +209,36 @@ class EventJoinViewModel(
     fun resumeSensing() = session.resumeSensing()
 
     fun leaveEvent() = session.leaveEvent()
+
+    /** Scan Close mirrors iOS 05e; the independent Account leave route stays unchanged. */
+    fun requestScanClose() {
+        if (_uiState.value.stopConfirmation != null) return
+        val proofId = session.currentProofId
+        val event = when (val phase = (session.state.value as? EventJoinUiState.Sensing)?.phase) {
+            is ScanPhase.Recording -> phase.session
+            is ScanPhase.SignalLost -> phase.session
+            else -> null
+        }
+        if (event == null || proofId == null || !session.hasStoredProof(proofId)) {
+            session.leaveEvent()
+            return
+        }
+        _uiState.update {
+            it.copy(stopConfirmation = ScanStopConfirmation(proofId, event), scanSessionMetrics = session.scanSessionMetrics.value())
+        }
+    }
+
+    fun keepSensing() {
+        _uiState.update { it.copy(stopConfirmation = null) }
+    }
+
+    fun confirmStopSensing() {
+        val snapshot = _uiState.value.stopConfirmation ?: return
+        // Consume before finalizing: even a callback retained by a second tap is harmless.
+        _uiState.update { it.copy(stopConfirmation = null) }
+        if (session.currentProofId != snapshot.proofId || !session.hasStoredProof(snapshot.proofId)) return
+        session.leaveEvent()
+    }
 
     fun markRecordingCeremonyShown() {
         session.markRecordingCeremonyShown()

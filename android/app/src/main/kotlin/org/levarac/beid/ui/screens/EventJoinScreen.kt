@@ -150,7 +150,9 @@ fun EventJoinScreen(
         onOpenSettings = viewModel::openAppSettings,
         onSimulateSignalLost = viewModel::simulateSignalLost,
         onResumeSensing = viewModel::resumeSensing,
-        onCloseScan = viewModel::leaveEvent,
+        onCloseScan = viewModel::requestScanClose,
+        onKeepSensing = viewModel::keepSensing,
+        onConfirmStopSensing = viewModel::confirmStopSensing,
         onStartWalletBinding = onStartWalletBinding,
         onRetryClockPreflight = viewModel::retryClockPreflight,
         showEntranceCeremony = !uiState.recordingCeremonyShown,
@@ -210,6 +212,8 @@ fun EventJoinContent(
     showSimulateSignalLost: Boolean = false,
     /** Read-only scenarios have no session to leave. */
     onCloseScan: () -> Unit = {},
+    onKeepSensing: () -> Unit = {},
+    onConfirmStopSensing: () -> Unit = {},
 ) {
     Scaffold(
         containerColor = BeidTheme.colors.surfaceCanvas,
@@ -238,6 +242,19 @@ fun EventJoinContent(
             )
         },
     ) { innerPadding ->
+        val confirmation = state.stopConfirmation
+        if (confirmation != null) {
+            BeidAppTheme(darkTheme = true) {
+                SensingStopConfirmScreen(
+                    event = confirmation.event,
+                    metrics = state.scanSessionMetrics,
+                    onStop = onConfirmStopSensing,
+                    onKeepSensing = onKeepSensing,
+                    modifier = Modifier.padding(innerPadding),
+                )
+            }
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
