@@ -47,16 +47,25 @@ class VenueBundleScheduleTest {
     @Test fun verificationAtLastEligibleEninIsEligible() {
         assertNotNull(check(envelope(5_999_990, 6_000_010, at = 6_000_009)).schedule)
     }
-    @Test fun verificationAtExclusiveExpiryIsMalformed() =
-        rejects("malformed_envelope", envelope(5_999_990, 6_000_010, at = 6_000_010))
-    @Test fun verificationBeforeStartIsMalformed() =
-        rejects("malformed_envelope", envelope(5_999_990, 6_000_010, at = 5_999_989))
+    // Barnard rejects these envelopes before either native adapter supplies scheduling.
+    @Test fun nativeVerificationAtExclusiveExpiryRejectionRejectsBundle() = rejects("malformed_envelope", null)
+    @Test fun nativeVerificationBeforeStartRejectionRejectsBundle() = rejects("malformed_envelope", null)
+    @Test fun scheduleDoesNotRevalidateNativeVerificationTime() {
+        for (at in listOf(5_999_989L, 6_000_010L)) {
+            assertNotNull(check(envelope(5_999_990, 6_000_010, at = at)).schedule)
+        }
+    }
     @Test fun terminalDefinitionEninIsNotRequiredForCoverage() { assertNotNull(check(envelope(5_999_990, 6_000_010)).schedule) }
-    @Test fun envelopeBeforeDefinitionIsRejected() = rejects("outside_definition_window", envelope(5_999_989, 6_000_010))
-    @Test fun envelopeAfterDefinitionIsRejected() =
-        rejects("outside_definition_window", envelope(5_999_990, 6_000_011, through = 6_000_011))
-    @Test fun declaredEnvelopeWindowOutsideDefinitionIsRejected() =
-        rejects("outside_definition_window", envelope(5_999_990, 6_000_010, through = 6_000_011))
+    @Test fun nativeAgreementBeforeDefinitionRejectionRejectsBundle() = rejects("malformed_envelope", null)
+    @Test fun nativeAgreementAfterDefinitionRejectionRejectsBundle() = rejects("malformed_envelope", null)
+    @Test fun nativeAgreementDeclaredWindowRejectionRejectsBundle() = rejects("malformed_envelope", null)
+    @Test fun scheduleDoesNotRepeatNativeRegistryAgreement() {
+        // Deliberately impossible native verdicts isolate ownership: shared checks coverage,
+        // while the adapters must pass null for a failed Barnard registry agreement.
+        assertNotNull(check(envelope(5_999_989, 6_000_010)).schedule)
+        assertNotNull(check(envelope(5_999_990, 6_000_011, through = 6_000_011)).schedule)
+        assertNotNull(check(envelope(5_999_990, 6_000_010, through = 6_000_011)).schedule)
+    }
     @Test fun malformedDefinitionFailsClosed() {
         assertEquals("invalid_definition_window", verifyVenueBundleSchedule(listOf(envelope(1, 2)), 100, 0).failureCode)
         assertEquals("invalid_definition_window", verifyVenueBundleSchedule(listOf(envelope(1, 2)), -1, 100).failureCode)
