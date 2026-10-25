@@ -192,6 +192,8 @@ class EventJoinViewModel(
 
     fun resumeSensing() = session.resumeSensing()
 
+    fun leaveEvent() = session.leaveEvent()
+
     fun markRecordingCeremonyShown() {
         session.markRecordingCeremonyShown()
         _uiState.update { it.copy(recordingCeremonyShown = true) }
