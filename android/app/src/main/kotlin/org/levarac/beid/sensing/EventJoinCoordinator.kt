@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import android.content.Context
 import android.util.Log
 import java.io.File
 import java.time.Instant
@@ -150,19 +151,19 @@ class EventJoinCoordinator internal constructor(
     checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
     private val checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
 ) : EventJoinSession {
-    constructor(activity: Activity) : this(
-        engine = BarnardEventJoinEngine(activity),
+    constructor(context: Context) : this(
+        engine = BarnardEventJoinEngine(context),
         nowEpochMillis = System::currentTimeMillis,
         coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
         registryClient = RegistryDependencies.createClient(),
-        sensingCryptography = BarnardSensingCryptography(activity.applicationContext),
+        sensingCryptography = BarnardSensingCryptography(context.applicationContext),
         selfProofRecordStore = ProcessSessionCheckpointRuntimeOwner.selfProofStore(
-            SelfProofRecordStore.defaultFile(activity.filesDir),
+            SelfProofRecordStore.defaultFile(context.filesDir),
         ),
-        bindingRecordStore = ProcessSessionCheckpointRuntimeOwner.bindingStore(BindingRecordStore.defaultFile(activity.filesDir)),
-        ledgerFilesDir = activity.filesDir,
+        bindingRecordStore = ProcessSessionCheckpointRuntimeOwner.bindingStore(BindingRecordStore.defaultFile(context.filesDir)),
+        ledgerFilesDir = context.filesDir,
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
-        initialBluetoothPermissionState = currentBluetoothPermissionState(activity),
+        initialBluetoothPermissionState = currentBluetoothPermissionState(context),
     )
 
     private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
@@ -216,6 +217,8 @@ class EventJoinCoordinator internal constructor(
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
     private var currentBluetoothPermissionState = initialBluetoothPermissionState
+    private var bluetoothPermissionResultHandler: ((BluetoothPermissionState) -> Unit)? = null
+    private var undeliveredBluetoothPermissionResult: BluetoothPermissionState? = null
     override val bluetoothPermissionState: BluetoothPermissionState
         get() = currentBluetoothPermissionState
     override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = nearbyDiscovery.cards
@@ -424,8 +427,8 @@ class EventJoinCoordinator internal constructor(
      *   `AccountScreen.kt`'s "Leave Event" button
      *   (`onClick = viewModel::leaveEvent`, a Compose click handler, which
      *   Compose always dispatches on the main thread), and [dispose] is
-     *   invoked from `MainActivity.onDestroy()` (an Activity lifecycle
-     *   callback, also always the main thread). Both confirmed by reading
+     *   invoked from the Activity session ViewModel's `onCleared()`
+     *   (also on the main thread). Both confirmed by reading
      *   their actual callers, not inferred by analogy.
      * - [completeBinding] is called from [WalletBindingFlow]. The pinned
      *   MetaMask SDK invokes request callbacks inline from an AIDL response
@@ -1394,8 +1397,19 @@ class EventJoinCoordinator internal constructor(
 
     override fun openAppSettings() = engine.openAppSettings()
 
+    override fun bindBluetoothPermissionResult(onResult: ((BluetoothPermissionState) -> Unit)?) {
+        bluetoothPermissionResultHandler = onResult
+        if (onResult != null) {
+            undeliveredBluetoothPermissionResult?.let { result ->
+                undeliveredBluetoothPermissionResult = null
+                onResult(result)
+            }
+        }
+    }
+
     override fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit) {
         if (disposed) return
+        bindBluetoothPermissionResult(onResult)
         engine.requestPermissions { result ->
             if (disposed) return@requestPermissions
             val permissionState = mapOnboardingPermissionResult(result)
@@ -1403,7 +1417,10 @@ class EventJoinCoordinator internal constructor(
             if (permissionState == BluetoothPermissionState.Granted) {
                 startNearbyEventDiscoveryIfIdle()
             }
-            onResult(permissionState)
+            // The SDK callback retains only this coordinator, never the requesting UI.
+            val handler = bluetoothPermissionResultHandler
+            if (handler != null) handler(permissionState)
+            else undeliveredBluetoothPermissionResult = permissionState
         }
     }
 
@@ -1493,18 +1510,27 @@ class EventJoinCoordinator internal constructor(
         _nearbyEventSearchOutcome.value = NearbyEventSearchOutcome.SEARCHING
     }
 
+    internal fun attachActivity(activity: Activity) = engine.attachActivity(activity)
+
+    internal fun detachActivity() {
+        bindBluetoothPermissionResult(null)
+        engine.detachActivity()
+    }
+
     fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean =
         !disposed && engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
     /**
-     * Releases Activity-owned transport resources. This is not an ENIN or
-     * session boundary: configuration destruction must not create, sign, or
-     * close a durable observation window. [leaveEvent] and an observed ENIN
+     * Finalizes the session and releases transport resources on real Activity finish.
+     * Configuration destruction must never call this method. Transport disposal
+     * does not close a durable observation window: [leaveEvent] and an observed ENIN
      * rollover are the business boundaries for [windowAccumulator].
      */
     fun dispose() {
         if (disposed) return
         disposed = true
+        bluetoothPermissionResultHandler = null
+        undeliveredBluetoothPermissionResult = null
         joinVerificationOwner = null
         finalizeSelfProofIfNeeded()
         sessionCheckpointWriter?.close()

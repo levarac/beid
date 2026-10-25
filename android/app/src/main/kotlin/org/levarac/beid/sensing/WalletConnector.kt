@@ -284,6 +284,13 @@ class WalletBindingFlow(
         }
     }
 
+    /** Releases this host's wallet UI without resetting a completed binding. */
+    fun detach() {
+        if (currentAttemptId != null) cancel()
+        else connector.cancelPendingOperation()
+        coordinator.onBindingAttemptInvalidated = null
+    }
+
     fun cancel() {
         currentAttemptId = null
         connector.cancelPendingOperation()
