@@ -28,6 +28,8 @@ on:
       - "scripts/ci_change_filter.py"
       - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/ci_gradle_timing.init.gradle"
+      - "scripts/ios_gradle_cache_inventory.py"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
       - "scripts/ios_ui_smoke.py"
@@ -152,7 +154,7 @@ jobs:
       unit-shards: ${{ steps.plan.outputs.unit-shards }}
     env:
       # Dedicated build-only home: no test task results enter these caches.
-      GRADLE_OPTS: -Dorg.gradle.caching=true
+      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -319,6 +321,17 @@ jobs:
           xcrun simctl boot "$SIMULATOR_UDID"
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
+      - name: Install Gradle diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GRADLE_USER_HOME/init.d" "$CI_OUTPUT_ROOT/gradle"
+          cp scripts/ci_gradle_timing.init.gradle "$GRADLE_USER_HOME/init.d/beid-timing.gradle"
+          printf 'task\toutcome\tseconds\n' > "$CI_OUTPUT_ROOT/gradle/tasks.tsv"
+          printf 'BEID_GRADLE_TIMING_FILE=%s\n' "$CI_OUTPUT_ROOT/gradle/tasks.tsv" >> "$GITHUB_ENV"
+          python3 -m scripts.ios_gradle_cache_inventory \
+            "$GRADLE_USER_HOME/caches/build-cache-1" "$CI_OUTPUT_ROOT/gradle/cache-before.json"
+
       - name: Build for testing
         shell: bash
         env:
@@ -336,7 +349,28 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             SWIFT_OPTIMIZATION_LEVEL=-O \
-            build-for-testing
+            build-for-testing 2>&1 | tee "$CI_OUTPUT_ROOT/gradle/build.log"
+
+      - name: Report Gradle diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$CI_OUTPUT_ROOT/gradle/tasks.tsv" ]]; then
+            cat "$CI_OUTPUT_ROOT/gradle/tasks.tsv"
+          fi
+          python3 -m scripts.ios_gradle_cache_inventory \
+            "$GRADLE_USER_HOME/caches/build-cache-1" "$CI_OUTPUT_ROOT/gradle/cache-after.json"
+
+      - name: Upload Gradle diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-build-gradle
+          overwrite: true
+          path: ${{ env.CI_OUTPUT_ROOT }}/gradle/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Enumerate built tests and plan shards
         id: plan

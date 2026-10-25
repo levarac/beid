@@ -351,15 +351,63 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     library, exported symbols, Swift modules and headers matched; only archive
     metadata and four source-index files differed.
 
-    A larger prototype also retained generated-gradle-jars and transforms. It
-    took 107.2 seconds but added about 1.25 GiB uncompressed, for only 23.3
-    seconds less than the small-cache run before transfer costs. It is not
-    retained. The selected 4.3 MiB addition is expected to save roughly 20-40
-    seconds of hosted setup, based on the 27.2-second settings reduction;
-    this is a forecast, not a hosted result. Xcode/JDK versions, machine load
-    and transfer speeds differ. Hosted full-mode execution on the final SHA,
-    including restore/save time and the shared 10 GB cache budget, remains
-    required.
+    A larger prototype retained generated-gradle-jars and transforms. It
+    added about 1.25 GiB for only 23.3 seconds less than the small-cache run,
+    before transfer costs, and is not retained. Keep the 4.3 MiB DSL addition
+    based on the local settings-evaluation reduction; its hosted benefit is
+    still a hypothesis, not an explanation for the native link miss.
+
+    Follow-up: run 40177765095 attempt 2 restored all three exact keys, but
+    Gradle still took 574 seconds with only two tasks FROM-CACHE (both Kotlin
+    compilations). The native static link executed. The restored build-cache
+    archive was 4,707,972 bytes. Those aggregate lines do not identify its
+    entries or establish whether a link entry was ever stored. GitHub's cache
+    metadata API also reports sizes, not archive contents. Do not infer a
+    missing link entry from archive size alone; local archives differ with
+    toolchain and debug information.
+
+    The proposed run-dependent DerivedData explanation did not reproduce.
+    Actual Xcode script invocations with output roots A, B, B, deleting
+    shared/build each time and sharing one private Gradle cache, took
+    137.6 / 111.4 / 123.2 seconds. All three cacheable tasks were FROM-CACHE:
+    main compilation 22.63 / 23.89 / 24.13 seconds, bridge compilation
+    0.48 / 0.20 / 0.34 seconds, link 1.73 / 1.20 / 1.16 seconds. Gradle's
+    normalized input fingerprints and cache keys for those tasks matched
+    across A/B/B. Only non-cacheable SwiftPM generation/merge input
+    fingerprints varied; this does not establish their cause. Consequently the build's DerivedData path stays
+    run-specific, along with every shard's artifact and evidence roots. The
+    hosted miss's differing input remains unverified; local Xcode 27.1/JDK 21
+    does not establish the behavior of hosted Xcode 26.5/JDK 17.
+
+    The build job installs scripts/ci_gradle_timing.init.gradle only into its
+    dedicated GRADLE_USER_HOME/init.d before build-for-testing. It records
+    shared task paths, Gradle outcomes and wall seconds, plus configuration
+    time from init-script evaluation through task-graph readiness (excluding
+    wrapper/JVM startup). It uses public Gradle 8.14 TaskExecutionListener,
+    TaskState, task-graph and build-finished APIs; configuration cache remains
+    disabled, as in android/gradle.properties. Enabling configuration cache
+    requires replacing these listeners. No timing file becomes a task input.
+    The original Xcode product phases remain identical to dc26afff; Gradle's
+    own actionable-task line supplies the counts.
+
+    CI additionally enables Gradle info-level caching diagnostics, including
+    normalized input fingerprints and stored/loaded entry keys. With
+    -hideShellScriptEnvironment, the workflow preserves xcodebuild's exit
+    status through tee and retains build.log, tasks.tsv and before/after
+    build-cache METADATA inventories in the seven-day ios-build-gradle
+    artifact, overwritten on a partial rerun. The compact TSV is printed even
+    after build failure; partial rows remain diagnostic evidence, not tests.
+    Inventories read only task identity, key, size, Gradle version and original
+    execution time; they do not extract outputs. They distinguish an absent
+    restored link entry from a stored entry looked up under a different key.
+    Compare these artifacts on the next hosted runs before claiming a cause
+    or a hosted speedup. Diagnostics add logging/I/O, not a measured saving.
+    A local Xcode invocation of the unchanged product command and final CI
+    logging settings took 143.4 seconds: configuration 24.96 seconds, main
+    compilation 29.27, bridge 0.34 and link 1.33 seconds (all three FROM-CACHE).
+    It recorded all fourteen shared outcomes. Separate task/configuration
+    failure fixtures also retained FAILED rows with Gradle exit 1. Required checks, test selection and
+    enumeration/execution evidence are unchanged.
 
     Under 25 minutes for the full lane needs a build below roughly 7 minutes
     with attempt 1's 17.3-minute longest test job, or below roughly 5.7 minutes

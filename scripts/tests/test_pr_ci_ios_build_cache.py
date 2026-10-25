@@ -1,15 +1,19 @@
 """Cache trust boundaries and build execution on both hits and misses."""
 import itertools
+import io
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import tempfile
+import tarfile
 import textwrap
 import unittest
 
 from scripts.tests.test_pr_ci_lane_skip import IOS, job_block
 from scripts.tests.test_pr_ci_ios_macos_workflow import step_block
+from scripts.ios_gradle_cache_inventory import inventory
 
 
 def cache_paths(block):
@@ -170,3 +174,77 @@ class IosBuildCacheTests(unittest.TestCase):
             self.assertIn('-clonedSourcePackagesDirPath "$RUNNER_TEMP/beid-swift-packages"', block)
         self.assertIn('git diff --exit-code -- ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', resolve)
         self.assertIn('-disableAutomaticPackageResolution', build)
+
+    def test_ci_timing_is_installed_before_build_and_uploaded_on_failure(self):
+        self.assertIn('GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info', self.build)
+        install = step_block(self.build, 'Install Gradle diagnostics')
+        report = step_block(self.build, 'Report Gradle diagnostics')
+        upload = step_block(self.build, 'Upload Gradle diagnostics')
+        self.assertLess(self.build.index(install), self.build.index('      - name: Build for testing\n'))
+        self.assertLess(self.build.index('      - name: Build for testing\n'), self.build.index(report))
+        for block in (report, upload):
+            self.assertIn('if: ${{ always() }}', block)
+        self.assertIn('name: ios-build-gradle', upload)
+        self.assertIn('overwrite: true', upload)
+        self.assertIn('path: ${{ env.CI_OUTPUT_ROOT }}/gradle/', upload)
+        script = textwrap.dedent(install.split('        run: |\n')[1])
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            environment = {**os.environ, 'GRADLE_USER_HOME': str(temp / 'gradle'),
+                           'CI_OUTPUT_ROOT': str(temp / 'run-1'), 'GITHUB_ENV': str(temp / 'env')}
+            result = subprocess.run(['bash', '-c', script], cwd=root, env=environment,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((temp / 'gradle/init.d/beid-timing.gradle').read_bytes(),
+                             (root / 'scripts/ci_gradle_timing.init.gradle').read_bytes())
+            self.assertEqual((temp / 'run-1/gradle/tasks.tsv').read_text(), 'task\toutcome\tseconds\n')
+            self.assertEqual(json.loads((temp / 'run-1/gradle/cache-before.json').read_text()), [])
+            self.assertIn('BEID_GRADLE_TIMING_FILE=' + str(temp / 'run-1/gradle/tasks.tsv'),
+                          (temp / 'env').read_text())
+            timings = temp / 'run-1/gradle/tasks.tsv'
+            timings.write_text(timings.read_text() + 'configuration\tCOMPLETE\t1.234\n'
+                               ':shared:link\tFROM-CACHE\t0.345\n:shared:broken\tFAILED\t0.001\n')
+            result = subprocess.run(['bash', '-c', textwrap.dedent(report.split('        run: |\n')[1])],
+                                    cwd=root, env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(':shared:link\tFROM-CACHE\t0.345', result.stdout)
+            self.assertIn(':shared:broken\tFAILED\t0.001', result.stdout)
+            self.assertEqual(json.loads((temp / 'run-1/gradle/cache-after.json').read_text()), [])
+            # The workflow's logging pipe must retain xcodebuild's failure.
+            executable = temp / 'bin/xcodebuild'
+            executable.parent.mkdir()
+            executable.write_text('#!/bin/sh\necho build-diagnostic\nexit "$FIXTURE_STATUS"\n')
+            executable.chmod(0o755)
+            build_script = textwrap.dedent(step_block(self.build, 'Build for testing').split('        run: |\n')[1])
+            for status in (0, 73):
+                result = subprocess.run(['bash', '-c', build_script], cwd=root,
+                                        env={**environment, 'PATH': str(executable.parent) + os.pathsep + os.environ['PATH'],
+                                             'RUNNER_TEMP': str(temp), 'SIMULATOR_UDID': 'fixture',
+                                             'FIXTURE_STATUS': str(status)}, capture_output=True, text=True)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertIn('build-diagnostic', (temp / 'run-1/gradle/build.log').read_text())
+        for job in ('ios-unit', 'ios-ui', 'ios-simulator'):
+            self.assertNotIn('beid-timing', job_block(IOS, job))
+
+    def test_cache_inventory_identifies_tasks_and_tolerates_corruption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata = b'identity=\\:shared\\:link\nexecutionTime=1234\ngradleVersion=8.14\nhostName=ignored\n'
+            with tarfile.open(root / ('a' * 32), 'w:gz') as archive:
+                member = tarfile.TarInfo('METADATA')
+                member.size = len(metadata)
+                archive.addfile(member, io.BytesIO(metadata))
+                # No output paths, including traversal names, are extracted.
+                member = tarfile.TarInfo('../../untrusted-output')
+                member.size = 4
+                archive.addfile(member, io.BytesIO(b'data'))
+            (root / ('b' * 32)).write_bytes(b'bad archive')
+            (root / 'gc.properties').write_text('ignored')
+            rows = inventory(root)
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]['identity'], ':shared:link')
+            self.assertEqual(rows[0]['executionTime'], '1234')
+            self.assertNotIn('hostName', rows[0])
+            self.assertEqual(rows[1]['error'], 'ReadError')
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ['a' * 32, 'b' * 32, 'gc.properties'])
