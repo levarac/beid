@@ -52,8 +52,7 @@ class ScanStopConfirmationTest {
         override val scanSessionMetrics = metrics
     }
 
-    // This fixture uses the original constructor so the tests execute on the unfixed head.
-    private fun model() = EventJoinViewModel(session)
+    private fun model() = EventJoinViewModel(session, metricsDispatcher = metricsDispatcher)
 
     @BeforeTest fun setUp() = Dispatchers.setMain(main)
     @AfterTest fun tearDown() = Dispatchers.resetMain()

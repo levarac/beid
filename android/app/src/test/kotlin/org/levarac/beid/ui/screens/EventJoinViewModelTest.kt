@@ -44,7 +44,7 @@ class EventJoinViewModelTest {
             override fun hasStoredProof(proofId: java.util.UUID) = proofId == currentProofId
             override val scanSessionMetrics = metrics
         }
-        val model = EventJoinViewModel(session)
+        val model = EventJoinViewModel(session, metricsDispatcher = testDispatcher)
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(0, reads)
         model.requestScanClose()
