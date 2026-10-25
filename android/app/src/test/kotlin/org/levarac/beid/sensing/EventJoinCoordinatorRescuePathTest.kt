@@ -294,6 +294,37 @@ class EventJoinCoordinatorRescuePathTest {
         assertEquals(NearbyEventSearchOutcome.RESCUE_ENTRY_OFFERED, coordinator.nearbyEventSearchOutcome.value)
     }
 
+    @Test
+    fun leavingAJoinedEventCancelsThePendingRescueCountdown() = runTest {
+        val engine = FakeEventJoinEngine()
+        val nearby = FakeNearbyEventRegistry()
+        val coordinator = coordinator(engine, nearbyRegistry = nearby)
+        val delayMillis = RESCUE_ENTRY_DELAY_SECONDS * 1_000L
+
+        coordinator.startNearbyEventDiscovery()
+        runCurrent()
+        advanceTimeBy(delayMillis / 2)
+        runCurrent()
+        joinPromotedVectorEvent(coordinator, engine, nearby)
+        assertIs<EventJoinUiState.Sensing>(coordinator.state.value)
+        assertEquals(1, engine.joinEventCalls, "a pending search must lead to a real joined session")
+        assertEquals(NearbyEventSearchOutcome.SEARCHING, coordinator.nearbyEventSearchOutcome.value)
+
+        coordinator.leaveEvent()
+        runCurrent()
+        assertIs<EventJoinUiState.Idle>(coordinator.state.value)
+        assertEquals(null, engine.getCurrentEventCode())
+        assertEquals(NearbyEventSearchOutcome.SEARCHING, coordinator.nearbyEventSearchOutcome.value)
+
+        advanceTimeBy(delayMillis)
+        runCurrent()
+        assertEquals(
+            NearbyEventSearchOutcome.SEARCHING,
+            coordinator.nearbyEventSearchOutcome.value,
+            "the pending countdown must not offer rescue after its joined session has ended",
+        )
+    }
+
     /**
      * The hole the countdown's position closes. A participant can arrive on
      * the join surface while a scan is already running and this object does
