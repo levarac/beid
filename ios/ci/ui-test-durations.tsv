@@ -1,0 +1,6 @@
+# Source run: 40076919260, attempt 1 (2026-10-24, latest completed full run), UI summary: 66 cases, 1412.663 s.
+# No xcresult artifact was uploaded. The quiet log contains only bundle totals,
+# not per-test durations. There are NO measured per-test rows in this file.
+# Unknown cases use the observed mean (1412.663 / 66 s) as an ESTIMATE only.
+# Replace with identifier<TAB>measured_seconds from ios-evidence-*/report.json.
+# This seed does not establish duration-balanced shards; hosted measurement is pending.

@@ -102,9 +102,8 @@ class IosShardTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.tool.verify_reports(plan, bad)
         ui_children[0]['result'] = 'Skipped'
-        bad = self.tool.make_report('ui-1', 'full', 'BeidUITests', tree(ui=[ui_children[0]], unit=False))
         with self.assertRaises(ValueError):
-            self.tool.verify_reports(plan, [reports[0], bad, reports[2]])
+            self.tool.make_report('ui-1', 'full', 'BeidUITests', tree(ui=[ui_children[0]], unit=False))
 
     def test_summary_counts_are_structured_consistent_and_nonzero(self):
         summary = dict(result='Passed', totalTestCount=1, passedTests=1, failedTests=0,
@@ -139,3 +138,77 @@ class IosShardTests(unittest.TestCase):
                 self.assertFalse(any('Intermediates' in n for n in names))
                 self.assertTrue(tar.getmember('Products/Debug-iphonesimulator/Beid.app/link').issym())
                 self.assertEqual(tar.getmember('Products/Debug-iphonesimulator/Beid.app/Beid').mode & 0o111, 0o111)
+
+    def test_aggregate_cli_summarizes_failures_and_only_classifier_can_bypass(self):
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
+            root = Path(temp)
+            needs = root / 'needs.json'
+            summary = root / 'summary.md'
+            command = [sys.executable, '-m', 'scripts.ios_test_shards', 'aggregate',
+                       '--event', 'pull_request', '--mode', '', '--needs', str(needs),
+                       '--root', str(root), '--summary', str(summary)]
+            needs.write_text(json.dumps({'changes': {'result': 'success', 'outputs': {'ios': 'false'}}}))
+            result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('not needed', summary.read_text())
+            needs.write_text(json.dumps({'changes': {'result': 'failure'},
+                                         'ios-build': {'result': 'cancelled'}}))
+            summary.write_text('')
+            result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('ios-build', summary.read_text())
+            self.assertIn('cancelled', summary.read_text())
+
+    def test_test_job_shell_selects_exact_bundle_or_shard_and_retains_child_exit(self):
+        import os
+        import subprocess
+        import sys
+        import textwrap
+        from scripts.tests.test_pr_ci_lane_skip import job_block, IOS
+        from scripts.tests.test_pr_ci_ios_macos_workflow import step_block
+        with tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
+            root = Path(temp)
+            (root / 'Products').mkdir()
+            (root / 'Products/Beid.xctestrun').touch()
+            (root / 'plan').mkdir()
+            (root / 'plan/ui-2.txt').write_text(TWO + '\n')
+            fake = root / 'xcodebuild'
+            fake.write_text(f'#!{sys.executable}\nimport json, os, sys\n'
+                            'print(json.dumps(sys.argv[1:]))\n'
+                            "sys.exit(int(os.environ['CHILD_EXIT']))\n")
+            fake.chmod(0o755)
+            for job, mode, code in itertools.product(('unit', 'ui'), ('smoke', 'full'), (0, 65)):
+                block = step_block(job_block(IOS, 'ios-' + job), 'Test without rebuilding')
+                script = textwrap.dedent(block.split('        run: |\n', 1)[1])
+                result = subprocess.run(['bash', '-c', script], capture_output=True, text=True,
+                    env={**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                         'CI_OUTPUT_ROOT': str(root), 'SIMULATOR_UDID': 'owned', 'UI_SHARD': '2',
+                         'TEST_MODE': mode, 'CHILD_EXIT': str(code)})
+                self.assertEqual(result.returncode, code, result.stderr)
+                argv = json.loads(result.stdout)
+                self.assertEqual([a for a in argv if a.startswith('-only-testing:')],
+                                 ['-only-testing:BeidTests' if job == 'unit' else '-only-testing:' + TWO])
+                self.assertNotIn('-project', argv)
+                self.assertNotIn('-derivedDataPath', argv)
+                self.assertEqual(argv[argv.index('-parallel-testing-enabled') + 1], 'NO')
+                self.assertEqual(argv[argv.index('-resultBundlePath') + 1], str(root / 'Tests.xcresult'))
+
+    def test_unit_report_keeps_existing_expected_failure_accounting(self):
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
+            root = Path(temp)
+            unit = tree()['testNodes'][0]['children'][0]
+            unit['children'][0]['result'] = 'Expected Failure'
+            (root / 'test-tree.json').write_text(json.dumps({'testNodes': [unit]}))
+            (root / 'test-summary.json').write_text(json.dumps(dict(
+                result='Passed', totalTestCount=1, passedTests=0, failedTests=0,
+                skippedTests=0, expectedFailures=1)))
+            result = subprocess.run([sys.executable, '-m', 'scripts.ios_test_shards', 'report',
+                '--mode', 'full', '--bundle', 'BeidTests', '--job', 'unit',
+                '--root', str(root), '--summary', str(root / 'summary.md')],
+                cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads((root / 'report.json').read_text())['skipped'], 1)

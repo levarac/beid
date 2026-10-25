@@ -31,6 +31,7 @@ on:
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
       - "scripts/ios_ui_smoke.py"
+      - "scripts/ios_test_shards.py"
       - "scripts/run_local_tests.py"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
@@ -137,27 +138,24 @@ jobs:
         if: always()
         run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
 
-  ios-simulator:
-    name: iOS simulator
+  ios-build:
+    name: iOS simulator build
     needs: changes
-    # Still created on every PR head so the required context reports; a
-    # PR limited to docs or Android app sources/resources reports it as skipped.
-    # Fail closed: unsafe diff metadata, unknown paths, or failed/missing classification
-    # runs the lane. Merge groups always run the full suite, even for docs-only changes.
-    # `!cancelled()` avoids starting a superseded macOS job.
+    # Same fail-closed classifier condition as the former serial job.
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
-    # Keep PR code on disposable hosted runners; repository variables must
-    # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
-    # The serial unit and UI suites (959 tests) take 28-39 minutes after a
-    # 9-14 minute build; 45 minutes cancelled most runs from 2026-10-15 on.
-    timeout-minutes: 60
+    # Measured build 10-14 min; allow setup, enumeration and artifact transfer.
+    timeout-minutes: 25
+    outputs:
+      mode: ${{ steps.test-mode.outputs.mode }}
+      ui-shards: ${{ steps.plan.outputs.ui-shards }}
     steps:
       - name: Initialize CI output path
         shell: bash
         run: |
           set -euo pipefail
-          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}"
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -243,11 +241,12 @@ jobs:
         run: |
           set -euo pipefail
           simulator_udid="$(python3 scripts/ci_simulator.py \
-            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB")"
+            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}")"
           printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
 
       # A newly created device is already clean. Never erase or reuse one
       # found in the host's device list: it may belong to another job or seat.
+
       - name: Boot owned simulator
         shell: bash
         env:
@@ -274,144 +273,56 @@ jobs:
             SWIFT_OPTIMIZATION_LEVEL=-O \
             build-for-testing
 
-      - name: Test without rebuilding
+      - name: Enumerate built UI tests and plan shards
+        id: plan
         shell: bash
         env:
           TEST_MODE: ${{ steps.test-mode.outputs.mode }}
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
         run: |
           set -euo pipefail
-          # Materialize before reading: a parser failure must stop the test step.
-          python3 -m scripts.ios_ui_smoke arguments --mode "$TEST_MODE" \
-            > "$CI_OUTPUT_ROOT/test-arguments.txt"
-          test_args=(SWIFT_OPTIMIZATION_LEVEL=-O)
-          while IFS= read -r argument; do
-            test_args+=("$argument")
-          done < "$CI_OUTPUT_ROOT/test-arguments.txt"
-          xcodebuild -quiet \
-            -project ios/Beid.xcodeproj \
-            -scheme Beid \
-            -configuration Debug \
-            -sdk iphonesimulator \
+          runs=("$CI_OUTPUT_ROOT/DerivedData/Build/Products/"*.xctestrun)
+          test "${#runs[@]}" -eq 1
+          xcodebuild -quiet test-without-building -xctestrun "${runs[0]}" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-            -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
-            -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
-            "${test_args[@]}" \
-            test-without-building
+            -only-testing:BeidUITests -enumerate-tests \
+            -test-enumeration-style flat -test-enumeration-format text \
+            -test-enumeration-output-path "$CI_OUTPUT_ROOT/ui-enumeration.txt"
+          python3 -m scripts.ios_test_shards plan --mode "$TEST_MODE" \
+            --enumeration "$CI_OUTPUT_ROOT/ui-enumeration.txt" \
+            --durations ios/ci/ui-test-durations.tsv --output "$CI_OUTPUT_ROOT/plan" >> "$GITHUB_OUTPUT"
 
-      - name: Summarize structured test results
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          result_bundle="$CI_OUTPUT_ROOT/Tests.xcresult"
-          summary_json="$CI_OUTPUT_ROOT/test-summary.json"
-
-          if [[ ! -d "$result_bundle" ]]; then
-            echo "### iOS simulator tests" >> "$GITHUB_STEP_SUMMARY"
-            echo "Result bundle missing; tests did not produce verifiable results." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          if ! xcrun xcresulttool get test-results summary --path "$result_bundle" --compact > "$summary_json"; then
-            echo "### iOS simulator tests" >> "$GITHUB_STEP_SUMMARY"
-            echo "Result bundle could not be parsed." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
-          python3 - "$summary_json" "$GITHUB_STEP_SUMMARY" <<'PY'
-          import json
-          import pathlib
-          import sys
-          import uuid
-
-          summary_path = pathlib.Path(sys.argv[1])
-          job_summary_path = pathlib.Path(sys.argv[2])
-          try:
-              summary = json.loads(summary_path.read_text(encoding="utf-8"))
-              result = summary["result"]
-              counts = {
-                  "total": summary["totalTestCount"],
-                  "passed": summary["passedTests"],
-                  "failed": summary["failedTests"],
-                  "skipped": summary["skippedTests"],
-                  "expected failures": summary["expectedFailures"],
-              }
-              if any(isinstance(value, bool) or not isinstance(value, int) for value in counts.values()):
-                  raise TypeError("test counts must be integers")
-              total = counts["total"]
-              passed = counts["passed"]
-              failed = counts["failed"]
-              skipped = counts["skipped"]
-              expected_failures = counts["expected failures"]
-              if any(value < 0 for value in counts.values()):
-                  raise ValueError("test counts must be nonnegative")
-              if any(value > total for name, value in counts.items() if name != "total"):
-                  raise ValueError("a test category exceeds the total test count")
-              if passed + failed + skipped + expected_failures != total:
-                  raise ValueError("test categories do not account for the total test count")
-          except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-              with job_summary_path.open("a", encoding="utf-8") as output:
-                  output.write("### iOS simulator tests\n\nStructured result data is corrupt or incomplete.\n")
-              raise SystemExit(f"invalid xcresult summary: {error}")
-
-          with job_summary_path.open("a", encoding="utf-8") as output:
-              output.write("### iOS simulator tests\n\n")
-              output.write("| Result | Total | Passed | Failed | Skipped | Expected failures |\n")
-              output.write("| --- | ---: | ---: | ---: | ---: | ---: |\n")
-              output.write(
-                  f"| {result} | {total} | {passed} | {failed} | {skipped} | {expected_failures} |\n"
-              )
-
-          # The test step runs xcodebuild -quiet, which prints only the names
-          # of failing tests. Surface each failure's message and location from
-          # the result bundle so a red run can be diagnosed from the job log.
-          # Indentation is for readability; the runner trims whitespace.
-          # Disable workflow commands while printing untrusted test text.
-          failures = summary.get("testFailures") or []
-          if failures:
-              lines = []
-              for failure in failures:
-                  name = failure.get("testIdentifierString") or failure.get("testName") or "unknown test"
-                  target = failure.get("targetName") or "unknown target"
-                  text = failure.get("failureText") or "(no failure text)"
-                  lines.append(f"{target} {name}")
-                  lines.extend(f"    {line}" for line in str(text).splitlines() or [""])
-              print("Test failures:")
-              token = uuid.uuid4().hex
-              print(f"::stop-commands::{token}", flush=True)
-              try:
-                  for line in lines:
-                      print(f"  {line}")
-              finally:
-                  print(f"::{token}::", flush=True)
-              with job_summary_path.open("a", encoding="utf-8") as output:
-                  output.write("\n#### Failures\n\n```text\n")
-                  for line in lines:
-                      output.write(line.replace("```", "'''") + "\n")
-                  output.write("```\n")
-
-          if total <= 0:
-              raise SystemExit("xcresult contains zero tests")
-          print(f"iOS tests: result={result}, total={total}, passed={passed}, failed={failed}, skipped={skipped}, expected_failures={expected_failures}")
-          if failed != 0 or result != "Passed":
-              raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
-          PY
-
-      - name: Verify UI execution and bundle durations
-        if: always()
+      - name: Pack portable test products and report size
         shell: bash
         env:
           TEST_MODE: ${{ steps.test-mode.outputs.mode }}
         run: |
           set -euo pipefail
-          mkdir -p "$CI_OUTPUT_ROOT"
-          # Inspect Xcode 26.5's per-node fields; retain the schema with the JSON.
-          xcrun xcresulttool get test-results tests --schema \
-            --path "$CI_OUTPUT_ROOT/Tests.xcresult" > "$CI_OUTPUT_ROOT/test-tree-schema.json"
-          xcrun xcresulttool get test-results tests \
-            --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/test-tree.json"
-          python3 -m scripts.ios_ui_smoke verify --mode "$TEST_MODE" \
-            --tests-json "$CI_OUTPUT_ROOT/test-tree.json" --summary "$GITHUB_STEP_SUMMARY"
+          python3 -m scripts.ios_test_shards pack \
+            --products "$CI_OUTPUT_ROOT/DerivedData/Build/Products" \
+            --archive "$CI_OUTPUT_ROOT/products.tar.gz" > "$CI_OUTPUT_ROOT/artifact-size.txt"
+          cat "$CI_OUTPUT_ROOT/artifact-size.txt"
+          {
+            printf 'Mode: %s. Build only; tests execute in downstream jobs.\n' "$TEST_MODE"
+            cat "$CI_OUTPUT_ROOT/artifact-size.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test products
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-build-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/products.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload shard plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-plan-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/plan/
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Delete owned simulator
         if: ${{ always() && steps.simulator.outputs.udid != '' }}
@@ -422,3 +333,307 @@ jobs:
           set -euo pipefail
           xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
           xcrun simctl delete "$SIMULATOR_UDID"
+
+  ios-unit:
+    name: iOS unit tests
+    needs: ios-build
+    runs-on: macos-26
+    # Unit 6-9.4 min / half full UI about 10.5 min, plus download and boot.
+    timeout-minutes: 20
+    env:
+      TEST_MODE: ${{ needs.ios-build.outputs.mode }}
+      TEST_BUNDLE: BeidTests
+      EVIDENCE_JOB: unit
+    steps:
+      - name: Initialize CI output path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Check selected Xcode and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.5"
+          xcrun simctl list runtimes --json \
+            | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 26.5" for item in runtimes) else "iOS 26.5 runtime is unavailable")'
+
+      - name: Download test products
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ios-build-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}
+
+      - name: Download shard plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ios-plan-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/plan
+
+      - name: Extract test products
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf "$CI_OUTPUT_ROOT/products.tar.gz" -C "$CI_OUTPUT_ROOT"
+
+      - name: Create owned simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_udid="$(python3 scripts/ci_simulator.py \
+            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}")"
+          printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
+
+      # A newly created device is already clean. Never erase or reuse one
+      # found in the host's device list: it may belong to another job or seat.
+
+      - name: Boot owned simulator
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      - name: Test without rebuilding
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          runs=("$CI_OUTPUT_ROOT/Products/"*.xctestrun)
+          test "${#runs[@]}" -eq 1
+          test_args=(SWIFT_OPTIMIZATION_LEVEL=-O)
+          test_args+=("-only-testing:BeidTests")
+          xcodebuild -quiet \
+            -xctestrun "${runs[0]}" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            "${test_args[@]}" \
+            test-without-building
+
+      - name: Summarize structured test results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_OUTPUT_ROOT/evidence"
+          xcrun xcresulttool get test-results summary \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/evidence/test-summary.json"
+          xcrun xcresulttool get test-results tests --schema \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" > "$CI_OUTPUT_ROOT/evidence/test-tree-schema.json"
+          xcrun xcresulttool get test-results tests \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/evidence/test-tree.json"
+          python3 -m scripts.ios_test_shards report --mode "$TEST_MODE" \
+            --bundle "$TEST_BUNDLE" --job "$EVIDENCE_JOB" \
+            --root "$CI_OUTPUT_ROOT/evidence" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload executed evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-evidence-${{ github.run_attempt }}-${{ env.EVIDENCE_JOB }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/evidence/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Delete owned simulator
+        if: ${{ always() && steps.simulator.outputs.udid != '' }}
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
+          xcrun simctl delete "$SIMULATOR_UDID"
+
+  ios-ui:
+    name: iOS UI shard ${{ matrix.shard }}
+    needs: ios-build
+    runs-on: macos-26
+    # Unit 6-9.4 min / half full UI about 10.5 min, plus download and boot.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.ios-build.outputs.ui-shards) }}
+    env:
+      TEST_MODE: ${{ needs.ios-build.outputs.mode }}
+      TEST_BUNDLE: BeidUITests
+      EVIDENCE_JOB: ui-${{ matrix.shard }}
+      UI_SHARD: ${{ matrix.shard }}
+    steps:
+      - name: Initialize CI output path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Check selected Xcode and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"
+          test "$(xcodebuild -version | sed -n '1p')" = "Xcode 26.5"
+          xcrun simctl list runtimes --json \
+            | python3 -c 'import json, sys; runtimes = json.load(sys.stdin)["runtimes"]; raise SystemExit(0 if any(item.get("isAvailable") and item.get("name") == "iOS 26.5" for item in runtimes) else "iOS 26.5 runtime is unavailable")'
+
+      - name: Download test products
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ios-build-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}
+
+      - name: Download shard plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ios-plan-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/plan
+
+      - name: Extract test products
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf "$CI_OUTPUT_ROOT/products.tar.gz" -C "$CI_OUTPUT_ROOT"
+
+      - name: Create owned simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_udid="$(python3 scripts/ci_simulator.py \
+            --name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}")"
+          printf 'udid=%s\n' "$simulator_udid" >> "$GITHUB_OUTPUT"
+
+      # A newly created device is already clean. Never erase or reuse one
+      # found in the host's device list: it may belong to another job or seat.
+
+      - name: Boot owned simulator
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+      - name: Test without rebuilding
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          runs=("$CI_OUTPUT_ROOT/Products/"*.xctestrun)
+          test "${#runs[@]}" -eq 1
+          test_args=(SWIFT_OPTIMIZATION_LEVEL=-O)
+          test -s "$CI_OUTPUT_ROOT/plan/ui-$UI_SHARD.txt"
+          while IFS= read -r identifier; do
+            test_args+=("-only-testing:$identifier")
+          done < "$CI_OUTPUT_ROOT/plan/ui-$UI_SHARD.txt"
+          xcodebuild -quiet \
+            -xctestrun "${runs[0]}" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -parallel-testing-enabled NO \
+            -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
+            "${test_args[@]}" \
+            test-without-building
+
+      - name: Summarize structured test results
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_OUTPUT_ROOT/evidence"
+          xcrun xcresulttool get test-results summary \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/evidence/test-summary.json"
+          xcrun xcresulttool get test-results tests --schema \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" > "$CI_OUTPUT_ROOT/evidence/test-tree-schema.json"
+          xcrun xcresulttool get test-results tests \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/evidence/test-tree.json"
+          python3 -m scripts.ios_test_shards report --mode "$TEST_MODE" \
+            --bundle "$TEST_BUNDLE" --job "$EVIDENCE_JOB" \
+            --root "$CI_OUTPUT_ROOT/evidence" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload executed evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-evidence-${{ github.run_attempt }}-${{ env.EVIDENCE_JOB }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/evidence/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Delete owned simulator
+        if: ${{ always() && steps.simulator.outputs.udid != '' }}
+        shell: bash
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -euo pipefail
+          xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true
+          xcrun simctl delete "$SIMULATOR_UDID"
+
+  ios-simulator:
+    name: iOS simulator
+    needs: [changes, ios-build, ios-unit, ios-ui]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    env:
+      TEST_MODE: ${{ needs.ios-build.outputs.mode }}
+      EVENT_NAME: ${{ github.event_name }}
+      NEEDS_JSON: ${{ toJSON(needs) }}
+    steps:
+      - name: Initialize CI output path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      # A successful classifier's explicit false is the ONLY skip exception.
+      - name: Download aggregate plan
+        if: ${{ github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ios-plan-${{ github.run_attempt }}
+          path: ${{ env.CI_OUTPUT_ROOT }}/plan
+
+      - name: Download every job evidence
+        if: ${{ always() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: ios-evidence-${{ github.run_attempt }}-*
+          path: ${{ env.CI_OUTPUT_ROOT }}/evidence
+
+      - name: Verify all jobs and UI union
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$NEEDS_JSON" > "$CI_OUTPUT_ROOT/needs.json"
+          python3 -m scripts.ios_test_shards aggregate --event "$EVENT_NAME" \
+            --needs "$CI_OUTPUT_ROOT/needs.json" --mode "$TEST_MODE" \
+            --root "$CI_OUTPUT_ROOT" --summary "$GITHUB_STEP_SUMMARY"

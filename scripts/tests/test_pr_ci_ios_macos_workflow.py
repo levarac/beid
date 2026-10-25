@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -53,8 +54,8 @@ def without_comments(text: str) -> str:
 def step_block(text: str, name: str) -> str:
     marker = f"      - name: {name}\n"
     start = text.index(marker)
-    next_step = text.find("\n      - ", start + len(marker))
-    return text[start:] if next_step == -1 else text[start:next_step]
+    following = re.search(r"\n(?:      - |  [\w-]+:\n)", text[start + len(marker):])
+    return text[start:] if following is None else text[start:start + len(marker) + following.start()]
 
 
 class PrCiIosMacosWorkflowTest(unittest.TestCase):
@@ -71,7 +72,7 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         text = workflow_text()
         creation = step_block(text, "Create owned simulator")
         self.assertIn("        id: simulator\n", creation)
-        self.assertIn('--name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB"', creation)
+        self.assertIn('--name "ci-beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}"', creation)
         self.assertIn('printf \'udid=%s\\n\' "$simulator_udid" >> "$GITHUB_OUTPUT"', creation)
         for name in ("Boot owned simulator", "Build for testing",
                      "Test without rebuilding", "Delete owned simulator"):
