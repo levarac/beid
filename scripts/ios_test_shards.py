@@ -122,9 +122,11 @@ def validate_summary(summary):
         raise ValueError('structured test summary did not pass')
 
 
-def make_report(job, mode, bundle, payload):
+def make_report(job, mode, bundle, payload, run_attempt):
     if mode not in ('smoke', 'full'):
         raise ValueError('invalid mode in report')
+    if type(run_attempt) is not int or run_attempt < 1:
+        raise ValueError('run attempt must be a positive integer')
     counts = parse_xcresult_tests(payload)
     if set(counts.bundles) != {bundle} or counts.bundles[bundle].total <= 0 or counts.warnings:
         raise ValueError('unexpected, empty or malformed test bundle')
@@ -156,7 +158,7 @@ def make_report(job, mode, bundle, payload):
         raise ValueError('test tree counts are inconsistent or failing')
     if bundle == 'BeidUITests' and any(c['result'] != 'Passed' for c in cases):
         raise ValueError('UI skips and nonpassing cases fail verification')
-    return dict(job=job, mode=mode, bundle=bundle, total=c.total, passed=c.passed,
+    return dict(job=job, run_attempt=run_attempt, mode=mode, bundle=bundle, total=c.total, passed=c.passed,
                 failed=c.failed, skipped=c.skipped, seconds=duration, cases=cases, tree=payload)
 
 
@@ -172,7 +174,7 @@ def verify_reports(plan, reports):
         if report['mode'] != plan['mode'] or report['bundle'] != bundle:
             raise ValueError('job mode or bundle mismatch')
         # Recompute from the raw tree: reports cannot claim better counts.
-        if make_report(job, plan['mode'], bundle, report['tree']) != report:
+        if make_report(job, plan['mode'], bundle, report['tree'], report['run_attempt']) != report:
             raise ValueError('report differs from raw test evidence')
         if job != 'unit':
             shard = plan['shards'][int(job.split('-')[1]) - 1]
@@ -186,10 +188,10 @@ def verify_reports(plan, reports):
 
 def summary_table(mode, reports):
     lines = [f'\nMode: **{mode}**. Durations sum Test Case nodes, excluding suite totals.\n',
-             '| Job | Bundle | Cases | Passed | Failed | Skipped | Duration (s) |',
-             '| --- | --- | ---: | ---: | ---: | ---: | ---: |']
+             '| Job | Attempt | Bundle | Cases | Passed | Failed | Skipped | Duration (s) |',
+             '| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |']
     for r in sorted(reports, key=lambda r: r['job']):
-        lines.append(f"| {r['job']} | {r['bundle']} | {r['total']} | {r['passed']} | {r['failed']} | {r['skipped']} | {r['seconds']:.3f} |")
+        lines.append(f"| {r['job']} | {r['run_attempt']} | {r['bundle']} | {r['total']} | {r['passed']} | {r['failed']} | {r['skipped']} | {r['seconds']:.3f} |")
     return '\n'.join(lines) + '\n'
 
 
@@ -244,6 +246,7 @@ def main():
     report.add_argument('--mode', choices=('smoke', 'full'), required=True)
     report.add_argument('--bundle', choices=('BeidTests', 'BeidUITests'), required=True)
     report.add_argument('--job', required=True)
+    report.add_argument('--run-attempt', type=int, required=True)
     report.add_argument('--root', type=Path, required=True)
     report.add_argument('--summary', type=Path, required=True)
     aggregate = sub.add_parser('aggregate')
@@ -272,7 +275,8 @@ def main():
             summary = json.loads((args.root / 'test-summary.json').read_text())
             # Keep raw structured failure data as an artifact even when validation fails.
             validate_summary(summary)
-            result = make_report(args.job, args.mode, args.bundle, json.loads((args.root / 'test-tree.json').read_text()))
+            result = make_report(args.job, args.mode, args.bundle,
+                                 json.loads((args.root / 'test-tree.json').read_text()), args.run_attempt)
             if result['total'] != summary['totalTestCount'] or any(
                 result[key] != summary[field] for key, field in
                 (('passed', 'passedTests'), ('failed', 'failedTests'))

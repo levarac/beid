@@ -494,8 +494,11 @@ list exactly and pass; full must pass every built UI case, including the list.
 Per-job and aggregate tables show mode, bundle counts and summed xcresult
 Test Case durations without suite totals. Evidence artifacts retain raw trees,
 summaries and per-case durations for seven days; build products last one day.
-Artifacts are attempt-scoped: re-run all jobs, not only failed jobs, to recreate
-the handoff. A full aggregate pass on the exact merge-group SHA satisfies the
+Artifacts are run-scoped: `ios-products`, `ios-plan`, and `ios-evidence-<job>`
+overwrite their prior uploads, so partial reruns reuse the build and plan and
+read each job's latest evidence. Reports and aggregate tables show the producing
+attempt. Current job results must succeed and evidence must match the plan.
+A full aggregate pass on the exact merge-group SHA satisfies the
 merge requirement. PR smoke and classifier bypasses are not full evidence.
 
 `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:

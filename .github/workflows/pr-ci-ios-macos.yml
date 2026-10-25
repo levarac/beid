@@ -310,7 +310,8 @@ jobs:
       - name: Upload test products
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-build-${{ github.run_attempt }}
+          name: ios-products
+          overwrite: true
           path: ${{ env.CI_OUTPUT_ROOT }}/products.tar.gz
           compression-level: 0
           if-no-files-found: error
@@ -319,7 +320,8 @@ jobs:
       - name: Upload shard plan
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-plan-${{ github.run_attempt }}
+          name: ios-plan
+          overwrite: true
           path: ${{ env.CI_OUTPUT_ROOT }}/plan/
           if-no-files-found: error
           retention-days: 7
@@ -369,13 +371,13 @@ jobs:
       - name: Download test products
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ios-build-${{ github.run_attempt }}
+          name: ios-products
           path: ${{ env.CI_OUTPUT_ROOT }}
 
       - name: Download shard plan
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ios-plan-${{ github.run_attempt }}
+          name: ios-plan
           path: ${{ env.CI_OUTPUT_ROOT }}/plan
 
       - name: Extract test products
@@ -436,14 +438,15 @@ jobs:
           xcrun xcresulttool get test-results tests \
             --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/evidence/test-tree.json"
           python3 -m scripts.ios_test_shards report --mode "$TEST_MODE" \
-            --bundle "$TEST_BUNDLE" --job "$EVIDENCE_JOB" \
+            --bundle "$TEST_BUNDLE" --job "$EVIDENCE_JOB" --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --root "$CI_OUTPUT_ROOT/evidence" --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Upload executed evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-evidence-${{ github.run_attempt }}-${{ env.EVIDENCE_JOB }}
+          name: ios-evidence-${{ env.EVIDENCE_JOB }}
+          overwrite: true
           path: ${{ env.CI_OUTPUT_ROOT }}/evidence/
           if-no-files-found: error
           retention-days: 7
@@ -498,13 +501,13 @@ jobs:
       - name: Download test products
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ios-build-${{ github.run_attempt }}
+          name: ios-products
           path: ${{ env.CI_OUTPUT_ROOT }}
 
       - name: Download shard plan
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ios-plan-${{ github.run_attempt }}
+          name: ios-plan
           path: ${{ env.CI_OUTPUT_ROOT }}/plan
 
       - name: Extract test products
@@ -568,14 +571,15 @@ jobs:
           xcrun xcresulttool get test-results tests \
             --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/evidence/test-tree.json"
           python3 -m scripts.ios_test_shards report --mode "$TEST_MODE" \
-            --bundle "$TEST_BUNDLE" --job "$EVIDENCE_JOB" \
+            --bundle "$TEST_BUNDLE" --job "$EVIDENCE_JOB" --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --root "$CI_OUTPUT_ROOT/evidence" --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Upload executed evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-evidence-${{ github.run_attempt }}-${{ env.EVIDENCE_JOB }}
+          name: ios-evidence-${{ env.EVIDENCE_JOB }}
+          overwrite: true
           path: ${{ env.CI_OUTPUT_ROOT }}/evidence/
           if-no-files-found: error
           retention-days: 7
@@ -618,14 +622,14 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: ios-plan-${{ github.run_attempt }}
+          name: ios-plan
           path: ${{ env.CI_OUTPUT_ROOT }}/plan
 
       - name: Download every job evidence
         if: ${{ always() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: ios-evidence-${{ github.run_attempt }}-*
+          pattern: ios-evidence-*
           path: ${{ env.CI_OUTPUT_ROOT }}/evidence
 
       - name: Verify all jobs and UI union

@@ -7,6 +7,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.tests.test_ios_ui_smoke import tree, ONE, TWO
 
@@ -92,10 +93,10 @@ class IosShardTests(unittest.TestCase):
         unit_tree = tree()['testNodes'][0]['children'][0]
         ui_tree = tree(unit=False)
         ui_children = ui_tree['testNodes'][0]['children'][0]['children'][0]['children']
-        reports = [self.tool.make_report('unit', 'full', 'BeidTests', {'testNodes': [unit_tree]})]
+        reports = [self.tool.make_report('unit', 'full', 'BeidTests', {'testNodes': [unit_tree]}, 1)]
         for i, case in enumerate(ui_children, 1):
             part = tree(ui=[case], unit=False)
-            reports.append(self.tool.make_report(f'ui-{i}', 'full', 'BeidUITests', part))
+            reports.append(self.tool.make_report(f'ui-{i}', 'full', 'BeidUITests', part, 1))
         self.tool.verify_reports(plan, reports)
         for bad in (reports[:-1], reports + [reports[-1]],
                     [{**r, 'mode': 'smoke'} for r in reports]):
@@ -103,7 +104,7 @@ class IosShardTests(unittest.TestCase):
                 self.tool.verify_reports(plan, bad)
         ui_children[0]['result'] = 'Skipped'
         with self.assertRaises(ValueError):
-            self.tool.make_report('ui-1', 'full', 'BeidUITests', tree(ui=[ui_children[0]], unit=False))
+            self.tool.make_report('ui-1', 'full', 'BeidUITests', tree(ui=[ui_children[0]], unit=False), 1)
 
     def test_summary_counts_are_structured_consistent_and_nonzero(self):
         summary = dict(result='Passed', totalTestCount=1, passedTests=1, failedTests=0,
@@ -113,6 +114,67 @@ class IosShardTests(unittest.TestCase):
                         {'result': 'Failed'}, {'skippedTests': -1}):
             with self.assertRaises(ValueError):
                 self.tool.validate_summary({**summary, **changed})
+
+    def run_rerun_aggregate(self, root, mode, unit_attempt, latest_results=None,
+                            missing_job=None, wrong_plan=False):
+        plan = self.tool.make_plan(mode, [ONE, TWO], [ONE], {}, 3)
+        (root / 'plan').mkdir()
+        (root / 'plan/plan.json').write_text(json.dumps(plan))
+        needs = {job: {'result': 'success'} for job in ('ios-build', 'ios-unit', 'ios-ui')}
+        needs['ios-build']['outputs'] = {'mode': mode}
+        for job, result in (latest_results or {}).items():
+            needs[job]['result'] = result
+        (root / 'needs.json').write_text(json.dumps(needs))
+        unit = {'testNodes': [tree()['testNodes'][0]['children'][0]]}
+        ui_cases = tree(unit=False)['testNodes'][0]['children'][0]['children'][0]['children']
+        entries = [('unit', 'BeidTests', unit, unit_attempt)]
+        for i, shard in enumerate(plan['shards'], 1):
+            cases = [case for case in ui_cases
+                     if f"BeidUITests/{case['nodeIdentifier'].removesuffix('()')}" in shard]
+            entries.append((f'ui-{i}', 'BeidUITests', tree(ui=cases, unit=False), 1))
+        for job, bundle, payload, attempt in entries:
+            if job == missing_job:
+                continue
+            report = self.tool.make_report(job, mode, bundle, payload, attempt)
+            folder = root / 'evidence' / f'ios-evidence-{job}'
+            folder.mkdir(parents=True)
+            (folder / 'report.json').write_text(json.dumps(report))
+        if wrong_plan:
+            # The evidence is passing, but it belongs to a different assignment.
+            plan['shards'].reverse()
+            (root / 'plan/plan.json').write_text(json.dumps(plan))
+        summary = root / 'summary.md'
+        with patch('sys.argv', ['ios_test_shards', 'aggregate', '--event', 'pull_request',
+                                '--mode', mode, '--needs', str(root / 'needs.json'),
+                                '--root', str(root), '--summary', str(summary)]):
+            code = self.tool.main()
+        return code, summary.read_text()
+
+    def test_partial_rerun_reuses_first_attempt_plan_and_ui_evidence(self):
+        for mode in ('smoke', 'full'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
+                code, summary = self.run_rerun_aggregate(Path(temp), mode, unit_attempt=2)
+                self.assertEqual(code, 0, summary)
+                self.assertIn('| Job | Attempt | Bundle |', summary)
+                self.assertIn('| unit | 2 | BeidTests |', summary)
+                self.assertIn('| ui-1 | 1 | BeidUITests |', summary)
+
+    def test_latest_failed_job_rejects_older_successful_evidence(self):
+        for job, attempt in itertools.product(('ios-build', 'ios-unit', 'ios-ui'), (1, 2)):
+            with self.subTest(job=job, attempt=attempt), tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
+                code, summary = self.run_rerun_aggregate(
+                    Path(temp), 'full', unit_attempt=attempt, latest_results={job: 'failure'})
+                self.assertEqual(code, 1)
+                self.assertIn(f'| {job} | failure |', summary)
+                self.assertIn('Evidence verification failed', summary)
+
+    def test_partial_rerun_success_requires_evidence_matching_plan(self):
+        for missing_job, wrong_plan in (('unit', False), ('ui-1', False), (None, True)):
+            with self.subTest(missing=missing_job, mismatch=wrong_plan), tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
+                code, summary = self.run_rerun_aggregate(
+                    Path(temp), 'full', unit_attempt=2, missing_job=missing_job, wrong_plan=wrong_plan)
+                self.assertEqual(code, 1)
+                self.assertIn('Evidence verification failed', summary)
 
     def test_pack_preserves_executable_and_symlinks_excludes_intermediates(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'build') as temp:
@@ -207,8 +269,10 @@ class IosShardTests(unittest.TestCase):
                 result='Passed', totalTestCount=1, passedTests=0, failedTests=0,
                 skippedTests=0, expectedFailures=1)))
             result = subprocess.run([sys.executable, '-m', 'scripts.ios_test_shards', 'report',
-                '--mode', 'full', '--bundle', 'BeidTests', '--job', 'unit',
+                '--mode', 'full', '--bundle', 'BeidTests', '--job', 'unit', '--run-attempt', '2',
                 '--root', str(root), '--summary', str(root / 'summary.md')],
                 cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads((root / 'report.json').read_text())['skipped'], 1)
+            self.assertEqual(json.loads((root / 'report.json').read_text())['run_attempt'], 2)
+            self.assertIn('| unit | 2 | BeidTests |', (root / 'summary.md').read_text())

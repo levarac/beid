@@ -179,8 +179,18 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertIn("scripts.ios_test_shards plan", text)
         self.assertIn("ios/ci/ui-test-durations.tsv", text)
         self.assertIn("if-no-files-found: error", text)
-        self.assertIn("ios-build-${{ github.run_attempt }}", text)
-        self.assertIn("ios-evidence-", text)
+        self.assertEqual(text.count("name: ios-products\n"), 3)
+        self.assertEqual(text.count("name: ios-plan\n"), 4)
+        self.assertEqual(text.count("name: ios-evidence-${{ env.EVIDENCE_JOB }}\n"), 2)
+        self.assertIn("pattern: ios-evidence-*\n", text)
+        self.assertNotRegex(text, r"(?:name|pattern): ios-.*github.run_attempt")
+        for name in ("Upload test products", "Upload shard plan", "Upload executed evidence"):
+            self.assertIn("overwrite: true", step_block(text, name))
+        from scripts.tests.test_pr_ci_lane_skip import job_block, IOS
+        for job in ("ios-unit", "ios-ui"):
+            block = step_block(job_block(IOS, job), "Summarize structured test results")
+            self.assertIn('--run-attempt "$GITHUB_RUN_ATTEMPT"', block)
+            self.assertIn("overwrite: true", step_block(job_block(IOS, job), "Upload executed evidence"))
         check = step_block(text, "Verify all jobs and UI union")
         self.assertIn("scripts.ios_test_shards aggregate", check)
 

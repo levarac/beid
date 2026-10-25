@@ -167,9 +167,12 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     extract it and use `-xctestrun`, with no project or DerivedData argument.
     Separate small plan and per-job evidence artifacts carry the inventory,
     assignments, raw xcresult summary/tree/schema JSON and per-case durations.
-    Products are retained one day and evidence seven days. Names include the
-    run attempt to reject stale evidence; use re-run all jobs to recreate the
-    complete handoff, since re-running only failed jobs changes that attempt.
+    Products are retained one day and evidence seven days. Run-scoped names
+    `ios-products`, `ios-plan`, and `ios-evidence-<job>` use `overwrite: true`.
+    Partial reruns reuse the existing build products and plan; the aggregate
+    reads each job's latest evidence and shows its producing run attempt.
+    Current `needs` results must all succeed, even if older passing evidence
+    exists; every successful job's evidence must exist and match the plan.
 
     `ios/ci/ui-test-durations.tsv` is outside XcodeGen source roots. Source
     run 40076919260 attempt 1 (2026-10-24) uploaded no xcresult, and its quiet
