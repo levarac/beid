@@ -71,6 +71,9 @@ private fun String.toRecordDisplayLabel(): String = if (matches(EventCodeHexPatt
     this
 }
 
+internal val RecordListItem.displayLabel: String
+    get() = eventName ?: eventLabel.toRecordDisplayLabel()
+
 fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
     id = id,
     eventLabel = eventName ?: eventCode,
@@ -103,15 +106,9 @@ fun ProofRecord.toRecordListItem(): RecordListItem = RecordListItem(
  *   iOS-only and explicitly provisional (`ios/Beid/Models/ProofSignature.swift`,
  *   beid#33).
  *
- * **Account-screen placement is a stated, deliberate divergence, not an
- * oversight**: on iOS, `CollectionHomeView` is the *home* screen and
- * `PastEventsView` is the secondary list reached from the Account sheet.
- * This screen is reached the way iOS's *secondary* list is reached, not the
- * way its primary one is — Android has no collection home yet
- * (`Screen.kt`'s own comment: "`EventJoin` stands in for iOS's `.home`").
- * Promoting this list to be the actual collection home is a separate
- * navigation decision belonging to the participation-surface work (#141),
- * not to this storage slice.
+ * Home presents event groups; this screen remains the secondary full list
+ * under Account (the iOS `PastEventsView` equivalent), and also renders a
+ * selected event's records with the same rows and detail navigation.
  *
  * **Empty-state note**: [org.levarac.beid.ui.designsystem.BeidStateScreen]
  * (icon + title + message) is this codebase's usual "whole-screen state"
@@ -195,7 +192,7 @@ internal val recordDateFormatter: DateTimeFormatter =
 
 @Composable
 private fun RecordRow(record: RecordListItem, onClick: () -> Unit) {
-    val displayLabel = record.eventName ?: record.eventLabel.toRecordDisplayLabel()
+    val displayLabel = record.displayLabel
     BeidPanel(
         modifier = Modifier
             .clickable(onClick = onClick)
@@ -247,11 +244,13 @@ fun RecordsRoute(
     proofRecordStore: ProofRecordStore,
     onOpenToday: () -> Unit,
     onOpenDetail: (UUID) -> Unit,
+    eventGroupAnchorId: UUID? = null,
 ) {
     val viewModel: RecordsViewModel = viewModel(factory = RecordsViewModel.Factory(proofRecordStore))
     val records by viewModel.records.collectAsState()
     RecordsScreen(
-        records = records.map(ProofRecord::toRecordListItem),
+        records = (eventGroupAnchorId?.let { proofRecordsForGroup(records, it) } ?: records)
+            .map(ProofRecord::toRecordListItem),
         onOpenToday = onOpenToday,
         onOpenDetail = onOpenDetail,
     )
