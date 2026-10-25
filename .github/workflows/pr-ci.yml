@@ -215,6 +215,8 @@ jobs:
           swiftlint version
       - name: Run design-contract lint
         run: scripts/lint.sh
+      - name: Verify design-contract lint fixtures
+        run: python3 scripts/check_lint_fixtures.py
 
   sanity:
     name: Repository sanity
