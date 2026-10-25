@@ -35,7 +35,10 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
       envelopes: [scheduling], validFromUnixSeconds: 1_799_997_000, validUntilUnixSeconds: 1_800_003_299
     )
     let schedule = try XCTUnwrap(result.schedule)
-    XCTAssertTrue(String(reflecting: type(of: schedule)).hasPrefix("BeidSharedKit."))
+    XCTAssertEqual(
+      ObjectIdentifier(type(of: schedule)),
+      ObjectIdentifier(ExportedKotlinPackages.org.levarac.parallax.venue.VenueVerifiedSchedule.self)
+    )
     XCTAssertNil(result.failureCode)
     XCTAssertEqual(schedule.requiredEndEnin, 6_000_010)
   }

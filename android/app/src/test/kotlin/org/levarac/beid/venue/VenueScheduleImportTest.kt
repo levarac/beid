@@ -1,6 +1,5 @@
 package org.levarac.beid.venue
 
-import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.SocketException
@@ -88,11 +87,10 @@ class VenueScheduleImportTest {
     }
 
     private fun fixture(name: String): ByteArray {
-        val root = generateSequence(File(System.getProperty("user.dir")).canonicalFile) { it.parentFile }
-            .first { File(it, "ios/BeidTests/Fixtures/venue-bundle-conformance").isDirectory }
-        val file = File(root, "ios/BeidTests/Fixtures/venue-bundle-conformance/$name")
-        return if (name.endsWith(".hex")) file.readText().trim().chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        else file.readBytes()
+        val bytes = requireNotNull(javaClass.getResourceAsStream("/$name")).use { it.readBytes() }
+        return if (name.endsWith(".hex")) {
+            bytes.decodeToString().trim().chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        } else bytes
     }
 
     private companion object {

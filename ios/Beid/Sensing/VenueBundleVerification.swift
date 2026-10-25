@@ -391,139 +391,69 @@ enum VenueBundleVerificationLogic {
     }
   }
 
-  /// Floor division/modulo matching Kotlin's `Math.floorDiv`/`floorMod`
-  /// (rounds toward negative infinity; Swift's `/`/`%` truncate toward
-  /// zero). Duplicated from `BarnardB005EnvelopeV2.registryAgreement`'s
-  /// private helpers of the same name/behavior, because that function
-  /// exposes only its agree/mismatch verdict, never the two ENIN bounds a
-  /// coverage check over the WHOLE definition window needs. The barnard
-  /// Kotlin/Swift pair already duplicates this exact pair of functions
-  /// across languages for the same reason, so a third copy here follows an
-  /// established pattern rather than starting a new one.
+  // Compatibility adapters for the existing native test/API surface. All
+  // schedule arithmetic and decisions are owned by shared; no native rules.
   static func floorDiv(_ a: Int64, _ b: Int64) -> Int64 {
-    let q = a / b, r = a % b
-    return (r != 0 && (r < 0) != (b < 0)) ? q - 1 : q
+    ExportedKotlinPackages.org.levarac.parallax.venue.venueFloorDiv(a: a, b: b)
   }
 
   static func floorMod(_ a: Int64, _ b: Int64) -> Int64 {
-    let r = a % b
-    return (r != 0 && (r < 0) != (b < 0)) ? r + b : r
+    ExportedKotlinPackages.org.levarac.parallax.venue.venueFloorMod(a: a, b: b)
   }
 
-  /// Compares verified ENIN intervals only after converting each interval to
-  /// its own half-open Unix-second range. ENIN indices from different cadences
-  /// are not interchangeable.
   static func hasOverlappingEnvelopeIntervals(
     _ intervals: [(start: Int64, end: Int64, eninSeconds: Int64)]
   ) -> Bool {
-    var normalized: [(start: Int64, end: Int64)] = []
-    for interval in intervals {
-      guard interval.eninSeconds > 0, interval.start < interval.end else { return true }
-      let startProduct = interval.start.multipliedReportingOverflow(by: interval.eninSeconds)
-      let endProduct = interval.end.multipliedReportingOverflow(by: interval.eninSeconds)
-      guard !startProduct.overflow, !endProduct.overflow else { return true }
-      let start = startProduct.partialValue
-      let end = endProduct.partialValue
-      if normalized.contains(where: { start < $0.end && $0.start < end }) { return true }
-      normalized.append((start: start, end: end))
-    }
-    return false
+    ExportedKotlinPackages.org.levarac.parallax.venue.venueScheduleHasOverlap(
+      intervals: intervals.map {
+        ExportedKotlinPackages.org.levarac.parallax.venue.VenueScheduleInterval(
+          start: $0.start, end: $0.end, eninSeconds: $0.eninSeconds
+        )
+      }
+    )
   }
 
-  /// The definition's Unix-second validity window, converted to the same
-  /// inclusive ENIN convention `BarnardB005EnvelopeV2.registryAgreement`
-  /// uses for its `registryStartEnin`/`registryEndEnin` (start rounded up,
-  /// end rounded down). Returns `nil` for a malformed window, matching that
-  /// function's own well-formedness guard.
   static func definitionEninWindow(
     validFromUnixSeconds: Int64,
     validUntilUnixSeconds: Int64,
     eninSeconds: Int64
   ) -> (start: Int64, end: Int64)? {
-    guard eninSeconds > 0, validFromUnixSeconds >= 0, validUntilUnixSeconds >= 0,
-          validFromUnixSeconds <= validUntilUnixSeconds
-    else { return nil }
-    let start = -floorDiv(-validFromUnixSeconds, eninSeconds)
-    let q = floorDiv(validUntilUnixSeconds, eninSeconds)
-    let r = floorMod(validUntilUnixSeconds, eninSeconds)
-    let end = r == eninSeconds - 1 ? q : q - 1
-    return (start, end)
+    ExportedKotlinPackages.org.levarac.parallax.venue.venueDefinitionEninWindow(
+      validFromUnixSeconds: validFromUnixSeconds,
+      validUntilUnixSeconds: validUntilUnixSeconds,
+      eninSeconds: eninSeconds
+    ).map { (start: $0.start, end: $0.end) }
   }
 
-  /// True when the union of `candidates` (each `[from, to)`, half-open)
-  /// leaves any ENIN in `[requiredStart, requiredEnd)` uncovered.
-  ///
-  /// `requiredEnd` is EXCLUSIVE, deliberately: per
-  /// `BarnardB005EnvelopeV2.registryAgreement`'s own documentation, the ENIN
-  /// at `requiredEnd` itself can never be covered by any envelope
-  /// (`relayExpiresAtEnin <= validThroughEnin` bars an envelope from ending
-  /// after the definition's last inclusive ENIN), so requiring an inclusive
-  /// `[requiredStart, requiredEnd]` would reject every real bundle.
   static func hasCoverageGap(
-    candidates: [(from: Int64, to: Int64)],
-    requiredStart: Int64,
-    requiredEnd: Int64
+    candidates: [(from: Int64, to: Int64)], requiredStart: Int64, requiredEnd: Int64
   ) -> Bool {
-    guard requiredStart < requiredEnd else { return false }
-    let sorted = candidates
-      .filter { $0.from < $0.to }
-      .sorted { $0.from < $1.from }
-    var coveredThrough = requiredStart
-    for candidate in sorted {
-      if candidate.from > coveredThrough { break }
-      coveredThrough = max(coveredThrough, candidate.to)
-      if coveredThrough >= requiredEnd { return false }
-    }
-    return coveredThrough < requiredEnd
+    ExportedKotlinPackages.org.levarac.parallax.venue.venueScheduleHasGap(
+      candidates: candidates.map {
+        ExportedKotlinPackages.org.levarac.parallax.venue.VenueScheduleInterval(start: $0.from, end: $0.to, eninSeconds: 1)
+      },
+      requiredStart: requiredStart, requiredEnd: requiredEnd
+    )
   }
 
-  /// The coverage verdict, as an exhaustive three-way outcome rather than an
-  /// optional/boolean pair a caller could chain with `if let` and
-  /// accidentally fall through on `nil`. `.uncomputable` covers BOTH "no
-  /// envelope verified at all" (`referenceEninSeconds == nil`) and "the
-  /// definition's own window will not convert to ENIN terms"
-  /// (`definitionEninWindow` returns `nil`) -- "could not determine
-  /// coverage" and "coverage is satisfied" must never produce the same
-  /// outcome, so both map to a refusal here, not to a pass-through. Whether
-  /// the second case is actually reachable given this file's window formula
-  /// matching `BarnardB005EnvelopeV2.registryAgreement`'s is a cross-repo
-  /// invariant this file cannot enforce on its own, so it is not assumed
-  /// impossible.
-  ///
-  /// PHASE 2 GATE. `ProductionVenueBundleVerifier.importBundle` calls this
-  /// after every envelope has been verified through Barnard and compared with
-  /// the anchored definition. The phase-1 ruling in
-  /// `docs/plans/2026-09-10-venue-bundle-import.md` deliberately excluded this
-  /// gate; the phase-2 acceptance condition now makes it load-bearing.
-  enum CoverageOutcome: Equatable { case uncomputable, gap, covered }
+  enum CoverageOutcome: String { case uncomputable, gap, covered }
 
-  /// KNOWN LIMITATION, latent rather than live: `coverageIntervals` are
-  /// compared as raw ENIN numbers against a window converted at the single
-  /// `referenceEninSeconds` granularity, without checking that every interval
-  /// was computed at that same granularity. A single real bundle today only
-  /// ever carries one envelope (barnard's producer emits one per bundle;
-  /// nothing writes a multi-envelope VenueBundleV1 yet -- see
-  /// levarac/parallax#108), so this cannot be exercised now. It would matter
-  /// for a bundle whose envelopes legitimately (or adversarially) mix
-  /// eninSeconds values once multi-envelope bundles exist: mixing ENIN
-  /// numbers computed at different granularities would compare incompatible
-  /// units. A phase-2 caller building `coverageIntervals` owes that check.
   static func coverageOutcome(
     referenceEninSeconds: UInt16?,
     validFromUnixSeconds: Int64,
     validUntilUnixSeconds: Int64,
     coverageIntervals: [(from: Int64, to: Int64)]
   ) -> CoverageOutcome {
-    guard let referenceEninSeconds,
-          let window = definitionEninWindow(
-            validFromUnixSeconds: validFromUnixSeconds,
-            validUntilUnixSeconds: validUntilUnixSeconds,
-            eninSeconds: Int64(referenceEninSeconds)
-          )
-    else { return .uncomputable }
-    return hasCoverageGap(candidates: coverageIntervals, requiredStart: window.start, requiredEnd: window.end)
-      ? .gap : .covered
+    let code = ExportedKotlinPackages.org.levarac.parallax.venue.venueScheduleCoverageCode(
+      referenceEninSeconds: referenceEninSeconds.map { Int64($0) },
+      validFromUnixSeconds: validFromUnixSeconds, validUntilUnixSeconds: validUntilUnixSeconds,
+      coverageIntervals: coverageIntervals.map {
+        ExportedKotlinPackages.org.levarac.parallax.venue.VenueScheduleInterval(start: $0.from, end: $0.to, eninSeconds: 1)
+      }
+    )
+    return CoverageOutcome(rawValue: code) ?? .uncomputable
   }
+
 }
 
 /// Production `VenueBundleVerifying`. This is the first production caller of
@@ -663,9 +593,9 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
         return .rejected(failure)
       }
       guard case .usable(let barnardDefinition) = Self.barnardDefinition(from: identity.definition),
-            !Self.hasInvalidOrOverlappingEnvelope(
+            Self.importSchedule(
               bundle: bundle, definition: barnardDefinition, nameValidator: nameValidator
-      )
+      ).schedule != nil
       else {
         return .rejected(.definitionRejected)
       }
@@ -680,39 +610,34 @@ final class ProductionVenueBundleVerifier: VenueBundleVerifying {
     }
   }
 
-  private static func hasInvalidOrOverlappingEnvelope(
+  /// Barnard owns decoding/signatures/agreement; shared owns the complete schedule.
+  private static func importSchedule(
     bundle: ExportedKotlinPackages.org.levarac.parallax.venue.VenueBundle,
     definition: BarnardEventDefinitionV1,
     nameValidator: any BarnardB005DisplayNameNormalizing
-  ) -> Bool {
-    var intervals: [(start: Int64, end: Int64, eninSeconds: Int64)] = []
-    var referenceEninSeconds: UInt16?
-    for index in 0..<Int(bundle.envelopeCount) {
-      guard let bytes = bundle.envelopeAt(index: Int32(index)) else { return true }
-      let signed = Self.swiftBytes(fromKotlin: bytes)
-      guard let container = BarnardB005EnvelopeV2.encodeContainer(relayHopCount: 0, signedEnvelope: signed),
-        let hint = BarnardB005EnvelopeV2.schedulingFields(container: container),
-        hint.eninSeconds > 0,
-        let verified = BarnardB005EnvelopeV2.verify(
-          container: container, currentEnin: hint.validFromEnin, nameValidator: nameValidator
-        ),
-        BarnardB005EnvelopeV2.registryAgreement(verified, definition: definition) == .agrees
-      else { return true }
-      if let referenceEninSeconds, referenceEninSeconds != verified.eninSeconds {
-        return true
+  ) -> ExportedKotlinPackages.org.levarac.parallax.venue.VenueScheduleCheck {
+    let scheduling: [ExportedKotlinPackages.org.levarac.parallax.venue.VenueVerifiedScheduling?] =
+      (0..<Int(bundle.envelopeCount)).map { index in
+        guard let bytes = bundle.envelopeAt(index: Int32(index)) else { return nil }
+        let signed = Self.swiftBytes(fromKotlin: bytes)
+        guard let container = BarnardB005EnvelopeV2.encodeContainer(relayHopCount: 0, signedEnvelope: signed),
+          let hint = BarnardB005EnvelopeV2.schedulingFields(container: container),
+          hint.eninSeconds > 0,
+          let verified = BarnardB005EnvelopeV2.verify(
+            container: container, currentEnin: hint.validFromEnin, nameValidator: nameValidator
+          ),
+          BarnardB005EnvelopeV2.registryAgreement(verified, definition: definition) == .agrees
+        else { return nil }
+        return ExportedKotlinPackages.org.levarac.parallax.venue.VenueVerifiedScheduling(
+          validFromEnin: verified.validFromEnin, validThroughEnin: verified.validThroughEnin,
+          relayExpiresAtEnin: verified.relayExpiresAtEnin, eninSeconds: Int32(verified.eninSeconds),
+          verifiedAtEnin: hint.validFromEnin
+        )
       }
-      referenceEninSeconds = verified.eninSeconds
-      if VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals(
-        intervals + [(start: verified.validFromEnin, end: verified.relayExpiresAtEnin, eninSeconds: Int64(verified.eninSeconds))]
-      ) { return true }
-      intervals.append((start: verified.validFromEnin, end: verified.relayExpiresAtEnin, eninSeconds: Int64(verified.eninSeconds)))
-    }
-    return VenueBundleVerificationLogic.coverageOutcome(
-      referenceEninSeconds: referenceEninSeconds,
-      validFromUnixSeconds: definition.validFromUnixSeconds,
-      validUntilUnixSeconds: definition.validUntilUnixSeconds,
-      coverageIntervals: intervals.map { ($0.start, $0.end) }
-    ) != .covered
+    return ExportedKotlinPackages.org.levarac.parallax.venue.verifyVenueBundleSchedule(
+      envelopes: scheduling, validFromUnixSeconds: definition.validFromUnixSeconds,
+      validUntilUnixSeconds: definition.validUntilUnixSeconds
+    )
   }
 
   func evaluate(_ imported: VenueImportedBundle, clock: VenueClockReading) async -> VenueServingDecision {
