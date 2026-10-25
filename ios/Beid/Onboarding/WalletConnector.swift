@@ -70,8 +70,8 @@ enum WalletConnectorError: Error, Equatable {
   case relayFailure(String)
   /// An in-flight operation that did not complete while the SDK session was
   /// deliberately left intact. Both `cancelPendingOperation()` and a newer
-  /// connection attempt superseding an older one produce this result. The
-  /// active gate MUST resolve its `CheckedContinuation` with some value
+  /// connection or signing attempt superseding an older one produce this
+  /// result. The active gate MUST resolve its `CheckedContinuation` with some value
   /// before dropping the reference — an unresumed continuation traps on
   /// deallocation, so the awaiting caller either crashes (debug) or hangs
   /// forever (release). Of the other three existing cases, none is a
