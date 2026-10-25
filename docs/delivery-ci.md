@@ -374,7 +374,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   **`scripts/check_pr_ci_doc_drift.py` checks all three PR build workflows**
   against `AGENTS.md`, including the separate iOS and lab CLI job names and
-  distinguishing commands. Trigger, head checkout, hosted runner and secret
+  distinguishing commands. The scripts unittest discovery command is checked
+  in both directions, including whitespace and continued-line forms; an echo
+  or comment mentioning it is not execution evidence. Trigger, head checkout, hosted runner and secret
   boundaries are guarded by the contract tests in `scripts/tests`.
 
   Recommended required status checks on main: `Determine changed paths`,
