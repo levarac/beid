@@ -48,6 +48,9 @@ class EventJoinViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(0, reads)
         model.requestScanClose()
+        assertEquals(0, reads, "opening must return before evaluating the aggregate")
+        assertEquals(ScanSessionMetrics(), model.uiState.value.scanSessionMetrics)
+        testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(1, reads)
         assertEquals(1, model.uiState.value.scanSessionMetrics.windowCount)
         metrics.value = { reads++; ScanSessionMetrics(windowCount = 2) }

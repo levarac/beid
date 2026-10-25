@@ -152,6 +152,9 @@ class ScanCloseTest {
                 assertEquals(0, proofs.records.size)
                 return@runTest
             }
+            // Retain the old callback before any external session change removes its screen.
+            val confirm = compose.onNodeWithText("Stop and keep record").performScrollTo().assertIsDisplayed()
+                .fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
             if (replaceSession) {
                 coordinator.leaveEvent()
                 joinPromotedVectorEvent(coordinator, engine, registry)
@@ -159,10 +162,9 @@ class ScanCloseTest {
                 engine.emitDetection(enin = 5, rpid = "ee", detectedDisplayId = "device-5")
                 engine.emitDetection(enin = 6, rpid = "ff", detectedDisplayId = "device-6")
                 assertEquals(2, collected.size)
+                compose.onNodeWithText("Stop sensing?").assertDoesNotExist()
             }
             val beforeConfirm = coordinator.state.value
-            val confirm = compose.onNodeWithText("Stop and keep record").performScrollTo().assertIsDisplayed()
-                .fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
             // Invoke the same captured callback twice, including after its screen disappears.
             compose.runOnIdle { confirm(); confirm() }
             if (replaceSession) {
