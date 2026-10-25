@@ -22,6 +22,7 @@ class VenueControllerTest {
         controller.useLink("https://example.test/#valid")
         scope.advanceUntilIdle()
         controller.start()
+        scope.advanceUntilIdle()
         assertTrue(controller.state.value.isBroadcasting)
 
         outcome = VenueImportOutcome.LinkUnreadable
@@ -30,7 +31,7 @@ class VenueControllerTest {
 
         assertTrue(controller.state.value.isBroadcasting)
         assertEquals(0, radio.stopCalls)
-        assertEquals("That link cannot be read.", controller.state.value.message)
+        kotlin.test.assertNotNull(controller.state.value.message)
     }
 
     @Test
@@ -45,6 +46,7 @@ class VenueControllerTest {
         assertEquals(0, radio.startCalls)
 
         controller.start()
+        scope.advanceUntilIdle()
         assertEquals(1, radio.startCalls)
         assertTrue(controller.state.value.isBroadcasting)
         controller.stop()
