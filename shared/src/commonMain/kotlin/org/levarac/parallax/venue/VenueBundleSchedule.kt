@@ -30,18 +30,23 @@ public class VenueScheduleCheck internal constructor(
  * Native Barnard must verify EVERY decoded envelope at its own start ENIN and
  * check registry agreement first. Pass its verified scheduling in bundle order;
  * a null entry represents any malformed, signature-rejected or disagreeing
- * envelope. Shared never decodes B005, verifies signatures, or reimplements its
- * signing/cadence-limit semantics (KMP-002).
+ * envelope. Barnard verify owns per-envelope verification-time eligibility,
+ * relay expiry <= validThroughEnin, signatures and the relay lifetime cap.
+ * Barnard registryAgreement owns containment of each envelope's validity window
+ * in the venue definition. Shared relies on those native verdicts and does not
+ * recheck verifiedAtEnin or validThroughEnin (KMP-002).
  *
- * Oracle: iOS ProductionVenueBundleVerifier at 59862267. All envelopes must have
+ * Beid bundle policy, from iOS ProductionVenueBundleVerifier at 59862267:
+ * all envelopes must have
  * one cadence, non-overlapping [validFromEnin, relayExpiresAtEnin) eligibility,
  * and tile the definition's required [ceil(validFrom / cadence), lastCompleteEnin)
  * span. The last complete definition ENIN is deliberately EXCLUSIVE for coverage:
  * the SDK's signed relay expiry cannot extend past that ENIN. validThroughEnin
- * is metadata, not an inclusive relay endpoint. Input verification must itself
- * have happened within the half-open eligibility interval.
+ * is metadata, not an inclusive relay endpoint. This definition-window arithmetic
+ * sets the bundle's required coverage span; it does not validate individual
+ * envelopes against the definition again.
  *
- * Rejections: malformed_envelope, outside_definition_window, mixed_cadence,
+ * Rejections: malformed_envelope, mixed_cadence,
  * overlap (including duplicates), gap, invalid_definition_window.
  * A successful schedule authorizes no broadcasting and contains no clock lease.
  */
@@ -56,21 +61,15 @@ public fun verifyVenueBundleSchedule(
     for (candidate in envelopes) {
         val envelope = candidate ?: return scheduleRejected("malformed_envelope")
         val interval = VenueScheduleInterval(envelope.validFromEnin, envelope.relayExpiresAtEnin, envelope.eninSeconds.toLong())
-        if (normalizedInterval(interval) == null ||
-            envelope.verifiedAtEnin < interval.start || envelope.verifiedAtEnin >= interval.end
-        ) return scheduleRejected("malformed_envelope")
-        val window = venueDefinitionEninWindow(validFromUnixSeconds, validUntilUnixSeconds, interval.eninSeconds)
-            ?: return scheduleRejected("invalid_definition_window")
-        if (interval.start < window.start || interval.end > window.end || envelope.validThroughEnin > window.end) {
-            return scheduleRejected("outside_definition_window")
-        }
+        if (normalizedInterval(interval) == null) return scheduleRejected("malformed_envelope")
         if (referenceCadence != null && referenceCadence != envelope.eninSeconds) return scheduleRejected("mixed_cadence")
         referenceCadence = envelope.eninSeconds
         intervals += interval
     }
     if (venueScheduleHasOverlap(intervals)) return scheduleRejected("overlap")
     val cadence = requireNotNull(referenceCadence)
-    val window = requireNotNull(venueDefinitionEninWindow(validFromUnixSeconds, validUntilUnixSeconds, cadence.toLong()))
+    val window = venueDefinitionEninWindow(validFromUnixSeconds, validUntilUnixSeconds, cadence.toLong())
+        ?: return scheduleRejected("invalid_definition_window")
     if (venueScheduleHasGap(intervals, window.start, window.end)) return scheduleRejected("gap")
     return VenueScheduleCheck(VenueVerifiedSchedule(envelopes.size, cadence, window.start, window.end), null)
 }
