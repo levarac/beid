@@ -26,9 +26,10 @@ internal class ReportProofLinkStoreException(val reason: Reason) : IOException(r
 
 /**
  * Display-only, on-device links (beid#769), matching iOS's ReportProofLinkStore.
- * The window accumulator is the only writer, at window close. Neither this
+ * The window accumulator is the only writer, at window open. Neither this
  * store nor its Proof ids enter the submission context, ledger, signing or drain.
- * Existing records and recovered drafts stay unlinked; nothing infers links.
+ * Existing records and recovered drafts gain no new links; an open-time row
+ * survives recovery unchanged. Nothing infers links.
  *
  * There is no delete API. Any future change that deletes a Proof or a report
  * record must delete the matching link rows in the same change.

@@ -11,6 +11,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -23,6 +24,7 @@ import org.levarac.beid.persistence.SelfProofRecordStore
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
 import org.levarac.beid.persistence.WindowObservationDraftStore
+import org.levarac.parallax.registry.EventDefinitionResolution
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportProofLinkWiringTest {
@@ -163,6 +165,9 @@ class ReportProofLinkWiringTest {
     fun restoredDraftWithoutAnOpenTimeRowStaysUnlinked() {
         val directory = directory()
         observe(accumulator(directory, null), 6_000_000, PROOF)
+        ProofRecordStore(ProofRecordStore.defaultFile(directory)).add(
+            ProofRecord(PROOF, "event", Instant.EPOCH, peersVerified = 3),
+        )
         var recoveryWrites = 0
         val store = ReportProofLinkContract(linkFile(directory)) { _, _ -> recoveryWrites++ }
         accumulator(directory, store).recoverAfterRelaunch()
@@ -252,6 +257,99 @@ class ReportProofLinkWiringTest {
             "an Activity replacement does not transfer the retained window to the new session")
     }
 
+    @Test
+    fun runtimeOwnerPreservesEpochMillisecondsInRetryDeadlines() {
+        val directory = directory()
+        var lookupTime: Long? = null
+        val registry = object : EventJoinRegistry {
+            override fun resolveEventId(code: String, completion: (String?, String?) -> Unit) {
+                error("A queued window already has its event id")
+            }
+
+            override fun resolveEventDefinition(
+                eventIdHex: String,
+                useTimeEpochSeconds: Long,
+                completion: (EventDefinitionResolution?, String?) -> Unit,
+            ) {
+                lookupTime = useTimeEpochSeconds
+                completion(null, "timeout")
+            }
+        }
+        val runtime = WindowObservationRuntimeOwner(newWindowId = { WINDOW }).acquire(
+            filesDir = directory,
+            cryptography = SigningCryptography(),
+            nowEpochSeconds = { 1_800_000_000.75 },
+            eventJoinRegistry = registry,
+        )
+        try {
+            runtime.updateContext(WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32)))
+            observe(runtime.accumulator, 6_000_000, PROOF)
+            assertTrue(runtime.accumulator.close())
+            assertEquals(1_800_000_000L, lookupTime)
+            assertEquals(1_800_000_030_750L, runtime.accumulator.retryNotBeforeEpochMilliseconds())
+        } finally {
+            runtime.submissionDrain.close()
+        }
+    }
+
+    @Test
+    fun repeatedRelaunchRecoveryNeverPromotesALiveRecordingWindow() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        val accumulator = accumulator(directory, store)
+        accumulator.recoverAfterRelaunch()
+        observe(accumulator, 6_000_000, PROOF)
+        val draft = directory.resolve("draft.snapshot").readBytes()
+        val before = submissionFiles(directory)
+
+        accumulator.recoverAfterRelaunch()
+
+        assertNotNull(WindowObservationDraftStore(directory.resolve("draft.snapshot")).load())
+        assertContentEquals(draft, directory.resolve("draft.snapshot").readBytes())
+        assertTrue(directory.resolve("observations").listFiles().orEmpty().isEmpty())
+        before.forEach { (path, bytes) -> assertContentEquals(bytes, directory.resolve(path).readBytes(), path) }
+        assertEquals(listOf(WINDOW to PROOF), store.links())
+        assertTrue(accumulator.close())
+    }
+
+    @Test
+    fun failedPreparationRefusesAnotherEventAndKeepsTheOriginalProof() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        val signer = SigningCryptography()
+        var keyReadable = true
+        val cryptography = object : SensingCryptography by signer {
+            override fun eventSigningPublicKey(eventCode: String): ByteArray =
+                if (keyReadable) signer.eventSigningPublicKey(eventCode) else byteArrayOf()
+        }
+        val accumulator = accumulator(directory, store, cryptography = cryptography)
+        observe(accumulator, 6_000_000, PROOF)
+        keyReadable = false
+
+        assertFalse(accumulator.beginEvent("other"))
+        assertNotNull(WindowObservationDraftStore(directory.resolve("draft.snapshot")).load())
+        assertEquals(listOf(WINDOW to PROOF), store.links())
+
+        keyReadable = true
+        assertTrue(accumulator.close())
+    }
+
+    @Test
+    fun bufferedSessionNeverLinksAWindowUsingAnotherEventsContext() {
+        val directory = directory()
+        val store = ReportProofLinkContract(linkFile(directory))
+        var context: WindowObservationContext? = null
+        val accumulator = accumulator(directory, store, context = { context })
+        observe(accumulator, 6_000_000, PROOF)
+        context = WindowObservationContext("other", "31".repeat(32), "32".repeat(32), "ab".repeat(32))
+
+        assertTrue(accumulator.close())
+
+        assertEquals(emptyList(), store.links())
+        assertFalse(linkFile(directory).exists())
+        assertNull(SubmissionRecordStore(SubmissionRecordStore.defaultFile(directory)).recordFor(WINDOW.toString()))
+    }
+
     private fun completedWithoutLinks(): File = directory().also {
         val accumulator = accumulator(it, null)
         // The pre-link call path has neither a store nor a Proof argument.
@@ -279,11 +377,15 @@ class ReportProofLinkWiringTest {
         directory: File,
         store: ReportProofLinkContract?,
         onWindowClosed: () -> Unit = {},
+        cryptography: SensingCryptography = SigningCryptography(),
+        context: () -> WindowObservationContext? = {
+            WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32))
+        },
     ): WindowObservationAccumulator {
         val ids = ArrayDeque(listOf(WINDOW, OTHER_WINDOW))
         return WindowObservationAccumulator(
-            context = { WindowObservationContext("event", "21".repeat(32), "22".repeat(32), "ab".repeat(32)) },
-            cryptography = SigningCryptography(),
+            context = context,
+            cryptography = cryptography,
             ledgerStore = UnsentWindowLedgerStore(directory.resolve("ledger.snapshot")),
             draftStore = WindowObservationDraftStore(directory.resolve("draft.snapshot")),
             observationDirectory = directory.resolve("observations"),

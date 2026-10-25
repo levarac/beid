@@ -257,7 +257,6 @@ internal class WindowObservationAccumulator(
     private var activeEventCode: String? = null
     private var recordingObserved = false
     private var recordingProofId: UUID? = null
-    private var openedProofId: UUID? = null
     private var recovered = false
 
     /**
@@ -376,12 +375,18 @@ internal class WindowObservationAccumulator(
         openedWindowId = id
         openedContext = openingContext
         openedReporterRpid = openingReporter
-        // Retain the original session identity with this process-owned window,
-        // including across Activity replacement. A new coordinator's Proof must
-        // never take ownership of an already-open window. Nothing is persisted
-        // here: only closeCurrentWindow writes a link, and recovered drafts
-        // have no live session identity from which to make one.
-        openedProofId = recordingProofId
+        // Write once while the opening session is known. A retained window
+        // never reaches this point again under a replacement coordinator, and
+        // draft recovery has no live session from which to create a link.
+        recordingProofId?.let { proofId ->
+            try {
+                reportProofLinkStore?.add(id, proofId)
+            } catch (_: Exception) {
+                // A display-only failure must never block signing, alter queue
+                // state or leak identifiers through an exception's message.
+                logRuntimeDiagnostic("Unable to persist a report-to-proof link; the report stays unlinked")
+            }
+        }
         persistDraft()
         persistSubmissionRecord(id.toString().lowercase(), openingContext.eventIdHex, openingContext.submissionConfiguration)
         return true
@@ -456,15 +461,6 @@ internal class WindowObservationAccumulator(
             if (BuildConfig.DEBUG) logRuntimeDiagnostic("window_close outcome=failure_not_preparable")
             return false
         }
-        openedProofId?.let { proofId ->
-            try {
-                reportProofLinkStore?.add(id, proofId)
-            } catch (_: Exception) {
-                // A display-only failure must never block signing, alter queue
-                // state or leak identifiers through an exception's message.
-                logRuntimeDiagnostic("Unable to persist a report-to-proof link; the report stays unlinked")
-            }
-        }
         val signature = cryptography.signWindowReport(
             closingContext.eventCode,
             prepared.signatureStructure.toByteArray(),
@@ -528,7 +524,6 @@ internal class WindowObservationAccumulator(
         openedReporterRpid = null
         recordingObserved = false
         recordingProofId = null
-        openedProofId = null
     }
 
     /**
