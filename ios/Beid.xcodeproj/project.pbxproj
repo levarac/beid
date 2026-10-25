@@ -1456,8 +1456,8 @@
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\nKMP_JAVA_HOME=\"$(\"$SRCROOT/../scripts/resolve_kmp_java_home.sh\")\"\nexport JAVA_HOME=\"$KMP_JAVA_HOME\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\necho \"Using KMP JDK: $JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\ncd \"$SRCROOT/../android\"\n./gradlew :shared:embedSwiftExportForXcode --no-daemon --console=plain 2>&1 \\\n  | awk -f \"$SRCROOT/../scripts/gradle_task_summary.awk\"\n";
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nKMP_JAVA_HOME=\"$(\"$SRCROOT/../scripts/resolve_kmp_java_home.sh\")\"\nexport JAVA_HOME=\"$KMP_JAVA_HOME\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\necho \"Using KMP JDK: $JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\ncd \"$SRCROOT/../android\"\n./gradlew :shared:embedSwiftExportForXcode --no-daemon\n";
 		};
 		F2B6B1CB58EACE18BFC50F4D /* Build BeidSharedKit */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -1475,8 +1475,8 @@
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\nKMP_JAVA_HOME=\"$(\"$SRCROOT/../scripts/resolve_kmp_java_home.sh\")\"\nexport JAVA_HOME=\"$KMP_JAVA_HOME\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\ncd \"$SRCROOT/../android\"\n./gradlew :shared:embedSwiftExportForXcode --no-daemon --console=plain 2>&1 \\\n  | awk -f \"$SRCROOT/../scripts/gradle_task_summary.awk\"\n";
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nKMP_JAVA_HOME=\"$(\"$SRCROOT/../scripts/resolve_kmp_java_home.sh\")\"\nexport JAVA_HOME=\"$KMP_JAVA_HOME\"\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\ncd \"$SRCROOT/../android\"\n./gradlew :shared:embedSwiftExportForXcode --no-daemon\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

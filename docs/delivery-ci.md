@@ -237,8 +237,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
       the missing DSL entries on the next successful save.
       The key hashes all Gradle scripts/properties/wrappers, TOML catalogs,
       `scripts/resolve_kmp_java_home.sh` and this workflow. The JDK resolver is
-      the only repository script affecting dependency setup; the task-summary
-      filter only streams logs. Unrelated Python edits do not invalidate
+      the only repository script called by the Xcode build phases; Gradle
+      invokes no repository scripts. Unrelated Python edits do not invalidate
       dependencies. A toolchain prefix restores the latest compatible entry
       when the exact key misses. Gradle verifies module artifacts and native
       toolchains use versioned directories; configuration is still evaluated.
@@ -281,10 +281,7 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     packs this run's products and executes every planned test on fresh owned
     simulators. Build logs now hide shell-script environments and include
     verbose phase/Gradle output plus `-showBuildTimingSummary`; timing sums can
-    overlap and are not a substitute for job wall clocks. Both Beid and BeidLab
-    use plain Gradle output and print one task-outcome line, including zero
-    `FROM-CACHE` counts. Repeated task headers are counted once; `pipefail`
-    preserves Gradle failures through the streaming filter. Cache corruption is
+    overlap and are not a substitute for job wall clocks. Cache corruption is
     a failure to investigate, never a reason to accept old test evidence.
     Cache misses/eviction rebuild from pinned dependencies. Cache entry sizes
     and restore/save time must be checked on hosted runs: the repository's
