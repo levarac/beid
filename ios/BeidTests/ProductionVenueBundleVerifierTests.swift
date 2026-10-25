@@ -278,6 +278,12 @@ final class ProductionVenueBundleVerifierTests: XCTestCase {
 
   // MARK: - VenueBundleVerificationLogic: join mode
 
+  func testEveryExportedJoinModeHasAnExplicitBarnardMapping() {
+    // Swift Export exposes Kotlin enums as classes. Count the exported
+    // entries so adding a case cannot silently rely on the nil fallback.
+    XCTAssertEqual(ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.allCases.count, 2)
+  }
+
   func testBarnardJoinModeMapsOpenAndGatedAndFailsClosedOnNil() {
     XCTAssertEqual(
       VenueBundleVerificationLogic.barnardJoinMode(
