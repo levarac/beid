@@ -113,7 +113,7 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
     def test_debug_build_and_test_use_measured_optimization(self) -> None:
         text = workflow_text()
 
-        for name in ("Build for testing", "Test without rebuilding"):
+        for name in ("Build for testing",):
             with self.subTest(step=name):
                 block = step_block(text, name)
                 self.assertEqual(block.count("SWIFT_OPTIMIZATION_LEVEL=-O"), 1)
@@ -132,53 +132,57 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertNotIn("Build Release for device", directives)
         self.assertNotIn("generic/platform=iOS", directives)
 
-    def test_mode_is_selected_once_and_cannot_skip_testing(self):
+    def test_mode_is_selected_once_and_reaches_all_consumers(self):
         text = workflow_text()
-        self.assertIn("      - name: Determine test mode\n", text)
         mode = step_block(text, "Determine test mode")
-        self.assertIn("id: test-mode", mode)
         self.assertIn('python3 -m scripts.ios_ui_smoke mode', mode)
         self.assertIn('"$GITHUB_EVENT_PATH"', mode)
         self.assertNotIn("if:", mode)
         self.assertEqual(text.count("scripts.ios_ui_smoke mode"), 1)
-        run = step_block(text, "Test without rebuilding")
-        self.assertNotIn("if:", run)
-        self.assertIn("TEST_MODE: ${{ steps.test-mode.outputs.mode }}", run)
-        self.assertIn('scripts.ios_ui_smoke arguments', run)
-        self.assertIn('"${test_args[@]}"', run)
-        check = step_block(text, "Verify UI execution and bundle durations")
-        self.assertIn("if: always()", check)
-        self.assertIn("TEST_MODE: ${{ steps.test-mode.outputs.mode }}", check)
-        self.assertIn('xcresulttool get test-results tests', check)
-        self.assertIn('scripts.ios_ui_smoke verify', check)
+        self.assertIn("mode: ${{ steps.test-mode.outputs.mode }}", text)
+        self.assertEqual(text.count("TEST_MODE: ${{ needs.ios-build.outputs.mode }}"), 3)
         self.assertNotIn("continue-on-error", text)
 
-    def test_selection_shell_passes_exact_arguments_in_both_modes(self):
-        block = step_block(workflow_text(), "Test without rebuilding")
-        self.assertIn("scripts.ios_ui_smoke arguments", block)
-        command = textwrap.dedent(block.split("        run: |\n", 1)[1])
-        root = WORKFLOW_PATH.parents[2]
-        (root / "build").mkdir(exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=root / "build") as temporary:
-            folder = Path(temporary)
-            fake = folder / "xcodebuild"
-            fake.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
-                            "print(json.dumps(sys.argv[1:]))\n"
-                            "sys.exit(int(os.environ.get('XCODE_EXIT', '0')))\n")
-            fake.chmod(0o755)
-            for mode, child_exit in (("smoke", 0), ("full", 0), ("smoke", 65)):
-                result = subprocess.run(["bash", "-c", command], cwd=root, text=True,
-                    capture_output=True, env={**os.environ,
-                        "PATH": str(folder) + os.pathsep + os.environ["PATH"],
-                        "CI_OUTPUT_ROOT": str(folder), "SIMULATOR_UDID": "owned",
-                        "TEST_MODE": mode, "XCODE_EXIT": str(child_exit)})
-                self.assertEqual(result.returncode, child_exit, result.stderr)
-                argv = json.loads(result.stdout)
-                selections = [item for item in argv if item.startswith("-only-testing:")]
-                from scripts.ios_ui_smoke import parse_smoke_list
-                listed = parse_smoke_list((root / "ios/ci/ui-smoke-tests.txt").read_text())
-                self.assertEqual(selections, (["-only-testing:BeidTests"] +
-                    [f"-only-testing:{test}" for test in listed]) if mode == "smoke" else [])
+    def test_parallel_graph_preserves_only_one_required_context(self):
+        from scripts.tests.test_pr_ci_lane_skip import job_block, IOS
+        build = job_block(IOS, "ios-build")
+        unit = job_block(IOS, "ios-unit")
+        ui = job_block(IOS, "ios-ui")
+        aggregate = job_block(IOS, "ios-simulator")
+        self.assertIn("needs: changes", build)
+        self.assertIn("timeout-minutes: 25", build)
+        for block in (unit, ui):
+            self.assertIn("needs: ios-build", block)
+            self.assertIn("timeout-minutes: 20", block)
+            self.assertIn("runs-on: macos-26", block)
+            self.assertIn("Create owned simulator", block)
+            self.assertIn("Delete owned simulator", block)
+            self.assertIn("actions/download-artifact@", block)
+            self.assertNotIn("-project", block)
+            self.assertNotIn("-derivedDataPath", block)
+        self.assertIn("fail-fast: false", ui)
+        self.assertIn("fromJSON(needs.ios-build.outputs.ui-shards)", ui)
+        self.assertIn("needs: [changes, ios-build, ios-unit, ios-ui]", aggregate)
+        self.assertIn("if: ${{ always() }}", aggregate)
+        self.assertIn("timeout-minutes: 5", aggregate)
+        self.assertIn("NEEDS_JSON: ${{ toJSON(needs) }}", aggregate)
+        self.assertIn("scripts.ios_test_shards aggregate", aggregate)
+        self.assertEqual(workflow_text().count("    name: iOS simulator\n"), 1)
+
+    def test_build_handoff_is_products_only_and_union_check_runs_after_download(self):
+        text = workflow_text()
+        self.assertEqual(text.count("            build-for-testing"), 1)
+        self.assertIn("scripts.ios_test_shards pack", text)
+        self.assertIn("-enumerate-tests", text)
+        self.assertIn("-test-enumeration-style flat", text)
+        self.assertIn("scripts.ios_test_shards plan", text)
+        self.assertIn("ios/ci/ui-test-durations.tsv", text)
+        self.assertIn("if-no-files-found: error", text)
+        self.assertIn("ios-build-${{ github.run_attempt }}", text)
+        self.assertIn("ios-evidence-", text)
+        check = step_block(text, "Verify all jobs and UI union")
+        self.assertIn("scripts.ios_test_shards aggregate", check)
+
 
 
 class MainIosReleaseBuildWorkflowTest(unittest.TestCase):
