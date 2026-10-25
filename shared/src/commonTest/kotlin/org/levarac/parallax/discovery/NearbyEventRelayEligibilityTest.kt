@@ -4,6 +4,7 @@ import org.levarac.parallax.registry.EventJoinMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -15,6 +16,26 @@ import kotlin.test.assertTrue
  * fails closed on anything it cannot positively confirm.
  */
 class NearbyEventRelayEligibilityTest {
+    @Test
+    fun publicLookupAcceptsEquivalentHashSpellings() {
+        val store = createNearbyEventDiscoveryStore()
+        recordNearbyEventHint(store, "p", "Event", "000000000000000a".hexBytes(), null, false, false, 1L)
+        val snapshot = store.snapshot
+        val candidate = assertNotNull(snapshot.candidateAt(0))
+        for (query in listOf("000000000000000a", "000000000000000A", "0x000000000000000a", "0X000000000000000A")) {
+            assertEquals(candidate, snapshot.candidateForHashHex(query), query)
+        }
+    }
+
+    @Test
+    fun publicLookupRejectsMalformedHashes() {
+        val store = createNearbyEventDiscoveryStore()
+        recordNearbyEventHint(store, "p", "Event", "000000000000000a".hexBytes(), null, false, false, 1L)
+        for (query in listOf("", "0x", "a", "00000000000000a", "00000000000000000a", "000000000000000g", "0x000000000000000g")) {
+            assertNull(store.snapshot.candidateForHashHex(query), query)
+        }
+    }
+
     @Test
     fun registryVerifiedEnvelopeForTheJoinedEventIsEligible() {
         val snapshot = registryVerifiedSnapshot()
