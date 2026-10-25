@@ -166,8 +166,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     It excludes dSYMs, loose compiler outputs, intermediates, dependency caches
     and other DerivedData contents. Absolute Products references in the plist
     are relocated to `__TESTROOT__`; external product symlinks fail packaging.
-    Its actual compressed byte/MiB size is printed in the build summary; no
-    hosted size has been measured for this change yet. Upload uses compression
+    Its actual compressed byte/MiB size is printed in the build summary;
+    run 40166483245 measured about 24.7 MB (23.6 MiB). Upload uses compression
     level zero because the tar is already compressed. Consumers download and
     extract it and use `-xctestrun`, with no project or DerivedData argument.
     Separate small plan and per-job evidence artifacts carry the inventory,
@@ -221,6 +221,90 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Failed, cancelled, skipped or missing needed jobs; missing/duplicate shard
     reports; wrong mode/bundle; zero/inconsistent counts; missing durations;
     duplicate, extra, missing or skipped UI cases all fail closed.
+
+    Build caches are confined to `iOS simulator build`; test jobs and the
+    aggregate never restore caches. Three exact-key caches use the existing
+    `actions/cache` v4 SHA with separate restore/save actions:
+    - Dependencies: a dedicated `$RUNNER_TEMP/beid-gradle` home's
+      `wrapper/dists` and `caches/modules-2`, plus `~/.konan` (Kotlin/Native
+      distributions, downloaded native dependencies and platform caches).
+      The key hashes all Gradle scripts/properties/wrappers, TOML catalogs,
+      repository scripts and this workflow. Gradle configuration is still
+      evaluated; compiled project outputs are not in this dependency cache.
+    - Swift packages: `$RUNNER_TEMP/beid-swift-packages`, including checkouts,
+      repositories and binary artifacts. Its key hashes every Package.resolved
+      and Package.swift, project.yml, the generated project and this workflow.
+      An explicit `-resolvePackageDependencies` step uses the lockfile, checks
+      it stayed unchanged, and reports its own duration. The build uses the
+      same directory and forbids automatic resolution to other versions.
+    - Gradle build outputs: only the dedicated home's `caches/build-cache-1`,
+      with `org.gradle.caching=true`. Its key includes the complete checked-out
+      Git tree, so every tracked build input, including native/shared source,
+      build configuration and scripts, invalidates it. Gradle still evaluates
+      task inputs; a hit never skips the Xcode invocation or its KMP phase.
+      This home is populated only by build-for-testing, never by test tasks;
+      it cannot import Android/host test-task results from another lane.
+
+    All three keys also include a namespace version, runner OS/architecture
+    and a fingerprint of the selected Xcode build, simulator SDK build, full
+    JDK version and macOS build. There are no prefix restore keys. Separate
+    save steps run only after successful build, enumeration and upload, only
+    on a miss and only for non-PR events or a PR whose head repository equals
+    this repository. Fork PRs are restore-only, use no private credentials,
+    and retain GitHub's PR cache-ref isolation; no pull_request_target build
+    is introduced. Same-repository PR and merge-group caches remain ref-scoped;
+    default-branch caches can seed other refs, whose caches cannot seed main.
+    Workflow guards do not make arbitrary fork code trusted. GitHub's cache
+    scope is the additional boundary against a fork editing its own workflow.
+
+    No test results, xcresult bundles, evidence, simulator state, DerivedData
+    or final shared frameworks are cached. Every hit still builds, enumerates,
+    packs this run's products and executes every planned test on fresh owned
+    simulators. Build logs now hide shell-script environments and include
+    verbose phase/Gradle output plus `-showBuildTimingSummary`; timing sums can
+    overlap and are not a substitute for job wall clocks. Cache corruption is
+    a failure to investigate, never a reason to accept old test evidence.
+    Cache misses/eviction rebuild from pinned dependencies. Cache entry sizes
+    and restore/save time must be checked on hosted runs: the repository's
+    10 GB cache budget is shared with other lanes, and exact source-tree
+    entries can churn. Bump the namespace to invalidate a suspected bad cache.
+
+    Baseline for this cache change: run 40166483245, head 198f7a11, attempts
+    1/2. Build jobs were 680/1153 seconds: setup and runtime selection 16/43,
+    simulator create+boot 80/148, build-for-testing 470/854, enumeration 84/80,
+    packing+upload 10/9, and remaining cleanup/gaps 20/19 seconds. The existing
+    `-quiet` logs do not expose separate package-resolution, Gradle/Kotlin/Native
+    download/compile, Swift compile or linker intervals. The first Swift warning
+    appeared 394/719 seconds after the build step started; the remaining
+    76/135 seconds also mix compilation and linking. These are observable
+    boundaries, not phase attribution. No download or cache saving is measured
+    inside those opaque intervals, so per-phase savings remain hypotheses.
+    Build logs contain 16 environment blocks (85 assignment lines) per attempt;
+    downloaded measurement copies redact assignments before writing to disk.
+
+    Attempt 1 unit shard 1 took 665 seconds: setup 16, simulator create+boot
+    88, products/plan download+extract 6, test invocation 532, remainder 23.
+    UI shard 1 took 1039 seconds: setup 11, simulator create+boot 87,
+    download+extract 2, test invocation 917, remainder 22. Test invocations
+    include additional test-runner startup; their durations are not case-time
+    sums. The 24.7 MB products archive transfers in seconds, so changing its
+    handoff cannot recover minutes. Simulator boot could overlap downloads,
+    but only saves those few seconds here; no simulator-state reuse is added.
+
+    Hosted measurement must compare cold and warm full runs on one head,
+    checking cache-hit/size/transfer lines and the new package/Gradle/build
+    timings as well as the unchanged executed evidence. A cold run should
+    resemble the 11.3–19.2 minute baseline plus roughly 0.5–2 minutes for cache
+    save/lookup overhead. A warm run is hypothesized at about 7–18 minutes:
+    package fetching 0.3–1 minute saved, Gradle/native downloads and reusable
+    build tasks 2–4 minutes saved, less 0.2–0.8 minutes restore overhead.
+    These ranges are unverified, not measurements or percentile estimates;
+    uncached Swift/link, boot and enumeration costs remain. If native tasks
+    are not cacheable or transfer costs dominate, savings can be near zero.
+    Under 25 minutes for the full lane needs a build below roughly 7 minutes
+    with attempt 1's 17.3-minute longest test job, or below roughly 5.7 minutes
+    with attempt 2's 19.1-minute job. No claim is made that this reaches it,
+    or establishes the per-job p50 <15 / p90 <25 minute team budget.
 
     Wall-clock projections retain measured job overhead rather than halving
     whole jobs. In full run 40163436992, UI job overhead (job wall minus case
