@@ -7,7 +7,11 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import kotlinx.coroutines.awaitCancellation
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import java.io.File
@@ -47,6 +51,7 @@ class VenueScreenScreenshotTest {
     @Test fun addressMissing() = capture("missing-pack-address", VenueImportOutcome.BundleAddressMissing)
     @Test fun addressUnsupported() = capture("insecure-pack-address", VenueImportOutcome.BundleAddressUnsupported)
     @Test fun pendingPack() = capture("pending-pack", VenueImportOutcome.Ready(venueTestPack()), start = true, replace = true)
+    @Test fun stoppedPendingPack() = capture("stopped-pending-pack", VenueImportOutcome.Ready(venueTestPack()), start = true, replace = true, stop = true)
     @Test fun permissionPending() = capture("bluetooth-permission-pending", VenueImportOutcome.Ready(venueTestPack()), start = true, waitPermission = true)
 
     private fun capture(
@@ -61,7 +66,11 @@ class VenueScreenScreenshotTest {
                     onProgress(VenueImportProgress(venueTestPack().eventIdHex, waitStage))
                     awaitCancellation()
                 }
-                return import(link)
+                return import(link).also { imported ->
+                    if (imported is VenueImportOutcome.Ready) {
+                        onProgress(VenueImportProgress(imported.pack.eventIdHex, VenueImportStage.CHECKING))
+                    }
+                }
             }
         }
         val controller = VenueController(importer, VenueTestRadio().apply { deferPermission = waitPermission }, scope)
@@ -70,16 +79,30 @@ class VenueScreenScreenshotTest {
         compose.waitForIdle()
         compose.runOnIdle { if (start) controller.start() }
         compose.waitForIdle()
-        compose.runOnIdle { if (stop) controller.stop() }
-        compose.waitForIdle()
         if (scan) compose.onNodeWithTag("venue-scan").performClick()
         compose.runOnIdle {
             if (replace) {
                 result = VenueImportOutcome.Ready(venueTestPack().copy(displayName = "Next Event", eventIdHex = "04".repeat(32)))
-                controller.useLink("https://venue.example/#next")
+                if (!stop) controller.useLink("https://venue.example/#next")
             }
         }
+        if (stop && replace) {
+            compose.onNodeWithTag("venue-link").performTextInput("https://venue.example/#next")
+            compose.onNodeWithTag("venue-use-link").performClick()
+        }
         compose.waitForIdle()
+        compose.runOnIdle { if (stop) controller.stop() }
+        compose.waitForIdle()
+        if (stop && replace) {
+            compose.onNodeWithText("Next Event").assertIsDisplayed()
+            compose.onNodeWithText("Example Event").assertDoesNotExist()
+            compose.onNodeWithText("New pack checked. Refresh to use it.").assertDoesNotExist()
+            compose.onNodeWithText("Ready").assertIsDisplayed()
+            compose.onNodeWithText("Broadcast stopped.").assertIsDisplayed()
+            compose.onNodeWithText("Link event: 0404040404040404…").assertIsDisplayed()
+            compose.onNodeWithTag("venue-link").assertTextContains("https://venue.example/#next")
+            compose.onNodeWithText("Start broadcasting").assertIsDisplayed()
+        }
         compose.runOnIdle {
             val view = requireNotNull(findComposeView(compose.activity.window.decorView))
             kotlin.test.assertTrue(view.width > 0 && view.height > 0)
