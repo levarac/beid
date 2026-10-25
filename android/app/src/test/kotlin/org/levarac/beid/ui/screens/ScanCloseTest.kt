@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsActions
 import java.io.File
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -19,6 +20,8 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.levarac.beid.persistence.BindingRecordStore
 import org.levarac.beid.persistence.SelfProofRecordStore
+import org.levarac.beid.persistence.ProofRecordStore
+import org.levarac.beid.sensing.ProofRecordingBridge
 import org.levarac.beid.sensing.EventBindingState
 import org.levarac.beid.sensing.EventJoinCoordinator
 import org.levarac.beid.sensing.EventJoinSession
@@ -78,7 +81,15 @@ class ScanCloseTest {
     @Test fun closeFinalizesRecordingThroughExistingCoordinatorLeavePath() = closesRealSession(signalLost = false)
     @Test fun closeFinalizesSignalLostThroughExistingCoordinatorLeavePath() = closesRealSession(signalLost = true)
 
-    private fun closesRealSession(signalLost: Boolean) = runTest {
+    @Test fun keepSensingPreservesRecording() = closesRealSession(keepSensing = true)
+    @Test fun keepSensingPreservesSignalLost() = closesRealSession(signalLost = true, keepSensing = true)
+    @Test fun staleConfirmationCannotFinalizeNewerSession() = closesRealSession(replaceSession = true)
+
+    private fun closesRealSession(
+        signalLost: Boolean = false,
+        keepSensing: Boolean = false,
+        replaceSession: Boolean = false,
+    ) = runTest {
         val engine = FakeEventJoinEngine()
         val registry = FakeNearbyEventRegistry()
         val proofFile = File(files.root, "self-proofs.json")
@@ -93,7 +104,12 @@ class ScanCloseTest {
             bindingRecordStore = BindingRecordStore(File(files.root, "bindings.json")),
         )
         val collected = mutableListOf<UUID>()
-        coordinator.onProofCollected = { id, _, _ -> collected += id }
+        val records = ProofRecordStore(File(files.root, "proof-records.json"))
+        val bridge = coordinator.sharedProofRecordingBridge(ProofRecordingBridge(records))
+        coordinator.onProofCollected = { id, session, peers ->
+            collected += id
+            bridge.onProofCollected(id, session, peers)
+        }
         try {
             joinPromotedVectorEvent(coordinator, engine, registry)
             engine.emitDetection(enin = 1, rpid = "aa", detectedDisplayId = "device-1")
@@ -114,6 +130,46 @@ class ScanCloseTest {
             }
 
             compose.onNodeWithText("Close").assertIsDisplayed().performClick()
+
+            compose.onNodeWithText("Stop sensing?").assertIsDisplayed()
+            compose.onNodeWithText("Stop sensing to seal and keep what you've recorded on this phone. You can sense this event again later.").assertIsDisplayed()
+            compose.onNodeWithText("SO FAR").assertIsDisplayed()
+            listOf("MUTUAL", "DETECTED", "WINDOWS").forEach {
+                compose.onNodeWithText(it).assertIsDisplayed()
+            }
+            assertEquals(0, leaveCalls)
+            assertEquals(0, proofs.records.size)
+            val liveState = coordinator.state.value
+            val originalProof = collected.single()
+            if (keepSensing) {
+                compose.onNodeWithText("Keep sensing").assertIsDisplayed().performClick()
+                compose.onNodeWithText("Stop sensing?").assertDoesNotExist()
+                assertEquals(liveState, coordinator.state.value)
+                assertEquals(originalProof, records.records.single().id)
+                assertEquals(0, leaveCalls)
+                assertEquals(0, proofs.records.size)
+                return@runTest
+            }
+            if (replaceSession) {
+                coordinator.leaveEvent()
+                joinPromotedVectorEvent(coordinator, engine, registry)
+                engine.emitDetection(enin = 4, rpid = "dd", detectedDisplayId = "device-4")
+                engine.emitDetection(enin = 5, rpid = "ee", detectedDisplayId = "device-5")
+                engine.emitDetection(enin = 6, rpid = "ff", detectedDisplayId = "device-6")
+                assertEquals(2, collected.size)
+            }
+            val beforeConfirm = coordinator.state.value
+            val confirm = compose.onNodeWithText("Stop and keep record").assertIsDisplayed()
+                .fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
+            // Invoke the same captured callback twice, including after its screen disappears.
+            compose.runOnIdle { confirm(); confirm() }
+            if (replaceSession) {
+                assertEquals(0, leaveCalls)
+                assertEquals(beforeConfirm, coordinator.state.value)
+                compose.onNodeWithText("Stop sensing?").assertDoesNotExist()
+                assertEquals(1, proofs.records.size)
+                return@runTest
+            }
 
             compose.onNodeWithTag(EventJoinScreenTestTags.NEARBY_EVENT_LIST).assertIsDisplayed()
             assertEquals(1, leaveCalls)
