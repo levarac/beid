@@ -76,7 +76,8 @@ class IosBuildCacheTests(unittest.TestCase):
             restore = step_block(self.build, 'Restore ' + cache + ' cache')
             save = step_block(self.build, 'Save ' + cache + ' cache')
             key = re.search(r'^          key: (.+)$', restore, re.M).group(1)
-            prefix = (f'beid-ios-{cache}-v1-${{{{ runner.os }}}}-${{{{ runner.arch }}}}-'
+            version = 'v2' if cache == 'dependencies' else 'v1'
+            prefix = (f'beid-ios-{cache}-{version}-${{{{ runner.os }}}}-${{{{ runner.arch }}}}-'
                       '${{ steps.cache-inputs.outputs.toolchain }}-')
             self.assertTrue(key.startswith(prefix), key)
             if cache == 'swift-packages':

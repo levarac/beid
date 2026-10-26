@@ -235,9 +235,9 @@ jobs:
             ~/.konan
             ${{ runner.temp }}/beid-gradle/caches/*/kotlin-dsl
             ${{ runner.temp }}/beid-gradle/caches/*/groovy-dsl
-          key: beid-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', '**/gradle-wrapper.*', '**/gradlew*', '**/*.toml', 'scripts/resolve_kmp_java_home.sh', '.github/workflows/pr-ci-ios-macos.yml') }}
+          key: beid-ios-dependencies-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', '**/gradle-wrapper.*', '**/gradlew*', '**/*.toml', 'scripts/resolve_kmp_java_home.sh', '.github/workflows/pr-ci-ios-macos.yml') }}
           restore-keys: |
-            beid-ios-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-
+            beid-ios-dependencies-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-
 
       - name: Restore swift-packages cache
         id: swift-packages
