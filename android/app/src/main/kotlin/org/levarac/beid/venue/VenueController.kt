@@ -104,9 +104,7 @@ internal class VenueController(
                         pack = result.pack, pendingPack = null, isStarting = false,
                         isBroadcasting = true, message = null,
                     )
-                    else -> mutableState.value.copy(
-                        isStarting = false, isBroadcasting = false, message = VenueNotice.RADIO_FAILED,
-                    )
+                    else -> stoppedState(VenueNotice.RADIO_FAILED)
                 }
             }
         }
@@ -116,11 +114,7 @@ internal class VenueController(
         if (disposed) return
         nextOperation()
         radio.stop()
-        mutableState.value = mutableState.value.copy(
-            pack = mutableState.value.pendingPack ?: mutableState.value.pack,
-            pendingPack = null,
-            isImporting = false, isStarting = false, isBroadcasting = false, message = VenueNotice.STOPPED,
-        )
+        mutableState.value = stoppedState(VenueNotice.STOPPED)
     }
 
     fun dispose() {
@@ -129,6 +123,18 @@ internal class VenueController(
         nextOperation()
         radio.stop()
         radio.dispose()
+        mutableState.value = stoppedState(VenueNotice.STOPPED)
+    }
+
+    private fun stoppedState(message: VenueNotice): VenueUiState {
+        val current = mutableState.value
+        // Only a verified import sets pendingPack and selectedLink. Once stopped,
+        // show that selection as ready for the next start's verification and radio request.
+        val readyPack = current.pendingPack ?: current.pack
+        return current.copy(
+            pack = readyPack, pendingPack = null, linkEventIdHex = readyPack?.eventIdHex,
+            isImporting = false, isStarting = false, isBroadcasting = false, message = message,
+        )
     }
 
     private fun nextOperation(): Long {
