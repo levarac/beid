@@ -52,11 +52,13 @@ class VenueScreenScreenshotTest {
     @Test fun addressUnsupported() = capture("insecure-pack-address", VenueImportOutcome.BundleAddressUnsupported)
     @Test fun pendingPack() = capture("pending-pack", VenueImportOutcome.Ready(venueTestPack()), start = true, replace = true)
     @Test fun stoppedPendingPack() = capture("stopped-pending-pack", VenueImportOutcome.Ready(venueTestPack()), start = true, replace = true, stop = true)
+    @Test fun failedRefreshPendingPack() = capture("failed-refresh-pending-pack", VenueImportOutcome.Ready(venueTestPack()), start = true, replace = true, failRefresh = true)
     @Test fun permissionPending() = capture("bluetooth-permission-pending", VenueImportOutcome.Ready(venueTestPack()), start = true, waitPermission = true)
 
     private fun capture(
         name: String, outcome: VenueImportOutcome? = null, start: Boolean = false, stop: Boolean = false,
         waitStage: VenueImportStage? = null, scan: Boolean = false, replace: Boolean = false, waitPermission: Boolean = false,
+        failRefresh: Boolean = false,
     ) {
         var result = outcome
         val importer = object : VenuePackImporter {
@@ -73,7 +75,8 @@ class VenueScreenScreenshotTest {
                 }
             }
         }
-        val controller = VenueController(importer, VenueTestRadio().apply { deferPermission = waitPermission }, scope)
+        val radio = VenueTestRadio().apply { deferPermission = waitPermission }
+        val controller = VenueController(importer, radio, scope)
         compose.setContent { BeidAppTheme { VenueScreen(controller) } }
         compose.runOnIdle { if (outcome != null || waitStage != null) controller.useLink("https://venue.example/#test") }
         compose.waitForIdle()
@@ -83,22 +86,26 @@ class VenueScreenScreenshotTest {
         compose.runOnIdle {
             if (replace) {
                 result = VenueImportOutcome.Ready(venueTestPack().copy(displayName = "Next Event", eventIdHex = "04".repeat(32)))
-                if (!stop) controller.useLink("https://venue.example/#next")
+                if (!stop && !failRefresh) controller.useLink("https://venue.example/#next")
             }
         }
-        if (stop && replace) {
+        if ((stop || failRefresh) && replace) {
             compose.onNodeWithTag("venue-link").performTextInput("https://venue.example/#next")
             compose.onNodeWithTag("venue-use-link").performClick()
         }
         compose.waitForIdle()
         compose.runOnIdle { if (stop) controller.stop() }
+        if (failRefresh) {
+            radio.startResult = false
+            compose.onNodeWithTag("venue-start").performClick()
+        }
         compose.waitForIdle()
-        if (stop && replace) {
+        if ((stop || failRefresh) && replace) {
             compose.onNodeWithText("Next Event").assertIsDisplayed()
             compose.onNodeWithText("Example Event").assertDoesNotExist()
             compose.onNodeWithText("New pack checked. Refresh to use it.").assertDoesNotExist()
             compose.onNodeWithText("Ready").assertIsDisplayed()
-            compose.onNodeWithText("Broadcast stopped.").assertIsDisplayed()
+            compose.onNodeWithText(if (failRefresh) "The radio could not start." else "Broadcast stopped.").assertIsDisplayed()
             compose.onNodeWithText("Link event: 0404040404040404…").assertIsDisplayed()
             compose.onNodeWithTag("venue-link").assertTextContains("https://venue.example/#next")
             compose.onNodeWithText("Start broadcasting").assertIsDisplayed()

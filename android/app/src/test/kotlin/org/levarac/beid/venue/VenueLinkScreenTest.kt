@@ -144,11 +144,12 @@ internal class VenueTestRadio : VenueRadio {
     var stops = 0
     var permission: ((Boolean) -> Unit)? = null
     var deferPermission = false
+    var startResult = true
     val containers = mutableListOf<ByteArray>()
     override fun requestPermission(completion: (Boolean) -> Unit) {
         if (deferPermission) permission = completion else completion(true)
     }
-    override fun start(container: ByteArray): Boolean { starts++; containers += container; return true }
+    override fun start(container: ByteArray): Boolean { starts++; containers += container; return startResult }
     override fun stop() { stops++ }
     override fun forwardPermissionResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) = false
     override fun dispose() = Unit

@@ -108,6 +108,142 @@ class VenueStartTest {
         assertTrue(controller.state.value.isBroadcasting)
     }
 
+    @Test fun failedRefreshPromotesThePendingPackBeforeTheNextStart() = runTest {
+        val first = venueTestPack()
+        val second = first.copy(
+            eventIdHex = "04".repeat(32), displayName = "Next Event", container = byteArrayOf(4),
+            validFromUnixSeconds = first.validFromUnixSeconds + 86_400,
+            validUntilUnixSeconds = first.validUntilUnixSeconds + 86_400,
+            stopAtUnixSeconds = first.stopAtUnixSeconds + 86_400,
+        )
+        val imports = mutableListOf<String>()
+        val radio = VenueTestRadio()
+        val controller = VenueController(VenuePackImporter { link ->
+            imports += link
+            VenueImportOutcome.Ready(if (link == "first") first else second)
+        }, radio, this)
+        controller.useLink("first")
+        runCurrent()
+        controller.start()
+        runCurrent()
+        controller.useLink("second")
+        runCurrent()
+        assertTrue(controller.state.value.isBroadcasting)
+        assertEquals(first, controller.state.value.pack)
+        assertEquals(second, controller.state.value.pendingPack)
+
+        radio.startResult = false
+        controller.start()
+        runCurrent()
+
+        assertFalse(controller.state.value.isBroadcasting)
+        assertEquals(second, controller.state.value.pack)
+        assertNull(controller.state.value.pendingPack)
+        assertEquals(second.eventIdHex, controller.state.value.linkEventIdHex)
+        assertFalse(controller.state.value.isStarting)
+        assertFalse(controller.state.value.isImporting)
+        assertEquals(VenueNotice.RADIO_FAILED, controller.state.value.message)
+        assertEquals(listOf(first.container, second.container), radio.containers)
+        radio.startResult = true
+        controller.start()
+        runCurrent()
+        assertEquals(listOf("first", "first", "second", "second", "second"), imports)
+        assertEquals(listOf(first.container, second.container, second.container), radio.containers)
+        assertEquals(second, controller.state.value.pack)
+        assertTrue(controller.state.value.isBroadcasting)
+    }
+
+    @Test fun failedRefreshWithoutAPendingPackKeepsTheCurrentPackForTheNextStart() = runTest {
+        val first = venueTestPack()
+        val imports = mutableListOf<String>()
+        val radio = VenueTestRadio()
+        val controller = VenueController(VenuePackImporter { link ->
+            imports += link
+            VenueImportOutcome.Ready(first)
+        }, radio, this)
+        controller.useLink("first")
+        runCurrent()
+        controller.start()
+        runCurrent()
+
+        radio.startResult = false
+        controller.start()
+        runCurrent()
+
+        assertFalse(controller.state.value.isBroadcasting)
+        assertEquals(first, controller.state.value.pack)
+        assertNull(controller.state.value.pendingPack)
+        assertEquals(VenueNotice.RADIO_FAILED, controller.state.value.message)
+        radio.startResult = true
+        controller.start()
+        runCurrent()
+        assertEquals(listOf("first", "first", "first", "first"), imports)
+        assertEquals(listOf(first.container, first.container, first.container), radio.containers)
+        assertTrue(controller.state.value.isBroadcasting)
+    }
+
+    @Test fun failedRefreshDoesNotPromoteAPackWhoseVerificationFailed() = runTest {
+        val first = venueTestPack()
+        val imports = mutableListOf<String>()
+        val radio = VenueTestRadio()
+        val controller = VenueController(VenuePackImporter { link ->
+            imports += link
+            if (link == "first") VenueImportOutcome.Ready(first) else VenueImportOutcome.VerificationFailed
+        }, radio, this)
+        controller.useLink("first")
+        runCurrent()
+        controller.start()
+        runCurrent()
+        controller.useLink("rejected")
+        runCurrent()
+        assertTrue(controller.state.value.isBroadcasting)
+        assertEquals(VenueNotice.VERIFICATION_FAILED, controller.state.value.message)
+        assertNull(controller.state.value.pendingPack)
+
+        radio.startResult = false
+        controller.start()
+        runCurrent()
+
+        assertFalse(controller.state.value.isBroadcasting)
+        assertEquals(first, controller.state.value.pack)
+        assertNull(controller.state.value.pendingPack)
+        assertEquals(VenueNotice.RADIO_FAILED, controller.state.value.message)
+        radio.startResult = true
+        controller.start()
+        runCurrent()
+        assertEquals(listOf("first", "first", "rejected", "first", "first"), imports)
+        assertEquals(listOf(first.container, first.container, first.container), radio.containers)
+        assertTrue(controller.state.value.isBroadcasting)
+    }
+
+    @Test fun disposeLeavesTheVerifiedPendingPackInTheStoppedState() = runTest {
+        val first = venueTestPack()
+        val second = first.copy(eventIdHex = "04".repeat(32), displayName = "Next Event", container = byteArrayOf(4))
+        val radio = VenueTestRadio()
+        val controller = VenueController(VenuePackImporter { link ->
+            VenueImportOutcome.Ready(if (link == "first") first else second)
+        }, radio, this)
+        controller.useLink("first")
+        runCurrent()
+        controller.start()
+        runCurrent()
+        controller.useLink("second")
+        runCurrent()
+
+        controller.dispose()
+
+        assertFalse(controller.state.value.isBroadcasting)
+        assertEquals(second, controller.state.value.pack)
+        assertNull(controller.state.value.pendingPack)
+        assertEquals(second.eventIdHex, controller.state.value.linkEventIdHex)
+        assertEquals(1, radio.stops)
+        controller.start()
+        runCurrent()
+        controller.dispose()
+        assertEquals(listOf(first.container), radio.containers)
+        assertEquals(1, radio.stops)
+    }
+
     @Test fun startChecksTheImportedLinkAgainBeforeRequestingRadio() = runTest {
         var imports = 0
         var result: VenueImportOutcome = VenueImportOutcome.Ready(venueTestPack())
