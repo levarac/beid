@@ -20,6 +20,7 @@ import SwiftUI
 struct VenueDeviceOrganizerView: View {
   @ObservedObject var sensingCoordinator: SensingCoordinator
   @StateObject private var viewModel: VenueDeviceOrganizerViewModel
+  @Environment(\.scenePhase) private var scenePhase
 
   init(sensingCoordinator: SensingCoordinator) {
     self.sensingCoordinator = sensingCoordinator
@@ -121,6 +122,10 @@ struct VenueDeviceOrganizerView: View {
     .background(DS.Color.surfaceCanvas)
     .navigationTitle("Venue Device")
     .navigationBarTitleDisplayMode(.inline)
+    .onDisappear { viewModel.endSession() }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .background { viewModel.sceneDidEnterBackground() }
+    }
   }
 
   private var broadcastingBinding: Binding<Bool> {
