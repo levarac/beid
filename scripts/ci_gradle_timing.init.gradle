@@ -11,9 +11,8 @@ if (outputPath) {
     def output = new File(outputPath)
     output.parentFile.mkdirs()
     def lock = new Object()
-    // Keep Gradle's own normalized fingerprints, not an approximation of its
-    // cache key. This also distinguishes a lookup miss from disabled caching.
-    System.setProperty('org.gradle.caching.debug', 'true')
+    // The workflow enables cache-key fingerprints in GRADLE_OPTS before Gradle
+    // starts; setting that property here is too late for cache-key logging.
     def starts = new java.util.concurrent.ConcurrentHashMap<String, Long>()
     def append = { String path, String outcome, long nanos ->
         synchronized (lock) {

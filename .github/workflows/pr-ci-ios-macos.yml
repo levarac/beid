@@ -154,7 +154,7 @@ jobs:
       unit-shards: ${{ steps.plan.outputs.unit-shards }}
     env:
       # Dedicated build-only home: no test task results enter these caches.
-      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info
+      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info -Dorg.gradle.caching.debug=true
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -366,7 +366,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ios-build-gradle
+          name: ios-build-gradle-${{ github.run_attempt }}
           overwrite: true
           path: ${{ env.CI_OUTPUT_ROOT }}/gradle/
           if-no-files-found: warn

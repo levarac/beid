@@ -390,12 +390,15 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     The original Xcode product phases remain identical to dc26afff; Gradle's
     own actionable-task line supplies the counts.
 
-    CI additionally enables Gradle info-level caching diagnostics, including
-    normalized input fingerprints and stored/loaded entry keys. With
+    CI enables org.gradle.caching.debug=true in GRADLE_OPTS before Gradle
+    starts, retaining normalized input fingerprints and stored/loaded entry
+    keys at info level. Setting the property in the init script was too late:
+    run 40199089439 recorded entry keys but no input fingerprints. With
     -hideShellScriptEnvironment, the workflow preserves xcodebuild's exit
     status through tee and retains build.log, tasks.tsv and before/after
-    build-cache METADATA inventories in the seven-day ios-build-gradle
-    artifact, overwritten on a partial rerun. The compact TSV is printed even
+    build-cache METADATA inventories in the seven-day ios-build-gradle-N
+    artifact (N is github.run_attempt), so reruns retain earlier diagnostics.
+    The compact TSV is printed even
     after build failure; partial rows remain diagnostic evidence, not tests.
     Inventories read only task identity, key, size, Gradle version and original
     execution time; they do not extract outputs. They distinguish an absent

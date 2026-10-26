@@ -175,6 +175,17 @@ class IosBuildCacheTests(unittest.TestCase):
         self.assertIn('git diff --exit-code -- ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', resolve)
         self.assertIn('-disableAutomaticPackageResolution', build)
 
+    def test_input_fingerprints_are_enabled_before_gradle_starts(self):
+        # Gradle initializes cache-key logging before evaluating init scripts.
+        options = re.search(r'^      GRADLE_OPTS: (.+)$', self.build, re.M).group(1)
+        self.assertIn('-Dorg.gradle.caching.debug=true', options.split())
+        timing = Path('scripts/ci_gradle_timing.init.gradle').read_text()
+        self.assertNotIn("System.setProperty('org.gradle.caching.debug'", timing)
+
+    def test_gradle_diagnostics_keep_each_attempt_for_comparison(self):
+        upload = step_block(self.build, 'Upload Gradle diagnostics')
+        self.assertIn('name: ios-build-gradle-${{ github.run_attempt }}\n', upload)
+
     def test_ci_timing_is_installed_before_build_and_uploaded_on_failure(self):
         self.assertIn('GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info', self.build)
         install = step_block(self.build, 'Install Gradle diagnostics')
