@@ -54,8 +54,8 @@ def looks_like_float_literal(text: str) -> bool:
 
     Either it carries an `f`/`F` suffix, or its body has a decimal point or
     an exponent. A bare integer token is a type error where a Double is
-    expected, and the resulting compile failure would be misreported as
-    "killed (build failed)" -- a mutant credited to a test that never ran.
+    expected, and the resulting compile-failed mutation would provide no
+    evidence of test protection.
     """
     if text[-1:] in ("f", "F"):
         return True
