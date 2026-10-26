@@ -76,7 +76,7 @@ class IosBuildCacheTests(unittest.TestCase):
             restore = step_block(self.build, 'Restore ' + cache + ' cache')
             save = step_block(self.build, 'Save ' + cache + ' cache')
             key = re.search(r'^          key: (.+)$', restore, re.M).group(1)
-            version = 'v2' if cache == 'dependencies' else 'v1'
+            version = 'v3' if cache == 'dependencies' else 'v1'
             prefix = (f'beid-ios-{cache}-{version}-${{{{ runner.os }}}}-${{{{ runner.arch }}}}-'
                       '${{ steps.cache-inputs.outputs.toolchain }}-')
             self.assertTrue(key.startswith(prefix), key)
@@ -182,6 +182,15 @@ class IosBuildCacheTests(unittest.TestCase):
         self.assertIn('-Dorg.gradle.caching.debug=true', options.split())
         timing = Path('scripts/ci_gradle_timing.init.gradle').read_text()
         self.assertNotIn("System.setProperty('org.gradle.caching.debug'", timing)
+
+    def test_native_link_cache_kind_is_explicit_before_gradle_starts(self):
+        # KGP 2.2.20 derives its default from the installed konan.properties.
+        # A fresh distribution and a restored one must select the same kind.
+        options = re.search(r'^      GRADLE_OPTS: (.+)$', self.build, re.M).group(1)
+        self.assertIn(
+            '-Dorg.gradle.project.kotlin.native.cacheKind.iosSimulatorArm64=static',
+            options.split(),
+        )
 
     def test_gradle_diagnostics_keep_each_attempt_for_comparison(self):
         upload = step_block(self.build, 'Upload Gradle diagnostics')

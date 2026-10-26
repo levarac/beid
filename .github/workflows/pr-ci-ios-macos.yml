@@ -154,7 +154,9 @@ jobs:
       unit-shards: ${{ steps.plan.outputs.unit-shards }}
     env:
       # Dedicated build-only home: no test task results enter these caches.
-      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info -Dorg.gradle.caching.debug=true
+      # KGP 2.2.20 otherwise derives NONE before a fresh toolchain is installed,
+      # but STATIC when ~/.konan is restored, changing the native link cache key.
+      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info -Dorg.gradle.caching.debug=true -Dorg.gradle.project.kotlin.native.cacheKind.iosSimulatorArm64=static
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -235,9 +237,9 @@ jobs:
             ~/.konan
             ${{ runner.temp }}/beid-gradle/caches/*/kotlin-dsl
             ${{ runner.temp }}/beid-gradle/caches/*/groovy-dsl
-          key: beid-ios-dependencies-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', '**/gradle-wrapper.*', '**/gradlew*', '**/*.toml', 'scripts/resolve_kmp_java_home.sh', '.github/workflows/pr-ci-ios-macos.yml') }}
+          key: beid-ios-dependencies-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', '**/gradle-wrapper.*', '**/gradlew*', '**/*.toml', 'scripts/resolve_kmp_java_home.sh', '.github/workflows/pr-ci-ios-macos.yml') }}
           restore-keys: |
-            beid-ios-dependencies-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-
+            beid-ios-dependencies-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-
 
       - name: Restore swift-packages cache
         id: swift-packages
