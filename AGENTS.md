@@ -454,7 +454,9 @@ classification; failed collection or classification runs all three gates.
   `:app:assembleDebug`, `:app:compileDebugAndroidTestKotlin`, and
   `:app:dependencyInsight` for Barnard dependency provenance. The private Parallax comparison is explicitly SKIPPED here;
   a separate protected main-only workflow runs it.
-**SwiftLint**: `scripts/lint.sh`.
+**SwiftLint**: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
+The fixture check requires SwiftLint exit 2 and exact fail-fixture line/rule
+violations, with no pass-fixture or application violations.
 **Repository sanity**: YAML and TestFlight note validation,
   `scripts/check_pr_ci_doc_drift.py`, and
   `python3 -m unittest discover -s scripts/tests -t .`.

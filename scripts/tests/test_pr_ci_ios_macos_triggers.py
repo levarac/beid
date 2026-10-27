@@ -5,6 +5,9 @@ import unittest
 from pathlib import Path
 
 
+from scripts.tests.workflow_yaml import workflow_data
+
+
 WORKFLOW_PATH = Path(__file__).parents[2] / ".github/workflows/pr-ci-ios-macos.yml"
 
 EXPECTED_PATHS = [
@@ -57,55 +60,56 @@ def event_section(block: str, event: str) -> str:
 
 class PrCiIosMacosTriggerTest(unittest.TestCase):
     def test_pull_request_fires_on_every_head(self) -> None:
-        section = event_section(trigger_block(workflow_text()), "pull_request")
-        self.assertIn("    types: [opened, synchronize, reopened, ready_for_review, labeled]\n", section)
-        self.assertNotIn("paths:", section)
+        section = workflow_data(workflow_text())["on"]["pull_request"]
+        self.assertEqual(set(section), {"types"})
+        self.assertEqual(set(section["types"]),
+                         {"opened", "synchronize", "reopened", "ready_for_review", "labeled"})
 
     def test_drafts_also_get_exact_head_evidence(self) -> None:
-        text = workflow_text()
-        self.assertNotIn("pull_request.draft", text)
-        self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", text)
+        data = workflow_data(workflow_text())
+        checkouts = []
+        for job in data["jobs"].values():
+            self.assertNotIn("pull_request.draft", job.get("if", ""))
+            for step in job.get("steps", []):
+                self.assertNotIn("pull_request.draft", step.get("if", ""))
+                if step.get("uses", "").startswith("actions/checkout@"):
+                    checkouts.append(step)
+        self.assertTrue(checkouts)
+        for step in checkouts:
+            self.assertEqual(step["with"]["ref"],
+                             "${{ github.event.pull_request.head.sha || github.sha }}")
 
     def test_push_is_limited_to_main(self) -> None:
-        block = trigger_block(workflow_text())
-        section = event_section(block, "push")
-
-        self.assertIn("    branches: [main]\n", section)
-        self.assertNotIn("tags:", section)
+        section = workflow_data(workflow_text())["on"]["push"]
+        self.assertEqual(section["branches"], ["main"])
+        self.assertNotIn("tags", section)
+        self.assertNotIn("branches-ignore", section)
 
     def test_manual_dispatch_is_available(self) -> None:
-        block = trigger_block(workflow_text())
-
-        self.assertIn("  workflow_dispatch:", block)
+        self.assertIn("workflow_dispatch", workflow_data(workflow_text())["on"])
 
     def test_main_push_keeps_the_paths_filter(self) -> None:
-        block = trigger_block(workflow_text())
-
-        for event in ("push",):
-            with self.subTest(event=event):
-                section = event_section(block, event)
-                found = re.findall(r'^      - "(.+)"$', section, re.MULTILINE)
-                self.assertEqual(found, EXPECTED_PATHS)
+        paths = workflow_data(workflow_text())["on"]["push"]["paths"]
+        self.assertEqual(set(paths), set(EXPECTED_PATHS))
+        self.assertEqual(len(paths), len(EXPECTED_PATHS))
 
     def test_nightly_schedule_has_no_pr_filter(self) -> None:
-        self.assertIn("  schedule:\n", trigger_block(workflow_text()))
-        section = event_section(trigger_block(workflow_text()), "schedule")
-        self.assertIn('- cron: "23 3 * * *"', section)
-        self.assertNotIn("unlabeled", trigger_block(workflow_text()))
+        events = workflow_data(workflow_text())["on"]
+        self.assertEqual(events["schedule"], [{"cron": "23 3 * * *"}])
+        self.assertNotIn("unlabeled", events["pull_request"]["types"])
 
     def test_run_name_displays_payload_mode(self) -> None:
-        self.assertIn("\nrun-name:", workflow_text())
-        line = next(line for line in workflow_text().splitlines() if line.startswith("run-name:"))
-        self.assertIn("github.event_name == 'pull_request'", line)
-        self.assertIn("github.event.pull_request.labels.*.name", line)
-        self.assertIn("ci:full-ui", line)
-        self.assertIn("'smoke' || 'full'", line)
+        name = workflow_data(workflow_text())["run-name"]
+        self.assertIn("github.event_name == 'pull_request'", name)
+        self.assertIn("github.event.pull_request.labels.*.name", name)
+        self.assertIn("ci:full-ui", name)
+        self.assertIn("'smoke' || 'full'", name)
 
     def test_concurrency_still_cancels_superseded_runs(self) -> None:
-        text = workflow_text()
-
-        self.assertIn("  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}\n", text)
-        self.assertIn("  cancel-in-progress: true\n", text)
+        concurrency = workflow_data(workflow_text())["concurrency"]
+        self.assertEqual(concurrency["group"],
+                         "pr-ios-macos-${{ github.event_name }}-${{ github.ref }}")
+        self.assertEqual(concurrency["cancel-in-progress"], "true")
 
 
 if __name__ == "__main__":

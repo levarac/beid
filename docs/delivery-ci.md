@@ -48,7 +48,11 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     events behind the `parallax-comparison` environment. Its token must be an
     environment secret; missing credentials fail the trusted lane.
 
-  - SwiftLint: `scripts/lint.sh`
+  - SwiftLint: `scripts/lint.sh` and `scripts/check_lint_fixtures.py`.
+    The same hosted job proves both lint fixtures: SwiftLint must exit 2,
+    every fail marker must match its line and rule exactly, and the pass fixture
+    and application must have zero violations. The checker itself exits 0
+    only for that expected negative result; other exits or report drift fail.
   - repository sanity: XcodeGen YAML と TestFlight notes の JSON / 構造検証、
     `scripts/check_pr_ci_doc_drift.py` による本 subsection と workflow の
     drift 検査、`python3 -m unittest discover -s scripts/tests -t .` による
@@ -457,7 +461,9 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
 
   **`scripts/check_pr_ci_doc_drift.py` checks all three PR build workflows**
   against `AGENTS.md`, including the separate iOS and lab CLI job names and
-  distinguishing commands. Trigger, head checkout, hosted runner and secret
+  distinguishing commands. The scripts unittest discovery command is checked
+  in both directions, including whitespace and continued-line forms; an echo
+  or comment mentioning it is not execution evidence. Trigger, head checkout, hosted runner and secret
   boundaries are guarded by the contract tests in `scripts/tests`.
 
   Recommended required status checks on main: `Determine changed paths`,
