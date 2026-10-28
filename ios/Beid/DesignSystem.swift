@@ -357,11 +357,7 @@ struct BeidEmptyBlock<Content: View>: View {
 }
 
 extension ToolbarContent {
-  /// Removes the iOS 26 per-item glass from explicit toolbar content.
-  /// #630 removed branches that ADDED iOS 26 glass and made versions differ;
-  /// the owner approved this #631 branch because it REMOVES glass that exists
-  /// only on iOS 26, keeping explicit items consistent across OS versions.
-  /// The system-created navigation back item remains OS-owned.
+  /// Being removed under #730 (the OS's bar glass stays); no new call may be added.
   @ToolbarContentBuilder
   func beidWithoutSharedBackground() -> some ToolbarContent {
     if #available(iOS 26, *) {

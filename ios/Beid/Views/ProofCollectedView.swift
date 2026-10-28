@@ -136,10 +136,13 @@ struct ProofCollectedView: View {
       NavigationStack {
         WhatWeSendView()
           .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              BeidTextControl("Done", accessibilityLabel: "Done") { showWhatWeSend = false }
+            ToolbarItem(placement: .confirmationAction) {
+              if #available(iOS 26, *) {
+                Button(role: .confirm) { showWhatWeSend = false }
+              } else {
+                Button("Done") { showWhatWeSend = false }
+              }
             }
-            .beidWithoutSharedBackground()
           }
       }
     }
