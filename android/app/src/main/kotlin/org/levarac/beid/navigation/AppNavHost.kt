@@ -5,6 +5,9 @@ import android.content.ActivityNotFoundException
 import android.widget.Toast
 import android.provider.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -90,6 +93,12 @@ fun AppNavHost(
                 navigateClearingOnboarding(navController, next)
             }
         }
+    }
+
+    val currentPermissionResultHandler by rememberUpdatedState(handleBluetoothPermissionResult)
+    DisposableEffect(session) {
+        session.bindBluetoothPermissionResult { currentPermissionResultHandler(it) }
+        onDispose { session.bindBluetoothPermissionResult(null) }
     }
 
     NavHost(navController = navController, startDestination = startDestination) {

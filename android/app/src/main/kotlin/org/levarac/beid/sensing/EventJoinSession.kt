@@ -146,6 +146,9 @@ interface EventJoinSession {
      */
     fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit)
 
+    /** Replaces the current permission UI after recreation; null releases that UI. */
+    fun bindBluetoothPermissionResult(onResult: ((BluetoothPermissionState) -> Unit)?) = Unit
+
     /**
      * Manual trigger for `RECORDING -> SIGNAL_LOST` (beid#120) — Android has
      * no real BLE signal-loss *detection* yet, only this explicit action,
