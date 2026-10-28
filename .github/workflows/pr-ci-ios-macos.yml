@@ -1,10 +1,14 @@
 name: PR iOS CI
+# Display only: execution mode is selected once below from the immutable event file.
+run-name: "iOS simulator (${{ github.event_name == 'pull_request' && github.event.pull_request.labels != null && !contains(github.event.pull_request.labels.*.name, 'ci:full-ui') && 'smoke' || 'full' }}) — ${{ github.event_name }} — ${{ github.ref_name }}"
 
 on:
   # Always report a status for every PR head, including drafts. Workflow-level
   # path filters would leave a required context pending on unrelated changes.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+  merge_group:
+    types: [checks_requested]
   push:
     # Measure the merged result on main exactly once. Note the concurrency
     # group below is keyed on github.ref with cancel-in-progress, so two merges
@@ -20,12 +24,21 @@ on:
       - "android/gradle.properties"
       - "android/gradlew"
       - "android/gradle/wrapper/**"
+      - "android/gradle/*.toml"
+      - "scripts/ci_change_filter.py"
+      - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
+      - "scripts/ios_ui_smoke.py"
+      - "scripts/run_local_tests.py"
   # Escape hatch: run this lane against any ref on demand. `paths` does not
   # apply to workflow_dispatch, so a manual run always executes.
   workflow_dispatch:
+  # 03:23 UTC avoids the busy top of the hour; scheduled workflows use main,
+  # the default branch. Its separate group cannot cancel a main push.
+  schedule:
+    - cron: "23 3 * * *"
 
 permissions:
   contents: read
@@ -34,16 +47,111 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
 
 concurrency:
-  group: pr-ios-macos-${{ github.ref }}
+  # Event and ref/PR identity isolate queue entries from PR updates and main pushes.
+  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Classify paths for iOS lane
+    # Pull requests only: merge groups, main pushes, nightly and manual runs bypass classification.
+    # The name differs from pr-ci.yml's "Determine changed paths" on purpose:
+    # required status contexts are keyed by job name.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ios: ${{ steps.classify.outputs.ios }}
+      error: ${{ steps.classify.outputs.error }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Collect changed paths
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const outputPath = `${process.env.RUNNER_TEMP}/beid-changed-files.json`;
+            // The compare API returns at most 300 files. A list that reaches the cap
+            // may be truncated, and a truncated list can look documentation-only.
+            const FILE_LIMIT = 300;
+            try {
+              // Pinned to this event's own SHAs, never to the pull request's current
+              // file list: a re-run of an older run must classify what it builds.
+              let basehead;
+              if (context.eventName === 'pull_request') {
+                const { base, head } = context.payload.pull_request;
+                basehead = `${base.sha}...${head.sha}`;
+              } else if (context.eventName === 'merge_group') {
+                const { base_sha, head_sha } = context.payload.merge_group || {};
+                if (!/^[0-9a-f]{40}$/i.test(base_sha || '') || !/^[0-9a-f]{40}$/i.test(head_sha || '')) {
+                  throw new Error('merge group is missing valid base/head SHAs');
+                }
+                basehead = `${base_sha}...${head_sha}`;
+              } else if (context.eventName === 'push' && context.payload.before && !/^0+$/.test(context.payload.before)) {
+                basehead = `${context.payload.before}...${context.payload.after}`;
+              } else {
+                throw new Error(`unsupported or unbounded event: ${context.eventName}`);
+              }
+              let listed = 0;
+              let firstPage = true;
+              let iosForceRun = false;
+              const files = await github.paginate(
+                github.rest.repos.compareCommitsWithBasehead,
+                { owner: context.repo.owner, repo: context.repo.repo, basehead, per_page: 100 },
+                response => {
+                  // Compare pagination is by commit; files exist only on page 1.
+                  if (!firstPage) return [];
+                  firstPage = false;
+                  const page = response.data.files;
+                  if (!Array.isArray(page)) {
+                    throw new Error('first compare page is missing a files array');
+                  }
+                  listed = page.length;
+                  // Renames, deletions and incomplete metadata are never safe
+                  // evidence for skipping iOS, even inside excluded directories.
+                  iosForceRun ||= page.some(file =>
+                    !['added', 'modified'].includes(file.status) ||
+                    typeof file.filename !== 'string' || !file.filename ||
+                    Boolean(file.previous_filename));
+                  return page.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
+                },
+              );
+              if (listed >= FILE_LIMIT) {
+                throw new Error(`file list may be truncated at ${FILE_LIMIT} files (${listed} listed)`);
+              }
+              fs.writeFileSync(outputPath, JSON.stringify(iosForceRun ? { files, ios_force_run: true } : { files }), 'utf8');
+            } catch (error) {
+              core.warning(`changed-path collection failed; all checks will run: ${error.message}`);
+              fs.writeFileSync(outputPath, JSON.stringify({ error: String(error) }), 'utf8');
+            }
+
+      - name: Classify changed paths (fail closed)
+        id: classify
+        if: always()
+        run: python3 scripts/ci_change_filter.py --input "$RUNNER_TEMP/beid-changed-files.json" >> "$GITHUB_OUTPUT"
+
   ios-simulator:
     name: iOS simulator
+    needs: changes
+    # Still created on every PR head so the required context reports; a
+    # PR limited to docs or Android app sources/resources reports it as skipped.
+    # Fail closed: unsafe diff metadata, unknown paths, or failed/missing classification
+    # runs the lane. Merge groups always run the full suite, even for docs-only changes.
+    # `!cancelled()` avoids starting a superseded macOS job.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.ios != 'false' || needs.changes.outputs.error == 'true') }}
     # Keep PR code on disposable hosted runners; repository variables must
     # never route a fork pull request back to a persistent signing host.
     runs-on: macos-26
-    timeout-minutes: 45
+    # The serial unit and UI suites (959 tests) take 28-39 minutes after a
+    # 9-14 minute build; 45 minutes cancelled most runs from 2026-10-15 on.
+    timeout-minutes: 60
     steps:
       - name: Initialize CI output path
         shell: bash
@@ -55,6 +163,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Determine test mode
+        id: test-mode
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          python3 -m scripts.ios_ui_smoke mode \
+            --event-name "$EVENT_NAME" --event-path "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Set up Java
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -159,9 +277,17 @@ jobs:
       - name: Test without rebuilding
         shell: bash
         env:
+          TEST_MODE: ${{ steps.test-mode.outputs.mode }}
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
         run: |
           set -euo pipefail
+          # Materialize before reading: a parser failure must stop the test step.
+          python3 -m scripts.ios_ui_smoke arguments --mode "$TEST_MODE" \
+            > "$CI_OUTPUT_ROOT/test-arguments.txt"
+          test_args=(SWIFT_OPTIMIZATION_LEVEL=-O)
+          while IFS= read -r argument; do
+            test_args+=("$argument")
+          done < "$CI_OUTPUT_ROOT/test-arguments.txt"
           xcodebuild -quiet \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
@@ -170,7 +296,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             -resultBundlePath "$CI_OUTPUT_ROOT/Tests.xcresult" \
-            SWIFT_OPTIMIZATION_LEVEL=-O \
+            "${test_args[@]}" \
             test-without-building
 
       - name: Summarize structured test results
@@ -270,6 +396,22 @@ jobs:
           if failed != 0 or result != "Passed":
               raise SystemExit(f"tests did not pass: result={result}, failed={failed}")
           PY
+
+      - name: Verify UI execution and bundle durations
+        if: always()
+        shell: bash
+        env:
+          TEST_MODE: ${{ steps.test-mode.outputs.mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$CI_OUTPUT_ROOT"
+          # Inspect Xcode 26.5's per-node fields; retain the schema with the JSON.
+          xcrun xcresulttool get test-results tests --schema \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" > "$CI_OUTPUT_ROOT/test-tree-schema.json"
+          xcrun xcresulttool get test-results tests \
+            --path "$CI_OUTPUT_ROOT/Tests.xcresult" --compact > "$CI_OUTPUT_ROOT/test-tree.json"
+          python3 -m scripts.ios_ui_smoke verify --mode "$TEST_MODE" \
+            --tests-json "$CI_OUTPUT_ROOT/test-tree.json" --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Delete owned simulator
         if: ${{ always() && steps.simulator.outputs.udid != '' }}

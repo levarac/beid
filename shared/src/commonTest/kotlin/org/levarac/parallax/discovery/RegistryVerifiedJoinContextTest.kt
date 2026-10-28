@@ -49,6 +49,7 @@ class RegistryVerifiedJoinContextTest {
         assertEquals(CANONICAL_OPEN_CODE, issued.eventIdHex)
         assertEquals(DEFINITION_HASH_HEX, issued.definitionHashHex)
         assertEquals(BLOCK_HASH_HEX, issued.registryBlockHashHex)
+        assertNull(issued.eventName, "operator definitions contain no display name")
     }
 
     @Test
@@ -308,10 +309,28 @@ class RegistryVerifiedJoinContextTest {
         assertEquals(EVENT_ID, issued.eventIdHex)
         assertEquals(DEFINITION_HASH_HEX, issued.definitionHashHex)
         assertEquals(BLOCK_HASH_HEX, issued.registryBlockHashHex)
+        assertEquals("Event", issued.eventName)
         assertNull(
             issued.definition,
             "shape (a) stands on retained promotion evidence, not on a live definition read",
         )
+    }
+
+    @Test
+    fun aJoinRetainsTheEnvelopeNameDespiteLaterHintsAndDisagreeingEnvelopes() {
+        val store = createNearbyEventDiscoveryStore()
+        promotedCandidates(store = store)
+        recordNearbyEventHint(store, "p", "Unauthenticated name", HASH.hexBytes(), null, false, false, 2L)
+        recordNearbyEventRadioSelfVerifiedEnvelope(
+            store, "p", "Different key set name", HASH.hexBytes(), byteArrayOf(9, 8, 7),
+            false, false, false, 3L,
+        )
+
+        val issued = assertNotNull(
+            RegistryVerifiedJoinContext.fromNearbyCandidate(store.snapshot, HASH, VALID_FROM),
+        )
+        assertEquals("Event", issued.eventName)
+        assertEquals(EVENT_ID, issued.eventIdHex)
     }
 
     @Test
@@ -489,8 +508,8 @@ class RegistryVerifiedJoinContextTest {
         retainEvidence: Boolean = true,
         definitionHashHex: String = DEFINITION_HASH_HEX,
         resolvedEventIdHex: String = EVENT_ID,
+        store: NearbyEventDiscoveryStore = createNearbyEventDiscoveryStore(),
     ): NearbyEventCandidates {
-        val store = createNearbyEventDiscoveryStore()
         recordEnvelope(store)
         val attempt = assertNotNull(beginNearbyEventRegistryResolutionFromHex(store, HASH))
         return completeNearbyEventRegistryResolutionFromHex(

@@ -203,6 +203,43 @@ final class StubOperatorServer {
   private var heldResponses: [(NWConnection, Data)] = []
   private var activeRequests = 0
   private var maximumActiveRequests = 0
+  private let observationStart = ProcessInfo.processInfo.systemUptime
+  private var returnedURL: URL?
+  private var readyUptime: TimeInterval?
+  private var readyDate: Date?
+  private var readyPort: UInt16?
+  private var readyEndpoint: String?
+  private var clientSubscription: ExportedKotlinPackages.org.levarac.parallax.submission
+    .IosSubmissionTransportTestSubscription?
+  private var clientAttemptCount = 0
+  private var expectedAttemptCount = 0
+  private var firstClientAttempt: ClientEvent?
+  private var firstExpectedAttempt: ClientEvent?
+  private var lastExpectedEvent: ClientEvent?
+  private var clientEvents: [ClientEvent] = []
+
+  private struct ClientEvent {
+    let id: Int64
+    let phase: String
+    let method: String
+    let url: String
+    let uptime: TimeInterval
+    let httpStatus: Int32
+    let errorDomain: String
+    let errorCode: Int64
+
+    func summary(since start: TimeInterval) -> String {
+      let outcome: String
+      if !errorDomain.isEmpty {
+        outcome = "outcome=error error=\(errorDomain)/\(errorCode) HTTP=\(httpStatus)"
+      } else if httpStatus != 0 {
+        outcome = "outcome=response HTTP=\(httpStatus)"
+      } else {
+        outcome = "outcome=\(phase == "attempt" ? "pending" : phase)"
+      }
+      return "id=\(id) \(method) url=\(url) at+\(String(format: "%.3f", uptime - start))s phase=\(phase) \(outcome)"
+    }
+  }
 
   var maximumInFlight: Int { lock.withLock { maximumActiveRequests } }
 
@@ -243,10 +280,75 @@ final class StubOperatorServer {
   }
 
   var diagnostics: String {
-    lock.lock()
-    defer { lock.unlock() }
-    return "connections=\(connectionCount), bytes=\(receivedByteCount), requests=\(requestCount), POST=\(_postCount), GET=\(_getCount)"
+    diagnosticSnapshot(atTimeout: false)
   }
+
+  var timeoutDiagnostics: String { diagnosticSnapshot(atTimeout: true) }
+
+  private func diagnosticSnapshot(atTimeout: Bool) -> String {
+    lock.withLock {
+      let now = ProcessInfo.processInfo.systemUptime
+      let classification: String
+      if clientAttemptCount > 0 && expectedAttemptCount == 0 {
+        classification = "attempted-different-url"
+      } else if connectionCount > 0 {
+        classification = "connected-but-slow"
+      } else if expectedAttemptCount > 0 {
+        classification = lastExpectedEvent?.errorDomain.isEmpty == false
+          ? "attempted-right-url-failed" : "attempted-right-url-no-connection-yet"
+      } else {
+        classification = "never-attempted"
+      }
+      let elapsed: (TimeInterval?) -> String = { value in
+        value.map { "+\(String(format: "%.3f", $0 - self.observationStart))s" } ?? "never"
+      }
+      let readyAt = readyDate.map { ISO8601DateFormatter().string(from: $0) } ?? "never"
+      let events = clientEvents.map { $0.summary(since: observationStart) }.joined(separator: "; ")
+      // NWListener exposes parameters and port, not a separate getsockname
+      // endpoint. Preserve exactly what it reports; nil is not proof of IPv6
+      // or IPv4 binding, and the returned URL is not the bound endpoint.
+      let endpoint = listener.parameters.requiredLocalEndpoint.map { String(describing: $0) } ?? "not-reported"
+      return "case=\(classification); " +
+        "listenerURL=\(returnedURL?.absoluteString ?? "not-returned"), " +
+        "listenerEndpoint=\(endpoint), listenerPort=\(listener.port.map { String($0.rawValue) } ?? "not-reported"), " +
+        "readyEndpoint=\(readyEndpoint ?? "not-reported"), readyPort=\(readyPort.map(String.init) ?? "not-reported"), " +
+        "readyAt=\(readyAt), listenerState=\(listener.state), listenerDebug=\(listener.debugDescription); " +
+        "connections=\(connectionCount), bytes=\(receivedByteCount), requests=\(requestCount), POST=\(_postCount), GET=\(_getCount); " +
+        "clientScope=process-during-stub-lifetime, clientAttempts=\(clientAttemptCount), expectedURLAttempts=\(expectedAttemptCount), " +
+        "firstAttemptURL=\(firstClientAttempt?.url ?? "none"), " +
+        "lastExpected={\(lastExpectedEvent?.summary(since: observationStart) ?? "none")}, clientEvents(last8)=[\(events)]; " +
+        "timeline=[ready@\(elapsed(readyUptime)), firstAttempt=\(firstClientAttempt == nil ? "never" : elapsed(firstClientAttempt?.uptime)), " +
+        "firstExpectedAttempt=\(elapsed(firstExpectedAttempt?.uptime)), \(atTimeout ? "timeout" : "sample")@\(elapsed(now))]"
+    }
+  }
+
+  private func recordClientEvent(
+    _ event: ExportedKotlinPackages.org.levarac.parallax.submission.IosSubmissionTransportTestEvent
+  ) {
+    let sample = ClientEvent(
+      id: event.requestId, phase: event.phase, method: event.method, url: event.url,
+      uptime: event.uptimeSeconds, httpStatus: event.httpStatus,
+      errorDomain: event.errorDomain, errorCode: event.errorCode
+    )
+    lock.withLock {
+      let expected = returnedURL.map { $0.absoluteString + "/v1/observations" }
+      let matches = expected.map { sample.url == $0 ||
+        (sample.url.hasPrefix($0 + "/") && sample.url.hasSuffix("/acceptance")) } ?? false
+      if sample.phase == "attempt" {
+        clientAttemptCount += 1
+        if firstClientAttempt == nil { firstClientAttempt = sample }
+        if matches {
+          expectedAttemptCount += 1
+          if firstExpectedAttempt == nil { firstExpectedAttempt = sample }
+        }
+      }
+      if matches { lastExpectedEvent = sample }
+      clientEvents.append(sample)
+      if clientEvents.count > 8 { clientEvents.removeFirst(clientEvents.count - 8) }
+    }
+  }
+
+  deinit { clientSubscription?.close() }
 
   init(
     eventId: Data,
@@ -268,13 +370,21 @@ final class StubOperatorServer {
     listener = try NWListener(using: .tcp, on: port)
   }
 
-  func start() async throws -> URL {
+  func start(timeout: TimeInterval? = nil) async throws -> URL {
+    clientSubscription = ExportedKotlinPackages.org.levarac.parallax.submission
+      .observeIosSubmissionTransportForTesting { [weak self] in self?.recordClientEvent($0) }
     listener.stateUpdateHandler = { [weak self] state in
       guard let self else { return }
       self.lock.lock()
       defer { self.lock.unlock() }
       if case .ready = state {
         self.isReady = true
+        if self.readyUptime == nil {
+          self.readyUptime = ProcessInfo.processInfo.systemUptime
+          self.readyDate = Date()
+          self.readyPort = self.listener.port?.rawValue
+          self.readyEndpoint = self.listener.parameters.requiredLocalEndpoint.map { String(describing: $0) }
+        }
       }
       if case .failed(let error) = state {
         self.startupError = error
@@ -286,13 +396,29 @@ final class StubOperatorServer {
     }
     listener.start(queue: queue)
 
+    if let timeout {
+      let ready = try await SubmissionTestWait.until(timeout: timeout) {
+        let status = self.lock.withLock { (self.isReady, self.startupError) }
+        if let error = status.1 { throw error }
+        return status.0 && self.listener.port.map { $0.rawValue != 0 } == true
+      }
+      guard ready, let port = listener.port else {
+        throw StubOperatorError.startTimedOut(diagnostics: "after \(timeout)s; \(diagnostics)")
+      }
+      let url = try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
+      lock.withLock { returnedURL = url }
+      return url
+    }
+
     for _ in 0..<100 {
       let status = lock.withLock { (isReady, startupError) }
       if let error = status.1 {
         throw error
       }
       if status.0, let port = listener.port, port.rawValue != 0 {
-        return try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
+        let url = try XCTUnwrap(URL(string: "http://127.0.0.1:\(port.rawValue)"))
+        lock.withLock { returnedURL = url }
+        return url
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
@@ -314,10 +440,27 @@ final class StubOperatorServer {
       if lock.withLock({ isCancelled }) { return }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.requestTimedOut(diagnostics: "listener did not release its port")
+    throw StubOperatorError.requestTimedOut(diagnostics: "listener did not release its port; \(timeoutDiagnostics)")
   }
 
-  func waitFor(postCount expectedPosts: Int, getCount expectedGets: Int? = nil) async throws {
+  func waitFor(
+    postCount expectedPosts: Int,
+    getCount expectedGets: Int? = nil,
+    timeout: TimeInterval? = nil
+  ) async throws {
+    if let timeout {
+      if try await SubmissionTestWait.until(timeout: timeout, {
+        self.postCount >= expectedPosts && (expectedGets.map { self.getCount >= $0 } ?? true)
+      }) { return }
+      let progress = lock.withLock {
+        connectionCount == 0 ? "no connection arrived" : "connection arrived but expected requests did not complete"
+      }
+      throw StubOperatorError.requestTimedOut(
+        diagnostics: "after \(timeout)s: \(progress); expected POST>=\(expectedPosts), " +
+          "GET>=\(expectedGets ?? 0); \(timeoutDiagnostics)"
+      )
+    }
+
     for _ in 0..<1_000 {
       if postCount >= expectedPosts,
          expectedGets.map({ getCount >= $0 }) ?? true {
@@ -325,7 +468,7 @@ final class StubOperatorServer {
       }
       try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.requestTimedOut(diagnostics: diagnostics)
+    throw StubOperatorError.requestTimedOut(diagnostics: timeoutDiagnostics)
   }
 
   private func accept(_ connection: NWConnection) {
@@ -512,6 +655,36 @@ final class StubOperatorServer {
     startupError = error
     lock.unlock()
   }
+}
+
+@MainActor
+func waitForStoredSubmissionState(
+  _ expected: ReportSubmissionState,
+  at fileURL: URL,
+  server: StubOperatorServer
+) async throws {
+  var lastState: String?
+  if try await SubmissionTestWait.until({
+    let state = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState
+    lastState = state?.rawValue
+    return state == expected
+  }) { return }
+  throw StubOperatorError.submissionStateTimedOut(
+    expected: expected.rawValue,
+    diagnostics: "after \(SubmissionTestWait.timeout)s; last state \(lastState ?? "no record"); \(server.timeoutDiagnostics)"
+  )
+}
+
+@MainActor
+func waitForSubmissionJoin(_ coordinator: SensingCoordinator, eventIdHex: String) async throws {
+  if try await SubmissionTestWait.until({
+    coordinator.relayGateJoinedEventIdHexForTesting == eventIdHex
+  }) { return }
+  throw StubOperatorError.joinedStateTimedOut(
+    expected: eventIdHex,
+    actual: coordinator.relayGateJoinedEventIdHexForTesting,
+    refusal: "after \(SubmissionTestWait.timeout)s; \(String(describing: coordinator.joinRefusal))"
+  )
 }
 
 struct HTTPRequest {

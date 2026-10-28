@@ -1,5 +1,6 @@
 package org.levarac.beid.venue
 
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -26,6 +27,18 @@ internal fun interface VenueBundleAcquirer {
     suspend fun acquire(url: String): ByteArray?
 }
 
+/** Reads at most [maxBytes] plus one lookahead byte, rejecting oversized bodies. */
+internal fun readBoundedVenueBundle(input: InputStream, maxBytes: Int): ByteArray? {
+    val buffer = ByteArray(maxBytes + 1)
+    var total = 0
+    while (total < buffer.size) {
+        val count = input.read(buffer, total, buffer.size - total)
+        if (count == -1) break
+        total += count
+    }
+    return if (total <= maxBytes) buffer.copyOf(total) else null
+}
+
 /** HTTPS-only, redirect-refusing, bounded acquisition for the public pack. */
 internal class HttpsVenueBundleAcquirer : VenueBundleAcquirer {
     override suspend fun acquire(url: String): ByteArray? = withContext(Dispatchers.IO) {
@@ -40,8 +53,7 @@ internal class HttpsVenueBundleAcquirer : VenueBundleAcquirer {
             if (connection.responseCode !in 200..299) return@withContext null
             if (connection.contentLengthLong > MAX_BUNDLE_BYTES) return@withContext null
             connection.inputStream.use { input ->
-                val bytes = input.readNBytes(MAX_BUNDLE_BYTES + 1)
-                bytes.takeIf { it.size <= MAX_BUNDLE_BYTES }
+                readBoundedVenueBundle(input, MAX_BUNDLE_BYTES)
             }
         } catch (_: Exception) {
             null
