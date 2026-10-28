@@ -907,6 +907,7 @@ final class SensingCoordinator: ObservableObject {
   /// real event session is established. It is an untrusted routing hint and is
   /// never derived from event code.
   private var pendingCanonicalEventIdHex: String?
+  private var pendingEventName: String?
   /// Identifies the current join attempt so a completion that lands after the
   /// user moved on cannot act (beid#410).
   ///
@@ -1858,7 +1859,7 @@ final class SensingCoordinator: ObservableObject {
       let eventCode = pendingEventCode ?? engine.currentJoinedEventCode() ?? "Unknown Event"
       let session = EventSession(
         id: eventCode,
-        name: eventCode,
+        name: pendingEventName ?? eventCode,
         venue: nil,
         canonicalEventIdHex: pendingCanonicalEventIdHex
       )
@@ -2795,6 +2796,7 @@ final class SensingCoordinator: ObservableObject {
     switch decision {
     case .admit(let context):
       joinRefusal = nil
+      pendingEventName = context.eventName
       emitJoinStageDiagnostic(
         joinDiagnosticLog,
         eventIdHex: context.eventIdHex,
@@ -3027,6 +3029,7 @@ final class SensingCoordinator: ObservableObject {
     currentWindowReporterRpid = nil
     currentWindowLedgerOpened = false
     pendingCanonicalEventIdHex = nil
+    pendingEventName = nil
     // Cleared with its sibling. `startSensing` resets first and assigns both
     // afterwards, so a new session never inherits the previous one's name.
     pendingEventCode = nil

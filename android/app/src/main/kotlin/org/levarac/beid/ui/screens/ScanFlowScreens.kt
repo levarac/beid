@@ -58,15 +58,9 @@ import org.levarac.beid.ui.theme.BeidTheme
  * is a plain `Column`, the same embedded-content shape the `ScanPhaseDetail`
  * composable this replaces already used.
  *
- * **Data gap vs. iOS, stated once here for all four screens:** Android's
- * [ScanEventSession] is `data class ScanEventSession(val eventCode: String)`
- * — it carries none of iOS's richer `EventSession` (display name, identity
- * verification status). These screens show only what that model actually
- * has; they do not invent an event name or fake a verification-retry
- * affordance. [EventFoundScreen] and the steady-state [RecordingScreen]
- * accordingly show no event-identity content beyond what their design
- * calls for; [SignalLostScreen] is the one screen whose copy needs "the
- * event," and it uses the one real field, `eventCode`.
+ * [ScanEventSession] carries an optional name and canonical ID from verified
+ * join. Missing display metadata stays absent; these screens do not invent
+ * a name or expose an identity-verification retry state they do not own.
  */
 @Composable
 fun ScanFlowScreen(
@@ -230,6 +224,15 @@ fun RecordingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(BeidSpacing.l),
     ) {
+        session.eventName?.let { eventName ->
+            Text(
+                text = eventName,
+                style = MaterialTheme.typography.titleLarge,
+                color = BeidTheme.colors.textPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().semantics { heading() },
+            )
+        }
         if (showCeremony) {
             BeidHeroHeader(
                 title = stringResource(R.string.scan_recording_ceremony_title),
@@ -304,7 +307,7 @@ fun SignalLostScreen(session: ScanEventSession, peersVerified: Int, onResumeSens
         BeidHeroHeader(
             icon = Icons.Filled.Warning,
             title = stringResource(R.string.scan_signal_lost_title),
-            subtitle = stringResource(R.string.scan_signal_lost_message, session.eventCode),
+            subtitle = stringResource(R.string.scan_signal_lost_message, session.eventName ?: session.eventCode),
             tint = BeidTheme.colors.signalWarning,
         )
         BeidStatusPill(

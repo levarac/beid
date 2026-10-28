@@ -16,9 +16,14 @@ EXPECTED_PATHS = [
     'android/gradle.properties',
     'android/gradlew',
     'android/gradle/wrapper/**',
+    'android/gradle/*.toml',
+    'scripts/ci_change_filter.py',
+    'scripts/xcodegen_generate_checked.sh',
     'scripts/resolve_kmp_java_home.sh',
     'scripts/download_xcodegen.sh',
     'scripts/ci_simulator.py',
+    'scripts/ios_ui_smoke.py',
+    'scripts/run_local_tests.py',
 ]
 
 
@@ -50,7 +55,7 @@ def event_section(block: str, event: str) -> str:
 class PrCiIosMacosTriggerTest(unittest.TestCase):
     def test_pull_request_fires_on_every_head(self) -> None:
         section = event_section(trigger_block(workflow_text()), "pull_request")
-        self.assertIn("    types: [opened, synchronize, reopened, ready_for_review]\n", section)
+        self.assertIn("    types: [opened, synchronize, reopened, ready_for_review, labeled]\n", section)
         self.assertNotIn("paths:", section)
 
     def test_drafts_also_get_exact_head_evidence(self) -> None:
@@ -79,10 +84,24 @@ class PrCiIosMacosTriggerTest(unittest.TestCase):
                 found = re.findall(r'^      - "(.+)"$', section, re.MULTILINE)
                 self.assertEqual(found, EXPECTED_PATHS)
 
+    def test_nightly_schedule_has_no_pr_filter(self) -> None:
+        self.assertIn("  schedule:\n", trigger_block(workflow_text()))
+        section = event_section(trigger_block(workflow_text()), "schedule")
+        self.assertIn('- cron: "23 3 * * *"', section)
+        self.assertNotIn("unlabeled", trigger_block(workflow_text()))
+
+    def test_run_name_displays_payload_mode(self) -> None:
+        self.assertIn("\nrun-name:", workflow_text())
+        line = next(line for line in workflow_text().splitlines() if line.startswith("run-name:"))
+        self.assertIn("github.event_name == 'pull_request'", line)
+        self.assertIn("github.event.pull_request.labels.*.name", line)
+        self.assertIn("ci:full-ui", line)
+        self.assertIn("'smoke' || 'full'", line)
+
     def test_concurrency_still_cancels_superseded_runs(self) -> None:
         text = workflow_text()
 
-        self.assertIn("  group: pr-ios-macos-${{ github.ref }}\n", text)
+        self.assertIn("  group: pr-ios-macos-${{ github.event_name }}-${{ github.ref }}\n", text)
         self.assertIn("  cancel-in-progress: true\n", text)
 
 
