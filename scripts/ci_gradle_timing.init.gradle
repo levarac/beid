@@ -1,0 +1,44 @@
+import org.gradle.api.Task
+import org.gradle.api.execution.TaskExecutionListener
+import org.gradle.api.tasks.TaskState
+
+// Installed only in the hosted build's private Gradle home. Gradle 8.14's
+// public execution listeners require configuration cache to remain disabled
+// (the repository does not enable it). Do not register these files as inputs.
+def outputPath = System.getenv('BEID_GRADLE_TIMING_FILE')
+if (outputPath) {
+    def started = System.nanoTime()
+    def output = new File(outputPath)
+    output.parentFile.mkdirs()
+    def lock = new Object()
+    // The workflow enables cache-key fingerprints in GRADLE_OPTS before Gradle
+    // starts; setting that property here is too late for cache-key logging.
+    def starts = new java.util.concurrent.ConcurrentHashMap<String, Long>()
+    def append = { String path, String outcome, long nanos ->
+        synchronized (lock) {
+            output.append(String.format(java.util.Locale.ROOT, '%s\t%s\t%.3f%n',
+                path, outcome, nanos / 1e9), 'UTF-8')
+        }
+    }
+    def configured = false
+    gradle.taskGraph.whenReady {
+        append('configuration', 'COMPLETE', System.nanoTime() - started)
+        configured = true
+    }
+    gradle.addListener(new TaskExecutionListener() {
+        void beforeExecute(Task task) {
+            if (task.path.startsWith(':shared:')) starts.put(task.path, System.nanoTime())
+        }
+        void afterExecute(Task task, TaskState state) {
+            if (!task.path.startsWith(':shared:')) return
+            def outcome = state.failure ? 'FAILED' :
+                (state.skipMessage ?: (state.noSource ? 'NO-SOURCE' :
+                (state.upToDate ? 'UP-TO-DATE' : 'EXECUTED')))
+            append(task.path, outcome, System.nanoTime() - starts.remove(task.path))
+        }
+    })
+    gradle.buildFinished { result ->
+        if (!configured) append('configuration', result.failure ? 'FAILED' : 'COMPLETE',
+            System.nanoTime() - started)
+    }
+}

@@ -170,8 +170,8 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     It excludes dSYMs, loose compiler outputs, intermediates, dependency caches
     and other DerivedData contents. Absolute Products references in the plist
     are relocated to `__TESTROOT__`; external product symlinks fail packaging.
-    Its actual compressed byte/MiB size is printed in the build summary; no
-    hosted size has been measured for this change yet. Upload uses compression
+    Its actual compressed byte/MiB size is printed in the build summary;
+    run 40166483245 measured about 24.7 MB (23.6 MiB). Upload uses compression
     level zero because the tar is already compressed. Consumers download and
     extract it and use `-xctestrun`, with no project or DerivedData argument.
     Separate small plan and per-job evidence artifacts carry the inventory,
@@ -225,6 +225,201 @@ See [CI dependency pins](ci-dependency-pins.md) for provenance.
     Failed, cancelled, skipped or missing needed jobs; missing/duplicate shard
     reports; wrong mode/bundle; zero/inconsistent counts; missing durations;
     duplicate, extra, missing or skipped UI cases all fail closed.
+
+    Build caches are confined to `iOS simulator build`; test jobs and the
+    aggregate never restore caches. Three caches use the existing
+    `actions/cache` v4 SHA with separate restore/save actions:
+    - Dependencies: a dedicated `$RUNNER_TEMP/beid-gradle` home's
+      `wrapper/dists` and `caches/modules-2`, plus `~/.konan` (Kotlin/Native
+      distributions, downloaded native dependencies and platform caches).
+      The dependency cache also retains `caches/*/kotlin-dsl` and
+      `caches/*/groovy-dsl`, the compiled build scripts. Restoring downloaded
+      artifacts alone repeats script compilation on every job. These add about
+      4.3 MiB uncompressed, without project execution history. The whole version
+      directory, generated API JARs, transforms, file-hash state and project
+      `.gradle` are excluded. Existing prefix hits remain compatible and seed
+      the missing DSL entries on the next successful save.
+      The key hashes all Gradle scripts/properties/wrappers, TOML catalogs,
+      `scripts/resolve_kmp_java_home.sh` and this workflow. The JDK resolver is
+      the only repository script called by the Xcode build phases; Gradle
+      invokes no repository scripts. Unrelated Python edits do not invalidate
+      dependencies. A toolchain prefix restores the latest compatible entry
+      when the exact key misses. Gradle verifies module artifacts and native
+      toolchains use versioned directories; configuration is still evaluated.
+      Compiled project outputs are not in this dependency cache.
+    - Swift packages: `$RUNNER_TEMP/beid-swift-packages`, including checkouts,
+      repositories and binary artifacts. Its key hashes every Package.resolved
+      and Package.swift, project.yml, the generated project and this workflow.
+      An explicit `-resolvePackageDependencies` step uses the lockfile, checks
+      it stayed unchanged, and reports its own duration. The build uses the
+      same directory and forbids automatic resolution to other versions.
+    - Gradle build outputs: only the dedicated home's `caches/build-cache-1`,
+      with `org.gradle.caching=true`. Its key includes the complete checked-out
+      Git tree, with a toolchain prefix restore for newer trees. Gradle selects
+      content-addressed task outputs by their full input hashes, so changed
+      inputs rebuild while unchanged tasks can reuse an older tree's outputs.
+      A hit never skips the Xcode invocation or its KMP phase.
+      This home is populated only by build-for-testing, never by test tasks;
+      it cannot import Android/host test-task results from another lane.
+
+    All three keys also include a namespace version, runner OS/architecture
+    and a fingerprint of the selected Xcode build, simulator SDK build, full
+    JDK version and macOS build. Dependencies and Gradle build outputs restore
+    only through that complete prefix; Swift packages remain exact-key only.
+    No fallback crosses toolchains. Separate
+    save steps run only after successful build, enumeration and upload, only
+    on an exact-key miss (including a prefix hit). Dependencies and Swift
+    packages save for non-PR events or a PR whose head repository equals this
+    repository. Gradle build outputs save only on pushes to main, schedules,
+    or same-repository PRs; never merge groups, fork PRs or manual dispatches.
+    Fork PRs are restore-only, use no private credentials,
+    and retain GitHub's PR cache-ref isolation; no pull_request_target build
+    is introduced. PR caches and any merge-group dependency/package saves
+    remain ref-scoped;
+    default-branch caches can seed other refs, whose caches cannot seed main.
+    Workflow guards do not make arbitrary fork code trusted. GitHub's cache
+    scope is the additional boundary against a fork editing its own workflow.
+
+    No test results, xcresult bundles, evidence, simulator state, DerivedData
+    or final shared frameworks are cached. Every hit still builds, enumerates,
+    packs this run's products and executes every planned test on fresh owned
+    simulators. Build logs now hide shell-script environments and include
+    verbose phase/Gradle output plus `-showBuildTimingSummary`; timing sums can
+    overlap and are not a substitute for job wall clocks. Cache corruption is
+    a failure to investigate, never a reason to accept old test evidence.
+    Cache misses/eviction rebuild from pinned dependencies. Cache entry sizes
+    and restore/save time must be checked on hosted runs: the repository's
+    10 GB cache budget is shared with other lanes, and source-tree entries
+    still consume one entry per saved tree. Gradle's
+    [automatic cleanup](https://docs.gradle.org/8.14/userguide/directory_layout.html#dir:gradle_user_home:cache_cleanup)
+    expires build-cache entries after seven days without access, with a
+    default 24-hour cleanup interval. General user-home cleanup normally runs
+    on daemon shutdown, or after the session with `--no-daemon` (already used
+    by these Xcode phases). Gradle 8.14's `DirectoryBuildCache.close()` also
+    closes its persistent cache, whose `DefaultCacheCoordinator.close()` checks
+    for eligible cleanup; the build-scoped controller closes it at build end.
+    A still-live daemon alone does not suppress that local-cache check, but
+    the 24-hour interval can defer deletion. Age retention does not impose a
+    size bound: before saving, a
+    `du -sk` check skips empty/missing directories and those above 524288 KiB
+    (512 MiB). This caps each newly saved build-cache directory without
+    changing Gradle retention or deleting in-use entries. It does not cap
+    total repository cache usage. Bump the namespace to invalidate a suspected
+    bad cache.
+
+    Baseline for this cache change: run 40166483245, head 198f7a11, attempts
+    1/2. Build jobs were 680/1153 seconds: setup and runtime selection 16/43,
+    simulator create+boot 80/148, build-for-testing 470/854, enumeration 84/80,
+    packing+upload 10/9, and remaining cleanup/gaps 20/19 seconds. The existing
+    `-quiet` logs do not expose separate package-resolution, Gradle/Kotlin/Native
+    download/compile, Swift compile or linker intervals. The first Swift warning
+    appeared 394/719 seconds after the build step started; the remaining
+    76/135 seconds also mix compilation and linking. These are observable
+    boundaries, not phase attribution. No download or cache saving is measured
+    inside those opaque intervals, so per-phase savings remain hypotheses.
+    Build logs contain 16 environment blocks (85 assignment lines) per attempt;
+    downloaded measurement copies redact assignments before writing to disk.
+
+    Attempt 1 unit shard 1 took 665 seconds: setup 16, simulator create+boot
+    88, products/plan download+extract 6, test invocation 532, remainder 23.
+    UI shard 1 took 1039 seconds: setup 11, simulator create+boot 87,
+    download+extract 2, test invocation 917, remainder 22. Test invocations
+    include additional test-runner startup; their durations are not case-time
+    sums. The 24.7 MB products archive transfers in seconds, so changing its
+    handoff cannot recover minutes. Simulator boot could overlap downloads,
+    but only saves those few seconds here; no simulator-state reuse is added.
+
+    Hosted run 40177765095 at dc26afff (Xcode 26.5) measured 14.3 minutes
+    for build-for-testing cold and 14.9 minutes with exact hits on the original
+    three caches. Its shared build phase took 579 seconds. Those measurements
+    establish no hosted saving for the original cache paths.
+
+    Local profiling on 2026-10-25 used Gradle 8.14 / Kotlin Gradle plugin
+    2.2.20, Xcode 27.1 and Debug iphonesimulator arm64 build settings extracted
+    with xcodebuild. A fresh worktree-local Gradle home and a private copy of
+    the existing Konan distribution kept the global caches untouched. The
+    first invocation took 1335.5 seconds; after deleting shared/build, it took
+    228.5 seconds, with both Kotlin compilations and the static link FROM-CACHE.
+    Swift export and its SwiftPM build re-executed: the pinned plugin disables
+    caching for these experimental task types. Native static caches did not
+    change. GRADLE_OPTS enabled the build cache even through an actual Xcode
+    script phase; changing to --build-cache alone is not the fix.
+
+    Fresh homes restoring only the original CI paths took 310.2 and 190.6
+    seconds; the variation is why the first cold/warm difference is not a
+    hosted saving forecast. Adding only the compiled DSL caches took 130.5
+    seconds. Compared with the repeated baseline, settings evaluation fell
+    from 45.7 to 18.5 seconds. The same three native tasks were FROM-CACHE;
+    Swift export and its SwiftPM build still executed. Both comparisons began
+    without project .gradle or shared/build. All 19 object members of the final
+    library, exported symbols, Swift modules and headers matched; only archive
+    metadata and four source-index files differed.
+
+    A larger prototype retained generated-gradle-jars and transforms. It
+    added about 1.25 GiB for only 23.3 seconds less than the small-cache run,
+    before transfer costs, and is not retained. Keep the 4.3 MiB DSL addition
+    based on the local settings-evaluation reduction; its hosted benefit is
+    still a hypothesis, not an explanation for the native link miss.
+
+    Follow-up: run 40177765095 attempt 2 restored all three exact keys, but
+    Gradle still took 574 seconds with only two tasks FROM-CACHE (both Kotlin
+    compilations). The native static link executed. The restored build-cache
+    archive was 4,707,972 bytes. Those aggregate lines do not identify its
+    entries or establish whether a link entry was ever stored. GitHub's cache
+    metadata API also reports sizes, not archive contents. Do not infer a
+    missing link entry from archive size alone; local archives differ with
+    toolchain and debug information.
+
+    The proposed run-dependent DerivedData explanation did not reproduce.
+    Actual Xcode script invocations with output roots A, B, B, deleting
+    shared/build each time and sharing one private Gradle cache, took
+    137.6 / 111.4 / 123.2 seconds. All three cacheable tasks were FROM-CACHE:
+    main compilation 22.63 / 23.89 / 24.13 seconds, bridge compilation
+    0.48 / 0.20 / 0.34 seconds, link 1.73 / 1.20 / 1.16 seconds. Gradle's
+    normalized input fingerprints and cache keys for those tasks matched
+    across A/B/B. Only non-cacheable SwiftPM generation/merge input
+    fingerprints varied; this does not establish their cause. Consequently the build's DerivedData path stays
+    run-specific, along with every shard's artifact and evidence roots. The
+    hosted miss's differing input remains unverified; local Xcode 27.1/JDK 21
+    does not establish the behavior of hosted Xcode 26.5/JDK 17.
+
+    The build job installs scripts/ci_gradle_timing.init.gradle only into its
+    dedicated GRADLE_USER_HOME/init.d before build-for-testing. It records
+    shared task paths, Gradle outcomes and wall seconds, plus configuration
+    time from init-script evaluation through task-graph readiness (excluding
+    wrapper/JVM startup). It uses public Gradle 8.14 TaskExecutionListener,
+    TaskState, task-graph and build-finished APIs; configuration cache remains
+    disabled, as in android/gradle.properties. Enabling configuration cache
+    requires replacing these listeners. No timing file becomes a task input.
+    The original Xcode product phases remain identical to dc26afff; Gradle's
+    own actionable-task line supplies the counts.
+
+    CI enables org.gradle.caching.debug=true in GRADLE_OPTS before Gradle
+    starts, retaining normalized input fingerprints and stored/loaded entry
+    keys at info level. Setting the property in the init script was too late:
+    run 40199089439 recorded entry keys but no input fingerprints. With
+    -hideShellScriptEnvironment, the workflow preserves xcodebuild's exit
+    status through tee and retains build.log, tasks.tsv and before/after
+    build-cache METADATA inventories in the seven-day ios-build-gradle-N
+    artifact (N is github.run_attempt), so reruns retain earlier diagnostics.
+    The compact TSV is printed even
+    after build failure; partial rows remain diagnostic evidence, not tests.
+    Inventories read only task identity, key, size, Gradle version and original
+    execution time; they do not extract outputs. They distinguish an absent
+    restored link entry from a stored entry looked up under a different key.
+    Compare these artifacts on the next hosted runs before claiming a cause
+    or a hosted speedup. Diagnostics add logging/I/O, not a measured saving.
+    A local Xcode invocation of the unchanged product command and final CI
+    logging settings took 143.4 seconds: configuration 24.96 seconds, main
+    compilation 29.27, bridge 0.34 and link 1.33 seconds (all three FROM-CACHE).
+    It recorded all fourteen shared outcomes. Separate task/configuration
+    failure fixtures also retained FAILED rows with Gradle exit 1. Required checks, test selection and
+    enumeration/execution evidence are unchanged.
+
+    Under 25 minutes for the full lane needs a build below roughly 7 minutes
+    with attempt 1's 17.3-minute longest test job, or below roughly 5.7 minutes
+    with attempt 2's 19.1-minute job. No claim is made that this reaches it,
+    or establishes the per-job p50 <15 / p90 <25 minute team budget.
 
     Wall-clock projections retain measured job overhead rather than halving
     whole jobs. In full run 40163436992, UI job overhead (job wall minus case

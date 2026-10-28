@@ -20,6 +20,8 @@ EXPECTED_PATHS = [
     'scripts/ci_change_filter.py',
     'scripts/xcodegen_generate_checked.sh',
     'scripts/resolve_kmp_java_home.sh',
+    'scripts/ci_gradle_timing.init.gradle',
+    'scripts/ios_gradle_cache_inventory.py',
     'scripts/download_xcodegen.sh',
     'scripts/ci_simulator.py',
     'scripts/ios_ui_smoke.py',

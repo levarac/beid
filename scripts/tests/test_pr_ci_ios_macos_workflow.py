@@ -234,7 +234,10 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertEqual(text.count("name: ios-plan\n"), 4)
         self.assertEqual(text.count("name: ios-evidence-${{ env.EVIDENCE_JOB }}\n"), 2)
         self.assertIn("pattern: ios-evidence-*\n", text)
-        self.assertNotRegex(text, r"(?:name|pattern): ios-.*github.run_attempt")
+        # Execution handoff artifacts stay run-scoped for partial reruns;
+        # cache diagnostics retain both sides of an attempt comparison.
+        attempt_scoped = re.findall(r"^\s+(?:name|pattern): (ios-.*github.run_attempt.*)$", text, re.M)
+        self.assertEqual(attempt_scoped, ["ios-build-gradle-${{ github.run_attempt }}"])
         for name in ("Upload test products", "Upload shard plan", "Upload executed evidence"):
             self.assertIn("overwrite: true", step_block(text, name))
         from scripts.tests.test_pr_ci_lane_skip import job_block, IOS

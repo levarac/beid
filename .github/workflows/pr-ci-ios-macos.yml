@@ -28,6 +28,8 @@ on:
       - "scripts/ci_change_filter.py"
       - "scripts/xcodegen_generate_checked.sh"
       - "scripts/resolve_kmp_java_home.sh"
+      - "scripts/ci_gradle_timing.init.gradle"
+      - "scripts/ios_gradle_cache_inventory.py"
       - "scripts/download_xcodegen.sh"
       - "scripts/ci_simulator.py"
       - "scripts/ios_ui_smoke.py"
@@ -150,11 +152,17 @@ jobs:
       mode: ${{ steps.test-mode.outputs.mode }}
       ui-shards: ${{ steps.plan.outputs.ui-shards }}
       unit-shards: ${{ steps.plan.outputs.unit-shards }}
+    env:
+      # Dedicated build-only home: no test task results enter these caches.
+      # KGP 2.2.20 otherwise derives NONE before a fresh toolchain is installed,
+      # but STATIC when ~/.konan is restored, changing the native link cache key.
+      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.logging.level=info -Dorg.gradle.caching.debug=true -Dorg.gradle.project.kotlin.native.cacheKind.iosSimulatorArm64=static
     steps:
       - name: Initialize CI output path
         shell: bash
         run: |
           set -euo pipefail
+          printf 'GRADLE_USER_HOME=%s\n' "$RUNNER_TEMP/beid-gradle" >> "$GITHUB_ENV"
           printf 'CI_OUTPUT_ROOT=%s\n' "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/beid-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$GITHUB_JOB-${UI_SHARD:-0}"
 
@@ -203,6 +211,54 @@ jobs:
             echo "JAVA_HOME=$kmp_java_home"
           } >> "$GITHUB_ENV"
 
+      - name: Identify cache inputs
+        id: cache-inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$(
+            {
+              xcodebuild -version
+              xcrun --sdk iphonesimulator --show-sdk-build-version
+              "$JAVA_HOME/bin/java" -version 2>&1
+              sw_vers -buildVersion
+            } | shasum -a 256 | awk '{print $1}'
+          )"
+          printf 'toolchain=%s\n' "$toolchain" >> "$GITHUB_OUTPUT"
+          printf 'source-tree=%s\n' "$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore dependencies cache
+        id: dependencies
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/beid-gradle/wrapper/dists
+            ${{ runner.temp }}/beid-gradle/caches/modules-2
+            ~/.konan
+            ${{ runner.temp }}/beid-gradle/caches/*/kotlin-dsl
+            ${{ runner.temp }}/beid-gradle/caches/*/groovy-dsl
+          key: beid-ios-dependencies-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle.properties', '**/gradle-wrapper.*', '**/gradlew*', '**/*.toml', 'scripts/resolve_kmp_java_home.sh', '.github/workflows/pr-ci-ios-macos.yml') }}
+          restore-keys: |
+            beid-ios-dependencies-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-
+
+      - name: Restore swift-packages cache
+        id: swift-packages
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/beid-swift-packages
+          key: beid-ios-swift-packages-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ hashFiles('**/Package.resolved', '**/Package.swift', 'ios/project.yml', 'ios/Beid.xcodeproj/project.pbxproj', '.github/workflows/pr-ci-ios-macos.yml') }}
+
+      - name: Restore gradle-build cache
+        id: gradle-build
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/beid-gradle/caches/build-cache-1
+          key: beid-ios-gradle-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-${{ steps.cache-inputs.outputs.source-tree }}
+          restore-keys: |
+            beid-ios-gradle-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-inputs.outputs.toolchain }}-
+
       - name: Install pinned XcodeGen
         shell: bash
         run: |
@@ -236,6 +292,16 @@ jobs:
             fi
           )
 
+      - name: Resolve pinned Swift packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project ios/Beid.xcodeproj -scheme Beid \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/beid-swift-packages" \
+            -onlyUsePackageVersionsFromResolvedFile
+          git diff --exit-code -- ios/Beid.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
       - name: Create owned simulator
         id: simulator
         shell: bash
@@ -257,6 +323,17 @@ jobs:
           xcrun simctl boot "$SIMULATOR_UDID"
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
 
+      - name: Install Gradle diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GRADLE_USER_HOME/init.d" "$CI_OUTPUT_ROOT/gradle"
+          cp scripts/ci_gradle_timing.init.gradle "$GRADLE_USER_HOME/init.d/beid-timing.gradle"
+          printf 'task\toutcome\tseconds\n' > "$CI_OUTPUT_ROOT/gradle/tasks.tsv"
+          printf 'BEID_GRADLE_TIMING_FILE=%s\n' "$CI_OUTPUT_ROOT/gradle/tasks.tsv" >> "$GITHUB_ENV"
+          python3 -m scripts.ios_gradle_cache_inventory \
+            "$GRADLE_USER_HOME/caches/build-cache-1" "$CI_OUTPUT_ROOT/gradle/cache-before.json"
+
       - name: Build for testing
         shell: bash
         env:
@@ -264,7 +341,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$CI_OUTPUT_ROOT"
-          xcodebuild -quiet \
+          xcodebuild -hideShellScriptEnvironment -showBuildTimingSummary \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/beid-swift-packages" \
+            -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile \
             -project ios/Beid.xcodeproj \
             -scheme Beid \
             -configuration Debug \
@@ -272,7 +351,28 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$CI_OUTPUT_ROOT/DerivedData" \
             SWIFT_OPTIMIZATION_LEVEL=-O \
-            build-for-testing
+            build-for-testing 2>&1 | tee "$CI_OUTPUT_ROOT/gradle/build.log"
+
+      - name: Report Gradle diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$CI_OUTPUT_ROOT/gradle/tasks.tsv" ]]; then
+            cat "$CI_OUTPUT_ROOT/gradle/tasks.tsv"
+          fi
+          python3 -m scripts.ios_gradle_cache_inventory \
+            "$GRADLE_USER_HOME/caches/build-cache-1" "$CI_OUTPUT_ROOT/gradle/cache-after.json"
+
+      - name: Upload Gradle diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-build-gradle-${{ github.run_attempt }}
+          overwrite: true
+          path: ${{ env.CI_OUTPUT_ROOT }}/gradle/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Enumerate built tests and plan shards
         id: plan
@@ -333,6 +433,58 @@ jobs:
           path: ${{ env.CI_OUTPUT_ROOT }}/plan/
           if-no-files-found: error
           retention-days: 7
+
+      # Restore has no implicit post-job save. Fork PRs can read base caches,
+      # but never write; PR caches are scoped to their merge ref by GitHub.
+      # Save only after build, enumeration and handoff all succeed, never tests.
+      - name: Save dependencies cache
+        if: ${{ success() && steps.dependencies.outputs.cache-hit != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}
+          path: |
+            ${{ runner.temp }}/beid-gradle/wrapper/dists
+            ${{ runner.temp }}/beid-gradle/caches/modules-2
+            ~/.konan
+            ${{ runner.temp }}/beid-gradle/caches/*/kotlin-dsl
+            ${{ runner.temp }}/beid-gradle/caches/*/groovy-dsl
+
+      - name: Save swift-packages cache
+        if: ${{ success() && steps.swift-packages.outputs.cache-hit != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: ${{ steps.swift-packages.outputs.cache-primary-key }}
+          path: |
+            ${{ runner.temp }}/beid-swift-packages
+
+      # Gradle expires unused entries by age, not total size. Bound each saved
+      # directory even when prefix restores accumulate recently used outputs.
+      - name: Check gradle-build cache size
+        id: gradle-cache-size
+        if: ${{ success() && steps.gradle-build.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache_dir="$GRADLE_USER_HOME/caches/build-cache-1"
+          size_kib=0
+          if [[ -d "$cache_dir" ]]; then
+            size_kib="$(du -sk "$cache_dir" | awk '{print $1}')"
+          fi
+          within_limit=false
+          if [[ "$size_kib" -gt 0 && "$size_kib" -le 524288 ]]; then
+            within_limit=true
+          fi
+          printf 'within-limit=%s\n' "$within_limit" >> "$GITHUB_OUTPUT"
+          printf 'Gradle build cache: %s KiB; save limit 524288 KiB (512 MiB); eligible=%s.\n' \
+            "$size_kib" "$within_limit" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save gradle-build cache
+        if: ${{ success() && steps.gradle-build.outputs.cache-hit != 'true' && steps.gradle-cache-size.outputs.within-limit == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: ${{ steps.gradle-build.outputs.cache-primary-key }}
+          path: |
+            ${{ runner.temp }}/beid-gradle/caches/build-cache-1
 
       - name: Delete owned simulator
         if: ${{ always() && steps.simulator.outputs.udid != '' }}
