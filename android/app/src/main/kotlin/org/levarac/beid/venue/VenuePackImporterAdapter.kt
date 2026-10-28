@@ -20,6 +20,7 @@ import org.levarac.parallax.venue.decodeVenueBundle
 import org.levarac.parallax.venue.decodeVenueHandoffLink
 import org.levarac.parallax.venue.decodeVenueHandoffLinkBytes
 import org.levarac.parallax.venue.evaluateVenueCurrentLease
+import org.levarac.parallax.venue.verifyVenueBundleSchedule
 import org.levarac.parallax.venue.verifyVenueBundleIdentity
 import kotlin.coroutines.resume
 
@@ -107,6 +108,28 @@ internal class SharedVenuePackImporter(
             validFromUnixSeconds = definition.validFrom.value,
             validUntilUnixSeconds = definition.validUntil.value,
         )
+        // Import is clock-free: even future envelopes must verify at their own start.
+        // Never use a current lease as evidence of complete signed schedule coverage.
+        val importScheduling = List(bundle.envelopeCount) { index ->
+            val container = bundle.envelopeAt(index)?.let { BarnardB005EnvelopeV2.encodeContainer(0, it) }
+            val hint = container?.let(BarnardB005EnvelopeV2::schedulingFields)
+            val verified = if (container != null && hint != null && hint.eninSeconds > 0) {
+                BarnardB005EnvelopeV2.verify(container, hint.validFromEnin)
+            } else null
+            if (verified == null || BarnardB005EnvelopeV2.registryAgreement(verified, barnardDefinition) !is BarnardRegistryAgreement.Agrees) {
+                null
+            } else {
+                VenueVerifiedScheduling(
+                    verified.validFromEnin, verified.validThroughEnin, verified.relayExpiresAtEnin,
+                    verified.eninSeconds, hint!!.validFromEnin,
+                )
+            }
+        }
+        if (verifyVenueBundleSchedule(importScheduling, definition.validFrom.value, definition.validUntil.value).schedule == null) {
+            return VenueImportOutcome.VerificationFailed
+        }
+
+        // Separate serve-time gate: a valid import alone neither permits nor starts radio.
         val now = nowSeconds()
         val candidates = ArrayList<VenueVerifiedScheduling?>(bundle.envelopeCount)
         val containers = HashMap<Int, Pair<ByteArray, String>>()

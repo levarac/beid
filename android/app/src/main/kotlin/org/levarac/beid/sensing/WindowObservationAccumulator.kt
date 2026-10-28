@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import org.levarac.beid.persistence.ReportProofLinkStore
 import org.levarac.beid.persistence.SubmissionRecord
 import org.levarac.beid.persistence.SubmissionRecordStore
 import org.levarac.beid.persistence.UnsentWindowLedgerStore
@@ -241,6 +242,9 @@ internal class WindowObservationAccumulator(
     private val onSubmissionEmitted: (UnsentWindowSubmission, SubmissionEmissionOrigin) -> Unit = { _, _ -> },
     /** beid#525's "after a window's durable close" drain trigger — see [closeCurrentWindow]. */
     private val onWindowClosed: () -> Unit = {},
+    /** Local display metadata only; never exposed to the submission drain. */
+    private val reportProofLinkStore: ReportProofLinkStore? =
+        ReportProofLinkStore(ReportProofLinkStore.defaultFile(requireNotNull(observationDirectory.parentFile))),
 ) {
     private var ledger: UnsentWindowLedger = ledgerStore.load()?.ledger
         ?: requireNotNull(createUnsentWindowLedger(ledgerInstanceId()).ledger)
@@ -252,6 +256,7 @@ internal class WindowObservationAccumulator(
     private var openedReporterRpid: String? = null
     private var activeEventCode: String? = null
     private var recordingObserved = false
+    private var recordingProofId: UUID? = null
     private var recovered = false
 
     /**
@@ -312,7 +317,14 @@ internal class WindowObservationAccumulator(
      * inside the body and that is a signature change nothing yet needs.
      */
     @Synchronized
-    fun observe(enin: Long, rpid: String, reporterRpid: String?, recording: Boolean, eventCode: String? = context()?.eventCode) {
+    fun observe(
+        enin: Long,
+        rpid: String,
+        reporterRpid: String?,
+        recording: Boolean,
+        eventCode: String? = context()?.eventCode,
+        proofId: UUID? = null,
+    ) {
         if (eventCode != null && !beginEvent(eventCode)) return
         if (this.enin != null && this.enin != enin) {
             openCurrentWindowIfEligible()
@@ -335,6 +347,7 @@ internal class WindowObservationAccumulator(
         if (acceptedRpid) rpids += normalizedRpid
         if (this.reporterRpid == null) this.reporterRpid = reporterRpid?.lowercase()
         recordingObserved = recordingObserved || recording
+        if (recording && recordingProofId == null) recordingProofId = proofId
         openCurrentWindowIfEligible()
         // A window that opened during this call already wrote its draft
         // inside `openCurrentWindowIfEligible`; this is the incremental write
@@ -362,6 +375,18 @@ internal class WindowObservationAccumulator(
         openedWindowId = id
         openedContext = openingContext
         openedReporterRpid = openingReporter
+        // Write once while the opening session is known. A retained window
+        // never reaches this point again under a replacement coordinator, and
+        // draft recovery has no live session from which to create a link.
+        recordingProofId?.let { proofId ->
+            try {
+                reportProofLinkStore?.add(id, proofId)
+            } catch (_: Exception) {
+                // A display-only failure must never block signing, alter queue
+                // state or leak identifiers through an exception's message.
+                logRuntimeDiagnostic("Unable to persist a report-to-proof link; the report stays unlinked")
+            }
+        }
         persistDraft()
         persistSubmissionRecord(id.toString().lowercase(), openingContext.eventIdHex, openingContext.submissionConfiguration)
         return true
@@ -498,6 +523,7 @@ internal class WindowObservationAccumulator(
         openedContext = null
         openedReporterRpid = null
         recordingObserved = false
+        recordingProofId = null
     }
 
     /**

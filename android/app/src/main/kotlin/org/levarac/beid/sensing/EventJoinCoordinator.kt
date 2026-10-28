@@ -33,6 +33,7 @@ import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
 import org.levarac.parallax.discovery.nearbyCandidateJoinEligibility
 import org.levarac.parallax.discovery.operatorLookupJoinEligibility
+import org.levarac.parallax.registry.EventDefinitionContext
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
@@ -549,11 +550,10 @@ class EventJoinCoordinator internal constructor(
 
     /**
      * Nearby-card join. Same boundary as [joinEvent], one step shorter: the
-     * card already carries the registry's canonical Event ID, so there is
-     * nothing to route and the operator lookup is skipped. The definition read
-     * still runs here rather than being inherited from discovery — the card's
-     * ID is an argument this class received, and a candidate's tier can have
-     * changed since the list was built.
+     * candidate already carries the registry's canonical Event ID, so there is
+     * nothing to route. The shared issuer re-checks the live candidate; its
+     * matching retained definition supplies the window submission settings
+     * without another registry read.
      *
      * The Event ID is passed to `BarnardEngine.joinEvent` verbatim, as it
      * always has been on this path, so it is also this session's event code.
@@ -590,7 +590,7 @@ class EventJoinCoordinator internal constructor(
                     return@requestPermissions
                 }
                 joinVerificationOwner = null
-                beginVerifiedJoin(context)
+                beginVerifiedJoin(context, nearbyDiscovery.definitionForJoin(eventCodeHashHex, context))
             } else {
                 stopParticipantRelay()
                 _state.value = mapPermissionResultToState(result)
@@ -765,7 +765,10 @@ class EventJoinCoordinator internal constructor(
      * registry read. That ID is now known before the join rather than after
      * it, so the window where the session was joined but unnameable is gone.
      */
-    private fun beginVerifiedJoin(context: RegistryVerifiedJoinContext) {
+    private fun beginVerifiedJoin(
+        context: RegistryVerifiedJoinContext,
+        definition: EventDefinitionContext? = context.definition,
+    ) {
         // Verify and cache the owner key before collecting anything that needs
         // a self-proof. The production provider uses this verified keypair for
         // all subsequent signatures, without another storage read.
@@ -795,17 +798,9 @@ class EventJoinCoordinator internal constructor(
                 eventCode = context.joinCode,
                 eventIdHex = context.eventIdHex,
                 eventDefinitionDigestHex = context.definitionHashHex,
-                // beid#525: only the operator-lookup join path (manual event
-                // code entry) carries a full verified Event Definition here.
-                // `context.definition` is `null` on the nearby-card-tap path
-                // by that evidence shape's own design (see
-                // `RegistryVerifiedJoinContext.fromNearbyCandidate`'s doc) —
-                // a window opened during a nearby-joined session therefore
-                // has no resolvable submission configuration and is held,
-                // per beid#525's design decision, rather than guessed at.
-                // See `docs/checkpoints/android-submission-drain.md` for the
-                // real gap this leaves and the two ways to close it.
-                submissionConfiguration = context.definition?.let {
+                // Both join paths derive settings from the definition verified
+                // for this join. The writer persists them when the window opens.
+                submissionConfiguration = definition?.let {
                     org.levarac.parallax.submission.createSubmissionOperatorConfigurationFromEventDefinition(it)
                 },
             ),
@@ -971,6 +966,7 @@ class EventJoinCoordinator internal constructor(
             reporterRpid = reporterRpid,
             recording = scanPhase is ScanPhase.Recording,
             eventCode = engine.getCurrentEventCode(),
+            proofId = activeProofId,
         )
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }

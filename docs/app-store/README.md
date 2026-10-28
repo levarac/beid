@@ -40,7 +40,10 @@ App Store Connect の「App のプライバシー」(nutrition labels) は**公�
 `asc` にも `asc web privacy` という別系統のコマンドしか無く、これは Apple の Web セッション
 （Apple ID + 2 要素認証）を必要とする。API キーでは通らない。
 
-したがって手順は:
+したがって手順は下のとおり。owner のログインが要るのは、このリポジトリの App Store 作業でここだけ。
+ほかの作業（ビルド、TestFlight への配信、メタデータやスクリーンショットの反映、状態の読み取り）は
+API キーの `asc` プロファイルで行い、owner のログインを待たない。プライバシーラベルも、回答の JSON を
+先に用意しておき、owner がログインするのはストア提出の作業と同じ 1 回にまとめる。
 
 ```sh
 asc web auth login --apple-id "<owner の Apple ID>"   # 2FA。owner 本人しかできない
