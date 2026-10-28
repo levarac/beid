@@ -347,6 +347,8 @@ jobs:
   ios-unit:
     name: iOS unit shard ${{ matrix.shard }}
     needs: ios-build
+    # The PR-only classifier is skipped on other events; override implicit success().
+    if: ${{ !cancelled() && needs.ios-build.result == 'success' }}
     runs-on: macos-26
     # Each class-level shard owns a fresh simulator; retain the 30-minute limit.
     timeout-minutes: 30
@@ -480,6 +482,8 @@ jobs:
   ios-ui:
     name: iOS UI shard ${{ matrix.shard }}
     needs: ios-build
+    # The PR-only classifier is skipped on other events; override implicit success().
+    if: ${{ !cancelled() && needs.ios-build.result == 'success' }}
     runs-on: macos-26
     # Measured-duration shards; retain allowance for hosted setup/transfer variance.
     timeout-minutes: 30
