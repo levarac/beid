@@ -122,6 +122,8 @@ android {
     }
 
     sourceSets.getByName("test").resources.srcDir("../../shared/src/commonTest/fixtures")
+    // Share the signed import fixtures with iOS and track them as JVM test inputs.
+    sourceSets.getByName("test").resources.srcDir("../../ios/BeidTests/Fixtures/venue-bundle-conformance")
 
 }
 
