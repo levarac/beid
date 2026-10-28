@@ -176,6 +176,48 @@ class PrCiIosMacosWorkflowTest(unittest.TestCase):
         self.assertIn("scripts.ios_test_shards aggregate", aggregate)
         self.assertEqual(workflow_text().count("    name: iOS simulator\n"), 1)
 
+    def test_every_classifier_descendant_overrides_implicit_success(self):
+        from scripts.tests.test_pr_ci_lane_skip import IOS, job_block, job_condition
+
+        jobs = re.findall(r"(?m)^  ([\w-]+):$", workflow_text().split("\njobs:\n", 1)[1])
+        descendants = {"changes"}
+        pending = set(jobs) - descendants
+        while pending:
+            found = set()
+            for job in pending:
+                needs = re.search(r"(?m)^    needs: (.+)$", job_block(IOS, job))
+                if needs and descendants.intersection(re.findall(r"[\w-]+", needs.group(1))):
+                    found.add(job)
+            if not found:
+                break
+            descendants.update(found)
+            pending.difference_update(found)
+
+        self.assertTrue({"ios-build", "ios-unit", "ios-ui", "ios-simulator"} <= descendants)
+        for job in sorted(descendants - {"changes"}):
+            with self.subTest(job=job):
+                # An explicit status function suppresses Actions' default
+                # success(), which is false for a skipped ancestor.
+                self.assertRegex(job_condition(IOS, job), r"\b(?:always|cancelled|failure)\(\)")
+
+    def test_shards_run_after_skipped_classifier_only_when_build_succeeded(self):
+        from scripts.tests.test_pr_ci_lane_skip import IOS, evaluate, job_condition
+
+        for event in ("merge_group", "workflow_dispatch", "schedule"):
+            for job in ("ios-unit", "ios-ui"):
+                for build_result in ("success", "failure", "cancelled", "skipped", ""):
+                    for cancelled in (False, True):
+                        with self.subTest(event=event, job=job, build=build_result,
+                                          cancelled=cancelled):
+                            condition = job_condition(IOS, job).replace(
+                                "needs.ios-build.result", repr(build_result)
+                            )
+                            self.assertEqual(
+                                evaluate(condition, event=event, changes_result="skipped",
+                                         outputs={}, cancelled=cancelled),
+                                build_result == "success" and not cancelled,
+                            )
+
     def test_build_handoff_is_products_only_and_union_check_runs_after_download(self):
         text = workflow_text()
         self.assertEqual(text.count("            build-for-testing"), 1)
