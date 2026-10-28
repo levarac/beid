@@ -39,9 +39,12 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "collection-empty-\(orientation)")
 
     app.buttons["home.account"].tap()
-    XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+    let accountFooter = app.buttons["account.version.value"]
+    XCTAssertTrue(accountFooter.waitForExistence(timeout: 5))
     capture(named: "account-\(orientation)")
-    app.buttons["Done"].tap()
+    // Flat 2b v2 has no Done item; a swipe down dismisses the sheet.
+    app.collectionViews.firstMatch.swipeDown(velocity: .fast)
+    XCTAssertTrue(accountFooter.waitForNonExistence(timeout: 5))
 
     let resumedSenseEvent = app.buttons["home.scan"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))

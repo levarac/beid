@@ -44,11 +44,32 @@ final class FlatScreenshotTourD: XCTestCase {
 
   func testShot_10_Account() {
     openAccount()
-    let copy = app.buttons["Copy address"]
+    let copy = app.buttons["account.copy"]
     _ = copy.waitForExistence(timeout: 5)
     attachScreenshot("10")
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(copy)
+    XCTAssertEqual(copy.label, "Copy address")
+    let footer = app.buttons["account.version.value"]
+    assertMinimumHitTarget(footer)
+
+    // Flat 2b v2 has no Done item; a swipe down dismisses the sheet.
+    app.collectionViews.firstMatch.swipeDown(velocity: .fast)
+    XCTAssertTrue(footer.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.account"].isHittable)
+  }
+
+  /// 10b: no wallet, so CONNECT → replaces the Copy item and Disconnect.
+  func testShot_10b_NoWallet() {
+    openAccount(connected: false)
+    let connect = app.buttons["account.wallet.connect"]
+    _ = connect.waitForExistence(timeout: 5)
+    attachScreenshot("10b")
+    XCTAssertEqual(connect.label, "Connect Wallet")
+    assertMinimumHitTarget(connect)
+    XCTAssertTrue(app.staticTexts["account.wallet.note"].exists)
+    XCTAssertFalse(app.buttons["account.copy"].exists)
+    XCTAssertFalse(app.buttons["Disconnect wallet"].exists)
+    connect.tap()
+    XCTAssertTrue(app.buttons["Connect with MetaMask"].waitForExistence(timeout: 5))
   }
 
   func testShot_10c_BluetoothOff() {
@@ -57,8 +78,7 @@ final class FlatScreenshotTourD: XCTestCase {
     _ = bluetoothStatus.waitForExistence(timeout: 5)
     attachScreenshot("10c")
     XCTAssertEqual(bluetoothStatus.label, "Open Bluetooth Settings")
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(app.buttons["Copy address"])
+    XCTAssertTrue(app.buttons["account.copy"].exists)
   }
 
   func testShot_10d_DisconnectConfirm() {
@@ -76,23 +96,36 @@ final class FlatScreenshotTourD: XCTestCase {
     _ = title.waitForExistence(timeout: 5)
     attachScreenshot("10d")
     XCTAssertTrue(title.exists)
+    XCTAssertFalse(app.buttons["account.version.value"].exists, "the footer hides while confirming")
     let keepConnected = app.buttons["Keep connected"]
     assertMinimumHitTarget(keepConnected)
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(app.buttons["Copy address"])
+    XCTAssertTrue(app.buttons["account.copy"].exists)
     assertMinimumHitTarget(app.buttons["Disconnect"])
   }
 
   func testShot_10e_Copied() {
     openAccount()
-    let copy = app.buttons["Copy address"]
+    let copy = app.buttons["account.copy"]
     XCTAssertTrue(copy.waitForExistence(timeout: 5))
     copy.tap()
     let copied = app.buttons["account.copy.feedback"]
     _ = copied.waitForExistence(timeout: 5)
     attachScreenshot("10e")
-    assertMinimumHitTarget(app.buttons["Done"])
-    assertMinimumHitTarget(copied)
+    XCTAssertEqual(copied.label, "Copied address")
+    XCTAssertFalse(app.buttons["account.copy"].exists)
+  }
+
+  /// The footer's ABOUT → opens About sensing (15) at the large detent.
+  func testShot_15_FromAccountFooter() {
+    openAccount()
+    let footer = app.buttons["account.version.value"]
+    XCTAssertTrue(footer.waitForExistence(timeout: 5))
+    XCTAssertEqual(footer.label, "About sensing")
+    footer.tap()
+    let whatWeSend = app.buttons["aboutSensing.whatWeSend"]
+    XCTAssertTrue(whatWeSend.waitForExistence(timeout: 5))
+    attachScreenshot("15-from-footer")
+    assertMinimumHitTarget(app.navigationBars.buttons.firstMatch)
   }
 
   /// The launch uses its own empty pack file (`OrganizerToolsObjects.storeURL`),
@@ -294,8 +327,10 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed)
   }
 
-  private func openAccount(extraArguments: [String] = []) {
-    app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
+  private func openAccount(connected: Bool = true, extraArguments: [String] = []) {
+    app.launchArguments = ["-beid-ui-test"]
+      + (connected ? ["-beid-account-connected-fixture"] : [])
+      + extraArguments
     app.launch()
 
     app.buttons["Get Started"].tap()
