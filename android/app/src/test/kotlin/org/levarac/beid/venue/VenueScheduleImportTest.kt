@@ -8,6 +8,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.test.runCurrent
+import org.levarac.parallax.venue.decodeVenueHandoffLinkBytes
 import org.levarac.parallax.registry.createSepoliaRegistryClientWithRpcEndpoints
 import org.levarac.parallax.venue.decodeVenueHandoff
 
@@ -30,6 +32,38 @@ class VenueScheduleImportTest {
     @Test fun validImportScheduleDoesNotOverrideNotStartedServingGate() = runTest {
         withImporter(full = true, now = 1_790_294_399) { importer, link ->
             assertEquals(VenueImportOutcome.NotReady("notStarted"), importer.import(link))
+        }
+    }
+
+    @Test fun modifiedDigestRemainsReadableButIsRejectedAsLinkPackMismatch() = runTest {
+        withImporter(full = true, now = 1_790_294_401) { importer, link ->
+            val bytes = requireNotNull(decodeVenueHandoffLinkBytes(link))
+            val digest = requireNotNull(decodeVenueHandoff(bytes)).bundleDigest.toByteArray()
+            val index = bytes.indices.first { start ->
+                start + digest.size <= bytes.size && bytes.copyOfRange(start, start + digest.size).contentEquals(digest)
+            }
+            bytes[index] = (bytes[index].toInt() xor 1).toByte()
+            val changed = "https://venue.example/#" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+            kotlin.test.assertNotNull(decodeVenueHandoffLinkBytes(changed))
+            assertEquals(VenueImportOutcome.LinkPackMismatch, importer.import(changed))
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun productionImportThroughControllerChecksScheduleWithoutStartingRadio() = runTest {
+        withImporter(full = true, now = 1_790_294_401) { importer, link ->
+            val radio = VenueTestRadio()
+            val controller = VenueController(importer, radio, this)
+            controller.useLink(link)
+            runCurrent()
+            // Registry callbacks use a native dispatcher; await the terminal state.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                kotlinx.coroutines.withTimeout(10_000) {
+                    while (controller.state.value.pack == null) kotlinx.coroutines.delay(10)
+                }
+            }
+            assertEquals(0, radio.starts)
+            kotlin.test.assertNotNull(controller.state.value.pack)
         }
     }
 

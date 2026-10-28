@@ -74,15 +74,20 @@ internal class SharedVenuePackImporter(
     private val acquirer: VenueBundleAcquirer = HttpsVenueBundleAcquirer(),
     private val nowSeconds: () -> Long = { System.currentTimeMillis() / 1_000L },
 ) : VenuePackImporter {
-    override suspend fun import(link: String): VenueImportOutcome {
+    override suspend fun import(link: String): VenueImportOutcome = import(link) {}
+
+    override suspend fun import(link: String, onProgress: (VenueImportProgress) -> Unit): VenueImportOutcome {
         val handoffBytes = decodeVenueHandoffLinkBytes(link) ?: return VenueImportOutcome.LinkUnreadable
         val handoff = decodeVenueHandoffLink(link) ?: return VenueImportOutcome.LinkUnreadable
+        val eventIdHex = handoff.eventId.toByteArray().toHex()
+        onProgress(VenueImportProgress(eventIdHex, VenueImportStage.GETTING))
         val bundleUrl = handoff.bundleUrl ?: return VenueImportOutcome.BundleAddressMissing
         val uri = runCatching { URI(bundleUrl) }.getOrNull()
         if (uri?.isAbsolute != true || uri.scheme.lowercase() != "https") {
             return VenueImportOutcome.BundleAddressUnsupported
         }
         val bundleBytes = acquirer.acquire(bundleUrl) ?: return VenueImportOutcome.FetchFailed
+        onProgress(VenueImportProgress(eventIdHex, VenueImportStage.CHECKING))
         val bundle = decodeVenueBundle(bundleBytes) ?: return VenueImportOutcome.VerificationFailed
         val registry = resolve(bundle.eventId.toByteArray().toHex())
             ?: return VenueImportOutcome.VerificationFailed
