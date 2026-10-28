@@ -966,6 +966,7 @@ class EventJoinCoordinator internal constructor(
             reporterRpid = reporterRpid,
             recording = scanPhase is ScanPhase.Recording,
             eventCode = engine.getCurrentEventCode(),
+            proofId = activeProofId,
         )
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }

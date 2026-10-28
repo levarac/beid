@@ -69,6 +69,13 @@ class EventJoinCoordinatorWindowLedgerTest {
             ledgerInstanceId = { "000102030405060708090a0b0c0d0e0f" },
         )
         val cryptography = vectorCryptography()
+        // Complete startup recovery before the live window can leave a draft.
+        // Its intentionally unverifiable signature must be observed only at close.
+        owner.acquire(
+            filesDir = directory,
+            cryptography = cryptography,
+            nowEpochSeconds = { NearbyEventPromotionFixture.VECTOR_NOW_EPOCH_MILLIS.toDouble() / 1_000.0 },
+        ).recoverAfterRelaunch()
         val engine = FakeEventJoinEngine()
         val registry = FakeNearbyEventRegistry()
         val coordinator = coordinator(engine, directory, owner, cryptography, registry)
