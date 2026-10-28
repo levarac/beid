@@ -54,8 +54,8 @@ def looks_like_float_literal(text: str) -> bool:
 
     Either it carries an `f`/`F` suffix, or its body has a decimal point or
     an exponent. A bare integer token is a type error where a Double is
-    expected, and the resulting compile failure would be misreported as
-    "killed (build failed)" -- a mutant credited to a test that never ran.
+    expected, and the resulting compile-failed mutation would provide no
+    evidence of test protection.
     """
     if text[-1:] in ("f", "F"):
         return True
@@ -619,7 +619,7 @@ class DirtyTargetTests(ModuleTest):
             outside.write_text("val a = 1.5\n", encoding="utf-8")
             with mock.patch.object(
                 self.tool, "git_status_porcelain", side_effect=AssertionError("called git")
-            ):
+            ), mock.patch.object(self.tool, "REPO_ROOT", Path(tmp) / "repo"):
                 self.assertIsNone(self.tool.note_if_dirty(outside))
 
 
@@ -638,7 +638,8 @@ class DisplayPathTests(ModuleTest):
     def test_path_outside_the_repository_is_absolute_and_does_not_raise(self):
         with tempfile.TemporaryDirectory() as tmp:
             outside = Path(tmp).resolve() / "Outside.kt"
-            self.assertEqual(self.tool.display_path(outside), str(outside))
+            with mock.patch.object(self.tool, "REPO_ROOT", outside.parent / "repo"):
+                self.assertEqual(self.tool.display_path(outside), str(outside))
 
 
 # --------------------------------------------------------------------------

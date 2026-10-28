@@ -2,7 +2,15 @@
 
 Verified 2026-08-27 against `shared/src/commonMain/kotlin/org/levarac/beid/shared/event/EventWindowFilter.kt`
 and `EventInfoStore.kt` on `:shared:testAndroidHostTest`. That remains the
-last end-to-end run of the whole tool against a real Gradle test task.
+last recorded full-target sweep against a real Gradle test task.
+
+On 2026-10-27, a one-site end-to-end check of beid#572 selected only the
+`value == null` comparison at `HttpDate.kt:13` and inverted it to `!=`.
+The real `:shared:testAndroidHostTest --rerun-tasks` baseline reported 667
+tests (663 passed, 4 skipped, 0 failures). The mutation then failed at
+`:shared:compileAndroidMain` and reported `Sites mutated: 1   Killed: 0   Survived: 0   Compile-failed: 1`,
+with exit status 1 and byte-identical source restoration. This was not a
+full-file sweep or a real float-operator check.
 
 The float operator and the snapshot-based restore (beid#662) were added on
 2026-09-23 and verified **only by unit test**, in
@@ -48,10 +56,26 @@ the script finds mutable sites in the target by scanning the source text,
 copies the bytes of every target file once into a temporary backup
 directory, then for each site in turn: applies exactly one mutation, reruns
 the given test task(s) with `--rerun-tasks`, records whether any test newly
-failed ("killed", with the specific test name(s)) or none did ("survived"),
-and restores the file from that byte snapshot before moving to the next
-site. It runs an unmutated baseline pass first so pre-existing failing tests
-are never counted as evidence a mutation was caught.
+failed ("killed", with the specific test name(s)), none did ("survived"),
+or the build failed without a test failure or produced no usable test XML
+("compile-failed"). It restores the file from that byte snapshot before
+moving to the next site. It runs an unmutated baseline pass first so
+pre-existing failing tests are never counted as evidence a mutation was caught.
+
+Before every Gradle invocation, including the baseline, existing `TEST-*.xml`
+files for the requested task names are deleted from this checkout's
+`test-results` directories. Only XML created by that invocation is read;
+even a previous green run within two seconds cannot become a survivor after
+compilation fails (beid#572). This does not depend on filesystem mtime
+precision. Use a checkout whose test outputs are not being written by another
+Gradle invocation at the same time.
+
+The summary counts `Killed`, `Survived`, and `Compile-failed` separately.
+A compile-failed mutation is not evidence of test protection; this category
+also covers missing/empty test XML and a non-zero build exit with only passing
+tests. The JSON report adds `compile_failed` to the totals and uses the
+per-site verdict `compile-failed`; `killed_by` contains only test IDs, while
+`build_failure` holds the Gradle exit code and output tail for an incomplete run.
 
 Mutation operators:
 
@@ -164,8 +188,8 @@ the ambient system Java). It does not configure `ANDROID_HOME` — set that up
 the same way you would for any other Android build in this repo (see
 `android/README.md`).
 
-Exit status is non-zero if any mutant survives, so this is usable as an
-on-demand pass/fail check, not only an informational report. A JSON report
+Exit status is non-zero if any mutant survives or is compile-failed, so this
+is usable as an on-demand pass/fail check, not only an informational report. A JSON report
 (machine-readable per-site verdicts) is printed to stdout, or written to a
 file with `--json-out <path>`.
 

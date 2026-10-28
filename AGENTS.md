@@ -395,9 +395,13 @@ the same name shadows them.
   operator — and a separate float operator that scales `Double`/`Float`
   literals toward zero by 10%, so a surviving float site means exactly "no
   test pins this value to better than 10% relative"), reruns a given Gradle
-  test task, and reports per-site whether some test went red ("killed") or
-  none did ("survived"), then restores the file from a byte snapshot taken
-  up front and verified by reading the file back — not `git checkout --`,
+  test task, and reports per-site whether some test newly went red ("killed"),
+  none did ("survived"), or the build failed without a test failure or produced
+  no usable test XML ("compile-failed"). These categories are counted separately;
+  compile-failed is not evidence of test protection. Existing test-result XML
+  for the requested tasks is deleted before each run, including the baseline,
+  so prior results cannot be reused. It then restores the file from a byte
+  snapshot taken up front and verified by reading the file back — not `git checkout --`,
   so it runs against untracked and dirty targets, which is the normal state
   of the code you are adding tests for. It exists because three rounds of
   manually rebuilding this check by hand during PR #109's review each
