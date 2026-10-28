@@ -6,8 +6,7 @@ import java.util.UUID
 /**
  * A locally collected proof of attendance — the Android counterpart of
  * iOS's `Proof` (`ios/Beid/Models/Proof.swift`), reduced to this slice's
- * scope (beid#121): no `eventName` (Android has no session type to source
- * one from yet — the list shows [eventCode] as-is), no `gradientSeed`
+ * scope (beid#121): no `gradientSeed`
  * (no artwork), no `ProofSignatureState`/wallet-`personal_sign` mirroring
  * (that mechanism is iOS-only and explicitly provisional, see
  * `ios/Beid/Models/ProofSignature.swift`'s own doc comment and beid#33).
@@ -31,4 +30,7 @@ data class ProofRecord(
     val peersVerified: Int,
     val hasSelfProof: Boolean = false,
     val hasBinding: Boolean = false,
+    /** Historical verified join metadata; absent on older records. */
+    val eventName: String? = null,
+    val eventIdHex: String? = null,
 )

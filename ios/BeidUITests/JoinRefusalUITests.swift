@@ -3,7 +3,7 @@
 
 import XCTest
 
-/// Runtime proof for beid#430. The fixture drives the actual SensingView with
+/// Runtime proof for beid#430. The fixture drives the actual scan flow with
 /// one typed refusal; the existing coordinator tests cover the other cases.
 ///
 /// The original version of this comment said the View renders every refusal at
@@ -24,12 +24,13 @@ final class JoinRefusalUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-join-refusal-fixture"]
     app.launch()
 
+    app.buttons["Get Started"].assertHittable()
     app.buttons["Get Started"].tap()
-    XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
+    app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
 
     let senseEvent = app.buttons["home.scan"]
-    XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
+    senseEvent.assertHittable()
     senseEvent.tap()
 
     // The fixture's refusal is classified from a transport error code, so this
@@ -39,20 +40,21 @@ final class JoinRefusalUITests: XCTestCase {
     let refusalTitle = app.staticTexts[
       "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
     ]
-    let scrollView = app.scrollViews.firstMatch
-    var attempts = 0
-    while !refusalTitle.exists && attempts < 4 {
-      scrollView.swipeUp()
-      attempts += 1
-    }
-    XCTAssertTrue(refusalTitle.waitForExistence(timeout: 5))
+    // A refusal replaces the sensing screen; it is not a panel inside it.
+    let refusalPanel = app.scrollViews["scan.cant-join"]
+    refusalPanel.assertHittable()
+    refusalTitle.scrollToHittable(in: app)
 
+    app.buttons["Close"].assertHittable()
     app.buttons["Close"].tap()
-    XCTAssertFalse(refusalTitle.waitForExistence(timeout: 1))
+    refusalPanel.assertDisappears()
+    refusalTitle.assertDisappears()
 
     // A fresh scan starts after finishScan() reset the coordinator session, so
     // this proves the user-visible refusal was cleared rather than left stale.
+    senseEvent.assertHittable()
     senseEvent.tap()
-    XCTAssertTrue(refusalTitle.waitForExistence(timeout: 5))
+    refusalPanel.assertHittable()
+    refusalTitle.scrollToHittable(in: app)
   }
 }

@@ -131,13 +131,28 @@ final class FlatScreenshotTourC: XCTestCase {
   }
 
   func testLinkedProofDetailFromEventDetailListsItsReport() {
-    let app = launchEventDetailFixture(extraArguments: ["-beid-report-links-701"])
+    let app = XCUIApplication()
+    app.launchArguments = ["-beid-ui-test", "-beid-event-detail-frame-08", "-beid-report-links-701"]
+    app.launch()
+    let getStarted = app.buttons["Get Started"]
+    getStarted.assertExists()
+    getStarted.tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    allowBluetooth.assertExists()
+    allowBluetooth.tap()
+    let event = app.buttons["home.past-event.ETHTOKYO2026"]
+    event.assertExists()
+    event.tap()
+    app.staticTexts["event-detail.heading"].assertHittable()
+
     let proof = app.buttons["event-detail.proof.1"]
-    for _ in 0..<5 where !proof.isHittable { app.swipeUp() }
-    XCTAssertTrue(proof.waitForExistence(timeout: 5))
+    proof.scrollToHittable(in: app)
     proof.tap()
-    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
-    assertFromReportsListsTheLinkedReport(app)
+    app.staticTexts["proof.detail.title"].assertHittable()
+    app.staticTexts["FROM REPORTS"].scrollToHittable(in: app)
+    let report = app.buttons["proof-detail.report.\(Self.linkedReportID)"]
+    XCTAssertTrue(report.exists)
+    XCTAssertTrue(report.label.contains("Report #1"), report.label)
     attachScreenshot("09-linked")
   }
 

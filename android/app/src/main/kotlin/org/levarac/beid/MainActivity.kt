@@ -24,6 +24,7 @@ import org.levarac.beid.sensing.MetaMaskWalletConnector
 import org.levarac.beid.sensing.WalletBindingFlow
 import org.levarac.beid.sensing.EventBindingState
 import org.levarac.beid.sensing.ProofRecordingBridge
+import org.levarac.beid.sensing.ProcessSessionCheckpointRuntimeOwner
 import org.levarac.beid.ui.screens.EventJoinContent
 import org.levarac.beid.ui.screens.RecordsScreen
 import org.levarac.beid.ui.theme.BeidAppTheme
@@ -86,9 +87,7 @@ open class MainActivity : ComponentActivity() {
         val walletConnector = MetaMaskWalletConnector(this)
         walletBindingFlow = WalletBindingFlow(coordinator, walletConnector)
 
-        // Sibling store MainActivity owns directly (beid#121) — not something
-        // EventJoinCoordinator owns, unlike SelfProofRecordStore/BindingRecordStore.
-        val proofRecordStore = ProofRecordStore(ProofRecordStore.defaultFile(filesDir))
+        val proofRecordStore = ProcessSessionCheckpointRuntimeOwner.proofRecordStore(ProofRecordStore.defaultFile(filesDir))
         val proofRecordingBridge = ProofRecordingBridge(proofRecordStore)
         wireProofRecording(coordinator, proofRecordingBridge)
 
@@ -120,6 +119,11 @@ open class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         eventJoinCoordinator?.drainPendingSubmissionsOnForeground()
+    }
+
+    override fun onStop() {
+        eventJoinCoordinator?.checkpointSession()
+        super.onStop()
     }
 
     /**
@@ -243,7 +247,14 @@ private const val SCENARIO_FRAME_DELAY_MILLIS = 700L
  * current Robolectric setup).
  */
 internal fun wireProofRecording(coordinator: EventJoinCoordinator, bridge: ProofRecordingBridge) {
-    coordinator.onProofCollected = bridge::onProofCollected
-    coordinator.onPeersVerifiedChanged = bridge::onPeersVerifiedChanged
-    coordinator.onProofSignatureStateChanged = bridge::onProofSignatureStateChanged
+    val shared = coordinator.sharedProofRecordingBridge(bridge)
+    coordinator.onProofCollected = { id, eventCode, peers ->
+        coordinator.checkpointSerialization.serialized { shared.onProofCollected(id, eventCode, peers) }
+    }
+    coordinator.onPeersVerifiedChanged = { id, peers ->
+        coordinator.checkpointSerialization.serialized { shared.onPeersVerifiedChanged(id, peers) }
+    }
+    coordinator.onProofSignatureStateChanged = { _, _, _ ->
+        shared.onProofSignatureStatePersisted()
+    }
 }

@@ -17,7 +17,7 @@ final class ReportProofLinkByteIdentityTests: XCTestCase {
       for: self,
       named: "beid-report-proof-link-bytes-unlinked"
     )
-    let unlinked = try await ReportSubmissionGoldenScenario.run(in: unlinkedDirectory)
+    let unlinked = try await ReportSubmissionGoldenScenario.run(in: unlinkedDirectory, hostedWaits: true)
 
     let linkedDirectory = try makeReportProofLinkTestDirectory(
       for: self,
@@ -29,7 +29,7 @@ final class ReportProofLinkByteIdentityTests: XCTestCase {
       windowId: ReportSubmissionGoldenScenario.captureId,
       proofId: proofId
     )
-    let linked = try await ReportSubmissionGoldenScenario.run(in: linkedDirectory)
+    let linked = try await ReportSubmissionGoldenScenario.run(in: linkedDirectory, hostedWaits: true)
 
     // The link row really was there for the whole linked run.
     XCTAssertEqual(

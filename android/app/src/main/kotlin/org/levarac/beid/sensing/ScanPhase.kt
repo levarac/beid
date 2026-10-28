@@ -9,10 +9,15 @@ import org.levarac.beid.shared.sensing.scanPhaseAfterStopSensing
 
 /**
  * Native identity for the event a scan session is currently attached to.
- * Mirrors iOS's `EventSession` (`ios/Beid/Models/EventSession.swift`) at the
- * minimal shape this slice needs — see beid#120.
+ * Copies display metadata from the shared verified join context. Missing
+ * names and canonical identifiers stay absent rather than being derived
+ * from a code, including for historical records.
  */
-data class ScanEventSession(val eventCode: String)
+data class ScanEventSession(
+    val eventCode: String,
+    val eventName: String? = null,
+    val eventIdHex: String? = null,
+)
 
 /**
  * Android-native mirror of iOS's `ScanPhase` (`ios/Beid/Sensing/ScanPhase.swift`).

@@ -126,7 +126,7 @@ final class ReportProofLinkContainmentTests: XCTestCase {
       signingPublicKey: try XCTUnwrap(goldenData(fromHex: receiptKeyHex))
     )
     defer { server.stop() }
-    let endpoint = try await server.start()
+    let endpoint = try await server.start(timeout: SubmissionTestWait.timeout)
     let submissionFileURL = directory.appendingPathComponent("report-submissions.json")
     let linkFileURL = directory.appendingPathComponent("report-proof-links.json")
     let cryptography = SignatureInputRecordingCryptography(wrapping: TestSensingCryptography())
@@ -158,9 +158,8 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     coordinator.useDemoEventMode = false
 
     coordinator.startSensing(eventCode: "verified-definition-event", eventIdHex: eventIdHex)
-    // Let the permission grant and registry read admit the join first, as
-    // `ReportSubmissionOperatorIntegrationTests.driveOneRealWindow` does.
-    try await Task.sleep(nanoseconds: 100_000_000)
+    // Detection is meaningful only after permission and registry admission.
+    try await waitForSubmissionJoin(coordinator, eventIdHex: eventIdHex)
     let reporterRpid = "01" + String(repeating: "aa", count: 16)
     for index in 0..<BeidConfig.eventConfirmThreshold {
       coordinator.handleDetection(
@@ -176,9 +175,18 @@ final class ReportProofLinkContainmentTests: XCTestCase {
     }
     let proofId = try XCTUnwrap(coordinator.currentProofID)
     _ = coordinator.stopSensing()
-    try await server.waitFor(postCount: 1)
+    try await server.waitFor(postCount: 1, timeout: SubmissionTestWait.timeout)
 
     #if DEBUG
+    let postFinished = try await SubmissionTestWait.until { runtime.activeSubmissionCountForTesting == 0 }
+    guard postFinished else {
+      throw StubOperatorError.submissionStateTimedOut(
+        expected: "original POST callback idle before relaunch",
+        diagnostics: server.timeoutDiagnostics
+      )
+    }
+    // Model process death only after the first receipt was verified but not persisted.
+    runtime.stop()
     let relaunched = try makeRuntime(
       endpoint: endpoint,
       cryptography: cryptography,
@@ -186,8 +194,8 @@ final class ReportProofLinkContainmentTests: XCTestCase {
       bundleDirectory: directory
     )
     relaunched.submitPending()
-    try await server.waitFor(postCount: 1, getCount: 1)
-    try await waitForAcceptedRecord(at: submissionFileURL)
+    try await server.waitFor(postCount: 1, getCount: 1, timeout: SubmissionTestWait.timeout)
+    try await waitForStoredSubmissionState(.accepted, at: submissionFileURL, server: server)
     withExtendedLifetime(relaunched) {}
     #endif
     withExtendedLifetime(runtime) {}
@@ -359,19 +367,5 @@ final class ReportProofLinkContainmentTests: XCTestCase {
       fileURL: fileURL,
       allowInsecureLoopbackForTests: true
     ))
-  }
-
-  private func waitForAcceptedRecord(at fileURL: URL) async throws {
-    for _ in 0..<1_000 {
-      if ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState == .accepted {
-        return
-      }
-      try await Task.sleep(nanoseconds: 10_000_000)
-    }
-    let actual = ReportSubmissionStore(fileURL: fileURL).records.first?.submissionState.rawValue
-    throw StubOperatorError.submissionStateTimedOut(
-      expected: ReportSubmissionState.accepted.rawValue,
-      diagnostics: "last state \(actual ?? "nil")"
-    )
   }
 }

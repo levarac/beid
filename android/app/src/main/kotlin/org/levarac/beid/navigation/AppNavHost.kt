@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -144,6 +145,7 @@ fun AppNavHost(
         }
 
         composable(Screen.Account.route) {
+            val supportShareTitle = stringResource(R.string.account_support_share)
             AccountRoute(
                 session,
                 onOpenRecords = { navController.navigate(Screen.Records.route) },
@@ -154,7 +156,7 @@ fun AppNavHost(
                     try {
                         context.startActivity(supportShareIntent(
                             supportDiagnostics.exportJson(),
-                            context.getString(R.string.account_support_share),
+                            supportShareTitle,
                         ))
                     } catch (_: ActivityNotFoundException) {
                         Toast.makeText(context, R.string.account_support_unavailable, Toast.LENGTH_LONG).show()

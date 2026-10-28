@@ -190,7 +190,28 @@ final class FlatScreenshotTourD: XCTestCase {
   }
 
   func testShot_14e_InvalidLink() {
-    assertVenueFrame("14e", outcome: "Not a venue link")
+    app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture", "-beid-venue-frame", "14e"]
+    app.launch()
+    let getStarted = app.buttons["Get Started"]
+    getStarted.assertExists()
+    getStarted.tap()
+    let allowBluetooth = app.buttons["Allow Bluetooth"]
+    allowBluetooth.assertExists()
+    allowBluetooth.tap()
+    let account = app.buttons["home.account"]
+    account.assertExists()
+    account.tap()
+    let organizer = app.buttons["Organizer tools"]
+    organizer.assertExists()
+    organizer.tap()
+    let venue = app.buttons["organizer.venueBroadcast"]
+    venue.assertExists()
+    venue.tap()
+    app.buttons["Scan QR code"].assertHittable()
+
+    attachScreenshot("14e")
+    assertVenueControls()
+    XCTAssertTrue(app.staticTexts["NOT A VENUE LINK"].exists)
   }
 
   func testShot_14e2_NoSource() {
