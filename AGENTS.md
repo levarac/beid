@@ -78,9 +78,10 @@ capture screenshot` を併用すると agent なしで確認できる）。iPad 
   `FOREGROUND_SERVICE*` 権限も無く（`android/app/src/main/AndroidManifest.xml`）、
   scan の開始/停止は Activity lifecycle ではなく discovery 状態で駆動され、dispose は
   `MainActivity.onDestroy()` のみ（`EventJoinCoordinator.kt`、
-  `MainActivity.kt`）。self-proof の保存も leaveEvent/dispose 時のみで
-  セッション途中には無い（`EventJoinCoordinator.kt`、PR#314 が開示した喪失）。
-  iOS が「切り詰め」で済むところが、Android では「喪失」になる。
+  `MainActivity.kt`）。Mid-session checkpoints are saved in
+  `MainActivity.onStop()` and recovered on the next launch
+  (`EventJoinCoordinator.reconcileSessionCheckpoints()`). Keeping a recording
+  alive across activity recreation remains open (#750).
 
 ### 送信 drain で複数の窓が停止するリスク（beid#607 / PR#609 の後続課題）
 
@@ -160,7 +161,9 @@ primary `CollectionHomeView` sits. So the collection *home* is still absent
 (`Screen.kt` still states outright that `EventJoin` stands in for iOS's
 `.home`); promoting the records list to that position is a navigation decision
 that belongs with the participation-surface work in #141, not a follow-up to
-#121. Also still absent: the proof-detail surface (#122), wallet connection
+#121. Android's proof-detail flow already uses `RecordDetailScreen` (#122,
+PR #340); Flat 2b screens awaiting navigation wiring are a separate gap.
+Also still absent: wallet connection
 (#124, additionally gated on the iOS field test per its own issue body), and
 the venue-device organizer surface — `VenueDeviceBroadcasting` and
 `VenueDeviceOrganizerView` exist only on iOS (`git grep -w
@@ -318,8 +321,9 @@ the same name shadows them.
 - **`xcode-select` may point at CommandLineTools, breaking `simctl` and
   `xcodebuild` with no obvious connection to your change.** Do not
   `sudo xcode-select -s` — that is a host-wide change affecting every
-  worktree and session. Pass `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
-  per invocation instead (verified 2026-08-21).
+  worktree and session. Resolve a valid active `DEVELOPER_DIR` or an existing
+  full Xcode installation per invocation, using `xcode-select -p` only to read
+  the current selection; do not change the host-wide selection.
 - **Resolve a supported local JDK through
   `scripts/resolve_kmp_java_home.sh`.** Canonical commands must not hardcode a
   machine path. The resolver accepts a supported `KMP_JAVA_HOME`, then tries
@@ -545,6 +549,6 @@ does not revoke runner access or configure branch protection.
 ## PR と issue の紐付け (Development 欄)
 
 1. issue を閉じる PR は本文に `Closes #N` (複数可) を書く。base が main なら link は自動で付く。merge 後に本文を編集しても付く。
-2. base が main でない PR (stacked PR、release/* 向け) では Closes は評価されない。`gh pr edit <n> --base main` で一時的に main に付け替え、GraphQL (`issue.closedByPullRequestsReferences`) で link を確認してから元の base に戻す。link は base を戻しても残る。base の付け替えは CI (`pull_request` の既定 type) を起動しない。
+2. For a PR targeting a non-default branch (stacked PR or `release/*`), add a manual closing link with the `addCloseIssueReferences` GraphQL mutation (`input: {issueId: "ISSUE_NODE_ID", pullRequestIds: ["PR_NODE_ID"]}`), or through the issue's Development sidebar. Keep the PR base unchanged and re-check `issue.closedByPullRequestsReferences(includeClosedPrs: true, first: 100)` for the intended PR, following pagination if needed.
 3. merge 前の確認コメント (レビュー結果と検証結果を PR コメントに残す) に「Development link: 済」と書く。issue を閉じない PR だけ「該当 issue なし」。
 4. コメントや mention は link ではない。確認は GraphQL で行う。
