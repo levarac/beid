@@ -112,13 +112,10 @@ struct DailySummaryView: View {
     .frame(minHeight: DS.Size.minHitTarget)
   }
 
-  /// Submission is never rendered as a count (Phase 1's approved design):
-  /// the submission pipeline is code-complete (#258) but globally disabled
-  /// by the `BeidReportSubmissionEnabled` build flag
-  /// (`BEID_REPORT_SUBMISSION_ENABLED = "NO"`), so a per-day sent/pending
-  /// count would not correspond to anything a user could act on. This row
-  /// states the pipeline's actual on/off status in words instead — "built,
-  /// off," never "not built."
+  /// Submission status comes from the current `BeidReportSubmissionEnabled`
+  /// setting through `ReportSubmissionRuntime.isSubmissionEnabled()`.
+  ///
+  /// Per-day sent/pending counts are not implemented on this screen.
   private var submissionSection: some View {
     BeidPanel {
       VStack(alignment: .leading, spacing: DS.Space.s) {
