@@ -132,6 +132,38 @@ final class VenueDeviceOrganizerViewModelTests: XCTestCase {
     )
   }
 
+  func testLeavingTheScreenStopsBroadcastingAndPreservesAssignmentHistory() {
+    let broadcasting = FakeVenueDeviceBroadcasting()
+    let (viewModel, fileURL) = makeViewModel(broadcasting: broadcasting)
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+    viewModel.label = "Front Desk"
+    viewModel.validityEnd = viewModel.validityStart.addingTimeInterval(3600)
+    viewModel.toggleOn(eventCode: "EVENT-A")
+    let history = viewModel.history
+
+    viewModel.endSession()
+
+    XCTAssertFalse(viewModel.isBroadcasting)
+    XCTAssertEqual(broadcasting.calls.last, .stopBroadcasting)
+    XCTAssertEqual(viewModel.history, history)
+    viewModel.endSession()
+    XCTAssertFalse(viewModel.isBroadcasting, "repeated departure cannot restart the radio")
+  }
+
+  func testBackgroundingStopsBroadcasting() {
+    let broadcasting = FakeVenueDeviceBroadcasting()
+    let (viewModel, fileURL) = makeViewModel(broadcasting: broadcasting)
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+    viewModel.label = "Front Desk"
+    viewModel.validityEnd = viewModel.validityStart.addingTimeInterval(3600)
+    viewModel.toggleOn(eventCode: "EVENT-A")
+
+    viewModel.sceneDidEnterBackground()
+
+    XCTAssertFalse(viewModel.isBroadcasting)
+    XCTAssertEqual(broadcasting.calls.last, .stopBroadcasting)
+  }
+
   func testWhenBarnardThrowsTheViewModelSurfacesInvalidLabelAndDoesNotRecordHistory() {
     let broadcasting = FakeVenueDeviceBroadcasting()
     broadcasting.startBroadcastingError = BarnardEventInfoError.invalidDisplayName
