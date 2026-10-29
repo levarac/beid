@@ -9,12 +9,16 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.levarac.beid.sensing.ClockPreflightController
 import org.levarac.beid.sensing.EventJoinUiState
+import org.levarac.beid.sensing.EventJoinSession
+import org.levarac.beid.sensing.ScanEventSession
+import org.levarac.beid.sensing.ScanSessionMetrics
 import org.levarac.beid.sensing.NearbyEventCard
 import org.levarac.beid.sensing.ScanPhase
 import org.levarac.beid.sensing.TrustedDateSource
@@ -29,6 +33,36 @@ import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventJoinViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
+
+    @Test
+    fun metricsAreEvaluatedOnlyWhileStopConfirmationIsVisible() = runTest {
+        var reads = 0
+        val metrics = MutableStateFlow<() -> ScanSessionMetrics>({ reads++; ScanSessionMetrics(windowCount = 1) })
+        val fake = FakeEventJoinSession(EventJoinUiState.Sensing(ScanPhase.Recording(ScanEventSession("ABC123"), 3)))
+        val session = object : EventJoinSession by fake {
+            override val currentProofId = java.util.UUID.randomUUID()
+            override fun hasStoredProof(proofId: java.util.UUID) = proofId == currentProofId
+            override val scanSessionMetrics = metrics
+        }
+        val model = EventJoinViewModel(session, metricsDispatcher = testDispatcher)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, reads)
+        model.requestScanClose()
+        assertEquals(0, reads, "opening must return before evaluating the aggregate")
+        assertEquals(ScanSessionMetrics(), model.uiState.value.scanSessionMetrics)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, reads)
+        assertEquals(1, model.uiState.value.scanSessionMetrics.windowCount)
+        metrics.value = { reads++; ScanSessionMetrics(windowCount = 2) }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, reads)
+        assertEquals(2, model.uiState.value.scanSessionMetrics.windowCount)
+        model.keepSensing()
+        metrics.value = { reads++; ScanSessionMetrics(windowCount = 3) }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, reads)
+        assertEquals(0, fake.leaveEventCallCount)
+    }
 
     @BeforeTest
     fun setUp() {
