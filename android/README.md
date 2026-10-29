@@ -188,6 +188,42 @@ permission semantics assume cleanly and keeps the launcher-icon story simple
 (no legacy per-density mipmap buckets needed); revisit if a real product
 reason to support API 24–25 shows up.
 
+### Collection home
+
+After onboarding and Bluetooth checks, `Home` is the start destination.
+`HomeRoute` wraps the existing `EventJoinRoute`, preserving automatic nearby
+discovery, one-tap card joining, and the active scan flow in one renderer.
+The same edge-to-edge Material 3 scaffold keeps the Account icon in its top
+app bar and scrolls discovery followed by the collection, including at large
+font sizes. The existing no-result manual-entry rescue shortcut is preserved;
+ordinary manual entry and the complete secondary Records list remain in Account.
+
+The collection reads the existing `ProofRecordStore.recordsFlow` and calls
+shared `homeRecordGroups` for identity, newest-first ordering, tie handling,
+and active-event exclusion; see
+[`shared-event-grouping.md`](../docs/decisions/shared-event-grouping.md).
+Cards use stored verified names, falling back to the Records label, with the
+latest recording date and record count. A singleton opens the existing detail;
+a larger group opens the existing Records screen filtered by an anchor UUID.
+Destinations re-read the current store, and system Back returns through that
+list to Home. The former `event_join` route redirects to Home for restored
+navigation state; no external navigation deep links are registered today.
+
+`CollectionHomeTest` exercises the production navigation graph with a fake
+session and a real local store under Robolectric. To avoid outbound clock
+preflight requests while running the full local suites, supply an empty lookup
+origin only to the test build:
+
+```sh
+ANDROID_HOME="$HOME/Library/Android/sdk" \
+  GRADLE_OPTS="-Dorg.gradle.project.beid.eventCodeLookupUrlTemplate=" \
+  python3 scripts/run_local_tests.py android \
+  :shared:testAndroidHostTest :app:testDebugUnitTest
+```
+
+Ordinary builds retain their configured operator URL. These tests provide JVM
+UI/navigation evidence; they do not establish real-radio or device behavior.
+
 ## Localization
 
 Following the root `AGENTS.md` process, adapted for Android tooling: Android
