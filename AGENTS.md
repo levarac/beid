@@ -366,9 +366,11 @@ the same name shadows them.
   workflow-level PR path exclusions. It runs on every PR except one whose changed files are
   documentation or verified independent inputs (`android/app/src/**` after
   build-input rules, and standalone `tools/beid-lab-cli/**`, as
-  `scripts/ci_change_filter.py` defines it), which reports it as skipped. Renames, deletions and unsafe metadata run
-  it even under those paths; a failed classification also runs it. It checks out the PR head explicitly and
-  builds both bundles on a clean owned simulator. Ordinary PR runs execute all
+  `scripts/ci_change_filter.py` defines it). Only a successful classifier with
+  `ios=false` and no error allows the final aggregate to pass without tests.
+  Renames, deletions and unsafe metadata run it even under those paths; a failed
+  classification also runs it. The build and isolated test jobs check out the
+  PR head explicitly and use fresh owned simulators. Ordinary PR runs execute all
   `BeidTests` plus `ios/ci/ui-smoke-tests.txt`; a `ci:full-ui` label in the event
   payload selects the full UI suite. All other events run full, including
   `merge_group`, main pushes, nightly and manual dispatch. With the main merge
@@ -379,8 +381,9 @@ the same name shadows them.
   a run; removing the label does not). Re-runs retain their original payload
   mode. A smoke pass or classifier skip is not a full-mode pass.
   A missing, cancelled or pre-start failed run is not passing evidence, and a
-  skipped run is evidence only for a PR whose successful classification job
-  found no iOS-affecting changes. Xcode Cloud `PR Build & Test`
+  classifier bypass is evidence only for a PR whose successful classification
+  job found no iOS-affecting changes; a skipped needed job fails the aggregate.
+  Xcode Cloud `PR Build & Test`
   stays paused; its former file exclusions do not apply to this hosted gate.
   Xcode Cloud Internal/Release delivery is a separate concern. Required status
   checks remain operator-managed repository settings; workflow code alone
@@ -464,20 +467,57 @@ classification; failed collection or classification runs all three gates.
   `scripts/check_pr_ci_doc_drift.py`, and
   `python3 -m unittest discover -s scripts/tests -t .`.
 
-The separate `.github/workflows/pr-ci-ios-macos.yml` runs **iOS simulator**:
-`build-for-testing` compiles both bundles; `test-without-building` executes all
-`BeidTests` plus the checked-in UI smoke list on ordinary PR events. A payload
-label `ci:full-ui` selects the full UI suite; merge groups, main pushes,
-nightly (03:23 UTC, separate concurrency group) and manual runs are full.
-The xcresult tree must prove exactly the listed UI cases Passed in smoke mode and every listed case
-Passed in full mode; skipped listed tests fail. Summary counts and per-bundle
-durations come from xcresult Test Case nodes, summed without suite totals.
-With the main merge queue enabled, add the PR to the queue to merge. Its
-full-mode `iOS simulator` pass on the exact merge result satisfies the merge
-requirement. Add `ci:full-ui` after updating the PR to request a full run before
-queueing; a PR smoke pass or skip is not full-suite evidence. The label need
-not exist for ordinary smoke runs. The existing path classifier may skip PR
-runs; merge groups always run the lane in full mode.
+The separate `.github/workflows/pr-ci-ios-macos.yml` keeps **iOS simulator**
+as a final `always()` aggregate (5 minutes, Linux), needing the classifier,
+**iOS simulator build** (30 minutes), **iOS unit shard ${{ matrix.shard }}** (30 minutes per shard), and
+**iOS UI shard ${{ matrix.shard }}** (30 minutes per shard). The macOS jobs use
+the same Xcode 26.5 selection. One `build-for-testing` compiles both bundles;
+a gzip tar of `.xctestrun` and `Build/Products` preserves executable bits and
+symlinks, excludes dSYMs/compiler-only files, and reports its byte/MiB size in
+the build summary. No intermediates, dependency caches or DerivedData tree is
+uploaded. `test-without-building -xctestrun` downloads those products without
+rebuilding; each job owns a fresh simulator and separate result path outside
+DerivedData. Smoke uses one UI job to avoid extra startup for eight cases;
+full uses two UI jobs. Both modes run all `BeidTests` across two unit shards
+in parallel with UI. Unit selectors use whole classes, so every
+`ReportSubmissionOperatorIntegrationTests` method stays in one job.
+
+Mode is computed once from the event payload and passed as a build output.
+Ordinary PRs use the smoke list; `ci:full-ui`, merge groups, main pushes,
+nightly (03:23 UTC, separate concurrency group) and manual runs select full.
+`scripts/ios_test_shards.py` partitions the built unit and UI enumerations using
+longest measured duration first and stable identifier ties. Unit class weights
+sum their methods' recorded durations; unknown methods use a bundle-mean
+estimate. UI unknown tests go to the lighter shard. The per-test duration data
+is `ios/ci/ui-test-durations.tsv` (66 rows) and
+`ios/ci/unit-test-durations.tsv` (898 rows), outside XcodeGen sources, extracted
+from run 40163436992 attempt 1's raw test trees. The resulting unit shards have
+20/878 cases in 1/94 classes, estimated 500.287/263.331 seconds; full UI has
+33/33 cases, estimated 683.658/680.883 seconds. These are case-duration sums,
+not hosted job wall clocks. Each unit and UI shard union must match its built
+inventory exactly, and unit classes cannot span shards. Missing, duplicate or
+misassigned unit evidence fails just as UI evidence does. Partial reruns can
+replace one unit shard's run-scoped evidence while retaining the other jobs.
+The observed build/setup overhead still puts full mode around 32.3 minutes;
+smoke is about 24.0 minutes using its successful unit timing, or 28.1 with the
+full run's higher unit overhead. These estimates do not establish the under-25
+minute target; the new graph still needs hosted execution.
+
+The aggregate passes without tests only for the existing explicit classifier
+bypass. Otherwise build and the entire unit and UI matrices must succeed; skipped,
+cancelled, failed or missing needed jobs fail. Missing/duplicate reports,
+mode mismatches, missing durations, corrupt counts, UI skips and incorrect
+shard unions also fail. Across all shard results, smoke cases must equal the
+list exactly and pass; full must pass every built UI case, including the list.
+Per-job and aggregate tables show mode, bundle counts and summed xcresult
+Test Case durations without suite totals. Evidence artifacts retain raw trees,
+summaries and per-case durations for seven days; build products last one day.
+Artifacts are run-scoped: `ios-products`, `ios-plan`, and `ios-evidence-<job>`
+overwrite their prior uploads, so partial reruns reuse the build and plan and
+read each job's latest evidence. Reports and aggregate tables show the producing
+attempt. Current job results must succeed and evidence must match the plan.
+A full aggregate pass on the exact merge-group SHA satisfies the
+merge requirement. PR smoke and classifier bypasses are not full evidence.
 
 `.github/workflows/pr-ci-lab-cli.yml` runs **beid-lab-cli build and test**:
 `swift build -c release` and `swift test`. Both report on every PR head,
@@ -487,9 +527,10 @@ a PR workflow path filter, so the required contexts are always created.
 Each workflow has its own small classification
 job (**Classify paths for iOS lane**, **Classify paths for lab CLI lane**) that
 runs the same collection step and `scripts/ci_change_filter.py` as Determine
-changed paths. Both lanes report as skipped on a documentation-only PR. The iOS lane uses
-its independent ios output and also skips changes limited to Android app
-sources and resources. Only `android/app/src/**` after build-input rules and
+changed paths. On a documentation-only PR the lab CLI reports skipped; the
+iOS aggregate reports success after verifying the classifier bypass. The iOS
+work jobs use the independent ios output and also skip changes limited to
+Android app sources and resources. Only `android/app/src/**` after build-input rules and
 standalone `tools/beid-lab-cli/**` are excluded beyond documentation.
 `android/settings.gradle.kts` includes only app and shared;
 `shared/build.gradle.kts` has no app dependency, and `ios/project.yml` invokes
@@ -524,7 +565,7 @@ drift check covers all three job lists and their distinguishing command tokens.
 
 All pull-request jobs use fixed GitHub-hosted runner labels. Determine changed
 paths and Repository sanity use `ubuntu-24.04-arm`; Android uses
-`ubuntu-24.04`; SwiftLint, the iOS simulator lane and the lab
+`ubuntu-24.04`; SwiftLint, the iOS build/test jobs and the lab
 CLI lane use `macos-26` with Xcode 26.5. The simulator uses iOS 26.5. SwiftLint needs Xcode SourceKit. Repository sanity
 installs pinned Python 3.12; Android installs JDK 17 and Android 36 job-locally.
 All pull requests run these checks without private credentials. The private
