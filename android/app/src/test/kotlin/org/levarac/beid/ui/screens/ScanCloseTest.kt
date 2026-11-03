@@ -1,5 +1,7 @@
 package org.levarac.beid.ui.screens
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -85,11 +87,15 @@ class ScanCloseTest {
     @Test fun keepSensingPreservesRecording() = closesRealSession(keepSensing = true)
     @Test fun keepSensingPreservesSignalLost() = closesRealSession(signalLost = true, keepSensing = true)
     @Test fun staleConfirmationCannotFinalizeNewerSession() = closesRealSession(replaceSession = true)
+    @Test fun systemBackOnConfirmationKeepsSensing() = closesRealSession(keepSensing = true, dismissWithBack = true)
+    @Test fun systemBackOnConfirmationKeepsSensingAfterSignalLoss() =
+        closesRealSession(signalLost = true, keepSensing = true, dismissWithBack = true)
 
     private fun closesRealSession(
         signalLost: Boolean = false,
         keepSensing: Boolean = false,
         replaceSession: Boolean = false,
+        dismissWithBack: Boolean = false,
     ) = runTest {
         val engine = FakeEventJoinEngine()
         val registry = FakeNearbyEventRegistry()
@@ -126,7 +132,9 @@ class ScanCloseTest {
                 }
             }
             val model = EventJoinViewModel(session)
+            lateinit var backDispatcher: OnBackPressedDispatcher
             compose.setContent {
+                backDispatcher = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
                 BeidAppTheme { EventJoinScreen(model, onOpenAccount = {}, onOpenManualEventCode = {}) }
             }
 
@@ -144,12 +152,21 @@ class ScanCloseTest {
             val liveState = coordinator.state.value
             val originalProof = collected.single()
             if (keepSensing) {
-                compose.onNodeWithText("Keep sensing").performScrollTo().assertIsDisplayed().performClick()
+                if (dismissWithBack) {
+                    // System Back on the confirmation means "Keep sensing", not leaving the activity.
+                    compose.runOnIdle { backDispatcher.onBackPressed() }
+                } else {
+                    compose.onNodeWithText("Keep sensing").performScrollTo().assertIsDisplayed().performClick()
+                }
                 compose.onNodeWithText("Stop sensing?").assertDoesNotExist()
                 assertEquals(liveState, coordinator.state.value)
                 assertEquals(originalProof, records.records.single().id)
                 assertEquals(0, leaveCalls)
                 assertEquals(0, proofs.records.size)
+                if (dismissWithBack) {
+                    // Once dismissed, the screen no longer intercepts Back.
+                    compose.runOnIdle { assertFalse(backDispatcher.hasEnabledCallbacks()) }
+                }
                 return@runTest
             }
             // Retain the old callback before any external session change removes its screen.
