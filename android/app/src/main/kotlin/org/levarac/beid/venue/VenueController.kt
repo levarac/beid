@@ -53,6 +53,8 @@ internal class VenueController(
     val state: StateFlow<VenueUiState> = mutableState.asStateFlow()
     private var importJob: Job? = null
     private var selectedLink: String? = null
+    // The link whose pack the active radio request carries.
+    private var broadcastLink: String? = null
     private var operation = 0L
     private var disposed = false
 
@@ -93,18 +95,30 @@ internal class VenueController(
             if (!isCurrent(request)) return@launch
             mutableState.value = mutableState.value.copy(isImporting = false)
             if (result !is VenueImportOutcome.Ready) {
-                mutableState.value = mutableState.value.copy(isStarting = false, message = result.notice())
+                val current = mutableState.value
+                // A rejected re-import is never promoted: drop the pending pack and
+                // select the link of the pack that is still on the radio again.
+                if (current.isBroadcasting) selectedLink = broadcastLink
+                mutableState.value = current.copy(pendingPack = null, isStarting = false, message = result.notice())
                 return@launch
             }
             radio.requestPermission { granted ->
                 if (!isCurrent(request) || !mutableState.value.isStarting) return@requestPermission
                 mutableState.value = when {
                     !granted -> mutableState.value.copy(isStarting = false, message = VenueNotice.BLUETOOTH_PERMISSION)
-                    radio.start(result.pack.container) -> mutableState.value.copy(
-                        pack = result.pack, pendingPack = null, isStarting = false,
-                        isBroadcasting = true, message = null,
-                    )
-                    else -> stoppedState(VenueNotice.RADIO_FAILED)
+                    radio.start(result.pack.container) -> {
+                        broadcastLink = link
+                        mutableState.value.copy(
+                            pack = result.pack, pendingPack = null, isStarting = false,
+                            isBroadcasting = true, message = null,
+                        )
+                    }
+                    else -> {
+                        // A failed Refresh can leave the earlier request advertising
+                        // with its container cleared; stop it so the radio matches the screen.
+                        radio.stop()
+                        stoppedState(VenueNotice.RADIO_FAILED)
+                    }
                 }
             }
         }
