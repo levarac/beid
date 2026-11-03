@@ -1,5 +1,6 @@
 package org.levarac.beid.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -242,6 +243,9 @@ fun EventJoinContent(
             )
         },
     ) { innerPadding ->
+        // System Back on the confirmation means "Keep sensing". The scan screen is the
+        // navigation root, so an unhandled Back would leave the activity instead.
+        BackHandler(enabled = state.stopConfirmation != null) { onKeepSensing() }
         val confirmation = state.stopConfirmation
         if (confirmation != null) {
             BeidAppTheme(darkTheme = true) {
