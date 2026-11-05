@@ -111,4 +111,12 @@ final class VenueDeviceOrganizerViewModel: ObservableObject {
     broadcasting.stopBroadcasting()
     isBroadcasting = false
   }
+
+  func endSession() {
+    toggleOff()
+  }
+
+  func sceneDidEnterBackground() {
+    endSession()
+  }
 }
