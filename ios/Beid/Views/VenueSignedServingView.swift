@@ -289,8 +289,9 @@ struct VenueSignedServingView: View {
       if let failure = effectiveRadio.failure {
         statusMessage(message(for: failure))
       }
-      if viewModel.storedSourceDescription != nil, fixtureCode == nil {
+      if (viewModel.storedSourceDescription != nil && fixtureCode == nil) || fixtureCode == "14h" {
         textAction(isBroadcasting ? "Refresh pack" : "Start broadcasting", identifier: "Refresh pack") {
+          guard fixtureCode == nil else { return }
           requestTask?.cancel()
           requestTask = Task { await viewModel.restoreFromStorage() }
         }
@@ -461,13 +462,14 @@ struct VenueSignedServingView: View {
       let index = arguments.firstIndex(of: "-beid-venue-frame"),
       arguments.indices.contains(index + 1) else { return nil }
     let code = arguments[index + 1]
-    return ["14b", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g"].contains(code) ? code : nil
+    return ["14b", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g", "14h"].contains(code) ? code : nil
     #else
     return nil
     #endif
   }
 
   private var effectiveStatus: VenueServingStatus {
+    if fixtureCode == "14h" { return .blocked(VenueServingRejection(reason: .expired)!) }
     if fixtureCode != nil { return .serving(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
     return viewModel.displayStatus(isBluetoothPoweredOff: bluetoothMonitor.isPoweredOff)
   }
@@ -478,6 +480,7 @@ struct VenueSignedServingView: View {
   }
 
   private var effectiveRadio: VenueRadioUpdate {
+    if fixtureCode == "14h" { return VenueRadioUpdate(state: .stopped)! }
     if fixtureCode != nil { return VenueRadioUpdate(state: .advertisingRequested)! }
     return viewModel.radio
   }

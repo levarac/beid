@@ -92,6 +92,11 @@ enum VenueLinkFailure: String, CaseIterable, Hashable {
   case unsupportedBundleUrl
 }
 
+enum VenueLeaseDiagnosticStage: String {
+  case evaluation
+  case installation
+}
+
 enum VenueServingStatus: Equatable {
   case idle
   case acquiring
@@ -162,6 +167,7 @@ final class VenueSignedServingViewModel: ObservableObject {
   private let expiry: any VenueExpiryScheduling
   private let canonicalEventIdHex: String?
   private let bundleURLTemplate: String?
+  private let diagnostics: (VenueLeaseDiagnosticStage, VenueServingBlock) -> Void
 
   /// The effect lease and selected workflow have different lifetimes.
   /// Background revokes a lease but retains the selected public artifact.
@@ -219,7 +225,8 @@ final class VenueSignedServingViewModel: ObservableObject {
     clock: @escaping () -> VenueClockReading,
     expiry: (any VenueExpiryScheduling)? = nil,
     canonicalEventIdHex: String? = nil,
-    bundleURLTemplate: String? = nil
+    bundleURLTemplate: String? = nil,
+    diagnostics: ((VenueLeaseDiagnosticStage, VenueServingBlock) -> Void)? = nil
   ) {
     self.verifier = verifier
     self.broadcasting = broadcasting
@@ -228,6 +235,7 @@ final class VenueSignedServingViewModel: ObservableObject {
     self.clock = clock
     self.canonicalEventIdHex = canonicalEventIdHex
     self.bundleURLTemplate = bundleURLTemplate
+    self.diagnostics = diagnostics ?? { _, _ in }
     // `VenueExpiryTimer` is `@MainActor`; a default-argument expression is not
     // evaluated in the initializer's own isolation, so the default is
     // constructed here in the (main-actor) init body instead of as a parameter
