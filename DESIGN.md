@@ -1917,8 +1917,9 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
 - **Root switch**: `RootView` switches on `AppScreen`
   (welcome / walletConnect / eventCodeEntry / bluetoothPermission /
   bluetoothOff / home).
-  Onboarding order depends on `OnboardingMode` (walletFirst | guestFirst).
-  MUST: both orders stay coherent; no screen may assume a wallet exists.
+  Both legacy `OnboardingMode` values enter Bluetooth permission directly;
+  the compatibility flag does not introduce a wallet onboarding step.
+  MUST: no screen may assume a wallet exists.
   **[Android counterpart, verified `Screen.kt` + `AppNavHost.kt`: a
   Compose-Navigation graph over nine routes — `Welcome`,
   `BluetoothPermission`, `BluetoothOff`, `EventJoin`, `Account`,
