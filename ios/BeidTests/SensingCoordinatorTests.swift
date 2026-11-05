@@ -934,6 +934,36 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
   }
 
+  func testNearbyJoinRefusesExpiredSourceBeforeScheduledRefreshRuns() async throws {
+    let boundary: Int64 = 1_800_000_000_000
+    var now = boundary - 300_000
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let store = makeNearbyDiscoveryStore(observedAtEpochMillis: now)
+    let coordinator = makeIsolatedSensingCoordinator(
+      for: self, eventJoinControl: engine,
+      nearbyDiscoveryStore: store, nearbyDiscoveryClock: { now }
+    )
+    coordinator.useDemoEventMode = false
+    defer { coordinator.reset() }
+    let action = try XCTUnwrap(NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates, nowEpochSeconds: now / 1_000
+    ).cards.first?.joinActionEventCodeHashHex)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState, .REGISTRY_VERIFIED)
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: action)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    now = boundary
+    // The permission callback may reach MainActor before the queued expiry
+    // task. Issuance must apply the current source TTL in that ordering too.
+    engine.grantHeldPermissionRequest()
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(engine.joinAndStartContexts.count, 0)
+    XCTAssertEqual(coordinator.joinRefusal, .definitionNotEligible)
+  }
+
   func testRenderedNearbyActionFailsClosedWhenCandidateExpiresBeforeTap() async throws {
     var nowEpochMillis: Int64 = 1_800_000_000_000
     let engine = RecordingEventJoinControl()
