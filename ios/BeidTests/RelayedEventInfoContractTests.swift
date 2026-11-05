@@ -94,19 +94,7 @@ final class RelayedEventInfoContractTests: XCTestCase {
     // the rest of the test would silently exercise a direct receipt instead.
     XCTAssertEqual(verified.relayHopCount, 1)
 
-    let registry = FakeEventJoinRegistry()
-    registry.answer = .resolves(
-      BeidSharedKit.jointestsupport.createEventDefinitionResolutionForTesting(
-        eventIdHex: "0x" + Self.eventIdHex,
-        definitionHashHex: "0x" + String(repeating: "b", count: 64),
-        blockHashHex: "0x" + String(repeating: "c", count: 64),
-        eventCodeHashHex: Self.eventCodeHashHex,
-        validFromEpochSeconds: Self.validFromEpochSeconds,
-        validUntilEpochSeconds: Self.validUntilEpochSeconds,
-        joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN,
-        keySetDigestHex: Self.keySetDigestHex
-      )
-    )
+    let registry = makeRegistry()
     let engine = RecordingEventJoinControl()
     engine.permissionOutcome = .granted
     let submission = RelayedWindowSubmissionSpy()
@@ -139,6 +127,12 @@ final class RelayedEventInfoContractTests: XCTestCase {
     XCTAssertNil(candidate.sourceAt(index: 1), "only the relayer was ever heard")
     XCTAssertEqual(candidate.rawEnvelopeContainerHex, Self.hex(relayedContainer))
 
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertTrue(engine.joinAndStartContexts.isEmpty, "discovery must wait for explicit JOIN")
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(reportStore.reports.count, 0)
+    XCTAssertTrue(submission.queuedWindows.isEmpty)
+
     coordinator.joinNearbyEvent(eventCodeHashHex: Self.eventCodeHashHex)
     try await waitUntil("the relayed candidate is joined") { !engine.joinAndStartContexts.isEmpty }
     XCTAssertEqual(engine.joinAndStartContexts.count, 1)
@@ -165,12 +159,199 @@ final class RelayedEventInfoContractTests: XCTestCase {
     XCTAssertEqual(submission.queuedWindows.first?.id, reportStore.reports.first?.id)
   }
 
+  func testTamperedRelayedSignatureCreatesNoCandidateOrRegistryRead() throws {
+    var signedEnvelope = try XCTUnwrap(Self.bytes(fromHex: Self.sourceEnvelopeHex))
+    // Keep the container well formed and change only a signature byte.
+    signedEnvelope[signedEnvelope.count - 1] ^= 0x01
+    let event = try observedRelay(signedEnvelope: signedEnvelope)
+    XCTAssertNil(event.verifiedEnvelope, "Barnard must reject the altered signed input")
+
+    let registry = makeRegistry()
+    let engine = RecordingEventJoinControl()
+    let submission = RelayedWindowSubmissionSpy()
+    let (coordinator, reportStore) = makeCoordinator(
+      engine: engine, registry: registry, submission: submission
+    )
+    defer { coordinator.reset() }
+
+    coordinator.handleObservedEventInfoEnvelopeV2(event)
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 1)
+    XCTAssertTrue(registry.requestedEventIdHexes.isEmpty)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertTrue(engine.joinAndStartContexts.isEmpty)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertTrue(reportStore.reports.isEmpty)
+    XCTAssertTrue(submission.queuedWindows.isEmpty)
+  }
+
+  func testRelayedEnvelopeExpiresAtItsSignedExclusiveBoundary() throws {
+    let lastValid = try observedRelay(currentEnin: 6_000_001)
+    XCTAssertNotNil(lastValid.verifiedEnvelope, "the same signed input is valid before expiry")
+    let expired = try observedRelay(currentEnin: 6_000_002)
+    XCTAssertNil(expired.verifiedEnvelope, "the signed relay expiry is exclusive")
+
+    let registry = makeRegistry()
+    let engine = RecordingEventJoinControl()
+    let submission = RelayedWindowSubmissionSpy()
+    let (coordinator, reportStore) = makeCoordinator(
+      engine: engine, registry: registry, submission: submission,
+      clock: { 1_800_000_600_000 }
+    )
+    defer { coordinator.reset() }
+
+    coordinator.handleObservedEventInfoEnvelopeV2(expired)
+
+    XCTAssertEqual(coordinator.nearbyEventCandidates.candidateCount, 0)
+    XCTAssertEqual(coordinator.nearbyEventCandidates.unverifiedEnvelopeCount, 1)
+    XCTAssertTrue(registry.requestedEventIdHexes.isEmpty)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertTrue(engine.joinAndStartContexts.isEmpty)
+    XCTAssertTrue(reportStore.reports.isEmpty)
+    XCTAssertTrue(submission.queuedWindows.isEmpty)
+  }
+
+  func testRelayedAuthorityThatDisagreesWithRegisteredKeysCannotJoin() async throws {
+    try await assertRegistryDisagreementPreventsJoin(
+      registry: makeRegistry(keySetDigestHex: String(repeating: "a", count: 64))
+    )
+  }
+
+  func testRelayedValidityThatDisagreesWithTheRegistryCannotJoin() async throws {
+    try await assertRegistryDisagreementPreventsJoin(
+      registry: makeRegistry(validUntilEpochSeconds: Self.validUntilEpochSeconds + 300)
+    )
+  }
+
+  func testRepeatedRelaysAtBothHopsNeverJoinOrCreateObservations() async throws {
+    let registry = makeRegistry()
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let submission = RelayedWindowSubmissionSpy()
+    let (coordinator, reportStore) = makeCoordinator(
+      engine: engine, registry: registry, submission: submission
+    )
+    defer { coordinator.reset() }
+
+    for index in 1...6 {
+      let event = try observedRelay(
+        hop: index.isMultiple(of: 2) ? 2 : 1,
+        peripheralId: try XCTUnwrap(UUID(
+          uuidString: "0BE1D000-0000-4000-8000-00000000000\(index)"
+        ))
+      )
+      XCTAssertNotNil(event.verifiedEnvelope)
+      coordinator.handleObservedEventInfoEnvelopeV2(event)
+    }
+    try await waitUntil("repeated relays are registry-verified") {
+      coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState == .REGISTRY_VERIFIED
+    }
+
+    let presentation = NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates,
+      nowEpochSeconds: Self.nowEpochMillis / 1_000
+    )
+    XCTAssertEqual(presentation.cards.count, 1, "relay volume must not duplicate the event")
+    XCTAssertEqual(presentation.cards.first?.joinActionEventCodeHashHex, Self.eventCodeHashHex)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertTrue(engine.joinAndStartContexts.isEmpty)
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertNil(coordinator.joinedEventCode)
+    XCTAssertEqual(coordinator.devicesVerified, 0, "relays are discovery input, not observations")
+    XCTAssertTrue(reportStore.reports.isEmpty)
+    XCTAssertTrue(submission.queuedWindows.isEmpty)
+    coordinator.reset()
+    XCTAssertTrue(reportStore.reports.isEmpty)
+    XCTAssertTrue(submission.queuedWindows.isEmpty)
+  }
+
   // MARK: - Helpers
+
+  private func observedRelay(
+    signedEnvelope: [UInt8]? = nil,
+    hop: UInt8 = 1,
+    currentEnin: Int64? = nil,
+    peripheralId: UUID? = nil
+  ) throws -> StubObservedEventInfoEnvelopeV2 {
+    let envelope = try XCTUnwrap(signedEnvelope ?? Self.bytes(fromHex: Self.sourceEnvelopeHex))
+    let container = try XCTUnwrap(
+      BarnardB005EnvelopeV2.encodeContainer(relayHopCount: hop, signedEnvelope: envelope)
+    )
+    return StubObservedEventInfoEnvelopeV2(
+      peripheralId: peripheralId ?? Self.relayerPeripheralId,
+      rawContainer: Data(container),
+      verifiedEnvelope: BarnardB005EnvelopeV2.verify(
+        container: container,
+        currentEnin: currentEnin ?? Self.currentEnin,
+        nameValidator: BarnardB005NativeDisplayNameNormalizer()
+      )
+    )
+  }
+
+  private func makeRegistry(
+    keySetDigestHex: String? = nil,
+    validUntilEpochSeconds: Int64? = nil
+  ) -> FakeEventJoinRegistry {
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(
+      BeidSharedKit.jointestsupport.createEventDefinitionResolutionForTesting(
+        eventIdHex: "0x" + Self.eventIdHex,
+        definitionHashHex: "0x" + String(repeating: "b", count: 64),
+        blockHashHex: "0x" + String(repeating: "c", count: 64),
+        eventCodeHashHex: Self.eventCodeHashHex,
+        validFromEpochSeconds: Self.validFromEpochSeconds,
+        validUntilEpochSeconds: validUntilEpochSeconds ?? Self.validUntilEpochSeconds,
+        joinMode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode.OPEN,
+        keySetDigestHex: keySetDigestHex ?? Self.keySetDigestHex
+      )
+    )
+    return registry
+  }
+
+  private func assertRegistryDisagreementPreventsJoin(
+    registry: FakeEventJoinRegistry,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async throws {
+    let event = try observedRelay()
+    XCTAssertNotNil(event.verifiedEnvelope, "the relayed signature itself must be valid", file: file, line: line)
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let submission = RelayedWindowSubmissionSpy()
+    let (coordinator, reportStore) = makeCoordinator(
+      engine: engine, registry: registry, submission: submission
+    )
+    defer { coordinator.reset() }
+
+    coordinator.handleObservedEventInfoEnvelopeV2(event)
+    try await waitUntil("registry resolution completes") {
+      coordinator.nearbyEventCandidates.candidateAt(index: 0)?.registryStatus == .REGISTERED_VIA_OPERATOR_LOOKUP
+    }
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(registry.requestedEventIdHexes, ["0x" + Self.eventIdHex], file: file, line: line)
+    XCTAssertEqual(candidate.receiverState, .RADIO_SELF_VERIFIED, file: file, line: line)
+    let presentation = NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates,
+      nowEpochSeconds: Self.nowEpochMillis / 1_000
+    )
+    XCTAssertNil(presentation.cards.first?.joinActionEventCodeHashHex, file: file, line: line)
+
+    // Even a stale or forged action cannot bypass the current capability gate.
+    coordinator.joinNearbyEvent(eventCodeHashHex: Self.eventCodeHashHex)
+    try await waitUntil("the attempted join is refused") { coordinator.joinRefusal != nil }
+
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1, file: file, line: line)
+    XCTAssertTrue(engine.joinAndStartContexts.isEmpty, file: file, line: line)
+    XCTAssertTrue(reportStore.reports.isEmpty, file: file, line: line)
+    XCTAssertTrue(submission.queuedWindows.isEmpty, file: file, line: line)
+  }
 
   private func makeCoordinator(
     engine: RecordingEventJoinControl,
     registry: FakeEventJoinRegistry,
-    submission: RelayedWindowSubmissionSpy
+    submission: RelayedWindowSubmissionSpy,
+    clock: (() -> Int64)? = nil
   ) -> (SensingCoordinator, WindowReportStore) {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("relayed-event-info-contract-\(UUID().uuidString)", isDirectory: true)
@@ -202,7 +383,7 @@ final class RelayedEventInfoContractTests: XCTestCase {
       reportSubmissionRuntime: submission,
       eventJoinControl: engine,
       eventJoinRegistry: registry,
-      nearbyDiscoveryClock: { Self.nowEpochMillis }
+      nearbyDiscoveryClock: clock ?? { Self.nowEpochMillis }
     )
     coordinator.useDemoEventMode = false
     return (coordinator, reportStore)
