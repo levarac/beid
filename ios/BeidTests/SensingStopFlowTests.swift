@@ -292,6 +292,49 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertNil(coordinator.proofCollectedSnapshot)
   }
 
+  func testStopDuringDetectingRequiresConfirmationAndKeepPreservesSession() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let app = makeCoordinator(sensingCoordinator: sensing)
+    app.scanPresented = true
+    sensing.runDemoScenario(.appReviewGolden, stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound)
+    await sensing.waitForDemoScenarioPreviewToSettle()
+    let phase = sensing.phase
+    let count = sensing.devicesVerified
+    XCTAssertNil(sensing.currentProofID)
+
+    app.requestScanClose()
+    XCTAssertNotNil(app.stopConfirmSnapshot)
+    app.keepSensing()
+
+    XCTAssertNil(app.stopConfirmSnapshot)
+    XCTAssertEqual(sensing.phase, phase)
+    XCTAssertEqual(sensing.devicesVerified, count)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+    XCTAssertTrue(app.scanPresented)
+    _ = sensing.reset()
+  }
+
+  func testConfirmedStopDuringDetectingEndsParticipationWithoutSavedClaim() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    let app = makeCoordinator(sensingCoordinator: sensing)
+    app.scanPresented = true
+    sensing.runDemoScenario(.appReviewGolden, stepDelayNanos: 0, stopWhenPhaseReaches: .eventFound)
+    await sensing.waitForDemoScenarioPreviewToSettle()
+
+    app.requestScanClose()
+    XCTAssertNotNil(app.stopConfirmSnapshot)
+    app.confirmStopSensing()
+
+    XCTAssertNil(app.stopConfirmSnapshot)
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+    XCTAssertEqual(sensing.phase, .idle)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+    XCTAssertFalse(app.scanPresented)
+  }
+
   private func makeCoordinator(sensingCoordinator: SensingCoordinator? = nil) -> AppCoordinator {
     let identifier = UUID().uuidString
     let fileURL = FileManager.default.temporaryDirectory
