@@ -78,6 +78,12 @@ class PublicPrWorkflowTests(unittest.TestCase):
             self.assertIn("    environment: " + environment, text)
             self.assertIn("  workflow_dispatch:", text)
 
+    def test_latest_main_comparison_supersedes_stale_approval_waiters(self):
+        text = (WORKFLOWS / "trusted-parallax-comparison.yml").read_text()
+        concurrency = text.split("\nconcurrency:\n", 1)[1].split("\njobs:\n", 1)[0]
+        self.assertRegex(concurrency, r"(?m)^  group: trusted-parallax-comparison$")
+        self.assertRegex(concurrency, r"(?m)^  cancel-in-progress: true$")
+
     def test_every_secret_reference_belongs_to_an_approved_main_only_job(self):
         approved = {
             ("internal-google-play.yml", "deliver"): "google-play-internal",
