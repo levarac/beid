@@ -67,6 +67,161 @@ final class VenueSignedServingViewModelTests: XCTestCase {
     }
   }
 
+  // MARK: - Lease renewal from the selected public sources
+
+  private func nextLeasePermit() -> VenueServePermit {
+    VenueServingContractTestFactory.permit(
+      identity: fixture.identity, container: Data([0x22]), displayName: "Renewed event",
+      payloadDigestHex: VenueServingContractFixture.payloadDigestHex,
+      currentEnin: VenueServingContractFixture.currentEnin + 1,
+      startAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds,
+      stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds + 300
+    )
+  }
+
+  private func startRenewableLease(_ model: VenueSignedServingViewModel) async throws {
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await supply(model)
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.expired)))]
+  }
+
+  func testExpiredLeaseRefetchesBothOriginalSourcesAndInstallsOnlyANewPermit() async throws {
+    let model = makeViewModel()
+    try await startRenewableLease(model)
+    let original = try XCTUnwrap(acquisition.requestedSources.first)
+    let renewed = VenuePublicArtifact(bundleBytes: Data([0x31]), handoffBytes: Data([0x32]))
+    acquisition.replies = [.artifact(renewed)]
+    ports.importReplies = [.immediate(.imported(VenueServingContractTestFactory.imported(
+      identity: fixture.identity, publicArtifact: renewed
+    ))) ]
+    ports.evaluationReplies.append(.immediate(.permitted(nextLeasePermit())))
+
+    await expiry.fireAndWait()
+
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertEqual(acquisition.requestedSources.last?.bundle, original.bundle)
+    XCTAssertEqual(acquisition.requestedSources.last?.handoff, original.handoff)
+    XCTAssertEqual(ports.installedPermit?.container, Data([0x22]))
+    XCTAssertEqual(model.status, .serving(displayName: "Renewed event", stopAtUnixSeconds: now + 600))
+    XCTAssertEqual(expiry.scheduledStopAt, now + 600)
+    XCTAssertEqual(store.record?.bundleBytes, renewed.bundleBytes)
+    model.stop()
+  }
+
+  func testAdjacentLeaseNeedsANewSDKPermitAndFinalExpiryRefetchesOnce() async throws {
+    let model = makeViewModel()
+    try await startRenewableLease(model)
+    ports.evaluationReplies = [.immediate(.permitted(nextLeasePermit()))]
+    await expiry.fireAndWait()
+    XCTAssertEqual(acquisition.requestedSources.count, 1, "an SDK-authorized adjacent interval needs no fetch")
+    XCTAssertEqual(model.status, .serving(displayName: "Renewed event", stopAtUnixSeconds: now + 600))
+    XCTAssertEqual(expiry.scheduledStopAt, now + 600, "never display an unverified chained deadline")
+
+    clockReading = .available(unixSeconds: now + 600)
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.noCurrentEnvelope)))]
+    acquisition.replies = [.failure(.transportFailure)]
+    await expiry.fireAndWait()
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertEqual(model.status, .acquisitionFailed(.transportFailure))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled, "failed renewal must not start a retry loop")
+  }
+
+  func testRenewalFailureKeepsRadioStoppedAndManualSupplyRecovers() async throws {
+    let model = makeViewModel()
+    try await startRenewableLease(model)
+    acquisition.replies = [.failure(.timedOut)]
+    await expiry.fireAndWait()
+    XCTAssertEqual(model.status, .acquisitionFailed(.timedOut))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies = [.immediate(.permitted(nextLeasePermit()))]
+    await supply(model)
+    XCTAssertEqual(ports.installedPermit?.container, Data([0x22]))
+    model.stop()
+  }
+
+  func testRenewalRejectsAnotherEventWithoutInstallingOrReplacingStoredBytes() async throws {
+    let model = makeViewModel()
+    try await startRenewableLease(model)
+    let storedBytes = store.record?.bundleBytes
+    let other = VenueArtifactIdentity(eventIdHex: String(repeating: "a", count: 64),
+                                     definitionSequence: 2, bundleDigestHex: fixture.identity.bundleDigestHex)
+    acquisition.replies = [.artifact(VenuePublicArtifact(bundleBytes: Data([0x41]), handoffBytes: Data([0x42])))]
+    ports.importReplies = [.immediate(.imported(VenueServingContractTestFactory.imported(
+      identity: other, publicArtifact: fixture.artifact
+    )))]
+    await expiry.fireAndWait()
+    XCTAssertEqual(model.status, .acquisitionFailed(.eventIdentityMismatch))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertEqual(store.record?.bundleBytes, storedBytes)
+    XCTAssertFalse(expiry.isScheduled)
+  }
+
+  func testRefetchedExpiredPackIsEvaluatedOnceAndNeverLoopsOrExtendsItsDeadline() async throws {
+    let model = makeViewModel()
+    try await startRenewableLease(model)
+    acquisition.replies = [.artifact(fixture.artifact)]
+    ports.importReplies = [.immediate(.imported(fixture.imported()))]
+    ports.evaluationReplies.append(.immediate(.blocked(try rejection(.expired))))
+    await expiry.fireAndWait()
+    XCTAssertEqual(acquisition.requestedSources.count, 2)
+    XCTAssertEqual(model.status, .blocked(try rejection(.expired)))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+  }
+
+  func testRenewalResultAfterStopBackgroundOrReplacementCannotReviveOldLease() async throws {
+    for interruption in ["stop", "background", "replacement"] {
+      ports = ScriptedVenuePorts()
+      acquisition = StubVenueArtifactAcquisition()
+      store = makeTemporaryArtifactStore()
+      expiry = FakeVenueExpiryScheduler()
+      clockReading = .available(unixSeconds: now)
+      let model = makeViewModel()
+      try await startRenewableLease(model)
+      acquisition.replies = [.deferred]
+      let requested = expectation(description: "renewal requested")
+      acquisition.onRequest = { requested.fulfill() }
+      let renewal = Task { await self.expiry.fireAndWait() }
+      await fulfillment(of: [requested], timeout: 2)
+      guard acquisition.requestedSources.count == 2 else { await renewal.value; continue }
+      acquisition.onRequest = nil
+      let pending = try XCTUnwrap(acquisition.pendingAcquisitionIDs.first)
+      if interruption == "stop" { model.stop() }
+      if interruption == "background" { model.sceneDidEnterBackground() }
+      if interruption == "replacement" {
+        acquisition.replies = [.failure(.unreadable)]
+        await model.supply(bundleSource: URL(string: "https://replacement.example/bundle")!,
+                           handoffSource: URL(string: "https://replacement.example/source")!,
+                           sourceDescription: "replacement.example")
+      }
+      XCTAssertTrue(acquisition.completeAcquisition(id: pending, with: fixture.artifact))
+      await renewal.value
+      XCTAssertNil(ports.installedPermit, interruption)
+      XCTAssertFalse(expiry.isScheduled, interruption)
+      XCTAssertEqual(installCalls.count, 1, interruption)
+      if interruption == "background" { XCTAssertEqual(model.status, .idle) }
+      model.stop()
+    }
+  }
+
+  func testUnavailableClockAtExpiryStopsWithoutAttemptingRenewal() async throws {
+    let model = makeViewModel()
+    try await startRenewableLease(model)
+    clockReading = .unavailable
+    ports.evaluationReplies = [.immediate(.blocked(try rejection(.clockUnavailable)))]
+    await expiry.fireAndWait()
+    XCTAssertEqual(model.status, .blocked(try rejection(.clockUnavailable)))
+    XCTAssertEqual(acquisition.requestedSources.count, 1)
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+  }
+
   // MARK: - Scenario 1 — every import rejection
 
   func testBluetoothOffDemotesTheDisplayedServingStatusWithoutStoppingTheLease() async throws {

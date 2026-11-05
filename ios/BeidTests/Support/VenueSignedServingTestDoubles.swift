@@ -77,6 +77,7 @@ final class StubVenueArtifactAcquisition: VenueArtifactAcquiring {
   }
 
   var replies: [Reply] = []
+  var onRequest: (() -> Void)?
   private(set) var requestedSources: [(bundle: URL, handoff: URL?)] = []
   private var pending: [Int: CheckedContinuation<VenuePublicArtifact, Error>] = [:]
   private var nextRequestID = 0
@@ -99,6 +100,7 @@ final class StubVenueArtifactAcquisition: VenueArtifactAcquiring {
     let id = nextRequestID
     nextRequestID += 1
     requestedSources.append((bundleSource, handoffSource))
+    onRequest?()
     let ready = observers.filter { $0.count <= requestedSources.count }
     observers.removeAll { $0.count <= requestedSources.count }
     for observer in ready { observer.continuation.resume() }
