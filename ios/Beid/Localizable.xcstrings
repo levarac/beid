@@ -1,6 +1,61 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Saved records unavailable": {
+      "comment": "Join refusal title when local record recovery cannot finish.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved records unavailable"
+          }
+        }
+      }
+    },
+    "Loading saved records": {
+      "comment": "Shown while an event join waits for existing local records to load.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading saved records"
+          }
+        }
+      }
+    },
+    "beid couldn't access saved records. Try again before joining another event.": {
+      "comment": "Local storage refusal; the retry action repeats the requested join after recovery succeeds.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid couldn't access saved records. Try again before joining another event."
+          }
+        }
+      }
+    },
+    "beid is loading saved records before joining another event. Please wait.": {
+      "comment": "The pending join resumes after local record loading and recovery finish.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid is loading saved records before joining another event. Please wait."
+          }
+        }
+      }
+    },
+    "Try again": {
+      "comment": "Retries the requested event join after a local storage failure.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
     "PEERS PER OBSERVED WINDOW": {
       "comment": "Heading for the Observation Detail bar chart. Each bar is a window with at least one recorded observation; gaps are not zero-filled.",
       "localizations": {

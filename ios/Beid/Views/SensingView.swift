@@ -197,10 +197,8 @@ struct SensingView: View {
 
   /// What to say about a refused join, or nil when nothing was refused.
   ///
-  /// The reason is `shared/`'s (`eventJoinFailureReasonKey`); these sentences
-  /// are this host's, and they are the same English Android already ships
-  /// (`event_join_error_*`), so one situation does not read as two different
-  /// products.
+  /// Registry reasons come from `shared/` (`eventJoinFailureReasonKey`).
+  /// Native storage/loading reasons describe this host's recovery effects.
   ///
   /// Until beid#472 there was nothing here at all. `SensingCoordinator` held
   /// the refusal and no view read it, so a radio that never started looked
@@ -209,6 +207,10 @@ struct SensingView: View {
   private var joinRefusalMessage: LocalizedStringKey? {
     guard let key = sensing.joinRefusalReasonKey else { return nil }
     switch key {
+    case "storage_recovery_required":
+      return "beid couldn't access saved records. Try again before joining another event."
+    case "storage_loading":
+      return "beid is loading saved records before joining another event. Please wait."
     case "network_required":
       return "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
     case "event_not_found":
@@ -240,11 +242,20 @@ struct SensingView: View {
   /// its accessibility identifier are kept here; its copy is not.
   private func joinRefusalNotice(_ message: LocalizedStringKey) -> some View {
     BeidPanel {
-      Text(message)
-        .font(DS.Font.supporting)
-        .foregroundStyle(DS.Color.textPrimary)
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      VStack(alignment: .leading, spacing: DS.Space.s) {
+        Text(message)
+          .font(DS.Font.supporting)
+          .foregroundStyle(DS.Color.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        if sensing.joinRefusalReasonKey == "storage_recovery_required" {
+          Button("Try again") { sensing.retrySessionAdmissionAfterStorageFailure() }
+            .buttonStyle(.plain)
+            .font(DS.Font.supporting)
+            .frame(minHeight: DS.Size.minHitTarget)
+            .accessibilityIdentifier("scan.storage-retry")
+        }
+      }
     }
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("scan.join-refusal")
@@ -788,7 +799,8 @@ struct SensingPrejoinRouter: View {
         reason: reason,
         code: sensing.joinedEventCode,
         event: nil,
-        candidate: nil
+        candidate: nil,
+        onRetry: { sensing.retrySessionAdmissionAfterStorageFailure() }
       )
     } else {
       SensingView(sensing: sensing, clockPreflight: clockPreflight)
@@ -810,10 +822,22 @@ enum SensingCantJoinReason {
     }
   }
 
+  var isStorageRefusal: Bool {
+    if case .refused("storage_recovery_required") = self { return true }
+    return false
+  }
+
+  var isStorageLoading: Bool {
+    if case .refused("storage_loading") = self { return true }
+    return false
+  }
+
   var title: LocalizedStringKey {
     switch self {
     case .refused(let key):
       switch key {
+      case "storage_recovery_required": "Saved records unavailable"
+      case "storage_loading": "Loading saved records"
       case "network_required": "No network connection"
       case "event_not_found": "Code not registered"
       case "code_mismatch": "Code mismatch"
@@ -827,6 +851,10 @@ enum SensingCantJoinReason {
     switch self {
     case .refused(let key):
       switch key {
+      case "storage_recovery_required":
+        "beid couldn't access saved records. Try again before joining another event."
+      case "storage_loading":
+        "beid is loading saved records before joining another event. Please wait."
       case "network_required":
         "beid needs a connection to verify this event, and couldn't reach the network. Check your connection and try again."
       case "event_not_found":
@@ -852,6 +880,7 @@ struct SensingCantJoinView: View {
   let code: String?
   let event: EventSession?
   let candidate: NearbyEventCard?
+  var onRetry: (() -> Void)?
 
   var body: some View {
     GeometryReader { geometry in
@@ -894,14 +923,23 @@ struct SensingCantJoinView: View {
           }
 
           Spacer(minLength: DS.Space.xl)
-          NavigationLink {
-            EventCodeEntryView(mode: .scanFlow)
-          } label: {
-            BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
-              .frame(maxWidth: .infinity)
+          if reason.isStorageRefusal, let onRetry {
+            Button(action: onRetry) {
+              BeidTextControlLabel("Try again", labelColor: DS.Color.labelOnActionPrimary)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("scan.storage-retry")
+          } else if !reason.isStorageLoading {
+            NavigationLink {
+              EventCodeEntryView(mode: .scanFlow)
+            } label: {
+              BeidTextControlLabel("Enter event code instead", labelColor: DS.Color.labelOnActionPrimary)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("scan.manual-entry")
           }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("scan.manual-entry")
         }
         .frame(minHeight: geometry.size.height, alignment: .top)
         .padding(.horizontal, DS.Space.pageMargin)

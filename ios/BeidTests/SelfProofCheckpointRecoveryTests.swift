@@ -130,9 +130,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     }
   }
 
-  func testStopOrResetCancelsAdmissionDeferredDuringLoading() async {
+  func testStopResetOrLeaveCancelsAdmissionDeferredDuringLoading() async {
     for entry in ["typed", "nearby", "demo"] {
-      for stop in [false, true] {
+      for cancellation in ["stop", "reset", "leave"] {
         let directory = makeTemporaryDirectory()
         let engine = RecordingEventJoinControl()
         let sensing = SensingCoordinator(loadingFromDirectory: directory,
@@ -140,7 +140,11 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
                                          eventJoinControl: engine)
         sensing.useDemoEventMode = false
         attemptAdmission(entry, sensing: sensing)
-        if stop { _ = sensing.stopSensing() } else { _ = sensing.reset() }
+        switch cancellation {
+        case "stop": _ = sensing.stopSensing()
+        case "reset": _ = sensing.reset()
+        default: sensing.leaveEvent()
+        }
         await sensing.waitForLedgerLoadToFinish()
         await sensing.waitForDemoSequenceToFinish()
         XCTAssertEqual(sensing.phase, .idle, entry)
@@ -156,7 +160,7 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     switch entry {
     case "typed": sensing.startSensing(eventCode: "EXAMPLE-NEXT")
     case "nearby": sensing.joinNearbyEvent(eventCodeHashHex: String(repeating: "ab", count: 32))
-    case "demo": sensing.runDemoScenario(BeidConfig.demoScenario(), stepDelayNanos: 0)
+    case "demo": sensing.runDemoScenario(.appReviewGolden, stepDelayNanos: 0)
     default: XCTFail("unknown admission entry")
     }
   }
