@@ -3068,6 +3068,478 @@
           }
         }
       }
+    },
+    "home.now.title": {
+      "comment": "Tab and heading for current event actions.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now"
+          }
+        }
+      }
+    },
+    "records.title": {
+      "comment": "Tab and heading for saved participation records.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Records"
+          }
+        }
+      }
+    },
+    "now.join.action": {
+      "comment": "Starts sensing the event shown above this button after one tap.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JOIN"
+          }
+        }
+      }
+    },
+    "now.keep-open.title": {
+      "comment": "Instruction during active sensing.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the app open."
+          }
+        }
+      }
+    },
+    "now.organizer.dates": {
+      "comment": "Start and end dates from the event's registration.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ – %2$@"
+          }
+        }
+      }
+    },
+    "records.record.accessibilityLabel": {
+      "comment": "Opens the participation record for the named event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record for %@"
+          }
+        }
+      }
+    },
+    "LISTENING FOR EVENTS NEARBY": {
+      "comment": "Status while listening for nearby event announcements.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LISTENING FOR EVENTS NEARBY"
+          }
+        }
+      }
+    },
+    "Keep the app open and head to the venue.": {
+      "comment": "Instruction while waiting for an event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the app open and head to the venue."
+          }
+        }
+      }
+    },
+    "beid listens for nearby events over Bluetooth. Tap JOIN when your event appears.": {
+      "comment": "Finding an event does not start participation; JOIN does.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid listens for nearby events over Bluetooth. Tap JOIN when your event appears."
+          }
+        }
+      }
+    },
+    "HOW SENSING WORKS": {
+      "comment": "Opens information about sensing.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HOW SENSING WORKS"
+          }
+        }
+      }
+    },
+    "BLUETOOTH OFF · SENSING PAUSED": {
+      "comment": "Bluetooth is off, so sensing cannot continue.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "BLUETOOTH OFF · SENSING PAUSED"
+          }
+        }
+      }
+    },
+    "NAME ANNOUNCED NEARBY": {
+      "comment": "The following event name was announced over Bluetooth.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NAME ANNOUNCED NEARBY"
+          }
+        }
+      }
+    },
+    "FOUND NEARBY": {
+      "comment": "An event candidate has been heard; participation has not started.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FOUND NEARBY"
+          }
+        }
+      }
+    },
+    "Checking event registration…": {
+      "comment": "The candidate does not yet have current registration evidence permitting a join.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking event registration…"
+          }
+        }
+      }
+    },
+    "EVENT REGISTRATION CHECKED": {
+      "comment": "Registration evidence currently allows this event to be joined; this says nothing about a record being verified.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EVENT REGISTRATION CHECKED"
+          }
+        }
+      }
+    },
+    "EVENT REGISTRATION EXPIRED": {
+      "comment": "The event registration period has ended; joining is disabled.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EVENT REGISTRATION EXPIRED"
+          }
+        }
+      }
+    },
+    "ALSO NEARBY": {
+      "comment": "Additional nearby event candidates, in discovery order.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ALSO NEARBY"
+          }
+        }
+      }
+    },
+    "JOIN →": {
+      "comment": "Starts sensing the event in this row.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JOIN →"
+          }
+        }
+      }
+    },
+    "DEMO EVENT · FOR APP REVIEW": {
+      "comment": "Identifies a sample event, not a real Bluetooth event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DEMO EVENT · FOR APP REVIEW"
+          }
+        }
+      }
+    },
+    "Demo event": {
+      "comment": "Name of the sample event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo event"
+          }
+        }
+      }
+    },
+    "Sample devices and records. No Bluetooth event is joined.": {
+      "comment": "Explains that demo data is artificial.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sample devices and records. No Bluetooth event is joined."
+          }
+        }
+      }
+    },
+    "JOINING": {
+      "comment": "The participant tapped JOIN and the app is beginning sensing.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JOINING"
+          }
+        }
+      }
+    },
+    "Joining event…": {
+      "comment": "The chosen event is starting; no registered name is available.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joining event…"
+          }
+        }
+      }
+    },
+    "beid is starting sensing for the event you chose.": {
+      "comment": "Shown after an explicit JOIN action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid is starting sensing for the event you chose."
+          }
+        }
+      }
+    },
+    "Sensing continues": {
+      "comment": "The active radio operation can be opened from Now.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensing continues"
+          }
+        }
+      }
+    },
+    "Nearby phones can keep observing each other.": {
+      "comment": "Encourages keeping the app open while sensing continues.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nearby phones can keep observing each other."
+          }
+        }
+      }
+    },
+    "DEVICES HEARD": {
+      "comment": "Number of nearby devices this phone has observed, not a mutual count.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DEVICES HEARD"
+          }
+        }
+      }
+    },
+    "Stay nearby. Keep the app open.": {
+      "comment": "Instruction during active sensing.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stay nearby. Keep the app open."
+          }
+        }
+      }
+    },
+    "Keeping beid open helps nearby phones observe each other and keep signed records.": {
+      "comment": "Does not claim that a person was present or that the record is verified.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeping beid open helps nearby phones observe each other and keep signed records."
+          }
+        }
+      }
+    },
+    "OPEN DETAILS": {
+      "comment": "Opens the current sensing details without ending sensing.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OPEN DETAILS"
+          }
+        }
+      }
+    },
+    "DO THIS NOW": {
+      "comment": "Heading for the current instruction.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DO THIS NOW"
+          }
+        }
+      }
+    },
+    "FROM THE ORGANIZER": {
+      "comment": "Shows only the authenticated event name and registered dates.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FROM THE ORGANIZER"
+          }
+        }
+      }
+    },
+    "BY EVENT": {
+      "comment": "Opens saved records grouped by event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "BY EVENT"
+          }
+        }
+      }
+    },
+    "By event": {
+      "comment": "Title of the saved event list.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By event"
+          }
+        }
+      }
+    },
+    "Saved records appear here after sensing.": {
+      "comment": "Empty Records tab.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved records appear here after sensing."
+          }
+        }
+      }
+    },
+    "Records need an accurate clock. Turn on “Set automatically” in Settings.": {
+      "comment": "Clock warning before joining an event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Records need an accurate clock. Turn on “Set automatically” in Settings."
+          }
+        }
+      }
+    },
+    "records.header.counts": {
+      "comment": "Saved record count and distinct event count, pluralized independently.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@records@ · %#@events@"
+          },
+          "substitutions": {
+            "records": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg record"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg records"
+                    }
+                  }
+                }
+              }
+            },
+            "events": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg event"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg events"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "records.event.recordAction": {
+      "comment": "Count of saved records for an event; the arrow opens event details.",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld record →"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld records →"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "version": "1.0"

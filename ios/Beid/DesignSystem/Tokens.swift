@@ -140,6 +140,8 @@ enum DS {
     static let proofDetailSigil: CGFloat = 200
     /// `ProofCardView`'s circular per-proof gradient avatar diameter.
     static let proofCardArtwork: CGFloat = 76
+    /// Saved-record artwork in the two-column Records grid.
+    static let recordsGridSigil: CGFloat = 104
     /// Legacy detail gradient-avatar diameter, superseded by
     /// `proofDetailSigil` in frame 09.
     static let itemDetailArtwork: CGFloat = 190

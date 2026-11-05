@@ -20,7 +20,7 @@ final class EventMembershipUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
 
     app.buttons["home.account"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
@@ -59,7 +59,7 @@ final class EventMembershipUITests: XCTestCase {
       "Join Event should disable immediately when the current session joins"
     )
     app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
   }
 
   /// An offscreen List row may already `exist`, so require its full frame to

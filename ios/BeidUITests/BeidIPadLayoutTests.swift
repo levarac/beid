@@ -34,7 +34,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "bluetooth-permission-\(orientation)")
 
     app.buttons["Allow Bluetooth"].tap()
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-empty-\(orientation)")
 
@@ -43,7 +43,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "account-\(orientation)")
     app.buttons["Done"].tap()
 
-    let resumedSenseEvent = app.buttons["home.scan"]
+    let resumedSenseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
     XCTAssertTrue(
@@ -228,7 +228,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     )
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(
       senseEvent.waitForExistence(timeout: 5),
       "Expected Home after allowing Bluetooth.\n\(app.debugDescription)"
@@ -275,7 +275,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons["View collection"].tap()
 
     XCTAssertTrue(
-      app.buttons["home.scan"].waitForExistence(timeout: 5),
+      app.buttons["home.demo.join"].waitForExistence(timeout: 5),
       "Expected Home after closing recording.\n\(app.debugDescription)"
     )
   }
@@ -283,6 +283,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   /// Opens the DemoEvent proof `navigateToCollectionWithProof` just left on
   /// Collection, and waits for Proof Detail to appear.
   private func openFirstProof() {
+    app.openRecordsByEvent()
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()

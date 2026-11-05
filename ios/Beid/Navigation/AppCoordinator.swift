@@ -47,6 +47,14 @@ final class AppCoordinator: ObservableObject {
   /// assign it directly) and is never read on that path.
   @Published private(set) var liveWalletAddress: LiveWalletAddress?
   @Published var scanPresented = false
+  @Published var selectedHomeTab: HomeTab = .now
+  @Published private(set) var homeStandby = HomeStandbyState()
+  @Published private(set) var homeStandbyDiscoveryActive = false
+  @Published private(set) var nowEventRegistration: HomeEventRegistration?
+  #if DEBUG
+  @Published private(set) var homeStandbyFixtureTime: TimeInterval = 0
+  @Published private(set) var homeStandbyFixtureHasCandidate = false
+  #endif
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
   private enum ScanStopIntent {
     case keepAutomaticTransport
@@ -705,6 +713,9 @@ final class AppCoordinator: ObservableObject {
     let outcome = await joinEventFromAccountSheetResolvingCanonicalId(code: code)
     if case .completed(nil) = outcome {
       homeEventCodeSheetPresented = false
+      nowEventRegistration = nil
+      sensingCoordinator.startSensing()
+      scanPresented = true
     }
     return outcome
   }
@@ -902,6 +913,104 @@ final class AppCoordinator: ObservableObject {
       fromTemplate: bundle.object(forInfoDictionaryKey: "BeidEventCodeLookupURLTemplate") as? String
     )
   }
+
+  var homeStandbyNow: TimeInterval {
+    #if DEBUG
+    if isHomeStandbyFixture { return homeStandbyFixtureTime }
+    #endif
+    return ProcessInfo.processInfo.systemUptime
+  }
+
+  var homeBluetoothIsOff: Bool {
+    #if DEBUG
+    if ProcessInfo.processInfo.arguments.contains("-beid-ui-test"),
+      ProcessInfo.processInfo.arguments.contains("-beid-now-bluetooth-off-fixture") { return true }
+    #endif
+    return bluetoothMonitor.isPoweredOff
+  }
+
+  var homeHasDemoCandidate: Bool {
+    #if DEBUG
+    if isHomeStandbyFixture { return homeStandbyFixtureHasCandidate }
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("-beid-ui-test"),
+      arguments.contains("-beid-home-frame-04b") || arguments.contains("-beid-home-frame-04c") {
+      return false
+    }
+    #endif
+    return sensingCoordinator.homeDemoEventAvailable
+  }
+
+  /// Starts only discovery while Now's root is visible and interactive.
+  /// Joining owns its own in-flight evidence; leaving that phase must not
+  /// clear a candidate before the permission completion consumes it.
+  func updateHomeStandby(isVisible: Bool, isSceneActive: Bool) {
+    let isIdle: Bool
+    if case .idle = sensingCoordinator.phase { isIdle = true } else { isIdle = false }
+    let isEnabled = isVisible && isSceneActive && screen == .home
+      && selectedHomeTab == .now && !scanPresented && !accountSheetPresented
+      && !homeEventCodeSheetPresented && !homeBluetoothIsOff && isIdle
+    if isEnabled && !homeStandbyDiscoveryActive {
+      homeStandbyDiscoveryActive = true
+      #if DEBUG
+      if !isHomeStandbyFixture {
+        sensingCoordinator.startHomeStandbyDiscovery()
+      }
+      #else
+      sensingCoordinator.startHomeStandbyDiscovery()
+      #endif
+    } else if !isEnabled && homeStandbyDiscoveryActive {
+      homeStandbyDiscoveryActive = false
+      if isIdle { sensingCoordinator.stopNearbyEventDiscovery() }
+    }
+    let hasCandidates = sensingCoordinator.nearbyEventCandidates.candidateCount > 0 || homeHasDemoCandidate
+    homeStandby.update(isEnabled: isEnabled, hasCandidates: hasCandidates, now: homeStandbyNow)
+  }
+
+  func joinNearbyEventFromHome(_ card: NearbyEventCard) {
+    guard card.joinActionEventCodeHashHex != nil else { return }
+    nowEventRegistration = homeRegistration(for: card)
+    SensingView(sensing: sensingCoordinator, clockPreflight: clockPreflight).joinNearbyEventTapped(card)
+    scanPresented = true
+  }
+
+  func homeRegistration(for card: NearbyEventCard) -> HomeEventRegistration? {
+    guard let context = ExportedKotlinPackages.org.levarac.parallax.discovery
+      .RegistryVerifiedJoinContext.Companion.shared.fromNearbyCandidate(
+        candidates: sensingCoordinator.nearbyEventCandidates,
+        eventCodeHashHex: card.eventCodeHashHex,
+        nowEpochSeconds: Int64(Date().timeIntervalSince1970.rounded(.down))
+      ), let name = context.eventName,
+      let starts = card.displayValidFromEpochSeconds,
+      let ends = card.displayValidUntilEpochSeconds else { return nil }
+    return HomeEventRegistration(
+      name: name,
+      startsAt: Date(timeIntervalSince1970: TimeInterval(starts)),
+      endsAt: Date(timeIntervalSince1970: TimeInterval(ends))
+    )
+  }
+
+  func joinDemoEventFromHome() {
+    nowEventRegistration = nil
+    startScan()
+  }
+
+  #if DEBUG
+  var isHomeStandbyFixture: Bool {
+    let arguments = ProcessInfo.processInfo.arguments
+    return arguments.contains("-beid-ui-test") && arguments.contains("-beid-now-standby-fixture")
+  }
+
+  func advanceHomeStandbyFixture(by seconds: TimeInterval) {
+    guard isHomeStandbyFixture else { return }
+    homeStandbyFixtureTime += seconds
+  }
+
+  func setHomeStandbyFixtureCandidate(_ present: Bool) {
+    guard isHomeStandbyFixture else { return }
+    homeStandbyFixtureHasCandidate = present
+  }
+  #endif
 
   func startScan() {
     stopConfirmSnapshot = nil

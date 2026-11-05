@@ -11,22 +11,12 @@ final class NearbyJoinUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
-    app.buttons["home.scan"].tap()
-
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     XCTAssertTrue(receipt.waitForExistence(timeout: 5))
     XCTAssertEqual(receipt.label, "joins=0 event=none")
-    // SwiftUI exposes the enclosing section identifier on this Button.
-    // Match the fixture's actual card label as well, rather than the section title.
-    let card = app.buttons.matching(NSPredicate(
-      format: "identifier == %@ AND label CONTAINS %@", "scan.nearby-events", "Community night"
-    )).firstMatch
+    let card = app.buttons["home.nearby.join.9adc61d60dda843e"]
     XCTAssertTrue(card.waitForExistence(timeout: 5))
     XCTAssertTrue(card.isEnabled)
-    // XCTest can report this offscreen card as hittable behind the fixed footer.
-    // Bring it into the visible part of the actual Scan scroll view first.
-    app.scrollViews["scan.sensing"].swipeUp()
     XCTAssertTrue(card.isHittable)
     card.tap()
 
@@ -111,9 +101,9 @@ final class NowNavigationUITests: XCTestCase {
     launchHome(["-beid-nearby-join-fixture", "-beid-nearby-multiple-fixture"])
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
     XCTAssertEqual(receipt.label, "joins=0 event=none")
-    XCTAssertEqual(app.staticTexts["home.nearby.primary-name"].label, "Community night")
+    XCTAssertEqual(app.staticTexts["home.nearby.primary-name"].label, "Sample gathering")
     XCTAssertTrue(app.staticTexts["ALSO NEARBY"].exists)
-    XCTAssertTrue(app.buttons["home.nearby.additional.1111111111111111"].exists)
+    XCTAssertTrue(app.buttons["home.nearby.additional.ffffffffffffffff"].exists)
     let join = app.buttons["home.nearby.join.9adc61d60dda843e"]
     XCTAssertTrue(join.isEnabled)
     XCTAssertFalse(app.otherElements["home.active-event"].exists)
@@ -135,16 +125,29 @@ final class NowNavigationUITests: XCTestCase {
     capture("now-bluetooth-off")
   }
 
-  func testDemoStartsOnlyAfterJoinAndReturnsToTheActiveNowSummary() {
+  func testDemoStartsOnlyAfterJoinAndSavesARecordInRecords() {
     launchHome([])
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.otherElements["home.active-event"].exists)
     XCTAssertTrue(app.staticTexts["DEMO EVENT · FOR APP REVIEW"].exists)
     app.buttons["home.demo.join"].tap()
-    XCTAssertTrue(app.scrollViews["scan.session-surface"].waitForExistence(timeout: 30))
-    if app.buttons["Not now"].waitForExistence(timeout: 3) { app.buttons["Not now"].tap() }
+    XCTAssertTrue(app.scrollViews["scan.sensing-session"].waitForExistence(timeout: 30))
+    let cancelBinding = app.buttons["Cancel"]
+    if cancelBinding.waitForExistence(timeout: 10) { cancelBinding.tap() }
+    let recording = app.buttons["Simulate Signal Lost"]
+    XCTAssertTrue(recording.waitForExistence(timeout: 30))
     app.buttons["Close"].tap()
-    if app.buttons["KEEP SENSING"].exists { app.buttons["KEEP SENSING"].tap() }
+    app.buttons["scan.stop-confirm.stop"].assertHittable()
+    app.buttons["scan.stop-confirm.stop"].tap()
+    app.buttons["Done"].assertHittable()
+    app.buttons["Done"].tap()
+    app.buttons["View collection"].assertHittable()
+    app.buttons["View collection"].tap()
+    app.tabBars.buttons["Records"].assertHittable()
+    app.tabBars.buttons["Records"].tap()
+    XCTAssertTrue(app.scrollViews["records.grid"].exists)
+    XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record.")).firstMatch.exists)
+    capture("records-after-demo")
   }
 
   private func launchHome(_ arguments: [String]) {

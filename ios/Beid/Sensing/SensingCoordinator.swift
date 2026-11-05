@@ -3050,6 +3050,19 @@ final class SensingCoordinator: ObservableObject {
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
 
+  @Published private(set) var homeDemoEventAvailable = false
+
+  /// Home discovery never starts a demo recording before an explicit JOIN.
+  /// The existing scan entry remains available to older callers.
+  func startHomeStandbyDiscovery() {
+    guard case .idle = phase else { return }
+    if useDemoEventMode {
+      homeDemoEventAvailable = true
+      return
+    }
+    startNearbyEventDiscovery()
+  }
+
   /// Starts Central-only B005 discovery while no event has been selected.
   ///
   /// `AppCoordinator.startScan()` called `startSensing()` with no selected
@@ -3137,6 +3150,7 @@ final class SensingCoordinator: ObservableObject {
   /// `discoveryOnlyScanOwned` is false and dismissing this surface cannot stop
   /// the joined session's automatic operation.
   func stopNearbyEventDiscovery() {
+    homeDemoEventAvailable = false
     let shouldStopOwnedScan = discoveryOnlyScanOwned && !isAdvertising
     discoveryOnlyScanOwned = false
     clearNearbyEventDiscovery()

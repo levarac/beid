@@ -53,3 +53,16 @@ extension XCUIElement {
     assertHittable(file: file, line: line)
   }
 }
+
+extension XCUIApplication {
+  func openRecordsByEvent() {
+    let recordsTab = tabBars.buttons["Records"]
+    recordsTab.assertHittable()
+    recordsTab.tap()
+    if collectionViews["records.events"].exists { return }
+    let byEvent = buttons["records.by-event"]
+    byEvent.assertHittable()
+    byEvent.tap()
+    collectionViews["records.events"].assertExists()
+  }
+}
