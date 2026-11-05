@@ -7,6 +7,8 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -140,6 +142,9 @@ fun EventJoinScreen(
     onOpenManualEventCode: () -> Unit,
     onStartWalletBinding: () -> Unit = {},
     showSimulateSignalLost: Boolean = BuildConfig.DEBUG,
+    modifier: Modifier = Modifier,
+    title: String = stringResource(R.string.event_join_title),
+    collectionContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -159,6 +164,9 @@ fun EventJoinScreen(
         showEntranceCeremony = !uiState.recordingCeremonyShown,
         onCeremonyFinished = viewModel::markRecordingCeremonyShown,
         showSimulateSignalLost = showSimulateSignalLost,
+        modifier = modifier,
+        title = title,
+        collectionContent = collectionContent,
     )
 }
 
@@ -178,7 +186,7 @@ fun EventJoinScreen(
  *
  * Once [EventJoinUiState.Sensing] is reached, the title and the nearby-event
  * cards give way to [ScanFlowScreen] (beid#336) — the Android equivalent of
- * iOS's `ScanFlowView` full-screen cover, except the account-entry [Text]
+ * iOS's `ScanFlowView` full-screen cover, except the account-entry icon
  * above stays visible in every state: it is Android's only door to the
  * Account screen (and therefore to "Leave Event"). It stays in the chrome
  * alongside the one-tap Close action while a session is active.
@@ -215,12 +223,17 @@ fun EventJoinContent(
     onCloseScan: () -> Unit = {},
     onKeepSensing: () -> Unit = {},
     onConfirmStopSensing: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    title: String = stringResource(R.string.event_join_title),
+    /** Home adds its collection to the same scrolling body, below discovery or the active scan. */
+    collectionContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     Scaffold(
+        modifier = modifier,
         containerColor = BeidTheme.colors.surfaceCanvas,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.event_join_title)) },
+                title = { Text(title) },
                 actions = {
                     IconButton(
                         onClick = onOpenAccount,
@@ -263,6 +276,7 @@ fun EventJoinContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
                 .padding(horizontal = BeidSpacing.pageMargin)
                 .padding(top = BeidSpacing.l, bottom = BeidSpacing.l)
                 .verticalScroll(rememberScrollState()),
@@ -324,6 +338,7 @@ fun EventJoinContent(
                     )
                 }
             }
+            collectionContent()
         }
     }
 }
@@ -671,10 +686,16 @@ fun EventJoinRoute(
             OperatorDateHeaderSource(operatorOriginOrNull(BuildConfig.EVENT_CODE_LOOKUP_URL_TEMPLATE)),
         )
     },
+    modifier: Modifier = Modifier,
+    title: String = stringResource(R.string.event_join_title),
+    collectionContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     LaunchedEffect(session) { session.startNearbyEventDiscovery() }
     val viewModel: EventJoinViewModel = viewModel(factory = EventJoinViewModel.Factory(session, clockPreflight))
-    EventJoinScreen(viewModel, onOpenAccount, onOpenManualEventCode, onStartWalletBinding)
+    EventJoinScreen(
+        viewModel, onOpenAccount, onOpenManualEventCode, onStartWalletBinding,
+        modifier = modifier, title = title, collectionContent = collectionContent,
+    )
 }
 
 @Composable

@@ -32,6 +32,13 @@
     <string name="bluetooth_denied_open_settings_button">Open Settings</string>
     <string name="bluetooth_denied_check_again_button">I\'ve granted it</string>
 
+    <string name="home_title">Home</string>
+    <string name="home_collection_title">Your collection</string>
+    <string name="home_collection_empty">Recorded events appear here. Join a nearby event above to start collecting.</string>
+    <plurals name="home_record_count">
+        <item quantity="one">%d record</item>
+        <item quantity="other">%d records</item>
+    </plurals>
     <string name="event_join_title">Join an event</string>
     <string name="event_join_account_action">Open account</string>
     <string name="event_join_discovery_heading">Find an event nearby</string>

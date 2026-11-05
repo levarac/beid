@@ -4,16 +4,16 @@ import java.util.UUID
 
 /**
  * Navigation destinations — the Compose-Navigation equivalent of iOS's
- * `AppScreen` enum (`ios/Beid/Navigation/AppScreen.swift`). [EventJoin]
- * stands in for iOS's `.home`, since Android has no post-onboarding
- * collection-home screen yet (android/README.md); further screens land in
- * follow-up slices as their iOS counterparts stabilize.
+ * `AppScreen` enum (`ios/Beid/Navigation/AppScreen.swift`). Home combines
+ * nearby participation with the participant's collected event groups.
  */
 sealed class Screen(val route: String) {
     data object Welcome : Screen("welcome")
     data object BluetoothPermission : Screen("bluetooth_permission")
     data object BluetoothDenied : Screen("bluetooth_denied")
     data object BluetoothOff : Screen("bluetooth_off")
+    data object Home : Screen("home")
+    /** Compatibility route for restored navigation state targeting the former home. */
     data object EventJoin : Screen("event_join")
     data object Account : Screen("account")
     data object ManualEventCode : Screen("manual_event_code")
@@ -21,13 +21,14 @@ sealed class Screen(val route: String) {
     /**
      * Flat, reverse-chronological list of collected proofs (beid#121) — see
      * `RecordsScreen.kt`'s kdoc for the full placement reasoning. Reached
-     * the way iOS's *secondary* `PastEventsView` is reached (from Account),
-     * not the way its *primary* `CollectionHomeView` is — this is a
-     * deliberate, stated divergence, not this screen standing in for
-     * [EventJoin]'s eventual promotion to a real collection home (a
-     * separate navigation decision belonging to #141).
+     * the way iOS's secondary `PastEventsView` is reached (from Account).
      */
     data object Records : Screen("records")
+    /** An anchor record identifies a group without encoding or inventing event identity. */
+    data object EventRecords : Screen("event_records/{anchorId}") {
+        const val ANCHOR_ID_ARG: String = "anchorId"
+        fun route(anchorId: UUID): String = "event_records/$anchorId"
+    }
     data object TodaySummary : Screen("today_summary")
 
     /**
