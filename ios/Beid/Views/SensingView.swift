@@ -106,7 +106,7 @@ struct NearbyEventCardListPresentation {
   var showsManualEntryRescue: Bool { true }
 }
 
-/// Screen 05: Scan screen with a radar animation, "Sensing automatically".
+/// Prejoin discovery, with manual event-code entry when needed.
 struct SensingView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ObservedObject private var sensing: SensingCoordinator
@@ -127,11 +127,12 @@ struct SensingView: View {
       ScrollView {
         BeidAdaptiveContent {
           VStack(spacing: DS.Space.l) {
-            BeidStatusPill(state: .sensingAutomatically)
+            Text("Listening for nearby events")
+              .beidTextStyle(DS.Font.Library.labelMono11)
 
             radar
 
-            Text("Walk into an event — it will show up here automatically.")
+            Text("Nearby events appear here. Tap JOIN to begin sensing.")
               .font(DS.Font.body)
               .foregroundStyle(DS.Color.textSecondary)
               .multilineTextAlignment(.center)
@@ -428,7 +429,7 @@ struct SensingView: View {
   private var waitingForVerificationLabel: String {
     String(
       localized: "nearbyEvent.verification.waiting",
-      defaultValue: "Waiting for event verification",
+      defaultValue: "Checking event registration…",
       comment: "Non-interactive nearby-event card status: registry evidence is not currently sufficient to join this candidate."
     )
   }
@@ -436,7 +437,7 @@ struct SensingView: View {
   private var verifiedLabel: String {
     String(
       localized: "nearbyEvent.verification.verified",
-      defaultValue: "Verified",
+      defaultValue: "Event registration matched",
       comment: "Status on an interactive nearby-event card whose registry evidence currently permits a join. This is separate from the display-only Selected state."
     )
   }
@@ -547,9 +548,9 @@ struct SensingSessionSurface: View {
 
             SensingRadarView(
               peers: radarPeers,
-              mutualDeviceCount: Int(sensing.sessionAggregate?.mutualDeviceCount ?? 0),
+              mutualDeviceCount: 0,
               observedWindowCount: observedWindowCount ?? 0,
-              showsEdges: presentation.showsEdges,
+              showsEdges: false,
               size: max(0, min(DS.Size.radarField, geometry.size.width - DS.Space.pageMargin))
             )
             // Keep the measured radar centered without widening the inset content.
@@ -557,6 +558,7 @@ struct SensingSessionSurface: View {
             .padding(.top, DS.Space.m)
 
             SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
+              .accessibilityHidden(true)
               .frame(width: contentWidth)
               .padding(.top, DS.Space.l)
 
@@ -631,23 +633,11 @@ struct SensingSessionSurface: View {
   }
 
   private func metrics(at now: Date) -> some View {
-    let elapsed = sensing.firstSightingAt.map { max(0, Int(now.timeIntervalSince($0))) }
-    // The mutual count is shared's actual mutual scope. It is zero today
-    // because no production observation carries reciprocal evidence; it is
-    // never inferred from signal strength or the all-observation count.
-    var items = [
-      SensingMetric(value: String(sensing.sessionAggregate?.mutualDeviceCount ?? 0), label: "MUTUAL"),
-      SensingMetric(value: String(sensing.devicesVerified), label: "DETECTED")
+    let elapsed = max(0, Int(sensing.firstSightingAt.map { now.timeIntervalSince($0) } ?? 0))
+    let items = [
+      SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
+      SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED")
     ]
-    if let elapsed {
-      let isSearching = effectivePresentation(at: now) == .detectingLong
-      items.append(SensingMetric(
-        value: isSearching && elapsed < 60
-          ? String(format: "0:%02d", elapsed)
-          : "\(elapsed / 60)′",
-        label: isSearching ? "SEARCHING" : "ELAPSED"
-      ))
-    }
     return HStack(alignment: .top, spacing: 0) {
       ForEach(items) { item in
         VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -661,49 +651,29 @@ struct SensingSessionSurface: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      "\(sensing.sessionAggregate?.mutualDeviceCount ?? 0) mutual, "
-        + "\(sensing.devicesVerified) detected, "
-        + "window \(observedWindowCount ?? 0)"
-    )
   }
 
-  private func effectivePresentation(at now: Date) -> Presentation {
-    guard presentation == .detecting,
-      let firstSightingAt = sensing.firstSightingAt,
-      now.timeIntervalSince(firstSightingAt) >= 20
-    else { return presentation }
-    return .detectingLong
-  }
-
-  @ViewBuilder
-  private func footer(at now: Date) -> some View {
-    switch effectivePresentation(at: now) {
-    case .detecting:
-      Text("Looking for peers · stay nearby")
-        .beidTextStyle(DS.Font.Library.labelMono9)
+  private func footer(at _: Date) -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.m) {
+      Text("Keep the app open nearby to help phones observe each other and keep signed records.")
+        .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondaryOnInk)
-    case .detectingLong:
-      NavigationLink {
-        EventCodeEntryView(mode: .scanFlow)
-      } label: {
-        BeidTextControlLabel(
-          "Not finding it? Enter event code",
-          glyph: .trailing("→", announcing: "Enter event code"),
-          labelColor: DS.Color.labelOnActionPrimary
-        )
+      if presentation != .steady {
+        NavigationLink {
+          AboutSensingView()
+        } label: {
+          BeidTextControlLabel(
+            "HOW SENSING WORKS",
+            glyph: .trailing("→", announcing: "How sensing works"),
+            labelColor: DS.Color.labelOnActionPrimary
+          )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("scan.first-time.about")
       }
-      .buttonStyle(.plain)
-      .accessibilityIdentifier("scan.manual-entry")
-    case .detectingFirstTime:
-      // 15 About sensing is owned by Stream A and does not exist yet. The
-      // first-time Figma footer is omitted until its destination is real.
-      EmptyView()
-    case .steady:
-      EmptyView()
     }
   }
+
 }
 
 struct SensingMetric: Identifiable {
@@ -920,7 +890,7 @@ struct SensingCantJoinView: View {
 
       if let event {
         if event.identityVerification == .verified {
-          identityRow("Registry", value: "Verified")
+          identityRow("Registry", value: "Matched")
         }
         identityRow("Code", value: event.id)
       }

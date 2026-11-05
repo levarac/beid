@@ -31,9 +31,7 @@ private struct HomeClockFixtureDateSource: TrustedDateSource {
 }
 #endif
 
-/// Root state machine for onboarding + the collection home. Order of the
-/// wallet step is decided once at init from `OnboardingMode.current`; see
-/// README "Onboarding flag".
+/// Root routing for onboarding and the collection home.
 @MainActor
 final class AppCoordinator: ObservableObject {
   @Published var screen: AppScreen = .welcome
@@ -56,11 +54,6 @@ final class AppCoordinator: ObservableObject {
   @Published private(set) var homeStandbyFixtureHasCandidate = false
   #endif
   @Published private(set) var stopConfirmSnapshot: SensingStopConfirmSnapshot?
-  private enum ScanStopIntent {
-    case keepAutomaticTransport
-    case stopAutomaticTransport
-  }
-  private var pendingStopIntent: ScanStopIntent?
   @Published private(set) var sealedSnapshot: SensingSealedSnapshot?
   @Published private(set) var proofCollectedSnapshot: ProofCollectedSnapshot?
   @Published var selectedProof: Proof?
@@ -427,13 +420,6 @@ final class AppCoordinator: ObservableObject {
   /// exists to prevent — a restored user must never be dropped onto `.home`
   /// with a dead radio).
   ///
-  /// `.walletFirst` restore is intentionally left exactly as
-  /// `beginOnboarding()`'s existing `.walletConnect` routing — i.e. it does
-  /// not skip wallet-connect. Deciding how a previously-connected wallet
-  /// should restore intersects #202 Q6 (wallet-unconnected guest handling),
-  /// which is explicitly out of scope here; `.walletFirst` isn't
-  /// `OnboardingMode.current` in production, so this is a documented,
-  /// accepted limitation, not a regression.
   private func restoreAfterOnboarding() {
     beginOnboarding()
     if screen == .bluetoothPermission {
@@ -442,12 +428,7 @@ final class AppCoordinator: ObservableObject {
   }
 
   func beginOnboarding() {
-    switch onboardingMode {
-    case .walletFirst:
-      screen = .walletConnect
-    case .guestFirst:
-      screen = .bluetoothPermission
-    }
+    screen = .bluetoothPermission
   }
 
   /// `address` is supplied by `WalletConnectPairingView` (MetaMask) once a
@@ -484,13 +465,13 @@ final class AppCoordinator: ObservableObject {
   ///
   /// Also abandons any join attempt still resolving its lookup: without
   /// this, a user who taps this while a code-entry lookup is in flight and
-  /// then reaches `.walletConnect` could later be silently yanked into
+  /// then leaves code entry could later be silently yanked into
   /// `.bluetoothPermission` when that stale lookup finally completes and
   /// `joinEvent` succeeds — a screen change the user never asked for, for
   /// an event they explicitly walked away from (beid#258 P1-1 round-2 fix).
   func returnToWalletConnect() {
     cancelPendingJoinAttempt()
-    screen = .walletConnect
+    screen = .bluetoothPermission
   }
 
   /// Validates and joins the manually entered event code
@@ -714,6 +695,8 @@ final class AppCoordinator: ObservableObject {
     if case .completed(nil) = outcome {
       homeEventCodeSheetPresented = false
       nowEventRegistration = nil
+      sealedSnapshot = nil
+      proofCollectedSnapshot = nil
       sensingCoordinator.startSensing()
       scanPresented = true
     }
@@ -969,6 +952,8 @@ final class AppCoordinator: ObservableObject {
 
   func joinNearbyEventFromHome(_ card: NearbyEventCard) {
     guard card.joinActionEventCodeHashHex != nil else { return }
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
     nowEventRegistration = homeRegistration(for: card)
     SensingView(sensing: sensingCoordinator, clockPreflight: clockPreflight).joinNearbyEventTapped(card)
     scanPresented = true
@@ -1013,8 +998,8 @@ final class AppCoordinator: ObservableObject {
   #endif
 
   func startScan() {
+    selectedHomeTab = .now
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     #if DEBUG
@@ -1089,110 +1074,84 @@ final class AppCoordinator: ObservableObject {
     await clockPreflight.check()
   }
 
-  /// Legacy close entry point. It follows the same Proof gate as every new
-  /// caller, so no caller can bypass the confirmation for an actual Proof.
+  /// Retained for callers that explicitly request the stop flow.
   func finishScan() {
     requestScanClose()
   }
 
-  private func resetAndDismissScan(intent: ScanStopIntent) {
+  private func resetAndDismissScan() {
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     cancelPendingJoinAttempt()
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
-    switch intent {
-    case .keepAutomaticTransport:
-      sensingCoordinator.reset()
-    case .stopAutomaticTransport:
-      sensingCoordinator.stopSensing()
-    }
+    sensingCoordinator.stopSensing()
   }
 
-  /// Scan CLOSE preserves automatic operation after ending this session.
-  /// A stored Proof still passes through 05e before finalization.
+  /// Returning with Back never calls this method. Only an explicit stop
+  /// requests confirmation for the current participation.
   func requestScanClose() {
-    requestScanClose(intent: .keepAutomaticTransport)
-  }
-
-  /// Home Stop sensing uses the same Proof gate and 05e confirmation, but
-  /// stops automatic transport after confirmation or immediately prejoin.
-  func requestHomeStopSensing() {
-    requestScanClose(intent: .stopAutomaticTransport)
-  }
-
-  private func requestScanClose(intent: ScanStopIntent) {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
       stopConfirmSnapshot == nil else { return }
-    guard let proofID = sensingCoordinator.currentProofID,
-      proofStore.proof(withId: proofID) != nil
-    else {
-      resetAndDismissScan(intent: intent)
-      return
-    }
     let event: EventSession
     switch sensingCoordinator.phase {
-    case .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+    case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
       event = currentEvent
-    case .idle, .sensing, .eventFound:
-      resetAndDismissScan(intent: intent)
+    case .idle, .sensing:
+      resetAndDismissScan()
       return
     }
     stopConfirmSnapshot = SensingStopConfirmSnapshot(
-      proofID: proofID,
+      proofID: sensingCoordinator.currentProofID,
       event: event
     )
-    pendingStopIntent = intent
+    selectedHomeTab = .now
     scanPresented = true
+  }
+
+  func requestHomeStopSensing() {
+    requestScanClose()
   }
 
   func keepSensing() {
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
   }
 
-  /// The single confirmed finalization entry for Scan CLOSE and Home Stop.
-  /// Clear the pending confirmation before ending the session so a repeated
-  /// tap cannot finalize again. Scan keeps automatic transport; Home stops it.
-  /// A nil return keeps the Proof but dismisses without a sealed claim.
+  /// Consume the confirmation before performing effects so repeated taps
+  /// cannot finalize twice. A different session cannot use an old request.
   func confirmStopSensing() {
-    guard let snapshot = stopConfirmSnapshot, let proofID = snapshot.proofID,
-      let intent = pendingStopIntent else { return }
+    guard let snapshot = stopConfirmSnapshot else { return }
     stopConfirmSnapshot = nil
-    pendingStopIntent = nil
-    guard sensingCoordinator.currentProofID == proofID else {
-      // A newer session may have taken this slot while 05e was open. Keep
-      // that live session visible; only an externally reset session exits.
-      if sensingCoordinator.currentProofID == nil { scanPresented = false }
+    let event: EventSession
+    switch sensingCoordinator.phase {
+    case .eventFound(let currentEvent), .recording(let currentEvent, _), .signalLost(let currentEvent, _):
+      event = currentEvent
+    case .idle, .sensing:
+      scanPresented = false
       return
     }
-    guard proofStore.proof(withId: proofID) != nil else {
-      // Still sensing, but the record vanished: return to the live screen
-      // without finalizing or making a sealed claim.
+    guard event.sessionID == snapshot.event.sessionID else { return }
+    let proofID = sensingCoordinator.currentProofID
+    if let expectedID = snapshot.proofID, proofID != expectedID { return }
+    if let proofID, proofStore.proof(withId: proofID) == nil {
       return
     }
     let aggregate = sensingCoordinator.sessionAggregate
     let detectedDeviceCount = sensingCoordinator.devicesVerified
     let firstSightingAt = sensingCoordinator.firstSightingAt
+    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
     cancelPendingJoinAttempt()
     sensingCoordinator.stopNearbyEventDiscovery()
-    let sealedAt = sensingCoordinator.sensingPresentationNow(Date())
-    let selfProof: SelfProofRecord?
-    switch intent {
-    case .keepAutomaticTransport:
-      selfProof = sensingCoordinator.reset()
-    case .stopAutomaticTransport:
-      selfProof = sensingCoordinator.stopSensing()
-    }
-    guard selfProof?.proofId == proofID else {
+    let selfProof = sensingCoordinator.stopSensing()
+    guard let proofID, selfProof?.proofId == proofID,
+      proofStore.proof(withId: proofID) != nil else {
       scanPresented = false
       return
     }
     sealedSnapshot = SensingSealedSnapshot(
       recordID: proofID,
-      event: snapshot.event,
+      event: event,
       aggregate: aggregate,
       detectedDeviceCount: detectedDeviceCount,
       firstSightingAt: firstSightingAt,
@@ -1215,13 +1174,13 @@ final class AppCoordinator: ObservableObject {
       detectedPeerCount: sealedSnapshot.detectedDeviceCount,
       observedWindowCount: sealedSnapshot.aggregate.map { Int($0.windowCount) }
     )
-    self.sealedSnapshot = nil
   }
 
   func viewCollectionAfterProofCollected() {
     guard proofCollectedSnapshot != nil else { return }
     proofCollectedSnapshot = nil
     scanPresented = false
+    selectedHomeTab = .records
   }
 
   // MARK: - Item detail

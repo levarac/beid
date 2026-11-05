@@ -37,7 +37,7 @@ struct EventIdentityVerificationPresentation: Equatable {
     case .verified:
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.verified",
-        defaultMessage: "Event identity verified",
+        defaultMessage: "Event registration matched",
         statusAccessibilityIdentifier: "event-identity-verification-status-verified",
         showsProgress: false,
         showsRetry: false,

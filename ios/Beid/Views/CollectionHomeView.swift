@@ -54,6 +54,7 @@ private struct NowHomeView: View {
   @ObservedObject var bluetooth: BluetoothMonitor
   @State private var isRootVisible = false
   @State private var showAboutSensing = false
+  @State private var showWhatWasSent = false
   @State private var showsClockInstructions = false
   @State private var clockInstructionsForNetwork = false
 
@@ -82,6 +83,8 @@ private struct NowHomeView: View {
               if !isIdle && coordinator.homeBluetoothIsOff { bluetoothOff }
               if let event = activeEvent {
                 activeSummary(event: event, now: context.date)
+              } else if isIdle, let saved = coordinator.sealedSnapshot {
+                savedSummary(saved)
               } else if isIdle && sensing.isAdvertising {
                 continuingSummary
               } else if !isIdle {
@@ -106,6 +109,10 @@ private struct NowHomeView: View {
       .toolbarBackground(.visible, for: .navigationBar)
       .toolbarColorScheme(usesInk ? .dark : .light, for: .navigationBar, .tabBar)
       .navigationDestination(isPresented: $showAboutSensing) { AboutSensingView() }
+      .navigationDestination(isPresented: $showWhatWasSent) { WhatWeSendView() }
+      .navigationDestination(isPresented: $coordinator.scanPresented) {
+        ScanFlowView(sensing: sensing).environmentObject(coordinator)
+      }
       .navigationDestination(item: $coordinator.selectedProof) { proof in
         HomeRecordDetail(proof: proof)
       }
@@ -366,6 +373,43 @@ private struct NowHomeView: View {
     .foregroundStyle(foreground)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("home.active-event")
+  }
+
+  private func savedSummary(_ snapshot: SensingSealedSnapshot) -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.l) {
+      Text("home.now.title")
+        .beidTextStyle(DS.Font.Library.display60)
+        .accessibilityAddTraits(.isHeader)
+      listeningStrip
+      Text(verbatim: snapshot.event.name)
+        .beidTextStyle(DS.Font.Library.labelMono11)
+        .foregroundStyle(secondary)
+      Text("You’re done.")
+        .beidTextStyle(DS.Font.Library.display46)
+        .accessibilityIdentifier("home.saved.title")
+      Text("Your record is saved on this phone. You can close the app.")
+        .beidTextStyle(DS.Font.Library.body15)
+        .foregroundStyle(secondary)
+      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
+      if let recordID = snapshot.recordID, let record = coordinator.proofStore.proof(withId: recordID) {
+        BeidTextControl("VIEW RECORD", glyph: .trailing("→", announcing: "View record")) {
+          coordinator.openProof(record)
+        }
+        .accessibilityIdentifier("home.saved.view-record")
+      }
+      BeidTextControl("WHAT WAS SENT", glyph: .trailing("→", announcing: "What was sent")) {
+        showWhatWasSent = true
+      }
+      .accessibilityIdentifier("home.saved.what-was-sent")
+      if coordinator.homeHasDemoCandidate {
+        demoCandidate
+      } else if let first = nearby.cards.first {
+        candidateCard(first)
+        if nearby.cards.count > 1 { additionalCandidates }
+      }
+    }
+    .foregroundStyle(foreground)
+    .accessibilityIdentifier("home.saved-record")
   }
 
   private func metric(value: String, label: LocalizedStringKey) -> some View {

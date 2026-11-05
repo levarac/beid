@@ -1548,20 +1548,16 @@ Real components in this codebase. Each entry is the contract for reuse.
 > see §11's Android note on the scan flow for the verified current shape.
 > This is a structural difference, not a missing name.
 
-- Purpose: Full-screen cover hosting the sensing flow, switching on
+- Purpose: Pushed detail hosting the sensing flow, switching on
   `SensingCoordinator.phase` (`ScanPhase`: idle/sensing → eventFound →
   recording, with signalLost branch).
-- Use when: The single entry point to sensing; presented via
-  `fullScreenCover` from `RootView`.
+- Use when: Open details from Now's `NavigationStack` through
+  `navigationDestination(isPresented:)`.
 - Don't use when: Anything else — there is exactly one scan flow.
-- Rules: phase transitions animate with `DS.Motion.standard`; a trailing
-  close (X) button is always reachable in the toolbar; each phase view owns
-  its content but not its chrome.
-- *Flat 2b (2026-09-22): the close (X) is superseded — the exit becomes
-  the monospaced text control `CLOSE` (and `DONE` when finished), with a
-  44×44pt hit region (§12, #631, #636). The "always reachable exit" rule
-  itself stands.* *Flat 2b v2 (2026-10-15, beid#730): the exit is the
-  system `.close` item and the finish is `.done` (§12, #732).*
+- Rules: native Back returns to Now without ending participation. The lower
+  STOP SENSING control opens confirmation, while DONE is available after
+  successful finalization. Each phase view owns content, and this container
+  owns its navigation and stop controls. See §11 for the lifecycle contract.
 
 ### Component: Sensing pulse (in SensingView)
 
@@ -1951,30 +1947,21 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   collection-home screen yet." Promoting a screen to this role is
   explicitly deferred to #141 (per `Screen.kt`/`RecordsScreen.kt`'s own
   kdoc), not something this document should describe as already true.]**
-- **Scan flow (05–06d)**: `fullScreenCover` — sensing is a modal session with
-  a clear exit (a trailing close (X) button). Phase progression is linear;
-  `SignalLostView` (06d) is the recovery branch and MUST always offer "Try
-  Again". **[Android's current shape differs structurally, not just by
-  name: `EventJoinScreen`'s `ScanPhaseDetail` (verified) renders
-  Sensing/EventFound/Recording/SignalLost as a `when` branch inside one
-  non-modal screen — no full-screen-cover container, no close (X) button
-  (there is nothing separate to close; leaving happens via `Account`'s
-  "Leave Event"). The SignalLost branch's actual button reads "Resume"
-  (`event_join_resume_sensing` — verified `strings.xml`), not "Try Again."
-  Separately, and not part of this bullet's iOS-described flow at all:
-  `EventJoinScreen` already offers **automatic nearby-event discovery**
-  (`NearbyEventCards`, BLE-driven, verified `EventJoinScreen.kt`) before a
-  user ever enters a code — iOS's current entry flow has no equivalent
-  auto-discovery card list. This is a concrete case of Android currently
-  being ahead of iOS on the entry flow, not behind it; this document does
-  not take a position on whether or how that gets reconciled.]**
-  *Flat 2b annotation (2026-09-22, beid#627,
-  [D-627](docs/decisions/issue-627-flat-2b.md)): the "trailing close (X)
-  button" is superseded by the monospaced text control `CLOSE` (§12,
-  #631, #636); the modal session with a clear exit stands. The bullets in
-  this section describe today's screens; the Flat 2b screens replace them
-  through #635–#644.* *Flat 2b v2 (2026-10-15, beid#730): the exit is the
-  system `.close` item again, not a text control (§12, #732).*
+- **Sensing detail (05–07)**: push from the Now tab's `NavigationStack`.
+  The native Back button and interactive pop gesture return to Now without
+  ending participation, changing the live session, or stopping its radio.
+  The lower `STOP SENSING` control opens the stop confirmation. `Keep sensing`
+  returns to the unchanged session; `Stop and keep record` finalizes the
+  record and ends participation, including participant advertising and relay.
+  Only successful durable finalization may show the saved-record screen and
+  say that the app can be closed. There is no threshold-based transition or
+  countdown. While sensing, show devices heard and elapsed time without a
+  mutual count or an achievement state. DONE advances to the collected-record
+  screen, and View collection opens Records. Returning to Now resumes nearby
+  discovery without joining another event.
+  **[Android retains its native event-join surface for this release; the
+  corresponding navigation and stop-confirmation changes are deferred to
+  its next application flow.]**
 - **Detail (08)**: push via `navigationDestination(item:)` from the grid.
   **[Android counterpart: `Screen.RecordDetail` is a parameterized
   Compose-Navigation route (`"records/{recordId}"`), pushed from

@@ -44,32 +44,18 @@ struct RecordingView: View {
       #endif
     }
     .tint(DS.Color.actionPrimary)
-    .task { @MainActor in
-      // Cross the first render transaction before presenting the binding
-      // sheet. The old ceremony supplied this separation with a timer.
-      await Task.yield()
-      guard !Task.isCancelled else { return }
-      sensing.markRecordingSurfaceReady()
-    }
   }
 
-  /// Temporary diagnostic line (beid#218, DECISIONS 2026-08-20): reads
-  /// `sensing.devicesVerified`/`sensing.unidentifiedRpidCount` directly,
-  /// both already `@Published` on the `SensingCoordinator` this view holds
-  /// — no new wiring. Not `#if DEBUG`-gated (unlike the neighboring
-  /// "Simulate Signal Lost" button above): this ships to real
-  /// TestFlight/production builds because a live multi-device field test
-  /// needs to read these counters without a debugger attached. Not
-  /// permanent product UI and does not need to survive #141's rebuild.
-  private var diagnosticCaption: String {
+  private var diagnosticCaption: String? {
+    #if DEBUG
     let identifiedCount = sensing.devicesVerified
     let unidentifiedCount = sensing.unidentifiedRpidCount
-    return String(
-      localized: "scan.recording.diagnosticCaption",
-      defaultValue: "Diagnostics: \(identifiedCount) identified · \(unidentifiedCount) unidentified",
-      comment: "Temporary diagnostic line on the Recording screen (beid#218, DECISIONS 2026-08-20) — not permanent product UI, does not need to survive #141's rebuild, but ships to real TestFlight/production builds (not #if DEBUG) because a live multi-device field test needs to read these counters without a debugger attached. \"Identified\" is SensingCoordinator.devicesVerified: distinct nearby devices whose proximity identifier (RPID) was resolved to a display ID. \"Unidentified\" is SensingCoordinator.unidentifiedRpidCount: proximity identifiers observed but not yet resolved to a display ID — radio is arriving, but the device could not be identified. A large unidentified count with a flat identified count points at an identification failure; both flat points at nothing arriving at all — opposite fixes, which is why both numbers must be visible together. Do NOT translate this as mutual, two-way, or reciprocal confirmation of any kind — neither number says anything about whether a peer observed this device back (the protocol carries no such signal, DECISIONS 2026-08-09). Same bar as this file's `scan.recording.caption` translator comment on the line above this one."
-    )
+    return "Diagnostics: \(identifiedCount) identified · \(unidentifiedCount) unidentified"
+    #else
+    return nil
+    #endif
   }
+
 }
 
 #Preview("Recording") {
@@ -136,6 +122,17 @@ struct SensingSealedView: View {
             .padding(.top, DS.Space.m)
 
           Spacer(minLength: DS.Space.m)
+          VStack(alignment: .leading, spacing: DS.Space.s) {
+            Text("DONE · YOU CAN CLOSE THE APP")
+              .beidTextStyle(DS.Font.Library.labelMono10)
+            Text("Your record is saved on this phone. You can close the app.")
+              .beidTextStyle(DS.Font.Library.body13)
+              .foregroundStyle(DS.Color.textSecondaryOnInk)
+          }
+          .padding(DS.Space.m)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(DS.Color.strokeHairlineOnInk, in: RoundedRectangle(cornerRadius: DS.Radius.card))
+          .padding(.vertical, DS.Space.l)
           Text("Added to your collection · no action needed")
             .beidTextStyle(DS.Font.Library.labelMono9)
             .foregroundStyle(DS.Color.textSecondaryOnInk)
@@ -155,11 +152,11 @@ struct SensingSealedView: View {
 
   private var sealedSubtitle: String {
     guard let firstSightingAt = snapshot.firstSightingAt, let sealedAt = snapshot.sealedAt else {
-      return "Proof sealed"
+      return "Record saved"
     }
     let start = firstSightingAt.formatted(date: .omitted, time: .shortened)
     let end = sealedAt.formatted(date: .omitted, time: .shortened)
-    return "Proof sealed · \(start) – \(end)"
+    return "Record saved · \(start) – \(end)"
   }
 
   private var metrics: some View {
@@ -167,11 +164,10 @@ struct SensingSealedView: View {
       snapshot.sealedAt.map { max(0, Int($0.timeIntervalSince(start))) }
     }
     var items = [
-      SensingMetric(value: String(snapshot.aggregate?.mutualDeviceCount ?? 0), label: "MUTUAL"),
-      SensingMetric(value: String(snapshot.detectedDeviceCount), label: "DETECTED")
+      SensingMetric(value: String(snapshot.detectedDeviceCount), label: "DEVICES HEARD")
     ]
     if let elapsed {
-      items.append(SensingMetric(value: "\(elapsed / 60)′", label: "ELAPSED"))
+      items.append(SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED"))
     }
     return HStack(alignment: .top, spacing: 0) {
       ForEach(items) { item in
@@ -186,10 +182,6 @@ struct SensingSealedView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      "\(snapshot.aggregate?.mutualDeviceCount ?? 0) mutual, "
-        + "\(snapshot.detectedDeviceCount) detected, window \(observedWindowCount)"
-    )
+
   }
 }

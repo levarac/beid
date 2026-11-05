@@ -711,7 +711,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Event identity verified"
+            "value": "Event registration matched"
           }
         }
       }
@@ -831,7 +831,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verified"
+            "value": "Event registration matched"
           }
         }
       }
@@ -842,7 +842,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Waiting for event verification"
+            "value": "Checking event registration…"
           }
         }
       }
