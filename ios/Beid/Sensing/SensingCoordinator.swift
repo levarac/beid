@@ -684,6 +684,10 @@ final class SensingCoordinator: ObservableObject {
 #endif
   }
 
+  static func defaultJoinRefusalLog(_ message: String) {
+    log.error("\(message, privacy: .public)")
+  }
+
   /// The Barnard participation operations this coordinator drives (beid#410).
   ///
   /// Deliberately `any EventJoinControlling` rather than a `BarnardEngine`.
@@ -1165,6 +1169,9 @@ final class SensingCoordinator: ObservableObject {
   /// Test-replaceable sink for the Debug-only join path diagnostics.
   private let joinDiagnosticLog: (String) -> Void
 
+  /// Test-replaceable effect for the existing public refusal error log.
+  private let joinRefusalLog: (String) -> Void
+
   /// Why the last join attempt was refused, as
   /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value, or nil when
   /// nothing has been refused.
@@ -1558,6 +1565,7 @@ final class SensingCoordinator: ObservableObject {
       Int64((Date().timeIntervalSince1970 * 1_000).rounded())
     },
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1585,6 +1593,7 @@ final class SensingCoordinator: ObservableObject {
       eventJoinRegistry: eventJoinRegistry,
       nearbyDiscoveryStore: nearbyDiscoveryStore,
       joinDiagnosticLog: joinDiagnosticLog,
+      joinRefusalLog: joinRefusalLog,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds
     )
@@ -1615,6 +1624,7 @@ final class SensingCoordinator: ObservableObject {
     nearbyDiscoveryStore injectedNearbyDiscoveryStore:
       ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore? = nil,
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
   ) {
@@ -1662,6 +1672,7 @@ final class SensingCoordinator: ObservableObject {
     self.nearbyDiscoveryClock = nearbyDiscoveryClock
     self.nearbyRegistryClient = nearbyRegistryClient
     self.joinDiagnosticLog = joinDiagnosticLog
+    self.joinRefusalLog = joinRefusalLog
     self.eventJoinRegistry = eventJoinRegistry
       ?? nearbyRegistryClient.map { RegistryEventJoinRegistry(client: $0) }
     let nearbyDiscoveryStore = injectedNearbyDiscoveryStore
@@ -2887,7 +2898,7 @@ final class SensingCoordinator: ObservableObject {
     _ message: String,
     reasonKey: String? = nil
   ) {
-    Self.log.error("\(message, privacy: .public)")
+    joinRefusalLog(message)
     let outcome: String
     switch refusal {
     case .noRegistryConfigured:

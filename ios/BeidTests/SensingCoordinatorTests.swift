@@ -21,6 +21,7 @@ func makeIsolatedSensingCoordinator(
     Int64((Date().timeIntervalSince1970 * 1_000).rounded())
   },
   joinDiagnosticLog: @escaping (String) -> Void = { _ in },
+  joinRefusalLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinRefusalLog,
   relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds
 ) -> SensingCoordinator {
   let directory = FileManager.default.temporaryDirectory
@@ -57,6 +58,7 @@ func makeIsolatedSensingCoordinator(
     nearbyDiscoveryStore: nearbyDiscoveryStore,
     nearbyDiscoveryClock: nearbyDiscoveryClock,
     joinDiagnosticLog: joinDiagnosticLog,
+    joinRefusalLog: joinRefusalLog,
     participantRelayControl: participantRelayControl,
     relayCadenceNanoseconds: relayCadenceNanoseconds
   )
@@ -1437,6 +1439,47 @@ final class SensingCoordinatorTests: XCTestCase {
       ),
       "diagnostic lines: \(lines)"
     )
+  }
+
+  func testNearbyJoinLogsPermissionRefusalBeforeASuccessfulRetry() async throws {
+    for (canScan, canAdvertise) in [(false, false), (false, true), (true, false)] {
+      let engine = RecordingEventJoinControl()
+      engine.permissionOutcome = .reports(canScan: canScan, canAdvertise: canAdvertise)
+      var lines: [String] = []
+      let coordinator = makeIsolatedSensingCoordinator(
+        for: self,
+        eventJoinControl: engine,
+        nearbyDiscoveryStore: makeNearbyDiscoveryStore(),
+        nearbyDiscoveryClock: { 1_800_000_000_000 },
+        joinDiagnosticLog: { lines.append($0) }
+      )
+      coordinator.useDemoEventMode = false
+
+      coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
+      try await Task.sleep(nanoseconds: 20_000_000)
+
+      XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+      XCTAssertEqual(coordinator.phase, .idle)
+      XCTAssertFalse(engine.didJoin)
+      XCTAssertEqual(lines, [
+        "join_stage event_id=unknown stage=admission outcome=rejected_permission_denied " +
+          "attempt=none retry_at_epoch_ms=none"
+      ])
+
+      engine.permissionOutcome = .granted
+      coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
+      try await Task.sleep(nanoseconds: 20_000_000)
+
+      XCTAssertEqual(engine.requestJoinPermissionsCallCount, 2)
+      XCTAssertEqual(engine.joinAndStartContexts.count, 1)
+      XCTAssertEqual(coordinator.phase, .sensing)
+      XCTAssertEqual(lines, [
+        "join_stage event_id=unknown stage=admission outcome=rejected_permission_denied " +
+          "attempt=none retry_at_epoch_ms=none",
+        "join_stage event_id=5d5891b9 stage=admission outcome=admitted " +
+          "attempt=none retry_at_epoch_ms=none"
+      ])
+    }
   }
 
   func testJoinDiagnosticsRejectMalformedIdentifiersAndKeepReceiptFieldsPrivate() {
