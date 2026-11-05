@@ -170,13 +170,20 @@ post-join flow (sensing → event found → recording with a one-time proof
 entrance, plus signal-loss recovery and collection home), which stays
 follow-up work.
 
-**Why `BarnardEngine` is owned by `MainActivity`, not the composable**:
-`requestPermissions` is Activity-driven — the hosting `Activity` must forward
-`onRequestPermissionsResult` back into the *same* engine instance for the
-pending callback to ever resolve. A
-composable-scoped instance would have no way to receive that callback, so
-`MainActivity` creates one `EventJoinCoordinator` in `onCreate`, forwards
-`onRequestPermissionsResult` into it, and disposes it in `onDestroy`.
+**Session lifetime and Activity recreation:** an Activity-scoped
+`EventJoinSessionViewModel` owns one `EventJoinCoordinator` and its proof-recording
+bridge. Configuration changes retain that owner, proof identity and running radio;
+`onCleared` disposes the coordinator on a real finish. Explicit leave still ends the
+recording, and process death still uses durable checkpoint recovery (beid#742).
+The owner is constructed with the Application, never an Activity. Each new
+`MainActivity` attaches itself as Barnard's permission host and constructs its own
+wallet binding flow and Compose subscriptions. Destruction cancels that wallet flow,
+removes its coordinator callback and clears Barnard's Activity reference without
+stopping sensing. `onRequestPermissionsResult` on the new Activity is forwarded to
+the same retained engine. The permission UI callback is rebound by the new Compose
+root; a result arriving before that attachment is delivered once it reattaches.
+This is an Android lifecycle fix; iOS is intentionally
+untouched. It does not provide a foreground service or background recording guarantee.
 
 ## App shell
 
