@@ -3507,8 +3507,8 @@
         }
       }
     },
-    "records.event.recordAction": {
-      "comment": "Count of saved records for an event; the arrow opens event details.",
+    "records.event.sessionAction": {
+      "comment": "Count of saved recording sessions for an event; the arrow opens event details.",
       "localizations": {
         "en": {
           "variations": {
@@ -3516,13 +3516,13 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld record →"
+                  "value": "%lld session →"
                 }
               },
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%lld records →"
+                  "value": "%lld sessions →"
                 }
               }
             }

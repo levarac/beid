@@ -73,6 +73,16 @@ final class NowNavigationUITests: XCTestCase {
     summary.scrollToHittable(in: app)
     summary.tap()
     app.staticTexts["2 sessions recorded for this event"].assertExists()
+    let sessions = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not yet available"))
+    XCTAssertEqual(sessions.count, 2, "Both stored sessions must remain accessible from the event record")
+    for index in 0..<2 {
+      let session = sessions.element(boundBy: index)
+      session.scrollToHittable(in: app)
+      session.tap()
+      app.staticTexts["Devices mutually confirmed"].assertExists()
+      app.navigationBars.buttons.firstMatch.tap()
+      app.staticTexts["2 sessions recorded for this event"].assertExists()
+    }
   }
 
   func testCodeFallbackAppearsAtThirtySecondsAndResetsAfterCandidates() {

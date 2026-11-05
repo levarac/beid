@@ -82,6 +82,7 @@ final class BeidIPadLayoutTests: XCTestCase {
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
+    app.openRecordsByEvent()
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()
@@ -90,7 +91,12 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.navigationBars.buttons.firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(app.collectionViews["records.events"].waitForExistence(timeout: 5))
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
+    app.tabBars.buttons["Now"].tap()
 
+    XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
     // Generous timeout: re-entering the scan flow a second time in one test
     // run has been observed to take noticeably longer than the first entry

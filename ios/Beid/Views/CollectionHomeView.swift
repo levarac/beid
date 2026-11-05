@@ -19,7 +19,6 @@ struct CollectionHomeView: View {
     .sheet(isPresented: $coordinator.accountSheetPresented) {
       AccountSheetView()
         .environmentObject(coordinator)
-        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         .tint(DS.Color.actionPrimary)
         .presentationBackground(DS.Color.textPrimary)
@@ -388,7 +387,10 @@ private struct NowHomeView: View {
       Text(title).beidTextStyle(DS.Font.Library.title17)
       Text(body).beidTextStyle(DS.Font.Library.body13).foregroundStyle(secondary)
     }
+    .padding(DS.Space.m)
     .frame(maxWidth: .infinity, alignment: .leading)
+    .background(usesInk ? DS.Color.strokeHairlineOnInk : DS.Color.surfaceTile,
+                in: RoundedRectangle(cornerRadius: DS.Radius.control))
   }
 
   private func organizerTile(_ registration: HomeEventRegistration) -> some View {
@@ -405,7 +407,7 @@ private struct NowHomeView: View {
     .padding(DS.Space.m)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(usesInk ? DS.Color.strokeHairlineOnInk : DS.Color.surfaceTile,
-                in: RoundedRectangle(cornerRadius: DS.Radius.card))
+                in: RoundedRectangle(cornerRadius: DS.Radius.control))
   }
 
   private func candidateRegistrationStatus(_ card: NearbyEventCard) -> LocalizedStringKey {
@@ -455,7 +457,6 @@ private struct RecordsHomeView: View {
   @ObservedObject var sensing: SensingCoordinator
   @State private var showsEvents = false
   @State private var selectedRecord: Proof?
-  @State private var selectedEvent: Proof?
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   private var eventGroups: [[Proof]] { EventGrouping.homeGroups(from: proofStore.proofs, activeEventCode: nil) }
@@ -470,7 +471,7 @@ private struct RecordsHomeView: View {
           VStack(alignment: .leading, spacing: DS.Space.l) {
             Text(String(
               localized: "records.header.counts",
-              defaultValue: "\(proofStore.proofs.count) records · \(eventGroups.count) events",
+              defaultValue: "\(eventGroups.count) records · \(eventGroups.count) events",
               comment: "Number of saved records and number of distinct recorded events."
             ))
               .beidTextStyle(DS.Font.Library.labelMono10)
@@ -489,7 +490,9 @@ private struct RecordsHomeView: View {
               }
             } else {
               LazyVGrid(columns: columns, alignment: .leading, spacing: DS.Space.l) {
-                ForEach(proofStore.proofs) { proof in recordTile(proof) }
+                ForEach(eventGroups, id: \.first?.id) { group in
+                  if let proof = group.first { recordTile(proof) }
+                }
               }
             }
           }
@@ -502,10 +505,6 @@ private struct RecordsHomeView: View {
       .modifier(HomeAccountToolbar())
       .navigationDestination(isPresented: $showsEvents) { eventList }
       .navigationDestination(item: $selectedRecord) { HomeRecordDetail(proof: $0) }
-      .navigationDestination(item: $selectedEvent) { proof in
-        EventDetailView(representative: proof, sensing: sensing, proofStore: proofStore,
-                        submissionStore: coordinator.reportSubmissionStore)
-      }
     }
   }
 
@@ -536,8 +535,9 @@ private struct RecordsHomeView: View {
     List {
       ForEach(eventGroups, id: \.first?.id) { group in
         if let proof = group.first {
-          Button {
-            selectedEvent = proof
+          NavigationLink {
+            EventDetailView(representative: proof, sensing: sensing, proofStore: proofStore,
+                            submissionStore: coordinator.reportSubmissionStore)
           } label: {
             HStack(spacing: DS.Space.m) {
               RecordSigilSlot(input: sensing.sigilInput(forProofId: proof.id), placement: .homePastRow)
@@ -549,9 +549,9 @@ private struct RecordsHomeView: View {
               }
               Spacer(minLength: 0)
               Text(String(
-                localized: "records.event.recordAction",
-                defaultValue: "\(group.count) records →",
-                comment: "Number of saved records for this event; opens event details."
+                localized: "records.event.sessionAction",
+                defaultValue: "\(group.count) sessions →",
+                comment: "Number of saved recording sessions for this event; opens event details."
               ))
               .beidTextStyle(DS.Font.Library.labelMono10)
             }

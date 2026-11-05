@@ -87,6 +87,10 @@ beid#627, [D-627](docs/decisions/issue-627-flat-2b.md)).** Figma file
   behavior**: Fixed v2 is the base, with v3–v5 deltas applied in order.
   The final specification wins when an earlier screen disagrees. Now owns
   current actions and explicit JOIN; Records owns saved records and events.
+  Now's DO THIS NOW and FROM THE ORGANIZER tiles use Flat 2b fills and a
+  12pt radius (`DS.Radius.control`); nearby candidate cards retain the 20pt
+  `DS.Radius.nowCard`. Records shows one Attendance per event, preserving
+  its stored recording sessions inside the existing detail routes.
 - The earlier Flat 2b Screens and Liquid Glass-era Fixed layouts are
   historical input only; the latter is distinct from the Fixed v2 base.
 - The product name is **beid**. "SenseProof" on the Flat 2b board and in
