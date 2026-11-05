@@ -6,19 +6,13 @@ import XCTest
 
 @MainActor
 final class OnboardingFlagTests: XCTestCase {
-  func testWalletFirstRoutesToWalletConnectFirst() {
-    // OnboardingMode.current is a static compile-time flag (see README
-    // "Onboarding flag"); this test documents the routing it drives for
-    // whichever value is currently set.
+  func testOnboardingStartsWithBluetoothPermission() {
+    // Legacy feature flags must not introduce a wallet step.
     let coordinator = AppCoordinator()
     coordinator.beginOnboarding()
 
-    switch OnboardingMode.current {
-    case .walletFirst:
-      XCTAssertEqual(coordinator.screen, .walletConnect)
-    case .guestFirst:
-      XCTAssertEqual(coordinator.screen, .bluetoothPermission)
-    }
+    XCTAssertEqual(coordinator.screen, .bluetoothPermission)
+    XCTAssertNil(coordinator.walletAddress)
   }
 
   func testWalletFirstOrderReachesBluetoothPermissionAfterConnect() throws {
@@ -27,13 +21,21 @@ final class OnboardingFlagTests: XCTestCase {
     }
     let coordinator = AppCoordinator()
     coordinator.beginOnboarding()
-    XCTAssertEqual(coordinator.screen, .walletConnect)
+    XCTAssertEqual(coordinator.screen, .bluetoothPermission)
 
     coordinator.completeWalletConnect(
       address: LiveWalletAddress.fromConnectorResult(address: "0xREALADDRESS", chainId: "eip155:1")
     )
     XCTAssertEqual(coordinator.walletAddress, "0xREALADDRESS")
     XCTAssertEqual(coordinator.screen, .bluetoothPermission)
+  }
+
+  func testLeavingLegacyCodeEntryReturnsToBluetoothWithoutWalletPresentation() {
+    let coordinator = AppCoordinator()
+    coordinator.screen = .eventCodeEntry
+    coordinator.returnToWalletConnect()
+    XCTAssertEqual(coordinator.screen, .bluetoothPermission)
+    XCTAssertNil(coordinator.walletAddress)
   }
 
   func testGuestFirstOrderSkipsWalletStepInitially() throws {
