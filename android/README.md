@@ -1,10 +1,11 @@
-# beid — native Android (first slice)
+# beid — native Android
 
-First slice of the native (Flutter-free) beid Android app. Kotlin, Jetpack
-Compose, consumes the [levarac/barnard](https://github.com/levarac/barnard)
-BLE SDK. This mirrors the native host shape described in `ios/README.md` at
-the same "first cut, not feature parity" scope — one screen, the
-design-system theme, and a compiling SDK dependency.
+The native beid Android app uses Kotlin and Jetpack Compose with the
+[levarac/barnard](https://github.com/levarac/barnard) BLE SDK. It includes
+onboarding, Bluetooth guidance, collection home, event participation,
+Account, Records, record detail, a daily summary, and a separate venue
+broadcast activity. The native navigation and platform effects differ from
+iOS; shared code owns the decisions both apps must agree on.
 
 ## Build & run
 
@@ -142,33 +143,34 @@ hardcoded (not read from `Colors.xcassets`, which is iOS-only tooling) — see
 `Color.kt`'s kdoc for the source hex values and DESIGN.md §5's table for the
 canonical values if they change.
 
-Not yet ported (out of scope for this slice, DESIGN.md marks them
-`PROPOSAL — Ken ratification pending` anyway): `DS.Motion` springs (Compose
-animation specs are a follow-up once a motion-bearing screen lands) and
-`DS.Artwork.proofCardGradient` (no proof-card screen exists yet on Android).
+The original iOS `DS.Motion` springs and `DS.Artwork.proofCardGradient`
+are not ported. Android renders its record list and record detail with
+native Compose components; the existence of those screens does not imply
+that every iOS animation or artwork component is shared.
 
-## One working screen: Join an event
+## Event participation and recording
 
-`ui/screens/EventJoinScreen.kt` is the scaffold's proof that the published SDK
-resolves, compiles, and runs: enter an event code → tap "Join event" →
-`EventJoinCoordinator` calls `BarnardEngine.requestPermissions` → the real
-Android BLE runtime-permission dialog appears → on grant, `joinEvent(code)` +
-`startAuto()` start scan+advertise and the screen reflects a "Sensing for
-nearby peers…" state. Verified end-to-end on a Pixel 6 API 33 emulator
-(screenshot attached to the PR).
+`HomeRoute` embeds `EventJoinRoute`, which supports nearby-event discovery
+and joining a selected card. Manual event-code entry remains available.
+Before starting a participant session, `EventJoinCoordinator` obtains a
+`RegistryVerifiedJoinContext` from the selected nearby candidate or the
+operator lookup and verified event definition. It checks the owner key,
+then calls `engine.joinAndStart(context)`; an arbitrary event code is not
+passed directly to the radio.
 
-This mirrors the manual event-code-entry slice landing on iOS in parallel
-(scope note in the task brief: a stub/simple version is intentional here, not
-a placeholder for missing work). `EventJoinCoordinator`
-(`sensing/EventJoinCoordinator.kt`) is a thin wrapper, not a full port of
-iOS's `SensingCoordinator` — no BLE-off/signal-lost recovery states. A native
-`persistence/UnsentWindowLedgerStore.kt` is wired into the sensing lifecycle:
-`WindowObservationAccumulator` opens and closes rows on it as windows are
-observed, and `WindowObservationSubmissionDrain` (beid#525) submits durably
-closed windows to the event's operator. What remains is the rest of iOS's
-post-join flow (sensing → event found → recording with a one-time proof
-entrance, plus signal-loss recovery and collection home), which stays
-follow-up work.
+`EventJoinScreen` renders `ScanFlowScreen` for the active session. That
+router includes Sensing, Event Found, Recording, and Signal Lost bodies;
+these are embedded in the participation screen rather than separate
+navigation destinations. Recording has a one-time entrance display, and
+signal-loss simulation is a Debug-only control. This does not establish
+real-radio loss detection or recovery evidence.
+
+`ProofRecordingBridge` writes the collected records used by Records and
+record detail. Separately, `WindowObservationAccumulator` opens and closes
+rows in the native `UnsentWindowLedgerStore`, and
+`WindowObservationSubmissionDrain` submits durably closed windows to the
+event's operator. The collection home is implemented below; none of these
+paths establishes complete iOS feature parity.
 
 **Session lifetime and Activity recreation:** an Activity-scoped
 `EventJoinSessionViewModel` owns one `EventJoinCoordinator` and its proof-recording
@@ -321,10 +323,11 @@ as of 2026-08-19 — reverify before reusing if this doc is old):
   serializers. Release builds enable minification with the Android Gradle
   plugin's optimized defaults and the intentionally empty
   `proguard-rules.pro`; debug builds remain unminified.
-- No instrumentation or device E2E tests. See "Testing" above for why Compose
-  UI coverage is Robolectric-backed JVM tests instead. JVM unit tests
-  currently cover the app-to-`shared/` bridge, the native unsent-window
-  ledger store, and the Event Join ViewModel/screen. For the current hosted
-  job set and the GitHub Actions / Xcode Cloud division, use the
+- Instrumented tests exist under `app/src/androidTest/` for isolated
+  persistence and two-device BLE discovery. The PR build compiles that
+  source set but does not execute it. Compose UI coverage runs as
+  Robolectric-backed JVM tests, as described in "Testing" above; a passing
+  JVM suite does not establish device or radio behavior. For the current
+  hosted job set and the GitHub Actions / Xcode Cloud division, use the
   repository's authoritative [PR CI contract](../AGENTS.md#pr-ci) together
   with its executable workflow, `.github/workflows/pr-ci.yml`.
