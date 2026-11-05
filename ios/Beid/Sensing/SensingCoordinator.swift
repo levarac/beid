@@ -2545,8 +2545,10 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
+    let selectedEventCode = eventCode ?? joinedEventCode
+    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     guard prepareForSessionAdmission(retry: { [weak self] in
-      self?.startSensing(eventCode: eventCode, eventIdHex: eventIdHex,
+      self?.startSensing(eventCode: selectedEventCode, eventIdHex: canonicalEventIdHex,
                          demoEvent: demoEvent, demoScenario: demoScenario)
     }) else { return }
     // No `?? "beid-demo-event"` any more (beid#410, gh#101). That fallback let
@@ -2554,8 +2556,6 @@ final class SensingCoordinator: ObservableObject {
     // event code — an ungated path with a built-in destination. The real path
     // below now starts nothing at all when no event has been selected, which
     // is the correct answer to "sense what?" with no answer.
-    let selectedEventCode = eventCode ?? joinedEventCode
-    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
     // Starting a session ends whatever event the previous one was joined to, so
     // the gate closes here (beid#437). Explicitly here rather than inside
