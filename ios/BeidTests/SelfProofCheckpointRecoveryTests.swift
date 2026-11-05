@@ -21,6 +21,42 @@ import XCTest
 /// instead of the direct `stopSensing()` path.
 @MainActor
 final class SelfProofCheckpointRecoveryTests: XCTestCase {
+  func testFailedReconciliationKeepsCheckpointAcrossReopenAndRepeatedRetries() throws {
+    let directory = makeTemporaryDirectory()
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "RECOVERY", eninStart: 1, eninEnd: 2)
+    SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
+    let store = SelfProofStore(fileURL: selfProofURL)
+    try FileManager.default.createDirectory(at: selfProofURL, withIntermediateDirectories: false)
+    for _ in 0..<2 {
+      _ = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL)
+      XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint,
+                      "a failed save must keep the sole durable recovery input, even after retry")
+    }
+    try FileManager.default.removeItem(at: selfProofURL)
+    _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
+                            checkpointURL: checkpointURL)
+    let reloaded = SelfProofStore(fileURL: selfProofURL)
+    XCTAssertEqual(reloaded.records.count, 1)
+    XCTAssertEqual(reloaded.records.first?.proofId, checkpoint.proofId)
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+  }
+
+  private func recoveryCoordinator(directory: URL, store: SelfProofStore,
+                                   checkpointURL: URL) -> SensingCoordinator {
+    SensingCoordinator(
+      windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
+      selfProofStore: store,
+      selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointURL),
+      bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
+      sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
+        fileURL: directory.appendingPathComponent("aggregates.json")),
+      unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
+      sensingCryptography: DeterministicSensingCryptography()
+    )
+  }
+
   func testReconciliationRecoversASelfProofAfterASimulatedCrashMidSession() throws {
     let directory = makeTemporaryDirectory()
     let windowReportFileURL = directory.appendingPathComponent("window-reports.json")
