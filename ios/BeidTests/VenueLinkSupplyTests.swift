@@ -33,14 +33,17 @@ final class VenueLinkSupplyTests: XCTestCase {
     clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
   }
 
-  private func makeViewModel() -> VenueSignedServingViewModel {
+  private func makeViewModel(
+    diagnostics: ((VenueLeaseDiagnosticStage, VenueServingBlock) -> Void)? = nil
+  ) -> VenueSignedServingViewModel {
     VenueSignedServingViewModel(
       verifier: ports,
       broadcasting: ports,
       acquisition: acquisition,
       store: store,
       clock: { [unowned self] in self.clockReading },
-      expiry: expiry
+      expiry: expiry,
+      diagnostics: diagnostics
     )
   }
 
@@ -329,6 +332,29 @@ final class VenueLinkSupplyTests: XCTestCase {
       startAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds,
       stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds + 300
     )
+  }
+
+  func testLeaseExpiryDiagnosticsContainOnlyTheStageAndCategoricalReason() async throws {
+    let artifact = linkedArtifact()
+    var messages: [String] = []
+    let model = makeViewModel { stage, reason in
+      messages.append("\(stage.rawValue):\(reason.rawValue)")
+    }
+    acquisition.replies = [.artifact(artifact)]
+    ports.importReplies = [.immediate(.imported(imported(artifact)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await model.supply(link: Self.link(base: Self.bundleUrl, handoff: artifact.handoffBytes))
+    XCTAssertTrue(messages.isEmpty)
+
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    ports.evaluationReplies = [.immediate(.blocked(try XCTUnwrap(VenueServingRejection(reason: .expired))))]
+    await expiry.fireAndWait()
+
+    XCTAssertEqual(messages, ["evaluation:expired"])
+    XCTAssertFalse(messages.joined().contains(Self.bundleUrl))
+    XCTAssertFalse(messages.joined().contains(VenueServingContractFixture.eventIdHex))
+    XCTAssertFalse(messages.joined().contains(VenueServingContractFixture.displayName))
+    XCTAssertNil(ports.installedPermit)
   }
 
   func testChangedBundleNeverReplacesTheImmutableLinkAuthority() async throws {
