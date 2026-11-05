@@ -278,6 +278,9 @@ enum VenueBundleVerificationLogic {
   /// `EventJoinMode` is a `shared/` enum with two cases today; B005 encodes
   /// join mode as a single byte, 0 or 1. A future third case must fail
   /// closed (`nil`) rather than silently guess a byte for it.
+  /// Swift Export emits the Kotlin enum as a class with static entries, so
+  /// a plain `default` must cover unmatched `.some` values of the Optional.
+  /// `@unknown default` cannot make those class entries exhaustive.
   static func barnardJoinMode(
     _ mode: ExportedKotlinPackages.org.levarac.parallax.registry.EventJoinMode?
   ) -> UInt8? {
@@ -285,7 +288,7 @@ enum VenueBundleVerificationLogic {
     case .OPEN: return 0
     case .GATED: return 1
     case nil: return nil
-    @unknown default: return nil
+    default: return nil
     }
   }
 
@@ -343,20 +346,9 @@ enum VenueBundleVerificationLogic {
   /// entries are static properties (see `BeidSharedKit.swift`), so the
   /// compiler cannot prove this switch exhaustive.
   ///
-  /// `@unknown` is rejected HERE specifically because this switch's subject is
-  /// that class, and `@unknown` has to attach to an enum. It is not a rule
-  /// about exported types in general: `barnardJoinMode` above switches over
-  /// `EventJoinMode?`, and an Optional IS a Swift enum, so `@unknown` has
-  /// something to attach to there and compiles.
-  ///
-  /// It does not follow that it does anything. `EventJoinMode` is itself an
-  /// exported class, not an enum (`BeidSharedKit.swift:2880`), so nothing
-  /// enumerates its cases and that `@unknown default` cannot warn when one is
-  /// added — despite the annotation, that switch still draws `warning: switch
-  /// must be exhaustive` with `note: add missing case: '.some(_)'`, which is
-  /// the compiler saying it can see Optional's structure and not the wrapped
-  /// class's cases. Both arms are fail-closed catch-alls and nothing more.
-  /// Leave it in place, but do not credit it with warning anyone.
+  /// `barnardJoinMode` also uses a plain `default`: wrapping the exported
+  /// class in Optional does not make its entries exhaustively matchable.
+  /// Both mappings therefore keep explicit fail-closed catch-alls.
   ///
   /// A third `EventJoinMode` case is caught on the Kotlin side instead:
   /// `classifyVenueDefinition`'s `when` covers `GATED`, `OPEN` and `null`
