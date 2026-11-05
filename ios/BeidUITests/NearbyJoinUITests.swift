@@ -57,6 +57,24 @@ final class NowNavigationUITests: XCTestCase {
     capture("now-active")
   }
 
+  func testRecordsGridHasOneAttendancePerEventAndKeepsSessions() {
+    launchHome(["-beid-home-frame-04"])
+    app.tabBars.buttons["Records"].tap()
+    app.scrollViews["records.grid"].assertExists()
+    let recordTiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
+    XCTAssertEqual(recordTiles.count, 4, "Two saved sessions of one event must share one Attendance tile")
+    XCTAssertTrue(app.staticTexts["4 records · 4 events"].exists)
+
+    let repeatedEvent = app.buttons.matching(NSPredicate(format: "label == %@", "Record for DevCon Bangkok 2025"))
+    XCTAssertEqual(repeatedEvent.count, 1)
+    repeatedEvent.firstMatch.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    let summary = app.buttons["View participation summary"]
+    summary.scrollToHittable(in: app)
+    summary.tap()
+    app.staticTexts["2 sessions recorded for this event"].assertExists()
+  }
+
   func testCodeFallbackAppearsAtThirtySecondsAndResetsAfterCandidates() {
     launchHome(["-beid-now-standby-fixture"])
     let fallback = app.buttons["home.enter-code"]
