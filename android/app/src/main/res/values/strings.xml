@@ -110,6 +110,16 @@
     <!-- Scan flow (beid#336): Sensing/Event Found/Recording/Signal Lost full-screen bodies shown inside EventJoinScreen once a session reaches EventJoinUiState.Sensing — mirrors iOS's ScanFlowView (screens 05-07/06d). -->
     <string name="scan_sensing_message">Walk into an event — it will show up here automatically.</string>
     <string name="scan_sensing_heading">Looking for a nearby event</string>
+    <string name="scan_close">Close</string>
+    <string name="scan_stop_heading">Stop sensing?</string>
+    <string name="scan_stop_message">Stop sensing to seal and keep what you\'ve recorded on this phone. You can sense this event again later.</string>
+    <string name="scan_stop_so_far">SO FAR</string>
+    <string name="scan_stop_mutual">MUTUAL</string>
+    <string name="scan_stop_detected">DETECTED</string>
+    <string name="scan_stop_windows">WINDOWS</string>
+    <string name="scan_stop_confirm">Stop and keep record</string>
+    <string name="scan_stop_keep_sensing">Keep sensing</string>
+    <string name="scan_stop_since">since %1$s</string>
     <string name="scan_event_found_title">Event Found</string>
     <string name="scan_event_found_message">Verification starts automatically — stay nearby</string>
     <string name="scan_event_found_status">Checking event details</string>

@@ -1,6 +1,10 @@
 package org.levarac.beid.sensing
 
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.time.Instant
+import java.util.UUID
 import org.levarac.beid.shared.event.NearbyEventSearchOutcome
 
 /**
@@ -71,6 +75,15 @@ enum class NearbyEventCardVerification {
     READY,
 }
 
+data class ScanSessionMetrics(
+    val firstSightingAt: Instant? = null,
+    val mutualDeviceCount: Int = 0,
+    val detectedDeviceCount: Int = 0,
+    val windowCount: Int = 0,
+)
+
+private val emptyScanSessionMetrics = MutableStateFlow<() -> ScanSessionMetrics>({ ScanSessionMetrics() }).asStateFlow()
+
 /**
  * The narrow surface [EventJoinViewModel][org.levarac.beid.ui.screens.EventJoinViewModel]
  * needs from a join session — [EventJoinCoordinator]'s production
@@ -83,6 +96,12 @@ enum class NearbyEventCardVerification {
  */
 interface EventJoinSession {
     val state: StateFlow<EventJoinUiState>
+
+    /** Live identity and stored presence are re-read when confirming a scan close. */
+    val currentProofId: UUID? get() = null
+    fun hasStoredProof(proofId: UUID): Boolean = false
+    /** O(1) snapshots; shared aggregation is evaluated only while 05e is visible. */
+    val scanSessionMetrics: StateFlow<() -> ScanSessionMetrics> get() = emptyScanSessionMetrics
 
     /** The latest native permission answer used by onboarding navigation. */
     val bluetoothPermissionState: BluetoothPermissionState

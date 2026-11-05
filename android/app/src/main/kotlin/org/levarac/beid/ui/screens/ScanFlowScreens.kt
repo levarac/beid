@@ -49,8 +49,8 @@ import org.levarac.beid.ui.theme.BeidTheme
  * Unlike iOS's `ScanFlowView` (a full-screen cover with its own
  * `NavigationStack` + toolbar), these screens are composed as a *portion*
  * of `EventJoinScreen`'s existing content — the account-entry text stays
- * visible above them so a user can still reach Account (and "Leave Event")
- * during an active session, Android's only such affordance. Because of
+ * visible above them alongside Close, so a user can still reach Account
+ * (and "Leave Event") during an active session. Because of
  * that, none of these take [org.levarac.beid.ui.designsystem.BeidScreen]/
  * `BeidStateScreen` (both call `Modifier.fillMaxSize()`, which throws when
  * measured inside `EventJoinScreen`'s existing `verticalScroll` Column,
