@@ -21,6 +21,146 @@ import XCTest
 /// instead of the direct `stopSensing()` path.
 @MainActor
 final class SelfProofCheckpointRecoveryTests: XCTestCase {
+  func testEveryAdmissionPathRefusesPendingRecoveryAndRetriesTheOriginalRequest() async throws {
+    for entry in ["typed", "nearby", "demo"] {
+      let directory = makeTemporaryDirectory()
+      let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+      let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+      let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING",
+                                           eninStart: 10, eninEnd: 11)
+      SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
+      var shouldFail = true
+      let store = SelfProofStore(fileURL: selfProofURL, writeData: { data, url in
+        if shouldFail { throw CocoaError(.fileWriteNoPermission) }
+        try data.write(to: url, options: .atomic)
+      })
+      let engine = RecordingEventJoinControl()
+      var diagnostics: [String] = []
+      let sensing = recoveryCoordinator(
+        directory: directory, store: store, checkpointURL: checkpointURL,
+        eventJoinControl: engine, joinDiagnosticLog: { diagnostics.append($0) })
+      sensing.useDemoEventMode = false
+      attemptAdmission(entry, sensing: sensing)
+      await sensing.waitForDemoSequenceToFinish()
+      XCTAssertEqual(sensing.phase, .idle, entry)
+      XCTAssertNil(sensing.currentProofID, entry)
+      XCTAssertEqual(sensing.joinRefusalReasonKey, "storage_recovery_required", entry)
+      XCTAssertNil(sensing.joinRefusal, "a storage failure is not a registry refusal")
+      XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0, entry)
+      XCTAssertFalse(engine.didJoin, entry)
+      XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint, checkpoint, entry)
+      #if DEBUG
+      XCTAssertTrue(diagnostics.contains { $0.contains("outcome=blocked_storage_recovery") }, entry)
+      #endif
+
+      shouldFail = false
+      sensing.retrySessionAdmissionAfterStorageFailure()
+      await sensing.waitForDemoSequenceToFinish()
+      XCTAssertNotNil(SelfProofStore(fileURL: selfProofURL).durableRecord(forProofId: checkpoint.proofId), entry)
+      XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint, entry)
+      XCTAssertNil(sensing.joinRefusalReasonKey, entry)
+      XCTAssertEqual(engine.requestJoinPermissionsCallCount, entry == "demo" ? 0 : 1, entry)
+      _ = sensing.stopSensing()
+    }
+  }
+
+  func testDetectionCannotBypassRecoveryAfterAnEarlierAdmissionCheck() throws {
+    let directory = makeTemporaryDirectory()
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let checkpoints = SelfProofCheckpointStore(fileURL: checkpointURL)
+    let store = SelfProofStore(fileURL: selfProofURL,
+                              writeData: { _, _ in throw CocoaError(.fileWriteNoPermission) })
+    let sensing = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL,
+                                     checkpointStore: checkpoints)
+    sensing.useDemoEventMode = false
+    sensing.startSensing(eventCode: "EXAMPLE-NEXT")
+    let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING",
+                                         eninStart: 10, eninEnd: 11)
+    checkpoints.save(checkpoint)
+    for index in 0..<BeidConfig.eventConfirmThreshold {
+      sensing.handleDetection(enin: 20, rpid: "example-peer-\(index)",
+                              detectedDisplayId: DetectionFixture.displayId(device: index))
+    }
+    XCTAssertEqual(sensing.phase, .idle)
+    XCTAssertNil(sensing.currentProofID)
+    XCTAssertEqual(sensing.joinRefusalReasonKey, "storage_recovery_required")
+    XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint, checkpoint)
+  }
+
+  func testLoadingDefersEveryAdmissionUntilTheRealCheckpointHasBeenRecovered() async throws {
+    for entry in ["typed", "nearby", "demo"] {
+      for storageUnavailable in [false, true] {
+        let directory = makeTemporaryDirectory()
+        let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+        let checkpointURL = directory.appendingPathComponent("self-proof-checkpoint.json")
+        let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING",
+                                             eninStart: 10, eninEnd: 11)
+        SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
+        if storageUnavailable {
+          try FileManager.default.createDirectory(at: selfProofURL, withIntermediateDirectories: false)
+        }
+        let engine = RecordingEventJoinControl()
+        let sensing = SensingCoordinator(loadingFromDirectory: directory,
+                                         sensingCryptography: DeterministicSensingCryptography(),
+                                         eventJoinControl: engine)
+        sensing.useDemoEventMode = false
+        attemptAdmission(entry, sensing: sensing)
+        XCTAssertTrue(sensing.isLedgerLoading)
+        XCTAssertEqual(sensing.joinRefusalReasonKey, "storage_loading", entry)
+        XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0, entry)
+        XCTAssertNil(sensing.currentProofID, entry)
+        XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint, checkpoint, entry)
+        await sensing.waitForLedgerLoadToFinish()
+        await sensing.waitForDemoSequenceToFinish()
+        XCTAssertFalse(sensing.isLedgerLoading)
+        if storageUnavailable {
+          XCTAssertEqual(sensing.phase, .idle, entry)
+          XCTAssertEqual(sensing.joinRefusalReasonKey, "storage_recovery_required", entry)
+          XCTAssertNil(sensing.currentProofID, entry)
+          XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0, entry)
+          XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint, checkpoint, entry)
+        } else {
+          XCTAssertNotNil(SelfProofStore(fileURL: selfProofURL).durableRecord(forProofId: checkpoint.proofId), entry)
+          XCTAssertNil(sensing.joinRefusalReasonKey, entry)
+          XCTAssertEqual(engine.requestJoinPermissionsCallCount, entry == "demo" ? 0 : 1, entry)
+        }
+        _ = sensing.stopSensing()
+      }
+    }
+  }
+
+  func testStopOrResetCancelsAdmissionDeferredDuringLoading() async {
+    for entry in ["typed", "nearby", "demo"] {
+      for stop in [false, true] {
+        let directory = makeTemporaryDirectory()
+        let engine = RecordingEventJoinControl()
+        let sensing = SensingCoordinator(loadingFromDirectory: directory,
+                                         sensingCryptography: DeterministicSensingCryptography(),
+                                         eventJoinControl: engine)
+        sensing.useDemoEventMode = false
+        attemptAdmission(entry, sensing: sensing)
+        if stop { _ = sensing.stopSensing() } else { _ = sensing.reset() }
+        await sensing.waitForLedgerLoadToFinish()
+        await sensing.waitForDemoSequenceToFinish()
+        XCTAssertEqual(sensing.phase, .idle, entry)
+        XCTAssertNil(sensing.currentProofID, entry)
+        XCTAssertNil(sensing.joinRefusalReasonKey, entry)
+        XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0, entry)
+        XCTAssertFalse(engine.didJoin, entry)
+      }
+    }
+  }
+
+  private func attemptAdmission(_ entry: String, sensing: SensingCoordinator) {
+    switch entry {
+    case "typed": sensing.startSensing(eventCode: "EXAMPLE-NEXT")
+    case "nearby": sensing.joinNearbyEvent(eventCodeHashHex: String(repeating: "ab", count: 32))
+    case "demo": sensing.runDemoScenario(BeidConfig.demoScenario(), stepDelayNanos: 0)
+    default: XCTFail("unknown admission entry")
+    }
+  }
+
   func testNextSessionPreservesFailedSelfProofAfterStopWhenWriterRecovers() throws {
     try assertFailedSessionRecoverySurvivesNextSession(writerRecovers: true, endWithReset: false)
   }
@@ -94,6 +234,11 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     var secondID = sensing.currentProofID
     if writerRecovers {
       XCTAssertNotNil(secondID, "a healthy writer must allow the next session after preserving the first")
+      XCTAssertNil(sensing.joinRefusalReasonKey)
+    } else {
+      XCTAssertNil(secondID, "storage failure must refuse the next session before recording")
+      XCTAssertEqual(sensing.phase, .idle)
+      XCTAssertEqual(sensing.joinRefusalReasonKey, "storage_recovery_required")
     }
     if let secondID { XCTAssertNotEqual(secondID, firstID) }
     assertRecoverable(firstID, checkpoint: firstCheckpoint)
@@ -318,17 +463,22 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
 
   private func recoveryCoordinator(directory: URL, store: SelfProofStore,
                                    checkpointURL: URL,
-                                   cryptography: any SensingCryptography = DeterministicSensingCryptography())
+                                   cryptography: any SensingCryptography = DeterministicSensingCryptography(),
+                                   checkpointStore: SelfProofCheckpointStore? = nil,
+                                   eventJoinControl: (any EventJoinControlling)? = nil,
+                                   joinDiagnosticLog: @escaping (String) -> Void = { _ in })
     -> SensingCoordinator {
     SensingCoordinator(
       windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
       selfProofStore: store,
-      selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: checkpointURL),
+      selfProofCheckpointStore: checkpointStore ?? SelfProofCheckpointStore(fileURL: checkpointURL),
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
         fileURL: directory.appendingPathComponent("aggregates.json")),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
-      sensingCryptography: cryptography
+      sensingCryptography: cryptography,
+      eventJoinControl: eventJoinControl,
+      joinDiagnosticLog: joinDiagnosticLog
     )
   }
 
