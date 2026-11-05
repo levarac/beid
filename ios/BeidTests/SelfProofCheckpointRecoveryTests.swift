@@ -88,6 +88,33 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
     XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint, checkpoint)
   }
 
+  func testRetryPreservesTheTypedEventSelectedBeforeStorageRefusedAdmission() {
+    let directory = makeTemporaryDirectory()
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    SelfProofCheckpointStore(fileURL: checkpointURL).save(
+      SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-PENDING", eninStart: 10, eninEnd: 11))
+    var shouldFail = true
+    let store = SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json"),
+                              writeData: { data, url in
+      if shouldFail { throw CocoaError(.fileWriteNoPermission) }
+      try data.write(to: url, options: .atomic)
+    })
+    let sensing = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL,
+                                     eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    XCTAssertTrue(sensing.joinEvent("EXAMPLE-SELECTED"))
+    sensing.startSensing()
+    XCTAssertEqual(sensing.joinRefusalReasonKey, "storage_recovery_required")
+    XCTAssertTrue(sensing.joinEvent("EXAMPLE-OTHER"))
+    shouldFail = false
+    sensing.retrySessionAdmissionAfterStorageFailure()
+    sensing.handleDetection(enin: 20, rpid: "example-peer", detectedDisplayId: DetectionFixture.displayId(device: 0))
+    switch sensing.phase {
+    case .eventFound(let event), .recording(let event, _): XCTAssertEqual(event.id, "EXAMPLE-SELECTED")
+    default: XCTFail("retry must use the event selected when the request was refused")
+    }
+  }
+
   func testLoadingDefersEveryAdmissionUntilTheRealCheckpointHasBeenRecovered() async throws {
     for entry in ["typed", "nearby", "demo"] {
       for storageUnavailable in [false, true] {
