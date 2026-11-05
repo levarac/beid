@@ -281,7 +281,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Set the time automatically"
+            "value": "Check your device's time"
           }
         }
       }
@@ -3454,17 +3454,6 @@
         }
       }
     },
-    "Records need an accurate clock. Turn on “Set automatically” in Settings.": {
-      "comment": "Clock warning before joining an event.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Records need an accurate clock. Turn on “Set automatically” in Settings."
-          }
-        }
-      }
-    },
     "records.header.counts": {
       "comment": "Saved record count and distinct event count, pluralized independently.",
       "localizations": {
@@ -3537,6 +3526,28 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Records need an accurate clock. Check Date & Time in Settings.": {
+      "comment": "Clock warning before joining an event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Records need an accurate clock. Check Date & Time in Settings."
+          }
+        }
+      }
+    },
+    "Open Settings, choose General, then Date & Time, and check the time settings.": {
+      "comment": "Path to device time settings when the clock differs from network time.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings, choose General, then Date & Time, and check the time settings."
           }
         }
       }

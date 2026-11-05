@@ -113,15 +113,14 @@ private struct NowHomeView: View {
       .onAppear { isRootVisible = true; refreshStandby() }
       .onDisappear { isRootVisible = false; refreshStandby() }
       .task { await coordinator.checkClockOnHome() }
-      .alert(clockInstructionsForNetwork ? "Check your connection" : "Set the time automatically",
-             isPresented: $showsClockInstructions) {
+      .alert(clockInstructionsTitle, isPresented: $showsClockInstructions) {
         Button("Check again") { Task { await coordinator.clockPreflight.check(force: true) } }
         Button("Close", role: .cancel) {}
       } message: {
         if clockInstructionsForNetwork {
           Text("Connect to the network, then check the clock again before joining an event.")
         } else {
-          Text("Open Settings, choose General, then Date & Time, and turn on Set Automatically.")
+          Text("Open Settings, choose General, then Date & Time, and check the time settings.")
         }
       }
     }
@@ -144,6 +143,13 @@ private struct NowHomeView: View {
     #if DEBUG
     .onChange(of: coordinator.homeStandbyFixtureHasCandidate) { _, _ in refreshStandby() }
     #endif
+  }
+
+  private var clockInstructionsTitle: String {
+    if clockInstructionsForNetwork {
+      return String(localized: "home.clock.networkInstructions.title", defaultValue: "Check your connection")
+    }
+    return String(localized: "home.clock.timeInstructions.title", defaultValue: "Check your device's time")
   }
 
   private func refreshStandby() {
@@ -607,7 +613,7 @@ private struct HomeClockWarning: View {
         }
         .padding(.top, DS.Space.m)
         if stateKey == "overTolerance" {
-          Text("Records need an accurate clock. Turn on “Set automatically” in Settings.")
+          Text("Records need an accurate clock. Check Date & Time in Settings.")
             .beidTextStyle(DS.Font.Library.body13)
             .foregroundStyle(DS.Color.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
