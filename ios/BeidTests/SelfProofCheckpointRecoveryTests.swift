@@ -21,6 +21,182 @@ import XCTest
 /// instead of the direct `stopSensing()` path.
 @MainActor
 final class SelfProofCheckpointRecoveryTests: XCTestCase {
+  func testInjectedSaveFailuresKeepRecoveryInputUntilDurableRetry() throws {
+    for failEncoding in [true, false] {
+      for hasExisting in [true, false] {
+        let directory = makeTemporaryDirectory()
+        let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+        let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+        if hasExisting {
+          SelfProofCheckpointStore(fileURL: checkpointURL).save(
+            SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-OLD", eninStart: 1, eninEnd: 2))
+          _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
+                                  checkpointURL: checkpointURL)
+        }
+        let existing = SelfProofStore(fileURL: selfProofURL).records
+        let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-RETRY",
+                                             eninStart: 3, eninEnd: 4)
+        SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
+        var shouldFail = true
+        let store = SelfProofStore(
+          fileURL: selfProofURL,
+          encodeRecords: { records in
+            if shouldFail && failEncoding { throw CocoaError(.coderInvalidValue) }
+            return try RecordSchemaEnvelope.encodeRecords(records)
+          },
+          writeData: { data, url in
+            if shouldFail && !failEncoding { throw CocoaError(.fileWriteNoPermission) }
+            try data.write(to: url, options: .atomic)
+          }
+        )
+        for _ in 0..<2 {
+          _ = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL)
+          XCTAssertNotNil(store.lastPersistenceError)
+          XCTAssertEqual(store.records, existing)
+          XCTAssertEqual(SelfProofStore(fileURL: selfProofURL).records, existing)
+          XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint?.proofId,
+                         checkpoint.proofId)
+        }
+        shouldFail = false
+        _ = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL)
+        XCTAssertNil(store.lastPersistenceError)
+        let saved = try XCTUnwrap(store.record(forProofId: checkpoint.proofId))
+        XCTAssertTrue(store.add(saved))
+        XCTAssertTrue(store.add(saved))
+        XCTAssertEqual(SelfProofStore(fileURL: selfProofURL).records.count, existing.count + 1)
+        XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+      }
+    }
+  }
+
+  func testSuspendedStoreCannotClearCheckpointUsingItsInMemoryFallback() throws {
+    let directory = makeTemporaryDirectory()
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    try FileManager.default.createDirectory(at: selfProofURL, withIntermediateDirectories: false)
+    let checkpoint = SelfProofCheckpoint(proofId: UUID(), eventCode: "EXAMPLE-SUSPENDED",
+                                         eninStart: 1, eninEnd: 2)
+    SelfProofCheckpointStore(fileURL: checkpointURL).save(checkpoint)
+    let store = SelfProofStore(fileURL: selfProofURL)
+    for _ in 0..<2 {
+      _ = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL)
+      XCTAssertTrue(store.isPersistenceSuspended)
+      XCTAssertNotNil(store.lastPersistenceError)
+      XCTAssertEqual(store.records.count, 1)
+      XCTAssertNil(store.durableRecord(forProofId: checkpoint.proofId))
+      XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    }
+    try FileManager.default.removeItem(at: selfProofURL)
+    _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
+                            checkpointURL: checkpointURL)
+    XCTAssertEqual(SelfProofStore(fileURL: selfProofURL).records.count, 1)
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+  }
+
+  func testFinalizationFailureKeepsCheckpointAndDoesNotReturnASavedRecord() throws {
+    let directory = makeTemporaryDirectory()
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let store = SelfProofStore(fileURL: selfProofURL,
+                              writeData: { _, _ in throw CocoaError(.fileWriteNoPermission) })
+    let sensing = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL)
+    sensing.useDemoEventMode = false
+    sensing.startSensing(eventCode: "EXAMPLE-STOP")
+    for index in 0..<BeidConfig.eventConfirmThreshold {
+      sensing.handleDetection(enin: 1, rpid: "peer-\(index)",
+                              detectedDisplayId: DetectionFixture.displayId(device: index))
+    }
+    XCTAssertNil(sensing.stopSensing())
+    XCTAssertNotNil(store.lastPersistenceError)
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
+                            checkpointURL: checkpointURL)
+    XCTAssertEqual(SelfProofStore(fileURL: selfProofURL).records.count, 1)
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+  }
+  func testMissingUnsavedRecordDismissesWithoutSealedClaimAndKeepsSelfRecovery() throws {
+    for suspended in [false, true] {
+    let directory = makeTemporaryDirectory()
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let proofURL = directory.appendingPathComponent("proofs.json")
+    if suspended {
+      try FileManager.default.createDirectory(at: proofURL, withIntermediateDirectories: false)
+    }
+    let proofStore = ProofStore(fileURL: proofURL,
+                                writeData: { _, _ in throw CocoaError(.fileWriteNoPermission) })
+    let selfStore = SelfProofStore(fileURL: selfProofURL,
+                                   writeData: { _, _ in throw CocoaError(.fileWriteNoPermission) })
+    let sensing = recoveryCoordinator(directory: directory, store: selfStore, checkpointURL: checkpointURL)
+    let suiteName = "beid.persistence-test.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let app = AppCoordinator(proofStore: proofStore, sensingCoordinator: sensing,
+                             registryClient: nil, userDefaults: defaults)
+    app.scanPresented = true
+    sensing.useDemoEventMode = false
+    sensing.startSensing(eventCode: "EXAMPLE-UNSAVED")
+    for index in 0..<BeidConfig.eventConfirmThreshold {
+      sensing.handleDetection(enin: 1, rpid: "peer-\(index)",
+                              detectedDisplayId: DetectionFixture.displayId(device: index))
+    }
+    let proofID = try XCTUnwrap(sensing.currentProofID)
+    XCTAssertNil(proofStore.proof(withId: proofID))
+    XCTAssertNotNil(proofStore.lastPersistenceError)
+    app.requestScanClose()
+    XCTAssertFalse(app.scanPresented)
+    XCTAssertNil(app.sealedSnapshot)
+    XCTAssertNil(app.proofCollectedSnapshot)
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
+                            checkpointURL: checkpointURL)
+    XCTAssertEqual(SelfProofStore(fileURL: selfProofURL).records.first?.proofId, proofID)
+    }
+  }
+
+  func testOwnerIdentityAndLegacyRecordLinkageSurviveReconstruction() throws {
+    let directory = makeTemporaryDirectory()
+    let seedURL = directory.appendingPathComponent("example-seed")
+    try Data((0..<32).map(UInt8.init)).write(to: seedURL, options: .atomic)
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    let proofURL = directory.appendingPathComponent("proofs.json")
+    let bindingURL = directory.appendingPathComponent("bindings.json")
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let proof = Proof(eventName: "Example event", date: Date(timeIntervalSince1970: 123),
+                      peersVerified: 2, eventCode: "EXAMPLE-RESTART")
+    XCTAssertTrue(ProofStore(fileURL: proofURL).add(proof))
+    let before = BarnardBackedSelfProofCryptography(keyStorage: FileSeedKeyStorage(fileURL: seedURL))
+    let ownerKey = try before.ownerPublicKey()
+    let eventKey = before.eventSigningPublicKey(eventCode: "EXAMPLE-RESTART")
+    let binding = BindingRecord(
+      proofId: proof.id, eventCode: "EXAMPLE-RESTART",
+      walletAddress: "0x" + String(repeating: "00", count: 20),
+      eventSigningPublicKey: eventKey, ownerPublicKey: ownerKey, chainId: 1,
+      nonce: Data(repeating: 0, count: 16), issuedAt: "2000-01-01T00:00:00Z",
+      walletSignatureHex: String(repeating: "00", count: 65),
+      deviceSignature: BarnardCoreRecoverableSignature(
+        r: [UInt8](repeating: 1, count: 32), s: [UInt8](repeating: 2, count: 32), v: 0))
+    BindingRecordStore(fileURL: bindingURL).add(binding)
+    SelfProofCheckpointStore(fileURL: checkpointURL).save(
+      SelfProofCheckpoint(proofId: proof.id, eventCode: "EXAMPLE-RESTART", eninStart: 1, eninEnd: 2))
+    let after = BarnardBackedSelfProofCryptography(keyStorage: FileSeedKeyStorage(fileURL: seedURL))
+    XCTAssertEqual(try after.ownerPublicKey(), ownerKey)
+    _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
+                            checkpointURL: checkpointURL, cryptography: after)
+    let restored = try XCTUnwrap(SelfProofStore(fileURL: selfProofURL).durableRecord(forProofId: proof.id))
+    XCTAssertEqual(ProofStore(fileURL: proofURL).proofs, [proof])
+    XCTAssertEqual(BindingRecordStore(fileURL: bindingURL).record(forProofId: proof.id), binding)
+    XCTAssertEqual(restored.ownerPublicKeyHex, binding.ownerPublicKeyHex)
+    XCTAssertEqual(restored.eventSigningPublicKeyHex, binding.eventSigningPublicKeyHex)
+    XCTAssertTrue(BarnardCoreSigning.verifySelfProof(
+      eventIdHash: Array(bytesFromHex(restored.eventIdHashHex)),
+      eventSigningPublicKey: bytesFromHex(restored.eventSigningPublicKeyHex),
+      eninStart: restored.eninStart, eninEnd: restored.eninEnd,
+      ownerPublicKey: bytesFromHex(restored.ownerPublicKeyHex),
+      signature: BarnardCoreRecoverableSignature(r: bytesFromHex(restored.signatureRHex),
+                                               s: bytesFromHex(restored.signatureSHex),
+                                               v: restored.signatureV)))
+  }
   func testFailedReconciliationKeepsCheckpointAcrossReopenAndRepeatedRetries() throws {
     let directory = makeTemporaryDirectory()
     let selfProofURL = directory.appendingPathComponent("self-proofs.json")
@@ -44,7 +220,9 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
   }
 
   private func recoveryCoordinator(directory: URL, store: SelfProofStore,
-                                   checkpointURL: URL) -> SensingCoordinator {
+                                   checkpointURL: URL,
+                                   cryptography: any SensingCryptography = DeterministicSensingCryptography())
+    -> SensingCoordinator {
     SensingCoordinator(
       windowReportStore: WindowReportStore(fileURL: directory.appendingPathComponent("windows.json")),
       selfProofStore: store,
@@ -53,7 +231,7 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(
         fileURL: directory.appendingPathComponent("aggregates.json")),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
-      sensingCryptography: DeterministicSensingCryptography()
+      sensingCryptography: cryptography
     )
   }
 
@@ -341,10 +519,11 @@ final class SelfProofCheckpointRecoveryTests: XCTestCase {
 /// rather than verifying it against any real signing key, so a real
 /// `BarnardIdentity` is unnecessary here.
 private final class BarnardBackedSelfProofCryptography: SensingCryptography {
-  private let ownerKeyProvider = OwnerKeyProvider(
-    keyStorage: FixedSeedKeyStorage(seed: Data((0..<32).map(UInt8.init))),
-    randomSource: NeverCalledRandomSource()
-  )
+  private let ownerKeyProvider: OwnerKeyProvider
+
+  init(keyStorage: any OwnerKeySeedResolving = FixedSeedKeyStorage(seed: Data((0..<32).map(UInt8.init)))) {
+    ownerKeyProvider = OwnerKeyProvider(keyStorage: keyStorage, randomSource: NeverCalledRandomSource())
+  }
   private let fixedEventSigningPublicKey = Data(bytesFromHex(
     "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
   ))
@@ -380,6 +559,22 @@ private final class BarnardBackedSelfProofCryptography: SensingCryptography {
     walletSignature: Data
   ) throws -> SensingRecoverableSignature? {
     nil
+  }
+}
+
+private struct FileSeedKeyStorage: OwnerKeySeedResolving {
+  let fileURL: URL
+
+  func bytes(forKey key: String) -> [UInt8]? {
+    (try? Data(contentsOf: fileURL)).map(Array.init)
+  }
+
+  func setBytes(_ bytes: [UInt8], forKey key: String) {
+    XCTFail("the example seed is already stored")
+  }
+
+  func resolveSeed(forKey key: String, randomSource: any OwnerKeyRandomBytesGenerating) throws -> [UInt8] {
+    Array(try Data(contentsOf: fileURL))
   }
 }
 
