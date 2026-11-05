@@ -11,6 +11,7 @@ import org.levarac.barnard.BarnardEventDefinitionV1
 import org.levarac.beid.BuildConfig
 import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.discovery.NearbyEventJoinEligibility
+import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
 import org.levarac.parallax.discovery.NearbyEventRegistryStatus
 import org.levarac.parallax.discovery.createNearbyEventDiscoveryStore
 import org.levarac.parallax.discovery.nearbyCandidateJoinEligibility
@@ -23,6 +24,8 @@ import org.levarac.parallax.discovery.beginNearbyEventRegistryResolutionFromHex
 import org.levarac.parallax.discovery.completeNearbyEventRegistryResolutionFromHex
 import org.levarac.parallax.discovery.isNearbyEventRegistryResolutionAttemptActive
 import org.levarac.parallax.discovery.NearbyEventRegistryResolutionResult
+import org.levarac.parallax.registry.EventDefinitionContext
+import org.levarac.parallax.registry.EventDefinitionResolution
 import org.levarac.parallax.registry.EventJoinMode
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.parallax.registry.safeRegistryReadPin
@@ -53,7 +56,24 @@ internal data class NearbyEventDefinitionVerification(
      */
     val definitionHashHex: String? = null,
     val blockHashHex: String? = null,
-)
+    /** The same read's full definition, retained for window submission settings. */
+    val definitionContext: EventDefinitionContext? = null,
+) {
+    companion object {
+        fun fromResolution(resolution: EventDefinitionResolution) = NearbyEventDefinitionVerification(
+            isSuccess = resolution.isSuccess,
+            joinMode = resolution.context?.joinMode,
+            eventIdHex = resolution.context?.eventIdHex,
+            eventCodeHashHex = resolution.context?.eventCodeHashHex,
+            validFromEpochSeconds = resolution.context?.validFrom?.value,
+            validUntilEpochSeconds = resolution.context?.validUntil?.value,
+            keySetDigestHex = resolution.context?.definition?.keySetDigestHex,
+            definitionHashHex = resolution.definitionHashHex,
+            blockHashHex = resolution.blockHashHex,
+            definitionContext = resolution.context,
+        )
+    }
+}
 
 /** Native effect seam; the shared reducer below remains the trust authority. */
 internal interface NearbyEventRegistry {
@@ -92,19 +112,7 @@ internal class RegistryClientNearbyEventRegistry(
             safeRegistryReadPin(),
             useTimeEpochSeconds,
         ) {
-            completion(
-                NearbyEventDefinitionVerification(
-                    isSuccess = it.isSuccess,
-                    joinMode = it.context?.joinMode,
-                    eventIdHex = it.context?.eventIdHex,
-                    eventCodeHashHex = it.context?.eventCodeHashHex,
-                    validFromEpochSeconds = it.context?.validFrom?.value,
-                    validUntilEpochSeconds = it.context?.validUntil?.value,
-                    keySetDigestHex = it.context?.definition?.keySetDigestHex,
-                    definitionHashHex = it.definitionHashHex,
-                    blockHashHex = it.blockHashHex,
-                ),
-            )
+            completion(NearbyEventDefinitionVerification.fromResolution(it))
         }
         return NearbyEventRegistryRequest(request::cancel)
     }
@@ -167,6 +175,7 @@ internal class NearbyEventDiscoverySession(
      * retention lifetime, including source eviction followed by re-observation.
      */
     private val verifiedDefinitionByHash = mutableMapOf<String, BarnardEventDefinitionV1>()
+    private val verifiedJoinEvidenceByHash = mutableMapOf<String, NearbyEventDefinitionVerification>()
     private val verifiedEventIdByHash = mutableMapOf<String, String>()
     private var expiryJob: Job? = null
     private var disposed = false
@@ -186,6 +195,19 @@ internal class NearbyEventDiscoverySession(
      */
     fun verifiedDefinitionsByHash(): Map<String, BarnardEventDefinitionV1> =
         verifiedDefinitionByHash.toMap()
+
+    /** Associates settings only with the exact definition and block that issued this join. */
+    fun definitionForJoin(eventCodeHashHex: String, context: RegistryVerifiedJoinContext): EventDefinitionContext? {
+        val hash = eventCodeHashHex.hexBytesOrNull(8)
+            ?.joinToString("") { "%02x".format(it.toInt() and 0xff) } ?: return null
+        val evidence = verifiedJoinEvidenceByHash[hash] ?: return null
+        val definition = evidence.definitionContext ?: return null
+        if (definition.eventIdHex.hexBytesOrNull(32)?.contentEquals(context.eventIdHex.hexBytesOrNull(32)) != true ||
+            definition.definitionHashHex.hexBytesOrNull(32)?.contentEquals(context.definitionHashHex.hexBytesOrNull(32)) != true ||
+            evidence.blockHashHex.hexBytesOrNull(32)?.contentEquals(context.registryBlockHashHex.hexBytesOrNull(32)) != true
+        ) return null
+        return definition
+    }
 
     fun recordHint(
         peripheralId: String,
@@ -300,6 +322,7 @@ internal class NearbyEventDiscoverySession(
         verifiedMetadataByHash.clear()
         envelopeAgreementByHash.clear()
         verifiedDefinitionByHash.clear()
+        verifiedJoinEvidenceByHash.clear()
         verifiedEventIdByHash.clear()
         _cards.value = emptyList()
     }
@@ -378,8 +401,10 @@ internal class NearbyEventDiscoverySession(
                             val definition = verified.toBarnardDefinition()
                             if (definition != null && result == NearbyEventRegistryResolutionResult.VERIFIED) {
                                 verifiedDefinitionByHash[hash] = definition
+                                verifiedJoinEvidenceByHash[hash] = verified
                             } else {
                                 verifiedDefinitionByHash.remove(hash)
+                                verifiedJoinEvidenceByHash.remove(hash)
                             }
                             // Barnard owns the comparison. This decides only that
                             // it is asked with a definition this host read itself.
@@ -450,6 +475,7 @@ internal class NearbyEventDiscoverySession(
         verifiedMetadataByHash.keys.retainAll(liveHashes)
         envelopeAgreementByHash.keys.retainAll(liveHashes)
         verifiedDefinitionByHash.keys.removeAll { !store.retainsVerifiedRegistryDefinitionForHashHex(it) }
+        verifiedJoinEvidenceByHash.keys.removeAll { !store.retainsVerifiedRegistryDefinitionForHashHex(it) }
         verifiedEventIdByHash.keys.retainAll(liveHashes)
         _cards.value = buildList {
             repeat(snapshot.candidateCount) { index ->

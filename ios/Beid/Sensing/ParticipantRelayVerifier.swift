@@ -133,7 +133,6 @@ final class ParticipantRelayVerifier: BarnardRelayVerifier {
         nameValidator: BarnardB005NativeDisplayNameNormalizer()
       )
     else { return .rejected }
-    guard let relayExpiresAtEnin = UInt32(exactly: verified.relayExpiresAtEnin) else { return .rejected }
 
     return participantRelayVerification(
       state: currentState,
@@ -143,7 +142,7 @@ final class ParticipantRelayVerifier: BarnardRelayVerifier {
       validFromEnin: verified.validFromEnin,
       validThroughEnin: verified.validThroughEnin,
       currentEnin: currentEnin,
-      relayExpiresAtEnin: relayExpiresAtEnin,
+      relayExpiresAtEnin: verified.relayExpiresAtEnin,
       agreesWithDefinition: { definition in
         BarnardB005EnvelopeV2.registryAgreement(verified, definition: definition) == .agrees
       }
@@ -165,7 +164,7 @@ func participantRelayVerification(
   validFromEnin: Int64,
   validThroughEnin: Int64,
   currentEnin: UInt32,
-  relayExpiresAtEnin: UInt32,
+  relayExpiresAtEnin: Int64,
   agreesWithDefinition: (BarnardEventDefinitionV1) -> Bool
 ) -> BarnardRelayVerification {
   let eventIdHex = eventId.relayHexString
@@ -201,18 +200,17 @@ func participantRelayVerification(
     return .rejected
   }
 
-  guard
-    let validFrom = UInt32(exactly: max(0, validFromEnin)),
-    let validThrough = UInt32(exactly: min(Int64(UInt32.max), max(0, validThroughEnin)))
-  else { return .rejected }
+  guard let validity = BeidSharedKit.event.participantRelayValidity(
+    validFromEnin: validFromEnin,
+    validThroughEnin: validThroughEnin,
+    relayExpiresAtEnin: relayExpiresAtEnin
+  ) else { return .rejected }
 
   return .registryVerified(
     eventId: eventId,
-    validFromEnin: validFrom,
-    validThroughEnin: validThrough,
-    // Barnard has already verified the signed expiry; pass it through
-    // unchanged so relay admission lasts exactly as long as authorized.
-    relayExpiresAtEnin: relayExpiresAtEnin
+    validFromEnin: UInt32(validity.validFromEnin),
+    validThroughEnin: UInt32(validity.validThroughEnin),
+    relayExpiresAtEnin: UInt32(validity.relayExpiresAtEnin)
   )
 }
 

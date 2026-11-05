@@ -2561,13 +2561,13 @@
         }
       }
     },
-    "REJOIN": {
-      "comment": "Action that rejoins this stored event by its code.",
+    "Rejoin": {
+      "comment": "Toolbar action that rejoins this stored event by its code.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "REJOIN"
+            "value": "Rejoin"
           }
         }
       }

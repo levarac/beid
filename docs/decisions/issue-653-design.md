@@ -428,14 +428,14 @@ Two items changed shape in the build:
 - The VoiceOver string is "0 mutual, N detected, window W", with N and W equal
   to the record's snapshot values.
 
-**Mutation targets.** `scripts/mutation_check.py` reaches Kotlin integer
-literals, comparisons and booleans only (#662; DECISIONS 1798), and no Swift at
-all.
+**Mutation targets.** `scripts/mutation_check.py` reaches Kotlin integer and
+float literals, comparisons and booleans (#662), and no Swift at all.
 - New Kotlin: the header version `1`, token length `32` and byte count `16`,
   the cap comparisons (`>=` / `>`), the rank arithmetic, the duplicate-token
   check, and the `isSuccess` booleans. All are reachable, and each has a
   literal vector above so it cannot survive by reference.
-- Double constants are not mutated, and the new shared code adds none. The mini
+- Double constants are now mutated by the float operator; the new shared code
+  in this slice adds none. The mini
   threshold `60.0` is already pinned by literal sizes 60.0 and 60.000001
   (`SigilLayoutTest.kt:540-542`). The 1,024 peer cap is pinned at
   `SigilLayoutTest.kt:718-719`.
@@ -445,7 +445,10 @@ all.
   in the `compile-fixtures/` manual style.
 - The full covering suites are run for every modified file, per AGENTS.md.
 
-**Mutation result, as built.** `scripts/mutation_check.py` was run on
+**Mutation result, as built.** These historical counts have not been rerun
+or reclassified under beid#572. Current output counts `compile-failed`
+separately from `killed` and `survived`; a compile failure does not establish
+test protection. `scripts/mutation_check.py` was run on
 `SigilPresence.kt` against `:shared:testAndroidHostTest`. It covered 72 sites:
 65 were killed and 7 survived. One survivor was the `too_many_windows`
 comparison. It is reachable at exactly 100,000 windows, so the test

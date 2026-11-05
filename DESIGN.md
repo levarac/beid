@@ -112,7 +112,7 @@ verbatim.
 | `Button/Primary` | SwiftUI primary-button component (replaces the §10 CTA pattern) | not assigned to an issue yet (none of #628–#644 names it) |
 | `Row/List`, `Row/KeyValue`, `Label/Section` | SwiftUI row / key-value / section-label components | not assigned to an issue yet (none of #628–#644 names it) |
 | `Block/Empty` | `BeidEmptyBlock` (`ios/Beid/DesignSystem.swift`), the dashed empty-state frame (§8) | #630 (2026-09-23) |
-| `Bar/Nav` | Text-only navigation row | #631 |
+| `Bar/Nav` | Text-only navigation row — **not built** since Flat 2b v2 (2026-10-15): the navigation bar is the OS's (§12) | #631, #732 |
 | `Sigil/Mini` | The mini form of the Sigil generator | #633 |
 
 Not components in the Library (raw nodes, spec §7): the sensing graph,
@@ -352,7 +352,9 @@ document enforces nothing.
    fixed — out of scope for this docs-only change.]**
    *Flat 2b note (2026-09-22): unchanged, and it binds the new text-only
    controls (`← EVENTS`, `CLOSE`, `COPY`, …) — an 11pt label still needs a
-   44×44pt hit region (§12, #631).*
+   44×44pt hit region (§12, #631).* *Flat 2b v2 (2026-10-15): navigation
+   items are OS-standard again (§12), so this binds the in-content text
+   controls (`COPY`, `PASTE`, `OPEN →`, …).*
 6. MUST: All text uses Dynamic Type-compatible fonts (every `DS.Font.*` role
    is built on text styles, not fixed sizes). **[Android counterpart: every
    `BeidTypography` role is a Material3 `TextStyle` reached via
@@ -1209,6 +1211,14 @@ and `DS.Space.emptyBlockVertical` (40), the vertical padding of the
   on the iOS 26 SDK (#631 owns the navigation bar; hiding it would need
   an iOS 26-only API), `EventCardView`'s `.tint.opacity` badge, and
   `DS.Artwork.proofCardGradient` (#633).
+- Navigation and sheet glass (2026-10-15, beid#730 A2): the glass the OS
+  draws for the navigation bar, toolbar items and sheets is the OS's and
+  stays. The app does not suppress it — the 2026-09-25 decision that hid
+  it with `sharedBackgroundVisibility(.hidden)` /
+  `UIBarButtonItem.hidesSharedBackground` (#631) is withdrawn, and #732
+  removes that code together with its call-site comments. Content keeps
+  every rule above: no app-drawn glass, materials, blur, shadows or
+  gradients (§12).
 - Empty block (#630, 2026-09-23): `BeidEmptyBlock`
   (`ios/Beid/DesignSystem.swift`) is `Block/Empty` — a dashed 1px
   `DS.Color.strokeEmptyState` frame, radius `DS.Radius.emptyBlock` (16),
@@ -1544,7 +1554,8 @@ Real components in this codebase. Each entry is the contract for reuse.
 - *Flat 2b (2026-09-22): the close (X) is superseded — the exit becomes
   the monospaced text control `CLOSE` (and `DONE` when finished), with a
   44×44pt hit region (§12, #631, #636). The "always reachable exit" rule
-  itself stands.*
+  itself stands.* *Flat 2b v2 (2026-10-15, beid#730): the exit is the
+  system `.close` item and the finish is `.done` (§12, #732).*
 
 ### Component: Sensing pulse (in SensingView)
 
@@ -1956,7 +1967,8 @@ The app's navigation shape (all real, from `ios/Beid/Navigation/`):
   button" is superseded by the monospaced text control `CLOSE` (§12,
   #631, #636); the modal session with a clear exit stands. The bullets in
   this section describe today's screens; the Flat 2b screens replace them
-  through #635–#644.*
+  through #635–#644.* *Flat 2b v2 (2026-10-15, beid#730): the exit is the
+  system `.close` item again, not a text control (§12, #732).*
 - **Detail (08)**: push via `navigationDestination(item:)` from the grid.
   **[Android counterpart: `Screen.RecordDetail` is a parameterized
   Compose-Navigation route (`"records/{recordId}"`), pushed from
@@ -2052,15 +2064,35 @@ visual language).
 > in violation until an Android follow-up is scheduled (none exists as of
 > 2026-09-22).
 
-**Flat 2b: no icons (owner decision 2026-09-22, beid#627,
-[D-627](docs/decisions/issue-627-flat-2b.md); implementation #631).**
+**Flat 2b v2: no icons in content; the navigation bar and toolbar are the
+OS's (owner decision 2026-10-15, beid#730, A2; implementation #732).**
 
-- MUST: The app draws no icons. Controls are monospaced uppercase text in
-  DM Mono (§6): `← EVENTS`, `CLOSE`, `DONE`, `COPY`, `OPEN →`.
-- The only exception is the OS status bar. OS-drawn chrome the app does
-  not draw itself (system alerts and confirmation dialogs, the keyboard,
-  permission dialogs) is outside this rule. There are no other
-  exceptions.
+- MUST: The app draws no icons in content. Controls inside a screen are
+  monospaced uppercase text in DM Mono (§6): `COPY`, `PASTE`, `OPEN →`,
+  `ENTER EVENT CODE →`.
+- MUST: Navigation-bar and toolbar items are OS-standard items, not
+  app-drawn controls. Back is the `NavigationStack` back button; close and
+  done are the system `.close` and `.done` items (`Button(role: .close)` /
+  `Button(role: .confirm)`, which are iOS 26+, or the `UIBarButtonItem`
+  system items). Below iOS 26 (the deployment target stays iOS 17) the
+  same item uses the nearest standard form — a toolbar item in the
+  standard placement with the OS's default styling — and that
+  `#available` branch exists only to reach the OS's own item, never to
+  restyle it. #732 chooses the exact form. A
+  screen-specific action carries **both an SF Symbol and a title** —
+  Rejoin `arrow.clockwise`, Copy `doc.on.doc`, Account
+  `person.crop.circle` — because the OS uses the title for overflow,
+  expanded display and VoiceOver. The OS renders them; on iOS 26 that is
+  the Liquid Glass symbol circle.
+- FORBIDDEN: Custom-drawn navigation controls (a text row in place of the
+  bar, a hand-built circle) and suppressing the glass the OS draws behind
+  bar items (`sharedBackgroundVisibility(.hidden)`,
+  `UIBarButtonItem.hidesSharedBackground`). The 2026-09-25 decision that
+  suppressed it is withdrawn (§8).
+- Beyond the navigation bar and toolbar, the only exception is the OS
+  status bar. OS-drawn chrome the app does not draw itself (system alerts
+  and confirmation dialogs, the keyboard, permission dialogs, sheets) is
+  outside this rule. There are no other exceptions.
 - MUST: Every text control meets §2 rule 5's 44×44pt hit region; an 11pt
   label needs its hit region widened.
 - MUST: A text control whose visible text reads badly aloud (e.g. "←")
@@ -2075,14 +2107,31 @@ visual language).
   reskin row: "no share action exists in the app") stands; no share
   feature exists. #631 and #638 remove SHARE from 09 Proof Detail's nav
   row.
-- **Open item 5 (D-627):** whether the `NavigationStack` back button is
-  replaced by `← PARENT` text is open (#631); it touches §2 rule 10
-  (standard containers first).
-- Until #631 lands, SF Symbols and the four illustration assets still in
-  code are migration debt. The two accessibility MUSTs quoted below
-  ("Decorative images use `.accessibilityHidden(true)`" and "Symbols
-  paired with text scale with Dynamic Type") keep applying to any image or
+- Back is the standard `NavigationStack` back button (owner decision
+  2026-09-25; this closed D-627 open item 5, `← PARENT` text was not
+  adopted).
+- The two accessibility MUSTs quoted below ("Decorative images use
+  `.accessibilityHidden(true)`" and "Symbols paired with text scale with
+  Dynamic Type") apply to the navigation-bar symbols and to any image or
   glyph that remains.
+
+> **Superseded 2026-10-15 (owner decision, beid#730, A2).** Figma "Flat 2b
+> v2 — Glass nav · Auto-sensing" (node `333:73`) hands the navigation bar
+> and toolbar back to the OS. The 2026-09-22 rule above it is replaced for
+> those items only; content keeps no icons. Previously (verbatim):
+>
+> **Flat 2b: no icons (owner decision 2026-09-22, beid#627,
+> [D-627](docs/decisions/issue-627-flat-2b.md); implementation #631).**
+>
+> - MUST: The app draws no icons. Controls are monospaced uppercase text in
+>   DM Mono (§6): `← EVENTS`, `CLOSE`, `DONE`, `COPY`, `OPEN →`.
+> - The only exception is the OS status bar. OS-drawn chrome the app does
+>   not draw itself (system alerts and confirmation dialogs, the keyboard,
+>   permission dialogs) is outside this rule. There are no other
+>   exceptions.
+> - **Open item 5 (D-627):** whether the `NavigationStack` back button is
+>   replaced by `← PARENT` text is open (#631); it touches §2 rule 10
+>   (standard containers first).
 
 > **Superseded 2026-09-22 (owner decision, beid#627,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** The SF Symbols /
@@ -2184,10 +2233,14 @@ Acceptance criteria for every component and screen, not post-hoc QA:
 >   "person.crop.circle" account button MUST carry "Account"") is
 >   superseded: the account entry becomes the address text (#631, #642).
 >   The labeling MUST itself stands and now covers text controls that read
->   badly aloud (§12).
+>   badly aloud (§12). Since Flat 2b v2 (2026-10-15, beid#730) the account
+>   entry is the `person.crop.circle` toolbar item again, with the title
+>   "Account" (§12), so the original example applies once more.
 > - Reduce Transparency has no app-drawn materials left to degrade since
 >   #630 (2026-09-23, §8); the toolbar and navigation-bar glass the OS
->   draws on the iOS 26 SDK is left as is (#631).
+>   draws on the iOS 26 SDK is left as is (#631), and since 2026-10-15
+>   (beid#730) it is deliberately the OS's — Reduce Transparency is the
+>   OS's to apply to it.
 > - Flat 2b's own accessibility ask is adopted as part of the contract
 >   (spec §9): graphs and Sigils carry information, not decoration, so
 >   each carries a VoiceOver summary (for example, "7 mutual, 13 detected,
@@ -2474,7 +2527,10 @@ lives in `AGENTS.md`.
   **Open item 1:** the nav text controls (`← EVENTS`, `CLOSE`) are both
   labels and controls, so the two rules meet there; also undecided is
   whether uppercase lives in the English source strings or in a style
-  transform. Not settled here.*
+  transform. Not settled here.* *Flat 2b v2 (2026-10-15, beid#730): the
+  navigation half of open item 1 is gone — bar items are OS-standard with
+  sentence-case titles (§12). The in-content text controls (`COPY`,
+  `OPEN →`) still meet both rules, and that part stays open.*
 - Error formula: what happened + why + one action. Model:
   "beid lost the connection to {event}. Move closer and we'll pick it back
   up automatically." + "Try Again". **[Platform-neutral principle; Android
@@ -2841,6 +2897,7 @@ inventory evidence. Naming remains governed by §12.
 | 2026-09-23 | **Flat 2b tokens landed** (beid#628): `DS.Color` is 17 tokens named by role over 13 single-appearance primitive colorsets named after the Library variables (§4, §5); several roles may share a primitive. Of the 8 old tokens with no Flat 2b counterpart, `signalActive`, `signalWarning`, `proofSeal`, `statusCaution`, `labelOnWarning` and `labelOnSeal` were removed (tints → `actionPrimary`; text and icons → `textPrimary`; dots → `statusOn`/`statusPending`/`statusOff`), and `statusOn`/`statusOff` were mapped to `semantic/green`/`semantic/red`; `surfaceRaised` was also removed (→ `surfaceCanvas`). `Button/Primary` tone pairs: `actionPrimary`/`labelOnActionPrimary` (Tone=Primary) and `actionInverse`/`labelOnActionInverse` (Tone=Inverse). `DS.Space.pageMargin` 32 → 24, new `emptyBlockVertical`, `DS.Radius.glyph`/`emptyBlock`/`nowCard`, new row/button minimum sizes and `DS.Motion.screenTransition`. `BeidDesign`'s duplicate scales folded into `DS` (content spacing 14 → 16, card radius 18 → 16, control radius 14 → 12); only `haptic(_:)` remains in `BeidDesign` | Adopted — token naming delegated to #628 by D-627 |
 | 2026-09-23 | **Flat 2b surfaces landed** (beid#630): `beidSurface` is a `surfaceCanvas` fill plus a 1px `strokeHairline` border (glass path, `Material` fallback and its `interactive:`/`fallback:` parameters removed); `BeidGlassGroup` and its 7 wrappers deleted; the glass button styles replaced (`BeidPrimaryButton` `.borderedProminent`, `BeidSecondaryButton` `.bordered`, both a `DS.Radius.control` rounded rectangle; Home's icon Scan button a `.borderedProminent` circle); all 5 `#available(iOS 26, *)` branches removed (deployment target still iOS 17); the scan-flow cover's `.regularMaterial` and the Home/Sensing insets' `.background(.bar)` → opaque `surfaceCanvas` (insets with a top `strokeHairline` rule); new `BeidEmptyBlock` (`Block/Empty`, `DS.Size.emptyBlockDash` 4 from the 2026-09-23 Figma read) replaces `BeidPanel` at the 04b and empty-day states; new lint rule `no_glass_or_material` (six custom rules). Open gaps named, not fixed: the primary button is not yet a pill (`Button/Primary` unassigned), and `.bordered` is a system tint fill, not `bg` + `line`. The Account sheet's background is `surfaceCanvas` as an interim value replacing the OS-default sheet glass; #642 takes it to `ink`. Left as is: the OS-drawn toolbar/navigation-bar glass (#631), `EventCardView`'s `.tint.opacity` badge, `DS.Artwork.proofCardGradient` (#633) | Adopted — implements the 2026-09-22 §8/§8a decision |
 | 2026-09-23 | **Flat 2b type ramp landed** (beid#629): the three OFL families (Bricolage Grotesque ExtraBold, DM Sans Bold/Regular, DM Mono Medium) are bundled, and `DS.Font` becomes two tiers — `DS.Font.Library`, the 17 Library text styles as `DS.Font.Style` values, and the 8 role tokens Views use, re-pointed onto them with no call site changed (§6). `ceremonyTitle` removed (no Swift call site). Text styles: nearest-default-size per style, `.largeTitle` for all five Display styles — `UIFontMetrics` applies one constant multiplier per (text style, content size category), quantised to 1/3 pt, and that multiplier is not the style's own size ratio; measured at AX3 on iOS 26.5, `.largeTitle` is about 1.49 against `.body`'s 2.18 and `.caption2`'s 2.69, so Display/60 reaches 89.33 pt at AX3 and 102.33 pt at AX5, versus 131.0 pt and 169.0 pt on `.body`'s curve. Uppercase: the three mono *label* styles only — the mono *value* styles stay mixed-case because EIP-55 addresses carry their checksum in letter case. Tabular figures: `Display/Number 40` only. `beidTextStyle(_:)` in `Tokens.swift` applies a whole style (tracking and line height scaled with Dynamic Type, case); plain `.font(DS.Font.x)` call sites still get family/size/Dynamic Type only — a named transitional gap. Display's 100% line height is **not** applied: `lineSpacing` is additive and nonnegative and `View.lineHeight(_:)` is iOS 26+, above the iOS 17 deployment target — also a named gap. #24 (button capitalization) untouched: #629 uppercases no existing string | Adopted — text-style, uppercase-scope and tabular-figure choices delegated to #629 by §6/D-627 |
+| 2026-10-15 | **Flat 2b v2 navigation** (Figma `333:73`, beid#730 / #731): §12's no-icons rule is narrowed to content. Navigation-bar and toolbar items are OS-standard — the `NavigationStack` back button, the system `.close` / `.done` items, and SF Symbol + title for screen-specific actions (Rejoin `arrow.clockwise`, Copy `doc.on.doc`, Account `person.crop.circle`) — rendered by the OS, Liquid Glass on iOS 26. The 2026-09-25 suppression of that glass (#631) is withdrawn (§8). `Bar/Nav` is not built. Content keeps no icons and no app-drawn glass, materials, blur, shadows or gradients | Adopted — owner decision 2026-10-15 (A2) |
 
 ### D. Deprecated patterns
 
@@ -2859,7 +2916,9 @@ generator.
 must not introduce any SF Symbol or icon (§12), glass/material/blur/shadow/
 gradient (§8), per-event hues (§5), or a forced dark variant (§14). The
 "designated artwork generator" is migration debt until #633, and may not be
-extended.*
+extended.* *Flat 2b v2 (2026-10-15, beid#730): the SF Symbol prohibition
+excludes navigation-bar and toolbar items, which use the OS-standard items
+and the symbols §12 names; new code must not suppress the OS's bar glass.*
 
 **[Android counterpart: a default Material3 blue as brand accent (verified
 not present — `Theme.kt` wires `actionPrimary` explicitly, §5); oversized

@@ -26,6 +26,23 @@ import XCTest
 @MainActor
 final class ProductionVenueBundleVerifierTests: XCTestCase {
 
+  func testImportScheduleDecisionComesFromSharedWithoutGrantingAServingPermit() throws {
+    let scheduling = ExportedKotlinPackages.org.levarac.parallax.venue.VenueVerifiedScheduling(
+      validFromEnin: 5_999_990, validThroughEnin: 6_000_010, relayExpiresAtEnin: 6_000_010,
+      eninSeconds: 300, verifiedAtEnin: 5_999_990
+    )
+    let result = ExportedKotlinPackages.org.levarac.parallax.venue.verifyVenueBundleSchedule(
+      envelopes: [scheduling], validFromUnixSeconds: 1_799_997_000, validUntilUnixSeconds: 1_800_003_299
+    )
+    let schedule = try XCTUnwrap(result.schedule)
+    XCTAssertEqual(
+      ObjectIdentifier(type(of: schedule)),
+      ObjectIdentifier(ExportedKotlinPackages.org.levarac.parallax.venue.VenueVerifiedSchedule.self)
+    )
+    XCTAssertNil(result.failureCode)
+    XCTAssertEqual(schedule.requiredEndEnin, 6_000_010)
+  }
+
   func testEnvelopeOverlapNormalizesEachVerifiedCadenceToWallClockSeconds() {
     XCTAssertFalse(
       VenueBundleVerificationLogic.hasOverlappingEnvelopeIntervals([

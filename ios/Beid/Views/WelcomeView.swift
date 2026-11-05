@@ -62,10 +62,13 @@ struct WelcomeView: View {
       NavigationStack {
         AboutSensingView()
           .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              BeidTextControl("Done", accessibilityLabel: "Done") { showAboutSensing = false }
+            ToolbarItem(placement: .confirmationAction) {
+              if #available(iOS 26, *) {
+                Button(role: .confirm) { showAboutSensing = false }
+              } else {
+                Button("Done") { showAboutSensing = false }
+              }
             }
-            .beidWithoutSharedBackground()
           }
       }
     }

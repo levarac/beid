@@ -33,6 +33,9 @@ struct ScanFlowView: View {
   ///    triggers firing is harmless.
   @State private var bindingSheetPresented = false
   @State private var restoreBindingSheetAfterKeepSensing = false
+  /// False while a screen is pushed over the stack's root (SensingView's
+  /// event-code entry), so the status overlay never covers its back button.
+  @State private var isStackRootVisible = true
 
   init(sensing: SensingCoordinator) {
     self.sensing = sensing
@@ -51,54 +54,28 @@ struct ScanFlowView: View {
         )
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(usesInkGround ? .dark : .light, for: .navigationBar)
+        .onAppear { isStackRootVisible = true }
+        .onDisappear { isStackRootVisible = false }
         .toolbar {
           if proofCollectedForDisplay == nil {
-            ToolbarItem(placement: .topBarLeading) {
-              HStack(spacing: DS.Space.s) {
-                Circle()
-                  .fill(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
-                  .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
-                  .accessibilityHidden(true)
-                Text(statusTitle)
-                  .beidTextStyle(DS.Font.Library.labelMono11)
-                  .foregroundStyle(
-                    usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary
-                  )
+            if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
+              ToolbarItem(placement: .confirmationAction) {
+                doneButton
               }
-              .fixedSize(horizontal: true, vertical: false)
-              .accessibilityElement(children: .combine)
-            }
-            // #631 / 2026-09-25: suppress iOS 26's item glass; #630 removed
-            // branches that added glass, not this branch that removes it.
-            .beidWithoutSharedBackground()
-            ToolbarItem(placement: .topBarTrailing) {
-              if coordinator.sealedSnapshot != nil || isSealedScreenshotFixture {
-                BeidTextControl(
-                  "Done",
-                  labelColor: DS.Color.textSecondaryOnInk,
-                  accessibilityLabel: "Done"
-                ) {
-                  if coordinator.sealedSnapshot != nil {
-                    coordinator.doneWithSealedRecord()
-                  } else {
-                    coordinator.finishScan()
-                  }
-                }
-              } else if coordinator.stopConfirmSnapshot == nil && !isStopConfirmScreenshotFixture {
-                BeidTextControl(
-                  "Close",
-                  labelColor: usesInkGround ? DS.Color.textSecondaryOnInk : DS.Color.textPrimary,
-                  accessibilityLabel: "Close"
-                ) {
-                  restoreBindingSheetAfterKeepSensing = bindingSheetPresented
-                  bindingSheetPresented = false
-                  coordinator.requestScanClose()
-                }
+            } else if coordinator.stopConfirmSnapshot == nil && !isStopConfirmScreenshotFixture {
+              ToolbarItem(placement: .topBarTrailing) {
+                closeButton
               }
             }
-            .beidWithoutSharedBackground()
           }
         }
+    }
+    .overlay(alignment: .topLeading) {
+      // Figma 05/06: the status sits at the left of the bar row, outside the
+      // toolbar so the OS draws no item glass around plain text.
+      if proofCollectedForDisplay == nil && isStackRootVisible {
+        statusLabel
+      }
     }
     #if DEBUG
     .safeAreaInset(edge: .top) {
@@ -175,6 +152,58 @@ struct ScanFlowView: View {
       coordinator.proofCollectedSnapshot == nil else { return }
     guard case .pendingConnect = sensing.bindingState else { return }
     bindingSheetPresented = true
+  }
+
+  private var statusLabel: some View {
+    HStack(spacing: DS.Space.s) {
+      Circle()
+        .fill(usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary)
+        .frame(width: DS.Size.statusDot, height: DS.Size.statusDot)
+        .accessibilityHidden(true)
+      Text(statusTitle)
+        .beidTextStyle(DS.Font.Library.labelMono11)
+        .foregroundStyle(
+          usesInkGround ? DS.Color.labelOnActionPrimary : DS.Color.textPrimary
+        )
+    }
+    .fixedSize(horizontal: true, vertical: false)
+    .accessibilityElement(children: .combine)
+    .frame(minHeight: DS.Size.minHitTarget)
+    .padding(.leading, DS.Space.pageMargin)
+  }
+
+  /// The OS's own done item (DESIGN.md §12); below iOS 26 the standard
+  /// confirmation-placement button, styled by the OS.
+  @ViewBuilder private var doneButton: some View {
+    if #available(iOS 26, *) {
+      Button(role: .confirm, action: finishSealedScan)
+    } else {
+      Button("Done", action: finishSealedScan)
+    }
+  }
+
+  /// The OS's own close item (DESIGN.md §12); below iOS 26 the standard
+  /// toolbar button with the OS's `xmark` symbol.
+  @ViewBuilder private var closeButton: some View {
+    if #available(iOS 26, *) {
+      Button(role: .close, action: requestClose)
+    } else {
+      Button("Close", systemImage: "xmark", action: requestClose)
+    }
+  }
+
+  private func finishSealedScan() {
+    if coordinator.sealedSnapshot != nil {
+      coordinator.doneWithSealedRecord()
+    } else {
+      coordinator.finishScan()
+    }
+  }
+
+  private func requestClose() {
+    restoreBindingSheetAfterKeepSensing = bindingSheetPresented
+    bindingSheetPresented = false
+    coordinator.requestScanClose()
   }
 
   private var usesInkGround: Bool {

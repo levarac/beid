@@ -1,5 +1,6 @@
 package org.levarac.beid.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -23,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -154,6 +156,9 @@ fun EventJoinScreen(
         onOpenSettings = viewModel::openAppSettings,
         onSimulateSignalLost = viewModel::simulateSignalLost,
         onResumeSensing = viewModel::resumeSensing,
+        onCloseScan = viewModel::requestScanClose,
+        onKeepSensing = viewModel::keepSensing,
+        onConfirmStopSensing = viewModel::confirmStopSensing,
         onStartWalletBinding = onStartWalletBinding,
         onRetryClockPreflight = viewModel::retryClockPreflight,
         showEntranceCeremony = !uiState.recordingCeremonyShown,
@@ -183,8 +188,8 @@ fun EventJoinScreen(
  * cards give way to [ScanFlowScreen] (beid#336) — the Android equivalent of
  * iOS's `ScanFlowView` full-screen cover, except the account-entry icon
  * above stays visible in every state: it is Android's only door to the
- * Account screen (and therefore to "Leave Event"), so it is chrome, not
- * swapped-out body content, even while a session is active.
+ * Account screen (and therefore to "Leave Event"). It stays in the chrome
+ * alongside the one-tap Close action while a session is active.
  *
  * [showEntranceCeremony]/[onCeremonyFinished] default to "skip the
  * ceremony" — read-only scenario/demo playback has no coordinator-backed
@@ -214,6 +219,10 @@ fun EventJoinContent(
     showEntranceCeremony: Boolean = false,
     onCeremonyFinished: () -> Unit = {},
     showSimulateSignalLost: Boolean = false,
+    /** Read-only scenarios have no session to leave. */
+    onCloseScan: () -> Unit = {},
+    onKeepSensing: () -> Unit = {},
+    onConfirmStopSensing: () -> Unit = {},
     modifier: Modifier = Modifier,
     title: String = stringResource(R.string.event_join_title),
     /** Home adds its collection to the same scrolling body, below discovery or the active scan. */
@@ -235,10 +244,34 @@ fun EventJoinContent(
                             contentDescription = stringResource(R.string.event_join_account_action),
                         )
                     }
+                    if (state.sessionState is EventJoinUiState.Sensing) {
+                        TextButton(onClick = onCloseScan) {
+                            Text(
+                                text = stringResource(R.string.scan_close),
+                                color = BeidTheme.colors.textPrimary,
+                            )
+                        }
+                    }
                 },
             )
         },
     ) { innerPadding ->
+        // System Back on the confirmation means "Keep sensing". The scan screen is the
+        // navigation root, so an unhandled Back would leave the activity instead.
+        BackHandler(enabled = state.stopConfirmation != null) { onKeepSensing() }
+        val confirmation = state.stopConfirmation
+        if (confirmation != null) {
+            BeidAppTheme(darkTheme = true) {
+                SensingStopConfirmScreen(
+                    event = confirmation.event,
+                    metrics = state.scanSessionMetrics,
+                    onStop = onConfirmStopSensing,
+                    onKeepSensing = onKeepSensing,
+                    modifier = Modifier.padding(innerPadding),
+                )
+            }
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()

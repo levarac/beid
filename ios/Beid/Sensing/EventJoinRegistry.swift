@@ -46,10 +46,10 @@ import Foundation
 /// exported, but its generated Swift surface offers no `name`, no
 /// `description` and no equality — only static accessors, `allCases` and
 /// `valueOf` — checked in the generated `BeidSharedKit.swift` rather than
-/// assumed. So there is no sound way to map it to a native case from Swift
-/// today. It is logged verbatim for diagnosis, and giving it a comparable or
-/// nameable Swift surface is shared-side work (beid#391), not something to
-/// fake here with identity comparisons that happen to work.
+/// assumed. The verdict is logged for diagnosis; refusal presentation uses
+/// `BeidSharedKit.event.eventJoinFailureReasonForJoinEligibility` and
+/// `BeidSharedKit.event.eventJoinFailureReasonKey` rather than enum identity
+/// comparisons.
 enum EventJoinRefusal: Equatable {
   /// No registry client is configured, so nothing can be verified.
   case noRegistryConfigured

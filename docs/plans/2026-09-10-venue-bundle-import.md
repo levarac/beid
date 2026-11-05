@@ -15,6 +15,17 @@ exactly, including the bounds-before-signature ordering. The maintainer's curren
 | Venue import verification | C / INVENT | None | None | Handoff and configured chain coordinates, anchored signed definition, SDK-verified envelopes, full schedule must agree | beid #432 / parallax #69 | VenueBundleImport | VenueBundleImportTest | iOS importer; Android adapter deferred | Design |
 | Venue serving schedule | C / INVENT | v1 hint; manually chosen local dates | No venue surface | Serve only one verified, current slice; stop at gaps, expiry or stale registry selection | beid #432 | VenueBundleServing | VenueBundleServingTest | iOS organizer model and dedicated venue engine | Design |
 
+### Import schedule convergence (beid #460, 2026-10-25)
+
+| family | class | current_ios | current_android | ruling_or_invariant | owner | shared_symbol | licensing_test | platform_callers | status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Complete import schedule | A / SWAP (iOS), B / CONVERGE (Android) | Native schedule rules at `59862267` | Current lease only | Preserve iOS import oracle: every envelope SDK-verified, one cadence, no overlaps, full half-open coverage; import is not serve-time eligibility | beid #460 / #432 | verifyVenueBundleSchedule | VenueBundleScheduleTest; VenueScheduleImportTest rejects a signed gap previously accepted as Ready | ProductionVenueBundleVerifier.importSchedule; SharedVenuePackImporter.import | Shared decision wired on both platforms; native Barnard signature/agreement verification retained |
+
+The native iOS helper names remain only as type-mapping compatibility adapters
+so existing VenueBundleVerification tests run unchanged. Coverage arithmetic,
+overlap and cadence decisions live in `VenueBundleSchedule.kt`. The shared result
+contains import evidence, never a current lease or permission to broadcast.
+
 The source survey above covers `ios/Beid`, `android/app/src/main` and
 `shared/src/commonMain` at beid `164c7bf9a63e501946a2b313a62e0cd86fc609e9`.
 Existing URL handling routes to MetaMask. It is not a venue artifact importer.

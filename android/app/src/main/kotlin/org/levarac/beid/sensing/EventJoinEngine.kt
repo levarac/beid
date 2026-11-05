@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import android.content.Context
 import org.levarac.barnard.BarnardDebugEvent
 import org.levarac.barnard.BarnardEngine
 import org.levarac.barnard.BarnardEvent
@@ -75,13 +76,27 @@ internal interface EventJoinEngine {
         grantResults: IntArray,
     ): Boolean
 
+    /** Only the native permission host changes when the Activity is recreated. */
+    fun attachActivity(activity: Activity) = Unit
+
+    fun detachActivity() = Unit
+
     fun dispose()
 }
 
-/** Activity-bound production forwarding facade for the native Barnard SDK. */
-internal class BarnardEventJoinEngine(activity: Activity) : EventJoinEngine {
-    private val engine = BarnardEngine(activity.applicationContext).apply {
-        setActivity(activity)
+/** Radio lifetime is independent of its replaceable Activity permission host. */
+internal class BarnardEventJoinEngine(context: Context) : EventJoinEngine {
+    private val engine = BarnardEngine(context.applicationContext).apply {
+        // Preserve the direct Activity constructor used by the device-lab harness.
+        if (context is Activity) setActivity(context)
+    }
+
+    override fun attachActivity(activity: Activity) {
+        engine.setActivity(activity)
+    }
+
+    override fun detachActivity() {
+        engine.setActivity(null)
     }
 
     override var onEvent: ((BarnardEvent) -> Unit)?

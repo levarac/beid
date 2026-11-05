@@ -11,11 +11,14 @@ source every time it runs, instead of reading it from anywhere hand-
 maintained.
 
 For each mutable site found in --target, this script: mutates exactly that
-site, reruns --test-task, records whether any test newly failed ("killed")
-or none did ("survived"), then restores the file before moving to the next
-site. A survived mutant is a behavior with no test protecting it. Exit status
-is non-zero if any mutant survives, so this is usable as an on-demand
-pass/fail check, not just an FYI.
+site, reruns --test-task, records whether any test newly failed ("killed"),
+none did ("survived"), or the build failed without a test failure or produced
+no usable test XML ("compile-failed"), then restores the file before moving
+to the next site. Existing result XML is deleted before every run, including
+the baseline, so a prior run cannot supply evidence for the current one.
+A survived mutant is a behavior with no test protecting it. Exit status is
+non-zero if any mutant survives or is compile-failed; a build failure is not
+evidence of test protection.
 
 Restore is snapshot-based, not `git checkout --`: the bytes of every target
 file are copied once, up front, into a temporary backup directory, and each
@@ -122,7 +125,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -193,8 +195,8 @@ def perturb_float_literal(body: str):
     text = repr(new_value)
     if "." not in text and "e" not in text and "E" not in text:
         # Defensive. A bare integer token is a type error where a Double is
-        # expected, so emitting one would be a compile failure this tool would
-        # then misreport as "killed (build failed)". repr() of a Python float
+        # expected, so emitting one would be a compile-failed mutation rather
+        # than a useful check of test protection. repr() of a Python float
         # never does this today; the guard is here so a future change to this
         # function fails loudly instead of silently emitting broken Kotlin.
         return None
@@ -221,8 +223,9 @@ class Site:
 @dataclass
 class SiteResult:
     site: Site
-    verdict: str  # "killed" | "survived" | "killed (build failed)"
+    verdict: str  # "killed" | "survived" | "compile-failed"
     killed_by: list = field(default_factory=list)
+    build_failure: list = field(default_factory=list)
 
 
 def mask_source(text: str) -> str:
@@ -519,14 +522,13 @@ def parse_junit_results(xml_paths):
     return results
 
 
-def fresh_result_xmls(task_names, since: float):
+def result_xmls(task_names):
     found = []
     for task_name in sorted(set(task_names)):
         for xml_path in REPO_ROOT.rglob(f"test-results/{task_name}/TEST-*.xml"):
             if ".git" in xml_path.parts:
                 continue
-            if xml_path.stat().st_mtime >= since:
-                found.append(xml_path)
+            found.append(xml_path)
     return found
 
 
@@ -534,19 +536,20 @@ def run_tests(tasks, env, verbose=False):
     """Run the given Gradle test tasks with --rerun-tasks and return
     (gradle_exit_code, {test_id: is_failed}, [stdout tail on failure])."""
     task_names = [t.rsplit(":", 1)[-1] for t in tasks]
-    # Buffer for filesystem mtime resolution; AGENTS.md's evidence traps
-    # bullet on --rerun vs --rerun-tasks is exactly about not trusting a
-    # prior run's XML, so this checks freshness against our own clock, not
-    # just against Gradle's UP-TO-DATE reasoning.
-    start = time.time() - 2
+    # A failed compilation never reaches the test task's own output cleanup.
+    # Remove prior XML ourselves, including results from a run moments ago.
+    # This also works on filesystems with coarse timestamp resolution.
+    for xml_path in result_xmls(task_names):
+        xml_path.unlink()
     cmd = [str(GRADLEW), *tasks, "--rerun-tasks"]
     if verbose:
         print(f"  $ {' '.join(cmd)} (cwd={ANDROID_DIR})", file=sys.stderr)
     result = run(cmd, cwd=ANDROID_DIR, env=env)
-    xmls = fresh_result_xmls(task_names, start)
+    xmls = result_xmls(task_names)
+    tail = result.stdout.splitlines()[-40:]
     if not xmls:
-        return result.returncode, None, result.stdout.splitlines()[-40:]
-    return result.returncode, parse_junit_results(xmls), None
+        return result.returncode, None, tail
+    return result.returncode, parse_junit_results(xmls), tail if result.returncode else None
 
 
 def collect_targets(target: Path) -> list:
@@ -651,15 +654,15 @@ def main():
             # silently rewritten as a side effect of one mutated literal.
             site.file.write_bytes(mutated_text.encode("utf-8"))
             rc, results, tail = run_tests(tasks, env, args.verbose)
-            if results is None:
+            if not results or (rc != 0 and not any(results.values())):
                 site_results.append(
                     SiteResult(
                         site,
-                        "killed (build failed)",
-                        [f"gradle exit {rc}, no test XML produced; tail:", *tail],
+                        "compile-failed",
+                        build_failure=[f"gradle exit {rc}; build/test run incomplete; tail:", *(tail or [])],
                     )
                 )
-                print("  -> killed (build/compile failed)")
+                print("  -> compile-failed (build failed or no usable test XML)")
                 continue
             newly_failed = sorted(
                 t for t, failed in results.items() if failed and t not in baseline_failures
@@ -673,11 +676,15 @@ def main():
         finally:
             restore_or_die(snapshot, backup_dir)
 
-    killed = [r for r in site_results if r.verdict.startswith("killed")]
+    killed = [r for r in site_results if r.verdict == "killed"]
     survived = [r for r in site_results if r.verdict == "survived"]
+    compile_failed = [r for r in site_results if r.verdict == "compile-failed"]
 
     print("\n" + "=" * 72)
-    print(f"Sites mutated: {len(site_results)}   Killed: {len(killed)}   Survived: {len(survived)}")
+    print(
+        f"Sites mutated: {len(site_results)}   Killed: {len(killed)}   "
+        f"Survived: {len(survived)}   Compile-failed: {len(compile_failed)}"
+    )
     if survived:
         print("\nSurvived (no test protects this behavior):")
         for r in survived:
@@ -691,6 +698,7 @@ def main():
         "sites_mutated": len(site_results),
         "killed": len(killed),
         "survived": len(survived),
+        "compile_failed": len(compile_failed),
         "results": [
             {
                 "file": display_path(r.site.file),
@@ -700,6 +708,7 @@ def main():
                 "mutated": r.site.mutated,
                 "verdict": r.verdict,
                 "killed_by": r.killed_by,
+                "build_failure": r.build_failure,
             }
             for r in site_results
         ],
@@ -717,7 +726,7 @@ def main():
     # their job and are safe to drop.
     shutil.rmtree(backup_dir, ignore_errors=True)
 
-    sys.exit(1 if survived else 0)
+    sys.exit(1 if survived or compile_failed else 0)
 
 
 if __name__ == "__main__":

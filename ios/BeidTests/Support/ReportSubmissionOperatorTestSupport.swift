@@ -213,6 +213,8 @@ final class StubOperatorServer {
     .IosSubmissionTransportTestSubscription?
   private var clientAttemptCount = 0
   private var expectedAttemptCount = 0
+  private var expectedPostAttemptCount = 0
+  private var expectedGetAttemptCount = 0
   private var firstClientAttempt: ClientEvent?
   private var firstExpectedAttempt: ClientEvent?
   private var lastExpectedEvent: ClientEvent?
@@ -339,6 +341,8 @@ final class StubOperatorServer {
         if firstClientAttempt == nil { firstClientAttempt = sample }
         if matches {
           expectedAttemptCount += 1
+          if sample.method == "POST" { expectedPostAttemptCount += 1 }
+          if sample.method == "GET" { expectedGetAttemptCount += 1 }
           if firstExpectedAttempt == nil { firstExpectedAttempt = sample }
         }
       }
@@ -461,14 +465,28 @@ final class StubOperatorServer {
       )
     }
 
-    for _ in 0..<1_000 {
-      if postCount >= expectedPosts,
-         expectedGets.map({ getCount >= $0 }) ?? true {
-        return
+    // Window close first resolves the definition, verifies the signed
+    // Observation, persists it, and dispatches the KMP coroutine. None of that
+    // is covered by the transport's four-second HTTP timeout. Start the
+    // request-arrival budget only after the matching transport attempts exist.
+    // Use the same bounded preparation budget as durable receipt verification.
+    let attempted = try await SubmissionTestWait.until {
+      self.lock.withLock {
+        self.expectedPostAttemptCount >= expectedPosts &&
+          self.expectedGetAttemptCount >= (expectedGets ?? 0)
       }
-      try await Task.sleep(nanoseconds: 10_000_000)
     }
-    throw StubOperatorError.requestTimedOut(diagnostics: timeoutDiagnostics)
+    guard attempted else {
+      throw StubOperatorError.requestTimedOut(
+        diagnostics: "phase=attempt-scheduling; after \(SubmissionTestWait.timeout)s; \(timeoutDiagnostics)"
+      )
+    }
+    if try await SubmissionTestWait.until(timeout: 10, {
+      self.postCount >= expectedPosts && (expectedGets.map { self.getCount >= $0 } ?? true)
+    }) { return }
+    throw StubOperatorError.requestTimedOut(
+      diagnostics: "phase=request-arrival; after 10s; \(timeoutDiagnostics)"
+    )
   }
 
   private func accept(_ connection: NWConnection) {

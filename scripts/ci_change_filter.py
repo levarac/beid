@@ -29,6 +29,10 @@ def _is_documentation(path: str) -> bool:
 # which `pr-ci-lab-cli.yml` provides.
 LAB_CLI_PREFIX = "tools/beid-lab-cli/"
 
+# android/app/build.gradle.kts includes this iOS directory as a JVM test
+# resource root, alongside shared/src/commonTest/fixtures (already shared/).
+ANDROID_VENUE_FIXTURE_PREFIX = "ios/BeidTests/Fixtures/venue-bundle-conformance/"
+
 
 def _is_lab_cli(path: str) -> bool:
     normalized = path[2:] if path.startswith("./") else path
@@ -90,6 +94,8 @@ def _classify_product_lanes(files: Iterable[str]) -> dict[str, bool]:
             android = True
         elif path.startswith("ios/"):
             lint = True
+            if path.startswith(ANDROID_VENUE_FIXTURE_PREFIX):
+                android = True
         elif path.startswith("shared/"):
             android = True
             lint = True

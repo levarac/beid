@@ -6,6 +6,7 @@ import org.levarac.barnard.BarnardEventDefinitionV1
 import org.levarac.barnard.BarnardRegistryAgreement
 import org.levarac.barnard.BarnardRelayVerification
 import org.levarac.barnard.BarnardRelayVerifier
+import org.levarac.beid.shared.event.participantRelayValidity
 import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.discovery.NearbyEventRelayEligibility
 import org.levarac.parallax.discovery.nearbyEventRelayEligibility
@@ -129,13 +130,13 @@ internal fun participantRelayVerification(
         return BarnardRelayVerification.Rejected
     }
 
+    val validity = participantRelayValidity(validFromEnin, validThroughEnin, relayExpiresAtEnin)
+        ?: return BarnardRelayVerification.Rejected
     return BarnardRelayVerification.RegistryVerified(
         eventId = eventId,
-        validFromEnin = validFromEnin,
-        validThroughEnin = validThroughEnin,
-        // Barnard has already verified the signed expiry; pass it through
-        // unchanged so relay admission lasts exactly as long as authorized.
-        relayExpiresAtEnin = relayExpiresAtEnin,
+        validFromEnin = validity.validFromEnin,
+        validThroughEnin = validity.validThroughEnin,
+        relayExpiresAtEnin = validity.relayExpiresAtEnin,
     )
 }
 

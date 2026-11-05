@@ -465,6 +465,54 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     XCTAssertTrue(scheduler.entries.allSatisfy(\.cancelled))
   }
 
+  func testDelayedPreparationStillSchedulesRetryAndStoresReceipt() async throws {
+    let server = try StubOperatorServer(
+      eventId: XCTUnwrap(Data(hexEncoded: eventIdHex)),
+      signingPrivateKey: receiptPrivateKey, signingPublicKey: receiptPublicKey,
+      transientPostFailures: 1
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let directory = try makeIsolatedDirectory(named: "beid-delayed-submission-preparation")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appendingPathComponent("report-submissions.json")
+    let provider = DeferredEventDefinitionContextProvider(configuration: try makeConfiguration(endpoint: endpoint))
+    let scheduler = ManualReportSubmissionRetryScheduler()
+    let scheduled = expectation(description: "retry remains scheduled after delayed preparation")
+    scheduler.onSchedule = { scheduled.fulfill() }
+    let cryptography = TestSensingCryptography()
+    let runtime = try XCTUnwrap(makeRuntime(
+      endpoint: endpoint, receiptPublicKeyHex: receiptKeyHex,
+      cryptography: cryptography, fileURL: fileURL, enabled: true,
+      provider: provider, retryScheduler: scheduler, now: { scheduler.now }
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeSubmissionCoordinator(cryptography: cryptography, runtime: runtime)
+    try await driveOneRealWindow(coordinator: coordinator)
+    XCTAssertFalse(provider.requestedEventIds.isEmpty)
+    // Hold the real definition/preparation boundary beyond the old ten-second
+    // request wait. No production clock, HTTP timeout or retry delay is changed.
+    let resolution = DispatchWorkItem {
+      MainActor.assumeIsolated { provider.resolveAll() }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: resolution)
+    defer { resolution.cancel() }
+    do { try await server.waitFor(postCount: 1) }
+    catch {
+      XCTFail("delayed preparation: \(error); \(server.timeoutDiagnostics)")
+      throw error
+    }
+    await fulfillment(of: [scheduled], timeout: 5)
+    scheduler.onSchedule = nil
+    XCTAssertEqual(scheduler.entries.last?.deadline, 2)
+    // Deliver the callback long after its deadline as well: late scheduling
+    // must still drain, look up the receipt, and reuse the original bytes.
+    scheduler.advance(by: 200)
+    try await server.waitFor(postCount: 2, getCount: 1)
+    try await waitForSubmissionState(.accepted, at: fileURL, server: server)
+    XCTAssertEqual(server.postBodies[0], server.postBodies[1])
+  }
+
   func testRetryableOutageBeyondSixAttemptsEventuallyStoresReceiptWithoutResigning() async throws {
     let server = try StubOperatorServer(
       eventId: try XCTUnwrap(Data(hexEncoded: eventIdHex)),

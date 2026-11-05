@@ -140,9 +140,10 @@ public fun isNearbyEventRelayEligible(
 // event-code hash as its stable identity, so joining one means re-reading the
 // candidate that hash currently names rather than trusting what was rendered.
 public fun NearbyEventCandidates.candidateForHashHex(hashHex: String): NearbyEventCandidate? {
+    val normalizedHash = hashHex.normalizedHexOrNull() ?: return null
     for (index in 0 until candidateCount) {
         val candidate = candidateAt(index) ?: continue
-        if (candidate.eventCodeHashHex.normalizedHexOrNull() == hashHex) return candidate
+        if (candidate.eventCodeHashHex.normalizedHexOrNull() == normalizedHash) return candidate
     }
     return null
 }

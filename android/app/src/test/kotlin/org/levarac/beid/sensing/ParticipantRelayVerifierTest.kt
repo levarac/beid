@@ -22,6 +22,44 @@ import org.levarac.parallax.registry.EventJoinMode
  */
 class ParticipantRelayVerifierTest {
     @Test
+    fun `validity end is clamped to the unsigned 32 bit boundary`() {
+        for (through in listOf(4_294_967_295L, 4_294_967_296L)) {
+            val result = boundaryVerification(through, 1L) as BarnardRelayVerification.RegistryVerified
+            assertEquals(0L, result.validFromEnin)
+            assertEquals(4_294_967_295L, result.validThroughEnin)
+            assertEquals(1L, result.relayExpiresAtEnin)
+        }
+    }
+
+    @Test
+    fun `signed expiry at the unsigned 32 bit maximum is preserved`() {
+        val result = boundaryVerification(4_294_967_295L, 4_294_967_295L)
+            as BarnardRelayVerification.RegistryVerified
+        assertEquals(4_294_967_295L, result.relayExpiresAtEnin)
+    }
+
+    @Test
+    fun `signed expiry above the unsigned 32 bit maximum is rejected`() {
+        assertEquals(
+            BarnardRelayVerification.Rejected,
+            boundaryVerification(4_294_967_296L, 4_294_967_296L),
+        )
+    }
+
+    private fun boundaryVerification(through: Long, expiry: Long): BarnardRelayVerification =
+        participantRelayVerification(
+            state = gateState(joinedEventIdHex = EVENT_ID),
+            signedEnvelopeHex = ENVELOPE_HEX,
+            eventCodeHashHex = HASH,
+            eventId = EVENT_ID.hexBytes(),
+            validFromEnin = 0L,
+            validThroughEnin = through,
+            relayExpiresAtEnin = expiry,
+            currentEnin = 0L,
+            agreesWithDefinition = { true },
+        )
+
+    @Test
     fun `a registry-verified envelope for the joined event relays`() {
         val result = verification(gateState(joinedEventIdHex = EVENT_ID))
 

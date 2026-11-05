@@ -1,6 +1,7 @@
 package org.levarac.beid.sensing
 
 import android.app.Activity
+import android.content.Context
 import android.util.Log
 import java.io.File
 import java.time.Instant
@@ -33,6 +34,7 @@ import org.levarac.parallax.discovery.NearbyEventCandidates
 import org.levarac.parallax.discovery.RegistryVerifiedJoinContext
 import org.levarac.parallax.discovery.nearbyCandidateJoinEligibility
 import org.levarac.parallax.discovery.operatorLookupJoinEligibility
+import org.levarac.parallax.registry.EventDefinitionContext
 import org.levarac.parallax.registry.RegistryClient
 import org.levarac.beid.persistence.BindingRecord
 import org.levarac.beid.persistence.BindingRecordStore
@@ -150,19 +152,19 @@ class EventJoinCoordinator internal constructor(
     checkpointPersistence: ((SessionCheckpoint) -> Unit)? = null,
     private val checkpointRuntimeOwner: SessionCheckpointRuntimeOwner = ProcessSessionCheckpointRuntimeOwner,
 ) : EventJoinSession {
-    constructor(activity: Activity) : this(
-        engine = BarnardEventJoinEngine(activity),
+    constructor(context: Context) : this(
+        engine = BarnardEventJoinEngine(context),
         nowEpochMillis = System::currentTimeMillis,
         coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
         registryClient = RegistryDependencies.createClient(),
-        sensingCryptography = BarnardSensingCryptography(activity.applicationContext),
+        sensingCryptography = BarnardSensingCryptography(context.applicationContext),
         selfProofRecordStore = ProcessSessionCheckpointRuntimeOwner.selfProofStore(
-            SelfProofRecordStore.defaultFile(activity.filesDir),
+            SelfProofRecordStore.defaultFile(context.filesDir),
         ),
-        bindingRecordStore = ProcessSessionCheckpointRuntimeOwner.bindingStore(BindingRecordStore.defaultFile(activity.filesDir)),
-        ledgerFilesDir = activity.filesDir,
+        bindingRecordStore = ProcessSessionCheckpointRuntimeOwner.bindingStore(BindingRecordStore.defaultFile(context.filesDir)),
+        ledgerFilesDir = context.filesDir,
         windowObservationRuntimeOwner = ProcessWindowObservationRuntimeOwner,
-        initialBluetoothPermissionState = currentBluetoothPermissionState(activity),
+        initialBluetoothPermissionState = currentBluetoothPermissionState(context),
     )
 
     private val selfProofRecordStore = checkpointRuntimeOwner.selfProofStore(selfProofRecordStore.file, selfProofRecordStore)
@@ -216,6 +218,8 @@ class EventJoinCoordinator internal constructor(
     private val _state = MutableStateFlow<EventJoinUiState>(EventJoinUiState.Idle)
     override val state: StateFlow<EventJoinUiState> = _state.asStateFlow()
     private var currentBluetoothPermissionState = initialBluetoothPermissionState
+    private var bluetoothPermissionResultHandler: ((BluetoothPermissionState) -> Unit)? = null
+    private var undeliveredBluetoothPermissionResult: BluetoothPermissionState? = null
     override val bluetoothPermissionState: BluetoothPermissionState
         get() = currentBluetoothPermissionState
     override val nearbyEventCards: StateFlow<List<NearbyEventCard>> = nearbyDiscovery.cards
@@ -334,6 +338,12 @@ class EventJoinCoordinator internal constructor(
      * session end: the session never reached `Recording`.
      */
     @Volatile private var activeProofId: UUID? = null
+    private var firstSightingAt: java.time.Instant? = null
+
+    override val currentProofId: UUID? get() = activeProofId
+    override fun hasStoredProof(proofId: UUID): Boolean = proofRecordStore?.recordForId(proofId) != null
+    private val _scanSessionMetrics = MutableStateFlow<() -> ScanSessionMetrics>({ ScanSessionMetrics() })
+    override val scanSessionMetrics: StateFlow<() -> ScanSessionMetrics> = _scanSessionMetrics.asStateFlow()
 
     /** Wallet connect+binding lifecycle for the currently recording event — see [EventBindingState]. */
     private val _bindingState = MutableStateFlow<EventBindingState>(EventBindingState.None)
@@ -424,8 +434,8 @@ class EventJoinCoordinator internal constructor(
      *   `AccountScreen.kt`'s "Leave Event" button
      *   (`onClick = viewModel::leaveEvent`, a Compose click handler, which
      *   Compose always dispatches on the main thread), and [dispose] is
-     *   invoked from `MainActivity.onDestroy()` (an Activity lifecycle
-     *   callback, also always the main thread). Both confirmed by reading
+     *   invoked from the Activity session ViewModel's `onCleared()`
+     *   (also on the main thread). Both confirmed by reading
      *   their actual callers, not inferred by analogy.
      * - [completeBinding] is called from [WalletBindingFlow]. The pinned
      *   MetaMask SDK invokes request callbacks inline from an AIDL response
@@ -549,11 +559,10 @@ class EventJoinCoordinator internal constructor(
 
     /**
      * Nearby-card join. Same boundary as [joinEvent], one step shorter: the
-     * card already carries the registry's canonical Event ID, so there is
-     * nothing to route and the operator lookup is skipped. The definition read
-     * still runs here rather than being inherited from discovery — the card's
-     * ID is an argument this class received, and a candidate's tier can have
-     * changed since the list was built.
+     * candidate already carries the registry's canonical Event ID, so there is
+     * nothing to route. The shared issuer re-checks the live candidate; its
+     * matching retained definition supplies the window submission settings
+     * without another registry read.
      *
      * The Event ID is passed to `BarnardEngine.joinEvent` verbatim, as it
      * always has been on this path, so it is also this session's event code.
@@ -590,7 +599,7 @@ class EventJoinCoordinator internal constructor(
                     return@requestPermissions
                 }
                 joinVerificationOwner = null
-                beginVerifiedJoin(context)
+                beginVerifiedJoin(context, nearbyDiscovery.definitionForJoin(eventCodeHashHex, context))
             } else {
                 stopParticipantRelay()
                 _state.value = mapPermissionResultToState(result)
@@ -765,7 +774,10 @@ class EventJoinCoordinator internal constructor(
      * registry read. That ID is now known before the join rather than after
      * it, so the window where the session was joined but unnameable is gone.
      */
-    private fun beginVerifiedJoin(context: RegistryVerifiedJoinContext) {
+    private fun beginVerifiedJoin(
+        context: RegistryVerifiedJoinContext,
+        definition: EventDefinitionContext? = context.definition,
+    ) {
         // Verify and cache the owner key before collecting anything that needs
         // a self-proof. The production provider uses this verified keypair for
         // all subsequent signatures, without another storage read.
@@ -795,17 +807,9 @@ class EventJoinCoordinator internal constructor(
                 eventCode = context.joinCode,
                 eventIdHex = context.eventIdHex,
                 eventDefinitionDigestHex = context.definitionHashHex,
-                // beid#525: only the operator-lookup join path (manual event
-                // code entry) carries a full verified Event Definition here.
-                // `context.definition` is `null` on the nearby-card-tap path
-                // by that evidence shape's own design (see
-                // `RegistryVerifiedJoinContext.fromNearbyCandidate`'s doc) —
-                // a window opened during a nearby-joined session therefore
-                // has no resolvable submission configuration and is held,
-                // per beid#525's design decision, rather than guessed at.
-                // See `docs/checkpoints/android-submission-drain.md` for the
-                // real gap this leaves and the two ways to close it.
-                submissionConfiguration = context.definition?.let {
+                // Both join paths derive settings from the definition verified
+                // for this join. The writer persists them when the window opens.
+                submissionConfiguration = definition?.let {
                     org.levarac.parallax.submission.createSubmissionOperatorConfigurationFromEventDefinition(it)
                 },
             ),
@@ -931,6 +935,8 @@ class EventJoinCoordinator internal constructor(
         // already does.
         if (_state.value !is EventJoinUiState.Sensing) return
 
+        if (firstSightingAt == null) firstSightingAt = java.time.Instant.ofEpochMilli(nowEpochMillis())
+
         val previousProofId = activeProofId
         val previousEninStart = accounting.firstWindowEnin
         val previousEninEnd = checkpointEninEnd
@@ -940,6 +946,13 @@ class EventJoinCoordinator internal constructor(
             logRuntimeDiagnostic("peer_detection co_present=${accounting.coPresentDeviceCount} distinct=${accounting.distinctDeviceCount}")
         }
         val observationAccepted = aggregationRuntime.recordObservation(enin, rpid, detectedDisplayId)
+        val aggregateSnapshot = aggregationRuntime.snapshotAggregate()
+        val since = firstSightingAt
+        val detected = accounting.distinctDeviceCount
+        _scanSessionMetrics.value = {
+            val aggregate = aggregateSnapshot()
+            ScanSessionMetrics(since, aggregate.mutualDeviceCount, detected, aggregate.windowCount)
+        }
 
         val session = when (val phase = scanPhase) {
             is ScanPhase.EventFound -> phase.session
@@ -971,6 +984,7 @@ class EventJoinCoordinator internal constructor(
             reporterRpid = reporterRpid,
             recording = scanPhase is ScanPhase.Recording,
             eventCode = engine.getCurrentEventCode(),
+            proofId = activeProofId,
         )
         _state.value = EventJoinUiState.Sensing(scanPhase)
     }
@@ -1256,6 +1270,8 @@ class EventJoinCoordinator internal constructor(
     }
 
     private fun resetSessionState() {
+        firstSightingAt = null
+        _scanSessionMetrics.value = { ScanSessionMetrics() }
         accounting.reset()
         checkpointEninEnd = null
         aggregationRuntime = AggregationRuntime()
@@ -1394,8 +1410,19 @@ class EventJoinCoordinator internal constructor(
 
     override fun openAppSettings() = engine.openAppSettings()
 
+    override fun bindBluetoothPermissionResult(onResult: ((BluetoothPermissionState) -> Unit)?) {
+        bluetoothPermissionResultHandler = onResult
+        if (onResult != null) {
+            undeliveredBluetoothPermissionResult?.let { result ->
+                undeliveredBluetoothPermissionResult = null
+                onResult(result)
+            }
+        }
+    }
+
     override fun requestBluetoothPermission(onResult: (BluetoothPermissionState) -> Unit) {
         if (disposed) return
+        bindBluetoothPermissionResult(onResult)
         engine.requestPermissions { result ->
             if (disposed) return@requestPermissions
             val permissionState = mapOnboardingPermissionResult(result)
@@ -1403,7 +1430,10 @@ class EventJoinCoordinator internal constructor(
             if (permissionState == BluetoothPermissionState.Granted) {
                 startNearbyEventDiscoveryIfIdle()
             }
-            onResult(permissionState)
+            // The SDK callback retains only this coordinator, never the requesting UI.
+            val handler = bluetoothPermissionResultHandler
+            if (handler != null) handler(permissionState)
+            else undeliveredBluetoothPermissionResult = permissionState
         }
     }
 
@@ -1493,18 +1523,27 @@ class EventJoinCoordinator internal constructor(
         _nearbyEventSearchOutcome.value = NearbyEventSearchOutcome.SEARCHING
     }
 
+    internal fun attachActivity(activity: Activity) = engine.attachActivity(activity)
+
+    internal fun detachActivity() {
+        bindBluetoothPermissionResult(null)
+        engine.detachActivity()
+    }
+
     fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean =
         !disposed && engine.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
     /**
-     * Releases Activity-owned transport resources. This is not an ENIN or
-     * session boundary: configuration destruction must not create, sign, or
-     * close a durable observation window. [leaveEvent] and an observed ENIN
+     * Finalizes the session and releases transport resources on real Activity finish.
+     * Configuration destruction must never call this method. Transport disposal
+     * does not close a durable observation window: [leaveEvent] and an observed ENIN
      * rollover are the business boundaries for [windowAccumulator].
      */
     fun dispose() {
         if (disposed) return
         disposed = true
+        bluetoothPermissionResultHandler = null
+        undeliveredBluetoothPermissionResult = null
         joinVerificationOwner = null
         finalizeSelfProofIfNeeded()
         sessionCheckpointWriter?.close()

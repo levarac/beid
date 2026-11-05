@@ -54,6 +54,34 @@ class CIChangeFilterTests(unittest.TestCase):
         self.assertEqual(result["android"], True)
         self.assertEqual(result["lint"], True)
 
+    def test_venue_gap_fixtures_run_android_and_ios(self):
+        for name in ("valid.venue-bundle.cbor", "valid.venue-handoff.cbor"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    classify([f"ios/BeidTests/Fixtures/venue-bundle-conformance/{name}"]),
+                    {"android": True, "lint": True, "labcli": False, "sanity": True, "error": False, "ios": True},
+                )
+
+    def test_venue_full_schedule_fixtures_run_android_and_ios(self):
+        for name in ("full-schedule.venue-bundle.hex", "full-schedule.venue-handoff.hex"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    classify([f"ios/BeidTests/Fixtures/venue-bundle-conformance/{name}"]),
+                    {"android": True, "lint": True, "labcli": False, "sanity": True, "error": False, "ios": True},
+                )
+
+    def test_other_ios_paths_still_skip_android(self):
+        for path in (
+            "ios/Beid/Sensing/VenueBundleVerification.swift",
+            "ios/BeidTests/Fixtures/other/valid.venue-bundle.cbor",
+            "ios/BeidTests/Fixtures/venue-bundle-conformance-other/valid.venue-bundle.cbor",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    classify([path]),
+                    {"android": False, "lint": True, "labcli": False, "sanity": True, "error": False, "ios": True},
+                )
+
     def test_workflow_and_dependency_changes_run_everything(self):
         for path in [
             ".github/workflows/pr-ci.yml",

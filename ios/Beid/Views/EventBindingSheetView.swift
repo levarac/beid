@@ -49,12 +49,11 @@ struct EventBindingSheetView: View {
       .toolbar {
         if showsCancelToolbarButton {
           ToolbarItem(placement: .cancellationAction) {
-            BeidTextControl("Cancel", accessibilityLabel: "Cancel", role: .cancel) {
+            Button("Cancel", role: .cancel) {
               sensing.declineBinding()
               dismiss()
             }
           }
-          .beidWithoutSharedBackground()
         }
       }
       .interactiveDismissDisabled(isInFlight)
