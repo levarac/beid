@@ -21,6 +21,103 @@ import XCTest
 /// instead of the direct `stopSensing()` path.
 @MainActor
 final class SelfProofCheckpointRecoveryTests: XCTestCase {
+  func testNextSessionPreservesFailedSelfProofAfterStopWhenWriterRecovers() throws {
+    try assertFailedSessionRecoverySurvivesNextSession(writerRecovers: true, endWithReset: false)
+  }
+
+  func testNextSessionPreservesFailedSelfProofAfterStopWhileWriterStillFails() throws {
+    try assertFailedSessionRecoverySurvivesNextSession(writerRecovers: false, endWithReset: false)
+  }
+
+  func testNextSessionPreservesFailedSelfProofAfterResetWhenWriterRecovers() throws {
+    try assertFailedSessionRecoverySurvivesNextSession(writerRecovers: true, endWithReset: true)
+  }
+
+  func testNextSessionPreservesFailedSelfProofAfterResetWhileWriterStillFails() throws {
+    try assertFailedSessionRecoverySurvivesNextSession(writerRecovers: false, endWithReset: true)
+  }
+
+  private func assertFailedSessionRecoverySurvivesNextSession(
+    writerRecovers: Bool,
+    endWithReset: Bool
+  ) throws {
+    let directory = makeTemporaryDirectory()
+    let selfProofURL = directory.appendingPathComponent("self-proofs.json")
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    var shouldFail = true
+    let store = SelfProofStore(fileURL: selfProofURL, writeData: { data, url in
+      if shouldFail { throw CocoaError(.fileWriteNoPermission) }
+      try data.write(to: url, options: .atomic)
+    })
+    let sensing = recoveryCoordinator(directory: directory, store: store, checkpointURL: checkpointURL)
+    sensing.useDemoEventMode = false
+
+    func recordSession(eventCode: String, firstWindow: Int) {
+      sensing.startSensing(eventCode: eventCode)
+      for index in 0..<BeidConfig.eventConfirmThreshold {
+        sensing.handleDetection(
+          enin: firstWindow, rpid: "example-peer-\(index)",
+          detectedDisplayId: DetectionFixture.displayId(device: index))
+      }
+      sensing.handleDetection(
+        enin: firstWindow + 1, rpid: "example-later-peer",
+        detectedDisplayId: DetectionFixture.displayId(device: BeidConfig.eventConfirmThreshold))
+    }
+
+    func endSession() -> SelfProofRecord? {
+      endWithReset ? sensing.reset() : sensing.stopSensing()
+    }
+
+    func assertRecoverable(_ proofID: UUID, checkpoint expectedCheckpoint: SelfProofCheckpoint? = nil) {
+      let durable = SelfProofStore(fileURL: selfProofURL).durableRecord(forProofId: proofID)
+      let checkpoint = SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint
+      XCTAssertTrue(durable != nil || checkpoint?.proofId == proofID,
+                    "each ended session needs its durable self-proof or its own recovery input")
+      if durable == nil, let expectedCheckpoint {
+        XCTAssertEqual(checkpoint, expectedCheckpoint, "a pending session's saved range must survive intact")
+      }
+    }
+
+    recordSession(eventCode: "EXAMPLE-SESSION-A", firstWindow: 10)
+    let firstID = try XCTUnwrap(sensing.currentProofID)
+    XCTAssertNil(endSession())
+    XCTAssertNil(sensing.currentProofID)
+    XCTAssertNil(SelfProofStore(fileURL: selfProofURL).durableRecord(forProofId: firstID))
+    let firstCheckpoint = try XCTUnwrap(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertEqual(firstCheckpoint.proofId, firstID)
+    XCTAssertEqual(firstCheckpoint.eninStart, 10)
+    XCTAssertEqual(firstCheckpoint.eninEnd, 11)
+
+    // Attempt the next session on the same live object, without launch recovery.
+    shouldFail = !writerRecovers
+    recordSession(eventCode: "EXAMPLE-SESSION-B", firstWindow: 20)
+    var secondID = sensing.currentProofID
+    if writerRecovers {
+      XCTAssertNotNil(secondID, "a healthy writer must allow the next session after preserving the first")
+    }
+    if let secondID { XCTAssertNotEqual(secondID, firstID) }
+    assertRecoverable(firstID, checkpoint: firstCheckpoint)
+    _ = endSession()
+    assertRecoverable(firstID, checkpoint: firstCheckpoint)
+    if let secondID {
+      assertRecoverable(secondID)
+    }
+
+    shouldFail = false
+    if secondID == nil {
+      // A refused session can be attempted again once persistence recovers.
+      recordSession(eventCode: "EXAMPLE-SESSION-B", firstWindow: 20)
+      secondID = try XCTUnwrap(sensing.currentProofID)
+      XCTAssertNotNil(endSession())
+    }
+    _ = recoveryCoordinator(directory: directory, store: SelfProofStore(fileURL: selfProofURL),
+                            checkpointURL: checkpointURL)
+    let reopened = SelfProofStore(fileURL: selfProofURL)
+    XCTAssertNotNil(reopened.durableRecord(forProofId: firstID))
+    if let secondID { XCTAssertNotNil(reopened.durableRecord(forProofId: secondID)) }
+    XCTAssertEqual(Set(reopened.records.map(\.proofId)).count, reopened.records.count)
+  }
+
   func testInjectedSaveFailuresKeepRecoveryInputUntilDurableRetry() throws {
     for failEncoding in [true, false] {
       for hasExisting in [true, false] {
