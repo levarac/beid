@@ -949,7 +949,7 @@ final class AppCoordinator: ObservableObject {
     if case .idle = sensingCoordinator.phase { isIdle = true } else { isIdle = false }
     let isEnabled = isVisible && isSceneActive && screen == .home
       && selectedHomeTab == .now && !scanPresented && !accountSheetPresented
-      && !homeEventCodeSheetPresented && !homeBluetoothIsOff && isIdle
+      && !homeEventCodeSheetPresented && !homeBluetoothIsOff && isIdle && !sensingCoordinator.isAdvertising
     if isEnabled && !homeStandbyDiscoveryActive {
       homeStandbyDiscoveryActive = true
       #if DEBUG

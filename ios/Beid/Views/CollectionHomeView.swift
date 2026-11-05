@@ -137,6 +137,7 @@ private struct NowHomeView: View {
     .onChange(of: coordinator.accountSheetPresented) { _, _ in refreshStandby() }
     .onChange(of: coordinator.homeEventCodeSheetPresented) { _, _ in refreshStandby() }
     .onChange(of: bluetooth.state) { _, _ in refreshStandby() }
+    .onChange(of: sensing.isAdvertising) { _, _ in refreshStandby() }
     .onChange(of: sensing.phase) { _, _ in refreshStandby() }
     .onChange(of: sensing.nearbyEventCandidates.candidateCount) { _, _ in refreshStandby() }
     .onChange(of: sensing.homeDemoEventAvailable) { _, _ in refreshStandby() }
@@ -403,10 +404,14 @@ private struct NowHomeView: View {
 
   private func candidateRegistrationStatus(_ card: NearbyEventCard) -> LocalizedStringKey {
     if card.joinActionEventCodeHashHex != nil { return "EVENT REGISTRATION CHECKED" }
-    if let candidate = sensing.nearbyEventCandidates.candidateForHashHex(eventCodeHashHex: card.eventCodeHashHex),
-      let validUntil = candidate.definitionValidUntilEpochSeconds,
-      validUntil < Int64(Date().timeIntervalSince1970.rounded(.down)) {
-      return "EVENT REGISTRATION EXPIRED"
+    let candidates = sensing.nearbyEventCandidates
+    for index in 0..<candidates.candidateCount {
+      guard let candidate = candidates.candidateAt(index: index),
+        candidate.eventCodeHashHex == card.eventCodeHashHex,
+        let validUntil = candidate.definitionValidUntilEpochSeconds else { continue }
+      if validUntil < Int64(Date().timeIntervalSince1970.rounded(.down)) {
+        return "EVENT REGISTRATION EXPIRED"
+      }
     }
     return "Checking event registration…"
   }
