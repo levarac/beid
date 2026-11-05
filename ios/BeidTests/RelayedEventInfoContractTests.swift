@@ -66,7 +66,8 @@ final class RelayedEventInfoContractTests: XCTestCase {
     "cba59e50c7666ef2468a14f2e53f04decfd078933cd245a9a2d77532eb23b700"
   private static let eventCodeHashHex = "9adc61d60dda843e"
   /// The vector's window in Unix seconds: `validFrom * 300` through
-  /// `(validThrough + 1) * 300 - 1`. barnard requires exact agreement.
+  /// `(validThrough + 1) * 300 - 1`. The registry window must contain
+  /// this signed window; a wider registered window is accepted.
   private static let validFromEpochSeconds: Int64 = 1_799_997_000
   private static let validUntilEpochSeconds: Int64 = 1_800_003_299
   /// ENIN 6_000_000, inside `[validFrom, relayExpires)`.
@@ -218,10 +219,52 @@ final class RelayedEventInfoContractTests: XCTestCase {
     )
   }
 
-  func testRelayedValidityThatDisagreesWithTheRegistryCannotJoin() async throws {
+  func testRelayedEnvelopeExtendingBeyondTheRegisteredWindowCannotJoin() async throws {
+    let registeredEnd = Self.validUntilEpochSeconds - 300
+    XCTAssertLessThan(Self.nowEpochMillis / 1_000, registeredEnd)
     try await assertRegistryDisagreementPreventsJoin(
-      registry: makeRegistry(validUntilEpochSeconds: Self.validUntilEpochSeconds + 300)
+      registry: makeRegistry(validUntilEpochSeconds: registeredEnd)
     )
+  }
+
+  func testRelayedEnvelopeWithinAWiderRegisteredWindowCanJoin() async throws {
+    let registeredEnd = Self.validUntilEpochSeconds + 300
+    let registry = makeRegistry(validUntilEpochSeconds: registeredEnd)
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let submission = RelayedWindowSubmissionSpy()
+    let (coordinator, reportStore) = makeCoordinator(
+      engine: engine, registry: registry, submission: submission
+    )
+    defer { coordinator.reset() }
+
+    let event = try observedRelay()
+    XCTAssertNotNil(event.verifiedEnvelope)
+    coordinator.handleObservedEventInfoEnvelopeV2(event)
+    try await waitUntil("the contained relayed envelope is registry-verified") {
+      coordinator.nearbyEventCandidates.candidateAt(index: 0)?.receiverState == .REGISTRY_VERIFIED
+    }
+    let candidate = try XCTUnwrap(coordinator.nearbyEventCandidates.candidateAt(index: 0))
+    XCTAssertEqual(candidate.definitionValidUntilEpochSeconds, registeredEnd)
+    XCTAssertEqual(registry.requestedEventIdHexes, ["0x" + Self.eventIdHex])
+    let presentation = NearbyEventCardListPresentation(
+      candidates: coordinator.nearbyEventCandidates,
+      nowEpochSeconds: Self.nowEpochMillis / 1_000
+    )
+    XCTAssertEqual(presentation.cards.first?.joinActionEventCodeHashHex, Self.eventCodeHashHex)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertTrue(engine.joinAndStartContexts.isEmpty)
+
+    coordinator.joinNearbyEvent(eventCodeHashHex: Self.eventCodeHashHex)
+    try await waitUntil("the contained relayed candidate is joined") {
+      !engine.joinAndStartContexts.isEmpty
+    }
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 1)
+    XCTAssertEqual(engine.joinAndStartContexts.count, 1)
+    XCTAssertEqual(Self.normalized(engine.joinAndStartContexts.first?.eventIdHex), Self.eventIdHex)
+    XCTAssertEqual(coordinator.phase, .sensing)
+    XCTAssertTrue(reportStore.reports.isEmpty)
+    XCTAssertTrue(submission.queuedWindows.isEmpty)
   }
 
   func testRepeatedRelaysAtBothHopsNeverJoinOrCreateObservations() async throws {
