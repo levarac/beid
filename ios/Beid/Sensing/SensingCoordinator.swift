@@ -2583,6 +2583,12 @@ final class SensingCoordinator: ObservableObject {
           // joins with `phase` already `.idle`.
           guard self.isCurrentJoinAttempt(joinGeneration) else { return }
           guard canScan, canAdvertise else {
+            emitJoinStageDiagnostic(
+              self.joinDiagnosticLog,
+              eventIdHex: canonicalEventIdHex,
+              stage: "admission",
+              outcome: "rejected_permission_denied"
+            )
             self.stopParticipantRelay()
             // Undo the optimistic `.sensing` set above. Without this the
             // screen keeps saying it is sensing over a radio that never
@@ -2758,7 +2764,7 @@ final class SensingCoordinator: ObservableObject {
         )
       return .refuse(
         .registryReadFailed,
-        "Registry read produced no definition (\(readFailureErrorCode ?? "no error code")); starting nothing.",
+        "Registry read produced no definition; starting nothing.",
         BeidSharedKit.event.eventJoinFailureReasonKey(reason: reason)
       )
     }
@@ -2898,7 +2904,6 @@ final class SensingCoordinator: ObservableObject {
     _ message: String,
     reasonKey: String? = nil
   ) {
-    joinRefusalLog(message)
     let outcome: String
     switch refusal {
     case .noRegistryConfigured:
@@ -2916,10 +2921,12 @@ final class SensingCoordinator: ObservableObject {
       stage: "admission",
       outcome: "rejected_\(outcome)"
     )
-    joinRefusal = refusal
-    joinRefusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
+    let refusalReasonKey = reasonKey ?? BeidSharedKit.event.eventJoinFailureReasonKey(
       reason: Self.sharedReason(for: refusal, lookupErrorCode: joinedLookupErrorCode)
     )
+    joinRefusalLog("join_refused outcome=rejected_\(outcome) reason=\(refusalReasonKey)")
+    joinRefusal = refusal
+    joinRefusalReasonKey = refusalReasonKey
     joinRegistryRequest = nil
     stopParticipantRelay()
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStopSensing())
@@ -3186,6 +3193,12 @@ final class SensingCoordinator: ObservableObject {
       Task { @MainActor in
         guard self.isCurrentJoinAttempt(generation) else { return }
         guard canScan, canAdvertise else {
+          emitJoinStageDiagnostic(
+            self.joinDiagnosticLog,
+            eventIdHex: nil,
+            stage: "admission",
+            outcome: "rejected_permission_denied"
+          )
           self.stopParticipantRelay()
           self.phase = Self.payloadlessNativePhase(
             BeidSharedKit.sensing.scanPhaseAfterStopSensing()
