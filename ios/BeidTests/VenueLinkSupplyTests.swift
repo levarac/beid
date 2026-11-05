@@ -312,9 +312,9 @@ final class VenueLinkSupplyTests: XCTestCase {
 
   // MARK: - Current-link authority and exclusive deadlines
 
-  private func linkedArtifact(url: String = bundleUrl) -> VenuePublicArtifact {
+  private func linkedArtifact(url: String? = nil) -> VenuePublicArtifact {
     VenuePublicArtifact(bundleBytes: fixture.artifact.bundleBytes,
-                        handoffBytes: Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: url))
+                        handoffBytes: Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: url ?? Self.bundleUrl))
   }
 
   private func imported(_ artifact: VenuePublicArtifact) -> VenueImportedBundle {
