@@ -1817,6 +1817,9 @@
     "Supply bundle": {
       "comment": "Button. Verb: fetch and verify the bundle at the addresses entered above."
     },
+    "Reload saved pack": {
+      "comment": "Button. Check the pack bytes already saved on this device again; this does not fetch a replacement pack."
+    },
     "Reload stored bundle": {
       "comment": "Button. Verb: verify the previously stored bundle again from scratch."
     },
@@ -2248,7 +2251,7 @@
     "The link carries the event's details itself. Use one the event's organiser gave you.": {},
     "The pack could not be fetched.": {},
     "The pack is not for the event this link named.": {},
-    "The part of this pack covering right now did not check out.": {},
+    "The part of this pack covering right now did not check out. Ask the organiser for a current link.": {},
     "The radio refused this pack and nothing is going out.": {},
     "This device cannot scan QR codes. Paste the link instead.": {},
     "This device's clock is unavailable, so broadcasting cannot be scheduled.": {},
@@ -2261,9 +2264,9 @@
     "This pack came from a different event record than the one this app is set up for.": {},
     "This pack could not be read.": {},
     "This pack could not be saved. It stays on this device only until the app closes.": {},
-    "This pack covers no part of right now.": {},
+    "This pack covers no part of right now. Scan or paste a current link from the organiser.": {},
     "This pack is for a network this app does not support.": {},
-    "This pack's current period has ended. Refresh it.": {},
+    "This pack's current period has ended. Scan or paste a current link from the organiser.": {},
     "Tools for the venue side. Attendees never need these.": {},
     "Until": {},
     "Use this link": {},
@@ -2661,7 +2664,7 @@
       }
     },
     "Waiting for Bluetooth": {},
-    "A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.": {},
+    "Reloading checks the saved bytes. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack.": {},
     "Prepared": {
       "comment": "A canonical Observation is stored locally before sending.",
       "localizations": {
