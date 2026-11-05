@@ -4641,6 +4641,7 @@ final class SensingCoordinator: ObservableObject {
   /// it is stale and must not be reconciled again on a later launch.
   @discardableResult
   private func finalizeSelfProofIfNeeded() -> SelfProofRecord? {
+    checkpointSelfProofStateIfNeeded()
     guard
       let proofId = activeProofId,
       let eventCode = currentBindingEvent?.id,
@@ -4661,9 +4662,9 @@ final class SensingCoordinator: ObservableObject {
       return nil
     }
 
-    selfProofStore.add(record)
+    guard selfProofStore.add(record) else { return nil }
     selfProofCheckpointStore.clear()
-    return record
+    return selfProofStore.durableRecord(forProofId: proofId)
   }
 
   // MARK: - Session aggregate snapshot (beid#166 Phase 2)
@@ -4760,11 +4761,9 @@ final class SensingCoordinator: ObservableObject {
   /// exactly like `finalizeSelfProofIfNeeded()` itself — there is nothing to
   /// checkpoint before `.recording` begins.
   ///
-  /// Demo mode never reaches this: `advanceDemoWindow()` deliberately never
-  /// calls `openNewWindowState` (its own doc comment — demo mode produces no
-  /// window reports), so a demo session's self-proof stays reachable only
-  /// through the graceful `stopSensing()`/`reset()` path, unchanged by this
-  /// sub-slice.
+  /// Demo window rotation does not call this because it produces no window
+  /// reports. Finalization checkpoints the final range for every session,
+  /// including demo sessions, before attempting the self-proof save.
   private func checkpointSelfProofStateIfNeeded() {
     guard
       let proofId = activeProofId,
@@ -4799,7 +4798,7 @@ final class SensingCoordinator: ObservableObject {
   /// checkpoint is stale and must not be reconciled into a duplicate.
   private func reconcileSelfProofCheckpointIfNeeded() {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
-    guard selfProofStore.record(forProofId: checkpoint.proofId) == nil else {
+    guard selfProofStore.durableRecord(forProofId: checkpoint.proofId) == nil else {
       selfProofCheckpointStore.clear()
       return
     }
@@ -4815,7 +4814,7 @@ final class SensingCoordinator: ObservableObject {
       return
     }
 
-    selfProofStore.add(record)
+    guard selfProofStore.add(record) else { return }
     selfProofCheckpointStore.clear()
   }
 

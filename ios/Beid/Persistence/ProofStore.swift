@@ -10,6 +10,8 @@ import Foundation
 @MainActor
 final class ProofStore: ObservableObject {
   @Published private(set) var proofs: [Proof] = []
+  @Published private(set) var lastPersistenceError: Error?
+  private var durableProofIDs: Set<UUID> = []
 
   /// Set when `load()` preserved a file that failed to decode, so the event
   /// is not invisible. Broader observability is beid#131's job.
@@ -26,9 +28,17 @@ final class ProofStore: ObservableObject {
   var isPersistenceSuspended: Bool { persistenceSuspensionReason != nil }
 
   private let fileURL: URL
+  private let encodeRecords: ([Proof]) throws -> Data
+  private let writeData: (Data, URL) throws -> Void
 
-  init(fileURL: URL? = nil) {
+  init(
+    fileURL: URL? = nil,
+    encodeRecords: @escaping ([Proof]) throws -> Data = { try RecordSchemaEnvelope.encodeRecords($0) },
+    writeData: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+  ) {
     self.fileURL = fileURL ?? Self.defaultFileURL()
+    self.encodeRecords = encodeRecords
+    self.writeData = writeData
     load()
   }
 
@@ -37,22 +47,28 @@ final class ProofStore: ObservableObject {
     return dir.appendingPathComponent("proofs.json")
   }
 
-  func add(_ proof: Proof) {
-    proofs.insert(proof, at: 0)
-    save()
+  @discardableResult
+  func add(_ proof: Proof) -> Bool {
+    var updated = proofs.filter { $0.id != proof.id }
+    updated.insert(proof, at: 0)
+    return save(updated)
   }
 
+  /// Memory-only fallback entries cannot support a saved-record claim.
   func proof(withId id: UUID) -> Proof? {
-    proofs.first { $0.id == id }
+    guard durableProofIDs.contains(id) else { return nil }
+    return proofs.first { $0.id == id }
   }
 
   /// Updates only the signature lifecycle of an already-stored proof — the
   /// proof's own collected fields are immutable once added. No-op if the
   /// proof was removed since the caller last read it.
-  func updateSignatureState(for id: UUID, to state: ProofSignatureState) {
-    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return }
-    proofs[index].signatureState = state
-    save()
+  @discardableResult
+  func updateSignatureState(for id: UUID, to state: ProofSignatureState) -> Bool {
+    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return false }
+    var updated = proofs
+    updated[index].signatureState = state
+    return save(updated)
   }
 
   /// Updates a recording proof's peer count in place as
@@ -60,10 +76,12 @@ final class ProofStore: ObservableObject {
   /// is created once, at the instant `.recording` begins, and never
   /// re-created (`docs/specs/scan-slice2-redesign.md` §4.6). No-op if the
   /// proof was removed since the caller last read it.
-  func updatePeersVerified(for id: UUID, to peersVerified: Int) {
-    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return }
-    proofs[index].peersVerified = peersVerified
-    save()
+  @discardableResult
+  func updatePeersVerified(for id: UUID, to peersVerified: Int) -> Bool {
+    guard let index = proofs.firstIndex(where: { $0.id == id }) else { return false }
+    var updated = proofs
+    updated[index].peersVerified = peersVerified
+    return save(updated)
   }
 
   private func load() {
@@ -108,15 +126,31 @@ final class ProofStore: ObservableObject {
     }
 
     proofs = loaded
+    durableProofIDs = Set(loaded.map(\.id))
     if didSanitize {
-      save()
+      save(loaded)
     }
   }
 
-  private func save() {
-    guard !isPersistenceSuspended else { return }
-    guard let data = try? RecordSchemaEnvelope.encodeRecords(proofs) else { return }
-    try? data.write(to: fileURL, options: .atomic)
+  @discardableResult
+  private func save(_ updated: [Proof]) -> Bool {
+    if let reason = persistenceSuspensionReason {
+      // Preserve the established memory-only fallback, while reporting failure.
+      proofs = updated
+      lastPersistenceError = reason
+      return false
+    }
+    do {
+      let data = try encodeRecords(updated)
+      try writeData(data, fileURL)
+      durableProofIDs = Set(updated.map(\.id))
+      proofs = updated
+      lastPersistenceError = nil
+      return true
+    } catch {
+      lastPersistenceError = error
+      return false
+    }
   }
 
   /// Test-only reset: clears in-memory state and deletes any persisted
@@ -132,6 +166,8 @@ final class ProofStore: ObservableObject {
     proofs = []
     quarantinedFileURL = nil
     persistenceSuspensionReason = nil
+    lastPersistenceError = nil
+    durableProofIDs = []
     try? FileManager.default.removeItem(at: fileURL)
   }
 }
