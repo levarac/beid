@@ -68,7 +68,7 @@ final class BeidIPadLayoutTests: XCTestCase {
 
     // CLOSE confirms the real Proof, DONE advances through persistent 07,
     // then View collection dismisses to Home.
-    app.buttons["Close"].tap()
+    app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     capture(named: "stop-confirm-\(orientation)")
     app.buttons["Stop and keep record"].tap()
@@ -80,7 +80,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "proof-collected-\(orientation)")
     app.buttons["View collection"].tap()
 
-    XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
     app.openRecordsByEvent()
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
@@ -220,8 +220,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   /// Shared navigation prefix: joins the DemoEvent event and waits until
-  /// `.recording` begins, then declines its automatic binding sheet so the
-  /// live screen's controls are hittable. Used by both the
+  /// `.recording` begins without a wallet presentation. Used by both the
   /// Recording-screen test above and `navigateToCollectionWithProof` below.
   private func reachRecordingScreen() {
     app.launchArguments = ["-beid-ui-test"]
@@ -257,13 +256,9 @@ final class BeidIPadLayoutTests: XCTestCase {
   }
 
   private func dismissBindingSheetToReachLiveRecording() {
-    let cancel = app.buttons["Cancel"]
-    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
-    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
-    cancel.tap()
-    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.buttons["Close"].isHittable, "Live recording Close must be tappable")
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
   }
 
   /// Ends the session `reachRecordingScreen()` just started, landing on
@@ -271,7 +266,7 @@ final class BeidIPadLayoutTests: XCTestCase {
   /// already exercises, without its screenshot/orientation concerns.
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
-    app.buttons["Close"].tap()
+    app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
@@ -281,8 +276,8 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons["View collection"].tap()
 
     XCTAssertTrue(
-      app.buttons["home.demo.join"].waitForExistence(timeout: 5),
-      "Expected Home after closing recording.\n\(app.debugDescription)"
+      app.scrollViews["records.grid"].waitForExistence(timeout: 5),
+      "Expected Records after ending recording.\n\(app.debugDescription)"
     )
   }
 

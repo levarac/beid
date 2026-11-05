@@ -164,7 +164,7 @@ final class NowNavigationUITests: XCTestCase {
     if cancelBinding.waitForExistence(timeout: 10) { cancelBinding.tap() }
     let recording = app.buttons["Simulate Signal Lost"]
     XCTAssertTrue(recording.waitForExistence(timeout: 30))
-    app.buttons["Close"].tap()
+    app.buttons["scan.stop-sensing"].tap()
     app.buttons["scan.stop-confirm.stop"].assertHittable()
     app.buttons["scan.stop-confirm.stop"].tap()
     app.buttons["Done"].assertHittable()

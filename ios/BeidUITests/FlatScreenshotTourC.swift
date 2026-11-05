@@ -263,6 +263,14 @@ final class FlatScreenshotTourC: XCTestCase {
     senseEvent.tap()
 
     XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].waitForExistence(timeout: 10), file: file, line: line)
+    if ["05", "05a", "05a2", "05a3", "05e", "06"].contains(code) {
+      XCTAssertFalse(app.staticTexts["MUTUAL"].exists, file: file, line: line)
+      XCTAssertTrue(app.staticTexts["DEVICES HEARD"].exists, file: file, line: line)
+      XCTAssertTrue(app.staticTexts["ELAPSED"].exists, file: file, line: line)
+    }
+    if code == "06" {
+      XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].exists, file: file, line: line)
+    }
     if code == "07" {
       XCTAssertTrue(app.buttons["View collection"].exists, file: file, line: line)
       let recordID = app.staticTexts["proof-collected.record-id"]

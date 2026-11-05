@@ -3,8 +3,7 @@
 
 import XCTest
 
-/// Runtime acceptance for beid#200: closing the scan surface must leave a
-/// truthful, actionable indication while transport continues.
+/// Returning from sensing details preserves the live participation.
 final class ContinuousSensingIndicatorUITests: XCTestCase {
   private let app = XCUIApplication()
 
@@ -23,18 +22,20 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
-    XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 30))
 
-    app.buttons["Close"].tap()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
 
-    let indicator = app.staticTexts["collection.continuous-sensing"]
+    let indicator = app.buttons["home.open-details"]
     XCTAssertTrue(indicator.waitForExistence(timeout: 5))
     XCTAssertFalse(app.buttons["collection.stop-sensing"].exists)
     let details = app.buttons["home.open-details"]
     XCTAssertTrue(details.isHittable)
     details.tap()
     XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 5))
-    app.buttons["Close"].tap()
+    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["scan.sealed"].exists)
+    app.navigationBars.buttons.element(boundBy: 0).tap()
     XCTAssertTrue(indicator.waitForExistence(timeout: 5))
   }
 }

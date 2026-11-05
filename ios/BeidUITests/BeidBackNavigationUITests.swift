@@ -45,7 +45,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     swipeFromLeadingEdge()
 
     XCTAssertEqual(app.state, .runningForeground, "the app did not survive a swipe on the root screen")
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
   }
 
   // MARK: - Gesture
@@ -81,8 +81,7 @@ final class BeidBackNavigationUITests: XCTestCase {
   // step for step. They are copied rather than shared because those are
   // `private` to that class; if the seeding route changes, both must change.
 
-  /// Joins the DemoEvent event, then declines the automatic binding sheet so
-  /// the live Recording controls are hittable.
+  /// Joins the demonstration event and waits for live recording controls.
   private func reachRecordingScreen() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
@@ -102,19 +101,15 @@ final class BeidBackNavigationUITests: XCTestCase {
   }
 
   private func dismissBindingSheetToReachLiveRecording() {
-    let cancel = app.buttons["Cancel"]
-    XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Recording must offer the binding sheet")
-    XCTAssertTrue(cancel.isHittable, "The binding sheet Cancel control must be tappable")
-    cancel.tap()
-    XCTAssertFalse(cancel.exists, "Cancel must dismiss the binding sheet")
+    XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
     XCTAssertTrue(app.buttons["Simulate Signal Lost"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.buttons["Close"].isHittable, "Live recording Close must be tappable")
+    XCTAssertTrue(app.buttons["scan.stop-sensing"].isHittable)
   }
 
   /// Ends that session, landing on Collection with the resulting proof.
   private func navigateToCollectionWithProof() {
     reachRecordingScreen()
-    app.buttons["Close"].tap()
+    app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
@@ -122,7 +117,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
     app.buttons["View collection"].tap()
 
-    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
   }
 
   /// Pushes Proof Detail for the DemoEvent proof left on Collection.
