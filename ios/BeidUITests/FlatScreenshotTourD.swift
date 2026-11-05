@@ -167,6 +167,16 @@ final class FlatScreenshotTourD: XCTestCase {
     }
   }
 
+  func testExpiredVenuePackRequestsACurrentLinkAndShowsNoBroadcastDeadline() {
+    openVenue(frame: "14h")
+    let guidance = app.staticTexts["This pack's current period has ended. Scan or paste a current link from the organiser."]
+    XCTAssertTrue(guidance.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["CANNOT BROADCAST"].exists)
+    XCTAssertFalse(app.staticTexts["Broadcasting until 18:00"].exists)
+    XCTAssertTrue(app.buttons["Scan QR code"].exists)
+    XCTAssertTrue(app.buttons["Use this link"].exists)
+  }
+
   func testShot_14b_VenueBroadcast() {
     openVenue(frame: "14b")
     attachScreenshot("14b")
