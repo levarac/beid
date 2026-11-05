@@ -175,7 +175,10 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertFalse(app.staticTexts["Broadcasting until 18:00"].exists)
     XCTAssertTrue(app.buttons["Scan QR code"].exists)
     XCTAssertTrue(app.buttons["Use this link"].exists)
-    XCTAssertEqual(app.buttons["Refresh pack"].label, "Reload saved pack")
+    let reload = app.buttons["Reload saved pack"]
+    XCTAssertTrue(reload.waitForExistence(timeout: 5))
+    XCTAssertTrue(reload.isEnabled)
+    assertMinimumHitTarget(reload)
     XCTAssertTrue(app.staticTexts["Reloading checks the saved bytes. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack."].exists)
   }
 
