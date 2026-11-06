@@ -1013,15 +1013,8 @@
     "I’ve turned it on": {
       "comment": "Button: rechecks whether the user has switched Bluetooth back on."
     },
-    "Proofs of presence, collected automatically while you are at an event. No codes, no taps.": {},
-    "Prove you\nwere there.": {},
     "Setup · 1 / 1": {},
-    "V 1.0": {
-      "comment": "Version label in the Welcome screen header."
-    },
     "You can change this anytime in Settings": {},
-    "beid can’t sense events or collect proofs while Bluetooth is off.": {},
-    "beid senses nearby events and people over Bluetooth Low Energy — that’s how it proves you were really there.": {},
     "%lld": {},
     "Account": {},
     "Active": {
@@ -1061,7 +1054,6 @@
     },
     "Connect Wallet": {},
     "Connect Your Wallet": {},
-    "Connect wallet instead": {},
     "Connect with MetaMask": {
       "comment": "Button: starts a direct app-to-app connection with the MetaMask app."
     },
@@ -1223,11 +1215,9 @@
     "Event code required": {
       "comment": "Error label shown when Join Event is pressed without an event code."
     },
-    "Events find you": {},
     "Get MetaMask": {
       "comment": "Button: opens the App Store page for MetaMask."
     },
-    "Get Started": {},
     "I've turned it on": {},
     "Install MetaMask to connect directly.": {},
     "Join Event": {},
@@ -1236,7 +1226,6 @@
     "Method": {},
     "My Proofs": {},
     "Nearby events": {},
-    "Nearby events appear automatically — no codes, no search.": {},
     "Nearby peers are confirming your attendance automatically.": {},
     "nearbyEvent.beaconName.conflict": {
       "comment": "Warning shown when nearby beacons announce different names for the same event-code hash. Do not choose one of the names as authoritative.",
@@ -1434,7 +1423,6 @@
       }
     },
     "Open Settings": {},
-    "Only needed if an event didn’t appear automatically. Ask the organizer for the code.": {},
     "Pairing URI": {},
     "Paste": {
       "comment": "Button that pastes clipboard text: the event code (13) or a venue link (14b)."
@@ -1458,7 +1446,6 @@
     "Sensing paused": {
       "comment": "Status pill label: sensing is temporarily paused. Parallels 'Sensing automatically' — keep the same grammatical form."
     },
-    "Sensing runs quietly in the background. Nothing to tap.": {},
     "Shibuya Hikarie": {
       "comment": "Venue name shown under the demo event name on the demo event card. A real Tokyo building; translate only if the target language has a conventional rendering of it.",
       "extractionState": "manual",
@@ -1524,7 +1511,6 @@
     "You can change this anytime in Settings.": {},
     "You declined the request in your wallet.": {},
     "Your attendance proof is ready to be added to your collection.": {},
-    "Zero effort": {},
     "account.bluetooth.relayNote": {
       "comment": "Note under the Bluetooth row on the Account sheet: while this phone is at an event it can pass that event's details on to phones nearby, so the event still reaches the edges of a venue (beid#367). Says what the phone does, not how the protocol does it.",
       "localizations": {
@@ -1567,9 +1553,6 @@
     "beid lost the connection to %@. Move closer and we'll pick it back up automatically.": {},
     "beid senses nearby events and people over Bluetooth Low Energy — that's how it proves you were really there.": {},
     "beid uses your wallet to sign proofs of event attendance.": {},
-    "e.g. ETHTOKYO2026": {
-      "comment": "Placeholder shown in the empty event-code text field. Keep the invented example code (ETHTOKYO2026) as-is; translate only the localized equivalent of \"e.g.\"."
-    },
     "Collection": {
       "comment": "Noun: title of the Collection Home screen, showing the user's collected proofs."
     },
@@ -2630,7 +2613,6 @@
     "HOW IT WORKS": {},
     "Phones exchange rotating anonymous IDs, not names or wallet addresses.": {},
     "What we send": {},
-    "SENDING STATUS · ALL SAVED OBSERVATIONS": {},
     "SENDING": {},
     "About sensing": {},
     "How it works": {},
@@ -3768,17 +3750,6 @@
         }
       }
     },
-    "DEMO EVENT · FOR APP REVIEW": {
-      "comment": "Identifies a sample event, not a real Bluetooth event.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DEMO EVENT · FOR APP REVIEW"
-          }
-        }
-      }
-    },
     "Demo event": {
       "comment": "Name of the sample event.",
       "localizations": {
@@ -4049,6 +4020,104 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Settings, choose General, then Date & Time, and check the time settings."
+          }
+        }
+      }
+    },
+    "Record you were there.": {},
+    "Your phones say hello to each other, and keep a note anyone can verify.": {},
+    "Continue": {},
+    "beid uses Bluetooth Low Energy to find nearby events and hear nearby phones.": {},
+    "beid can’t find nearby events or record observations while Bluetooth is off.": {},
+    "If your event is not listed, ask the organizer for its event code and paste it here.": {},
+    "Continue without a code": {
+      "comment": "Continues to Bluetooth setup without entering a code."
+    },
+    "SENDING STATUS": {},
+    "DEMO EVENT · SAMPLE DATA": {
+      "comment": "Identifies a sample event, not a real Bluetooth event.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DEMO EVENT · SAMPLE DATA"
+          }
+        }
+      }
+    },
+    "sensing.explainer.chooseEvent.title": {
+      "comment": "Heading that introduces selecting an event before recording.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your event"
+          }
+        }
+      }
+    },
+    "sensing.explainer.chooseEvent.detail": {
+      "comment": "Explains discovery followed by the participant choosing JOIN.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid looks for nearby events. Tap JOIN when your event appears."
+          }
+        }
+      }
+    },
+    "sensing.explainer.keepOpen.title": {
+      "comment": "Heading asking the participant to keep the app visible while sensing.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep beid open"
+          }
+        }
+      }
+    },
+    "sensing.explainer.keepOpen.detail": {
+      "comment": "Explains foreground use and the participant-controlled stop action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the app open while sensing. Tap STOP SENSING when you want to finish."
+          }
+        }
+      }
+    },
+    "aboutSensing.submission.detailsUnavailable": {
+      "comment": "The screen cannot report per-status sending counts. This does not claim that the queue is empty.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending details are not available here."
+          }
+        }
+      }
+    },
+    "welcome.version": {
+      "comment": "The short app version from app metadata, without a build number. Shown only when available.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "V %@"
+          }
+        }
+      }
+    },
+    "eventCode.input.placeholder": {
+      "comment": "Placeholder for the organizer-supplied event code. The user can paste it without typing a long identifier.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste event code"
           }
         }
       }

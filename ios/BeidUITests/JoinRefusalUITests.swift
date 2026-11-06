@@ -24,8 +24,8 @@ final class JoinRefusalUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-join-refusal-fixture"]
     app.launch()
 
-    app.buttons["Get Started"].assertHittable()
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
 

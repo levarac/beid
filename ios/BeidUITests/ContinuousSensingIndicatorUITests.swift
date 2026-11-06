@@ -15,7 +15,7 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-continuous-sensing-fixture"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 

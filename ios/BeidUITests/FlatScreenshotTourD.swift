@@ -15,7 +15,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_12_ReportDetail() {
     app.launchArguments = ["-beid-ui-test", "-beid-event-detail-frame-08"]
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
@@ -193,7 +193,7 @@ final class FlatScreenshotTourD: XCTestCase {
   func testShot_14e_InvalidLink() {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture", "-beid-venue-frame", "14e"]
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     getStarted.assertExists()
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
@@ -299,7 +299,7 @@ final class FlatScreenshotTourD: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-account-connected-fixture"] + extraArguments
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
     let account = app.buttons["home.account"]

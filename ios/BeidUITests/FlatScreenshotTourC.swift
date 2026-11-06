@@ -24,7 +24,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-beid-ui-test", "-beid-clock-preflight-fixture"]
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
@@ -321,7 +321,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-beid-ui-test", "-beid-event-detail-frame-08", "-beid-report-links-701"]
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     getStarted.assertExists()
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
@@ -369,8 +369,8 @@ final class FlatScreenshotTourC: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = ["-beid-ui-test", "-beid-sensing-shot", "07"]
     app.launch()
-    app.buttons["Get Started"].assertHittable()
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
     app.buttons["home.demo.join"].assertHittable()
@@ -425,7 +425,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let app = XCUIApplication()
     app.launchArguments = arguments
     app.launch()
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 10))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
@@ -454,7 +454,7 @@ final class FlatScreenshotTourC: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-sensing-shot", code]
     app.launch()
 
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 10), file: file, line: line)
     getStarted.tap()
 
