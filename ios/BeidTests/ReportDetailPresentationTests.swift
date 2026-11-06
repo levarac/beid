@@ -53,13 +53,34 @@ final class ReportDetailPresentationTests: XCTestCase {
     XCTAssertTrue(TransparencySubmissionDisplay(state: .accepted, receiptStored: true).isSent)
   }
 
+  func testMixedWindowsDoNotBorrowAnotherWindowsReceipt() {
+    let records = [
+      record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001"), state: .accepted, receipt: "ab"),
+      record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000002"), state: .prepared),
+      record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000003"), state: .accepted)
+    ]
+    let progress = ReportProgressPresentation(records: records)
+    XCTAssertEqual(progress.summary, "1 OF 3 RECEIVED")
+    XCTAssertEqual(progress.receivedCount, 1)
+    XCTAssertEqual(ReportProgressPresentation(records: [records[1]]).summary, "PREPARED ON DEVICE")
+    XCTAssertEqual(ReportProgressPresentation(records: [records[2]]).summary, "STATUS UNAVAILABLE")
+    XCTAssertEqual(ReportProgressPresentation(records: []).summary, "NO LINKED REPORTS")
+  }
+
+  func testStoppedWindowDoesNotContributeReceiptSuccess() {
+    let stopped = record(state: .accepted, receipt: "ab", terminalError: "local-error")
+    XCTAssertEqual(ReportProgressPresentation(records: [stopped]).receivedCount, 0)
+    XCTAssertEqual(ReportProgressPresentation(records: [stopped]).summary, "SUBMISSION STOPPED")
+  }
+
   private func record(
+    id: UUID? = nil,
     state: ReportSubmissionState,
     receipt: String? = nil,
     terminalError: String? = nil
   ) -> ReportSubmissionRecord {
     ReportSubmissionRecord(
-      id: UUID(uuidString: "00000000-0000-4000-8000-000000000641")!,
+      id: id ?? UUID(uuidString: "00000000-0000-4000-8000-000000000641")!,
       eventCode: "ETHTOKYO2026",
       endpoint: "https://example.invalid/observations",
       receiptPublicKeyHex: String(repeating: "a", count: 64),
