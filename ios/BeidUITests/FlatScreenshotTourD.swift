@@ -179,7 +179,10 @@ final class FlatScreenshotTourD: XCTestCase {
     XCTAssertTrue(reload.waitForExistence(timeout: 5))
     XCTAssertTrue(reload.isEnabled)
     assertMinimumHitTarget(reload)
-    XCTAssertTrue(app.staticTexts["Reloading checks the saved bytes. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack."].exists)
+    let reloadGuidance = "Reloading checks the pack already saved on this device. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack."
+    let reloadNote = app.staticTexts.matching(NSPredicate(format: "label == %@", reloadGuidance)).firstMatch
+    XCTAssertTrue(reloadNote.waitForExistence(timeout: 5))
+    XCTAssertEqual(reloadNote.label, reloadGuidance)
   }
 
   func testShot_14b_VenueBroadcast() {

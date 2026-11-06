@@ -2664,7 +2664,7 @@
       }
     },
     "Waiting for Bluetooth": {},
-    "Reloading checks the saved bytes. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack.": {},
+    "Reloading checks the pack already saved on this device. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack.": {},
     "Prepared": {
       "comment": "A canonical Observation is stored locally before sending.",
       "localizations": {

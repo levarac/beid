@@ -303,7 +303,7 @@ struct VenueSignedServingView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, DS.Space.m)
       }
-      Text("Reloading checks the saved bytes. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack.")
+      Text("Reloading checks the pack already saved on this device. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack.")
         .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
