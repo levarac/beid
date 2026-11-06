@@ -28,11 +28,12 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
     swipeFromLeadingEdge()
 
-    let senseEvent = app.buttons["home.scan"]
     XCTAssertTrue(
-      senseEvent.waitForExistence(timeout: 5),
-      "the second leading-edge swipe did not pop Event Detail back to Collection"
+      app.collectionViews["records.events"].waitForExistence(timeout: 5),
+      "the second leading-edge swipe did not return to the event list"
     )
+    swipeFromLeadingEdge()
+    XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.staticTexts["proof.detail.title"].exists)
   }
 
@@ -44,7 +45,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     swipeFromLeadingEdge()
 
     XCTAssertEqual(app.state, .runningForeground, "the app did not survive a swipe on the root screen")
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
   }
 
   // MARK: - Gesture
@@ -90,7 +91,7 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
     XCTAssertTrue(app.descendants(matching: .any)["scan.sensing"].waitForExistence(timeout: 30))
@@ -121,11 +122,12 @@ final class BeidBackNavigationUITests: XCTestCase {
     XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
     app.buttons["View collection"].tap()
 
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
   }
 
   /// Pushes Proof Detail for the DemoEvent proof left on Collection.
   private func openFirstProof() {
+    app.openRecordsByEvent()
     app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ETHGlobal Tokyo")).firstMatch.tap()
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     app.buttons["event-detail.proof.1"].tap()

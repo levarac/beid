@@ -40,7 +40,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testBindingSheetAutoPresentsOnRecordingAndDoesNotReopenAfterDismissal() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["home.scan"].tap()
+    app.buttons["home.demo.join"].tap()
 
     // Reaching `.recording` fires `beginRecording`, which sets
     // `bindingState = .pendingConnect(event)` fresh from `.none`
@@ -80,7 +80,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
 
   func testKeepSensingReturnsToLiveRecordingAfterBindingWasDeclined() {
     launchAndReachSenseEventScreen()
-    app.buttons["home.scan"].tap()
+    app.buttons["home.demo.join"].tap()
 
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
@@ -168,7 +168,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
   func testMistimedCloseTapDuringBindingSheetPresentationRecoversViaCancelThenClose() {
     launchAndReachSenseEventScreen()
 
-    app.buttons["home.scan"].tap()
+    app.buttons["home.demo.join"].tap()
 
     let cancelButton = app.buttons["Cancel"]
     XCTAssertTrue(cancelButton.waitForExistence(timeout: 15))
@@ -234,7 +234,7 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Done"].tap()
     XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
     app.buttons["View collection"].tap()
-    let homeScan = app.buttons["home.scan"]
+    let homeScan = app.buttons["home.demo.join"]
     XCTAssertTrue(
       homeScan.waitForExistence(timeout: 5) && homeScan.isHittable,
       "The confirmed stop, DONE, and View collection must reach Collection Home"
@@ -254,6 +254,6 @@ final class RecordingBindingSheetUITests: XCTestCase {
     app.buttons["Get Started"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
-    XCTAssertTrue(app.buttons["home.scan"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
   }
 }

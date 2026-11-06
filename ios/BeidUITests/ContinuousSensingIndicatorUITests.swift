@@ -12,7 +12,7 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testHomeShowsContinuousSensingAndClearsAfterStop() {
+  func testHomeResumesContinuousSensingThroughDetails() {
     app.launchArguments = ["-beid-ui-test", "-beid-continuous-sensing-fixture"]
     app.launch()
 
@@ -20,23 +20,21 @@ final class ContinuousSensingIndicatorUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
 
-    let senseEvent = app.buttons["home.scan"]
+    let senseEvent = app.buttons["home.demo.join"]
     XCTAssertTrue(senseEvent.waitForExistence(timeout: 5))
     senseEvent.tap()
     XCTAssertTrue(app.staticTexts["Sensing automatically"].waitForExistence(timeout: 30))
 
     app.buttons["Close"].tap()
 
-    let indicator = app.staticTexts["Sensing continues in background"]
+    let indicator = app.staticTexts["collection.continuous-sensing"]
     XCTAssertTrue(indicator.waitForExistence(timeout: 5))
-    let stopButton = app.buttons["collection.stop-sensing"]
-    XCTAssertTrue(stopButton.exists)
-    XCTAssertTrue(stopButton.isHittable)
-    XCTAssertTrue(senseEvent.isHittable, "Scan stays available while sensing continues")
-
-    stopButton.tap()
-    XCTAssertFalse(app.staticTexts["Stop sensing?"].exists, "prejoin Home Stop needs no Proof confirmation")
-    XCTAssertFalse(indicator.waitForExistence(timeout: 5))
-    XCTAssertFalse(stopButton.exists)
+    XCTAssertFalse(app.buttons["collection.stop-sensing"].exists)
+    let details = app.buttons["home.open-details"]
+    XCTAssertTrue(details.isHittable)
+    details.tap()
+    XCTAssertTrue(app.scrollViews["scan.sensing"].waitForExistence(timeout: 5))
+    app.buttons["Close"].tap()
+    XCTAssertTrue(indicator.waitForExistence(timeout: 5))
   }
 }
