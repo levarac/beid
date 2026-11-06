@@ -165,7 +165,10 @@ final class NowNavigationUITests: XCTestCase {
     launchHome([])
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.otherElements["home.active-event"].exists)
-    XCTAssertTrue(app.staticTexts["DEMO EVENT · FOR APP REVIEW"].exists)
+    XCTAssertTrue(
+      app.staticTexts["DEMO EVENT · SAMPLE DATA"].exists,
+      "The demo must identify sample data before explicit JOIN"
+    )
     app.buttons["home.demo.join"].tap()
     XCTAssertTrue(app.scrollViews["scan.sensing-session"].waitForExistence(timeout: 30))
     XCTAssertFalse(app.buttons["Cancel"].exists, "Recording must not present a wallet sheet")
