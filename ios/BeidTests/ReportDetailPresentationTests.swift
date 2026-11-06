@@ -73,8 +73,33 @@ final class ReportDetailPresentationTests: XCTestCase {
     XCTAssertEqual(ReportProgressPresentation(records: [stopped]).summary, "SUBMISSION STOPPED")
   }
 
+  func testWindowSelectionKeepsEveryKnownReportAndItsOwnServerReceipt() {
+    let first = record(
+      id: UUID(uuidString: "00000000-0000-4000-8000-000000000001"),
+      endpoint: "https://first.example.invalid/observations", state: .accepted, receipt: "ab"
+    )
+    let second = record(
+      id: UUID(uuidString: "00000000-0000-4000-8000-000000000002"),
+      endpoint: "https://second.example.invalid/observations", state: .prepared
+    )
+    let third = record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000003"), state: .accepted)
+    let unknown = record(id: UUID(uuidString: "00000000-0000-4000-8000-000000000004"), state: .submitting)
+    let reports = [first, second, third, unknown].enumerated().map { LinkedReport(ordinal: $0 + 1, record: $1) }
+    let indices = [first.id: Int64(7), second.id: 7, third.id: 9]
+    let selected = WindowReportSelection.reports(reports, at: 7) { indices[$0] }
+    XCTAssertEqual(selected.map(\.record.id), [first.id, second.id])
+    XCTAssertEqual(selected.map(\.record.endpoint), [first.endpoint, second.endpoint])
+    XCTAssertEqual(ReportDetailPresentation(record: selected[0].record).receipt, "STORED")
+    XCTAssertEqual(ReportDetailPresentation(record: selected[1].record).delivery, "NOT SENT")
+    let other = WindowReportSelection.reports(reports, at: 9) { indices[$0] }
+    XCTAssertEqual(other.map(\.record.id), [third.id])
+    XCTAssertEqual(ReportDetailPresentation(record: other[0].record).receipt, "STATUS UNAVAILABLE")
+    XCTAssertTrue(WindowReportSelection.reports(reports, at: 8) { indices[$0] }.isEmpty)
+  }
+
   private func record(
     id: UUID? = nil,
+    endpoint: String = "https://example.invalid/observations",
     state: ReportSubmissionState,
     receipt: String? = nil,
     terminalError: String? = nil
@@ -82,7 +107,7 @@ final class ReportDetailPresentationTests: XCTestCase {
     ReportSubmissionRecord(
       id: id ?? UUID(uuidString: "00000000-0000-4000-8000-000000000641")!,
       eventCode: "ETHTOKYO2026",
-      endpoint: "https://example.invalid/observations",
+      endpoint: endpoint,
       receiptPublicKeyHex: String(repeating: "a", count: 64),
       eventIdHex: nil,
       eventDefinitionDigestHex: nil,
