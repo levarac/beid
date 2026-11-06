@@ -142,31 +142,23 @@ create a package override, or temporarily point `project.yml` at a local
 
 ## Onboarding flag
 
-Resolved 2026-07-26: the default entry flow is event-first (`guestFirst`).
-Wallet connect and binding happen after event confirmation, not at Welcome —
-see `docs/specs/onboarding-redesign.md`. Both orders remain implemented
-behind a single flag so `walletFirst` stays flippable for demos:
+`OnboardingMode` retains its legacy values for compatibility. Both values
+now follow Welcome → Bluetooth permission → Now. Changing the flag does
+not introduce a wallet step or a recording-time binding sheet:
 
 ```swift
 // Beid/Models/OnboardingMode.swift
-static let current: OnboardingMode = .guestFirst  // or .walletFirst
+static let current: OnboardingMode = .guestFirst
 ```
 
-- `.walletFirst`: Welcome → Connect Wallet → Bluetooth permission → home,
-  with manual event-code entry as the wallet-optional secondary path.
-- `.guestFirst` (default): Welcome → Bluetooth permission → home, with wallet
-  connect deferred to the Account sheet.
-
-Flip the flag and rebuild to demo the other order — `OnboardingFlagTests`
-exercises both branches (the inapplicable one self-skips via `XCTSkip`
-rather than being commented out, so both stay compiled and typo-checked).
-
-The wallet step uses a direct app-to-app wallet connection (MetaMask) — see
-"WalletConnect" below.
+`OnboardingFlagTests` checks the Bluetooth entry and legacy return routes.
+Mode-specific compatibility tests remain compiled; an inapplicable mode
+self-skips via `XCTSkip`. Existing wallet bindings and connector support
+remain available to legacy record handling.
 
 ## WalletConnect
 
-`WalletConnectView` (onboarding) and the Account sheet's "Connect Wallet"
+The legacy `WalletConnectView` and the Account sheet's "Connect Wallet"
 action both use `WalletConnectPairingView`
 (`Beid/Views/WalletConnectView.swift`), which drives a `WalletConnector`:
 `MetaMaskConnector` wraps MetaMask's direct app-to-app mobile SDK. The
@@ -455,9 +447,8 @@ Issue #121.
 01 Welcome, 02 Bluetooth permission guide, 03 Bluetooth-off, 04 Collection
 home (+04b empty state), 05 Scan (radar), 06a Event Found, 06b Recording,
 06d Signal Lost, 06 Sealed, 07 Proof Collected, 08 Item Detail, 09 Account sheet
-— plus Connect Wallet and manual Enter
-Event Code screens for the `.walletFirst` onboarding order (not in the
-original 9-screen list).
+— plus manual Enter Event Code. Legacy wallet views remain in the source
+but are not introduced by the onboarding flag.
 
 All screens use the repository design-system tokens, adaptive layouts, and
 current custom artwork documented in `DESIGN.md`; the original blue-accent

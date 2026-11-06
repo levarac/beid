@@ -31,7 +31,7 @@ final class EventIdentityVerificationPresentationTests: XCTestCase {
     )
 
     XCTAssertEqual(presentation.messageKey, "event.identityVerification.verified")
-    XCTAssertEqual(presentation.defaultMessage, "Event identity verified")
+    XCTAssertEqual(presentation.defaultMessage, "Event registration matched")
     XCTAssertTrue(presentation.isVerified)
     XCTAssertEqual(
       presentation.statusAccessibilityIdentifier,

@@ -12,7 +12,7 @@ struct RootView: View {
       case .welcome:
         WelcomeView()
       case .walletConnect:
-        WalletConnectView()
+        BluetoothPermissionView()
       case .eventCodeEntry:
         EventCodeEntryView()
       case .bluetoothPermission:
@@ -31,12 +31,7 @@ struct RootView: View {
     .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
     .tint(DS.Color.actionPrimary)
     .animation(DS.Motion.screenTransition, value: coordinator.screen)
-    .fullScreenCover(isPresented: $coordinator.scanPresented) {
-      ScanFlowView(sensing: coordinator.sensingCoordinator)
-        .environmentObject(coordinator)
-        .tint(DS.Color.actionPrimary)
-        .presentationBackground(DS.Color.surfaceCanvas)
-    }
+
   }
 }
 

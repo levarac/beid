@@ -3,9 +3,8 @@
 
 import Foundation
 
-/// Top-level onboarding/home screens. The Scan flow (05-07) is presented as
-/// a full-screen cover from `.home` rather than a case here, driven by
-/// `SensingCoordinator.phase`.
+/// Top-level onboarding and home screens. Sensing details are pushed from
+/// the Now navigation stack rather than represented by a separate root.
 enum AppScreen: Equatable {
   case welcome
   case walletConnect

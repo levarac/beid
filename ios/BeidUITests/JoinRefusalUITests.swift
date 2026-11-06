@@ -45,8 +45,8 @@ final class JoinRefusalUITests: XCTestCase {
     refusalPanel.assertHittable()
     refusalTitle.scrollToHittable(in: app)
 
-    app.buttons["Close"].assertHittable()
-    app.buttons["Close"].tap()
+    app.navigationBars.buttons.element(boundBy: 0).assertHittable()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
     refusalPanel.assertDisappears()
     refusalTitle.assertDisappears()
 
