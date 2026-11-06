@@ -5214,12 +5214,14 @@ final class SensingCoordinator: ObservableObject {
   }
 
   func waitForDemoSequenceToFinish() async {
+    await ledgerLoadTask?.value
     await demoTask?.value
   }
 
   /// Preview/test seam: a scenario is settled only after each primitive has
   /// yielded one render turn, or it has deliberately parked at Signal Lost.
   func waitForDemoScenarioPreviewToSettle() async {
+    await ledgerLoadTask?.value
     await demoTask?.value
   }
 
