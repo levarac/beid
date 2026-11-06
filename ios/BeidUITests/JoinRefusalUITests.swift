@@ -20,6 +20,27 @@ final class JoinRefusalUITests: XCTestCase {
     continueAfterFailure = false
   }
 
+  func testStorageRefusalShowsItsOwnReasonAndRetryAction() {
+    app.launchArguments = ["-beid-ui-test", "-beid-join-refusal-fixture", "-beid-storage-refusal-fixture"]
+    app.launch()
+    app.buttons["Get Started"].assertHittable()
+    app.buttons["Get Started"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["home.scan"].assertHittable()
+    app.buttons["home.scan"].tap()
+    app.scrollViews["scan.cant-join"].assertHittable()
+    app.staticTexts["Saved records unavailable"].scrollToHittable(in: app)
+    app.staticTexts["beid couldn't access saved records. Try again before joining another event."]
+      .scrollToHittable(in: app)
+    XCTAssertFalse(app.buttons["scan.manual-entry"].exists)
+    let retry = app.buttons["scan.storage-retry"]
+    retry.scrollToHittable(in: app)
+    retry.tap()
+    app.scrollViews["scan.cant-join"].assertDisappears()
+    app.scrollViews["scan.sensing"].assertHittable()
+  }
+
   func testJoinRefusalPanelIsVisibleAndClearsWhenScanCloses() {
     app.launchArguments = ["-beid-ui-test", "-beid-join-refusal-fixture"]
     app.launch()

@@ -645,7 +645,7 @@ final class EventBindingTests: XCTestCase {
     coordinator.declineBinding()
     coordinator.declineBinding()
 
-    coordinator.reset()
+    XCTAssertNotNil(coordinator.reset())
 
     XCTAssertEqual(coordinator.bindingState, .none)
 
@@ -710,7 +710,7 @@ final class EventBindingTests: XCTestCase {
       XCTFail("expected a BindingRecord")
       return
     }
-    coordinator.reset()
+    XCTAssertNotNil(coordinator.reset())
 
     coordinator.startSensing(demoEvent: .demoSample)
     await coordinator.waitForDemoSequenceToFinish()
@@ -1004,7 +1004,12 @@ private final class BarnardBackedBindingCryptography: SensingCryptography {
     eninStart: UInt64,
     eninEnd: UInt64
   ) throws -> SensingRecoverableSignature? {
-    nil
+    try ownerKeyProvider.signSelfProof(
+      eventIdHash: eventIdHash,
+      eventSigningPublicKey: eventSigningPublicKey,
+      eninStart: eninStart,
+      eninEnd: eninEnd
+    ).map { SensingRecoverableSignature(barnardCore: $0) }
   }
 
   func signWalletAcknowledgement(

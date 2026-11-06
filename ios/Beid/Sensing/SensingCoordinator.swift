@@ -1166,8 +1166,8 @@ final class SensingCoordinator: ObservableObject {
   private let joinDiagnosticLog: (String) -> Void
 
   /// Why the last join attempt was refused, as
-  /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value, or nil when
-  /// nothing has been refused.
+  /// `BeidSharedKit.event.eventJoinFailureReasonKey`'s value or a native
+  /// storage/loading key. Nil means no refusal or storage wait is active.
   ///
   /// `joinRefusal` already existed and no view ever read it, so a refusal was
   /// visible only in the log: "nothing is happening" looked identical whether
@@ -1178,6 +1178,10 @@ final class SensingCoordinator: ObservableObject {
   /// enum no name, no description and no equality — see
   /// `eventJoinFailureReasonKey`'s own doc for the other half of that.
   @Published private(set) var joinRefusalReasonKey: String?
+
+  // Native storage refusals use their own keys rather than registry reasons.
+  private var storageAdmissionRetry: (() -> Void)?
+  private var admissionAfterLedgerLoad: (() -> Void)?
 
   private var demoStepDelayNanos: UInt64 {
     #if DEBUG
@@ -1456,6 +1460,9 @@ final class SensingCoordinator: ObservableObject {
       self.logOwnerKeyRegenerationSignalsIfNeeded()
       self.isLedgerLoading = false
       self.reportSubmissionRuntime?.submitPending()
+      let admission = self.admissionAfterLedgerLoad
+      self.admissionAfterLedgerLoad = nil
+      admission?()
       self.drainQueuedDetectionsAfterLoad()
     }
   }
@@ -1863,7 +1870,7 @@ final class SensingCoordinator: ObservableObject {
         venue: nil,
         canonicalEventIdHex: pendingCanonicalEventIdHex
       )
-      beginEventFoundSessionState(session)
+      guard beginEventFoundSessionState(session) else { return }
       observe(
         enin: enin,
         rpid: rpid,
@@ -2484,6 +2491,12 @@ final class SensingCoordinator: ObservableObject {
   /// whichever manual or nearby join code is current.
   func leaveEvent() {
     invalidateEventIdentityVerification()
+    admissionAfterLedgerLoad = nil
+    storageAdmissionRetry = nil
+    if joinRefusalReasonKey == "storage_loading" || joinRefusalReasonKey == "storage_recovery_required" {
+      joinRefusalReasonKey = nil
+      phase = .idle
+    }
     // Leaving invalidates an in-flight join the same way stopping does: a
     // permission grant or registry read still outstanding must not join an
     // event the user has just left (beid#410).
@@ -2532,13 +2545,17 @@ final class SensingCoordinator: ObservableObject {
     demoEvent: EventSession? = nil,
     demoScenario: DemoScenario? = nil
   ) {
+    let selectedEventCode = eventCode ?? joinedEventCode
+    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.startSensing(eventCode: selectedEventCode, eventIdHex: canonicalEventIdHex,
+                         demoEvent: demoEvent, demoScenario: demoScenario)
+    }) else { return }
     // No `?? "beid-demo-event"` any more (beid#410, gh#101). That fallback let
     // a host that had never joined anything start its radio on a hardcoded
     // event code — an ungated path with a built-in destination. The real path
     // below now starts nothing at all when no event has been selected, which
     // is the correct answer to "sense what?" with no answer.
-    let selectedEventCode = eventCode ?? joinedEventCode
-    let canonicalEventIdHex = eventIdHex ?? joinedCanonicalEventIdHex
     resetSessionState()
     // Starting a session ends whatever event the previous one was joined to, so
     // the gate closes here (beid#437). Explicitly here rather than inside
@@ -2795,6 +2812,11 @@ final class SensingCoordinator: ObservableObject {
   func applyJoinGateDecision(_ decision: JoinGateDecision) {
     switch decision {
     case .admit(let context):
+      let code = context.joinCode
+      let eventId = context.eventIdHex
+      guard prepareForSessionAdmission(retry: { [weak self] in
+        self?.startSensing(eventCode: code, eventIdHex: eventId)
+      }) else { return }
       joinRefusal = nil
       pendingEventName = context.eventName
       emitJoinStageDiagnostic(
@@ -2992,6 +3014,8 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func resetSessionState() {
+    storageAdmissionRetry = nil
+    admissionAfterLedgerLoad = nil
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
     sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
@@ -3076,6 +3100,10 @@ final class SensingCoordinator: ObservableObject {
   /// it does not call Barnard, the registry, or any production join path.
   func injectJoinRefusalForUITesting() {
     guard ProcessInfo.processInfo.arguments.contains("-beid-join-refusal-fixture") else {
+      return
+    }
+    if ProcessInfo.processInfo.arguments.contains("-beid-storage-refusal-fixture") {
+      refuseSessionAdmissionForStorage(retry: { [weak self] in _ = self?.reset() })
       return
     }
     joinRefusal = .registryReadFailed
@@ -3166,6 +3194,9 @@ final class SensingCoordinator: ObservableObject {
   /// display-only validity window is never join authority.
   func joinNearbyEvent(eventCodeHashHex: String) {
     guard case .idle = phase else { return }
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+    }) else { return }
     resetSessionState()
     let generation = joinAttemptGeneration
     reportSubmissionRuntime?.submitPending()
@@ -3888,12 +3919,17 @@ final class SensingCoordinator: ObservableObject {
   /// mode (`runDemoSequence`, beid#189, whose first synthesized device
   /// drives the same transition through the same shared reducer via
   /// `applyPhaseDecision`).
-  private func beginEventFoundSessionState(_ session: EventSession) {
+  private func beginEventFoundSessionState(_ session: EventSession) -> Bool {
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.startSensing(eventCode: session.id, eventIdHex: session.canonicalEventIdHex)
+    }) else { return false }
     resetSessionState()
     let eventSigningKey = sensingCryptography.eventSigningPublicKey(eventCode: session.id)
-    guard let ownerKey = resolvedOwnerPublicKey() else { return }
-    let salt = Data(randomSource.randomBytes(count: 16))
-    activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
+    if let ownerKey = resolvedOwnerPublicKey() {
+      let salt = Data(randomSource.randomBytes(count: 16))
+      activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
+    }
+    return true
   }
 
   /// Threshold-confirm (D3, §4.3): creates the `Proof` the instant
@@ -4641,6 +4677,7 @@ final class SensingCoordinator: ObservableObject {
   /// it is stale and must not be reconciled again on a later launch.
   @discardableResult
   private func finalizeSelfProofIfNeeded() -> SelfProofRecord? {
+    checkpointSelfProofStateIfNeeded()
     guard
       let proofId = activeProofId,
       let eventCode = currentBindingEvent?.id,
@@ -4661,9 +4698,9 @@ final class SensingCoordinator: ObservableObject {
       return nil
     }
 
-    selfProofStore.add(record)
+    guard selfProofStore.add(record) else { return nil }
     selfProofCheckpointStore.clear()
-    return record
+    return selfProofStore.durableRecord(forProofId: proofId)
   }
 
   // MARK: - Session aggregate snapshot (beid#166 Phase 2)
@@ -4760,11 +4797,9 @@ final class SensingCoordinator: ObservableObject {
   /// exactly like `finalizeSelfProofIfNeeded()` itself — there is nothing to
   /// checkpoint before `.recording` begins.
   ///
-  /// Demo mode never reaches this: `advanceDemoWindow()` deliberately never
-  /// calls `openNewWindowState` (its own doc comment — demo mode produces no
-  /// window reports), so a demo session's self-proof stays reachable only
-  /// through the graceful `stopSensing()`/`reset()` path, unchanged by this
-  /// sub-slice.
+  /// Demo window rotation does not call this because it produces no window
+  /// reports. Finalization checkpoints the final range for every session,
+  /// including demo sessions, before attempting the self-proof save.
   private func checkpointSelfProofStateIfNeeded() {
     guard
       let proofId = activeProofId,
@@ -4784,9 +4819,64 @@ final class SensingCoordinator: ObservableObject {
     )
   }
 
-  /// Runs once, at the end of `init` — i.e. once per cold launch, on both
-  /// `AppCoordinator`'s production `SensingCoordinator` and any test-
-  /// constructed instance. If a checkpoint survived from a session that
+  /// A new session must not replace the only recovery input for an older one.
+  /// Loading waits for the real store; an empty placeholder grants no admission.
+  private func prepareForSessionAdmission(retry: @escaping () -> Void) -> Bool {
+    if isLedgerLoading {
+      joinAttemptGeneration &+= 1
+      let generation = joinAttemptGeneration
+      admissionAfterLedgerLoad = { [weak self] in
+        guard let self, self.isCurrentJoinAttempt(generation) else { return }
+        self.phase = .idle
+        retry()
+      }
+      joinRefusal = nil
+      joinRefusalReasonKey = "storage_loading"
+      phase = .sensing
+      emitJoinStageDiagnostic(joinDiagnosticLog, eventIdHex: nil,
+                              stage: "admission", outcome: "waiting_storage_load")
+      return false
+    }
+    if !selfProofCheckpointStore.isPersistenceSuspended {
+      reconcileSelfProofCheckpointIfNeeded()
+    }
+    guard !selfProofCheckpointStore.isPersistenceSuspended,
+          !selfProofStore.isPersistenceSuspended,
+          selfProofCheckpointStore.checkpoint == nil else {
+      refuseSessionAdmissionForStorage(retry: retry)
+      return false
+    }
+    storageAdmissionRetry = nil
+    if joinRefusalReasonKey == "storage_loading" || joinRefusalReasonKey == "storage_recovery_required" {
+      joinRefusalReasonKey = nil
+    }
+    return true
+  }
+
+  private func refuseSessionAdmissionForStorage(retry: @escaping () -> Void) {
+    joinAttemptGeneration &+= 1
+    joinRegistryRequest?.cancel()
+    joinRegistryRequest = nil
+    admissionAfterLedgerLoad = nil
+    storageAdmissionRetry = retry
+    demoTask?.cancel()
+    demoTask = nil
+    stopParticipantRelay()
+    engine.stopAutomaticOperation()
+    joinRefusal = nil
+    joinRefusalReasonKey = "storage_recovery_required"
+    phase = .idle
+    Self.ledgerLog.error("session_admission outcome=blocked_storage_recovery")
+    emitJoinStageDiagnostic(joinDiagnosticLog, eventIdHex: nil,
+                            stage: "admission", outcome: "blocked_storage_recovery")
+  }
+
+  func retrySessionAdmissionAfterStorageFailure() {
+    storageAdmissionRetry?()
+  }
+
+  /// Runs after store loading and before another session is admitted.
+  /// If a checkpoint survived from a session that
   /// never reached a graceful end (§7.1 Option B: a device kill after
   /// binding completed but before `stopSensing()`/`reset()` ran), signs and
   /// persists the missing `SelfProofRecord` from the checkpoint's
@@ -4799,7 +4889,7 @@ final class SensingCoordinator: ObservableObject {
   /// checkpoint is stale and must not be reconciled into a duplicate.
   private func reconcileSelfProofCheckpointIfNeeded() {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
-    guard selfProofStore.record(forProofId: checkpoint.proofId) == nil else {
+    guard selfProofStore.durableRecord(forProofId: checkpoint.proofId) == nil else {
       selfProofCheckpointStore.clear()
       return
     }
@@ -4815,7 +4905,7 @@ final class SensingCoordinator: ObservableObject {
       return
     }
 
-    selfProofStore.add(record)
+    guard selfProofStore.add(record) else { return }
     selfProofCheckpointStore.clear()
   }
 
@@ -4886,6 +4976,9 @@ final class SensingCoordinator: ObservableObject {
     stepDelayNanos: UInt64,
     stopRoute: ScanFlowContent.Route?
   ) {
+    guard prepareForSessionAdmission(retry: { [weak self] in
+      self?.runDemoScenario(scenario, stepDelayNanos: stepDelayNanos, stopRoute: stopRoute)
+    }) else { return }
     demoTask?.cancel()
     let session = EventSession(
       id: scenario.event.id,
@@ -4899,7 +4992,7 @@ final class SensingCoordinator: ObservableObject {
     // `runDemoScenario` remains callable from tests and previews without
     // `startSensing()`, so make its `.sensing` precondition explicit.
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
-    beginEventFoundSessionState(session)
+    guard beginEventFoundSessionState(session) else { return }
     phase = Self.payloadlessNativePhase(BeidSharedKit.sensing.scanPhaseAfterStartSensing())
 
     let resolvedScenario = scenario.replacingEvent(session)
@@ -5121,12 +5214,14 @@ final class SensingCoordinator: ObservableObject {
   }
 
   func waitForDemoSequenceToFinish() async {
+    await ledgerLoadTask?.value
     await demoTask?.value
   }
 
   /// Preview/test seam: a scenario is settled only after each primitive has
   /// yielded one render turn, or it has deliberately parked at Signal Lost.
   func waitForDemoScenarioPreviewToSettle() async {
+    await ledgerLoadTask?.value
     await demoTask?.value
   }
 
