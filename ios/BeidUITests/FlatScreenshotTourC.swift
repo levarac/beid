@@ -110,7 +110,8 @@ final class FlatScreenshotTourC: XCTestCase {
     record.tap()
     let title = app.staticTexts["proof.detail.title"]
     title.assertExists()
-    XCTAssertTrue(app.staticTexts["Recorded on device"].exists)
+    XCTAssertTrue(app.staticTexts["RECORDED ON DEVICE"].exists)
+    XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
     XCTAssertFalse(app.staticTexts["ACCEPTED"].exists)
