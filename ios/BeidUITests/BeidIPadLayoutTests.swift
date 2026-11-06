@@ -115,54 +115,33 @@ final class BeidIPadLayoutTests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    XCTAssertTrue(app.staticTexts["Sealed"].waitForExistence(timeout: 5))
+    app.staticTexts["SEALED ON THIS PHONE"].scrollToHittable(in: app)
+    XCTAssertTrue(app.staticTexts["SEALED ON THIS PHONE"].exists)
     XCTAssertTrue(app.staticTexts["Self-signed on device"].exists)
     XCTAssertFalse(app.staticTexts["Verified"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
   }
 
-  /// beid#222, DECISIONS 2026-08-20: the Participation summary headline
-  /// ("Devices mutually confirmed") must never render a literal number,
-  /// including 0 — the protocol cannot measure mutual (two-way)
-  /// confirmation on-device, and an honest 0 reads on real hardware as
-  /// "measured and got 0," which is misinformation. It must always show a
-  /// "not yet available" state instead, independent of whether a
-  /// session-aggregate snapshot exists (this DemoEvent proof does have one,
-  /// so `bandBuildupSection` legitimately shows real band rows — this test
-  /// confirms the headline's own fix applies even when other data on the
-  /// same screen is present, which is the actual #222 regression scenario).
+  /// Mutual observation stays unavailable in the record's evidence ladder,
+  /// including when the finished session has a measured aggregate snapshot.
   func testParticipationSummaryHeadlineHidesNumericMutualCount() {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    app.buttons["View participation summary"].tap()
-    XCTAssertTrue(app.staticTexts["Devices mutually confirmed"].waitForExistence(timeout: 5))
-
-    XCTAssertTrue(app.staticTexts["Not yet available"].waitForExistence(timeout: 5))
-    XCTAssertFalse(app.staticTexts["0"].exists)
+    let mutual = app.staticTexts["MUTUAL OBSERVATION"]
+    mutual.scrollToHittable(in: app)
+    XCTAssertTrue(mutual.exists)
+    let following = app.staticTexts["INCLUDED IN PUBLISHED DATA"]
+    XCTAssertTrue(following.exists)
+    let rowValues = app.staticTexts.allElementsBoundByIndex.filter {
+      $0.frame.midY > mutual.frame.maxY && $0.frame.midY < following.frame.minY
+    }.map(\.label)
+    XCTAssertEqual(rowValues, ["NOT YET AVAILABLE"], "The mutual row must not report a measured zero")
   }
 
-  /// Regression coverage for beid#244. **What this test's claim depends
-  /// on**: every DemoEvent proof carries the same fixed `eventCode`
-  /// (`DemoEvent.EventSession.demoSample.id`, `"ETHGLOBALTOKYO-DEMO"`), so
-  /// two proofs recorded in two different launches of this test still
-  /// group together via `EventGrouping.sessions(for:in:)` unless
-  /// `ProofStore`'s on-disk state was actually reset between launches —
-  /// this test does not by itself prove isolation for a store keyed some
-  /// other way.
-  ///
-  /// `xcodebuild test` reinstalls the app once per suite run, not once per
-  /// test method: every `app.launch()` across every UI test method reuses
-  /// the same on-disk container. Before the beid#244 fix, a `ProofStore`
-  /// proof left behind by an earlier launch silently accumulated with a
-  /// later launch's proof under the same `eventCode`, flipping
-  /// `ItemDetailView.participationSummaryRow`'s destination from
-  /// `ParticipationSummaryView` (single session) to
-  /// `SessionParticipationListView` (multi-session) without failing any
-  /// assertion on its own — this test forces that exact
-  /// record/terminate/relaunch/record sequence inside one method (rather
-  /// than relying on suite execution order, which is not guaranteed) and
-  /// asserts the second launch still resolves a single-session group.
+  /// Two independent launches share the installed container but must not
+  /// accumulate DemoEvent sessions. Their common event code makes an extra
+  /// session route a witness that the first launch's stored record leaked.
   func testProofStoreDoesNotAccumulateAcrossUITestLaunches() {
     navigateToCollectionWithProof()
 
@@ -174,16 +153,16 @@ final class BeidIPadLayoutTests: XCTestCase {
     navigateToCollectionWithProof()
     openFirstProof()
 
-    app.buttons["View participation summary"].tap()
-    XCTAssertTrue(
-      app.staticTexts["Devices mutually confirmed"].waitForExistence(timeout: 5),
-      "A second -beid-ui-test launch must still resolve a single-session group; seeing " +
-        "the multi-session list here means the first launch's proof leaked into this one"
+    let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session."))
+    sessions.firstMatch.scrollToHittable(in: app)
+    XCTAssertEqual(
+      sessions.count, 1,
+      "The second launch must retain one session; an extra route means the first launch's record leaked"
     )
-    XCTAssertFalse(
-      app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "recorded for this event")).firstMatch.exists,
-      "SessionParticipationListView's header must not appear for what should be a single-session group"
-    )
+    sessions.firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["proof.detail.title"].waitForExistence(timeout: 5))
   }
 
   /// beid#218, DECISIONS 2026-08-20: the Recording screen must show a
