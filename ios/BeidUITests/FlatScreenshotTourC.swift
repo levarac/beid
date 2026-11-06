@@ -45,6 +45,10 @@ final class FlatScreenshotTourC: XCTestCase {
   }
   func testShot_05e_StopConfirm() { capture("05e") }
   func testShot_06_Sealed() { capture("06") }
+  func testSensingGuidanceRemainsReachableAfterScrolling() {
+    let app = launchSensingFixture("05a3")
+    SensingVisualOracle.assertPostScrollGuidance(in: app, test: self, name: "05a3-fixture")
+  }
   func testShot_07_ProofCollected() { capture("07") }
   func testShot_09_ProofDetail() { capture("09") }
 
@@ -245,7 +249,9 @@ final class FlatScreenshotTourC: XCTestCase {
     add(attachment)
   }
 
-  private func capture(_ code: String, file: StaticString = #filePath, line: UInt = #line) {
+  private func launchSensingFixture(
+    _ code: String, file: StaticString = #filePath, line: UInt = #line
+  ) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments = ["-beid-ui-test", "-beid-sensing-shot", code]
     app.launch()
@@ -263,6 +269,11 @@ final class FlatScreenshotTourC: XCTestCase {
     senseEvent.tap()
 
     XCTAssertTrue(app.staticTexts["ETH Tokyo 2026"].waitForExistence(timeout: 10), file: file, line: line)
+    return app
+  }
+
+  private func capture(_ code: String, file: StaticString = #filePath, line: UInt = #line) {
+    let app = launchSensingFixture(code, file: file, line: line)
     if ["05", "05a", "05a2", "05a3", "05e", "06"].contains(code) {
       XCTAssertFalse(app.staticTexts["MUTUAL"].exists, file: file, line: line)
       XCTAssertTrue(app.staticTexts["DEVICES HEARD"].exists, file: file, line: line)
@@ -289,9 +300,19 @@ final class FlatScreenshotTourC: XCTestCase {
       XCTAssertTrue(app.buttons["View participation summary"].exists, file: file, line: line)
       XCTAssertFalse(app.staticTexts["FROM REPORTS"].exists, file: file, line: line)
     }
-    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    let initial = XCUIScreen.main.screenshot()
+    let attachment = XCTAttachment(screenshot: initial)
     attachment.name = code
     attachment.lifetime = .keepAlways
     add(attachment)
+    let values: [String: (heard: String, elapsed: String)] = [
+      "05": ("13", "25:00"), "05a": ("5", "0:10"), "05a2": ("5", "0:24"),
+      "05a3": ("5", "2:00"), "05e": ("13", "25:00"), "06": ("13", "30:00")
+    ]
+    if let expected = values[code] {
+      SensingVisualOracle.assertInitialMetrics(in: app, test: self, name: code, expected: expected,
+                                               screenshot: initial, file: file, line: line)
+    }
+    if code == "06" { SensingVisualOracle.assertSavedCaption(in: app, test: self, name: "06-fixture", file: file, line: line) }
   }
 }
