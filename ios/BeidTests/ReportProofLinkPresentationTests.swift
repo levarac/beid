@@ -65,6 +65,10 @@ final class ReportProofLinkPresentationTests: XCTestCase {
     let proofs = seedThreeSessions(in: stores.proofs)
     let record = makeRecord(id: 9, createdAt: 150)
     XCTAssertEqual(stores.links.proofId(forWindowId: record.id), .failure(.unreadable))
+    XCTAssertThrowsError(try ReportProofLinkPresentation.readReports(
+      for: proofs[0], submissionStore: stores.submissions,
+      linkStore: stores.links, proofStore: stores.proofs
+    ).get())
 
     XCTAssertNil(ReportProofLinkPresentation.session(
       for: record, linkStore: stores.links, proofStore: stores.proofs, hasSelfProof: { _ in true }

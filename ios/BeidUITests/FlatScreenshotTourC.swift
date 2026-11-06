@@ -226,7 +226,9 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(app.staticTexts["23"].exists)
     XCTAssertTrue(app.staticTexts["6"].exists)
     XCTAssertFalse(app.staticTexts["MUTUAL"].exists)
-    XCTAssertFalse(app.staticTexts["AVG SIGNAL"].exists)
+    XCTAssertTrue(app.staticTexts["AVG SIGNAL"].exists)
+    XCTAssertTrue(app.staticTexts["WINDOW DURATION"].exists)
+    XCTAssertTrue(app.staticTexts["NOT YET AVAILABLE"].exists)
     XCTAssertFalse(app.staticTexts["INCLUDED IN REPORTS"].exists)
 
     let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -263,11 +265,11 @@ final class FlatScreenshotTourC: XCTestCase {
     // Not a link: 11 opens 12, so a 12 → 11 link would cycle without end.
     XCTAssertFalse(app.buttons["report-detail.session"].exists)
 
-    XCTAssertTrue(app.staticTexts["SESSION PROOF"].exists)
+    XCTAssertTrue(app.staticTexts["SESSION RECORD"].exists)
     let proofRow = app.buttons["report-detail.session-proof"]
     for _ in 0..<5 where !proofRow.isHittable { app.swipeUp() }
     XCTAssertTrue(proofRow.waitForExistence(timeout: 5))
-    XCTAssertTrue(proofRow.label.contains("Session 1 proof"), proofRow.label)
+    XCTAssertTrue(proofRow.label.contains("Record for session 1"), proofRow.label)
     XCTAssertFalse(app.descendants(matching: .any).matching(
       NSPredicate(format: "label CONTAINS[c] %@", "verif")
     ).firstMatch.exists)
@@ -281,7 +283,7 @@ final class FlatScreenshotTourC: XCTestCase {
   func testLinkedSessionListsItsReportAndOtherSessionsDoNot() {
     let app = launchEventDetailFixture(extraArguments: ["-beid-report-links-701"])
     openSession(1, in: app)
-    let included = app.staticTexts["INCLUDED IN REPORTS"]
+    let included = app.staticTexts["OTHER STORED REPORTS"]
     for _ in 0..<5 where !included.isHittable { app.swipeUp() }
     XCTAssertTrue(included.waitForExistence(timeout: 5))
     let report = app.buttons["observation-detail.report.\(Self.linkedReportID)"]
@@ -293,7 +295,7 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(app.staticTexts["event-detail.heading"].waitForExistence(timeout: 5))
     openSession(2, in: app)
     for _ in 0..<3 { app.swipeUp() }
-    XCTAssertFalse(app.staticTexts["INCLUDED IN REPORTS"].exists)
+    XCTAssertFalse(app.staticTexts["OTHER STORED REPORTS"].exists)
     XCTAssertFalse(app.buttons["observation-detail.report.\(Self.linkedReportID)"].exists)
   }
 
@@ -332,7 +334,7 @@ final class FlatScreenshotTourC: XCTestCase {
     for _ in 0..<3 { app.swipeUp() }
     XCTAssertTrue(app.staticTexts["OBSERVATIONS INCLUDED"].exists)
     XCTAssertFalse(app.descendants(matching: .any)["report-detail.session"].exists)
-    XCTAssertFalse(app.staticTexts["SESSION PROOF"].exists)
+    XCTAssertFalse(app.staticTexts["SESSION RECORD"].exists)
     XCTAssertFalse(app.buttons["report-detail.session-proof"].exists)
 
     app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -389,7 +391,8 @@ final class FlatScreenshotTourC: XCTestCase {
     row.tap()
     let title = app.staticTexts["observation-detail.title"]
     XCTAssertTrue(title.waitForExistence(timeout: 5))
-    XCTAssertEqual(title.label, "Session \(number)")
+    let starts: [TimeInterval] = [1_774_486_920, 1_774_498_500, 1_774_510_200]
+    XCTAssertEqual(title.label, Date(timeIntervalSince1970: starts[number - 1]).formatted(date: .omitted, time: .shortened))
   }
 
   private func launchEventDetailFixture(extraArguments: [String]) -> XCUIApplication {
@@ -473,8 +476,13 @@ final class FlatScreenshotTourC: XCTestCase {
     } else if code == "09" {
       XCTAssertTrue(app.staticTexts["proof.detail.title"].exists, file: file, line: line)
       XCTAssertTrue(app.staticTexts["Bound to wallet"].exists, file: file, line: line)
-      XCTAssertTrue(app.buttons["Transparency"].exists, file: file, line: line)
-      XCTAssertTrue(app.buttons["View participation summary"].exists, file: file, line: line)
+      XCTAssertFalse(app.buttons["Transparency"].exists, file: file, line: line)
+      XCTAssertFalse(app.buttons["View participation summary"].exists, file: file, line: line)
+      let externalResult = app.staticTexts["THIRD-PARTY RESULT"]
+      for _ in 0..<4 where !externalResult.isHittable { app.swipeUp() }
+      XCTAssertTrue(externalResult.exists, file: file, line: line)
+      XCTAssertTrue(app.staticTexts["NOT YET AVAILABLE"].exists, file: file, line: line)
+      for _ in 0..<4 { app.swipeDown() }
       XCTAssertFalse(app.staticTexts["FROM REPORTS"].exists, file: file, line: line)
     }
     let initial = XCUIScreen.main.screenshot()
