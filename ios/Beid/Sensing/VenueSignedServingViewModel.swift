@@ -3,6 +3,7 @@
 
 import BeidSharedKit
 import Foundation
+import OSLog
 
 enum VenueBundleURLTemplate {
   static let placeholder = "{eventId}"
@@ -92,6 +93,11 @@ enum VenueLinkFailure: String, CaseIterable, Hashable {
   case unsupportedBundleUrl
 }
 
+enum VenueLeaseDiagnosticStage: String {
+  case evaluation
+  case installation
+}
+
 enum VenueServingStatus: Equatable {
   case idle
   case acquiring
@@ -162,6 +168,8 @@ final class VenueSignedServingViewModel: ObservableObject {
   private let expiry: any VenueExpiryScheduling
   private let canonicalEventIdHex: String?
   private let bundleURLTemplate: String?
+  private let diagnostics: (VenueLeaseDiagnosticStage, VenueServingBlock) -> Void
+  private static let leaseLog = Logger(subsystem: "org.levarac.beid", category: "venue-lease")
 
   /// The effect lease and selected workflow have different lifetimes.
   /// Background revokes a lease but retains the selected public artifact.
@@ -219,7 +227,8 @@ final class VenueSignedServingViewModel: ObservableObject {
     clock: @escaping () -> VenueClockReading,
     expiry: (any VenueExpiryScheduling)? = nil,
     canonicalEventIdHex: String? = nil,
-    bundleURLTemplate: String? = nil
+    bundleURLTemplate: String? = nil,
+    diagnostics: ((VenueLeaseDiagnosticStage, VenueServingBlock) -> Void)? = nil
   ) {
     self.verifier = verifier
     self.broadcasting = broadcasting
@@ -228,6 +237,9 @@ final class VenueSignedServingViewModel: ObservableObject {
     self.clock = clock
     self.canonicalEventIdHex = canonicalEventIdHex
     self.bundleURLTemplate = bundleURLTemplate
+    self.diagnostics = diagnostics ?? { stage, reason in
+      Self.leaseLog.notice("Venue lease blocked: stage=\(stage.rawValue, privacy: .public) reason=\(reason.rawValue, privacy: .public)")
+    }
     // `VenueExpiryTimer` is `@MainActor`; a default-argument expression is not
     // evaluated in the initializer's own isolation, so the default is
     // constructed here in the (main-actor) init body instead of as a parameter
@@ -670,13 +682,13 @@ final class VenueSignedServingViewModel: ObservableObject {
       switch decision {
       case .blocked(let rejection):
         workflow?.stage = .settled
-        status = .blocked(rejection)
+        reportBlocked(rejection, stage: .evaluation)
         scheduleRecheckIfNeeded(for: rejection, generation: lease)
         return
       case .permitted(let permit):
         guard case .available(let now) = clock() else {
           workflow?.stage = .settled
-          status = .blocked(VenueServingRejection(reason: .clockUnavailable)!)
+          reportBlocked(VenueServingRejection(reason: .clockUnavailable)!, stage: .evaluation)
           return
         }
         guard now >= permit.startAtUnixSeconds, now < permit.stopAtUnixSeconds else {
@@ -689,7 +701,13 @@ final class VenueSignedServingViewModel: ObservableObject {
       }
     }
     workflow?.stage = .parked
-    status = .blocked(VenueServingRejection(reason: .expired)!)
+    reportBlocked(VenueServingRejection(reason: .expired)!, stage: .evaluation)
+  }
+
+  /// Diagnostic inputs are categorical so no source or artifact can enter the log.
+  private func reportBlocked(_ rejection: VenueServingRejection, stage: VenueLeaseDiagnosticStage) {
+    status = .blocked(rejection)
+    diagnostics(stage, rejection.reason)
   }
 
   /// `.notStarted` is the one rejection that names its own wake-up instant
@@ -747,13 +765,13 @@ final class VenueSignedServingViewModel: ObservableObject {
     // publishing `.serving` or arming a timer against an expired permit.
     guard case .available(let installedAt) = clock() else {
       clearRadio()
-      status = .blocked(VenueServingRejection(reason: .clockUnavailable)!)
+      reportBlocked(VenueServingRejection(reason: .clockUnavailable)!, stage: .installation)
       return
     }
     guard installedAt >= permit.startAtUnixSeconds,
       installedAt < permit.stopAtUnixSeconds else {
       clearRadio()
-      status = .blocked(VenueServingRejection(reason: .expired)!)
+      reportBlocked(VenueServingRejection(reason: .expired)!, stage: .installation)
       return
     }
 

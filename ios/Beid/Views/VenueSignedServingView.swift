@@ -289,8 +289,9 @@ struct VenueSignedServingView: View {
       if let failure = effectiveRadio.failure {
         statusMessage(message(for: failure))
       }
-      if viewModel.storedSourceDescription != nil, fixtureCode == nil {
-        textAction(isBroadcasting ? "Refresh pack" : "Start broadcasting", identifier: "Refresh pack") {
+      if (viewModel.storedSourceDescription != nil && fixtureCode == nil) || fixtureCode == "14h" {
+        textAction("Reload saved pack", identifier: "Refresh pack") {
+          guard fixtureCode == nil else { return }
           requestTask?.cancel()
           requestTask = Task { await viewModel.restoreFromStorage() }
         }
@@ -302,7 +303,7 @@ struct VenueSignedServingView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, DS.Space.m)
       }
-      Text("A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.")
+      Text("Reloading checks the pack already saved on this device. It does not fetch a replacement. Scan or paste a current link from the organiser to load a new pack.")
         .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
@@ -401,13 +402,6 @@ struct VenueSignedServingView: View {
     .foregroundStyle(DS.Color.textPrimary)
   }
 
-  private var isBroadcasting: Bool {
-    switch effectiveStatus {
-    case .serving, .waitingForBluetooth: return true
-    default: return false
-    }
-  }
-
   private func supply(_ link: String) {
     requestTask?.cancel()
     requestTask = Task { await viewModel.supply(link: link) }
@@ -461,13 +455,14 @@ struct VenueSignedServingView: View {
       let index = arguments.firstIndex(of: "-beid-venue-frame"),
       arguments.indices.contains(index + 1) else { return nil }
     let code = arguments[index + 1]
-    return ["14b", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g"].contains(code) ? code : nil
+    return ["14b", "14d", "14e", "14e2", "14e3", "14f", "14f2", "14f3", "14g", "14h"].contains(code) ? code : nil
     #else
     return nil
     #endif
   }
 
   private var effectiveStatus: VenueServingStatus {
+    if fixtureCode == "14h" { return .blocked(VenueServingRejection(reason: .expired)!) }
     if fixtureCode != nil { return .serving(displayName: "ETH Tokyo 2026", stopAtUnixSeconds: 0) }
     return viewModel.displayStatus(isBluetoothPoweredOff: bluetoothMonitor.isPoweredOff)
   }
@@ -478,6 +473,7 @@ struct VenueSignedServingView: View {
   }
 
   private var effectiveRadio: VenueRadioUpdate {
+    if fixtureCode == "14h" { return VenueRadioUpdate(state: .stopped)! }
     if fixtureCode != nil { return VenueRadioUpdate(state: .advertisingRequested)! }
     return viewModel.radio
   }
@@ -562,11 +558,11 @@ struct VenueSignedServingView: View {
     case .notStarted:
       return "This event has not started yet."
     case .expired:
-      return "This pack's current period has ended. Refresh it."
+      return "This pack's current period has ended. Scan or paste a current link from the organiser."
     case .noCurrentEnvelope:
-      return "This pack covers no part of right now."
+      return "This pack covers no part of right now. Scan or paste a current link from the organiser."
     case .envelopeRejected:
-      return "The part of this pack covering right now did not check out."
+      return "The part of this pack covering right now did not check out. Ask the organiser for a current link."
     case .staleDefinition:
       return "This event has been updated. Ask the organiser for a current link."
     case .registryUnavailable:

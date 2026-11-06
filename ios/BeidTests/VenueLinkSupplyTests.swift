@@ -18,6 +18,8 @@ final class VenueLinkSupplyTests: XCTestCase {
   private var acquisition: StubVenueArtifactAcquisition!
   private var store: VenuePublicArtifactStore!
   private var fixture: VenueServingContractFixture!
+  private var expiry: FakeVenueExpiryScheduler!
+  private var clockReading: VenueClockReading!
 
   private static let bundleUrl = "https://artifacts.example/artifacts/venue-bundles/abc"
 
@@ -27,16 +29,21 @@ final class VenueLinkSupplyTests: XCTestCase {
     acquisition = StubVenueArtifactAcquisition()
     store = makeTemporaryArtifactStore()
     fixture = try VenueServingContractFixture.load()
+    expiry = FakeVenueExpiryScheduler()
+    clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds)
   }
 
-  private func makeViewModel() -> VenueSignedServingViewModel {
+  private func makeViewModel(
+    diagnostics: ((VenueLeaseDiagnosticStage, VenueServingBlock) -> Void)? = nil
+  ) -> VenueSignedServingViewModel {
     VenueSignedServingViewModel(
       verifier: ports,
       broadcasting: ports,
       acquisition: acquisition,
       store: store,
-      clock: { .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds) },
-      expiry: FakeVenueExpiryScheduler()
+      clock: { [unowned self] in self.clockReading },
+      expiry: expiry,
+      diagnostics: diagnostics
     )
   }
 
@@ -304,6 +311,159 @@ final class VenueLinkSupplyTests: XCTestCase {
     // link that is no longer the subject.
     XCTAssertNil(viewModel.linkFailure)
     XCTAssertNil(viewModel.linkEventIdHex)
+  }
+
+  // MARK: - Current-link authority and exclusive deadlines
+
+  private func linkedArtifact(url: String? = nil) -> VenuePublicArtifact {
+    VenuePublicArtifact(bundleBytes: fixture.artifact.bundleBytes,
+                        handoffBytes: Self.handoffWithBundleUrl(fixture.artifact.handoffBytes, url: url ?? Self.bundleUrl))
+  }
+
+  private func imported(_ artifact: VenuePublicArtifact) -> VenueImportedBundle {
+    VenueServingContractTestFactory.imported(identity: fixture.identity, publicArtifact: artifact)
+  }
+
+  private func nextPermit() -> VenueServePermit {
+    VenueServingContractTestFactory.permit(
+      identity: fixture.identity, container: Data([0x22]), displayName: "Sample renewed event",
+      payloadDigestHex: VenueServingContractFixture.payloadDigestHex,
+      currentEnin: VenueServingContractFixture.currentEnin + 1,
+      startAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds,
+      stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds + 300
+    )
+  }
+
+  func testLeaseExpiryDiagnosticsContainOnlyTheStageAndCategoricalReason() async throws {
+    let artifact = linkedArtifact()
+    var messages: [String] = []
+    let model = makeViewModel { stage, reason in
+      messages.append("\(stage.rawValue):\(reason.rawValue)")
+    }
+    acquisition.replies = [.artifact(artifact)]
+    ports.importReplies = [.immediate(.imported(imported(artifact)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    await model.supply(link: Self.link(base: Self.bundleUrl, handoff: artifact.handoffBytes))
+    XCTAssertTrue(messages.isEmpty)
+
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    ports.evaluationReplies = [.immediate(.blocked(try XCTUnwrap(VenueServingRejection(reason: .expired))))]
+    await expiry.fireAndWait()
+
+    XCTAssertEqual(messages, ["evaluation:expired"])
+    XCTAssertFalse(messages.joined().contains(Self.bundleUrl))
+    XCTAssertFalse(messages.joined().contains(VenueServingContractFixture.eventIdHex))
+    XCTAssertFalse(messages.joined().contains(VenueServingContractFixture.displayName))
+    XCTAssertNil(ports.installedPermit)
+  }
+
+  func testChangedBundleNeverReplacesTheImmutableLinkAuthority() async throws {
+    let artifact = linkedArtifact()
+    // The transport has no authority to supply replacement fragment bytes.
+    let changed = VenuePublicArtifact(bundleBytes: Data([0x31]), handoffBytes: Data([0x32]))
+    acquisition.replies = [.artifact(changed)]
+    ports.importReplies = [.immediate(.rejected(.handoffMismatch))]
+    let model = makeViewModel()
+
+    await model.supply(link: Self.link(base: Self.bundleUrl, handoff: artifact.handoffBytes))
+
+    XCTAssertTrue(ports.calls.contains(.importing(id: 0, bundle: changed.bundleBytes,
+                                                handoff: artifact.handoffBytes)))
+    XCTAssertEqual(model.status, .importRejected(.handoffMismatch))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+    XCTAssertEqual(acquisition.requestedSources.count, 1)
+    XCTAssertNil(acquisition.requestedSources.first?.handoff)
+  }
+
+  func testLinkAdjacentIntervalRequiresFreshPermitAndFinalExpiryStopsWithoutGuessingASource() async throws {
+    let artifact = linkedArtifact()
+    acquisition.replies = [.artifact(artifact)]
+    ports.importReplies = [.immediate(.imported(imported(artifact)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    let model = makeViewModel()
+    await model.supply(link: Self.link(base: Self.bundleUrl, handoff: artifact.handoffBytes))
+    XCTAssertEqual(model.status, .serving(displayName: fixture.permit().displayName,
+                                        stopAtUnixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds))
+
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    ports.evaluationReplies = [.immediate(.permitted(nextPermit()))]
+    await expiry.fireAndWait()
+    XCTAssertEqual(ports.installedPermit?.container, Data([0x22]))
+    XCTAssertEqual(model.status, .serving(displayName: "Sample renewed event",
+                                        stopAtUnixSeconds: VenueServingContractFixture.currentUnixSeconds + 600))
+    XCTAssertEqual(expiry.scheduledStopAt, VenueServingContractFixture.currentUnixSeconds + 600)
+
+    clockReading = .available(unixSeconds: VenueServingContractFixture.currentUnixSeconds + 600)
+    ports.evaluationReplies = [.immediate(.blocked(try XCTUnwrap(VenueServingRejection(reason: .envelopeRejected))))]
+    let callsBefore = ports.calls.count
+    await expiry.fireAndWait()
+    XCTAssertEqual(ports.calls[callsBefore], .clearing)
+    XCTAssertEqual(model.status, .blocked(try XCTUnwrap(VenueServingRejection(reason: .envelopeRejected))))
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+    XCTAssertEqual(acquisition.requestedSources.count, 1, "a fragment supplies no replacement authority endpoint")
+  }
+
+  func testFreshLinkCanRecoverAfterExpiryWithoutReusingTheOldFragmentOrPermit() async throws {
+    let original = linkedArtifact()
+    acquisition.replies = [.artifact(original)]
+    ports.importReplies = [.immediate(.imported(imported(original)))]
+    ports.evaluationReplies = [.immediate(.permitted(fixture.permit()))]
+    let model = makeViewModel()
+    await model.supply(link: Self.link(base: Self.bundleUrl, handoff: original.handoffBytes))
+    clockReading = .available(unixSeconds: VenueServingContractFixture.exclusiveStopUnixSeconds)
+    ports.evaluationReplies = [.immediate(.blocked(try XCTUnwrap(VenueServingRejection(reason: .expired))))]
+    await expiry.fireAndWait()
+    XCTAssertNil(ports.installedPermit)
+    XCTAssertFalse(expiry.isScheduled)
+
+    let freshURL = "https://artifacts.example/current-bundle"
+    let fresh = VenuePublicArtifact(bundleBytes: Data([0x41]), handoffBytes: linkedArtifact(url: freshURL).handoffBytes)
+    XCTAssertNotEqual(fresh.handoffBytes, original.handoffBytes)
+    acquisition.replies = [.artifact(fresh)]
+    ports.importReplies = [.immediate(.imported(imported(fresh)))]
+    ports.evaluationReplies = [.immediate(.permitted(nextPermit()))]
+    await model.supply(link: Self.link(base: freshURL, handoff: fresh.handoffBytes))
+
+    XCTAssertEqual(acquisition.requestedSources.last?.bundle.absoluteString, freshURL)
+    XCTAssertEqual(store.record?.handoffBytes, fresh.handoffBytes)
+    XCTAssertTrue(ports.calls.contains {
+      if case .importing(_, let bundle, let carriedBytes) = $0 {
+        return bundle == fresh.bundleBytes && carriedBytes == fresh.handoffBytes
+      }
+      return false
+    })
+    XCTAssertEqual(ports.installedPermit?.container, Data([0x22]))
+    model.stop()
+  }
+
+  func testLateLinkAcquisitionAfterStopBackgroundOrReplacementCannotResumeBroadcasting() async throws {
+    let artifact = linkedArtifact()
+    for interruption in ["stop", "background", "replacement"] {
+      ports = ScriptedVenuePorts()
+      acquisition = StubVenueArtifactAcquisition()
+      expiry = FakeVenueExpiryScheduler()
+      let model = makeViewModel()
+      acquisition.replies = [.deferred]
+      let pending = Task { await model.supply(link: Self.link(base: Self.bundleUrl, handoff: artifact.handoffBytes)) }
+      await acquisition.waitForAcquisitionCount(1)
+      let request = try XCTUnwrap(acquisition.pendingAcquisitionIDs.first)
+      if interruption == "stop" { model.stop() }
+      if interruption == "background" { model.sceneDidEnterBackground() }
+      if interruption == "replacement" {
+        acquisition.replies = [.failure(.transportFailure)]
+        await model.supply(link: Self.link(base: Self.bundleUrl, handoff: artifact.handoffBytes))
+      }
+      let callsBefore = ports.calls.count
+      XCTAssertTrue(acquisition.completeAcquisition(id: request, with: artifact))
+      await pending.value
+      XCTAssertEqual(ports.calls.count, callsBefore, interruption)
+      XCTAssertNil(ports.installedPermit, interruption)
+      XCTAssertFalse(expiry.isScheduled, interruption)
+      if interruption == "background" { XCTAssertEqual(model.status, .idle) }
+      model.stop()
+    }
   }
 
   // MARK: - Fixtures
