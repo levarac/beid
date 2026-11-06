@@ -2782,10 +2782,9 @@ final class SensingCoordinator: ObservableObject {
         nowEpochSeconds: nowEpochSeconds
       )
     else {
-      // Ask the shared decision *why*, so the refusal is diagnosable rather
-      // than merely a refusal. The verdict is logged rather than mapped to a
-      // case: its generated Swift surface has no name, description or
-      // equality — see `EventJoinRefusal`.
+      // Ask the shared decision why and map its verdict to the stable reason
+      // key before categorical logging. Swift Export exposes no enum name or
+      // equality here — see `EventJoinRefusal`.
       let verdict = ExportedKotlinPackages.org.levarac.parallax.discovery
         .operatorLookupJoinEligibility(
           joinCode: joinCode,
@@ -2863,14 +2862,10 @@ final class SensingCoordinator: ObservableObject {
   /// Only `definitionNotEligible` has a verdict of its own; the rest are
   /// classified from what was available when the read was attempted.
   ///
-  /// `registryReadFailed` is `UNKNOWN` rather than `NETWORK_REQUIRED`, which
-  /// is the tempting answer: the definition read only runs once the
-  /// code-to-id lookup already succeeded, so a device that cannot reach the
-  /// network fails earlier and arrives here as `noCanonicalEventId` carrying
-  /// the lookup's own error code. Reaching this branch means an answer came
-  /// back carrying no definition. Carrying the *definition* read's error code
-  /// through as well would let it say more; the adapter currently collapses a
-  /// failed read to nil, and changing that is its own change.
+  /// These are fallbacks for callers without a classified reason key.
+  /// Registry-read failures normally carry the definition read's shared
+  /// error-code classification; eligibility refusals carry the verdict's
+  /// shared reason key. A read failure without that key falls back to UNKNOWN.
   private static func sharedReason(
     for refusal: EventJoinRefusal,
     lookupErrorCode: String?
@@ -3225,7 +3220,12 @@ final class SensingCoordinator: ObservableObject {
             )
           self.refuseJoin(
             .definitionNotEligible,
-            "Current nearby candidate is not eligible (\(String(describing: verdict))); starting nothing."
+            "Current nearby candidate is not eligible (\(String(describing: verdict))); starting nothing.",
+            reasonKey: BeidSharedKit.event.eventJoinFailureReasonKey(
+              reason: BeidSharedKit.event.eventJoinFailureReasonForJoinEligibility(
+                eligibility: verdict
+              )
+            )
           )
           return
         }
