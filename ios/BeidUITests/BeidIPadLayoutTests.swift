@@ -45,7 +45,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     let permission = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(permission.waitForExistence(timeout: 5))
     permission.tap()
-    let records = app.tabBars.buttons["Records"]
+    let records = app.tabButton("Records")
     XCTAssertTrue(records.waitForExistence(timeout: 5))
     records.tap()
     let grid = app.scrollViews["records.grid"]
@@ -226,7 +226,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.collectionViews["records.events"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.firstMatch.tap()
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
-    app.tabBars.buttons["Now"].tap()
+    app.tabButton("Now").tap()
 
     XCTAssertTrue(resumedSenseEvent.waitForExistence(timeout: 5))
     resumedSenseEvent.tap()
