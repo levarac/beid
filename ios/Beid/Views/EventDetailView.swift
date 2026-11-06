@@ -5,8 +5,8 @@ import BeidSharedKit
 import SwiftUI
 
 /// Flat 2b screen 08. An event here is a group of stored recording Proofs;
-/// no event schedule is stored. Report-to-session links (beid#701) are shown
-/// on 09, 11 and 12; this screen does not show them yet (OD-9).
+/// no event schedule is stored. Each session's report status uses its own
+/// UUID links; report details with known windows live inside that session.
 struct EventDetailView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject private var sensing: SensingCoordinator
@@ -123,12 +123,12 @@ struct EventDetailView: View {
     } label: {
       VStack(alignment: .leading, spacing: DS.Space.xs) {
         HStack(alignment: .firstTextBaseline) {
-          Text(SessionDisplay.title(index))
+          Text(proof.date.formatted(date: .omitted, time: .shortened))
             .beidTextStyle(DS.Font.Library.title15)
             .foregroundStyle(DS.Color.textPrimary)
           Spacer(minLength: DS.Space.s)
-          Text(proof.date.formatted(date: .omitted, time: .shortened))
-            .beidTextStyle(DS.Font.Library.labelMono11Time)
+          Text(sessionStatus(proof))
+            .beidTextStyle(DS.Font.Library.labelMono10)
             .foregroundStyle(DS.Color.textPrimary)
         }
         Text(sessionMeasurements(aggregate))
@@ -141,11 +141,21 @@ struct EventDetailView: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel(String(
-      localized: "observationDetail.openSession",
-      defaultValue: "Open observations for session \(index)",
+      localized: "record.openSession",
+      defaultValue: "Open session \(index), \(proof.date.formatted(date: .omitted, time: .shortened)), \(sessionStatus(proof))",
       comment: "VoiceOver label for an Event Detail session row that opens this recording session's observations."
     ))
     .accessibilityIdentifier("event-detail.observation.\(index)")
+  }
+
+  private func sessionStatus(_ proof: Proof) -> String {
+    switch ReportProofLinkPresentation.readReports(
+      for: proof, submissionStore: submissionStore,
+      linkStore: coordinator.reportProofLinkStore, proofStore: proofStore
+    ) {
+    case .failure: return String(localized: "REPORT STATUS UNAVAILABLE")
+    case .success(let reports): return ReportProgressPresentation(records: reports.map(\.record)).summary
+    }
   }
 
   private func sessionMeasurements(_ aggregate: BeidSharedKit.aggregation.SessionAggregate?) -> String {
@@ -168,11 +178,22 @@ struct EventDetailView: View {
             .beidTextStyle(DS.Font.Library.body13)
             .foregroundStyle(DS.Color.textSecondary)
         case .success(let records):
-          sectionLabel(records.isEmpty ? String(localized: "Reports") : reportHeading(records.count))
+          let otherReports = Array(records.enumerated()).filter { entry in
+            let record = entry.element
+            guard let session = ReportProofLinkPresentation.session(
+              for: record, linkStore: coordinator.reportProofLinkStore, proofStore: proofStore,
+              hasSelfProof: { sensing.selfProofRecord(forProofId: $0) != nil }
+            ), let index = sensing.observedWindowIndex(forWindowID: record.id),
+               let data = ObservationDetailPresentation(aggregate: sensing.sessionAggregateSnapshot(forProofId: session.proof.id))
+            else { return true }
+            return !data.windows.contains { $0.windowIndex == index }
+          }
           if records.isEmpty {
+            sectionLabel(String(localized: "Reports"))
             noReports
-          } else {
-            ForEach(Array(records.enumerated()), id: \.element.id) { index, record in
+          } else if !otherReports.isEmpty {
+            sectionLabel(String(localized: "OTHER STORED REPORTS"))
+            ForEach(otherReports, id: \.element.id) { index, record in
               hairline
               EventReportRow(
                 ordinal: index + 1,
@@ -189,7 +210,7 @@ struct EventDetailView: View {
         }
       } else {
         sectionLabel(String(localized: "Reports"))
-        Text("Reports unavailable for this older proof")
+        Text("Reports unavailable for this older record")
           .beidTextStyle(DS.Font.Library.body13)
           .foregroundStyle(DS.Color.textSecondary)
       }
@@ -224,65 +245,46 @@ struct EventDetailView: View {
       .foregroundStyle(DS.Color.textSecondary)
   }
 
-  private var proofs: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      Text(proofHeading)
-        .beidTextStyle(DS.Font.Library.labelMono10)
-        .foregroundStyle(DS.Color.textSecondary)
-        .padding(.bottom, DS.Space.s)
-      ForEach(Array(sessions.enumerated()), id: \.element.id) { index, proof in
-        let state = SessionDisplay.proofState(
-          hasSelfProof: sensing.selfProofRecord(forProofId: proof.id) != nil
-        )
+  @ViewBuilder private var proofs: some View {
+    // The single event entry keeps the earliest session's existing UUID.
+    // Its detail names that selected session; other sessions remain separate.
+    if let anchor = sessions.first, proofStore.proof(withId: anchor.id) != nil {
+      let state = SessionDisplay.proofState(hasSelfProof: sensing.selfProofRecord(forProofId: anchor.id) != nil)
+      VStack(alignment: .leading, spacing: 0) {
+        Text(String(localized: "record.event.count", defaultValue: "RECORDS · 1"))
+          .beidTextStyle(DS.Font.Library.labelMono10)
+          .foregroundStyle(DS.Color.textSecondary)
+          .padding(.bottom, DS.Space.s)
         hairline
         NavigationLink {
-          ItemDetailView(proof: proof)
+          ItemDetailView(proof: anchor)
         } label: {
           HStack(spacing: DS.Space.m) {
-            RecordSigilSlot(
-              input: sensing.sigilInput(forProofId: proof.id),
-              placement: .eventDetailRow
-            )
+            RecordSigilSlot(input: sensing.sigilInput(forProofId: anchor.id), placement: .eventDetailRow, isDeviceRecord: true)
             VStack(alignment: .leading, spacing: DS.Space.xs) {
-              Text(SessionDisplay.proofTitle(index + 1))
-                .beidTextStyle(DS.Font.Library.title15)
-                .foregroundStyle(DS.Color.textPrimary)
-              Text(state)
+              Text("Attendance Record").beidTextStyle(DS.Font.Library.title15)
+              Text(String(localized: "record.event.sessions", defaultValue: "SESSIONS · \(sessions.count)"))
                 .beidTextStyle(DS.Font.Library.labelMono10)
                 .foregroundStyle(DS.Color.textSecondary)
             }
             Spacer(minLength: 0)
-            Text("→")
-              .beidTextStyle(DS.Font.Library.labelMono11Time)
-              .foregroundStyle(DS.Color.textPrimary)
-              .accessibilityHidden(true)
+            Text("→").beidTextStyle(DS.Font.Library.labelMono11Time).accessibilityHidden(true)
           }
+          .foregroundStyle(DS.Color.textPrimary)
           .frame(minHeight: DS.Size.proofRowMinHeight)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(proofAccessibilityLabel(index + 1, state: state))
-        .accessibilityIdentifier("event-detail.proof.\(index + 1)")
+        .accessibilityLabel(String(
+          localized: "record.openEventRecord", defaultValue: "Open record, selected session 1, \(state)"
+        ))
+        .accessibilityIdentifier("event-detail.proof.1")
+        hairline
       }
-      hairline
+    } else {
+      Text("RECORDS · 0").beidTextStyle(DS.Font.Library.labelMono10)
+      Text("No records are stored for this event.").beidTextStyle(DS.Font.Library.body13)
     }
-  }
-
-  private var proofHeading: String {
-    let count = sessions.count
-    return String(
-      localized: "eventDetail.proofs.count",
-      defaultValue: "PROOFS · \(count)",
-      comment: "Section label and number of stored recording Proofs for this event."
-    )
-  }
-
-  private func proofAccessibilityLabel(_ index: Int, state: String) -> String {
-    String(
-      localized: "eventDetail.proof.accessibilityLabel",
-      defaultValue: "Open proof for session \(index), \(state)",
-      comment: "VoiceOver label for a Proof row. State comes only from a matching self-proof signature record."
-    )
   }
 
   private var hairline: some View {

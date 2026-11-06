@@ -640,6 +640,24 @@ final class SigilViewTests: XCTestCase {
     )
   }
 
+  func testDeviceRecordSummaryDoesNotTreatMutualityAsAMeasuredCount() {
+    for includesSyntheticMutual in [false, true] {
+      var entries: [Entry] = [(key: "detected", window: 0, presence: 1)]
+      if includesSyntheticMutual { entries.append((key: "mutual", window: 2, presence: 2)) }
+      let layout = BeidSharedKit.sigil.layoutSigil(
+        input: makeInput(windowCount: 3, entries), size: Self.fullSize, ground: .DISC
+      )
+      XCTAssertEqual(
+        SigilDrawing.recordAccessibilitySummary(for: layout),
+        "Mutual not available, 1 detected, window 3"
+      )
+      XCTAssertEqual(
+        SigilDrawing.accessibilitySummary(for: layout),
+        includesSyntheticMutual ? "1 mutual, 1 detected, window 3" : "0 mutual, 1 detected, window 3"
+      )
+    }
+  }
+
   /// A failed layout is hidden from VoiceOver, and still reports zeros
   /// rather than stale or invented counts if anything ever un-hides it.
   ///

@@ -69,19 +69,27 @@ final class NowNavigationUITests: XCTestCase {
     XCTAssertEqual(repeatedEvent.count, 1)
     repeatedEvent.firstMatch.tap()
     app.staticTexts["proof.detail.title"].assertExists()
-    let summary = app.buttons["View participation summary"]
-    summary.scrollToHittable(in: app)
-    summary.tap()
-    app.staticTexts["2 sessions recorded for this event"].assertExists()
-    let sessions = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not yet available"))
+    let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "record.session."))
+    sessions.firstMatch.scrollToHittable(in: app)
     XCTAssertEqual(sessions.count, 2, "Both stored sessions must remain accessible from the event record")
-    for index in 0..<2 {
-      let session = sessions.element(boundBy: index)
+    let identifiers = sessions.allElementsBoundByIndex.map(\.identifier)
+    XCTAssertEqual(Set(identifiers).count, 2)
+    for identifier in identifiers {
+      let session = app.buttons[identifier]
       session.scrollToHittable(in: app)
       session.tap()
-      app.staticTexts["Devices mutually confirmed"].assertExists()
+      app.staticTexts["observation-detail.title"].assertExists()
+      app.staticTexts["observation-detail.unavailable"].assertExists()
+      let ownRecord = app.buttons["View this session's record"]
+      ownRecord.scrollToHittable(in: app)
+      ownRecord.tap()
+      app.staticTexts["proof.detail.title"].assertExists()
+      let recordID = String(identifier.dropFirst("record.session.".count))
+      app.staticTexts.matching(NSPredicate(format: "label == %@", "Record ID \(recordID)")).firstMatch.assertExists()
       app.navigationBars.buttons.firstMatch.tap()
-      app.staticTexts["2 sessions recorded for this event"].assertExists()
+      app.staticTexts["observation-detail.title"].assertExists()
+      app.navigationBars.buttons.firstMatch.tap()
+      app.staticTexts["proof.detail.title"].assertExists()
     }
   }
 
