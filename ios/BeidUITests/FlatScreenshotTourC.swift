@@ -128,6 +128,17 @@ final class FlatScreenshotTourC: XCTestCase {
 
   func testSelectingObservedWindowExposesThatSelection() {
     let app = launchObservationFixture()
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    let fullSigil = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label ENDSWITH %@", "23 detected, window 6")
+    ).firstMatch
+    fullSigil.assertExists()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.staticTexts["event-detail.heading"].assertExists()
+
     let session = app.buttons["event-detail.observation.1"]
     session.scrollToHittable(in: app)
     session.tap()
@@ -141,15 +152,46 @@ final class FlatScreenshotTourC: XCTestCase {
     ).firstMatch
     fourthWindow.assertHittable()
     fourthWindow.tap()
-    XCTAssertTrue(fourthWindow.isSelected, "A tapped observed window must expose its selected state")
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(
+        NSPredicate(format: "label ENDSWITH %@", "23 detected, window 4")
+      ).firstMatch.exists,
+      "Selected window 4 must render four observed windows from stored Sigil input"
+    )
+    XCTAssertTrue(fourthWindow.isSelected)
 
     let firstWindow = app.descendants(matching: .any).matching(
       NSPredicate(format: "label == %@", "Observed window 1; peer count 4")
     ).firstMatch
     firstWindow.assertHittable()
     firstWindow.tap()
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(
+        NSPredicate(format: "label ENDSWITH %@", "4 detected, window 1")
+      ).firstMatch.exists,
+      "Selected window 1 must exclude peers first observed in later windows"
+    )
     XCTAssertTrue(firstWindow.isSelected)
     XCTAssertFalse(fourthWindow.isSelected)
+
+    let secondWindow = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label == %@", "Observed window 2; peer count 8")
+    ).firstMatch
+    secondWindow.assertHittable()
+    secondWindow.tap()
+    XCTAssertTrue(
+      app.descendants(matching: .any).matching(
+        NSPredicate(format: "label ENDSWITH %@", "12 detected, window 2")
+      ).firstMatch.exists,
+      "Selected window 2 must include only the first two observed windows"
+    )
+    XCTAssertTrue(secondWindow.isSelected)
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.staticTexts["event-detail.heading"].assertExists()
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    fullSigil.assertExists()
   }
 
   func testDisclosureDescribesASignatureWithoutPresenceClaims() {

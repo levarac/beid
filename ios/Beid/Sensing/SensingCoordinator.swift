@@ -622,8 +622,8 @@ final class SensingCoordinator: ObservableObject {
     }
   }
 
-  /// Six observed rows, with one unobserved ENIN gap, for frame 11. The
-  /// isolated screenshot snapshot store is the only output; this never
+  /// Six observed rows, with one unobserved ENIN gap, for frame 11. Only
+  /// isolated aggregate and Sigil display stores are written; this never
   /// enters Barnard, ProofStore, signing, or report submission.
   func injectObservationDetailSnapshotForUITesting(
     proofId: UUID,
@@ -652,10 +652,22 @@ final class SensingCoordinator: ObservableObject {
     let aggregate = BeidSharedKit.aggregation.aggregateObservationsForSession(
       input: input, windowsPerBand: 1
     )
+    let presence = BeidSharedKit.sigil.createSigilPresenceSession()
+    let tokenCount = Int(BeidSharedKit.sigil.sigilPresenceTokensNeeded(
+      session: presence, observations: input
+    ))
+    for index in 0..<tokenCount {
+      let added = BeidSharedKit.sigil.addSigilPresenceToken(
+        session: presence, observations: input,
+        token: String(format: "%032lx", index + 1)
+      )
+      precondition(added, "Unable to prepare isolated Sigil fixture")
+    }
     do {
       try sessionAggregateSnapshotStore.persist(aggregate: aggregate, proofId: proofId)
+      try sigilPresenceStore.persist(session: presence, observations: input, proofId: proofId)
     } catch {
-      assertionFailure("Unable to persist isolated Observation Detail aggregate fixture: \(error)")
+      assertionFailure("Unable to persist isolated Observation Detail display fixture: \(error)")
     }
   }
   #endif
