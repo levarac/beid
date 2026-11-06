@@ -132,7 +132,6 @@ struct ItemDetailView: View {
             .padding(.top, DS.Space.l + DS.Space.xs)
 
           VStack(spacing: 0) {
-            keyValueRow(String(localized: "METHOD"), value: presentation.method)
             keyValueRow(
               String(localized: "RECORD ID"),
               value: RecordIDDisplay.abbreviated(proof.id),
@@ -143,7 +142,7 @@ struct ItemDetailView: View {
                 comment: "VoiceOver reads the complete Proof UUID even though the visible record ID is abbreviated."
               )
             )
-            keyValueRow(String(localized: "STATUS"), value: presentation.status)
+            keyValueRow(String(localized: "METHOD"), value: presentation.method)
             keyValueRow(String(localized: "SIGNATURE"), value: presentation.signature)
             keyValueRow(String(localized: "WITH"), value: presentation.withValue)
           }
