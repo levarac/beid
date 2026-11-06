@@ -125,6 +125,7 @@ struct SensingSealedView: View {
           VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("DONE · YOU CAN CLOSE THE APP")
               .beidTextStyle(DS.Font.Library.labelMono10)
+              .foregroundStyle(DS.Color.labelOnActionPrimary)
             Text("Your record is saved on this phone. You can close the app.")
               .beidTextStyle(DS.Font.Library.body13)
               .foregroundStyle(DS.Color.textSecondaryOnInk)

@@ -557,6 +557,9 @@ struct SensingSessionSurface: View {
             .frame(width: contentWidth)
             .padding(.top, DS.Space.m)
 
+            metrics(at: now)
+              .padding(.top, DS.Space.m)
+
             SensingWindowBars(aggregate: sensing.sessionAggregate, firstSightingAt: sensing.firstSightingAt)
               .accessibilityHidden(true)
               .frame(width: contentWidth)
@@ -566,9 +569,6 @@ struct SensingSessionSurface: View {
               .fill(DS.Color.strokeHairlineOnInk)
               .frame(width: contentWidth, height: DS.Size.hairline)
               .padding(.top, DS.Space.l)
-
-            metrics(at: now)
-              .padding(.top, DS.Space.m)
 
             if EventIdentityVerificationPresentation.forStatus(event.identityVerification) != nil {
               BeidPanel {
