@@ -72,6 +72,15 @@ struct ObservationDetailView: View {
   let proof: Proof
   let sessionNumber: Int
   let aggregate: BeidSharedKit.aggregation.SessionAggregate?
+  var initialWindowIndex: Int64? = nil
+  var initialReportID: UUID? = nil
+  @State private var selectedWindowIndex: Int64? = nil
+
+  private var selectedWindow: ObservationDetailWindow? {
+    guard let presentation else { return nil }
+    let index = selectedWindowIndex ?? initialWindowIndex ?? presentation.windows.last?.windowIndex
+    return presentation.windows.first { $0.windowIndex == index }
+  }
 
   private var presentation: ObservationDetailPresentation? {
     ObservationDetailPresentation(aggregate: aggregate)
@@ -81,13 +90,13 @@ struct ObservationDetailView: View {
     ScrollView {
       BeidAdaptiveContent {
         VStack(alignment: .leading, spacing: 0) {
-          Text(sessionTitle)
+          Text(proof.date.formatted(date: .omitted, time: .shortened))
             .beidTextStyle(DS.Font.Library.display46)
             .foregroundStyle(DS.Color.textPrimary)
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("observation-detail.title")
 
-          Text(verbatim: proof.date.formatted(.dateTime.month(.abbreviated).day().year()).uppercased())
+          Text(verbatim: "\(sessionTitle) · \(proof.date.formatted(.dateTime.month(.abbreviated).day().year()))")
             .beidTextStyle(DS.Font.Library.labelMono10)
             .foregroundStyle(DS.Color.textSecondary)
             .padding(.top, DS.Space.s + DS.Space.xs)
@@ -95,8 +104,14 @@ struct ObservationDetailView: View {
           if let presentation {
             observedWindowsChart(presentation)
               .padding(.top, DS.Space.xl)
+            if let selectedWindow {
+              selectedWindowContent(selectedWindow, presentation: presentation)
+                .padding(.top, DS.Space.l)
+            }
             sensingData(presentation)
               .padding(.top, DS.Space.xxl)
+            timeBands
+              .padding(.top, DS.Space.l)
           } else {
             Text("Measurements unavailable")
               .beidTextStyle(DS.Font.Library.body13)
@@ -105,20 +120,19 @@ struct ObservationDetailView: View {
               .accessibilityIdentifier("observation-detail.unavailable")
           }
 
-          // One session is one Proof, so these are the reports closed in it.
-          LinkedReportsSection(
-            heading: String(
-              localized: "observationDetail.includedInReports",
-              defaultValue: "INCLUDED IN REPORTS",
-              comment: "Section listing the stored reports whose observation window was closed in this recording session. No count is shown."
-            ),
-            identifierPrefix: "observation-detail.report",
-            proof: proof,
-            submissionStore: coordinator.reportSubmissionStore,
-            proofStore: coordinator.proofStore,
-            linkStore: coordinator.reportProofLinkStore,
-            sensing: coordinator.sensingCoordinator
+          SessionWindowReports(
+            proof: proof, windowIndex: selectedWindow?.windowIndex,
+            observedIndices: Set(presentation?.windows.map(\.windowIndex) ?? []),
+            selectedReportID: initialReportID,
+            submissionStore: coordinator.reportSubmissionStore, proofStore: coordinator.proofStore,
+            linkStore: coordinator.reportProofLinkStore, sensing: coordinator.sensingCoordinator
           )
+          .padding(.top, DS.Space.l)
+          NavigationLink { ItemDetailView(proof: proof) } label: {
+            BeidTextControlLabel("VIEW THIS SESSION'S RECORD", glyph: .trailing("→", announcing: "View this session's record"))
+          }
+          .buttonStyle(.plain)
+          .padding(.top, DS.Space.l)
         }
         .padding(.horizontal, DS.Space.pageMargin)
         .padding(.top, DS.Space.s)
@@ -144,16 +158,19 @@ struct ObservationDetailView: View {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(alignment: .bottom, spacing: DS.Size.observationChartBarGap) {
           ForEach(presentation.windows) { window in
-            Rectangle()
-              // D-627 notes the Figma chart-muted #D9D9DE is 1.41:1 on white.
-              // This local blend is approximately #92929A, 3.09:1.
-              .fill(DS.Color.textSecondary.opacity(0.75))
-              .frame(
-                width: DS.Size.observationChartBarWidth,
-                height: barHeight(window.peerCount, in: presentation)
-              )
-              .frame(height: DS.Size.observationChartHeight, alignment: .bottom)
-              .accessibilityLabel(accessibilityLabel(for: window))
+            Button {
+              selectedWindowIndex = window.windowIndex
+            } label: {
+              Rectangle()
+                .fill(selectedWindow?.windowIndex == window.windowIndex ? DS.Color.textPrimary : DS.Color.textSecondary.opacity(0.75))
+                .frame(width: DS.Size.observationChartBarWidth, height: barHeight(window.peerCount, in: presentation))
+                .frame(height: DS.Size.observationChartHeight, alignment: .bottom)
+                .frame(minWidth: DS.Size.minHitTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel(for: window))
+            .accessibilityAddTraits(selectedWindow?.windowIndex == window.windowIndex ? .isSelected : [])
           }
         }
         .frame(minHeight: DS.Size.observationChartHeight, alignment: .bottom)
@@ -163,6 +180,60 @@ struct ObservationDetailView: View {
       .accessibilityElement(children: .contain)
       .accessibilityIdentifier("observation-detail.chart")
     }
+  }
+
+  private func selectedWindowContent(
+    _ window: ObservationDetailWindow,
+    presentation: ObservationDetailPresentation
+  ) -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.m) {
+      Text(String(localized: "record.selectedWindow", defaultValue: "WINDOW \(window.ordinal)"))
+        .beidTextStyle(DS.Font.Library.labelMono10)
+      if let input = presentation.selectedSigilInput(
+        storedInput: coordinator.sensingCoordinator.sigilInput(forProofId: proof.id),
+        storedProofID: proof.id, selectedProofID: proof.id, throughWindowIndex: window.windowIndex
+      ) {
+        RecordSigilSlot(input: input, placement: .proofDetail)
+          .frame(maxWidth: .infinity)
+      } else {
+        Text("Artwork is not available for this window.")
+          .beidTextStyle(DS.Font.Library.body13)
+          .foregroundStyle(DS.Color.textSecondary)
+      }
+      metricRow("PEERS IN THIS WINDOW", value: window.peerCount)
+      unavailableRow("WINDOW DURATION")
+      unavailableRow("AVG SIGNAL")
+    }
+  }
+
+  private var timeBands: some View {
+    VStack(alignment: .leading, spacing: DS.Space.s) {
+      Text("Time-band buildup").beidTextStyle(DS.Font.Library.labelMono10)
+      if let aggregate {
+        if aggregate.bandCount == 0 {
+          Text("No time bands recorded for this session").beidTextStyle(DS.Font.Library.body13)
+        }
+        ForEach(0..<Int(aggregate.bandCount), id: \.self) { index in
+          if let band = aggregate.bandAt(index: Int32(index)) {
+            Text(String(
+              localized: "participationSummary.bandBuildup.row",
+              defaultValue: "Band \(Int(band.bandIndex)): \(Int(band.deviceCount)) devices sensed"
+            ))
+            .beidTextStyle(DS.Font.Library.body13)
+          }
+        }
+      }
+    }
+  }
+
+  private func unavailableRow(_ label: LocalizedStringKey) -> some View {
+    HStack {
+      Text(label).beidTextStyle(DS.Font.Library.labelMono10)
+      Spacer(minLength: DS.Space.s)
+      Text("NOT YET AVAILABLE").beidTextStyle(DS.Font.Library.labelMono10)
+    }
+    .foregroundStyle(DS.Color.textSecondary)
+    .frame(minHeight: DS.Size.keyValueRowMinHeight)
   }
 
   private func barHeight(
@@ -216,6 +287,57 @@ struct ObservationDetailView: View {
       Rectangle()
         .fill(DS.Color.strokeHairline)
         .frame(height: DS.Size.hairline)
+    }
+  }
+}
+
+/// Unknown ENIN metadata stays in a report-only route, never a guessed bar.
+private struct SessionWindowReports: View {
+  let proof: Proof
+  let windowIndex: Int64?
+  let observedIndices: Set<Int64>
+  let selectedReportID: UUID?
+  @ObservedObject var submissionStore: ReportSubmissionStore
+  @ObservedObject var proofStore: ProofStore
+  @ObservedObject var linkStore: ReportProofLinkStore
+  @ObservedObject var sensing: SensingCoordinator
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: DS.Space.s) {
+      switch ReportProofLinkPresentation.readReports(
+        for: proof, submissionStore: submissionStore, linkStore: linkStore, proofStore: proofStore
+      ) {
+      case .failure:
+        Text("Reports unavailable on this device").beidTextStyle(DS.Font.Library.body13)
+      case .success(let reports):
+        if let windowIndex {
+          Text("REPORTS FOR SELECTED WINDOW").beidTextStyle(DS.Font.Library.labelMono10)
+          let selected = WindowReportSelection.reports(reports, at: windowIndex) {
+            sensing.observedWindowIndex(forWindowID: $0)
+          }
+          if selected.isEmpty {
+            Text("Report information is not available for this window.").beidTextStyle(DS.Font.Library.body13)
+          }
+          ForEach(selected, id: \.record.id) { report in
+            ReportEvidenceSection(record: report.record, ordinal: report.ordinal, selected: selectedReportID == report.record.id)
+          }
+        }
+        let unknown = reports.filter {
+          guard let index = sensing.observedWindowIndex(forWindowID: $0.record.id) else { return true }
+          return !observedIndices.contains(index)
+        }
+        if !unknown.isEmpty {
+          Text("OTHER STORED REPORTS").beidTextStyle(DS.Font.Library.labelMono10)
+          Text("The observation window is unavailable for these reports.").beidTextStyle(DS.Font.Library.body13)
+          ForEach(unknown, id: \.record.id) { report in
+            EventReportRow(
+              ordinal: report.ordinal, record: report.record,
+              identifier: "observation-detail.report.\(report.record.id.uuidString)",
+              submissionStore: submissionStore, proofStore: proofStore, linkStore: linkStore, sensing: sensing
+            )
+          }
+        }
+      }
     }
   }
 }

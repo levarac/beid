@@ -450,18 +450,18 @@ as-is.
 
 | Motif | Meaning | UI use | Avoid |
 | --- | --- | --- | --- |
-| **Encounter Field** | Nearby people sensed over time | `SensingView` pulse rings, proximity/sensing states, scan-flow backgrounds | Radar/sonar clichés, sci-fi neon, spinning sweeps |
-| **Proof Seal** | An encounter became durable | `RecordingView` entrance ceremony, proof card/detail artwork | Generic checkmark-only success, confetti |
+| **Encounter Field** | Nearby devices observed over time | `SensingView` pulse rings, proximity/sensing states, scan-flow backgrounds | Radar/sonar clichés, sci-fi neon, spinning sweeps |
+| **Record Seal** | An encounter became durable | `RecordingView` entrance ceremony, record card/detail artwork | Generic checkmark-only success, confetti |
 | **Ledger Trace** | A verifiable record exists behind this artifact | Metadata rows in `ItemDetailView`, address row in `AccountSheetView`, monospaced identifiers | Blockchain jargon, wallet chrome, explorer-link prominence |
-| **Event Artifact** | A proof is a collectible memory of a real event | `ProofCardView` cards, `CollectionHomeView` grid, event recap | NFT-marketplace aesthetics, price/rarity framing |
+| **Event Artifact** | A record is a collectible memory of a real event | `ProofCardView` cards, `CollectionHomeView` grid, event recap | NFT-marketplace aesthetics, price/rarity framing |
 
 Concrete do/don't pair (the empty state of `CollectionHomeView`):
 
 ```
 DO:
 Empty state uses the `encounter-field-empty` Encounter Field asset,
-title "No proofs yet",
-body "Start sensing at an event to collect your first proof.",
+title "No records yet",
+body "Start sensing at an event to collect your first record.",
 CTA "Sense Event",
 background DS.Color.surfaceCanvas.
 
@@ -495,9 +495,9 @@ share this grandfathered string; see #24's treatment in
 Voice registers by moment:
 
 - **Sensing** (`SensingView`, `EventFoundView`): calm, factual, present tense.
-  "Sensing automatically." No exclamation marks.
-- **Recording and proof entrance** (`RecordingView`): one short,
-  declarative, slightly formal entrance moment ("Proof collected."), then
+  "Listening for nearby events." No exclamation marks.
+- **Recording and record entrance** (`RecordingView`): one short,
+  declarative, slightly formal entrance moment ("Record collected."), then
   calm factual recording status. Give the entrance one quiet moment of
   weight, not a celebration.
 - **Recovery** (`SignalLostView`, `BluetoothOffView`): plain instructions,
@@ -644,7 +644,7 @@ and where their uses went:
   uses `statusOff` (the radio is not transmitting; the paired text says
   why).
 - `proofSeal` — tints use `actionPrimary`; text and icons use
-  `textPrimary`. A sealed proof is none of on / pending / off.
+  `textPrimary`. A sealed record is none of on / pending / off.
 - `statusCaution` — error text and warning icons use `textPrimary`: Flat
   2b has no "error" color, and red text on `bg` fails AA (3.41:1). The
   radio's `.waitingForBluetooth` dot uses `statusPending`; refusal and
@@ -824,7 +824,7 @@ they cite are the current ones, since #628):
   > `ink` fill → `bg` label; the `proofSeal`/`signalWarning`/`signalActive`
   > pairings describe today's code and are migration debt until #628. "In
   > both modes" now means the single appearance (§14).*
-- MUST: A proof's appearance is its **Sigil**, drawn deterministically
+- MUST: A record's appearance is its **Sigil**, drawn deterministically
   from observation data, with no image assets (spec §5; #633). Same data,
   same Sigil.
 - Migration debt: until #633 lands the Sigil,
@@ -881,7 +881,7 @@ spec §3.2; §0 records which styles were observed in Figma.
 | --- | --- | --- | --- | --- | --- |
 | Display/60 | Bricolage Grotesque ExtraBold | 60 | −2% | 100% | Home title "Events" |
 | Display/52 | 〃 | 52 | −2% | 100% | Onboarding titles (spec only; not observed in Figma, §0) |
-| Display/46 | 〃 | 46 | −1.5% | 100% | Screen titles (event name, Session 1, Report #2, Proof collected) |
+| Display/46 | 〃 | 46 | −1.5% | 100% | Screen titles (event name, Session 1, Report #2, Record collected) |
 | Display/Number 40 | 〃 | 40 | −1% | auto | Sensing figures |
 | Display/Address 34 | 〃 | 34 | −1% | auto | Account sheet address (typeface open: spec §10-5, #642) |
 | Title/19 · 17 · 16 · 15 | DM Sans Bold | 19–15 | 0 | auto | Row titles, buttons, key-value values |
@@ -1048,7 +1048,7 @@ older systems match.
 > | Token | Style | Role | Constraint |
 > | --- | --- | --- | --- |
 > | `DS.Font.screenTitle` | `.largeTitle` bold | Screen title | Max one per screen |
-> | `DS.Font.ceremonyTitle` | `.title` bold | "Proof Collected" entrance in `RecordingView` | Ceremony moments only |
+> | `DS.Font.ceremonyTitle` | `.title` bold | "Record Collected" entrance in `RecordingView` | Ceremony moments only |
 > | `DS.Font.sectionTitle` | `.title3` semibold | State/section titles | |
 > | `DS.Font.cardTitle` | `.subheadline` semibold | Card titles | `lineLimit(1)` + truncation on cards |
 > | `DS.Font.body` | `.body` | Body copy | |
@@ -1513,7 +1513,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 > also has no Android counterpart (§5). Not renamed, not deferred to
 > another component — absent.
 
-- Purpose: One collected proof in the `CollectionHomeView` grid.
+- Purpose: One collected record in the `CollectionHomeView` grid.
 - Use when: Rendering a `Proof` in a collection context.
 - Don't use when: Event-level summaries, onboarding illustrations, detail
   hero (that is `ItemDetailView`'s header).
@@ -2101,7 +2101,7 @@ Records tab bar are OS-standard controls (the 1.1 screen specification).**
 - **SHARE is not part of this contract** (owner decision 2026-09-22,
   settled item C in D-627). The 2026-07-28 rejection (§C, Item Detail
   reskin row: "no share action exists in the app") stands; no share
-  feature exists. #631 and #638 remove SHARE from 09 Proof Detail's nav
+  feature exists. #631 and #638 remove SHARE from 09 Record Detail's nav
   row.
 - Back is the standard `NavigationStack` back button (owner decision
   2026-09-25; this closed D-627 open item 5, `← PARENT` text was not
@@ -2391,6 +2391,25 @@ Kept unchanged:
 
 ## 15. Copywriting Voice
 
+The on-screen item is **Record**; its full name is **participation record**.
+Code identifiers and actual cryptographic proofs retain their existing names.
+One event has one Attendance entry, with its stored sessions still accessible.
+The entry opens the earliest stored session by default; the Record screen names
+that selected session and uses only its own UUID, artwork, binding and reports.
+A later session's receipt must never upgrade the other sessions.
+
+Record detail separates local sealing, the actual report destination, a stored
+operator acceptance receipt, reproducible external material and a third-party
+result. Preparing a report or starting a request establishes no delivery.
+External material and the third-party result are unavailable until a real data
+source exists; a receipt alone establishes neither. Do not title an unavailable
+result VERIFIED. Missing historical duration, ending time and delivery/receipt
+times remain unavailable; creation or signing times are not substitutes.
+Selected-window artwork uses the same saved session's observed-window ranks.
+Unknown report-window links keep a report-only detail route rather than being
+attached to a guessed window. Existing wallet-bound records keep Bound to wallet;
+these screens offer no new wallet connection.
+
 > **Platform scope:** mixed, annotated per bullet. The voice/vocabulary/
 > forbidden-term/trust-model/error-formula/CTA-shape rules are
 > platform-neutral. The localization *mechanism* (String Catalog) is
@@ -2470,15 +2489,16 @@ lives in `AGENTS.md`.
   > verbatim for history and for any future widening of the locale set;
   > the term choice itself was not overturned.
 
-- Vocabulary: "proof", "encounter", "event", "sense/sensing", "collect",
-  "seal", "verify". A proof is **collected** or **sealed**, never "minted",
+- Vocabulary: "record", "participation record", "encounter", "event", "sense/sensing", "collect",
+  "seal", "verify". A record is **collected** or **sealed**, never "minted",
   "dropped", or "claimed". **[Platform-neutral; Android's actual strings
   already comply, e.g. `event_join_button` = "Join event",
   `records_signature_status_bound`/`records_signature_status_self_proof`
   (verified `strings.xml`) — no "minted"/"dropped"/"claimed" found.]**
-- FORBIDDEN in user-facing copy: "NFT", "token", "on-chain", "gas", "mint",
+- FORBIDDEN in user-facing copy: "prove", "proof of presence", "automatically",
+  "no codes", "no taps", "NFT", "token", "on-chain", "gas", "mint",
   "airdrop", "web3". Wallet copy says what the wallet does for the user
-  ("sign your proofs"), not what protocol it speaks. **[Platform-neutral;
+  ("associate a wallet with a record"), not what protocol it speaks. **[Platform-neutral;
   no violation found in current Android `strings.xml` (grepped for each
   forbidden term).]**
 - *Flat 2b annotation (2026-09-22,
@@ -2764,7 +2784,7 @@ to.]**
 | `size.radar.centerDot` | `DS.Size.radarCenterDot` | 8 pt | Ink dot at the centre of the white disc |
 | `size.radar.detectedNode` | `DS.Size.radarDetectedNode` / `radarDetectedNodeStroke` | 8 / 1.5 pt | Detected-only node diameter and idle outline width |
 | `size.sensing.sealedSigil` | `DS.Size.sensingSealedSigil` | 300 pt | Frame 06 Sensing — Sealed artwork slot (Figma node `184:65`); shows the record's own Sigil from on-device presence (beid#653), and the neutral ring for a record without data |
-| `size.proofDetail.sigil` | `DS.Size.proofDetailSigil` | 200 pt | Frame 09 Proof Detail artwork slot (Figma node `204:36`); shows the record's own Sigil from on-device presence (beid#653), and the neutral `RecordSigilSlot` ring for a record without data |
+| `size.proofDetail.sigil` | `DS.Size.proofDetailSigil` | 200 pt | Frame 09 Record Detail artwork slot (Figma node `204:36`); shows the record's own Sigil from on-device presence (beid#653), and the neutral `RecordSigilSlot` ring for a record without data |
 | `size.proofCard.artwork` | `DS.Size.proofCardArtwork` | 76 pt | `ProofCardView` circular gradient-avatar diameter |
 | `size.itemDetail.artwork` | `DS.Size.itemDetailArtwork` | 190 pt | Legacy gradient-avatar diameter; no longer used by `ItemDetailView` after frame 09 |
 | `type.screen.title` | `DS.Font.screenTitle` | `Library.display46` — Bricolage Grotesque ExtraBold 46 / `.largeTitle` | Screen titles |

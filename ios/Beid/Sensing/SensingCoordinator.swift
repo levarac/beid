@@ -509,6 +509,19 @@ final class SensingCoordinator: ObservableObject {
     windowReportStore.reports.filter { $0.eventCode == eventCode }.count
   }
 
+  /// Display metadata for an already-linked UUID; absence is never an ENIN guess.
+  func observedWindowIndex(forWindowID windowID: UUID) -> Int64? {
+    guard let reports = try? windowReportStore.persistedReportsForLedgerRecovery(),
+          let report = reports.first(where: { $0.id == windowID }), report.enin >= 0
+    else { return nil }
+    return Int64(report.enin)
+  }
+
+  func availableRecordedWindowCount(forEventCode eventCode: String) -> Int? {
+    guard !isLedgerLoading, let reports = try? windowReportStore.persistedReportsForLedgerRecovery() else { return nil }
+    return reports.filter { EventGrouping.sameEvent($0.eventCode, eventCode) }.count
+  }
+
   /// beid#292's Transparency screen ("Sent"/"Acceptance receipt" rows): the
   /// most-advanced report-submission state recorded for one event. Forwards
   /// to `reportSubmissionRuntime.submissionState(forEventCode:)` — a pure

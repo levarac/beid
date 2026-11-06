@@ -48,7 +48,88 @@ struct ReportDetailPresentation {
   }
 }
 
-/// Flat 2b frame 12. The selected UUID, not the possibly-changing list
+/// Receipt progress over an explicitly scoped set, never the event's best state.
+struct ReportProgressPresentation {
+  let receivedCount: Int
+  let summary: String
+
+  init(records: [ReportSubmissionRecord]) {
+    receivedCount = records.filter { !$0.isTerminal && $0.submissionState == .accepted && $0.isReceiptStored }.count
+    if records.isEmpty {
+      summary = String(localized: "NO LINKED REPORTS")
+    } else if records.count == 1, let record = records.first {
+      summary = ReportDetailPresentation(record: record).caption
+    } else {
+      summary = String(
+        localized: "record.receivedProgress",
+        defaultValue: "\(receivedCount) OF \(records.count) RECEIVED"
+      )
+    }
+  }
+}
+
+/// The selected report's stored evidence, shared by Session and old routes.
+struct ReportEvidenceSection: View {
+  let record: ReportSubmissionRecord
+  let ordinal: Int
+  var selected = false
+  var identifierPrefix = "session-report"
+  var showsHeader = true
+  var showsDisclosure = true
+
+  private var presentation: ReportDetailPresentation { ReportDetailPresentation(record: record) }
+  private var received: Bool {
+    !record.isTerminal && record.submissionState == .accepted && record.isReceiptStored
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: DS.Space.s) {
+      if showsHeader {
+        Text(String(localized: "eventDetail.report.title", defaultValue: "Report #\(ordinal)"))
+          .beidTextStyle(DS.Font.Library.title15)
+        Text(verbatim: presentation.caption)
+          .beidTextStyle(DS.Font.Library.labelMono10)
+      }
+      evidenceRow("REPORT ID", value: record.id.uuidString, identifier: "\(identifierPrefix).record-id")
+      evidenceRow(
+        received ? "SENT TO" : "DESTINATION",
+        value: submissionOperatorOrigin(record.endpoint) ?? String(localized: "NOT YET AVAILABLE")
+      )
+      evidenceRow("DELIVERY", value: presentation.delivery, identifier: "\(identifierPrefix).delivery")
+      evidenceRow("DELIVERY TIME", value: String(localized: "NOT YET AVAILABLE"))
+      evidenceRow("ACCEPTANCE RECEIPT", value: presentation.receipt, identifier: "\(identifierPrefix).receipt")
+      evidenceRow("RECEIPT TIME", value: String(localized: "NOT YET AVAILABLE"))
+      if presentation.showsPreparedAt {
+        evidenceRow("PREPARED ON DEVICE", value: record.createdAt.formatted(date: .abbreviated, time: .shortened))
+      }
+      evidenceRow("OBSERVATION DIGEST", value: record.observationDigestHex)
+      evidenceRow("MUTUAL OBSERVATION", value: String(localized: "NOT YET AVAILABLE"))
+      evidenceRow("INCLUDED IN PUBLISHED DATA", value: String(localized: "NOT YET AVAILABLE"))
+      if showsDisclosure {
+        NavigationLink { WhatWeSendView() } label: {
+          BeidTextControlLabel("WHAT WAS SENT", glyph: .trailing("→", announcing: "WHAT WAS SENT"))
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .foregroundStyle(DS.Color.textPrimary)
+    .accessibilityIdentifier("session.report.\(record.id.uuidString)")
+    .accessibilityAddTraits(selected ? .isSelected : [])
+    .padding(.vertical, DS.Space.m)
+  }
+
+  private func evidenceRow(_ label: LocalizedStringKey, value: String, identifier: String = "") -> some View {
+    VStack(alignment: .leading, spacing: DS.Space.xs) {
+      Text(label).beidTextStyle(DS.Font.Library.labelMono10).foregroundStyle(DS.Color.textSecondary)
+      Text(verbatim: value).beidTextStyle(DS.Font.Library.body13).textSelection(.enabled)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier(identifier)
+  }
+}
+
+/// Report-only fallback when no authoritative observed window is available.
+/// The selected UUID, not the possibly-changing list
 /// ordinal, identifies the report. The observed store is the coordinator's
 /// same instance used by Event Detail and the submission runtime. The
 /// session and proof rows appear only for a linked report (beid#701); an
@@ -120,53 +201,11 @@ struct ReportDetailView: View {
         .padding(.top, DS.Space.s + DS.Space.xs)
         .accessibilityIdentifier("report-detail.status")
 
-      sectionHeading(
-        String(localized: "reportDetail.record", defaultValue: "RECORD")
+      ReportEvidenceSection(
+        record: record, ordinal: reportIndex, identifierPrefix: "report-detail",
+        showsHeader: false, showsDisclosure: false
       )
-      .padding(.top, DS.Space.xl)
-
-      hairline
-      keyValueRow(
-        String(localized: "reportDetail.reportID", defaultValue: "REPORT ID"),
-        value: RecordIDDisplay.abbreviated(record.id),
-        fullAccessibilityValue: String(
-          localized: "reportDetail.reportID.accessibility",
-          defaultValue: "Report ID \(record.id.uuidString)",
-          comment: "VoiceOver reads the full durable report UUID; the visible value is shortened."
-        ),
-        identifier: "report-detail.record-id"
-      )
-      hairline
-      keyValueRow(
-        String(localized: "reportDetail.recorded", defaultValue: "RECORDED ON DEVICE"),
-        value: String(localized: "reportDetail.oneObservation", defaultValue: "1 OBSERVATION")
-      )
-      hairline
-      keyValueRow(
-        String(localized: "reportDetail.mutual", defaultValue: "MUTUAL OBSERVATION"),
-        value: notYetAvailable,
-        unavailable: true
-      )
-      hairline
-      keyValueRow(
-        String(localized: "reportDetail.sent", defaultValue: "SENT"),
-        value: presentation.delivery,
-        identifier: "report-detail.delivery"
-      )
-      hairline
-      keyValueRow(
-        String(localized: "reportDetail.acceptanceReceipt", defaultValue: "ACCEPTANCE RECEIPT"),
-        value: presentation.receipt,
-        unavailable: !record.isReceiptStored,
-        identifier: "report-detail.receipt"
-      )
-      hairline
-      keyValueRow(
-        String(localized: "reportDetail.published", defaultValue: "PUBLISHED"),
-        value: notYetAvailable,
-        unavailable: true
-      )
-      hairline
+      .padding(.top, DS.Space.l)
 
       HStack(alignment: .firstTextBaseline) {
         sectionHeading(
@@ -178,7 +217,7 @@ struct ReportDetailView: View {
           WhatWeSendView()
             .toolbar(.visible, for: .navigationBar)
         } label: {
-          BeidTextControlLabel("What we send", glyph: .trailing("→", announcing: "What we send"))
+          BeidTextControlLabel("WHAT WAS SENT", glyph: .trailing("→", announcing: "WHAT WAS SENT"))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("report-detail.whatWeSend")
@@ -209,7 +248,7 @@ struct ReportDetailView: View {
         sectionHeading(
           String(
             localized: "reportDetail.sessionProof",
-            defaultValue: "SESSION PROOF",
+            defaultValue: "SESSION RECORD",
             comment: "Section for the one stored Proof of the recording session this report was closed in. Not a verification or earned-reward claim."
           )
         )
