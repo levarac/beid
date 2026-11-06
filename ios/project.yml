@@ -77,8 +77,8 @@ targets:
         BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
-        NSBluetoothPeripheralUsageDescription: "beid uses Bluetooth to automatically sense nearby events and collect proof of attendance."
+        NSBluetoothAlwaysUsageDescription: "beid uses Bluetooth to exchange signals with nearby devices and keep a record of what it observes."
+        NSBluetoothPeripheralUsageDescription: "beid uses Bluetooth to exchange signals with nearby devices and keep a record of what it observes."
         NSCameraUsageDescription: "beid uses the camera only to scan a venue link QR code when a venue device is set up."
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
