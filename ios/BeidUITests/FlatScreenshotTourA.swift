@@ -18,7 +18,11 @@ final class FlatScreenshotTourA: XCTestCase {
       "Your phones say hello to each other, and keep a note anyone can verify.",
       message: "Welcome must use the approved keep-a-note explanation"
     )
-    XCTAssertTrue(app.staticTexts["beid"].exists)
+    XCTAssertTrue(
+      app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "beid")).firstMatch
+        .waitForExistence(timeout: 5),
+      "Welcome must retain its brand label"
+    )
     XCTAssertTrue(app.buttons["Continue"].exists)
     XCTAssertFalse(app.buttons["Connect Wallet"].exists)
     XCTAssertFalse(app.buttons["Connect wallet instead"].exists)
