@@ -193,7 +193,7 @@ struct ObservationDetailView: View {
         storedInput: coordinator.sensingCoordinator.sigilInput(forProofId: proof.id),
         storedProofID: proof.id, selectedProofID: proof.id, throughWindowIndex: window.windowIndex
       ) {
-        RecordSigilSlot(input: input, placement: .proofDetail)
+        RecordSigilSlot(input: input, placement: .proofDetail, isDeviceRecord: true)
           .frame(maxWidth: .infinity)
       } else {
         Text("Artwork is not available for this window.")

@@ -117,7 +117,8 @@ struct ItemDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
           RecordSigilSlot(
             input: coordinator.sensingCoordinator.sigilInput(forProofId: proof.id),
-            placement: .proofDetail
+            placement: .proofDetail,
+            isDeviceRecord: true
           )
           .frame(maxWidth: .infinity)
           .padding(.top, DS.Space.s)

@@ -260,7 +260,7 @@ struct EventDetailView: View {
           ItemDetailView(proof: anchor)
         } label: {
           HStack(spacing: DS.Space.m) {
-            RecordSigilSlot(input: sensing.sigilInput(forProofId: anchor.id), placement: .eventDetailRow)
+            RecordSigilSlot(input: sensing.sigilInput(forProofId: anchor.id), placement: .eventDetailRow, isDeviceRecord: true)
             VStack(alignment: .leading, spacing: DS.Space.xs) {
               Text("Attendance Record").beidTextStyle(DS.Font.Library.title15)
               Text(String(localized: "record.event.sessions", defaultValue: "SESSIONS · \(sessions.count)"))

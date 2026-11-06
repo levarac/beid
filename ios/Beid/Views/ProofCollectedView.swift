@@ -88,7 +88,7 @@ struct ProofCollectedView: View {
           .beidTextStyle(DS.Font.Library.labelMono11)
           .frame(maxWidth: .infinity)
 
-          RecordSigilSlot(input: sigilInput, placement: .proofCollected)
+          RecordSigilSlot(input: sigilInput, placement: .proofCollected, isDeviceRecord: true)
             .frame(maxWidth: .infinity)
             .padding(.top, DS.Space.m)
 
