@@ -978,6 +978,8 @@ final class SensingCoordinator: ObservableObject {
 
   /// At most one in-flight expiry wake-up, rescheduled on every publish.
   private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
+  /// Retains Home's request while a prior scan awaits its stopped callback.
+  private var homeStandbyDiscoveryRequested = false
   /// True only while this coordinator has started a Central-only scan for
   /// the pre-join surface. Joining transfers the already-running scan to
   /// Barnard's automatic operation without stopping it; dismissing before a
@@ -1724,6 +1726,9 @@ final class SensingCoordinator: ObservableObject {
     case .state(let state):
       isScanning = state.isScanning
       isAdvertising = state.isAdvertising
+      if homeStandbyDiscoveryRequested && !isScanning {
+        startHomeStandbyDiscovery()
+      }
     case .detection(let detection):
       handleDetection(
         enin: detection.enin,
@@ -2806,6 +2811,7 @@ final class SensingCoordinator: ObservableObject {
       // `startAuto()` keeps an already-running Central scan alive and adds
       // advertising. From this instant it is automatic-operation transport,
       // not a discovery-only scan this pre-join flow may later stop.
+      homeStandbyDiscoveryRequested = false
       discoveryOnlyScanOwned = false
       engine.joinAndStart(context)
       // The relay gate opens here, from the capability the gate just admitted,
@@ -2992,6 +2998,7 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func resetSessionState() {
+    homeStandbyDiscoveryRequested = false
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
     sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
@@ -3056,6 +3063,7 @@ final class SensingCoordinator: ObservableObject {
   /// The existing scan entry remains available to older callers.
   func startHomeStandbyDiscovery() {
     guard case .idle = phase else { return }
+    homeStandbyDiscoveryRequested = true
     if useDemoEventMode {
       homeDemoEventAvailable = true
       return
@@ -3150,6 +3158,7 @@ final class SensingCoordinator: ObservableObject {
   /// `discoveryOnlyScanOwned` is false and dismissing this surface cannot stop
   /// the joined session's automatic operation.
   func stopNearbyEventDiscovery() {
+    homeStandbyDiscoveryRequested = false
     homeDemoEventAvailable = false
     let shouldStopOwnedScan = discoveryOnlyScanOwned && !isAdvertising
     discoveryOnlyScanOwned = false
