@@ -80,9 +80,7 @@ final class NowNavigationUITests: XCTestCase {
       session.tap()
       app.staticTexts["observation-detail.title"].assertExists()
       app.staticTexts["observation-detail.unavailable"].assertExists()
-      let ownRecord = app.buttons.matching(
-        NSPredicate(format: "label CONTAINS %@", "VIEW THIS SESSION'S RECORD")
-      ).firstMatch
+      let ownRecord = app.buttons["View this session's record"]
       ownRecord.scrollToHittable(in: app)
       ownRecord.tap()
       app.staticTexts["proof.detail.title"].assertExists()

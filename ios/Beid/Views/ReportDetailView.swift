@@ -113,6 +113,7 @@ struct ReportEvidenceSection: View {
       }
     }
     .foregroundStyle(DS.Color.textPrimary)
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("session.report.\(record.id.uuidString)")
     .accessibilityAddTraits(selected ? .isSelected : [])
     .padding(.vertical, DS.Space.m)
