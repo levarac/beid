@@ -194,6 +194,23 @@ final class FlatScreenshotTourC: XCTestCase {
     fullSigil.assertExists()
   }
 
+  func testStoredRecordArtworkAnnouncesMutualityAsUnavailable() {
+    let app = launchObservationFixture()
+    let record = app.buttons["event-detail.proof.1"]
+    record.scrollToHittable(in: app)
+    record.tap()
+    app.staticTexts["proof.detail.title"].assertExists()
+    let artwork = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label ENDSWITH %@", "23 detected, window 6")
+    ).firstMatch
+    artwork.assertExists()
+    XCTAssertTrue(
+      artwork.label.localizedCaseInsensitiveContains("mutual not available"),
+      "A device record cannot announce mutual confirmation as a measured zero"
+    )
+    XCTAssertFalse(artwork.label.localizedCaseInsensitiveContains("0 mutual"))
+  }
+
   func testDisclosureDescribesASignatureWithoutPresenceClaims() {
     let app = launchCollectedRecordForCopyAssertions()
     app.buttons["proof-collected.whatWeSend"].assertHittable()
