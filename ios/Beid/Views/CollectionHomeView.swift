@@ -409,6 +409,7 @@ private struct NowHomeView: View {
       }
     }
     .foregroundStyle(foreground)
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("home.saved-record")
   }
 
