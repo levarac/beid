@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2026 Levarac Foundation
 // SPDX-License-Identifier: MIT
 
+import Combine
 import XCTest
 @testable import Beid
 
@@ -87,6 +88,52 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     XCTAssertEqual(engine.startDiscoveryScanCallCount, 3)
   }
 
+  func testPendingStopAcknowledgementRestartsReenabledHomeDiscovery() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    sensing.useDemoEventMode = false
+    let app = makeApp(sensing: sensing)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    await deliverScanState(true, through: engine, to: sensing)
+
+    app.updateHomeStandby(isVisible: false, isSceneActive: true)
+    XCTAssertEqual(engine.stopDiscoveryScanCallCount, 1)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertTrue(app.homeStandbyDiscoveryActive)
+    XCTAssertTrue(sensing.isScanning, "The previous scan still awaits its stop acknowledgement")
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1, "Restart waits for the stopped callback")
+
+    await deliverScanState(false, through: engine, to: sensing)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 2, "The stop acknowledgement must release the deferred start")
+    await deliverScanState(true, through: engine, to: sensing)
+    XCTAssertTrue(sensing.isScanning)
+    XCTAssertEqual(sensing.phase, .idle)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertFalse(engine.didJoin)
+  }
+
+  func testDisablingAgainCancelsADeferredHomeDiscoveryRestart() async {
+    let engine = RecordingEventJoinControl()
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
+    sensing.useDemoEventMode = false
+    let app = makeApp(sensing: sensing)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    await deliverScanState(true, through: engine, to: sensing)
+
+    app.updateHomeStandby(isVisible: false, isSceneActive: true)
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    app.updateHomeStandby(isVisible: true, isSceneActive: false)
+    await deliverScanState(false, through: engine, to: sensing)
+
+    XCTAssertFalse(app.homeStandbyDiscoveryActive)
+    XCTAssertNil(app.homeStandby.listeningStartedAt)
+    XCTAssertFalse(sensing.isScanning)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1, "A stopped callback cannot restart background discovery")
+    XCTAssertEqual(engine.stopDiscoveryScanCallCount, 1)
+    XCTAssertEqual(engine.requestJoinPermissionsCallCount, 0)
+    XCTAssertFalse(engine.didJoin)
+  }
+
   func testAccountAndCodeEntrySuspendEmptyDiscovery() {
     let engine = RecordingEventJoinControl()
     let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: engine)
@@ -149,6 +196,19 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     XCTAssertEqual(sensing.phase, .sensing)
     XCTAssertEqual(engine.joinAndStartContexts.count, 0, "permission and registration still gate admission")
     _ = sensing.reset()
+  }
+
+  private func deliverScanState(
+    _ isScanning: Bool,
+    through engine: RecordingEventJoinControl,
+    to sensing: SensingCoordinator
+  ) async {
+    let delivered = expectation(description: "The engine reports scanning=\(isScanning)")
+    let observation = sensing.$isScanning.dropFirst().prefix(1).sink { _ in delivered.fulfill() }
+    engine.emitState(isScanning: isScanning)
+    await fulfillment(of: [delivered], timeout: 1)
+    observation.cancel()
+    XCTAssertEqual(sensing.isScanning, isScanning)
   }
 
   private func makeApp(sensing: SensingCoordinator) -> AppCoordinator {

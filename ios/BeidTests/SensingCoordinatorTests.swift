@@ -758,9 +758,16 @@ final class SensingCoordinatorTests: XCTestCase {
     )
     coordinator.useDemoEventMode = false
 
-    coordinator.startNearbyEventDiscovery()
+    coordinator.startHomeStandbyDiscovery()
     coordinator.joinNearbyEvent(eventCodeHashHex: nearbyVectorHashHex)
     try? await Task.sleep(nanoseconds: 20_000_000)
+    let stopped = expectation(description: "A stopped-state callback reaches the admitted session")
+    let observation = coordinator.$isScanning.dropFirst().prefix(1).sink { _ in stopped.fulfill() }
+    engine.emitState(isScanning: false)
+    await fulfillment(of: [stopped], timeout: 1)
+    observation.cancel()
+    XCTAssertEqual(coordinator.phase, .sensing)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 1, "An admitted session must not resume home discovery")
     coordinator.stopNearbyEventDiscovery()
 
     XCTAssertEqual(engine.startDiscoveryScanCallCount, 1)
