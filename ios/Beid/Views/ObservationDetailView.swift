@@ -43,6 +43,26 @@ struct ObservationDetailPresentation {
     }
     windows = rows
   }
+
+  /// Both immutable inputs belong to the same saved session. Their writers
+  /// rank the same sorted distinct observed windows; count equality is only
+  /// a consistency check, since stored Sigil text contains no ENIN list.
+  func selectedSigilInput(
+    storedInput: BeidSharedKit.sigil.SigilInput?,
+    storedProofID: UUID,
+    selectedProofID: UUID,
+    throughWindowIndex: Int64
+  ) -> BeidSharedKit.sigil.SigilInput? {
+    guard storedProofID == selectedProofID, let storedInput,
+          windowCount > 0, windows.count == windowCount,
+          Int(storedInput.windowCount) == windowCount,
+          zip(windows, windows.dropFirst()).allSatisfy({ $0.0.windowIndex < $0.1.windowIndex }),
+          let rank = windows.firstIndex(where: { $0.windowIndex == throughWindowIndex })
+    else { return nil }
+    return BeidSharedKit.sigil.sigilInputPrefixOrNull(
+      input: storedInput, observedWindowCount: Int32(rank + 1)
+    )
+  }
 }
 
 /// Flat 2b 11. A selected session, not the event-wide representative Proof.
