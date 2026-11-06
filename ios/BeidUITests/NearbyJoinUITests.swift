@@ -8,7 +8,7 @@ final class NearbyJoinUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test", "-beid-nearby-join-fixture"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
     let receipt = app.staticTexts["fixture.nearby-join.receipt"]
@@ -191,8 +191,8 @@ final class NowNavigationUITests: XCTestCase {
   private func launchHome(_ arguments: [String]) {
     app.launchArguments = ["-beid-ui-test"] + arguments
     app.launch()
-    app.buttons["Get Started"].assertHittable()
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].assertHittable()
+    app.buttons["Continue"].tap()
     app.buttons["Allow Bluetooth"].assertHittable()
     app.buttons["Allow Bluetooth"].tap()
     XCTAssertTrue(app.tabBars.buttons["Now"].waitForExistence(timeout: 5))

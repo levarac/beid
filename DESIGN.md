@@ -285,13 +285,15 @@ Beid MUST NOT feel like:
 - a generic event app (no confetti-by-default, no marketing gradients),
 - a leaderboard.
 
-Wallet is optional (`OnboardingMode.guestFirst` exists). The UI MUST read
-fully coherent to a user who never connects a wallet.
+For 1.1, Welcome uses Continue and enters Bluetooth setup without a wallet
+step. Onboarding and sensing MUST remain coherent without a wallet.
 
 > **Owner resolution, 2026-09-26 (Open item 2,
 > [D-627](docs/decisions/issue-627-flat-2b.md)).** Wallet-optional
 > onboarding is settled. The MUST above remains binding: 01 Welcome uses
 > the guest-first Get Started route, and wallet connection is optional.
+> **Superseded for 1.1:** Continue enters Bluetooth setup with no wallet
+> step; wallet controls do not belong to onboarding or sensing.
 
 ## 2. Non-Negotiables
 
@@ -1847,7 +1849,7 @@ Real components in this codebase. Each entry is the contract for reuse.
 > and in production use (`BeidPrimaryButton`, verified across
 > `WelcomeScreen`/`EventJoinScreen`/`ManualEventCodeScreen`).
 
-- Purpose: The one main action per screen ("Get Started", "Sense Event",
+- Purpose: The one main action per screen ("Continue", "Sense Event",
   "Try Again", "Done"). A convention, not a reusable component (yet).
   **[Android's actual CTA strings for this same role are "Get Started"
   (`welcome_get_started`) and "Join event" (`event_join_button`) — not
@@ -2489,6 +2491,11 @@ lives in `AGENTS.md`.
   > verbatim for history and for any future widening of the locale set;
   > the term choice itself was not overturned.
 
+- Welcome uses the exact headline "Record you were there." and subtitle
+  "Your phones say hello to each other, and keep a note anyone can verify."
+  These are the approved Welcome exception to the general presence-copy
+  caution. Other copy describes observations, explicit JOIN and foreground
+  sensing without promising background operation.
 - Vocabulary: "record", "participation record", "encounter", "event", "sense/sensing", "collect",
   "seal", "verify". A record is **collected** or **sealed**, never "minted",
   "dropped", or "claimed". **[Platform-neutral; Android's actual strings
@@ -2548,8 +2555,8 @@ lives in `AGENTS.md`.
   sentence-case titles (§12). The in-content text controls (`COPY`,
   `OPEN →`) still meet both rules, and that part stays open.*
 - Error formula: what happened + why + one action. Model:
-  "beid lost the connection to {event}. Move closer and we'll pick it back
-  up automatically." + "Try Again". **[Platform-neutral principle; Android
+  "beid lost the connection to {event}. Move closer and try again." +
+  "Try Again". **[Platform-neutral principle; Android
   has no screen dedicated to this exact formula yet — see §11's note on
   the scan-flow recovery branch, whose actual button reads "Resume," not
   "Try Again."]**

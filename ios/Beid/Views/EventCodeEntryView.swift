@@ -77,7 +77,7 @@ struct EventCodeEntryView: View {
             VStack(alignment: .leading, spacing: 0) {
               title
 
-              Text("Only needed if an event didn’t appear automatically. Ask the organizer for the code.")
+              Text("If your event is not listed, ask the organizer for its event code and paste it here.")
                 .beidTextStyle(DS.Font.Library.body15)
                 .foregroundStyle(DS.Color.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -96,7 +96,7 @@ struct EventCodeEntryView: View {
             EventCodeJoinButton(action: submit)
 
             if mode == .onboarding && !isScreenshotFixture {
-              BeidSecondaryButton(title: "Connect wallet instead") {
+              BeidSecondaryButton(title: "Continue without a code") {
                 coordinator.returnToWalletConnect()
               }
               .tint(DS.Color.actionPrimary)
@@ -148,7 +148,7 @@ struct EventCodeEntryView: View {
       }
       .frame(minHeight: 44)
 
-      TextField("Event code", text: $code, prompt: Text("e.g. ETHTOKYO2026"))
+      TextField("Event code", text: $code, prompt: Text("eventCode.input.placeholder"))
         .beidTextStyle(DS.Font.Library.displayAddress34)
         .foregroundStyle(DS.Color.textPrimary)
         .textInputAutocapitalization(.characters)

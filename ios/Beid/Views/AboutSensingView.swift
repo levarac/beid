@@ -6,6 +6,42 @@ import SwiftUI
 /// Flat 2b frame 15. This destination is shared by the Account route and
 /// the pending Welcome, Home, and first-time sensing routes.
 struct AboutSensingView: View {
+  private let submissionEnabled: Bool
+
+  init(submissionEnabled: Bool? = nil) {
+    #if DEBUG
+    let debugBuild = true
+    #else
+    let debugBuild = false
+    #endif
+    self.submissionEnabled = Self.submissionCapability(
+      explicit: submissionEnabled,
+      actual: ReportSubmissionRuntime.isSubmissionEnabled(),
+      arguments: ProcessInfo.processInfo.arguments,
+      debugBuild: debugBuild
+    )
+  }
+
+  /// Resolves display capability only; it never configures or starts the sender.
+  static func submissionCapability(
+    explicit: Bool?, actual: Bool, arguments: [String], debugBuild: Bool
+  ) -> Bool {
+    if let explicit { return explicit }
+    #if DEBUG
+    guard debugBuild, arguments.contains("-beid-ui-test") else { return actual }
+    let options = arguments.indices.filter { arguments[$0] == "-beid-about-sending" }
+    guard options.count == 1, let index = options.first,
+      arguments.indices.contains(index + 1) else { return actual }
+    switch arguments[index + 1] {
+    case "on": return true
+    case "off": return false
+    default: return actual
+    }
+    #else
+    return actual
+    #endif
+  }
+
   var body: some View {
     ScrollView {
       BeidAdaptiveContent {
@@ -22,8 +58,8 @@ struct AboutSensingView: View {
 
           SensingExplainerStep(
             number: "01",
-            title: "Events find you",
-            detail: "Nearby events appear automatically — no codes, no search."
+            title: "sensing.explainer.chooseEvent.title",
+            detail: "sensing.explainer.chooseEvent.detail"
           )
           SensingExplainerRule()
           SensingExplainerStep(
@@ -34,8 +70,8 @@ struct AboutSensingView: View {
           SensingExplainerRule()
           SensingExplainerStep(
             number: "03",
-            title: "Zero effort",
-            detail: "Sensing runs quietly in the background. Nothing to tap."
+            title: "sensing.explainer.keepOpen.title",
+            detail: "sensing.explainer.keepOpen.detail"
           )
           SensingExplainerRule()
 
@@ -58,7 +94,7 @@ struct AboutSensingView: View {
           .accessibilityIdentifier("aboutSensing.whatWeSend")
           SensingExplainerRule()
 
-          SensingExplainerSectionLabel("SENDING STATUS · ALL SAVED OBSERVATIONS")
+          SensingExplainerSectionLabel("SENDING STATUS")
             .padding(.top, DS.Space.xl)
           SensingExplainerRule()
           VStack(alignment: .leading, spacing: DS.Space.s) {
@@ -68,6 +104,10 @@ struct AboutSensingView: View {
             Text(sendingStatus)
               .beidTextStyle(DS.Font.Library.body13)
               .foregroundStyle(DS.Color.textPrimary)
+              .fixedSize(horizontal: false, vertical: true)
+            Text("aboutSensing.submission.detailsUnavailable")
+              .beidTextStyle(DS.Font.Library.body13)
+              .foregroundStyle(DS.Color.textSecondary)
               .fixedSize(horizontal: false, vertical: true)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -87,7 +127,7 @@ struct AboutSensingView: View {
   }
 
   private var sendingStatus: String {
-    if ReportSubmissionRuntime.isSubmissionEnabled() {
+    if submissionEnabled {
       return String(localized: "aboutSensing.submission.enabled", defaultValue: "Sending is turned on for this build.")
     }
     return String(localized: "dailySummary.submission.disabledForBuild")

@@ -17,7 +17,7 @@ final class EventMembershipUITests: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     XCTAssertTrue(app.buttons["Allow Bluetooth"].waitForExistence(timeout: 5))
     app.buttons["Allow Bluetooth"].tap()
     XCTAssertTrue(app.buttons["home.demo.join"].waitForExistence(timeout: 5))

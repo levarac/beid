@@ -90,7 +90,7 @@ final class FlatScreenshotTourA: XCTestCase {
     if let frame { app.launchArguments.append(frame) }
     app.launch()
 
-    app.buttons["Get Started"].tap()
+    app.buttons["Continue"].tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
     XCTAssertTrue(allowBluetooth.waitForExistence(timeout: 5))
     allowBluetooth.tap()
@@ -127,7 +127,7 @@ final class FlatScreenshotTourA: XCTestCase {
   }
 
   private func showBluetoothPermission() {
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(
       getStarted.waitForExistence(timeout: 5),
       "Welcome must offer its primary action before Bluetooth permission"
@@ -203,6 +203,32 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertFalse(app.staticTexts["Up to date"].exists)
   }
 
+  func testAboutEnabledCapabilityKeepsSendingDetailsUnavailable() {
+    assertSendingCapability(setting: "on", expected: "Sending is turned on for this build.")
+  }
+
+  func testAboutDisabledCapabilityKeepsSendingDetailsUnavailable() {
+    assertSendingCapability(setting: "off", expected: "Sending isn't turned on for this build.")
+  }
+
+  private func assertSendingCapability(setting: String, expected: String) {
+    app.launchArguments = ["-beid-ui-test", "-beid-about-sending", setting]
+    app.launch()
+    app.buttons["welcome.howItWorks"].tap()
+    let scroll = app.scrollViews["aboutSensing.scroll"]
+    XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+    let capability = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expected)).firstMatch
+    for _ in 0..<5 where !capability.isHittable { scroll.swipeUp() }
+    XCTAssertTrue(capability.isHittable)
+    assertContainsText("Sending details are not available here.")
+    assertExactText("SENDING STATUS")
+    XCTAssertFalse(app.staticTexts["SENDING STATUS · ALL SAVED OBSERVATIONS"].exists)
+    XCTAssertFalse(app.staticTexts["Up to date"].exists)
+    let otherState = setting == "on"
+      ? "Sending isn't turned on for this build." : "Sending is turned on for this build."
+    XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", otherState)).firstMatch.exists)
+  }
+
   private func assertExplainerCopy() {
     assertContainsText("Choose your event", message: "The explanation must require explicit event selection")
     assertContainsText("beid looks for nearby events. Tap JOIN when your event appears.")
@@ -274,7 +300,7 @@ final class FlatScreenshotTourA: XCTestCase {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
-    let getStarted = app.buttons["Get Started"]
+    let getStarted = app.buttons["Continue"]
     XCTAssertTrue(getStarted.waitForExistence(timeout: 5))
     getStarted.tap()
     let allowBluetooth = app.buttons["Allow Bluetooth"]
