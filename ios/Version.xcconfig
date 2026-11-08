@@ -1,0 +1,11 @@
+// The version of both iOS apps (Beid and BeidLab), kept in this one file.
+// A version bump edits MARKETING_VERSION here and nothing else: every build
+// configuration in ios/project.yml is based on this file, and no target sets
+// either key itself (scripts/tests/test_version_files.py checks that).
+//
+// MARKETING_VERSION is the version users see (CFBundleShortVersionString).
+// CURRENT_PROJECT_VERSION is the local placeholder for CFBundleVersion. Xcode
+// Cloud assigns the store build number for every build (docs/xcode-cloud.md),
+// so leave it at 1.
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1

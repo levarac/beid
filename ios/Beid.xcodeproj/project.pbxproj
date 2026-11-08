@@ -651,6 +651,7 @@
 		BE0A049DC2ECDD96A495BAB4 /* SupportShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportShareSheet.swift; sourceTree = "<group>"; };
 		BE1B81EFECE0C1E386CE9F58 /* FlatScreenshotTourA.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlatScreenshotTourA.swift; sourceTree = "<group>"; };
 		BE3443F4D439EC1843AF9FBF /* SensingStopFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensingStopFlowTests.swift; sourceTree = "<group>"; };
+		BEFE7ACAB64A50817C594125 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		BF9EA5AA27FCF0266F33DA32 /* SelfProofTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfProofTests.swift; sourceTree = "<group>"; };
 		C0412932757042A17306C358 /* RegistryDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegistryDependencies.swift; sourceTree = "<group>"; };
 		C0C21DF46165889A3C206F0C /* ProofStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProofStore.swift; sourceTree = "<group>"; };
@@ -804,6 +805,7 @@
 				DA293E8A0771B440603690A0 /* BeidTests */,
 				490CBC4967C88D5ADFE619BA /* BeidUITests */,
 				90338DE1E89FB1B3E0936275 /* fixtures */,
+				B3ED809F880D0F16E840AADB /* ios */,
 				A1E9D5CB79093CF80756E358 /* Lab */,
 				2D3FC70C0D371CE89503E6F3 /* positive */,
 				FD5D5F11FE5F3503CFF91250 /* Products */,
@@ -1069,6 +1071,15 @@
 				6BACA62F999D7F7071D2E51C /* Views */,
 			);
 			path = Beid;
+			sourceTree = "<group>";
+		};
+		B3ED809F880D0F16E840AADB /* ios */ = {
+			isa = PBXGroup;
+			children = (
+				BEFE7ACAB64A50817C594125 /* Version.xcconfig */,
+			);
+			name = ios;
+			path = .;
 			sourceTree = "<group>";
 		};
 		CB30DC35F92C60B4287A0A32 /* BeidMetaMaskSupport */ = {
@@ -1948,7 +1959,6 @@
 				BEID_VENUE_BUNDLE_URL_TEMPLATE = "";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Beid/App/Info.plist;
@@ -1956,7 +1966,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o",
@@ -1975,6 +1984,7 @@
 		};
 		5CB986D050BC61ECBB6A3109 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = BEFE7ACAB64A50817C594125 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -2087,6 +2097,7 @@
 		};
 		A7A45C387D9E9EEAD0977B8D /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = BEFE7ACAB64A50817C594125 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -2148,14 +2159,12 @@
 				BEID_REPORT_SUBMISSION_ENABLED = NO;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				INFOPLIST_FILE = Lab/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o",
@@ -2204,7 +2213,6 @@
 				BEID_VENUE_BUNDLE_URL_TEMPLATE = "";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Beid/App/Info.plist;
@@ -2212,7 +2220,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o",
@@ -2237,14 +2244,12 @@
 				BEID_REPORT_SUBMISSION_ENABLED = NO;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4WQE792998;
 				INFOPLIST_FILE = Lab/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"$(BUILT_PRODUCTS_DIR)/metamask-ios-sdk.o",

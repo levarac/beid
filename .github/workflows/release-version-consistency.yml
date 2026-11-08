@@ -20,18 +20,16 @@ jobs:
           RELEASE_BRANCH: ${{ github.ref_name }}
         run: |
           ruby <<'RUBY'
-          require "yaml"
-
           branch = ENV.fetch("RELEASE_BRANCH")
           match = branch.match(%r{\Arelease/(\d+\.\d+\.\d+)\z})
           abort "::error::Release branch must be named release/X.Y.Z; got #{branch.inspect}" unless match
 
-          project = YAML.safe_load(File.read("ios/project.yml"), aliases: true)
-          version = project.dig("targets", "Beid", "settings", "base", "MARKETING_VERSION")&.to_s
-          abort "::error::ios/project.yml targets.Beid.settings.base.MARKETING_VERSION is missing" if version.nil? || version.empty?
+          versions = File.read("ios/Version.xcconfig").scan(/^\s*MARKETING_VERSION\s*=\s*(\S+)\s*$/).flatten
+          abort "::error::ios/Version.xcconfig must set MARKETING_VERSION exactly once; found #{versions.length}" unless versions.length == 1
+          version = versions.first
 
           expected = match[1]
-          abort "::error::Release branch version #{expected} does not match ios/project.yml MARKETING_VERSION #{version}" unless version == expected
+          abort "::error::Release branch version #{expected} does not match ios/Version.xcconfig MARKETING_VERSION #{version}" unless version == expected
 
           puts "Release branch #{branch} matches MARKETING_VERSION #{version}"
           RUBY
