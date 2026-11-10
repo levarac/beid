@@ -303,7 +303,7 @@ private struct NowHomeView: View {
         }
         .buttonStyle(.plain)
         .disabled(card.joinActionEventCodeHashHex == nil)
-        .accessibilityLabel(Text(verbatim: "Join \(candidateName(card)), \(candidateRegistrationStatus(card))"))
+        .accessibilityLabel(Text(verbatim: "Join \(candidateName(card)), ") + Text(candidateRegistrationStatus(card)))
         .accessibilityIdentifier("home.nearby.additional.\(card.eventCodeHashHex)")
         Divider()
       }
@@ -520,7 +520,7 @@ private struct RecordsHomeView: View {
           VStack(alignment: .leading, spacing: DS.Space.l) {
             Text(String(
               localized: "records.header.counts",
-              defaultValue: "\(proofStore.proofs.count) records · \(eventGroups.count) events",
+              defaultValue: "\(eventGroups.count) records · \(eventGroups.count) events",
               comment: "Number of saved records and number of distinct recorded events."
             ))
               .beidTextStyle(DS.Font.Library.labelMono10)

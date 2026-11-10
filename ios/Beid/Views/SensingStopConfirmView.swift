@@ -8,6 +8,25 @@ import SwiftUI
 struct SensingStopConfirmSnapshot {
   let proofID: UUID?
   let event: EventSession
+
+  /// What the confirmation says. Before any record exists, stopping saves
+  /// nothing, so the copy must not promise a record.
+  var copy: SensingStopConfirmCopy { SensingStopConfirmCopy(hasRecord: proofID != nil) }
+}
+
+struct SensingStopConfirmCopy: Equatable {
+  let body: String
+  let stopTitle: String
+
+  init(hasRecord: Bool) {
+    if hasRecord {
+      body = "Your record will be saved on this phone. You can join this event again later."
+      stopTitle = "Stop and keep record"
+    } else {
+      body = "Nothing has been recorded yet. You can join this event again later."
+      stopTitle = "Stop sensing"
+    }
+  }
 }
 
 struct SensingStopConfirmView: View {
@@ -39,23 +58,25 @@ struct SensingStopConfirmView: View {
           Text("Stop sensing?")
             .beidTextStyle(DS.Font.Library.title19)
             .foregroundStyle(DS.Color.labelOnActionPrimary)
-          Text("Your record will be saved on this phone. You can join this event again later.")
+          Text(verbatim: snapshot.copy.body)
             .beidTextStyle(DS.Font.Library.body15)
             .foregroundStyle(DS.Color.textSecondaryOnInk)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, DS.Space.s)
 
-          Text("SO FAR")
-            .beidTextStyle(DS.Font.Library.labelMono10)
-            .foregroundStyle(DS.Color.textSecondaryOnInk)
-            .padding(.top, DS.Space.xxl)
+          if showsMetrics {
+            Text("SO FAR")
+              .beidTextStyle(DS.Font.Library.labelMono10)
+              .foregroundStyle(DS.Color.textSecondaryOnInk)
+              .padding(.top, DS.Space.xxl)
 
-          metrics
-            .padding(.top, DS.Space.s)
+            metrics
+              .padding(.top, DS.Space.s)
+          }
 
           Spacer(minLength: DS.Space.xxl)
 
-          BeidPrimaryButton("Stop and keep record", tone: .inverse, action: onStop)
+          BeidPrimaryButton(LocalizedStringKey(snapshot.copy.stopTitle), tone: .inverse, action: onStop)
           .accessibilityIdentifier("scan.stop-confirm.stop")
 
           BeidTextControl(
@@ -74,6 +95,11 @@ struct SensingStopConfirmView: View {
     }
     .background(DS.Color.textPrimary.ignoresSafeArea())
     .accessibilityIdentifier("scan.stop-confirm")
+  }
+
+  /// Hidden only when there is no record and both values would read zero.
+  private var showsMetrics: Bool {
+    snapshot.proofID != nil || sensing.devicesVerified > 0 || sensing.firstSightingAt != nil
   }
 
   private var eventDetail: String? {
