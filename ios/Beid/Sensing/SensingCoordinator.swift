@@ -1001,6 +1001,15 @@ final class SensingCoordinator: ObservableObject {
   /// Epoch-milliseconds source, injected so tests drive expiry deterministically.
   private let nearbyDiscoveryClock: () -> Int64
 
+  /// False while a join or event session is in progress. A joined code
+  /// outlives STOP (`reset` and `stopSensing` do not clear it), so "something
+  /// is joined" cannot gate selecting an event; an idle coordinator can always
+  /// select one, and selecting replaces the previous code.
+  var canSelectEventToJoin: Bool {
+    if case .idle = phase { return true }
+    return false
+  }
+
   /// The clock nearby-join eligibility is judged against, in epoch seconds.
   var nearbyDiscoveryNowEpochSeconds: Int64 { nearbyDiscoveryClock() / 1_000 }
 

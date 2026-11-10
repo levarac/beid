@@ -103,12 +103,10 @@ struct PastEventsView: View {
           }
         }
       }
-      // Matches "Join Event"'s existing single-slot invariant exactly
-      // (EventMembershipUITests.testJoinEventRowReenablesAfterLeavingEvent):
-      // every row here, including the current one, is only tappable while
-      // nothing is joined. Rejoining is "leave, then tap a past row," never
-      // an implicit leave-then-join on tap.
-      .disabled(sensingCoordinator.joinedEventCode != nil)
+      // Matches "Join Event"'s single-slot invariant: every row here,
+      // including the current one, is only tappable while no join or
+      // session is in progress. Ending the session (STOP) frees the slot.
+      .disabled(!sensingCoordinator.canSelectEventToJoin)
     }
   }
 }

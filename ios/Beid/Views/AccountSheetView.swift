@@ -731,7 +731,7 @@ private struct EventMembershipSections: View {
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(sensingCoordinator.joinedEventCode != nil)
+      .disabled(!sensingCoordinator.canSelectEventToJoin)
     }
   }
 

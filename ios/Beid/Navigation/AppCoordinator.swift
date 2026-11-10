@@ -780,10 +780,11 @@ final class AppCoordinator: ObservableObject {
 
   /// Rejoins a previously joined event by an already-known `Proof.eventCode`
   /// (beid#230's past-events list), instead of retyping it through
-  /// `EventCodeEntryView`. A no-op while an event is already joined —
-  /// matches the single-slot invariant `EventMembershipUITests` already
-  /// covers for "Join Event"; the caller is expected to disable the row the
-  /// same way, but this does not rely on that as its only guard.
+  /// `EventCodeEntryView`. A no-op while a join or session is in progress
+  /// (`SensingCoordinator.canSelectEventToJoin`) — the single-slot invariant
+  /// "Join Event" enforces; the caller is expected to disable its control the
+  /// same way, but this does not rely on that as its only guard. A joined
+  /// code survives STOP, so an idle coordinator may rejoin and replaces it.
   ///
   /// Routes through `attemptJoinEvent(code:)` (beid#226, DECISIONS
   /// 2026-08-20) so there is exactly one iOS call site into
@@ -793,13 +794,11 @@ final class AppCoordinator: ObservableObject {
   /// `attemptJoinEvent`'s normalization here means a legacy-cased stored
   /// code rejoins to the same RPID a fresh join of the same text derives
   /// today, instead of reproducing whatever it happened to canonicalize to
-  /// under the old, platform-diverging rule. The return value is discarded:
-  /// a stored `Proof.eventCode` cannot normalize to empty (it was itself
-  /// produced by a successful join), and a `.joinFailed` here has no
-  /// separate UI to report to, matching this function's pre-existing
-  /// `Bool`-discarding call into `SensingCoordinator`.
+  /// under the old, platform-diverging rule. A failed attempt has no separate
+  /// UI to report to, so it simply does nothing; a successful one finishes
+  /// like every other code join (`startSensingAfterSuccessfulJoin`).
   func rejoinPastEvent(code: String, canonicalEventIdHex: String? = nil) {
-    guard sensingCoordinator.joinedEventCode == nil else { return }
+    guard sensingCoordinator.canSelectEventToJoin else { return }
     guard attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex) == nil else { return }
     startSensingAfterSuccessfulJoin()
   }
@@ -1104,8 +1103,6 @@ final class AppCoordinator: ObservableObject {
     sensingCoordinator.stopSensing()
   }
 
-  /// Returning with Back never calls this method. Only an explicit stop
-  /// requests confirmation for the current participation.
   /// Only STOP SENSING ends participation. The Bluetooth-off screen is also
   /// reached from the Now tab while an event session is active, so opening
   /// Settings from there must not reset (finalize) that session.
@@ -1127,6 +1124,8 @@ final class AppCoordinator: ObservableObject {
     }
   }
 
+  /// Returning with Back never calls this method. Only an explicit stop
+  /// requests confirmation for the current participation.
   func requestScanClose() {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
       stopConfirmSnapshot == nil else { return }

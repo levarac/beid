@@ -55,15 +55,37 @@ final class EventRejoinTests: XCTestCase {
     )
   }
 
-  func testRejoinPastEventAfterLeavingJoinsTheNewCode() {
+  /// A joined code outlives STOP, so the guard keys on an active session:
+  /// after stopping, rejoining the same or another event works and starts
+  /// sensing again.
+  func testRejoinAfterStoppingTheSessionJoinsAgainAndStartsSensing() {
     let coordinator = makeApp()
     coordinator.rejoinPastEvent(code: "first-event")
-    coordinator.leaveEvent()
-    XCTAssertNil(coordinator.sensingCoordinator.joinedEventCode)
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .sensing)
+    _ = coordinator.sensingCoordinator.stopSensing()
+    coordinator.scanPresented = false
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
+    XCTAssertTrue(coordinator.sensingCoordinator.canSelectEventToJoin)
 
+    coordinator.rejoinPastEvent(code: "first-event")
+
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .sensing)
+    XCTAssertTrue(coordinator.scanPresented)
+    XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "first-event")
+
+    _ = coordinator.sensingCoordinator.stopSensing()
     coordinator.rejoinPastEvent(code: "second-event")
-
     XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "second-event")
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .sensing)
+    _ = coordinator.sensingCoordinator.reset()
+  }
+
+  func testSelectingAnEventIsUnavailableWhileASessionIsActive() {
+    let coordinator = makeApp()
+    XCTAssertTrue(coordinator.sensingCoordinator.canSelectEventToJoin)
+    coordinator.rejoinPastEvent(code: "first-event")
+    XCTAssertFalse(coordinator.sensingCoordinator.canSelectEventToJoin)
+    _ = coordinator.sensingCoordinator.reset()
   }
 
   func testSuccessfulRejoinStartsSensingAndShowsItFromTheNowTab() {
