@@ -39,7 +39,7 @@ struct SensingStopConfirmView: View {
           Text("Stop sensing?")
             .beidTextStyle(DS.Font.Library.title19)
             .foregroundStyle(DS.Color.labelOnActionPrimary)
-          Text("Stop sensing to seal and keep what you've recorded on this phone. You can sense this event again later.")
+          Text("Your record will be saved on this phone. You can join this event again later.")
             .beidTextStyle(DS.Font.Library.body15)
             .foregroundStyle(DS.Color.textSecondaryOnInk)
             .fixedSize(horizontal: false, vertical: true)
@@ -55,22 +55,11 @@ struct SensingStopConfirmView: View {
 
           Spacer(minLength: DS.Space.xxl)
 
-          Button {
-            BeidDesign.haptic()
-            onStop()
-          } label: {
-            Text("Stop and keep record")
-              .beidTextStyle(DS.Font.Library.title16)
-              .foregroundStyle(DS.Color.labelOnActionInverse)
-              .frame(maxWidth: .infinity)
-              .frame(minHeight: DS.Size.primaryButtonMinHeight)
-              .background(DS.Color.actionInverse, in: Capsule())
-          }
-          .buttonStyle(.plain)
+          BeidPrimaryButton("Stop and keep record", tone: .inverse, action: onStop)
           .accessibilityIdentifier("scan.stop-confirm.stop")
 
           BeidTextControl(
-            "Keep sensing",
+            "KEEP SENSING",
             labelColor: DS.Color.labelOnActionPrimary,
             accessibilityLabel: "Keep sensing",
             action: onKeepSensing
@@ -98,12 +87,12 @@ struct SensingStopConfirmView: View {
 
   private var metrics: some View {
     TimelineView(.periodic(from: .now, by: 1)) { context in
-      let elapsed = max(0, Int(sensing.firstSightingAt.map {
+      let elapsed = sensing.firstSightingAt.map {
         sensing.sensingPresentationNow(context.date).timeIntervalSince($0)
-      } ?? 0))
+      } ?? 0
       let items = [
         SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
-        SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED")
+        SensingMetric(value: ElapsedTimeFormat.minutesSeconds(elapsed), label: "ELAPSED")
       ]
       HStack(alignment: .top, spacing: 0) {
         ForEach(items) { item in

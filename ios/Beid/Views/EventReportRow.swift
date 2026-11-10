@@ -46,7 +46,7 @@ enum SessionDisplay {
     }
     return String(
       localized: "eventDetail.proof.state.recorded",
-      defaultValue: "RECORDED ON DEVICE",
+      defaultValue: "RECORDED ON THIS PHONE",
       comment: "Proof row state when no self-proof signature record exists for this exact stored Proof."
     )
   }

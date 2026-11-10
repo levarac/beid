@@ -223,7 +223,7 @@ tests cover an absent MetaMask installation, disconnect cleanup despite stale
 SDK state, and a late connect response after cancellation.
 
 `cancelPendingOperation()` (dispatch#26 condition 3) is a separate, lighter
-primitive from `disconnect()`: it is what Cancel/Try Again/Start Over in
+primitive from `disconnect()`: it is what Cancel/Try again/Start Over in
 onboarding, the Account sheet, and the connect+binding interstitial call, and
 it leaves the wallet SDK's own persisted session and the cached
 `WalletHintStore` hint alone. `disconnect()` is reserved for the explicit
@@ -290,7 +290,7 @@ cards or text-only stand-ins.
 `05 Sensing → 06a Event Found → 06b Recording`. The proof lands in
 `ProofStore` when recording starts. Recording stays live as the peer count
 grows. On confirmed stop, successful finalization shows 06 Sealed; DONE
-advances to persistent 07 Proof Collected, whose View collection action
+advances to persistent 07 Proof Collected, whose View records action
 returns to 04 home.
 
 Release configurations, including TestFlight and App Store archives, always

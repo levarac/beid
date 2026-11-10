@@ -77,17 +77,29 @@ struct BeidHeroHeader: View {
 }
 
 struct BeidPrimaryButton: View {
+  /// Fill and label pairing. `.inverse` is for ink grounds (DESIGN.md §5).
+  enum Tone {
+    case primary
+    case inverse
+  }
+
   let title: LocalizedStringKey
   let labelColor: Color
+  let tone: Tone
+  let hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle
   let action: () -> Void
 
   init(
     _ title: LocalizedStringKey,
-    labelColor: Color = DS.Color.labelOnActionPrimary,
+    tone: Tone = .primary,
+    labelColor: Color? = nil,
+    haptic: UIImpactFeedbackGenerator.FeedbackStyle = .light,
     action: @escaping () -> Void
   ) {
     self.title = title
-    self.labelColor = labelColor
+    self.tone = tone
+    self.labelColor = labelColor ?? (tone == .inverse ? DS.Color.labelOnActionInverse : DS.Color.labelOnActionPrimary)
+    self.hapticStyle = haptic
     self.action = action
   }
 
@@ -104,12 +116,12 @@ struct BeidPrimaryButton: View {
       .foregroundStyle(labelColor)
       .frame(maxWidth: .infinity)
       .frame(minHeight: DS.Size.primaryButtonMinHeight)
-      .background(DS.Color.actionPrimary, in: Capsule())
+      .background(tone == .inverse ? DS.Color.actionInverse : DS.Color.actionPrimary, in: Capsule())
       .contentShape(Capsule())
   }
 
   private func performAction() {
-    BeidDesign.haptic()
+    BeidDesign.haptic(hapticStyle)
     action()
   }
 }
@@ -127,7 +139,7 @@ struct BeidSecondaryButton: View {
   private func label() -> some View {
     Text(title)
       .font(DS.Font.cardTitle)
-      .frame(maxWidth: .infinity, minHeight: 44)
+      .frame(maxWidth: .infinity, minHeight: DS.Size.minHitTarget)
   }
 
   private func performAction() {

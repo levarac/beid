@@ -72,7 +72,7 @@ struct WelcomeView: View {
               if #available(iOS 26, *) {
                 Button(role: .confirm) { showAboutSensing = false }
               } else {
-                Button("Done") { showAboutSensing = false }
+                Button("Done", systemImage: "checkmark") { showAboutSensing = false }
               }
             }
           }

@@ -11,8 +11,8 @@ struct BluetoothDeniedView: View {
 
   var body: some View {
     BeidStatusLayout(
-      title: "Bluetooth permission required",
-      message: "This feature requires Bluetooth permission.",
+      title: "beid needs Bluetooth",
+      message: "beid uses Bluetooth to find nearby events and hear nearby phones. Turn it on for beid in Settings.",
       footer: {
         BeidPrimaryButton("Open Settings") {
           UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)

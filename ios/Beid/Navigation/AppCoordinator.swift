@@ -782,7 +782,7 @@ final class AppCoordinator: ObservableObject {
   /// (beid#230's past-events list), instead of retyping it through
   /// `EventCodeEntryView`. A no-op while a join or session is in progress
   /// (`SensingCoordinator.canSelectEventToJoin`) — the single-slot invariant
-  /// "Join Event" enforces; the caller is expected to disable its control the
+  /// "Join event" enforces; the caller is expected to disable its control the
   /// same way, but this does not rely on that as its only guard. A joined
   /// code survives STOP, so an idle coordinator may rejoin and replaces it.
   ///

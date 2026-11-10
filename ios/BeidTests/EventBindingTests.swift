@@ -501,7 +501,7 @@ final class EventBindingTests: XCTestCase {
     // beid#222: `ScanFlowView`'s auto-present/auto-dismiss `.onChange(of:
     // sensing.bindingState)` presents on a fresh `.none -> .pendingConnect`
     // and dismisses on any transition INTO `.none`. Both guards depend on
-    // this exact round trip (`.failed` -> Try Again's `declineBinding()`
+    // this exact round trip (`.failed` -> Try again's `declineBinding()`
     // -> `.pendingConnect`) never observably landing on `.none` in
     // between — if it did, the sheet would spuriously dismiss itself while
     // the user is actively retrying a failed binding. `declineBinding()`'s

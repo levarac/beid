@@ -85,7 +85,7 @@ enum WalletConnectorError: Error, Equatable {
   /// justifies the case's existence on its own, independent of whether any
   /// UI path reaches it today. For direct user cancellation, it also
   /// describes what happened: the user stopped this specific operation from
-  /// beid's own UI (Cancel, Try Again, Start Over) before it reached — or
+  /// beid's own UI (Cancel, Try again, Start Over) before it reached — or
   /// heard back from — the wallet.
   case cancelled
 }
@@ -129,7 +129,7 @@ protocol WalletConnector: ObservableObject {
   /// Aborts whatever connect/sign attempt is currently in flight and returns
   /// to `.idle`, without touching the wallet SDK's own persisted session or
   /// `WalletHintStore` (dispatch#26 condition 3). Use this for a user
-  /// cancelling out of beid's own UI (Cancel, Try Again, Start Over) —
+  /// cancelling out of beid's own UI (Cancel, Try again, Start Over) —
   /// reserve `disconnect()` for an explicit "forget this wallet" action.
   func cancelPendingOperation()
   @discardableResult func handle(url: URL) -> Bool

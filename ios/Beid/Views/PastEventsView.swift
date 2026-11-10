@@ -37,7 +37,7 @@ struct PastEventsView: View {
         if pastEvents.isEmpty {
           Text(
             "No past events yet.",
-            comment: "Empty state on the Past Events screen, shown when this device has never recorded a Proof for any event."
+            comment: "Empty state on the Past events screen, shown when this device has never recorded a Proof for any event."
           )
           .font(DS.Font.supporting)
           .foregroundStyle(DS.Color.textSecondary)
@@ -48,11 +48,12 @@ struct PastEventsView: View {
         }
       } footer: {
         Text(
-          "Only events you've actually recorded a proof for are listed here.",
-          comment: "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
+          "Only events you have a saved record for are listed here.",
+          comment: "Footer under the Past events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
         )
       }
     }
+    .listStyle(.plain)
     .scrollContentBackground(.hidden)
     .background(DS.Color.surfaceCanvas)
     .navigationTitle(navigationTitle)
@@ -60,12 +61,12 @@ struct PastEventsView: View {
   }
 
   /// Reuses `account.pastEvents.label` rather than a second, separately
-  /// translatable "Past Events" key — the Account sheet's row label and
+  /// translatable "Past events" key — the Account sheet's row label and
   /// this screen's nav title are the same English text for the same
   /// concept, so per AGENTS.md's key-reuse rule this is an explicit-key
   /// case, not two one-off literals.
   private var navigationTitle: String {
-    String(localized: "account.pastEvents.label", defaultValue: "Past Events")
+    String(localized: "account.pastEvents.label", defaultValue: "Past events")
   }
 
   @ViewBuilder
@@ -96,7 +97,7 @@ struct PastEventsView: View {
           if isCurrent {
             Text(
               "Current",
-              comment: "Trailing label on the Past Events row for the event this device is presently joined to — a plain state marker, not an external verification claim."
+              comment: "Trailing label on the Past events row for the event this device is presently joined to — a plain state marker, not an external verification claim."
             )
             .font(DS.Font.meta)
             .foregroundStyle(DS.Color.textPrimary)

@@ -649,7 +649,7 @@ final class SigilViewTests: XCTestCase {
       )
       XCTAssertEqual(
         SigilDrawing.recordAccessibilitySummary(for: layout),
-        "Mutual not available, 1 detected, window 3"
+        "1 devices heard, window 3. Mutual check not available yet."
       )
       XCTAssertEqual(
         SigilDrawing.accessibilitySummary(for: layout),

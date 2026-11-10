@@ -36,7 +36,7 @@ final class EventIdentityVerificationUITests: XCTestCase {
     XCTAssertFalse(identityVerificationRow.exists)
     simulateSignalLost.tap()
 
-    XCTAssertTrue(app.staticTexts["Signal Lost"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Signal lost"].waitForExistence(timeout: 5))
     XCTAssertFalse(identityVerificationRow.exists)
   }
 

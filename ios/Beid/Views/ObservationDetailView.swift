@@ -200,7 +200,7 @@ struct ObservationDetailView: View {
           .beidTextStyle(DS.Font.Library.body13)
           .foregroundStyle(DS.Color.textSecondary)
       }
-      metricRow("PEERS IN THIS WINDOW", value: window.peerCount)
+      metricRow("DEVICES IN THIS WINDOW", value: window.peerCount)
       unavailableRow("WINDOW DURATION")
       unavailableRow("AVG SIGNAL")
     }
@@ -265,7 +265,7 @@ struct ObservationDetailView: View {
         .beidTextStyle(DS.Font.Library.labelMono10)
         .foregroundStyle(DS.Color.textSecondary)
         .padding(.bottom, DS.Space.s + DS.Space.xs)
-      metricRow("PEERS OBSERVED", value: presentation.deviceCount)
+      metricRow("DEVICES HEARD", value: presentation.deviceCount)
         .accessibilityIdentifier("observation-detail.peers")
       metricRow("WINDOWS", value: presentation.windowCount)
         .accessibilityIdentifier("observation-detail.windows")

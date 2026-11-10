@@ -222,7 +222,7 @@ final class WalletConnectTests: XCTestCase {
 
   // MARK: - `cancelPendingOperation()` (dispatch#26 condition 3)
   //
-  // The light, in-app cancel used by Cancel/Try Again/Start Over — unlike
+  // The light, in-app cancel used by Cancel/Try again/Start Over — unlike
   // `disconnect()`, it must never reach the SDK's own persisted session
   // (`transport.disconnectCount` staying 0 is the proof of that) or clear
   // `WalletHintStore`.
