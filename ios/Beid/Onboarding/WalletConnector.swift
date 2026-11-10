@@ -12,7 +12,7 @@ enum WalletConnectorUnavailableReason: Equatable {
 /// read from `CachedWalletHint`/`WalletHintStore`. This is the structural
 /// half of dispatch#26 condition 4 (a cached address must never reach a
 /// binding signature): `performBinding`/`completeBinding`'s call site in
-/// `EventBindingSheetView` only ever accepts this type, and nothing in this
+/// The removed binding sheet only ever accepts this type, and nothing in this
 /// codebase converts a `CachedWalletHint`/`String` into one — the memberwise
 /// initializer is `private` to this file, and the only way to construct a
 /// value from any other file is `fromConnectorResult(address:chainId:)`
@@ -77,7 +77,7 @@ enum WalletConnectorError: Error, Equatable {
   /// forever (release). Of the other three existing cases, none is a
   /// truthful value to resolve it with: `.rejected` means MetaMask error
   /// 4001, a wallet-side decline, which never happened; `.notConnected` is
-  /// the literal string `EventBindingSheetView` shows a user ("Wallet not
+  /// the literal string the removed binding sheet shows a user ("Wallet not
   /// connected"), which overclaims — it reads as "your wallet link is
   /// broken, reconnect from zero," when the SDK session is deliberately
   /// left intact; `.timedOut` claims a response timer lapsed, which also

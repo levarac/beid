@@ -11,7 +11,7 @@ import Foundation
 /// `BindingRecord`) is exercisable in the simulator/demo walkthrough without
 /// a real wallet app installed — mirrors `SensingCoordinator
 /// .useDemoEventMode`'s existing demo-fixture convention. Offered only by
-/// `EventBindingSheetView`'s demo escape hatch (gated on `useDemoEventMode`,
+/// the removed binding sheet's demo escape hatch (gated on `useDemoEventMode`,
 /// same as `simulateSignalLost()`), never by `WalletConnectPairingView`
 /// (onboarding/Account sheet reuse it as-is, per
 /// `docs/specs/scan-slice2-redesign.md` §5.6 — no demo option there).
@@ -83,7 +83,7 @@ final class DemoWalletConnector: ObservableObject, WalletConnector {
   /// DEBUG-only parity with `MetaMaskConnector.connectAndSign` (dispatch#26
   /// condition 2) — no `.restored` cache-hint round trip exists for this
   /// connector (it is never wired to `WalletHintStore`, see the type doc
-  /// comment above), so this exists only so `EventBindingSheetView`'s demo
+  /// comment above), so this exists only so the removed binding sheet's demo
   /// escape hatch keeps compiling against the shared `WalletConnector`
   /// protocol, not because the demo path exercises the restored-hint UI.
   func connectAndSign(

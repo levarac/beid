@@ -11,7 +11,7 @@ import Foundation
 /// Sub-slice 2a wired this to `.pendingConnect` the instant `.recording`
 /// begins (state only). Sub-slice 2b drives the rest:
 /// `.connecting`/`.awaitingApproval`/`.bound`/`.failed`, via the connect+
-/// binding interstitial (`EventBindingSheetView`) and
+/// binding interstitial (the removed binding sheet) and
 /// `SensingCoordinator`'s binding methods. See `BindingRecord`
 /// (`Persistence/BindingRecord.swift`) for what `.bound` carries.
 enum EventBindingState: Equatable {

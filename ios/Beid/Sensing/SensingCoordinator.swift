@@ -3997,7 +3997,7 @@ final class SensingCoordinator: ObservableObject {
   // conformance sub-slice C, `docs/specs/barnard-binding-conformance.md`
   // §2.3/§2.4)
   //
-  // The interstitial (`EventBindingSheetView`) drives these; this type owns
+  // The interstitial (the removed binding sheet) drives these; this type owns
   // the message/signing/persistence side so the view only ever handles the
   // wallet connector's `connect()`/`requestPersonalSign(messageHex:)` calls.
 

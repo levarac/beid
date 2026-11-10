@@ -159,7 +159,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   /// immediately as a reference, with an explicit path both to resume it
   /// (a real `connect()` round trip, same as `providerSelectionContent`'s
   /// button — this view has no signature to collapse into that trip, see
-  /// `EventBindingSheetView`'s own restored-hint handling for the
+  /// the removed binding sheet's own restored-hint handling for the
   /// connect+sign collapse) and to bypass it for a fresh connection.
   private func restoredContent(hint: CachedWalletHint) -> some View {
     VStack(spacing: DS.Space.l) {
@@ -347,7 +347,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
 /// Preview-only fake `WalletConnector` with a freely settable `state`, so
 /// the `#Preview` blocks below can exercise every `WalletConnectorState`
 /// case without a real wallet SDK. Not `DemoWalletConnector`: that one is
-/// reserved for `EventBindingSheetView`'s demo escape hatch, is a singleton
+/// reserved for the removed binding sheet's demo escape hatch, is a singleton
 /// with a `private(set)` state, and only ever transitions
 /// `.idle → .connecting → .connected` — insufficient for previewing
 /// `.awaitingApproval`, `.failed`, `.notConfigured`, or `.unavailable`.

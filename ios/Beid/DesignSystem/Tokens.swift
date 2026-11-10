@@ -138,8 +138,6 @@ enum DS {
     static let sensingSealedSigil: CGFloat = 300
     /// Flat 2b 09 Proof Detail artwork slot (node 204:36).
     static let proofDetailSigil: CGFloat = 200
-    /// The circular per-proof gradient avatar diameter.
-    static let proofCardArtwork: CGFloat = 76
     /// Saved-record artwork in the two-column Records grid.
     static let recordsGridSigil: CGFloat = 104
     /// Legacy detail gradient-avatar diameter, superseded by
@@ -178,8 +176,6 @@ enum DS {
     static let compactPrimaryButtonMinHeight: CGFloat = 52
     /// `Button/Primary` Size=Small width (Home's Scan).
     static let compactPrimaryButtonWidth: CGFloat = 140
-    /// Numbered badge diameter for step lists (`BeidNumberedStepList`).
-    static let stepBadge: CGFloat = 28
   }
 
   // MARK: - Layout

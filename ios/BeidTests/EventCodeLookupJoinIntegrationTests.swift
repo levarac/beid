@@ -235,7 +235,7 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
   /// production caller) instead of by a second join attempt — the onboarding
   /// join surface's path behind the beid#258 P1-1 round-2 fix (abandoning
   /// the join surface must invalidate whatever lookup was still in flight).
-  func testReturnToWalletConnectWhileSuspendedSupersedesTheInFlightOnboardingAttempt() async throws {
+  func testReturnToBluetoothPermissionWhileSuspendedSupersedesTheInFlightOnboardingAttempt() async throws {
     let coordinator = AppCoordinator(registryClient: nil)
     let relay = ContinuationRelay()
     coordinator.resolveCanonicalEventIdHexOverride = { _ in
