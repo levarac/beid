@@ -264,6 +264,7 @@ final class HomeStandbyLifecycleTests: XCTestCase {
   }
 }
 
+@MainActor
 final class ActiveSessionControlsTests: XCTestCase {
   private let event = EventSession(id: "TEST-CONTROLS", name: "Test Controls Event", venue: nil)
 
