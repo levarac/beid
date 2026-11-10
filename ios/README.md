@@ -158,8 +158,7 @@ remain available to legacy record handling.
 
 ## WalletConnect
 
-The legacy `WalletConnectView` and the Account sheet's "Connect Wallet"
-action both use `WalletConnectPairingView`
+The Account sheet's "Connect Wallet" action uses `WalletConnectPairingView`
 (`Beid/Views/WalletConnectView.swift`), which drives a `WalletConnector`:
 `MetaMaskConnector` wraps MetaMask's direct app-to-app mobile SDK. The
 selected connector is retained by `AppCoordinator`, so proof signing uses

@@ -138,7 +138,7 @@ enum DS {
     static let sensingSealedSigil: CGFloat = 300
     /// Flat 2b 09 Proof Detail artwork slot (node 204:36).
     static let proofDetailSigil: CGFloat = 200
-    /// `ProofCardView`'s circular per-proof gradient avatar diameter.
+    /// The circular per-proof gradient avatar diameter.
     static let proofCardArtwork: CGFloat = 76
     /// Saved-record artwork in the two-column Records grid.
     static let recordsGridSigil: CGFloat = 104

@@ -11,8 +11,6 @@ struct RootView: View {
       switch coordinator.screen {
       case .welcome:
         WelcomeView()
-      case .walletConnect:
-        BluetoothPermissionView()
       case .eventCodeEntry:
         EventCodeEntryView()
       case .bluetoothPermission:

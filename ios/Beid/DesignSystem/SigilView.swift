@@ -313,8 +313,7 @@ struct BeidSigilView: View {
 // MARK: - Preview fixtures
 
 /// Preview-only helper, built through the same shared calls production code
-/// would use rather than a hand-rolled stand-in — the same arrangement, and
-/// the same reason, as `PreviewAggregateFactory`.
+/// would use rather than a hand-rolled stand-in.
 ///
 /// Fixture data only. Presence 2 (mutual) does not exist on the device today
 /// (DECISIONS 2026-08-09, 2026-09-23), so a preview is the only place the

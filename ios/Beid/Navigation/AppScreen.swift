@@ -7,7 +7,6 @@ import Foundation
 /// the Now navigation stack rather than represented by a separate root.
 enum AppScreen: Equatable {
   case welcome
-  case walletConnect
   case eventCodeEntry
   case bluetoothPermission
   case bluetoothDenied

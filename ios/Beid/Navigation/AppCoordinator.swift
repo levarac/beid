@@ -37,7 +37,7 @@ final class AppCoordinator: ObservableObject {
   @Published var screen: AppScreen = .welcome
   @Published var walletAddress: String?
   /// The address from this process's live connector session, if any — the
-  /// only wallet-address value `EventBindingSheetView.performBinding` is
+  /// only wallet-address value the former event-binding sheet was
   /// allowed to read for its "already connected" fast path (beid#315
   /// structural containment; see `LiveWalletAddress`'s doc comment in
   /// `WalletConnector.swift`). `walletAddress` above stays a plain,
@@ -78,7 +78,6 @@ final class AppCoordinator: ObservableObject {
       }
     }
   }
-  @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
@@ -441,7 +440,7 @@ final class AppCoordinator: ObservableObject {
   /// Takes `LiveWalletAddress`, not a plain `String` — every production
   /// caller already has one, straight from a connector's own successful
   /// `connect()`/`connectAndSign()` (see `WalletConnectPairingView.onConnected`
-  /// and `EventBindingSheetView`'s restored-hint fast path). This is part of
+  /// and the Account sheet's restored-hint fast path). This is part of
   /// beid#315's structural containment: a bare `String` (e.g. read from a
   /// `CachedWalletHint`) cannot be passed here without first being wrapped in
   /// a visible `LiveWalletAddress(...)` construction.
@@ -451,12 +450,6 @@ final class AppCoordinator: ObservableObject {
     }
     liveWalletAddress = address
     walletAddress = address.address
-  }
-
-  /// Wallet-optional fallback from `WalletConnectView`'s secondary action:
-  /// join an event by manually entered code instead of connecting a wallet.
-  func skipWalletForEventCode() {
-    screen = .eventCodeEntry
   }
 
   /// The way back out of `EventCodeEntryView` for a user who doesn't
@@ -469,7 +462,7 @@ final class AppCoordinator: ObservableObject {
   /// `.bluetoothPermission` when that stale lookup finally completes and
   /// `joinEvent` succeeds — a screen change the user never asked for, for
   /// an event they explicitly walked away from (beid#258 P1-1 round-2 fix).
-  func returnToWalletConnect() {
+  func returnToBluetoothPermission() {
     cancelPendingJoinAttempt()
     screen = .bluetoothPermission
   }
@@ -726,7 +719,7 @@ final class AppCoordinator: ObservableObject {
 
   /// Call when the account-sheet join surface is dismissed (Cancel or
   /// swipe) while a lookup may still be in flight — see
-  /// `cancelPendingJoinAttempt`'s doc comment and `returnToWalletConnect`'s
+  /// `cancelPendingJoinAttempt`'s doc comment and `returnToBluetoothPermission`'s
   /// onboarding-side equivalent.
   func cancelPendingAccountSheetJoinAttempt() {
     cancelPendingJoinAttempt()

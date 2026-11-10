@@ -37,7 +37,7 @@ import XCTest
 /// get a real, test-controlled suspension point without a flaky
 /// wall-clock-dependent test. A naive *sequential* version of this test
 /// (`Task { await coordinator.joinEventResolvingCanonicalId(...) }` then
-/// immediately `coordinator.returnToWalletConnect()`) does **not** work:
+/// immediately `coordinator.returnToBluetoothPermission()`) does **not** work:
 /// Swift's `Task { }` creation never suspends its creator, so the
 /// cancellation's generation bump provably runs before the child task's own
 /// bump — the reverse of a real abandon-mid-lookup. `ContinuationRelay`
@@ -231,7 +231,7 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
   }
 
   /// Same shape as the race above, but "first" is superseded by
-  /// `cancelPendingJoinAttempt` (via `returnToWalletConnect`, its only
+  /// `cancelPendingJoinAttempt` (via `returnToBluetoothPermission`, its only
   /// production caller) instead of by a second join attempt — the onboarding
   /// join surface's path behind the beid#258 P1-1 round-2 fix (abandoning
   /// the join surface must invalidate whatever lookup was still in flight).
@@ -244,7 +244,7 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
 
     async let outcome = coordinator.joinEventResolvingCanonicalId(code: "abandoned")
     await relay.waitUntilSuspended()
-    coordinator.returnToWalletConnect()
+    coordinator.returnToBluetoothPermission()
     await relay.resume(returning: "0x" + String(repeating: "aa", count: 32))
 
     let resolvedOutcome = await outcome

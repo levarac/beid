@@ -11,15 +11,6 @@ final class EventCodeJoinTests: XCTestCase {
     super.tearDown()
   }
 
-  func testSkipWalletForEventCodeRoutesToEventCodeEntry() {
-    let coordinator = AppCoordinator()
-    coordinator.screen = .walletConnect
-
-    coordinator.skipWalletForEventCode()
-
-    XCTAssertEqual(coordinator.screen, .eventCodeEntry)
-  }
-
   func testJoinEventWithEmptyCodeReturnsValidationErrorAndDoesNotAdvance() {
     let coordinator = AppCoordinator()
     coordinator.screen = .eventCodeEntry

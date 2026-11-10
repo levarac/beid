@@ -14,8 +14,7 @@ import SwiftUI
 /// fixed in count.
 ///
 /// Deliberately reuses `AccountSheetView`'s own plain `List`/`Section`/
-/// `Button` idiom, the same one `VenueDeviceOrganizerView`'s history
-/// list already uses for a "past records, tap for detail/no detail" list.
+/// `Button` idiom.
 /// Does **not** use `EventCardView` — its `Badge` vocabulary
 /// (`.detected`/`.recording`/`.paused`) is tied to the live scan-phase
 /// machine, and none of those states honestly describe "a past event, tap

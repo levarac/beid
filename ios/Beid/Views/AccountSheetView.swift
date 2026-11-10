@@ -636,7 +636,7 @@ private struct AccountBluetoothRow: View {
 }
 
 /// Sheet wrapper around `WalletConnectPairingView` for the Account sheet's
-/// "Connect Wallet" action. Unlike `WalletConnectView` (onboarding), success
+/// "Connect Wallet" action. Unlike the removed onboarding wallet screen, success
 /// here just sets `walletAddress` and dismisses — it does not advance
 /// `coordinator.screen`. No `secondaryAction`; Cancel in the toolbar is the
 /// escape hatch instead.
@@ -673,7 +673,7 @@ private struct WalletConnectSheetView: View {
     }
     // Sheets don't inherit the presenter's .tint (unlike push navigation),
     // so without this the toolbar Cancel button renders system blue — a
-    // §5 MUST-NOT violation (see WalletConnectView's doc comment).
+    // §5 MUST-NOT violation (see `WalletConnectPairingView`'s doc comment).
     .tint(DS.Color.actionPrimary)
   }
 }

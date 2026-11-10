@@ -30,7 +30,7 @@ struct Proof: Identifiable, Codable, Hashable {
   /// missing *field* today but not an unknown *enum case*, and this stays
   /// inside that documented tolerance rather than widening it. See beid#155
   /// for the still-open, general schema-versioning question this does not
-  /// attempt to solve. Used by `TransparencyView`'s "Recorded on device"
+  /// attempt to solve. Used by the "Recorded on device"
   /// row to filter `WindowReportStore.reports`; `nil` here means that row
   /// renders as "not yet available," the same honest-gap treatment as the
   /// rows that have no data source at all yet — never a false zero.

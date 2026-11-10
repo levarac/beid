@@ -97,7 +97,7 @@ struct EventCodeEntryView: View {
 
             if mode == .onboarding && !isScreenshotFixture {
               BeidSecondaryButton(title: "Continue without a code") {
-                coordinator.returnToWalletConnect()
+                coordinator.returnToBluetoothPermission()
               }
               .tint(DS.Color.actionPrimary)
             }
