@@ -54,6 +54,7 @@ struct PastEventsView: View {
         )
       }
     }
+    .listStyle(.plain)
     .scrollContentBackground(.hidden)
     .background(DS.Color.surfaceCanvas)
     .navigationTitle(navigationTitle)

@@ -139,7 +139,7 @@ struct ProofCollectedView: View {
               if #available(iOS 26, *) {
                 Button(role: .confirm) { showWhatWeSend = false }
               } else {
-                Button("Done") { showWhatWeSend = false }
+                Button("Done", systemImage: "checkmark") { showWhatWeSend = false }
               }
             }
           }

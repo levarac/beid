@@ -490,8 +490,7 @@ struct SensingView: View {
   }
 
   private func pulseAnimation(delay: Double) -> Animation {
-    .easeOut(duration: 1.8)
-      .repeatForever(autoreverses: false)
+    DS.Motion.sensingPulse
       .delay(delay)
   }
 }
@@ -700,7 +699,7 @@ struct SensingWindowBars: View {
   var body: some View {
     VStack(spacing: DS.Space.s) {
       GeometryReader { geometry in
-        let barGap: CGFloat = 6
+        let barGap = DS.Size.observationChartBarGap
         HStack(alignment: .bottom, spacing: barGap) {
           ForEach(0..<6, id: \.self) { index in
             Rectangle()

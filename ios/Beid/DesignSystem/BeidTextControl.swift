@@ -165,7 +165,7 @@ private extension View {
 /// (DESIGN.md §12). Use it for `CLOSE`, `DONE`, `COPY`, `OPEN →`.
 ///
 /// `.buttonStyle(.plain)` so no system chrome reappears around the text, and
-/// the haptic fires before the action, matching `BeidPrimaryButton`.
+/// an opt-in haptic (`haptic: true`) fires before the action, as `BeidPrimaryButton` always does.
 ///
 /// **On `labelColor` and destructive roles.** `role: .destructive` changes the
 /// semantics, not the color. DESIGN.md §5 permits `DS.Color.statusOff` as text
@@ -178,6 +178,10 @@ struct BeidTextControl: View {
   let labelColor: Color
   let accessibilityLabel: LocalizedStringKey?
   let role: ButtonRole?
+  /// DESIGN.md §9: haptics only at meaningful commits. Off by default; turn it
+  /// on only where the tap changes state (join, copy, confirm), never for
+  /// navigation.
+  let haptic: Bool
   let action: () -> Void
 
   /// A plain text control, with no glyph. See `BeidTextControlLabel`'s
@@ -187,6 +191,7 @@ struct BeidTextControl: View {
     labelColor: Color = DS.Color.textPrimary,
     accessibilityLabel: LocalizedStringKey? = nil,
     role: ButtonRole? = nil,
+    haptic: Bool = false,
     action: @escaping () -> Void
   ) {
     self.title = title
@@ -194,6 +199,7 @@ struct BeidTextControl: View {
     self.labelColor = labelColor
     self.accessibilityLabel = accessibilityLabel
     self.role = role
+    self.haptic = haptic
     self.action = action
   }
 
@@ -204,6 +210,7 @@ struct BeidTextControl: View {
     glyph: BeidTextControlGlyph,
     labelColor: Color = DS.Color.textPrimary,
     role: ButtonRole? = nil,
+    haptic: Bool = false,
     action: @escaping () -> Void
   ) {
     self.title = title
@@ -211,6 +218,7 @@ struct BeidTextControl: View {
     self.labelColor = labelColor
     self.accessibilityLabel = glyph.accessibilityLabel
     self.role = role
+    self.haptic = haptic
     self.action = action
   }
 
@@ -235,7 +243,7 @@ struct BeidTextControl: View {
   }
 
   private func performAction() {
-    BeidDesign.haptic()
+    if haptic { BeidDesign.haptic() }
     action()
   }
 }

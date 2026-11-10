@@ -263,7 +263,7 @@ private struct NowHomeView: View {
       Text(candidateRegistrationStatus(card))
         .beidTextStyle(DS.Font.Library.labelMono10)
         .foregroundStyle(DS.Color.textSecondaryOnInk)
-      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary) {
+      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary, haptic: true) {
         coordinator.joinNearbyEventFromHome(card)
       }
       .disabled(card.joinActionEventCodeHashHex == nil)
@@ -299,6 +299,7 @@ private struct NowHomeView: View {
         }
         .buttonStyle(.plain)
         .disabled(card.joinActionEventCodeHashHex == nil)
+        .accessibilityLabel(Text(verbatim: "Join \(candidateName(card)), \(candidateRegistrationStatus(card))"))
         .accessibilityIdentifier("home.nearby.additional.\(card.eventCodeHashHex)")
         Divider()
       }
@@ -312,7 +313,7 @@ private struct NowHomeView: View {
       Text("Demo event").beidTextStyle(DS.Font.Library.title19)
       Text("Sample devices and records. No Bluetooth event is joined.")
         .beidTextStyle(DS.Font.Library.body13)
-      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary) {
+      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary, haptic: true) {
         coordinator.joinDemoEventFromHome()
       }
       .accessibilityIdentifier("home.demo.join")
@@ -475,8 +476,7 @@ private struct NowHomeView: View {
   }
 
   private func elapsedString(_ seconds: TimeInterval) -> String {
-    let elapsed = max(0, Int(seconds))
-    return "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))"
+    ElapsedTimeFormat.minutesSeconds(seconds)
   }
 
   #if DEBUG
@@ -516,7 +516,7 @@ private struct RecordsHomeView: View {
           VStack(alignment: .leading, spacing: DS.Space.l) {
             Text(String(
               localized: "records.header.counts",
-              defaultValue: "\(eventGroups.count) records · \(eventGroups.count) events",
+              defaultValue: "\(proofStore.proofs.count) records · \(eventGroups.count) events",
               comment: "Number of saved records and number of distinct recorded events."
             ))
               .beidTextStyle(DS.Font.Library.labelMono10)

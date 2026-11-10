@@ -307,7 +307,7 @@ struct ReportDetailView: View {
         }
         Spacer(minLength: 0)
         Text("→")
-          .beidTextStyle(DS.Font.Library.labelMono11Time)
+          .beidTextStyle(DS.Font.Library.labelMono11)
           .foregroundStyle(DS.Color.textPrimary)
           .accessibilityHidden(true)
       }
@@ -389,7 +389,7 @@ struct ReportDetailView: View {
   private var hairline: some View {
     Rectangle()
       .fill(DS.Color.strokeHairline)
-      .frame(height: 1)
+      .frame(height: DS.Size.hairline)
       .accessibilityHidden(true)
   }
 

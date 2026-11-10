@@ -401,19 +401,10 @@ struct AccountSheetView: View {
 
   private var disconnectConfirmationActions: some View {
     VStack(spacing: DS.Space.s) {
-      Button(role: .destructive) {
-        BeidDesign.haptic(.medium)
+      BeidPrimaryButton("Disconnect", tone: .inverse, haptic: .medium) {
         coordinator.disconnectWallet()
         showDisconnectConfirmation = false
-      } label: {
-        Text("Disconnect")
-          .beidTextStyle(DS.Font.Library.title16)
-          .foregroundStyle(DS.Color.labelOnActionInverse)
-          .frame(maxWidth: .infinity, minHeight: DS.Size.primaryButtonMinHeight)
-          .background(DS.Color.actionInverse, in: Capsule())
-          .contentShape(Capsule())
       }
-      .buttonStyle(.plain)
 
       AccountTextControl(
         "Keep connected",

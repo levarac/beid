@@ -5,6 +5,7 @@ import SwiftUI
 
 struct RootView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     Group {
@@ -30,7 +31,7 @@ struct RootView: View {
     ))
     .modifier(OwnerKeyFailurePresenter(sensingCoordinator: coordinator.sensingCoordinator))
     .tint(DS.Color.actionPrimary)
-    .animation(DS.Motion.screenTransition, value: coordinator.screen)
+    .animation(reduceMotion ? nil : DS.Motion.screenTransition, value: coordinator.screen)
 
   }
 }
