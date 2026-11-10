@@ -1001,6 +1001,9 @@ final class SensingCoordinator: ObservableObject {
   /// Epoch-milliseconds source, injected so tests drive expiry deterministically.
   private let nearbyDiscoveryClock: () -> Int64
 
+  /// The clock nearby-join eligibility is judged against, in epoch seconds.
+  var nearbyDiscoveryNowEpochSeconds: Int64 { nearbyDiscoveryClock() / 1_000 }
+
   /// At most one in-flight expiry wake-up, rescheduled on every publish.
   private var nearbyDiscoveryExpiryTask: Task<Void, Never>?
   /// Retains Home's request while a prior scan awaits its stopped callback.

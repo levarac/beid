@@ -954,7 +954,7 @@ final class AppCoordinator: ObservableObject {
     // disabled (no registration-verified event) must not stop the timer.
     let nearbyCards = NearbyEventCardListPresentation(
       candidates: sensingCoordinator.nearbyEventCandidates,
-      nowEpochSeconds: Int64(Date().timeIntervalSince1970.rounded(.down))
+      nowEpochSeconds: sensingCoordinator.nearbyDiscoveryNowEpochSeconds
     ).cards
     let hasJoinableCandidates = nearbyCards.contains { $0.joinActionEventCodeHashHex != nil }
       || homeHasDemoCandidate

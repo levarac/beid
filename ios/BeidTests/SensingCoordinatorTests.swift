@@ -1000,6 +1000,71 @@ final class SensingCoordinatorTests: XCTestCase {
     XCTAssertEqual(engine.joinedCodes, [nearbyVectorEventIdHex])
   }
 
+  private func makeStandbyApp(
+    store: ExportedKotlinPackages.org.levarac.parallax.discovery.NearbyEventDiscoveryStore,
+    clock: @escaping () -> Int64
+  ) -> (AppCoordinator, SensingCoordinator) {
+    let sensing = makeIsolatedSensingCoordinator(
+      for: self,
+      eventJoinControl: RecordingEventJoinControl(),
+      nearbyDiscoveryStore: store,
+      nearbyDiscoveryClock: clock
+    )
+    sensing.useDemoEventMode = false
+    let defaults = UserDefaults(suiteName: "SensingCoordinatorTests.standby.\(UUID().uuidString)")!
+    let app = AppCoordinator(sensingCoordinator: sensing, registryClient: nil, userDefaults: defaults)
+    app.screen = .home
+    return (app, sensing)
+  }
+
+  /// The code-entry timer follows joinability, not the candidate count: the
+  /// count stays 1 while a verified definition expires and comes back.
+  func testStandbyTimerFollowsJoinabilityWhileTheCandidateCountIsUnchanged() {
+    let validUntilEpochSeconds: Int64 = 1_800_000_000
+    var nowEpochMillis = (validUntilEpochSeconds - 30) * 1_000
+    let store = makeNearbyDiscoveryStore(
+      observedAtEpochMillis: nowEpochMillis,
+      validFromEpochSeconds: validUntilEpochSeconds - 60,
+      validUntilEpochSeconds: validUntilEpochSeconds
+    )
+    let (app, sensing) = makeStandbyApp(store: store, clock: { nowEpochMillis })
+
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertEqual(sensing.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNil(app.homeStandby.listeningStartedAt, "a joinable candidate stops the timer")
+
+    nowEpochMillis = (validUntilEpochSeconds + 10) * 1_000
+    sensing.refreshNearbyEventDiscovery()
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertEqual(sensing.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNotNil(app.homeStandby.listeningStartedAt, "an expired definition restarts the timer")
+
+    nowEpochMillis = (validUntilEpochSeconds - 30) * 1_000
+    sensing.refreshNearbyEventDiscovery()
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+    XCTAssertNil(app.homeStandby.listeningStartedAt, "becoming joinable again stops the timer")
+  }
+
+  func testUnverifiedCandidateDoesNotStopTheStandbyTimer() {
+    let store = ExportedKotlinPackages.org.levarac.parallax.discovery.createNearbyEventDiscoveryStore()
+    _ = ExportedKotlinPackages.org.levarac.parallax.discovery.recordNearbyEventHintFromHex(
+      store: store,
+      peripheralId: "peripheral-unresolved",
+      eventDisplayName: "Unverified beacon",
+      eventCodeHashHex: "0102030405060708",
+      censusHex: nil,
+      additionalNamesOmitted: false,
+      additionalEventsOmitted: false,
+      observedAtEpochMillis: 1_800_000_000_000
+    )
+    let (app, sensing) = makeStandbyApp(store: store, clock: { 1_800_000_000_000 })
+
+    app.updateHomeStandby(isVisible: true, isSceneActive: true)
+
+    XCTAssertEqual(sensing.nearbyEventCandidates.candidateCount, 1)
+    XCTAssertNotNil(app.homeStandby.listeningStartedAt)
+  }
+
   func testDefinitionExpiryPublishesADisabledProjectionBeforeSourceTTL() async throws {
     let validUntilEpochSeconds: Int64 = 1_800_000_000
     var nowEpochMillis = validUntilEpochSeconds * 1_000 + 900
