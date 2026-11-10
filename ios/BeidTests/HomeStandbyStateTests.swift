@@ -233,6 +233,16 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     _ = sensing.reset()
   }
 
+  func testSensingScreenShowsListeningStateOnlyAfterJoining() {
+    let sensing = makeIsolatedSensingCoordinator(for: self)
+    sensing.useDemoEventMode = true
+    XCTAssertFalse(SensingView(sensing: sensing).isListeningAfterJoin, "before JOIN the screen still asks for it")
+    sensing.startSensing()
+    XCTAssertEqual(sensing.phase, .sensing)
+    XCTAssertTrue(SensingView(sensing: sensing).isListeningAfterJoin)
+    _ = sensing.reset()
+  }
+
   private func deliverScanState(
     _ isScanning: Bool,
     through engine: RecordingEventJoinControl,

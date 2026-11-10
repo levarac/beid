@@ -127,12 +127,23 @@ struct SensingView: View {
       ScrollView {
         BeidAdaptiveContent {
           VStack(spacing: DS.Space.l) {
-            Text("Listening for nearby events")
-              .beidTextStyle(DS.Font.Library.labelMono11)
+            if isListeningAfterJoin {
+              Text("Listening for nearby phones…")
+                .beidTextStyle(DS.Font.Library.labelMono11)
+            } else {
+              Text("Listening for nearby events")
+                .beidTextStyle(DS.Font.Library.labelMono11)
+            }
 
             radar
 
-            Text("Nearby events appear here. Tap JOIN to begin sensing.")
+            Group {
+              if isListeningAfterJoin {
+                Text("Keep the app open. Sensing starts when beid hears another phone at this event.")
+              } else {
+                Text("Nearby events appear here. Tap JOIN to begin sensing.")
+              }
+            }
               .font(DS.Font.body)
               .foregroundStyle(DS.Color.textSecondary)
               .multilineTextAlignment(.center)
@@ -182,6 +193,14 @@ struct SensingView: View {
       }
     }
     .accessibilityIdentifier("scan.sensing")
+  }
+
+  /// True once JOIN was tapped (or an event code accepted) and no other
+  /// phone has been heard yet: the phase is `.sensing`, so telling the
+  /// participant to tap JOIN again would be wrong.
+  var isListeningAfterJoin: Bool {
+    if case .sensing = sensing.phase { return true }
+    return false
   }
 
   private var isPreJoin: Bool {
