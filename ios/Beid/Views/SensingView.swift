@@ -324,25 +324,12 @@ struct SensingView: View {
       .accessibilityIdentifier("scan.nearby-events.omitted")
   }
 
-  /// What a nearby card's tap does, as a named method rather than a closure
-  /// buried in the `Button` below, so `BeidTests` can run it (beid#464).
-  ///
-  /// Not `private`, and the same seam shape
-  /// `SensingCoordinator.handleEventInfoHint` already uses: a closure inside
-  /// a SwiftUI `Button` is unreachable from a test without a view-inspection
-  /// dependency this repository does not have, which left the join-time clock
-  /// check below asserted by nothing. Order is load-bearing and matches
-  /// Android's `EventJoinViewModel.joinNearbyEvent`: refuse a card shared did
-  /// not make joinable, then re-read the clock, then join.
+  /// What a nearby card's tap does. The logic lives in
+  /// `SensingCoordinator.joinNearbyEvent(card:clockPreflight:)` so the Now tab
+  /// can run it without constructing this view (beid#464); this stays a named
+  /// method so `BeidTests` can still reach the tap path from a view.
   func joinNearbyEventTapped(_ card: NearbyEventCard) {
-    guard let eventCodeHashHex = card.joinActionEventCodeHashHex else { return }
-    // Re-read the clock preflight at the moment of joining, as Android does:
-    // shared re-measures an expired cache and catches a clock changed since
-    // the scan opened.
-    if let clockPreflight {
-      Task { await clockPreflight.check() }
-    }
-    sensing.joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+    sensing.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
   }
 
   private func nearbyEventCard(_ card: NearbyEventCard, selected: Bool) -> some View {

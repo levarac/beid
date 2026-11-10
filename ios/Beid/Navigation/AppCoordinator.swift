@@ -959,7 +959,7 @@ final class AppCoordinator: ObservableObject {
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     nowEventRegistration = homeRegistration(for: card)
-    SensingView(sensing: sensingCoordinator, clockPreflight: clockPreflight).joinNearbyEventTapped(card)
+    sensingCoordinator.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
     scanPresented = true
   }
 

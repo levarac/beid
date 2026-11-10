@@ -3207,6 +3207,21 @@ final class SensingCoordinator: ObservableObject {
     resolveNearbyCandidates(update.snapshot)
   }
 
+  /// What a nearby card's tap does (beid#464). Order is load-bearing and
+  /// matches Android's `EventJoinViewModel.joinNearbyEvent`: refuse a card
+  /// shared did not make joinable, then re-read the clock, then join. Not
+  /// `private`, so `BeidTests` can run the tap path directly.
+  func joinNearbyEvent(card: NearbyEventCard, clockPreflight: ClockPreflightController?) {
+    guard let eventCodeHashHex = card.joinActionEventCodeHashHex else { return }
+    // Re-read the clock preflight at the moment of joining, as Android does:
+    // shared re-measures an expired cache and catches a clock changed since
+    // the scan opened.
+    if let clockPreflight {
+      Task { await clockPreflight.check() }
+    }
+    joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+  }
+
   /// One-tap nearby join (beid#141). The action carries only the stable B005
   /// hash. After the permission wait resumes, this method re-reads the
   /// coordinator's current snapshot and asks the shared issuer for a fresh
