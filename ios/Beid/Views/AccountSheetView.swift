@@ -391,7 +391,7 @@ struct AccountSheetView: View {
 
   private var disconnectConfirmationActions: some View {
     VStack(spacing: DS.Space.s) {
-      BeidPrimaryButton("Disconnect", tone: .inverse, haptic: .medium) {
+      BeidPrimaryButton("Disconnect", tone: .inverse, haptic: .medium, role: .destructive) {
         coordinator.disconnectWallet()
         showDisconnectConfirmation = false
       }

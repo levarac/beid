@@ -632,10 +632,10 @@ struct SensingSessionSurface: View {
   }
 
   private func metrics(at now: Date) -> some View {
-    let elapsed = max(0, Int(sensing.firstSightingAt.map { now.timeIntervalSince($0) } ?? 0))
+    let elapsed = sensing.firstSightingAt.map { now.timeIntervalSince($0) } ?? 0
     let items = [
       SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
-      SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED")
+      SensingMetric(value: ElapsedTimeFormat.minutesSeconds(elapsed), label: "ELAPSED")
     ]
     return HStack(alignment: .top, spacing: 0) {
       ForEach(items) { item in

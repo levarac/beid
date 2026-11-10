@@ -307,7 +307,7 @@ struct ReportDetailView: View {
         }
         Spacer(minLength: 0)
         Text("→")
-          .beidTextStyle(DS.Font.Library.labelMono11)
+          .beidTextStyle(DS.Font.Library.labelMono11Time)
           .foregroundStyle(DS.Color.textPrimary)
           .accessibilityHidden(true)
       }

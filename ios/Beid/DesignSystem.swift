@@ -87,6 +87,7 @@ struct BeidPrimaryButton: View {
   let labelColor: Color
   let tone: Tone
   let hapticStyle: UIImpactFeedbackGenerator.FeedbackStyle
+  let role: ButtonRole?
   let action: () -> Void
 
   init(
@@ -94,17 +95,19 @@ struct BeidPrimaryButton: View {
     tone: Tone = .primary,
     labelColor: Color? = nil,
     haptic: UIImpactFeedbackGenerator.FeedbackStyle = .light,
+    role: ButtonRole? = nil,
     action: @escaping () -> Void
   ) {
     self.title = title
     self.tone = tone
     self.labelColor = labelColor ?? (tone == .inverse ? DS.Color.labelOnActionInverse : DS.Color.labelOnActionPrimary)
     self.hapticStyle = haptic
+    self.role = role
     self.action = action
   }
 
   var body: some View {
-    Button(action: performAction, label: label)
+    Button(role: role, action: performAction, label: label)
       .buttonStyle(.plain)
   }
 
