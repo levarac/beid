@@ -493,7 +493,9 @@ final class AppCoordinator: ObservableObject {
   /// `EventCodeEntryView` presented as a sheet over the Account sheet (see
   /// `AccountSheetView`'s `eventCodeEntrySheetPresented` binding). Unlike
   /// `joinEvent(code:)`, success here just dismisses the sheet — it never
-  /// touches `screen`, since the user is already past onboarding.
+  /// touches `screen`, since the user is already past onboarding. It then
+  /// finishes like every other post-onboarding code join
+  /// (`startSensingAfterSuccessfulJoin`).
   @discardableResult
   func joinEventFromAccountSheet(
     code rawCode: String,
@@ -507,8 +509,24 @@ final class AppCoordinator: ObservableObject {
     ) {
       return error
     }
-    eventCodeEntrySheetPresented = false
+    startSensingAfterSuccessfulJoin()
     return nil
+  }
+
+  /// The one way a successful post-onboarding code join finishes (home code
+  /// sheet, Account sheet, Rejoin): v1.1 has no separate start-sensing
+  /// button, so the join itself must start sensing and show the sensing
+  /// screen from the Now tab.
+  private func startSensingAfterSuccessfulJoin() {
+    homeEventCodeSheetPresented = false
+    eventCodeEntrySheetPresented = false
+    accountSheetPresented = false
+    nowEventRegistration = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
+    selectedHomeTab = .now
+    sensingCoordinator.startSensing()
+    scanPresented = true
   }
 
   /// Best-effort code -> canonical registry Event ID lookup, via the
@@ -684,16 +702,8 @@ final class AppCoordinator: ObservableObject {
   /// Home's 04b entry has its own sheet flag so the Account sheet cannot
   /// race to present its private wrapper for the same coordinator binding.
   func joinEventFromHomeResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
-    let outcome = await joinEventFromAccountSheetResolvingCanonicalId(code: code)
-    if case .completed(nil) = outcome {
-      homeEventCodeSheetPresented = false
-      nowEventRegistration = nil
-      sealedSnapshot = nil
-      proofCollectedSnapshot = nil
-      sensingCoordinator.startSensing()
-      scanPresented = true
-    }
-    return outcome
+    // The shared success path closes the home code sheet and starts sensing.
+    await joinEventFromAccountSheetResolvingCanonicalId(code: code)
   }
 
   /// Manual rescue from the nearby-event scan surface. It preserves the same
@@ -790,7 +800,8 @@ final class AppCoordinator: ObservableObject {
   /// `Bool`-discarding call into `SensingCoordinator`.
   func rejoinPastEvent(code: String, canonicalEventIdHex: String? = nil) {
     guard sensingCoordinator.joinedEventCode == nil else { return }
-    _ = attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
+    guard attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex) == nil else { return }
+    startSensingAfterSuccessfulJoin()
   }
 
   /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the

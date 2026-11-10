@@ -17,7 +17,7 @@ final class EventRejoinTests: XCTestCase {
   }
 
   func testRejoinPastEventJoinsWhenNothingIsCurrentlyJoined() {
-    let coordinator = AppCoordinator()
+    let coordinator = makeApp()
 
     coordinator.rejoinPastEvent(code: "beid-test-event")
 
@@ -32,7 +32,7 @@ final class EventRejoinTests: XCTestCase {
   /// before this fix, which may still carry surrounding whitespace or
   /// mixed case from the old, platform-diverging behavior.
   func testRejoinPastEventNormalizesTheStoredCode() {
-    let coordinator = AppCoordinator()
+    let coordinator = makeApp()
 
     coordinator.rejoinPastEvent(code: "  ETHTOKYO  ")
 
@@ -43,7 +43,7 @@ final class EventRejoinTests: XCTestCase {
   }
 
   func testRejoinPastEventIsANoOpWhileAnEventIsAlreadyJoined() {
-    let coordinator = AppCoordinator()
+    let coordinator = makeApp()
     coordinator.rejoinPastEvent(code: "first-event")
     XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "first-event")
 
@@ -56,7 +56,7 @@ final class EventRejoinTests: XCTestCase {
   }
 
   func testRejoinPastEventAfterLeavingJoinsTheNewCode() {
-    let coordinator = AppCoordinator()
+    let coordinator = makeApp()
     coordinator.rejoinPastEvent(code: "first-event")
     coordinator.leaveEvent()
     XCTAssertNil(coordinator.sensingCoordinator.joinedEventCode)
@@ -64,5 +64,75 @@ final class EventRejoinTests: XCTestCase {
     coordinator.rejoinPastEvent(code: "second-event")
 
     XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "second-event")
+  }
+
+  func testSuccessfulRejoinStartsSensingAndShowsItFromTheNowTab() {
+    let coordinator = makeApp()
+    coordinator.selectedHomeTab = .records
+    coordinator.accountSheetPresented = true
+    coordinator.eventCodeEntrySheetPresented = true
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
+
+    coordinator.rejoinPastEvent(code: "beid-test-event")
+
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .sensing)
+    XCTAssertTrue(coordinator.scanPresented)
+    XCTAssertEqual(coordinator.selectedHomeTab, .now)
+    XCTAssertFalse(coordinator.accountSheetPresented)
+    XCTAssertFalse(coordinator.eventCodeEntrySheetPresented)
+    XCTAssertNil(coordinator.sealedSnapshot)
+    XCTAssertNil(coordinator.proofCollectedSnapshot)
+    _ = coordinator.sensingCoordinator.reset()
+  }
+
+  func testRejoinThatIsRefusedDoesNotPresentSensingAgain() {
+    let coordinator = makeApp()
+    coordinator.rejoinPastEvent(code: "first-event")
+    coordinator.scanPresented = false
+
+    coordinator.rejoinPastEvent(code: "second-event")
+
+    XCTAssertFalse(coordinator.scanPresented, "a no-op rejoin must not present the sensing screen")
+    XCTAssertEqual(coordinator.sensingCoordinator.joinedEventCode, "first-event")
+    _ = coordinator.sensingCoordinator.reset()
+  }
+
+  func testSuccessfulAccountSheetJoinStartsSensingAndShowsItFromTheNowTab() {
+    let coordinator = makeApp()
+    coordinator.selectedHomeTab = .records
+    coordinator.accountSheetPresented = true
+    coordinator.eventCodeEntrySheetPresented = true
+
+    let error = coordinator.joinEventFromAccountSheet(code: "beid-test-event")
+
+    XCTAssertNil(error)
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .sensing)
+    XCTAssertTrue(coordinator.scanPresented)
+    XCTAssertEqual(coordinator.selectedHomeTab, .now)
+    XCTAssertFalse(coordinator.accountSheetPresented)
+    XCTAssertFalse(coordinator.eventCodeEntrySheetPresented)
+    XCTAssertNil(coordinator.sealedSnapshot)
+    _ = coordinator.sensingCoordinator.reset()
+  }
+
+  func testFailedAccountSheetJoinKeepsTheSheetsAndStaysIdle() {
+    let coordinator = makeApp()
+    coordinator.accountSheetPresented = true
+    coordinator.eventCodeEntrySheetPresented = true
+
+    let error = coordinator.joinEventFromAccountSheet(code: "   ")
+
+    XCTAssertEqual(error, .emptyCode)
+    XCTAssertEqual(coordinator.sensingCoordinator.phase, .idle)
+    XCTAssertFalse(coordinator.scanPresented)
+    XCTAssertTrue(coordinator.accountSheetPresented)
+    XCTAssertTrue(coordinator.eventCodeEntrySheetPresented)
+  }
+
+  private func makeApp() -> AppCoordinator {
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    let defaults = UserDefaults(suiteName: "EventRejoinTests.\(UUID().uuidString)")!
+    return AppCoordinator(sensingCoordinator: sensing, registryClient: nil, userDefaults: defaults)
   }
 }
