@@ -939,8 +939,19 @@ final class AppCoordinator: ObservableObject {
       homeStandbyDiscoveryActive = false
       if isIdle { sensingCoordinator.stopNearbyEventDiscovery() }
     }
-    let hasCandidates = sensingCoordinator.nearbyEventCandidates.candidateCount > 0 || homeHasDemoCandidate
-    homeStandby.update(isEnabled: isEnabled, hasCandidates: hasCandidates, now: homeStandbyNow)
+    // Same projection the Now tab renders: a card whose JOIN control is
+    // disabled (no registration-verified event) must not stop the timer.
+    let nearbyCards = NearbyEventCardListPresentation(
+      candidates: sensingCoordinator.nearbyEventCandidates,
+      nowEpochSeconds: Int64(Date().timeIntervalSince1970.rounded(.down))
+    ).cards
+    let hasJoinableCandidates = nearbyCards.contains { $0.joinActionEventCodeHashHex != nil }
+      || homeHasDemoCandidate
+    homeStandby.update(
+      isEnabled: isEnabled,
+      hasJoinableCandidates: hasJoinableCandidates,
+      now: homeStandbyNow
+    )
   }
 
   func joinNearbyEventFromHome(_ card: NearbyEventCard) {
