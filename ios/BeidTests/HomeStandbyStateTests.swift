@@ -278,4 +278,14 @@ final class ActiveSessionControlsTests: XCTestCase {
     XCTAssertFalse(App.shouldResetSensing(
       beforeOpeningBluetoothSettingsIn: .signalLost(event: event, peersVerified: 1), joinedEventCode: "code"))
   }
+
+  func testStopControlShowsWhenJoinedEvenBeforeTheFirstPhoneIsHeard() {
+    XCTAssertFalse(ScanFlowView.showsStopControl(phase: .idle, joinedEventCode: nil))
+    XCTAssertFalse(ScanFlowView.showsStopControl(phase: .idle, joinedEventCode: "code"))
+    XCTAssertFalse(ScanFlowView.showsStopControl(phase: .sensing, joinedEventCode: nil))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .sensing, joinedEventCode: "code"))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .eventFound(event), joinedEventCode: nil))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .recording(event: event, peersVerified: 1), joinedEventCode: nil))
+    XCTAssertTrue(ScanFlowView.showsStopControl(phase: .signalLost(event: event, peersVerified: 1), joinedEventCode: nil))
+  }
 }

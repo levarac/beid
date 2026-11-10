@@ -83,9 +83,17 @@ struct ScanFlowView: View {
       }
     }
     #endif
-    switch sensing.phase {
+    return Self.showsStopControl(phase: sensing.phase, joinedEventCode: sensing.joinedEventCode)
+  }
+
+  /// After JOIN the phase stays `.sensing` until the first detection. A
+  /// participant whose event is not nearby must still be able to end, so the
+  /// control shows in `.sensing` once an event has been joined.
+  static func showsStopControl(phase: ScanPhase, joinedEventCode: String?) -> Bool {
+    switch phase {
     case .eventFound, .recording, .signalLost: return true
-    case .idle, .sensing: return false
+    case .sensing: return joinedEventCode != nil
+    case .idle: return false
     }
   }
 
