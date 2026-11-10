@@ -1095,6 +1095,27 @@ final class AppCoordinator: ObservableObject {
 
   /// Returning with Back never calls this method. Only an explicit stop
   /// requests confirmation for the current participation.
+  /// Only STOP SENSING ends participation. The Bluetooth-off screen is also
+  /// reached from the Now tab while an event session is active, so opening
+  /// Settings from there must not reset (finalize) that session.
+  var shouldResetSensingBeforeOpeningBluetoothSettings: Bool {
+    Self.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: sensingCoordinator.phase,
+      joinedEventCode: sensingCoordinator.joinedEventCode
+    )
+  }
+
+  static func shouldResetSensing(
+    beforeOpeningBluetoothSettingsIn phase: ScanPhase,
+    joinedEventCode: String?
+  ) -> Bool {
+    switch phase {
+    case .idle: return true
+    case .sensing: return joinedEventCode == nil
+    case .eventFound, .recording, .signalLost: return false
+    }
+  }
+
   func requestScanClose() {
     guard sealedSnapshot == nil, proofCollectedSnapshot == nil,
       stopConfirmSnapshot == nil else { return }

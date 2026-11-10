@@ -263,3 +263,19 @@ final class HomeStandbyLifecycleTests: XCTestCase {
     return app
   }
 }
+
+final class ActiveSessionControlsTests: XCTestCase {
+  private let event = EventSession(id: "TEST-CONTROLS", name: "Test Controls Event", venue: nil)
+
+  func testBluetoothSettingsResetsOnlyWhenNoEventSessionIsActive() {
+    typealias App = AppCoordinator
+    XCTAssertTrue(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .idle, joinedEventCode: nil))
+    XCTAssertTrue(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .sensing, joinedEventCode: nil))
+    XCTAssertFalse(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .sensing, joinedEventCode: "code"))
+    XCTAssertFalse(App.shouldResetSensing(beforeOpeningBluetoothSettingsIn: .eventFound(event), joinedEventCode: "code"))
+    XCTAssertFalse(App.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: .recording(event: event, peersVerified: 1), joinedEventCode: "code"))
+    XCTAssertFalse(App.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: .signalLost(event: event, peersVerified: 1), joinedEventCode: "code"))
+  }
+}
