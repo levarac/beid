@@ -413,7 +413,7 @@ struct SensingView: View {
   private var missingBeaconNameLabel: String {
     String(
       localized: "nearbyEvent.beaconName.missing",
-      defaultValue: "No name announced by nearby beacon",
+      defaultValue: "This event didn't send a name",
       comment: "Fallback shown when a nearby Bluetooth candidate has no display name. The candidate remains visible."
     )
   }
@@ -490,8 +490,7 @@ struct SensingView: View {
   }
 
   private func pulseAnimation(delay: Double) -> Animation {
-    .easeOut(duration: 1.8)
-      .repeatForever(autoreverses: false)
+    DS.Motion.sensingPulse
       .delay(delay)
   }
 }
@@ -633,10 +632,10 @@ struct SensingSessionSurface: View {
   }
 
   private func metrics(at now: Date) -> some View {
-    let elapsed = max(0, Int(sensing.firstSightingAt.map { now.timeIntervalSince($0) } ?? 0))
+    let elapsed = sensing.firstSightingAt.map { now.timeIntervalSince($0) } ?? 0
     let items = [
       SensingMetric(value: String(sensing.devicesVerified), label: "DEVICES HEARD"),
-      SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED")
+      SensingMetric(value: ElapsedTimeFormat.minutesSeconds(elapsed), label: "ELAPSED")
     ]
     return HStack(alignment: .top, spacing: 0) {
       ForEach(items) { item in
@@ -700,7 +699,7 @@ struct SensingWindowBars: View {
   var body: some View {
     VStack(spacing: DS.Space.s) {
       GeometryReader { geometry in
-        let barGap: CGFloat = 6
+        let barGap = DS.Size.observationChartBarGap
         HStack(alignment: .bottom, spacing: barGap) {
           ForEach(0..<6, id: \.self) { index in
             Rectangle()
@@ -890,7 +889,7 @@ struct SensingCantJoinView: View {
 
       if let event {
         if event.identityVerification == .verified {
-          identityRow("Registry", value: "Matched")
+          identityRow("Registration", value: "Matched")
         }
         identityRow("Code", value: event.id)
       }

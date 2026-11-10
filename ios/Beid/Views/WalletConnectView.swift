@@ -288,7 +288,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
         .foregroundStyle(DS.Color.textSecondary)
         .multilineTextAlignment(.center)
       VStack(spacing: DS.Space.s) {
-        BeidSecondaryButton(title: "Try Again") {
+        BeidSecondaryButton(title: "Try again") {
           // Light in-app cancel, not forget-wallet (dispatch#26 condition 3)
           // — leaves the SDK session and cached hint alone.
           client.cancelPendingOperation()

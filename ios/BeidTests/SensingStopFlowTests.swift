@@ -88,7 +88,7 @@ final class SensingStopFlowTests: XCTestCase {
     XCTAssertEqual(coordinator.proofCollectedSnapshot?.observedWindowCount, sealedWindowCount)
     coordinator.doneWithSealedRecord()
     XCTAssertNotNil(coordinator.proofCollectedSnapshot)
-    XCTAssertTrue(coordinator.scanPresented, "07 must persist until View collection")
+    XCTAssertTrue(coordinator.scanPresented, "07 must persist until View records")
 
     coordinator.viewCollectionAfterProofCollected()
     XCTAssertFalse(coordinator.scanPresented)
@@ -240,7 +240,7 @@ final class SensingStopFlowTests: XCTestCase {
       proof: proof, detectedPeerCount: 2, observedWindowCount: nil
     )
 
-    XCTAssertEqual(snapshot.withValue, "2 peers")
+    XCTAssertEqual(snapshot.withValue, "2 devices")
     XCTAssertFalse(snapshot.withValue.contains("window"))
     XCTAssertEqual(snapshot.shortRecordID, RecordIDDisplay.abbreviated(proof.id))
   }

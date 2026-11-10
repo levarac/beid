@@ -263,7 +263,7 @@ private struct NowHomeView: View {
       Text(candidateRegistrationStatus(card))
         .beidTextStyle(DS.Font.Library.labelMono10)
         .foregroundStyle(DS.Color.textSecondaryOnInk)
-      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary) {
+      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary, haptic: true) {
         coordinator.joinNearbyEventFromHome(card)
       }
       .disabled(card.joinActionEventCodeHashHex == nil)
@@ -299,6 +299,7 @@ private struct NowHomeView: View {
         }
         .buttonStyle(.plain)
         .disabled(card.joinActionEventCodeHashHex == nil)
+        .accessibilityLabel(Text(verbatim: "Join \(candidateName(card)), ") + Text(candidateRegistrationStatus(card)))
         .accessibilityIdentifier("home.nearby.additional.\(card.eventCodeHashHex)")
         Divider()
       }
@@ -312,7 +313,7 @@ private struct NowHomeView: View {
       Text("Demo event").beidTextStyle(DS.Font.Library.title19)
       Text("Sample devices and records. No Bluetooth event is joined.")
         .beidTextStyle(DS.Font.Library.body13)
-      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary) {
+      BeidTextControl("now.join.action", labelColor: DS.Color.labelOnActionPrimary, haptic: true) {
         coordinator.joinDemoEventFromHome()
       }
       .accessibilityIdentifier("home.demo.join")
@@ -380,7 +381,6 @@ private struct NowHomeView: View {
       Text("home.now.title")
         .beidTextStyle(DS.Font.Library.display60)
         .accessibilityAddTraits(.isHeader)
-      listeningStrip
       Text(verbatim: snapshot.event.name)
         .beidTextStyle(DS.Font.Library.labelMono11)
         .foregroundStyle(secondary)
@@ -390,7 +390,6 @@ private struct NowHomeView: View {
       Text("Your record is saved on this phone. You can close the app.")
         .beidTextStyle(DS.Font.Library.body15)
         .foregroundStyle(secondary)
-      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
       if let recordID = snapshot.recordID, let record = coordinator.proofStore.proof(withId: recordID) {
         BeidTextControl("VIEW RECORD", glyph: .trailing("→", announcing: "View record")) {
           coordinator.openProof(record)
@@ -401,6 +400,8 @@ private struct NowHomeView: View {
         showWhatWasSent = true
       }
       .accessibilityIdentifier("home.saved.what-was-sent")
+      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
+      listeningStrip
       if coordinator.homeHasDemoCandidate {
         demoCandidate
       } else if let first = nearby.cards.first {
@@ -471,12 +472,11 @@ private struct NowHomeView: View {
 
   private func candidateName(_ card: NearbyEventCard) -> String {
     if card.hasDisplayNameConflict { return String(localized: "nearbyEvent.beaconName.conflict", defaultValue: "Multiple names reported nearby") }
-    return card.beaconDisplayName ?? String(localized: "nearbyEvent.beaconName.missing", defaultValue: "No name announced by nearby beacon")
+    return card.beaconDisplayName ?? String(localized: "nearbyEvent.beaconName.missing", defaultValue: "This event didn't send a name")
   }
 
   private func elapsedString(_ seconds: TimeInterval) -> String {
-    let elapsed = max(0, Int(seconds))
-    return "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))"
+    ElapsedTimeFormat.minutesSeconds(seconds)
   }
 
   #if DEBUG

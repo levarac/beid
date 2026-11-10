@@ -143,7 +143,7 @@ struct DailySummaryView: View {
     } else {
       return String(
         localized: "dailySummary.submission.disabledForBuild",
-        defaultValue: "Sending isn't turned on for this build.",
+        defaultValue: "Sending is off in this version.",
         comment: "Submission status line on the Daily Summary screen, shown when the BeidReportSubmissionEnabled build flag is off (the default today). Communicates that the sending feature exists but is switched off for this build — \"built, off,\" never \"not built\" — not that anything failed."
       )
     }

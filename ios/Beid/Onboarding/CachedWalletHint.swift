@@ -35,7 +35,7 @@ extension CachedWalletHint {
 /// isolated `UserDefaults(suiteName:)` instead of `.standard`.
 ///
 /// Cleared only by an explicit disconnect ("Forget"/"Disconnect Wallet")
-/// action — never by Cancel, Try Again, Start Over, or a sheet dismissal.
+/// action — never by Cancel, Try again, Start Over, or a sheet dismissal.
 /// Callers enforce that by simply never calling `clear()` from those paths;
 /// see `AppCoordinator.disconnectWallet()` for the one production call site.
 struct WalletHintStore {

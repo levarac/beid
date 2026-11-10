@@ -779,7 +779,7 @@ final class AppCoordinator: ObservableObject {
   /// (beid#230's past-events list), instead of retyping it through
   /// `EventCodeEntryView`. A no-op while an event is already joined —
   /// matches the single-slot invariant `EventMembershipUITests` already
-  /// covers for "Join Event"; the caller is expected to disable the row the
+  /// covers for "Join event"; the caller is expected to disable the row the
   /// same way, but this does not rely on that as its only guard.
   ///
   /// Routes through `attemptJoinEvent(code:)` (beid#226, DECISIONS
