@@ -381,7 +381,6 @@ private struct NowHomeView: View {
       Text("home.now.title")
         .beidTextStyle(DS.Font.Library.display60)
         .accessibilityAddTraits(.isHeader)
-      listeningStrip
       Text(verbatim: snapshot.event.name)
         .beidTextStyle(DS.Font.Library.labelMono11)
         .foregroundStyle(secondary)
@@ -391,7 +390,6 @@ private struct NowHomeView: View {
       Text("Your record is saved on this phone. You can close the app.")
         .beidTextStyle(DS.Font.Library.body15)
         .foregroundStyle(secondary)
-      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
       if let recordID = snapshot.recordID, let record = coordinator.proofStore.proof(withId: recordID) {
         BeidTextControl("VIEW RECORD", glyph: .trailing("→", announcing: "View record")) {
           coordinator.openProof(record)
@@ -402,6 +400,8 @@ private struct NowHomeView: View {
         showWhatWasSent = true
       }
       .accessibilityIdentifier("home.saved.what-was-sent")
+      if let registration = coordinator.nowEventRegistration { organizerTile(registration) }
+      listeningStrip
       if coordinator.homeHasDemoCandidate {
         demoCandidate
       } else if let first = nearby.cards.first {
