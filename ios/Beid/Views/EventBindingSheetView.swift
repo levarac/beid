@@ -205,7 +205,7 @@ struct EventBindingSheetView: View {
         .foregroundStyle(DS.Color.textSecondary)
         .multilineTextAlignment(.center)
       if retryable {
-        BeidSecondaryButton(title: "Try Again") {
+        BeidSecondaryButton(title: "Try again") {
           sensing.declineBinding()
         }
         .tint(DS.Color.actionPrimary)
@@ -317,7 +317,7 @@ struct EventBindingSheetView: View {
   /// switches over: `.bound` needs no further action here (the sheet
   /// dismisses on the resulting `bindingState` change), `.smartWalletUnsupported`
   /// (beid#359) gets its own non-retryable reason (also non-retryable in the
-  /// UI: Close instead of Try Again, beid#382), and `.notVerified` covers
+  /// UI: Close instead of Try again, beid#382), and `.notVerified` covers
   /// everything else — stale/malformed inputs, a wallet signature of the
   /// wrong length (beid#357), and a genuine signer mismatch the coordinator's
   /// own verification caught (beid#316). Before beid#316 only the
@@ -381,7 +381,7 @@ struct EventBindingSheetView: View {
     case .relayFailure(let message):
       sensing.failBinding(reason: message, retryable: true)
     case .cancelled:
-      // The user stopped this from beid's own UI (Cancel/Try Again/Start
+      // The user stopped this from beid's own UI (Cancel/Try again/Start
       // Over on the wallet-connect step), not a wallet-side rejection or a
       // stuck request. failedContent's header ("Couldn't seal attendance")
       // is unconditionally alarming regardless of the reason text

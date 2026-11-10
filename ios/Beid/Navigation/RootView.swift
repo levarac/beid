@@ -43,7 +43,7 @@ private struct OwnerKeyFailurePresenter: ViewModifier {
       Alert(
         title: Text(verbatim: failure.title),
         message: Text(verbatim: failure.message),
-        primaryButton: .default(Text(String(localized: "ownerKeyFailure.retry", defaultValue: "Try Again"))) {
+        primaryButton: .default(Text(String(localized: "ownerKeyFailure.retry", defaultValue: "Try again"))) {
           sensingCoordinator.retryOwnerKeyOperation()
         },
         secondaryButton: .cancel(Text(String(localized: "ownerKeyFailure.dismiss", defaultValue: "Close")))

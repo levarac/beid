@@ -413,7 +413,7 @@ struct SensingView: View {
   private var missingBeaconNameLabel: String {
     String(
       localized: "nearbyEvent.beaconName.missing",
-      defaultValue: "No name announced by nearby beacon",
+      defaultValue: "This event didn't send a name",
       comment: "Fallback shown when a nearby Bluetooth candidate has no display name. The candidate remains visible."
     )
   }
@@ -890,7 +890,7 @@ struct SensingCantJoinView: View {
 
       if let event {
         if event.identityVerification == .verified {
-          identityRow("Registry", value: "Matched")
+          identityRow("Registration", value: "Matched")
         }
         identityRow("Code", value: event.id)
       }

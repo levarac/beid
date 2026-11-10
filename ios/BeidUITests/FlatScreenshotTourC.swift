@@ -56,7 +56,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let app = launchCollectedRecordForCopyAssertions()
     let recordID = app.staticTexts["proof-collected.record-id"]
     XCTAssertEqual(recordID.label, "Record ID 42110000-0000-4000-8000-000000000000")
-    XCTAssertTrue(app.buttons["View collection"].exists)
+    XCTAssertTrue(app.buttons["View records"].exists)
 
     let disclosure = app.buttons["proof-collected.whatWeSend"]
     disclosure.assertHittable()
@@ -84,7 +84,7 @@ final class FlatScreenshotTourC: XCTestCase {
     let reportID = app.descendants(matching: .any)["report-detail.record-id"]
     reportID.assertExists()
     XCTAssertTrue(reportID.label.contains(Self.linkedReportID), reportID.label)
-    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON DEVICE"))
+    XCTAssertTrue(app.staticTexts["report-detail.status"].label.contains("PREPARED ON THIS PHONE"))
     XCTAssertTrue(app.descendants(matching: .any)["report-detail.delivery"].label.contains("NOT SENT"))
     app.navigationBars.buttons.element(boundBy: 0).tap()
     app.staticTexts["event-detail.heading"].assertExists()
@@ -110,7 +110,7 @@ final class FlatScreenshotTourC: XCTestCase {
     record.tap()
     let title = app.staticTexts["proof.detail.title"]
     title.assertExists()
-    XCTAssertTrue(app.staticTexts["RECORDED ON DEVICE"].exists)
+    XCTAssertTrue(app.staticTexts["RECORDED ON THIS PHONE"].exists)
     XCTAssertFalse(app.staticTexts["STATUS"].exists)
     XCTAssertFalse(app.staticTexts["Bound to wallet"].exists)
     XCTAssertFalse(app.buttons["Connect wallet"].exists)
@@ -264,7 +264,7 @@ final class FlatScreenshotTourC: XCTestCase {
     XCTAssertTrue(app.staticTexts["observation-detail.title"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["observation-detail.unavailable"].exists)
     XCTAssertFalse(app.staticTexts["PEERS PER OBSERVED WINDOW"].exists)
-    XCTAssertFalse(app.staticTexts["PEERS OBSERVED"].exists)
+    XCTAssertFalse(app.staticTexts["DEVICES HEARD"].exists)
   }
 
   // MARK: - beid#701 report-to-proof links
@@ -481,7 +481,7 @@ final class FlatScreenshotTourC: XCTestCase {
       XCTAssertTrue(app.staticTexts["DONE · YOU CAN CLOSE THE APP"].exists, file: file, line: line)
     }
     if code == "07" {
-      XCTAssertTrue(app.buttons["View collection"].exists, file: file, line: line)
+      XCTAssertTrue(app.buttons["View records"].exists, file: file, line: line)
       let recordID = app.staticTexts["proof-collected.record-id"]
       XCTAssertTrue(recordID.exists, file: file, line: line)
       XCTAssertEqual(

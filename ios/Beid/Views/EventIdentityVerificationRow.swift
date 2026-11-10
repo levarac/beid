@@ -28,7 +28,7 @@ struct EventIdentityVerificationPresentation: Equatable {
     case .checking:
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.checking",
-        defaultMessage: "Checking event registry…",
+        defaultMessage: "Checking event registration…",
         statusAccessibilityIdentifier: "event-identity-verification-status-checking",
         showsProgress: true,
         showsRetry: false,
@@ -46,7 +46,7 @@ struct EventIdentityVerificationPresentation: Equatable {
     case .unavailable:
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.unavailable",
-        defaultMessage: "Event registry is temporarily unavailable.",
+        defaultMessage: "Event registration can't be checked right now.",
         statusAccessibilityIdentifier: "event-identity-verification-status-unavailable",
         showsProgress: false,
         showsRetry: true,
@@ -55,7 +55,7 @@ struct EventIdentityVerificationPresentation: Equatable {
     case .notFound:
       return EventIdentityVerificationPresentation(
         messageKey: "event.identityVerification.notFound",
-        defaultMessage: "No registry definition was found for this event.",
+        defaultMessage: "This event isn't registered.",
         statusAccessibilityIdentifier: "event-identity-verification-status-not-found",
         showsProgress: false,
         showsRetry: true,

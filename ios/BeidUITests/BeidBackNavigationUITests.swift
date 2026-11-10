@@ -114,8 +114,8 @@ final class BeidBackNavigationUITests: XCTestCase {
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
-    app.buttons["View collection"].tap()
+    XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
+    app.buttons["View records"].tap()
 
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
   }

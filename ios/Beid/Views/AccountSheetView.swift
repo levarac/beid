@@ -121,7 +121,7 @@ struct AccountSheetView: View {
             .buttonStyle(.plain)
             .disabled(coordinator.walletAddress == nil)
           }
-          // DECISIONS 2026-09-26: keep the sole Past Events/rejoin path as an
+          // DECISIONS 2026-09-26: keep the sole Past events/rejoin path as an
           // extra Account row below the three Figma menu rows.
           AccountSheetRow(topGap: DS.Space.xxl) {
             Button {
@@ -140,7 +140,7 @@ struct AccountSheetView: View {
               .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Past Events")
+            .accessibilityLabel("Past events")
           }
           AccountSheetRow {
             Button {
@@ -378,7 +378,7 @@ struct AccountSheetView: View {
   private var pastEventsLabel: String {
     String(
       localized: "account.pastEvents.label",
-      defaultValue: "Past Events",
+      defaultValue: "Past events",
       comment: "Account row opening previously joined events, including the rejoin action."
     )
   }
@@ -679,7 +679,7 @@ private struct WalletConnectSheetView: View {
 }
 
 /// Sheet wrapper around `EventCodeEntryView` (in `.accountSheet` mode) for
-/// the Account sheet's "Join Event" action. Unlike `EventCodeEntryView`'s
+/// the Account sheet's "Join event" action. Unlike `EventCodeEntryView`'s
 /// onboarding usage, success here just dismisses the sheet — it does not
 /// advance `coordinator.screen`. No secondary action; Cancel in the toolbar
 /// is the escape hatch instead. No `navigationTitle`: the hero header inside
@@ -709,7 +709,7 @@ private struct EventCodeEntrySheetView: View {
   }
 }
 
-/// "Join Event" row for `AccountSheetView`. `AppCoordinator` holds its
+/// "Join event" row for `AccountSheetView`. `AppCoordinator` holds its
 /// sensing coordinator as a plain `let` and does not re-publish changes to
 /// `joinedEventCode`. Observe it here so the row disables as soon as a manual
 /// join succeeds, without republishing frequent sensing updates from AppCoordinator.
@@ -738,8 +738,8 @@ private struct EventMembershipSections: View {
   private var joinEventLabel: String {
     String(
       localized: "account.joinEvent.label",
-      defaultValue: "Join Event",
-      comment: "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages."
+      defaultValue: "Join event",
+      comment: "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join event\" in English but is a separate translation unit and may need different wording in other languages."
     )
   }
 

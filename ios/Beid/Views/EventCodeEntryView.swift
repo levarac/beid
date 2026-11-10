@@ -261,7 +261,7 @@ private struct EventCodeJoinButton: View {
       BeidDesign.haptic()
       action()
     } label: {
-      Text("Join Event")
+      Text("Join event")
         .beidTextStyle(DS.Font.Library.title16)
         .foregroundStyle(DS.Color.labelOnActionPrimary)
         .frame(maxWidth: .infinity, minHeight: 56)

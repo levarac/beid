@@ -205,7 +205,7 @@ enum SigilDrawing {
     let windows = Int(layout.windowCount)
     return String(
       localized: "sigil.record.accessibilitySummary",
-      defaultValue: "Mutual not available, \(detectedPeers) detected, window \(windows)",
+      defaultValue: "\(detectedPeers) devices heard, window \(windows). Mutual check not available yet.",
       comment: "VoiceOver summary for a device record. Mutual confirmation is decided off device and is unavailable here; never translate this as a measured zero. Keep the detected-device and observed-window counts from this exact rendered layout. Generic measured-layout narration uses sigil.accessibilitySummary."
     )
   }

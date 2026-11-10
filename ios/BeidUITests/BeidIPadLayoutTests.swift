@@ -199,7 +199,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     capture(named: "recording-\(orientation)")
 
     // CLOSE confirms the real Proof, DONE advances through persistent 07,
-    // then View collection dismisses to Home.
+    // then View records dismisses to Home.
     app.buttons["scan.stop-sensing"].tap()
     XCTAssertTrue(app.staticTexts["Stop sensing?"].waitForExistence(timeout: 5))
     capture(named: "stop-confirm-\(orientation)")
@@ -207,10 +207,10 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     capture(named: "sealed-\(orientation)")
     app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
     assertProofCollectedHeader()
     capture(named: "proof-collected-\(orientation)")
-    app.buttons["View collection"].tap()
+    app.buttons["View records"].tap()
 
     XCTAssertTrue(app.scrollViews["records.grid"].waitForExistence(timeout: 5))
     capture(named: "collection-with-proof-\(orientation)")
@@ -237,7 +237,7 @@ final class BeidIPadLayoutTests: XCTestCase {
     XCTAssertTrue(signalLost.waitForExistence(timeout: 30))
     dismissBindingSheetToReachLiveRecording()
     signalLost.tap()
-    XCTAssertTrue(app.staticTexts["Signal Lost"].waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["Signal lost"].waitForExistence(timeout: 30))
     capture(named: "signal-lost-\(orientation)")
   }
 
@@ -382,9 +382,9 @@ final class BeidIPadLayoutTests: XCTestCase {
     app.buttons["Stop and keep record"].tap()
     XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     app.buttons["Done"].tap()
-    XCTAssertTrue(app.buttons["View collection"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["View records"].waitForExistence(timeout: 5))
     assertProofCollectedHeader()
-    app.buttons["View collection"].tap()
+    app.buttons["View records"].tap()
 
     XCTAssertTrue(
       app.scrollViews["records.grid"].waitForExistence(timeout: 5),

@@ -4210,7 +4210,7 @@ final class SensingCoordinator: ObservableObject {
   /// from `declineBinding()`: this is the round trip failing, not the user
   /// dismissing the sheet before starting one. `retryable` is `false` only
   /// when retrying cannot succeed (the ERC-6492 smart-wallet result,
-  /// beid#382), so the sheet offers Close instead of Try Again.
+  /// beid#382), so the sheet offers Close instead of Try again.
   func failBinding(reason: String, retryable: Bool) {
     pendingBindingMessage = nil
     bindingState = .failed(reason: reason, retryable: retryable)

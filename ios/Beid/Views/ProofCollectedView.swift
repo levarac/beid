@@ -49,7 +49,7 @@ struct ProofCollectedSnapshot: Sendable {
   var shortRecordID: String { RecordIDDisplay.abbreviated(recordID) }
 
   var withValue: String {
-    let peers = "\(detectedPeerCount) \(detectedPeerCount == 1 ? "peer" : "peers")"
+    let peers = "\(detectedPeerCount) \(detectedPeerCount == 1 ? "device" : "devices")"
     guard let observedWindowCount else { return peers }
     let windows = "\(observedWindowCount) \(observedWindowCount == 1 ? "window" : "windows")"
     return "\(peers) · \(windows)"
@@ -109,7 +109,7 @@ struct ProofCollectedView: View {
           // General field disclosure, without claiming a successful delivery.
           BeidTextControl(
             "WHAT WAS SENT",
-            glyph: .trailing("→", announcing: "WHAT WAS SENT"),
+            glyph: .trailing("→", announcing: "What was sent"),
             labelColor: DS.Color.textSecondary
           ) {
             showWhatWeSend = true
@@ -119,7 +119,7 @@ struct ProofCollectedView: View {
 
           Spacer(minLength: DS.Space.l)
 
-          BeidPrimaryButton("View collection", action: onViewCollection)
+          BeidPrimaryButton("View records", action: onViewCollection)
             .tint(DS.Color.actionPrimary)
             .padding(.bottom, DS.Space.m)
         }

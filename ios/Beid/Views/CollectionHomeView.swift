@@ -471,7 +471,7 @@ private struct NowHomeView: View {
 
   private func candidateName(_ card: NearbyEventCard) -> String {
     if card.hasDisplayNameConflict { return String(localized: "nearbyEvent.beaconName.conflict", defaultValue: "Multiple names reported nearby") }
-    return card.beaconDisplayName ?? String(localized: "nearbyEvent.beaconName.missing", defaultValue: "No name announced by nearby beacon")
+    return card.beaconDisplayName ?? String(localized: "nearbyEvent.beaconName.missing", defaultValue: "This event didn't send a name")
   }
 
   private func elapsedString(_ seconds: TimeInterval) -> String {

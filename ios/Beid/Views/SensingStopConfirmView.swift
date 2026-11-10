@@ -39,7 +39,7 @@ struct SensingStopConfirmView: View {
           Text("Stop sensing?")
             .beidTextStyle(DS.Font.Library.title19)
             .foregroundStyle(DS.Color.labelOnActionPrimary)
-          Text("Stop sensing to seal and keep what you've recorded on this phone. You can sense this event again later.")
+          Text("Your record will be saved on this phone. You can join this event again later.")
             .beidTextStyle(DS.Font.Library.body15)
             .foregroundStyle(DS.Color.textSecondaryOnInk)
             .fixedSize(horizontal: false, vertical: true)
@@ -70,7 +70,7 @@ struct SensingStopConfirmView: View {
           .accessibilityIdentifier("scan.stop-confirm.stop")
 
           BeidTextControl(
-            "Keep sensing",
+            "KEEP SENSING",
             labelColor: DS.Color.labelOnActionPrimary,
             accessibilityLabel: "Keep sensing",
             action: onKeepSensing

@@ -66,7 +66,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let paste = app.buttons["eventCode.paste"]
     XCTAssertTrue(paste.exists)
     XCTAssertEqual(paste.label, "Paste event code")
-    XCTAssertTrue(app.buttons["Join Event"].exists)
+    XCTAssertTrue(app.buttons["Join event"].exists)
   }
 
   func testShot_13b_Error() {
@@ -103,14 +103,14 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertTrue(account.waitForExistence(timeout: 5))
     account.tap()
 
-    let joinEvent = app.buttons["Join Event"]
+    let joinEvent = app.buttons["Join event"]
     let list = app.collectionViews.firstMatch
     var attempts = 0
     while !joinEvent.exists && attempts < 6 {
       list.swipeUp()
       attempts += 1
     }
-    XCTAssertTrue(joinEvent.exists, "Account's Join Event row was not reachable")
+    XCTAssertTrue(joinEvent.exists, "Account's Join event row was not reachable")
     joinEvent.tap()
     XCTAssertTrue(app.staticTexts["eventCode.title"].waitForExistence(timeout: 5))
   }
@@ -194,7 +194,7 @@ final class FlatScreenshotTourA: XCTestCase {
     let scroll = app.scrollViews["aboutSensing.scroll"]
     XCTAssertTrue(scroll.waitForExistence(timeout: 5))
     let capability = app.staticTexts.matching(
-      NSPredicate(format: "label CONTAINS %@", "Sending is turned on for this build.")
+      NSPredicate(format: "label CONTAINS %@", "Sending is on.")
     ).firstMatch
     for _ in 0..<5 where !capability.isHittable { scroll.swipeUp() }
     XCTAssertTrue(capability.isHittable, "About must describe the actual enabled sending capability")
@@ -208,11 +208,11 @@ final class FlatScreenshotTourA: XCTestCase {
   }
 
   func testAboutEnabledCapabilityKeepsSendingDetailsUnavailable() {
-    assertSendingCapability(setting: "on", expected: "Sending is turned on for this build.")
+    assertSendingCapability(setting: "on", expected: "Sending is on.")
   }
 
   func testAboutDisabledCapabilityKeepsSendingDetailsUnavailable() {
-    assertSendingCapability(setting: "off", expected: "Sending isn't turned on for this build.")
+    assertSendingCapability(setting: "off", expected: "Sending is off in this version.")
   }
 
   private func assertSendingCapability(setting: String, expected: String) {
@@ -229,7 +229,7 @@ final class FlatScreenshotTourA: XCTestCase {
     XCTAssertFalse(app.staticTexts["SENDING STATUS · ALL SAVED OBSERVATIONS"].exists)
     XCTAssertFalse(app.staticTexts["Up to date"].exists)
     let otherState = setting == "on"
-      ? "Sending isn't turned on for this build." : "Sending is turned on for this build."
+      ? "Sending is off in this version." : "Sending is on."
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", otherState)).firstMatch.exists)
   }
 

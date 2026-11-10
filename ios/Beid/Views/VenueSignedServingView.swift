@@ -31,7 +31,7 @@ struct VenueSignedServingView: View {
           .beidTextStyle(DS.Font.Library.display52)
           .foregroundStyle(DS.Color.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
-        Text("Load the signed pack the organiser gave you. Once it checks out, this phone broadcasts it.")
+        Text("Load the signed pack the organizer gave you. Once it checks out, this phone broadcasts it.")
           .beidTextStyle(DS.Font.Library.body15)
           .foregroundStyle(DS.Color.textSecondary)
           .padding(.top, DS.Space.m)
@@ -241,7 +241,7 @@ struct VenueSignedServingView: View {
               .beidTextStyle(DS.Font.Library.labelMono11Time)
           }
         } else {
-          Text("No pack yet. Paste the link the organiser gave you, or scan its QR code.")
+          Text("No pack yet. Paste the link the organizer gave you, or scan its QR code.")
             .beidTextStyle(DS.Font.Library.body13)
             .foregroundStyle(DS.Color.textSecondary)
             .padding(.vertical, DS.Space.s)
@@ -292,7 +292,7 @@ struct VenueSignedServingView: View {
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, DS.Space.m)
       }
-      Text("A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organiser gave you.")
+      Text("A saved pack is checked again every time it is loaded. The link carries the event's details itself. Use one the event's organizer gave you.")
         .beidTextStyle(DS.Font.Library.body13)
         .foregroundStyle(DS.Color.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
@@ -526,7 +526,7 @@ struct VenueSignedServingView: View {
     case .malformedOrOutOfBounds:
       return "This pack could not be read."
     case .handoffMismatch:
-      return "The link and the pack do not agree. Ask the organiser for a current link."
+      return "The link and the pack do not agree. Ask the organizer for a current link."
     case .unsupportedDeployment:
       return "This pack is for a network this app does not support."
     case .registryUnavailable:
@@ -534,7 +534,7 @@ struct VenueSignedServingView: View {
     case .registrySourceMismatch:
       return "This pack came from a different event record than the one this app is set up for."
     case .anchoredRecordMissing:
-      return "This event has no record on chain."
+      return "This event isn't in the event registration list."
     case .definitionRejected:
       return "This event's details were rejected."
     case .gatedEventUnsupported:
@@ -555,7 +555,7 @@ struct VenueSignedServingView: View {
     case .envelopeRejected:
       return "The part of this pack covering right now did not check out."
     case .staleDefinition:
-      return "This event has been updated. Ask the organiser for a current link."
+      return "This event has been updated. Ask the organizer for a current link."
     case .registryUnavailable:
       return "The event record could not be reached, so it is unknown whether this may broadcast."
     }
@@ -566,7 +566,7 @@ struct VenueSignedServingView: View {
     case .unsupportedScheme:
       return "This link points somewhere this app cannot fetch from."
     case .redirectRefused:
-      return "That address sent us somewhere else, so it was not followed."
+      return "That link redirects elsewhere, so beid didn't follow it."
     case .oversize:
       return "That file is larger than a pack may be."
     case .unreadable:
