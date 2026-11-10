@@ -7,7 +7,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld devices heard, window %2$lld. Mutual check not available yet."
+            "value": "Devices heard: %1$lld. Window %2$lld. Mutual check not available yet."
           }
         }
       }
@@ -520,17 +520,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "SENSING DATA"
-          }
-        }
-      }
-    },
-    "DEVICES HEARD": {
-      "comment": "Number of distinct per-event display IDs observed in one stored session; this does not mean mutual confirmation.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DEVICES HEARD"
           }
         }
       }

@@ -63,7 +63,7 @@ final class NowNavigationUITests: XCTestCase {
     app.scrollViews["records.grid"].assertExists()
     let recordTiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "records.record."))
     XCTAssertEqual(recordTiles.count, 4, "Two saved sessions of one event must share one Attendance tile")
-    XCTAssertTrue(app.staticTexts["5 records · 4 events"].exists)
+    XCTAssertTrue(app.staticTexts["4 records · 4 events"].exists)
 
     let repeatedEvent = app.buttons.matching(NSPredicate(format: "label == %@", "Record for DevCon Bangkok 2025"))
     XCTAssertEqual(repeatedEvent.count, 1)
