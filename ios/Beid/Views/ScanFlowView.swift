@@ -282,7 +282,7 @@ enum ScanFlowContent {
       SensingStopConfirmView(
         sensing: sensing,
         snapshot: SensingStopConfirmSnapshot(
-          proofID: nil,
+          proofID: UUID(uuidString: "00000000-0000-4000-8000-000000000005"),
           event: event
         ),
         onStop: {},

@@ -164,7 +164,7 @@ struct SensingSealedView: View {
       SensingMetric(value: String(snapshot.detectedDeviceCount), label: "DEVICES HEARD")
     ]
     if let elapsed {
-      items.append(SensingMetric(value: "\(elapsed / 60):\(String(format: "%02d", elapsed % 60))", label: "ELAPSED"))
+      items.append(SensingMetric(value: ElapsedTimeFormat.minutesSeconds(TimeInterval(elapsed)), label: "ELAPSED"))
     }
     return HStack(alignment: .top, spacing: 0) {
       ForEach(items) { item in

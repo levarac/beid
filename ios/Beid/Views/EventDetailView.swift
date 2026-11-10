@@ -268,7 +268,7 @@ struct EventDetailView: View {
                 .foregroundStyle(DS.Color.textSecondary)
             }
             Spacer(minLength: 0)
-            Text("→").beidTextStyle(DS.Font.Library.labelMono11).accessibilityHidden(true)
+            Text("→").beidTextStyle(DS.Font.Library.labelMono11Time).accessibilityHidden(true)
           }
           .foregroundStyle(DS.Color.textPrimary)
           .frame(minHeight: DS.Size.proofRowMinHeight)

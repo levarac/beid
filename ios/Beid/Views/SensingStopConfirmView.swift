@@ -20,11 +20,11 @@ struct SensingStopConfirmCopy: Equatable {
 
   init(hasRecord: Bool) {
     if hasRecord {
-      body = "Your record will be saved on this phone. You can join this event again later."
-      stopTitle = "Stop and keep record"
+      body = String(localized: "Your record will be saved on this phone. You can join this event again later.")
+      stopTitle = String(localized: "Stop and keep record")
     } else {
-      body = "Nothing has been recorded yet. You can join this event again later."
-      stopTitle = "Stop sensing"
+      body = String(localized: "Nothing has been recorded yet. You can join this event again later.")
+      stopTitle = String(localized: "Stop sensing")
     }
   }
 }
