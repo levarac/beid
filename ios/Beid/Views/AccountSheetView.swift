@@ -72,11 +72,15 @@ struct AccountSheetView: View {
       List {
         // With the taller detent and top space for Done, this 116pt wallet
         // row places its divider near Figma's y=540 without moving the text.
-        AccountSheetRow(
-          minHeight: DS.Space.xxl * 2 + DS.Space.m + DS.Space.xs,
-          hasDivider: !showDisconnectConfirmation
-        ) {
-          walletContent
+        // v1.1 offers no wallet connection: the row only exists for a wallet
+        // connected by an earlier version, so that it can be disconnected.
+        if coordinator.walletAddress != nil {
+          AccountSheetRow(
+            minHeight: DS.Space.xxl * 2 + DS.Space.m + DS.Space.xs,
+            hasDivider: !showDisconnectConfirmation
+          ) {
+            walletContent
+          }
         }
         if showDisconnectConfirmation {
           AccountSheetRow(hasDivider: false) {
@@ -107,19 +111,20 @@ struct AccountSheetView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Organizer tools")
           }
-          AccountSheetRow(topGap: DS.Space.m + DS.Space.xs) {
-            Button(role: .destructive) {
-              showDisconnectConfirmation = true
-            } label: {
-              Text("Disconnect wallet")
-                .beidTextStyle(DS.Font.Library.title17)
-                .foregroundStyle(DS.Color.statusOff)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
-                .contentShape(Rectangle())
+          if coordinator.walletAddress != nil {
+            AccountSheetRow(topGap: DS.Space.m + DS.Space.xs) {
+              Button(role: .destructive) {
+                showDisconnectConfirmation = true
+              } label: {
+                Text("Disconnect wallet")
+                  .beidTextStyle(DS.Font.Library.title17)
+                  .foregroundStyle(DS.Color.statusOff)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: DS.Size.sessionRowMinHeight + DS.Space.xs)
+                  .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .disabled(coordinator.walletAddress == nil)
           }
           // DECISIONS 2026-09-26: keep the sole Past events/rejoin path as an
           // extra Account row below the three Figma menu rows.
@@ -347,21 +352,6 @@ struct AccountSheetView: View {
         }
       }
       .padding(.top, DS.Space.xs)
-    } else {
-      // DECISIONS 2026-09-26: wallet is optional, so keep voluntary connect
-      // and reconnect here although Figma 10 only depicts a connected wallet.
-      Button {
-        BeidDesign.haptic()
-        coordinator.connectWalletFromAccountSheet()
-      } label: {
-        Text("Connect Wallet")
-          .beidTextStyle(DS.Font.Library.title17)
-          .foregroundStyle(DS.Color.actionInverse)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .frame(minHeight: DS.Size.minHitTarget)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
     }
   }
 
@@ -389,7 +379,7 @@ struct AccountSheetView: View {
         .beidTextStyle(DS.Font.Library.title19)
         .foregroundStyle(DS.Color.actionInverse)
       Text(
-        "Your proofs stay on this device as self-proofs. Nothing is deleted. You can connect this or another wallet anytime."
+        "Your records stay on this phone. Nothing is deleted."
       )
       .beidTextStyle(DS.Font.Library.body15)
       .foregroundStyle(DS.Color.textSecondaryOnInk)
