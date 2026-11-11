@@ -278,6 +278,37 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertNil(provider.completion)
   }
 
+  func testUnreadableExclusionsPreventKeyDerivationAndSigning() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let initialStore = ReportSubmissionStore(fileURL: fileURL)
+    let capture = try seedCapture(in: initialStore, publicKey: publicKey)
+    try initialStore.addExclusion(ReportSubmissionExclusion(
+      id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+      enin: capture.enin, peerCount: capture.peerRpids.count,
+      reasonCode: "signing-key-changed", createdAt: Date()
+    ))
+    try Data("unreadable".utf8).write(to: directory.appendingPathComponent("submissions.exclusions.json"))
+    let reads = keychain.readCount
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+
+    runtime.submitPending()
+
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertNil(provider.completion)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertEqual(store.pendingCaptures.map(\.id), [capture.id])
+    XCTAssertEqual(runtime.eventSigningKeyFailure, .discardFailed)
+  }
+
   func testManualJoinKeepsResolvedSecretAcrossPermissionWait() async throws {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let cryptography = makeCryptography(keychain)
