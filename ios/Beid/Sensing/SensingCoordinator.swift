@@ -3131,7 +3131,9 @@ final class SensingCoordinator: ObservableObject {
       startSensing()
       return
     }
-    guard !discoveryOnlyScanOwned, !isScanning, !isAdvertising else { return }
+    // Ownership changes with the transport calls; the published scanning
+    // state may still describe the scan that a failed key read just stopped.
+    guard !discoveryOnlyScanOwned, !isAdvertising else { return }
     guard prepareDeviceSecret() else { return }
     discoveryOnlyScanOwned = true
     engine.startDiscoveryScan()
