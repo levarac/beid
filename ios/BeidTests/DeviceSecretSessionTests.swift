@@ -868,6 +868,14 @@ final class DeviceSecretSessionTests: XCTestCase {
   }
 
   func testExcludedCaptureCannotSignAfterItsRemovalWasInterrupted() throws {
+    try assertDiscardNoticeWaitsForCaptureRemoval(exclusionAlreadySaved: false)
+  }
+
+  func testExcludedCaptureDoesNotShowDiscardNoticeBeforeRemovalOnRelaunch() throws {
+    try assertDiscardNoticeWaitsForCaptureRemoval(exclusionAlreadySaved: true)
+  }
+
+  private func assertDiscardNoticeWaitsForCaptureRemoval(exclusionAlreadySaved: Bool) throws {
     let directory = try makeDirectory()
     let fileURL = directory.appendingPathComponent("submissions.json")
     let pendingURL = directory.appendingPathComponent("submissions.pending.json")
@@ -875,29 +883,45 @@ final class DeviceSecretSessionTests: XCTestCase {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
     let store = ReportSubmissionStore(fileURL: fileURL)
-    _ = try seedCapture(in: store, publicKey: publicKey)
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    if exclusionAlreadySaved {
+      try store.addExclusion(ReportSubmissionExclusion(
+        id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+        enin: capture.enin, peerCount: capture.peerRpids.count,
+        reasonCode: "signing-key-changed", createdAt: Date()
+      ))
+    }
+    let runtimeStore = exclusionAlreadySaved ? ReportSubmissionStore(fileURL: fileURL) : store
     try FileManager.default.moveItem(at: pendingURL, to: preservedURL)
     try FileManager.default.createDirectory(at: pendingURL, withIntermediateDirectories: false)
     keychain.storedData = Data(repeating: 0x42, count: 32)
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
-      definitionProvider: provider, store: store
+      definitionProvider: provider, store: runtimeStore
     ))
     defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
 
     runtime.submitPending()
 
-    XCTAssertEqual(store.pendingCaptures.count, 1)
+    XCTAssertEqual(runtimeStore.pendingCaptures.count, 1)
     XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).exclusions.count, 1)
-    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertTrue(runtimeStore.records.isEmpty)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
     try FileManager.default.removeItem(at: pendingURL)
     try FileManager.default.moveItem(at: preservedURL, to: pendingURL)
     keychain.storedData = Data(repeating: 0x31, count: 32)
     runtime.submitPending()
 
     XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.isEmpty)
-    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertTrue(runtimeStore.records.isEmpty)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
     XCTAssertNil(provider.completion)
   }
 
