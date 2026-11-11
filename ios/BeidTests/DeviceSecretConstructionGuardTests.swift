@@ -26,6 +26,28 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
     super.tearDown()
   }
 
+  func testSecretStorageAssertionsDoNotDescribeStoredValues() throws {
+    let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let unsafeAssertion = try NSRegularExpression(
+      pattern: #"\bXCTAssert(?:Equal|NotEqual|Nil|NotNil)\s*\(\s*(?:try\s+)?"#
+        + #"(?:UserDefaults\.standard\.object|(?:storage\.)?defaults\.(?:object|data|string)|"#
+        + #"storage\.(?:bytes|resolveSeed)|keychain\.storedData|keychain\.lastWrite(?!\?\.|\.)|"#
+        + #"resolved\b|regenerated\s+as\s+NSObject)"#
+    )
+    for name in [
+      "DeviceSecretConstructionGuardTests.swift",
+      "DeviceSecretKeychainStoreTests.swift",
+      "OwnerKeyKeychainTests.swift",
+      "OwnerKeyProviderTests.swift",
+    ] {
+      let source = try String(contentsOf: directory.appendingPathComponent(name), encoding: .utf8)
+      XCTAssertTrue(
+        unsafeAssertion.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)) == nil,
+        "\(name): compare secret storage values as Booleans so failures cannot describe them"
+      )
+    }
+  }
+
   func testNoAppSourceConstructsBarnardWithItsDefaultStorage() throws {
     let root = try XCTUnwrap(Bundle(for: Self.self).resourceURL).appendingPathComponent("Beid")
     let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
