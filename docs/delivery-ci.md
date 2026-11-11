@@ -281,11 +281,12 @@ restricted file permissions; values must never appear in logs.
   issue #55 — the sister project that originated it abandoned it after
   shipping stale tester notes for 19 hours through exactly this file
   confusion). When in doubt, the file you want is `what_to_test.json`.
-- **Versioning**: `MARKETING_VERSION` lives once in `ios/project.yml`
-  (the project is xcodegen-generated — never hand-edit the `.xcodeproj`).
-  Xcode Cloud builds use the Xcode Cloud run number.
-  `CURRENT_PROJECT_VERSION` in `project.yml` remains an inert placeholder
-  (`"1"`) — leave it, never bump it per build.
+- **Versioning**: `MARKETING_VERSION` lives once, in `ios/Version.xcconfig`,
+  which `ios/project.yml` makes the base of every build configuration (the
+  project is xcodegen-generated — never hand-edit the `.xcodeproj`). A
+  version bump edits that file only. Xcode Cloud builds use the Xcode Cloud
+  run number. `CURRENT_PROJECT_VERSION` in the same file remains an inert
+  placeholder (`1`) — leave it, never bump it per build.
 - **"Uploaded" ≠ "delivered"**: a build can be `VALID` in App Store
   Connect yet reach no tester. Internal builds auto-deliver to the "Dev"
   TestFlight group via the ASC workflow post-action (configured

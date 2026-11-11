@@ -82,7 +82,7 @@ The workflow performs these steps:
    and receives only the service-account file path. It uploads the signed AAB
    to the `internal` track with release status `completed`.
 
-The source `android/app/build.gradle.kts` remains unchanged. During the CI
+The source `android/version.properties` remains unchanged. During the CI
 build, `scripts/gha/android-version-code.init.gradle` sets a temporary
 versionCode to `1,000,000,000 + workflow run number × 10 + run attempt`. This
 keeps manual bootstrap build `1` separate, gives reruns distinct codes, and
@@ -174,8 +174,9 @@ owners.
 
 - **`versionCode` — the store number.** Assigned by the delivery workflow from
   the run (`1e9 + run×10 + attempt`), as described above. **gh#491 did not change
-  how it is assigned**, and `versionCode = 1` in `android/app/build.gradle.kts`
-  stays as the source-level placeholder.
+  how it is assigned**, and `versionCode=1` in `android/version.properties`
+  stays as the source-level placeholder. `versionName`, the version users
+  see, is set in the same file; a version bump edits that file only.
 - **git height — the build position.** `git rev-list --count HEAD`, computed by
   `internal-google-play.yml` and passed to Gradle as `-PgitHeight`, surfaced as
   `BuildConfig.GIT_HEIGHT`. It is a function of the built commit's ancestry, so
