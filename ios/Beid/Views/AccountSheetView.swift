@@ -692,8 +692,9 @@ private struct EventCodeEntrySheetView: View {
 
 /// "Join event" row for `AccountSheetView`. `AppCoordinator` holds its
 /// sensing coordinator as a plain `let` and does not re-publish changes to
-/// `joinedEventCode`. Observe it here so the row disables as soon as a manual
-/// join succeeds, without republishing frequent sensing updates from AppCoordinator.
+/// its state. Observe it here so the row follows `canSelectEventToJoin`:
+/// enabled while idle and disabled during a live session. STOP enables it
+/// again even though `joinedEventCode` remains set.
 private struct EventMembershipSections: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensingCoordinator: SensingCoordinator
