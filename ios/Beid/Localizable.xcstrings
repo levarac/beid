@@ -1035,17 +1035,6 @@
         }
       }
     },
-    "account.joinEvent.label": {
-      "comment": "Menu row in the Account sheet that opens the manual event-code entry form. Distinct from that form's own submit button, which is also labeled \"Join Event\" in English but is a separate translation unit and may need different wording in other languages.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Join Event"
-          }
-        }
-      }
-    },
     "account.wallet.connectedVia": {
       "localizations": {
         "en": {
@@ -1593,26 +1582,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "View participation summary"
-          }
-        }
-      }
-    },
-    "Current": {
-      "comment": "Trailing label on a Past Events row identifying the event this device is presently joined to. Refers to \"the event currently joined,\" not a generic adjective — distinct from any other use of the English word \"Current\" elsewhere in the app."
-    },
-    "No past events yet.": {
-      "comment": "Empty state on the Past Events screen, shown when this device has never recorded a Proof for any event."
-    },
-    "Only events you've actually recorded a proof for are listed here.": {
-      "comment": "Footer under the Past Events list, clarifying that a code that was typed and abandoned before recording completed does not appear."
-    },
-    "account.pastEvents.label": {
-      "comment": "Menu row in the Account sheet that opens the list of previously joined events (beid#230), for rejoining one without retyping its code.",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Past Events"
           }
         }
       }
@@ -2177,6 +2146,23 @@
         }
       }
     },
+    "account.footer.about": {
+      "comment": "Account sheet footer: product name and build, then a link to About sensing. The argument is the app version and build.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beid %@ · About →"
+          }
+        }
+      }
+    },
+    "Wallet · Not connected": {},
+    "No wallet": {},
+    "Connect": {
+      "comment": "Verb on a text button in the Account sheet when no wallet is connected: starts connecting a crypto wallet. Shown uppercase with a trailing arrow."
+    },
+    "Proofs stay on this device until a wallet is connected.": {},
     "A saved pack is checked again every time it is loaded.": {},
     "Asked to broadcast": {
       "comment": "The radio request was made; the system has not confirmed that the device is on air."
