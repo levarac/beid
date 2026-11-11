@@ -283,6 +283,35 @@ final class DeviceSecretSessionTests: XCTestCase {
     })
   }
 
+  func testDistinctEventsRequireSeparateNoticeDismissals() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    _ = try seedCapture(in: store, publicKey: publicKey, eventCode: "OTHER")
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+    runtime.submitPending()
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+
+    coordinator.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "OTHER")
+    XCTAssertEqual(store.acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(store.acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS", "OTHER"])
+  }
+
   func testPendingCaptureReadFailurePreservesInputsWithoutSigning() throws {
     let directory = try makeDirectory()
     let fileURL = directory.appendingPathComponent("submissions.json")
