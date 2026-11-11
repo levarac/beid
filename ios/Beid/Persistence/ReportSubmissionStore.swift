@@ -384,11 +384,13 @@ final class ReportSubmissionStore: ObservableObject {
     }.map(\.eventCode))
   }
 
-  func acknowledgeSigningKeyChanges() throws {
+  func acknowledgeSigningKeyChanges(forEventCodes eventCodes: Set<String>? = nil) throws {
     try ensureWritable()
     var updated = exclusions
     for index in updated.indices where updated[index].reasonCode == "signing-key-changed" {
-      updated[index].signingKeyChangeNoticeAcknowledged = true
+      if eventCodes?.contains(updated[index].eventCode) ?? true {
+        updated[index].signingKeyChangeNoticeAcknowledged = true
+      }
     }
     guard updated != exclusions else { return }
     try persistExclusions(updated)

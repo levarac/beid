@@ -81,10 +81,10 @@ final class ProofStore: ObservableObject {
     try persistDurably(updated)
   }
 
-  func acknowledgeSigningKeyChanges(forEventCodes eventCodes: Set<String> = []) throws {
+  func acknowledgeSigningKeyChanges(forEventCodes eventCodes: Set<String>) throws {
     var updated = proofs
     for index in updated.indices {
-      if updated[index].selfProofDiscardedForKeyChange || updated[index].eventCode.map(eventCodes.contains) == true {
+      if eventCodes.contains(updated[index].eventCode ?? updated[index].id.uuidString) {
         updated[index].signingKeyChangeNoticeAcknowledged = true
       }
     }
@@ -96,8 +96,10 @@ final class ProofStore: ObservableObject {
     proofs.contains { $0.eventCode == eventCode && $0.signingKeyChangeNoticeAcknowledged }
   }
 
-  var hasUnacknowledgedSigningKeyChange: Bool {
-    proofs.contains { $0.selfProofDiscardedForKeyChange && !$0.signingKeyChangeNoticeAcknowledged }
+  var unacknowledgedSigningKeyChangeEventCodes: Set<String> {
+    Set(proofs.filter {
+      $0.selfProofDiscardedForKeyChange && !$0.signingKeyChangeNoticeAcknowledged
+    }.map { $0.eventCode ?? $0.id.uuidString })
   }
 
   private func persistDurably(_ updated: [Proof]) throws {

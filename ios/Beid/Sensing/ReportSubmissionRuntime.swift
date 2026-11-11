@@ -277,10 +277,11 @@ final class ReportSubmissionRetryController {
 @MainActor
 protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? { get set }
+  var onSigningKeyChange: ((String) -> Void)? { get set }
   var isSigningKeyChangeAcknowledged: ((String) -> Bool)? { get set }
-  var signingKeyChangeEventCodes: Set<String> { get }
   var acknowledgedSigningKeyChangeEventCodes: Set<String> { get }
   func acknowledgeSigningKeyChanges() throws
+  func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws
   func captureAndQueueWindow(
     id: UUID,
     eventCode: String,
@@ -308,11 +309,18 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
+  var onSigningKeyChange: ((String) -> Void)? {
+    get { nil }
+    set {}
+  }
+  func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws {
+    try acknowledgeSigningKeyChanges()
+  }
+
   var isSigningKeyChangeAcknowledged: ((String) -> Bool)? {
     get { nil }
     set {}
   }
-  var signingKeyChangeEventCodes: Set<String> { [] }
   var acknowledgedSigningKeyChangeEventCodes: Set<String> { [] }
   func acknowledgeSigningKeyChanges() throws {}
 
@@ -343,11 +351,17 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       if let eventSigningKeyFailure { onEventSigningKeyFailure?(eventSigningKeyFailure) }
     }
   }
+  var onSigningKeyChange: ((String) -> Void)? {
+    didSet {
+      for eventCode in store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).sorted() {
+        onSigningKeyChange?(eventCode)
+      }
+    }
+  }
   var isSigningKeyChangeAcknowledged: ((String) -> Bool)?
   private(set) var eventSigningKeyFailure: EventSigningKeyFailure?
   private var notifiedSigningKeyChangeEvents: Set<String>
 
-  var signingKeyChangeEventCodes: Set<String> { store.signingKeyChangeEventCodes }
   var acknowledgedSigningKeyChangeEventCodes: Set<String> { store.acknowledgedSigningKeyChangeEventCodes }
 
   func acknowledgeSigningKeyChanges() throws {
@@ -355,10 +369,19 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     if eventSigningKeyFailure == .changed { eventSigningKeyFailure = nil }
   }
 
+  func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws {
+    try store.acknowledgeSigningKeyChanges(forEventCodes: [eventCode])
+    if eventSigningKeyFailure == .changed,
+       store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).isEmpty {
+      eventSigningKeyFailure = nil
+    }
+  }
+
   private func notifySigningKeyChange(forEventCode eventCode: String) {
     guard !store.acknowledgedSigningKeyChangeEventCodes.contains(eventCode),
           isSigningKeyChangeAcknowledged?(eventCode) != true,
           notifiedSigningKeyChangeEvents.insert(eventCode).inserted else { return }
+    onSigningKeyChange?(eventCode)
     recordSigningKeyFailure(.changed)
   }
 
