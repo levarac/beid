@@ -13,6 +13,55 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testCheckpointDiscardNoticeWaitsForRemoval() throws {
+    try assertCheckpointDiscardNoticeWaitsForRemoval(parentDecisionAlreadySaved: false)
+  }
+
+  func testCheckpointDiscardNoticeWaitsForRemovalOnRelaunch() throws {
+    try assertCheckpointDiscardNoticeWaitsForRemoval(parentDecisionAlreadySaved: true)
+  }
+
+  private func assertCheckpointDiscardNoticeWaitsForRemoval(parentDecisionAlreadySaved: Bool) throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    if parentDecisionAlreadySaved {
+      try ProofStore(fileURL: parentURL).discardSelfProofForKeyChange(for: proofId)
+    }
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    var removalFails = true
+    let checkpoints = SelfProofCheckpointStore(fileURL: checkpointURL, removeFile: { url in
+      if removalFails { throw CocoaError(.fileWriteNoPermission) }
+      try FileManager.default.removeItem(at: url)
+    })
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), checkpointStore: checkpoints
+    )
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint?.proofId, proofId)
+    XCTAssertTrue(try XCTUnwrap(ProofStore(fileURL: parentURL).proof(withId: proofId)).selfProofDiscardedForKeyChange)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+
+    removalFails = false
+    keychain.storedData = Data(repeating: 0x31, count: 32)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertNil(relaunched.eventSigningKeyFailure)
+  }
+
   func testOrphanCheckpointIsDiscardedOnceWithoutBlockingLaterJoins() throws {
     let directory = try makeDirectory()
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
@@ -1402,13 +1451,15 @@ final class DeviceSecretSessionTests: XCTestCase {
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
     deviceSecretStore: DeviceSecretKeychainStore = .shared,
     proofStore: ProofStore? = nil,
+    checkpointStore: SelfProofCheckpointStore? = nil,
     reportSubmissionRuntime: (any WindowReportSubmissionRuntimeProtocol)? = nil
   ) -> SensingCoordinator {
     let parents = proofStore ?? ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
     let coordinator = SensingCoordinator(
       windowReportStore: reports ?? WindowReportStore(fileURL: directory.appendingPathComponent("reports.json")),
       selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
-      selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
+      selfProofCheckpointStore: checkpointStore
+        ?? SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
