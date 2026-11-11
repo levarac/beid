@@ -190,6 +190,12 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertEqual(keychain.readCount, 0)
     if blockExclusionWrite {
       XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+      XCTAssertTrue(reloaded.pendingCaptures.isEmpty)
+      XCTAssertEqual(coordinator.eventSigningKeyFailure?.title, "Earlier record update failed")
+      XCTAssertEqual(
+        coordinator.eventSigningKeyFailure?.message,
+        "Changes to a record from an earlier session could not be saved."
+      )
       XCTAssertTrue(reloaded.acknowledgedSigningKeyChangeEventCodes.isEmpty)
       try FileManager.default.removeItem(at: exclusionURL)
       try FileManager.default.moveItem(at: preservedURL, to: exclusionURL)
