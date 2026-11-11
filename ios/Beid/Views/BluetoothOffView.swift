@@ -47,7 +47,9 @@ struct BluetoothOffView: View {
     } footer: {
       VStack(spacing: DS.Onboarding.recoveryActionGap) {
         BeidPrimaryButton("Open Settings") {
-          coordinator.sensingCoordinator.reset()
+          if coordinator.shouldResetSensingBeforeOpeningBluetoothSettings {
+            coordinator.sensingCoordinator.reset()
+          }
           UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
         }
 

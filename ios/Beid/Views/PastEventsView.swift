@@ -14,8 +14,7 @@ import SwiftUI
 /// fixed in count.
 ///
 /// Deliberately reuses `AccountSheetView`'s own plain `List`/`Section`/
-/// `Button` idiom, the same one `VenueDeviceOrganizerView`'s history
-/// list already uses for a "past records, tap for detail/no detail" list.
+/// `Button` idiom.
 /// Does **not** use `EventCardView` — its `Badge` vocabulary
 /// (`.detected`/`.recording`/`.paused`) is tied to the live scan-phase
 /// machine, and none of those states honestly describe "a past event, tap
@@ -78,7 +77,7 @@ struct PastEventsView: View {
     // simply omit a row this invariant says can't occur, rather than crash
     // if it somehow did.
     if let eventCode = proof.eventCode {
-      let isCurrent = eventCode == sensingCoordinator.joinedEventCode
+      let isCurrent = eventCode == sensingCoordinator.currentEventCode
       Button {
         BeidDesign.haptic()
         onRejoin(eventCode)
@@ -105,12 +104,10 @@ struct PastEventsView: View {
           }
         }
       }
-      // Matches "Join event"'s existing single-slot invariant exactly
-      // (EventMembershipUITests.testJoinEventRowReenablesAfterLeavingEvent):
-      // every row here, including the current one, is only tappable while
-      // nothing is joined. Rejoining is "leave, then tap a past row," never
-      // an implicit leave-then-join on tap.
-      .disabled(sensingCoordinator.joinedEventCode != nil)
+      // Matches "Join Event"'s single-slot invariant: every row here,
+      // including the current one, is only tappable while no join or
+      // session is in progress. Ending the session (STOP) frees the slot.
+      .disabled(!sensingCoordinator.canSelectEventToJoin)
     }
   }
 }

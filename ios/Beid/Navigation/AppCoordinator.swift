@@ -37,7 +37,7 @@ final class AppCoordinator: ObservableObject {
   @Published var screen: AppScreen = .welcome
   @Published var walletAddress: String?
   /// The address from this process's live connector session, if any — the
-  /// only wallet-address value `EventBindingSheetView.performBinding` is
+  /// only wallet-address value the former event-binding sheet was
   /// allowed to read for its "already connected" fast path (beid#315
   /// structural containment; see `LiveWalletAddress`'s doc comment in
   /// `WalletConnector.swift`). `walletAddress` above stays a plain,
@@ -62,7 +62,13 @@ final class AppCoordinator: ObservableObject {
   /// signing/reporting store, and is set only by the UI-test launch gate.
   private(set) var proofDetailScreenshotPresentation: ProofDetailPresentation?
   #endif
-  @Published var accountSheetPresented = false
+  @Published var accountSheetPresented = false {
+    didSet {
+      if oldValue, !accountSheetPresented {
+        cancelPendingJoinAttempt()
+      }
+    }
+  }
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
   /// Home's 04b code sheet. Closing it cancels a pending lookup, whatever
@@ -78,7 +84,6 @@ final class AppCoordinator: ObservableObject {
       }
     }
   }
-  @Published var dailySummaryPresented = false
 
   private(set) var walletConnector: (any WalletConnector)?
 
@@ -441,7 +446,7 @@ final class AppCoordinator: ObservableObject {
   /// Takes `LiveWalletAddress`, not a plain `String` — every production
   /// caller already has one, straight from a connector's own successful
   /// `connect()`/`connectAndSign()` (see `WalletConnectPairingView.onConnected`
-  /// and `EventBindingSheetView`'s restored-hint fast path). This is part of
+  /// and the Account sheet's restored-hint fast path). This is part of
   /// beid#315's structural containment: a bare `String` (e.g. read from a
   /// `CachedWalletHint`) cannot be passed here without first being wrapped in
   /// a visible `LiveWalletAddress(...)` construction.
@@ -451,12 +456,6 @@ final class AppCoordinator: ObservableObject {
     }
     liveWalletAddress = address
     walletAddress = address.address
-  }
-
-  /// Wallet-optional fallback from `WalletConnectView`'s secondary action:
-  /// join an event by manually entered code instead of connecting a wallet.
-  func skipWalletForEventCode() {
-    screen = .eventCodeEntry
   }
 
   /// The way back out of `EventCodeEntryView` for a user who doesn't
@@ -469,7 +468,7 @@ final class AppCoordinator: ObservableObject {
   /// `.bluetoothPermission` when that stale lookup finally completes and
   /// `joinEvent` succeeds — a screen change the user never asked for, for
   /// an event they explicitly walked away from (beid#258 P1-1 round-2 fix).
-  func returnToWalletConnect() {
+  func returnToBluetoothPermission() {
     cancelPendingJoinAttempt()
     screen = .bluetoothPermission
   }
@@ -500,7 +499,9 @@ final class AppCoordinator: ObservableObject {
   /// `EventCodeEntryView` presented as a sheet over the Account sheet (see
   /// `AccountSheetView`'s `eventCodeEntrySheetPresented` binding). Unlike
   /// `joinEvent(code:)`, success here just dismisses the sheet — it never
-  /// touches `screen`, since the user is already past onboarding.
+  /// touches `screen`, since the user is already past onboarding. It then
+  /// finishes like every other post-onboarding code join
+  /// (`startSensingAfterSuccessfulJoin`).
   @discardableResult
   func joinEventFromAccountSheet(
     code rawCode: String,
@@ -514,8 +515,24 @@ final class AppCoordinator: ObservableObject {
     ) {
       return error
     }
-    eventCodeEntrySheetPresented = false
+    startSensingAfterSuccessfulJoin()
     return nil
+  }
+
+  /// The one way a successful post-onboarding code join finishes (home code
+  /// sheet, Account sheet, Rejoin): v1.1 has no separate start-sensing
+  /// button, so the join itself must start sensing and show the sensing
+  /// screen from the Now tab.
+  private func startSensingAfterSuccessfulJoin() {
+    homeEventCodeSheetPresented = false
+    eventCodeEntrySheetPresented = false
+    accountSheetPresented = false
+    nowEventRegistration = nil
+    sealedSnapshot = nil
+    proofCollectedSnapshot = nil
+    selectedHomeTab = .now
+    sensingCoordinator.startSensing()
+    scanPresented = true
   }
 
   /// Best-effort code -> canonical registry Event ID lookup, via the
@@ -691,16 +708,8 @@ final class AppCoordinator: ObservableObject {
   /// Home's 04b entry has its own sheet flag so the Account sheet cannot
   /// race to present its private wrapper for the same coordinator binding.
   func joinEventFromHomeResolvingCanonicalId(code: String) async -> JoinAttemptOutcome {
-    let outcome = await joinEventFromAccountSheetResolvingCanonicalId(code: code)
-    if case .completed(nil) = outcome {
-      homeEventCodeSheetPresented = false
-      nowEventRegistration = nil
-      sealedSnapshot = nil
-      proofCollectedSnapshot = nil
-      sensingCoordinator.startSensing()
-      scanPresented = true
-    }
-    return outcome
+    // The shared success path closes the home code sheet and starts sensing.
+    await joinEventFromAccountSheetResolvingCanonicalId(code: code)
   }
 
   /// Manual rescue from the nearby-event scan surface. It preserves the same
@@ -726,7 +735,7 @@ final class AppCoordinator: ObservableObject {
 
   /// Call when the account-sheet join surface is dismissed (Cancel or
   /// swipe) while a lookup may still be in flight — see
-  /// `cancelPendingJoinAttempt`'s doc comment and `returnToWalletConnect`'s
+  /// `cancelPendingJoinAttempt`'s doc comment and `returnToBluetoothPermission`'s
   /// onboarding-side equivalent.
   func cancelPendingAccountSheetJoinAttempt() {
     cancelPendingJoinAttempt()
@@ -777,10 +786,11 @@ final class AppCoordinator: ObservableObject {
 
   /// Rejoins a previously joined event by an already-known `Proof.eventCode`
   /// (beid#230's past-events list), instead of retyping it through
-  /// `EventCodeEntryView`. A no-op while an event is already joined —
-  /// matches the single-slot invariant `EventMembershipUITests` already
-  /// covers for "Join event"; the caller is expected to disable the row the
-  /// same way, but this does not rely on that as its only guard.
+  /// `EventCodeEntryView`. A no-op while a join or session is in progress
+  /// (`SensingCoordinator.canSelectEventToJoin`) — the single-slot invariant
+  /// "Join event" enforces; the caller is expected to disable its control the
+  /// same way, but this does not rely on that as its only guard. A joined
+  /// code survives STOP, so an idle coordinator may rejoin and replaces it.
   ///
   /// Routes through `attemptJoinEvent(code:)` (beid#226, DECISIONS
   /// 2026-08-20) so there is exactly one iOS call site into
@@ -790,14 +800,13 @@ final class AppCoordinator: ObservableObject {
   /// `attemptJoinEvent`'s normalization here means a legacy-cased stored
   /// code rejoins to the same RPID a fresh join of the same text derives
   /// today, instead of reproducing whatever it happened to canonicalize to
-  /// under the old, platform-diverging rule. The return value is discarded:
-  /// a stored `Proof.eventCode` cannot normalize to empty (it was itself
-  /// produced by a successful join), and a `.joinFailed` here has no
-  /// separate UI to report to, matching this function's pre-existing
-  /// `Bool`-discarding call into `SensingCoordinator`.
+  /// under the old, platform-diverging rule. A failed attempt has no separate
+  /// UI to report to, so it simply does nothing; a successful one finishes
+  /// like every other code join (`startSensingAfterSuccessfulJoin`).
   func rejoinPastEvent(code: String, canonicalEventIdHex: String? = nil) {
-    guard sensingCoordinator.joinedEventCode == nil else { return }
-    _ = attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex)
+    guard sensingCoordinator.canSelectEventToJoin else { return }
+    guard attemptJoinEvent(code: code, canonicalEventIdHex: canonicalEventIdHex) == nil else { return }
+    startSensingAfterSuccessfulJoin()
   }
 
   /// Presents `EventCodeEntryView` in account-sheet mode as a sheet over the
@@ -946,8 +955,19 @@ final class AppCoordinator: ObservableObject {
       homeStandbyDiscoveryActive = false
       if isIdle { sensingCoordinator.stopNearbyEventDiscovery() }
     }
-    let hasCandidates = sensingCoordinator.nearbyEventCandidates.candidateCount > 0 || homeHasDemoCandidate
-    homeStandby.update(isEnabled: isEnabled, hasCandidates: hasCandidates, now: homeStandbyNow)
+    // Same projection the Now tab renders: a card whose JOIN control is
+    // disabled (no registration-verified event) must not stop the timer.
+    let nearbyCards = NearbyEventCardListPresentation(
+      candidates: sensingCoordinator.nearbyEventCandidates,
+      nowEpochSeconds: sensingCoordinator.nearbyDiscoveryNowEpochSeconds
+    ).cards
+    let hasJoinableCandidates = nearbyCards.contains { $0.joinActionEventCodeHashHex != nil }
+      || homeHasDemoCandidate
+    homeStandby.update(
+      isEnabled: isEnabled,
+      hasJoinableCandidates: hasJoinableCandidates,
+      now: homeStandbyNow
+    )
   }
 
   func joinNearbyEventFromHome(_ card: NearbyEventCard) {
@@ -955,7 +975,7 @@ final class AppCoordinator: ObservableObject {
     sealedSnapshot = nil
     proofCollectedSnapshot = nil
     nowEventRegistration = homeRegistration(for: card)
-    SensingView(sensing: sensingCoordinator, clockPreflight: clockPreflight).joinNearbyEventTapped(card)
+    sensingCoordinator.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
     scanPresented = true
   }
 
@@ -1087,6 +1107,27 @@ final class AppCoordinator: ObservableObject {
     scanPresented = false
     sensingCoordinator.stopNearbyEventDiscovery()
     sensingCoordinator.stopSensing()
+  }
+
+  /// Only STOP SENSING ends participation. The Bluetooth-off screen is also
+  /// reached from the Now tab while an event session is active, so opening
+  /// Settings from there must not reset (finalize) that session.
+  var shouldResetSensingBeforeOpeningBluetoothSettings: Bool {
+    Self.shouldResetSensing(
+      beforeOpeningBluetoothSettingsIn: sensingCoordinator.phase,
+      joinedEventCode: sensingCoordinator.joinedEventCode
+    )
+  }
+
+  static func shouldResetSensing(
+    beforeOpeningBluetoothSettingsIn phase: ScanPhase,
+    joinedEventCode: String?
+  ) -> Bool {
+    switch phase {
+    case .idle: return true
+    case .sensing: return joinedEventCode == nil
+    case .eventFound, .recording, .signalLost: return false
+    }
   }
 
   /// Returning with Back never calls this method. Only an explicit stop

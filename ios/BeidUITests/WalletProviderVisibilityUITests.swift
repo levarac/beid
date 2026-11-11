@@ -7,7 +7,7 @@ import XCTest
 /// renamed "Base" app) stopped showing its approval dialog on real devices,
 /// and the underlying SDK has no native-iOS fix available yet. The wallet
 /// picker was narrowed to MetaMask only — see `WalletConnectView.swift`'s
-/// `providerSelectionContent` and `EventBindingSheetView.swift`'s
+/// `providerSelectionContent` and the removed binding sheet's `swift`'s
 /// `connectContent` for the two production call sites.
 ///
 /// v1.1 offers no wallet connection. A user with no wallet must not find a

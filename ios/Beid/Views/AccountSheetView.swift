@@ -617,7 +617,7 @@ private struct AccountBluetoothRow: View {
 }
 
 /// Sheet wrapper around `WalletConnectPairingView` for the Account sheet's
-/// "Connect Wallet" action. Unlike `WalletConnectView` (onboarding), success
+/// "Connect Wallet" action. Unlike the removed onboarding wallet screen, success
 /// here just sets `walletAddress` and dismisses — it does not advance
 /// `coordinator.screen`. No `secondaryAction`; Cancel in the toolbar is the
 /// escape hatch instead.
@@ -654,7 +654,7 @@ private struct WalletConnectSheetView: View {
     }
     // Sheets don't inherit the presenter's .tint (unlike push navigation),
     // so without this the toolbar Cancel button renders system blue — a
-    // §5 MUST-NOT violation (see WalletConnectView's doc comment).
+    // §5 MUST-NOT violation (see `WalletConnectPairingView`'s doc comment).
     .tint(DS.Color.actionPrimary)
   }
 }
@@ -692,8 +692,9 @@ private struct EventCodeEntrySheetView: View {
 
 /// "Join event" row for `AccountSheetView`. `AppCoordinator` holds its
 /// sensing coordinator as a plain `let` and does not re-publish changes to
-/// `joinedEventCode`. Observe it here so the row disables as soon as a manual
-/// join succeeds, without republishing frequent sensing updates from AppCoordinator.
+/// its state. Observe it here so the row follows `canSelectEventToJoin`:
+/// enabled while idle and disabled during a live session. STOP enables it
+/// again even though `joinedEventCode` remains set.
 private struct EventMembershipSections: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @ObservedObject var sensingCoordinator: SensingCoordinator
@@ -712,7 +713,7 @@ private struct EventMembershipSections: View {
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(sensingCoordinator.joinedEventCode != nil)
+      .disabled(!sensingCoordinator.canSelectEventToJoin)
     }
   }
 

@@ -127,12 +127,23 @@ struct SensingView: View {
       ScrollView {
         BeidAdaptiveContent {
           VStack(spacing: DS.Space.l) {
-            Text("Listening for nearby events")
-              .beidTextStyle(DS.Font.Library.labelMono11)
+            if isListeningAfterJoin {
+              Text("Listening for nearby phones…")
+                .beidTextStyle(DS.Font.Library.labelMono11)
+            } else {
+              Text("Listening for nearby events")
+                .beidTextStyle(DS.Font.Library.labelMono11)
+            }
 
             radar
 
-            Text("Nearby events appear here. Tap JOIN to begin sensing.")
+            Group {
+              if isListeningAfterJoin {
+                Text("Keep the app open. Sensing starts when beid hears another phone at this event.")
+              } else {
+                Text("Nearby events appear here. Tap JOIN to begin sensing.")
+              }
+            }
               .font(DS.Font.body)
               .foregroundStyle(DS.Color.textSecondary)
               .multilineTextAlignment(.center)
@@ -182,6 +193,14 @@ struct SensingView: View {
       }
     }
     .accessibilityIdentifier("scan.sensing")
+  }
+
+  /// True once JOIN was tapped (or an event code accepted) and no other
+  /// phone has been heard yet: the phase is `.sensing`, so telling the
+  /// participant to tap JOIN again would be wrong.
+  var isListeningAfterJoin: Bool {
+    if case .sensing = sensing.phase { return true }
+    return false
   }
 
   private var isPreJoin: Bool {
@@ -305,25 +324,12 @@ struct SensingView: View {
       .accessibilityIdentifier("scan.nearby-events.omitted")
   }
 
-  /// What a nearby card's tap does, as a named method rather than a closure
-  /// buried in the `Button` below, so `BeidTests` can run it (beid#464).
-  ///
-  /// Not `private`, and the same seam shape
-  /// `SensingCoordinator.handleEventInfoHint` already uses: a closure inside
-  /// a SwiftUI `Button` is unreachable from a test without a view-inspection
-  /// dependency this repository does not have, which left the join-time clock
-  /// check below asserted by nothing. Order is load-bearing and matches
-  /// Android's `EventJoinViewModel.joinNearbyEvent`: refuse a card shared did
-  /// not make joinable, then re-read the clock, then join.
+  /// What a nearby card's tap does. The logic lives in
+  /// `SensingCoordinator.joinNearbyEvent(card:clockPreflight:)` so the Now tab
+  /// can run it without constructing this view (beid#464); this stays a named
+  /// method so `BeidTests` can still reach the tap path from a view.
   func joinNearbyEventTapped(_ card: NearbyEventCard) {
-    guard let eventCodeHashHex = card.joinActionEventCodeHashHex else { return }
-    // Re-read the clock preflight at the moment of joining, as Android does:
-    // shared re-measures an expired cache and catches a clock changed since
-    // the scan opened.
-    if let clockPreflight {
-      Task { await clockPreflight.check() }
-    }
-    sensing.joinNearbyEvent(eventCodeHashHex: eventCodeHashHex)
+    sensing.joinNearbyEvent(card: card, clockPreflight: clockPreflight)
   }
 
   private func nearbyEventCard(_ card: NearbyEventCard, selected: Bool) -> some View {

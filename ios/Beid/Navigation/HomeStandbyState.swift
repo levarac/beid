@@ -3,13 +3,15 @@
 
 import Foundation
 
-/// A visible, uninterrupted empty-discovery interval, measured by uptime.
-/// This is presentation timing; event eligibility remains in shared code.
+/// A visible, uninterrupted interval with nothing to join, measured by uptime.
+/// Only a joinable candidate ends it: a nearby event whose JOIN control is
+/// disabled (for example an expired registration) does not. This is
+/// presentation timing; event eligibility remains in shared code.
 struct HomeStandbyState: Equatable {
   private(set) var listeningStartedAt: TimeInterval?
 
-  mutating func update(isEnabled: Bool, hasCandidates: Bool, now: TimeInterval) {
-    guard isEnabled, !hasCandidates else {
+  mutating func update(isEnabled: Bool, hasJoinableCandidates: Bool, now: TimeInterval) {
+    guard isEnabled, !hasJoinableCandidates else {
       listeningStartedAt = nil
       return
     }

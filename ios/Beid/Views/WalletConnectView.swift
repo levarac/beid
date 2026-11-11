@@ -3,43 +3,12 @@
 
 import SwiftUI
 
-/// Wallet step in the `.walletFirst` `OnboardingMode` order. Direct
-/// app-to-app connection via `WalletConnectPairingView` — see
-/// ios/README.md "WalletConnect". Every tint here is
-/// `DS.Color.actionPrimary`, as on every screen (DESIGN.md §5).
-struct WalletConnectView: View {
-  @EnvironmentObject private var coordinator: AppCoordinator
-
-  var body: some View {
-    BeidAdaptiveContent {
-      VStack(spacing: DS.Space.l) {
-        Spacer()
-
-        WalletConnectPairingView(
-          onConnected: { address, connector in
-            coordinator.completeWalletConnect(address: address, connector: connector)
-          },
-          secondaryAction: (
-            title: "Enter event code instead",
-            action: { coordinator.skipWalletForEventCode() }
-          )
-        )
-        .padding(.horizontal, DS.Space.pageMargin)
-
-        Spacer()
-      }
-      .padding(.bottom, DS.Space.xl)
-    }
-  }
-}
-
-/// Reusable direct wallet-connect UI, shared by the onboarding
-/// `WalletConnectView` and the Account sheet's "Connect Wallet" action.
+/// Reusable direct wallet-connect UI, used by the Account sheet's
+/// "Connect Wallet" action.
 /// `onConnected` is called exactly once, with the paired address, when the
 /// SDK reports a settled session. `secondaryAction` is an optional escape
-/// hatch shown alongside the primary action (onboarding uses "Enter event
-/// code instead"; the Account sheet passes `nil` and relies on its own
-/// Cancel toolbar button instead).
+/// hatch shown alongside the primary action (the Account sheet passes `nil`
+/// and relies on its own Cancel toolbar button instead).
 ///
 /// MetaMask is currently the only wallet this connects to (Coinbase Wallet
 /// was removed, thegreeting/beid#270 — the Base app rebrand broke its
@@ -190,7 +159,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
   /// immediately as a reference, with an explicit path both to resume it
   /// (a real `connect()` round trip, same as `providerSelectionContent`'s
   /// button — this view has no signature to collapse into that trip, see
-  /// `EventBindingSheetView`'s own restored-hint handling for the
+  /// the removed binding sheet's own restored-hint handling for the
   /// connect+sign collapse) and to bypass it for a fresh connection.
   private func restoredContent(hint: CachedWalletHint) -> some View {
     VStack(spacing: DS.Space.l) {
@@ -378,7 +347,7 @@ struct WalletConnectPairingView<Connector: WalletConnector>: View {
 /// Preview-only fake `WalletConnector` with a freely settable `state`, so
 /// the `#Preview` blocks below can exercise every `WalletConnectorState`
 /// case without a real wallet SDK. Not `DemoWalletConnector`: that one is
-/// reserved for `EventBindingSheetView`'s demo escape hatch, is a singleton
+/// reserved for the removed binding sheet's demo escape hatch, is a singleton
 /// with a `private(set)` state, and only ever transitions
 /// `.idle → .connecting → .connected` — insufficient for previewing
 /// `.awaitingApproval`, `.failed`, `.notConfigured`, or `.unavailable`.
@@ -425,10 +394,6 @@ private final class PreviewWalletConnector: ObservableObject, WalletConnector {
   func handle(url: URL) -> Bool { false }
 }
 #endif
-
-#Preview {
-  WalletConnectView().environmentObject(AppCoordinator())
-}
 
 #if DEBUG
 #Preview("Connecting") {

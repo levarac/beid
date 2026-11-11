@@ -34,7 +34,7 @@ final class OnboardingFlagTests: XCTestCase {
   func testLeavingLegacyCodeEntryReturnsToBluetoothWithoutWalletPresentation() {
     let coordinator = AppCoordinator()
     coordinator.screen = .eventCodeEntry
-    coordinator.returnToWalletConnect()
+    coordinator.returnToBluetoothPermission()
     XCTAssertEqual(coordinator.screen, .bluetoothPermission)
     XCTAssertNil(coordinator.walletAddress)
   }
