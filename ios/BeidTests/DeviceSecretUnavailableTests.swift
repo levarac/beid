@@ -3,6 +3,7 @@
 
 import Foundation
 import Security
+import SwiftUI
 import XCTest
 @testable import Beid
 
@@ -11,6 +12,16 @@ import XCTest
 @MainActor
 final class DeviceSecretUnavailableTests: XCTestCase {
   private let canonicalEventIdHex = "0x\(String(repeating: "a", count: 64))"
+
+  func testDeviceKeyRefusalPanelUsesTheDeviceKeyErrorCopy() throws {
+    let coordinator = makeCoordinator(deviceSecretStore: DeviceSecretKeychainStore(keychain: lockedKeychain()))
+    coordinator.startSensing()
+
+    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
+    let reason = try XCTUnwrap(SensingCantJoinReason(joinRefusalKey: coordinator.joinRefusalReasonKey))
+    XCTAssertEqual(reason.title, LocalizedStringKey(EventSigningKeyFailure.unavailable.title))
+    XCTAssertEqual(reason.message, LocalizedStringKey(EventSigningKeyFailure.unavailable.message))
+  }
 
   func testSignerRefusesWhileTheDeviceSecretIsUnavailable() {
     let keychain = lockedKeychain()

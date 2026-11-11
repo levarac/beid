@@ -20,6 +20,56 @@ final class JoinRefusalUITests: XCTestCase {
     continueAfterFailure = false
   }
 
+  func testDeviceKeyFailureAppearsOnOpenScanFlowAndDismissesOnce() {
+    app.launchArguments = [
+      "-beid-ui-test", "-beid-nearby-join-fixture", "-beid-device-key-unavailable-fixture"
+    ]
+    app.launch()
+    app.buttons["Get Started"].assertHittable()
+    app.buttons["Get Started"].tap()
+    app.buttons["Allow Bluetooth"].assertHittable()
+    app.buttons["Allow Bluetooth"].tap()
+    app.buttons["home.scan"].assertHittable()
+    app.buttons["home.scan"].tap()
+
+    let receipt = app.staticTexts["fixture.nearby-join.receipt"]
+    receipt.assertHittable()
+    XCTAssertEqual(receipt.label, "joins=0 event=none")
+    let card = app.buttons.matching(NSPredicate(
+      format: "identifier == %@ AND label CONTAINS %@", "scan.nearby-events", "Community night"
+    )).firstMatch
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    let alert = app.alerts["Recording unavailable"]
+    XCTAssertFalse(alert.exists, "the failure must occur after the scan flow opens")
+    app.scrollViews["scan.sensing"].swipeUp()
+    card.assertHittable()
+    card.tap()
+
+    let message = "The device signing key is unavailable. Unlock your device and try again."
+    alert.assertHittable()
+    alert.staticTexts[message].assertHittable()
+    XCTAssertEqual(app.alerts.count, 1)
+    alert.buttons["Close"].tap()
+    alert.assertDisappears()
+    XCTAssertEqual(receipt.label, "joins=0 event=none")
+
+    let panel = app.scrollViews["scan.cant-join"]
+    panel.assertHittable()
+    let title = panel.staticTexts["scan.join-refusal"]
+    title.scrollToHittable(in: app)
+    XCTAssertEqual(title.label, "Recording unavailable")
+    panel.staticTexts[message].scrollToHittable(in: app)
+    XCTAssertFalse(app.staticTexts["beid couldn't join that event. Check the code and try again."].exists)
+    app.buttons["Close"].assertHittable()
+    app.buttons["Close"].tap()
+    panel.assertDisappears()
+    app.buttons["home.scan"].assertHittable()
+
+    let repeatedAlert = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: alert)
+    repeatedAlert.isInverted = true
+    XCTAssertEqual(XCTWaiter.wait(for: [repeatedAlert], timeout: 1), .completed)
+  }
+
   func testJoinRefusalPanelIsVisibleAndClearsWhenScanCloses() {
     app.launchArguments = ["-beid-ui-test", "-beid-join-refusal-fixture"]
     app.launch()
