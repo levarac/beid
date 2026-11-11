@@ -24,6 +24,8 @@ final class ProofStore: ObservableObject {
   private(set) var persistenceSuspensionReason: Error?
 
   var isPersistenceSuspended: Bool { persistenceSuspensionReason != nil }
+  private(set) var hasReadableProofs = false
+  private var persistedProofIds: Set<UUID> = []
 
   private let fileURL: URL
 
@@ -44,6 +46,17 @@ final class ProofStore: ObservableObject {
 
   func proof(withId id: UUID) -> Proof? {
     proofs.first { $0.id == id }
+  }
+
+  func hasPersistedProof(withId id: UUID) -> Bool {
+    persistedProofIds.contains(id)
+  }
+
+  /// A later join may resume once the protected file becomes readable.
+  func reloadAfterReadFailure() {
+    guard !hasReadableProofs else { return }
+    persistenceSuspensionReason = nil
+    load()
   }
 
   /// Updates only the signature lifecycle of an already-stored proof — the
@@ -121,10 +134,16 @@ final class ProofStore: ObservableObject {
     let data = try RecordSchemaEnvelope.encodeRecords(updated)
     try data.write(to: fileURL, options: .atomic)
     proofs = updated
+    persistedProofIds = Set(updated.map(\.id))
   }
 
   private func load() {
-    guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+    guard FileManager.default.fileExists(atPath: fileURL.path) else {
+      proofs = []
+      persistedProofIds = []
+      hasReadableProofs = true
+      return
+    }
     var loaded: [Proof]
     do {
       let data = try Data(contentsOf: fileURL)
@@ -165,6 +184,8 @@ final class ProofStore: ObservableObject {
     }
 
     proofs = loaded
+    persistedProofIds = Set(loaded.map(\.id))
+    hasReadableProofs = true
     if didSanitize {
       save()
     }
@@ -173,7 +194,12 @@ final class ProofStore: ObservableObject {
   private func save() {
     guard !isPersistenceSuspended else { return }
     guard let data = try? RecordSchemaEnvelope.encodeRecords(proofs) else { return }
-    try? data.write(to: fileURL, options: .atomic)
+    do {
+      try data.write(to: fileURL, options: .atomic)
+      persistedProofIds = Set(proofs.map(\.id))
+    } catch {
+      return
+    }
   }
 
   /// Test-only reset: clears in-memory state and deletes any persisted
@@ -189,6 +215,8 @@ final class ProofStore: ObservableObject {
     proofs = []
     quarantinedFileURL = nil
     persistenceSuspensionReason = nil
+    hasReadableProofs = true
+    persistedProofIds = []
     try? FileManager.default.removeItem(at: fileURL)
   }
 }

@@ -3130,6 +3130,7 @@ final class SensingCoordinator: ObservableObject {
       eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? signingKeyAvailabilityFailure
       // Complete any existing launch checkpoint with the resolved secret
       // before a new session can replace that checkpoint.
+      proofStore?.reloadAfterReadFailure()
       reconcileSelfProofCheckpointIfNeeded()
       guard selfProofCheckpointStore.checkpoint == nil else {
         discoveryOnlyScanOwned = false
@@ -4994,6 +4995,10 @@ final class SensingCoordinator: ObservableObject {
     else {
       return
     }
+    if let proofStore, !proofStore.hasPersistedProof(withId: proofId) {
+      recordEventSigningKeyFailure(.discardFailed)
+      return
+    }
     selfProofCheckpointStore.save(
       SelfProofCheckpoint(
         proofId: proofId,
@@ -5021,7 +5026,17 @@ final class SensingCoordinator: ObservableObject {
   private func reconcileSelfProofCheckpointIfNeeded() {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
     if let proofStore {
+      guard proofStore.hasReadableProofs else {
+        recordEventSigningKeyFailure(.discardFailed)
+        return
+      }
       guard let parent = proofStore.proof(withId: checkpoint.proofId) else {
+        do {
+          _ = try sensingCryptography.recoverySigningSnapshot()
+        } catch {
+          recordEventSigningKeyFailure(.unavailable)
+          return
+        }
         do {
           // Without a parent this input cannot produce a collected record.
           try selfProofCheckpointStore.clearDurably()
