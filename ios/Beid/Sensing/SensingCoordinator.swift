@@ -2839,7 +2839,10 @@ final class SensingCoordinator: ObservableObject {
     case .admit(let context):
       // The attempt prepared the engine and signer before requesting
       // permissions. Keep that resolved storage across both join waits.
-      guard let publicKey = resolvedEventSigningPublicKey(eventCode: context.joinCode) else {
+      // Session signing retains the selected code, including a human code
+      // distinct from the capability's canonical Event ID.
+      let eventCode = pendingEventCode ?? context.joinCode
+      guard let publicKey = resolvedEventSigningPublicKey(eventCode: eventCode) else {
         refuseJoin(.eventSigningKeyUnavailable, "The device signing key is unavailable.", reasonKey: "device_key_unavailable")
         return
       }
