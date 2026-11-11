@@ -66,6 +66,38 @@ final class ProofStore: ObservableObject {
     save()
   }
 
+  /// Persists the terminal decision before its signing input can be removed.
+  func discardSelfProofForKeyChange(for id: UUID) throws {
+    guard let index = proofs.firstIndex(where: { $0.id == id }) else {
+      throw CocoaError(.fileReadNoSuchFile)
+    }
+    guard !proofs[index].selfProofDiscardedForKeyChange else { return }
+    var updated = proofs
+    updated[index].selfProofDiscardedForKeyChange = true
+    updated[index].signingKeyChangeNoticeAcknowledged = false
+    try persistDurably(updated)
+  }
+
+  func acknowledgeSigningKeyChanges() throws {
+    var updated = proofs
+    for index in updated.indices where updated[index].selfProofDiscardedForKeyChange {
+      updated[index].signingKeyChangeNoticeAcknowledged = true
+    }
+    guard updated != proofs else { return }
+    try persistDurably(updated)
+  }
+
+  var hasUnacknowledgedSigningKeyChange: Bool {
+    proofs.contains { $0.selfProofDiscardedForKeyChange && !$0.signingKeyChangeNoticeAcknowledged }
+  }
+
+  private func persistDurably(_ updated: [Proof]) throws {
+    if let persistenceSuspensionReason { throw persistenceSuspensionReason }
+    let data = try RecordSchemaEnvelope.encodeRecords(updated)
+    try data.write(to: fileURL, options: .atomic)
+    proofs = updated
+  }
+
   private func load() {
     guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
     var loaded: [Proof]

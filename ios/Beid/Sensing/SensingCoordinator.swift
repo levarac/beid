@@ -799,6 +799,7 @@ final class SensingCoordinator: ObservableObject {
   private let bindingRecordStore: BindingRecordStore
   private let selfProofStore: SelfProofStore
   private var selfProofCheckpointStore: SelfProofCheckpointStore
+  private let proofStore: ProofStore?
   /// beid#166 Phase 2: on-device display-convenience store for computed
   /// session-aggregate snapshots. Loaded synchronously, like
   /// `selfProofStore`/`bindingRecordStore` and unlike
@@ -1221,7 +1222,8 @@ final class SensingCoordinator: ObservableObject {
       RegistryDependencies.createClient(),
     reportSubmissionStore: ReportSubmissionStore? = nil,
     reportProofLinkStore: ReportProofLinkStore? = nil,
-    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    proofStore: ProofStore? = nil
   ) {
     let sensingCryptography = BarnardSensingCryptography()
     let allowInsecureLoopbackForTests: Bool
@@ -1276,7 +1278,8 @@ final class SensingCoordinator: ObservableObject {
         RegistryEventIdentityVerificationSource(client: $0)
       },
       nearbyRegistryClient: registryClient,
-      joinDiagnosticLog: joinDiagnosticLog
+      joinDiagnosticLog: joinDiagnosticLog,
+      proofStore: proofStore ?? ProofStore()
     )
   }
 
@@ -1350,7 +1353,8 @@ final class SensingCoordinator: ObservableObject {
     ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
     nearbyRegistryClient:
       ExportedKotlinPackages.org.levarac.parallax.registry.RegistryClient? = nil,
-    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog
+    joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
+    proofStore: ProofStore? = nil
   ) {
     self.init(
       windowReportStore: WindowReportStore(fileURL: Self.unloadedPlaceholderFileURL()),
@@ -1368,7 +1372,8 @@ final class SensingCoordinator: ObservableObject {
       initialLedgerFailure: nil,
       nearbyRegistryClient: nearbyRegistryClient,
       eventJoinControl: eventJoinControl,
-      joinDiagnosticLog: joinDiagnosticLog
+      joinDiagnosticLog: joinDiagnosticLog,
+      proofStore: proofStore
     )
     // Only this initializer chain is actually loading — see
     // `isLedgerLoading`'s doc comment for why the default is `false`.
@@ -1565,7 +1570,8 @@ final class SensingCoordinator: ObservableObject {
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
-    deviceSecretStore: DeviceSecretKeychainStore = .shared
+    deviceSecretStore: DeviceSecretKeychainStore = .shared,
+    proofStore: ProofStore? = nil
   ) {
     guard
       let store = try? UnsentWindowLedgerStore(fileURL: unsentWindowLedgerFileURL),
@@ -1593,7 +1599,8 @@ final class SensingCoordinator: ObservableObject {
       joinDiagnosticLog: joinDiagnosticLog,
       participantRelayControl: participantRelayControl,
       relayCadenceNanoseconds: relayCadenceNanoseconds,
-      deviceSecretStore: deviceSecretStore
+      deviceSecretStore: deviceSecretStore,
+      proofStore: proofStore
     )
   }
 
@@ -1624,7 +1631,8 @@ final class SensingCoordinator: ObservableObject {
     joinDiagnosticLog: @escaping (String) -> Void = SensingCoordinator.defaultJoinDiagnosticLog,
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
-    deviceSecretStore: DeviceSecretKeychainStore = .shared
+    deviceSecretStore: DeviceSecretKeychainStore = .shared,
+    proofStore: ProofStore? = nil
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     var ledgerFailure = initialLedgerFailure
@@ -1650,6 +1658,7 @@ final class SensingCoordinator: ObservableObject {
     self.windowReportStore = windowReportStore
     self.selfProofStore = selfProofStore
     self.selfProofCheckpointStore = selfProofCheckpointStore
+    self.proofStore = proofStore
     self.bindingRecordStore = bindingRecordStore
     self.sessionAggregateSnapshotStore = sessionAggregateSnapshotStore
     // Production always passes its store (the private convenience init
@@ -1702,6 +1711,7 @@ final class SensingCoordinator: ObservableObject {
     self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
       self?.eventSigningKeyFailure = failure
     }
+    if proofStore?.hasUnacknowledgedSigningKeyChange == true { eventSigningKeyFailure = .changed }
     reconcileSelfProofCheckpointIfNeeded()
   }
 
@@ -3119,7 +3129,12 @@ final class SensingCoordinator: ObservableObject {
   }
 
   func dismissEventSigningKeyFailure() {
-    eventSigningKeyFailure = nil
+    do {
+      try proofStore?.acknowledgeSigningKeyChanges()
+      eventSigningKeyFailure = nil
+    } catch {
+      eventSigningKeyFailure = .discardFailed
+    }
   }
 
   // MARK: - Nearby event discovery (B005 pre-join hints, gh#100 Stage 1)
@@ -4740,6 +4755,10 @@ final class SensingCoordinator: ObservableObject {
       return nil
     }
 
+    if proofStore?.proof(withId: proofId)?.selfProofDiscardedForKeyChange == true {
+      discardSelfProofCheckpoint(proofId: proofId)
+      return nil
+    }
     do {
       guard let record = try makeSelfProofRecord(
         proofId: proofId,
@@ -4774,10 +4793,12 @@ final class SensingCoordinator: ObservableObject {
 
   private func discardSelfProofCheckpoint(proofId: UUID) {
     do {
+      guard let proofStore else { throw CocoaError(.fileReadNoSuchFile) }
+      try proofStore.discardSelfProofForKeyChange(for: proofId)
       if selfProofCheckpointStore.checkpoint?.proofId == proofId {
         try selfProofCheckpointStore.clearDurably()
       }
-      eventSigningKeyFailure = .changed
+      if proofStore.hasUnacknowledgedSigningKeyChange { eventSigningKeyFailure = .changed }
     } catch {
       eventSigningKeyFailure = .discardFailed
     }
@@ -4917,6 +4938,16 @@ final class SensingCoordinator: ObservableObject {
   /// checkpoint is stale and must not be reconciled into a duplicate.
   private func reconcileSelfProofCheckpointIfNeeded() {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
+    if let proofStore {
+      guard let parent = proofStore.proof(withId: checkpoint.proofId) else {
+        eventSigningKeyFailure = .discardFailed
+        return
+      }
+      if parent.selfProofDiscardedForKeyChange {
+        discardSelfProofCheckpoint(proofId: checkpoint.proofId)
+        return
+      }
+    }
     guard selfProofStore.record(forProofId: checkpoint.proofId) == nil else {
       do {
         try selfProofCheckpointStore.clearDurably()

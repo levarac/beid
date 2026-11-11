@@ -246,6 +246,9 @@ final class DeviceSecretSessionTests: XCTestCase {
 
   private func seedCheckpoint(in directory: URL, publicKey: Data?) throws -> UUID {
     let proofId = UUID()
+    ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).add(Proof(
+      id: proofId, eventName: "Previous event", date: Date(), peersVerified: 1, eventCode: "PREVIOUS"
+    ))
     var record: [String: Any] = [
       "proofId": proofId.uuidString, "eventCode": "PREVIOUS", "eninStart": 1, "eninEnd": 2
     ]
@@ -613,6 +616,9 @@ final class DeviceSecretSessionTests: XCTestCase {
     let directory = try makeDirectory()
     let proofId = UUID()
     let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).add(Proof(
+      id: proofId, eventName: "Previous event", date: Date(), peersVerified: 1, eventCode: "PREVIOUS"
+    ))
     let publicKey = try makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32)))
       .eventSigningPublicKey(eventCode: "PREVIOUS")
     SelfProofCheckpointStore(fileURL: checkpointURL).save(SelfProofCheckpoint(
@@ -732,9 +738,11 @@ final class DeviceSecretSessionTests: XCTestCase {
     directory: URL, cryptography: BarnardSensingCryptography, reports: WindowReportStore? = nil,
     eventJoinControl: (any EventJoinControlling)? = SessionJoinControl(),
     eventJoinRegistry: (any EventJoinRegistry)? = nil,
-    deviceSecretStore: DeviceSecretKeychainStore = .shared
+    deviceSecretStore: DeviceSecretKeychainStore = .shared,
+    proofStore: ProofStore? = nil
   ) -> SensingCoordinator {
-    SensingCoordinator(
+    let parents = proofStore ?? ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    let coordinator = SensingCoordinator(
       windowReportStore: reports ?? WindowReportStore(fileURL: directory.appendingPathComponent("reports.json")),
       selfProofStore: SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")),
       selfProofCheckpointStore: SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")),
@@ -743,8 +751,11 @@ final class DeviceSecretSessionTests: XCTestCase {
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
       sensingCryptography: cryptography, eventJoinControl: eventJoinControl,
       eventJoinRegistry: eventJoinRegistry, joinDiagnosticLog: { _ in },
-      deviceSecretStore: deviceSecretStore
+      deviceSecretStore: deviceSecretStore,
+      proofStore: parents
     )
+    coordinator.onProofCollected = { parents.add($0) }
+    return coordinator
   }
 
   private func makeDirectory() throws -> URL {

@@ -1959,6 +1959,17 @@
         }
       }
     },
+    "proofDetail.status.incomplete": {
+      "comment": "Status for a recording whose unsigned session record was discarded after the device signing key changed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording incomplete"
+          }
+        }
+      }
+    },
     "proofDetail.status.recorded": {
       "comment": "Proof Detail status when a Proof is stored locally but no matching self-proof signature record exists. Do not imply sealing or third-party verification.",
       "localizations": {
