@@ -93,7 +93,11 @@ final class ProofStore: ObservableObject {
   }
 
   func isSigningKeyChangeAcknowledged(forEventCode eventCode: String) -> Bool {
-    proofs.contains { $0.eventCode == eventCode && $0.signingKeyChangeNoticeAcknowledged }
+    acknowledgedSigningKeyChangeEventCodes.contains(eventCode)
+  }
+
+  var acknowledgedSigningKeyChangeEventCodes: Set<String> {
+    Set(proofs.filter(\.signingKeyChangeNoticeAcknowledged).map { $0.eventCode ?? $0.id.uuidString })
   }
 
   var unacknowledgedSigningKeyChangeEventCodes: Set<String> {

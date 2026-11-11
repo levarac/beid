@@ -355,7 +355,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   }
   var onSigningKeyChange: ((String) -> Void)? {
     didSet {
-      for eventCode in store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).sorted() {
+      for eventCode in store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).sorted()
+      where isSigningKeyChangeAcknowledged?(eventCode) != true {
         onSigningKeyChange?(eventCode)
       }
     }

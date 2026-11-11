@@ -1713,6 +1713,7 @@ final class SensingCoordinator: ObservableObject {
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
     }
+    reconcileSigningKeyChangeAcknowledgements()
     self.reportSubmissionRuntime?.isSigningKeyChangeAcknowledged = { [weak proofStore] eventCode in
       proofStore?.isSigningKeyChangeAcknowledged(forEventCode: eventCode) == true
     }
@@ -1725,7 +1726,9 @@ final class SensingCoordinator: ObservableObject {
     self.reportSubmissionRuntime?.onSigningKeyChange = { [weak self] eventCode in
       self?.recordSigningKeyChange(forEventCode: eventCode)
     }
-    for eventCode in proofStore?.unacknowledgedSigningKeyChangeEventCodes.sorted() ?? [] {
+    let unacknowledgedEvents = (proofStore?.unacknowledgedSigningKeyChangeEventCodes ?? [])
+      .subtracting(reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? [])
+    for eventCode in unacknowledgedEvents.sorted() {
       recordSigningKeyChange(forEventCode: eventCode)
     }
     reconcileSelfProofCheckpointIfNeeded()
@@ -3152,6 +3155,20 @@ final class SensingCoordinator: ObservableObject {
       pendingSigningKeyChangeEvents.append(eventCode)
     }
     eventSigningKeyFailure = .changed
+  }
+
+  private func reconcileSigningKeyChangeAcknowledgements() {
+    // Either durable acknowledgement completes an interrupted dismissal.
+    let acknowledgedEvents = (proofStore?.acknowledgedSigningKeyChangeEventCodes ?? [])
+      .union(reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? [])
+    do {
+      try proofStore?.acknowledgeSigningKeyChanges(forEventCodes: acknowledgedEvents)
+      for eventCode in acknowledgedEvents.sorted() {
+        try reportSubmissionRuntime?.acknowledgeSigningKeyChanges(forEventCode: eventCode)
+      }
+    } catch {
+      recordEventSigningKeyFailure(.discardFailed)
+    }
   }
 
   private func recordEventSigningKeyFailure(_ failure: EventSigningKeyFailure) {
