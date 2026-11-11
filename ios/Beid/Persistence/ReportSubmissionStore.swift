@@ -25,6 +25,7 @@ struct ReportSubmissionExclusion: Identifiable, Codable, Equatable {
   let peerCount: Int
   let reasonCode: String
   let createdAt: Date
+  var signingKeyChangeNoticeAcknowledged: Bool? = nil
 
   func hasSameWindowInputs(as other: ReportSubmissionExclusion) -> Bool {
     id == other.id &&
@@ -362,10 +363,36 @@ final class ReportSubmissionStore: ObservableObject {
       }
       return existing
     }
+    var exclusion = exclusion
+    if exclusion.reasonCode == "signing-key-changed",
+       acknowledgedSigningKeyChangeEventCodes.contains(exclusion.eventCode) {
+      exclusion.signingKeyChangeNoticeAcknowledged = true
+    }
     let updated = exclusions + [exclusion]
     try persistExclusions(updated)
     exclusions = updated
     return exclusion
+  }
+
+  var signingKeyChangeEventCodes: Set<String> {
+    Set(exclusions.filter { $0.reasonCode == "signing-key-changed" }.map(\.eventCode))
+  }
+
+  var acknowledgedSigningKeyChangeEventCodes: Set<String> {
+    Set(exclusions.filter {
+      $0.reasonCode == "signing-key-changed" && $0.signingKeyChangeNoticeAcknowledged == true
+    }.map(\.eventCode))
+  }
+
+  func acknowledgeSigningKeyChanges() throws {
+    try ensureWritable()
+    var updated = exclusions
+    for index in updated.indices where updated[index].reasonCode == "signing-key-changed" {
+      updated[index].signingKeyChangeNoticeAcknowledged = true
+    }
+    guard updated != exclusions else { return }
+    try persistExclusions(updated)
+    exclusions = updated
   }
 
   func removePendingCapture(id: UUID) throws {

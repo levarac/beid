@@ -67,24 +67,33 @@ final class ProofStore: ObservableObject {
   }
 
   /// Persists the terminal decision before its signing input can be removed.
-  func discardSelfProofForKeyChange(for id: UUID) throws {
+  func discardSelfProofForKeyChange(for id: UUID, acknowledgedEventCodes: Set<String> = []) throws {
     guard let index = proofs.firstIndex(where: { $0.id == id }) else {
       throw CocoaError(.fileReadNoSuchFile)
     }
     guard !proofs[index].selfProofDiscardedForKeyChange else { return }
     var updated = proofs
     updated[index].selfProofDiscardedForKeyChange = true
-    updated[index].signingKeyChangeNoticeAcknowledged = false
+    let eventCode = updated[index].eventCode
+    updated[index].signingKeyChangeNoticeAcknowledged = eventCode.map {
+      acknowledgedEventCodes.contains($0) || isSigningKeyChangeAcknowledged(forEventCode: $0)
+    } ?? false
     try persistDurably(updated)
   }
 
-  func acknowledgeSigningKeyChanges() throws {
+  func acknowledgeSigningKeyChanges(forEventCodes eventCodes: Set<String> = []) throws {
     var updated = proofs
-    for index in updated.indices where updated[index].selfProofDiscardedForKeyChange {
-      updated[index].signingKeyChangeNoticeAcknowledged = true
+    for index in updated.indices {
+      if updated[index].selfProofDiscardedForKeyChange || updated[index].eventCode.map(eventCodes.contains) == true {
+        updated[index].signingKeyChangeNoticeAcknowledged = true
+      }
     }
     guard updated != proofs else { return }
     try persistDurably(updated)
+  }
+
+  func isSigningKeyChangeAcknowledged(forEventCode eventCode: String) -> Bool {
+    proofs.contains { $0.eventCode == eventCode && $0.signingKeyChangeNoticeAcknowledged }
   }
 
   var hasUnacknowledgedSigningKeyChange: Bool {

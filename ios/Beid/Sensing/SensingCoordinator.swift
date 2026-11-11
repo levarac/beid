@@ -1711,6 +1711,9 @@ final class SensingCoordinator: ObservableObject {
       guard let self else { return }
       Task { @MainActor in self.handle(event) }
     }
+    self.reportSubmissionRuntime?.isSigningKeyChangeAcknowledged = { [weak proofStore] eventCode in
+      proofStore?.isSigningKeyChangeAcknowledged(forEventCode: eventCode) == true
+    }
     self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
       self?.recordEventSigningKeyFailure(failure)
     }
@@ -3144,7 +3147,10 @@ final class SensingCoordinator: ObservableObject {
   func dismissEventSigningKeyFailure() {
     do {
       if signingKeyChangeNoticePending {
-        try proofStore?.acknowledgeSigningKeyChanges()
+        try proofStore?.acknowledgeSigningKeyChanges(
+          forEventCodes: reportSubmissionRuntime?.signingKeyChangeEventCodes ?? []
+        )
+        try reportSubmissionRuntime?.acknowledgeSigningKeyChanges()
         signingKeyChangeNoticePending = false
       } else {
         signingKeyAvailabilityFailure = nil
@@ -4812,7 +4818,9 @@ final class SensingCoordinator: ObservableObject {
   private func discardSelfProofCheckpoint(proofId: UUID) {
     do {
       guard let proofStore else { throw CocoaError(.fileReadNoSuchFile) }
-      try proofStore.discardSelfProofForKeyChange(for: proofId)
+      try proofStore.discardSelfProofForKeyChange(
+        for: proofId, acknowledgedEventCodes: reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? []
+      )
       if selfProofCheckpointStore.checkpoint?.proofId == proofId {
         try selfProofCheckpointStore.clearDurably()
       }
