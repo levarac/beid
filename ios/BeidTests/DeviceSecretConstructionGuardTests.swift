@@ -16,6 +16,7 @@ import XCTest
 /// Two checks, because each misses what the other catches. The source scan
 /// sees a construction site nobody exercises; the runtime check sees a
 /// default reached in a way the text does not show.
+#if DEBUG
 @MainActor
 final class DeviceSecretConstructionGuardTests: XCTestCase {
   private let legacyKey = "barnard.rpidSeed"
@@ -27,7 +28,6 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
 
   func testNoAppSourceConstructsBarnardWithItsDefaultStorage() throws {
     let root = try XCTUnwrap(Bundle(for: Self.self).resourceURL).appendingPathComponent("Beid")
-    let pattern = try NSRegularExpression(pattern: #"\bBarnard(Identity|Engine)(\.init)?\s*\(\s*\)"#)
     let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
     var scanned = 0
     var offenders: [String] = []
@@ -35,13 +35,8 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
       guard url.pathExtension == "swift" else { continue }
       scanned += 1
       let text = try String(contentsOf: url, encoding: .utf8)
-      for (index, line) in text.components(separatedBy: "\n").enumerated() {
-        // Comments may name the initializer; only code may not.
-        let code = line.components(separatedBy: "//").first ?? ""
-        let range = NSRange(code.startIndex..., in: code)
-        if pattern.firstMatch(in: code, range: range) != nil {
-          offenders.append("\(url.lastPathComponent):\(index + 1)")
-        }
+      if try !defaultStorageConstructions(in: text).isEmpty {
+        offenders.append(url.lastPathComponent)
       }
     }
     XCTAssertGreaterThan(scanned, 100, "the scan must have read the app sources")
@@ -50,6 +45,52 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
       [],
       "build Barnard objects from DeviceSecretKeychainStore, never with BarnardIdentity() or BarnardEngine()"
     )
+  }
+
+  func testConstructionScannerRejectsNonemptyArgumentsWithoutInjectedStorage() throws {
+    for source in [
+      "BarnardEngine()",
+      "BarnardEngine(configuration: makeConfiguration())",
+      "BarnardIdentity.init(randomSource: makeRandom())",
+      "BarnardEngine(configuration: makeOptions(keyStorage: storage))",
+      "BarnardEngine(configuration: \"keyStorage: storage\")",
+      "BarnardEngine(/* keyStorage: storage */ configuration: options)",
+    ] {
+      XCTAssertEqual(try defaultStorageConstructions(in: source).count, 1, source)
+    }
+  }
+
+  func testConstructionScannerAcceptsInjectedStorageAndIgnoresCommentsAndStrings() throws {
+    for source in [
+      "BarnardEngine(keyStorage: try store.resolve())",
+      "BarnardEngine(configuration: makeConfiguration(), keyStorage: storage)",
+      "BarnardIdentity.init(keyStorage: makeStorage(options: [1, 2]))",
+      "// BarnardEngine()",
+      "/* BarnardIdentity() */",
+      "let example = \"BarnardEngine(configuration: options)\"",
+    ] {
+      XCTAssertTrue(try defaultStorageConstructions(in: source).isEmpty, source)
+    }
+  }
+
+  func testSignedContainerConstructionGuardActuallyStartsTheEngine() throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x11, count: 32))
+    try exerciseSignedContainerStart(deviceSecretStore: DeviceSecretKeychainStore(keychain: keychain))
+    XCTAssertEqual(keychain.readCount, 1, "the guard must reach engine construction inside installAndStart")
+  }
+
+  private func exerciseSignedContainerStart(deviceSecretStore: DeviceSecretKeychainStore) throws {
+    let signedContainer = BarnardVenueSignedContainerBroadcasting(deviceSecretStore: deviceSecretStore)
+    signedContainer.clearAndStop()
+  }
+
+  private func defaultStorageConstructions(in source: String) throws -> [String] {
+    let pattern = try NSRegularExpression(pattern: #"\bBarnard(Identity|Engine)(\.init)?\s*\(\s*\)"#)
+    let code = source.components(separatedBy: "\n")
+      .map { $0.components(separatedBy: "//").first ?? "" }.joined(separator: "\n")
+    return pattern.matches(in: code, range: NSRange(code.startIndex..., in: code)).compactMap {
+      Range($0.range, in: code).map { String(code[$0]) }
+    }
   }
 
   func testStartupDeletesTheLegacyValue() throws {
@@ -73,8 +114,7 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
     try venueDevice.startBroadcasting(eventCode: "GUARD-EVENT", label: "Guard Desk")
     venueDevice.stopBroadcasting()
 
-    let signedContainer = BarnardVenueSignedContainerBroadcasting()
-    signedContainer.clearAndStop()
+    try exerciseSignedContainerStart(deviceSecretStore: .shared)
 
     XCTAssertNil(
       UserDefaults.standard.object(forKey: legacyKey),
@@ -104,3 +144,5 @@ private struct FixedSecretStorage: BarnardCoreKeyStorage {
   func bytes(forKey key: String) -> [UInt8]? { secret }
   func setBytes(_ bytes: [UInt8], forKey key: String) {}
 }
+
+#endif
