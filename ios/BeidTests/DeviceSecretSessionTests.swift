@@ -13,6 +13,67 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testCheckpointAcknowledgementFailureIsShownBeforePendingNotice() throws {
+    try assertAcknowledgementFailureKeepsPendingNotice(blockParentWrite: true)
+  }
+
+  func testWindowAcknowledgementFailureKeepsPendingNoticeAfterParentWrite() throws {
+    try assertAcknowledgementFailureKeepsPendingNotice(blockParentWrite: false)
+  }
+
+  private func assertAcknowledgementFailureKeepsPendingNotice(blockParentWrite: Bool) throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: blockParentWrite ? publicKey : nil)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    let parents = ProofStore(fileURL: parentURL)
+    let submissionURL = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: submissionURL)
+    _ = try seedCapture(in: store, publicKey: blockParentWrite ? publicKey : nil)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain),
+      proofStore: parents, reportSubmissionRuntime: runtime
+    )
+    runtime.submitPending()
+    let notice: EventSigningKeyFailure = blockParentWrite ? .changed : .unverifiable
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, notice)
+    let blockedURL = blockParentWrite ? parentURL : directory.appendingPathComponent("submissions.exclusions.json")
+    let preservedURL = directory.appendingPathComponent("preserved.json")
+    try FileManager.default.moveItem(at: blockedURL, to: preservedURL)
+    try FileManager.default.createDirectory(at: blockedURL, withIntermediateDirectories: false)
+
+    coordinator.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message, "Changes to a record from an earlier session could not be saved."
+    )
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertEqual(parents.isSigningKeyChangeAcknowledged(forEventCode: "PREVIOUS"), !blockParentWrite)
+    XCTAssertTrue(store.acknowledgedSigningKeyChangeEventCodes.isEmpty)
+
+    coordinator.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, notice)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertTrue(store.acknowledgedSigningKeyChangeEventCodes.isEmpty)
+    try FileManager.default.removeItem(at: blockedURL)
+    try FileManager.default.moveItem(at: preservedURL, to: blockedURL)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertEqual(ProofStore(fileURL: parentURL).acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    XCTAssertEqual(ReportSubmissionStore(fileURL: submissionURL).acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
   func testCheckpointDiscardNoticeWaitsForRemoval() throws {
     try assertCheckpointDiscardNoticeWaitsForRemoval(parentDecisionAlreadySaved: false)
   }
