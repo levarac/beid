@@ -184,6 +184,75 @@ final class DeviceSecretSessionTests: XCTestCase {
     try assertPendingCaptureIsDropped(captureKeyIsMissing: true)
   }
 
+  func testAcknowledgedEventDoesNotRepeatNoticeForLaterWindowsOrRelaunch() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    var notices = 0
+    runtime.onEventSigningKeyFailure = { if $0 == .changed { notices += 1 } }
+    runtime.submitPending()
+    XCTAssertEqual(notices, 1)
+    try runtime.acknowledgeSigningKeyChanges()
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    runtime.submitPending()
+    XCTAssertEqual(notices, 1)
+    runtime.stop()
+    let reloaded = ReportSubmissionStore(fileURL: fileURL)
+    _ = try seedCapture(in: reloaded, publicKey: publicKey)
+    let relaunched = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: reloaded
+    ))
+    defer { relaunched.stop() }
+    relaunched.onEventSigningKeyFailure = { if $0 == .changed { notices += 1 } }
+    relaunched.submitPending()
+    XCTAssertEqual(notices, 1)
+    _ = try seedCapture(in: reloaded, publicKey: publicKey, eventCode: "OTHER")
+    relaunched.submitPending()
+    XCTAssertEqual(notices, 2)
+    XCTAssertTrue(reloaded.pendingCaptures.isEmpty)
+    XCTAssertTrue(reloaded.records.isEmpty)
+    XCTAssertEqual(reloaded.exclusions.count, 4)
+  }
+
+  func testUnacknowledgedWindowDiscardNoticeSurvivesRelaunch() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let capture = try seedCapture(in: store, publicKey: publicKey)
+    try store.addExclusion(ReportSubmissionExclusion(
+      id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+      enin: capture.enin, peerCount: capture.peerRpids.count,
+      reasonCode: "signing-key-changed", createdAt: Date()
+    ))
+    try store.removePendingCapture(id: capture.id)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: ReportSubmissionStore(fileURL: fileURL)
+    ))
+    defer { runtime.stop() }
+
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).exclusions.allSatisfy {
+      $0.signingKeyChangeNoticeAcknowledged == true
+    })
+  }
+
   func testPendingCaptureReadFailurePreservesInputsWithoutSigning() throws {
     let directory = try makeDirectory()
     let fileURL = directory.appendingPathComponent("submissions.json")
@@ -306,9 +375,11 @@ final class DeviceSecretSessionTests: XCTestCase {
     return proofId
   }
 
-  private func seedCapture(in store: ReportSubmissionStore, publicKey: Data?) throws -> ReportSubmissionCapture {
+  private func seedCapture(
+    in store: ReportSubmissionStore, publicKey: Data?, eventCode: String = "PREVIOUS"
+  ) throws -> ReportSubmissionCapture {
     let capture = ReportSubmissionCapture(
-      id: UUID(), eventCode: "PREVIOUS", eventIdHex: String(repeating: "11", count: 32),
+      id: UUID(), eventCode: eventCode, eventIdHex: String(repeating: "11", count: 32),
       enin: 1, peerRpids: ["01" + String(repeating: "aa", count: 16)],
       reporterRpid: "01" + String(repeating: "bb", count: 16), participantCommitment: nil
     )
