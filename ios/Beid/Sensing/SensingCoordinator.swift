@@ -251,6 +251,7 @@ final class SensingCoordinator: ObservableObject {
   private var pendingSigningKeyChangeEvents: [String] = []
   var eventSigningKeyNoticeEventCode: String? { pendingSigningKeyChangeEvents.first }
   private var signingKeyAvailabilityFailure: EventSigningKeyFailure?
+  private var hasUnacknowledgedCaptureFailure = false
 
   /// Wallet connect+binding lifecycle for the event currently being
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
@@ -1716,7 +1717,10 @@ final class SensingCoordinator: ObservableObject {
       proofStore?.isSigningKeyChangeAcknowledged(forEventCode: eventCode) == true
     }
     self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
-      if failure != .changed { self?.recordEventSigningKeyFailure(failure) }
+      if failure != .changed {
+        self?.hasUnacknowledgedCaptureFailure = true
+        self?.recordEventSigningKeyFailure(failure)
+      }
     }
     self.reportSubmissionRuntime?.onSigningKeyChange = { [weak self] eventCode in
       self?.recordSigningKeyChange(forEventCode: eventCode)
@@ -3108,8 +3112,9 @@ final class SensingCoordinator: ObservableObject {
       } else if prepareEngine {
         try keychainEngine?.prepare()
       }
-      signingKeyAvailabilityFailure = nil
-      eventSigningKeyFailure = pendingSigningKeyChangeEvents.isEmpty ? nil : .changed
+      // Reading a new session's key does not resolve an earlier capture.
+      if !hasUnacknowledgedCaptureFailure { signingKeyAvailabilityFailure = nil }
+      eventSigningKeyFailure = pendingSigningKeyChangeEvents.isEmpty ? signingKeyAvailabilityFailure : .changed
       // Complete any existing launch checkpoint with the resolved secret
       // before a new session can replace that checkpoint.
       reconcileSelfProofCheckpointIfNeeded()
@@ -3161,6 +3166,7 @@ final class SensingCoordinator: ObservableObject {
         try reportSubmissionRuntime?.acknowledgeSigningKeyChanges(forEventCode: eventCode)
         pendingSigningKeyChangeEvents.removeFirst()
       } else {
+        hasUnacknowledgedCaptureFailure = false
         signingKeyAvailabilityFailure = nil
       }
       eventSigningKeyFailure = pendingSigningKeyChangeEvents.isEmpty ? signingKeyAvailabilityFailure : .changed
