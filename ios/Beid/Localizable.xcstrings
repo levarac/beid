@@ -1959,6 +1959,56 @@
         }
       }
     },
+    "eventSigningKeyFailure.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording unavailable"
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The device signing key is unavailable. Unlock your device and try again."
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.changed.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier record discarded"
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A record from an earlier session could not be saved because this device's signing key changed."
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.discardFailed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A record from an earlier session could not be saved or removed. Recording is unavailable."
+          }
+        }
+      }
+    },
     "proofDetail.status.incomplete": {
       "comment": "Status for a recording whose unsigned session record was discarded after the device signing key changed.",
       "localizations": {

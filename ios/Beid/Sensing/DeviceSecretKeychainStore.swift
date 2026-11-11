@@ -103,7 +103,12 @@ enum EventSigningKeyFailure: String, Identifiable {
   var id: String { rawValue }
 
   var title: String {
-    String(localized: "eventSigningKeyFailure.title", defaultValue: "Recording unavailable")
+    switch self {
+    case .changed:
+      return String(localized: "eventSigningKeyFailure.changed.title", defaultValue: "Earlier record discarded")
+    case .unavailable, .discardFailed:
+      return String(localized: "eventSigningKeyFailure.title", defaultValue: "Recording unavailable")
+    }
   }
 
   var message: String {
@@ -114,9 +119,15 @@ enum EventSigningKeyFailure: String, Identifiable {
         defaultValue: "The device signing key is unavailable. Unlock your device and try again."
       )
     case .changed:
-      return "A record from an earlier session could not be saved because this device's signing key changed."
+      return String(
+        localized: "eventSigningKeyFailure.changed",
+        defaultValue: "A record from an earlier session could not be saved because this device's signing key changed."
+      )
     case .discardFailed:
-      return "A record from an earlier session could not be saved or removed. Recording is unavailable."
+      return String(
+        localized: "eventSigningKeyFailure.discardFailed",
+        defaultValue: "A record from an earlier session could not be saved or removed. Recording is unavailable."
+      )
     }
   }
 }
