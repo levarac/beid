@@ -13,6 +13,52 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testAsyncInitializationWaitsForRealCheckpointBeforeRebuildingDiscardNotice() async throws {
+    let directory = try makeDirectory()
+    let proofId = try seedCheckpoint(in: directory, publicKey: nil)
+    let parents = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    try parents.discardSelfProofForKeyChange(for: proofId)
+    let checkpointURL = directory.appendingPathComponent("self-proof-checkpoint.json")
+    try FileManager.default.moveItem(at: directory.appendingPathComponent("checkpoint.json"), to: checkpointURL)
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))),
+      proofStore: parents
+    )
+
+    XCTAssertTrue(coordinator.isLedgerLoading)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testAsyncInitializationDoesNotAnnounceDiscardWithUnreadableCheckpoint() async throws {
+    let directory = try makeDirectory()
+    let proofId = try seedCheckpoint(in: directory, publicKey: nil)
+    let parents = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    try parents.discardSelfProofForKeyChange(for: proofId)
+    let checkpointURL = directory.appendingPathComponent("self-proof-checkpoint.json")
+    try FileManager.default.createDirectory(at: checkpointURL, withIntermediateDirectories: false)
+    let coordinator = SensingCoordinator(
+      loadingFromDirectory: directory,
+      sensingCryptography: makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))),
+      proofStore: parents
+    )
+
+    await coordinator.waitForLedgerLoadToFinish()
+
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: checkpointURL.path))
+  }
+
   func testUnreadableParentStoreRetainsCheckpointUntilJoinCanReloadIt() throws {
     let directory = try makeDirectory()
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))

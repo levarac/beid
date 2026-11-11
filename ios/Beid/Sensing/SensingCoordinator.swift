@@ -1306,7 +1306,8 @@ final class SensingCoordinator: ObservableObject {
     reportProofLinkStore: ReportProofLinkStore? = nil,
     eventIdentityVerificationSource: (any EventIdentityVerificationSource)? = nil,
     eventJoinControl: (any EventJoinControlling)? = nil,
-    ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard
+    ownerKeyRestorationAcknowledgementDefaults: UserDefaults = .standard,
+    proofStore: ProofStore? = nil
   ) {
     self.init(
       windowReportFileURL: directory.appendingPathComponent("window-reports.json"),
@@ -1321,7 +1322,8 @@ final class SensingCoordinator: ObservableObject {
       reportProofLinkStore: reportProofLinkStore,
       eventIdentityVerificationSource: eventIdentityVerificationSource,
       eventJoinControl: eventJoinControl,
-      ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults
+      ownerKeyRestorationAcknowledgementDefaults: ownerKeyRestorationAcknowledgementDefaults,
+      proofStore: proofStore
     )
   }
 
