@@ -455,7 +455,10 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
     XCTAssertNotNil(coordinator.eventSigningKeyFailure)
     XCTAssertNotEqual(coordinator.eventSigningKeyFailure, .unavailable)
-    XCTAssertTrue(coordinator.eventSigningKeyFailure?.message.contains("signing key changed") == true)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message,
+      "A record from an earlier session could not be saved and was discarded."
+    )
     let parent = try XCTUnwrap(ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).proof(withId: proofId))
     XCTAssertTrue(parent.selfProofDiscardedForKeyChange)
     XCTAssertFalse(parent.signingKeyChangeNoticeAcknowledged)
@@ -530,7 +533,12 @@ final class DeviceSecretSessionTests: XCTestCase {
 
     XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
     XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
-    XCTAssertNotNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(
+      coordinator.eventSigningKeyFailure?.message,
+      "A record from an earlier session could not be saved and was discarded."
+    )
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
   }
 
   func testStartingSessionKeepsDiscardNoticeUntilDismissed() throws {
@@ -803,7 +811,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
     let store = ReportSubmissionStore(fileURL: fileURL)
     _ = try seedCapture(in: store, publicKey: captureKeyIsMissing ? nil : publicKey)
-    keychain.storedData = Data(repeating: 0x42, count: 32)
+    if !captureKeyIsMissing { keychain.storedData = Data(repeating: 0x42, count: 32) }
     let provider = DelayedDeviceSecretDefinitionProvider()
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
@@ -819,7 +827,10 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertTrue(store.records.isEmpty)
     XCTAssertEqual(store.exclusions.count, 1)
     XCTAssertNotEqual(runtime.eventSigningKeyFailure, .unavailable)
-    XCTAssertTrue(runtime.eventSigningKeyFailure?.message.contains("signing key changed") == true)
+    XCTAssertEqual(
+      runtime.eventSigningKeyFailure?.message,
+      "A record from an earlier session could not be saved and was discarded."
+    )
     XCTAssertNil(provider.completion)
     runtime.submitPending()
     XCTAssertEqual(notices, 1)
