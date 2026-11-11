@@ -225,6 +225,59 @@ final class DeviceSecretSessionTests: XCTestCase {
     return captured
   }
 
+  func testCheckpointSurvivesARecordWriteFailure() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    try FileManager.default.createDirectory(
+      at: directory.appendingPathComponent("self-proofs.json"), withIntermediateDirectories: false
+    )
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertNotNil(coordinator.eventSigningKeyFailure)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+    XCTAssertEqual(coordinator.joinRefusal, .eventSigningKeyUnavailable)
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+  }
+
+  func testExcludedCaptureCannotSignAfterItsRemovalWasInterrupted() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let pendingURL = directory.appendingPathComponent("submissions.pending.json")
+    let preservedURL = directory.appendingPathComponent("preserved.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    try FileManager.default.moveItem(at: pendingURL, to: preservedURL)
+    try FileManager.default.createDirectory(at: pendingURL, withIntermediateDirectories: false)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+
+    runtime.submitPending()
+
+    XCTAssertEqual(store.pendingCaptures.count, 1)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).exclusions.count, 1)
+    XCTAssertTrue(store.records.isEmpty)
+    try FileManager.default.removeItem(at: pendingURL)
+    try FileManager.default.moveItem(at: preservedURL, to: pendingURL)
+    keychain.storedData = Data(repeating: 0x31, count: 32)
+    runtime.submitPending()
+
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.isEmpty)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertNil(provider.completion)
+  }
+
   func testManualJoinKeepsResolvedSecretAcrossPermissionWait() async throws {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let cryptography = makeCryptography(keychain)
