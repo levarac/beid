@@ -13,6 +13,127 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testManualJoinUsesTheHumanCodeForWindowAndSelfProofSigning() async throws {
+    let directory = try makeDirectory()
+    let humanCode = "SESSION"
+    let eventIdHex = String(repeating: "11", count: 32)
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(FakeEventJoinRegistry.admittingResolution(eventIdHex: eventIdHex))
+    let reports = WindowReportStore(fileURL: directory.appendingPathComponent("reports.json"))
+    let store = ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: cryptography,
+      definitionProvider: provider, store: store, allowInsecureLoopbackForTests: true
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: cryptography, reports: reports,
+      eventJoinControl: engine, eventJoinRegistry: registry, reportSubmissionRuntime: runtime
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: humanCode, eventIdHex: eventIdHex)
+    try await Task.sleep(nanoseconds: 20_000_000)
+    XCTAssertEqual(engine.joinedCodes, [eventIdHex])
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: humanCode)
+    XCTAssertFalse(try cryptography.eventSigningPublicKey(eventCode: eventIdHex) == publicKey)
+    let reads = keychain.readCount
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 20)
+    let reporterRpid = "01" + String(repeating: "bb", count: 16)
+    for index in 0..<BeidConfig.eventConfirmThreshold {
+      coordinator.handleDetection(
+        enin: 1, rpid: "01" + String(format: "%032x", index + 1),
+        detectedDisplayId: DetectionFixture.displayId(device: index), reporterRpid: reporterRpid
+      )
+    }
+    guard case .recording(let session, _) = coordinator.phase else {
+      return XCTFail("recording must have started")
+    }
+    XCTAssertEqual(session.id, humanCode)
+    coordinator.handleDetection(
+      enin: 2, rpid: "01" + String(repeating: "cc", count: 16),
+      detectedDisplayId: DetectionFixture.displayId(device: 0), reporterRpid: reporterRpid
+    )
+    let checkpoint = try XCTUnwrap(SelfProofCheckpointStore(
+      fileURL: directory.appendingPathComponent("checkpoint.json")
+    ).checkpoint)
+    XCTAssertEqual(checkpoint.eventCode, humanCode)
+    XCTAssertTrue(checkpoint.eventSigningPublicKey == publicKey)
+    let capture = try XCTUnwrap(ReportSubmissionStore(
+      fileURL: directory.appendingPathComponent("submissions.json")
+    ).pendingCaptures.first)
+    XCTAssertEqual(capture.eventCode, humanCode)
+    XCTAssertEqual(capture.eventIdHex, eventIdHex)
+    XCTAssertTrue(capture.eventSigningPublicKey == publicKey)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    let report = try XCTUnwrap(reports.reports.first)
+    var payload = Data(humanCode.utf8)
+    payload.append(contentsOf: withUnsafeBytes(of: Int64(1).bigEndian) { Array($0) })
+    payload.append(hexData(report.commitHex))
+    for rpid in capture.peerRpids.sorted() { payload.append(contentsOf: rpid.utf8) }
+    XCTAssertTrue(BarnardCoreSigning.recoverPublicKey(
+      recoveryId: report.signatureV, r: Array(hexData(report.signatureRHex)),
+      s: Array(hexData(report.signatureSHex)), messageHash32: Array(SHA256.hash(data: payload))
+    ) == Array(publicKey))
+
+    let receiptKeyHex = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    let server = try StubOperatorServer(
+      eventId: Data(repeating: 0x11, count: 32),
+      signingPrivateKey: [UInt8](repeating: 0, count: 31) + [2], signingPublicKey: hexData(receiptKeyHex)
+    )
+    defer { server.stop() }
+    let endpoint = try await server.start()
+    let configuration = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.submission
+      .createSubmissionOperatorConfiguration(
+        endpoint: endpoint.absoluteString, receiptPublicKeyHex: receiptKeyHex,
+        eventIdHex: eventIdHex, eventDefinitionDigestHex: String(repeating: "22", count: 32),
+        validFrom: nil, validUntil: nil, allowInsecureLoopbackForTests: true
+      ))
+    try XCTUnwrap(provider.completion)(VerifiedSubmissionDefinition(configuration: configuration))
+    try await server.waitFor(postCount: 1)
+    let signed = try XCTUnwrap(store.records.first)
+    let evidence = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
+      .createMutualSensingWindowEvidence(
+        idHex: capture.id.uuidString.replacingOccurrences(of: "-", with: "").lowercased(), eventIdHex: eventIdHex,
+        eventDefinitionDigestHex: String(repeating: "22", count: 32), observerHex: hexString(publicKey),
+        finalizedAt: capture.finalizedAt, reporterRpidHex: capture.reporterRpid, enin: Int64(capture.enin),
+        observedRpidHexes: capture.peerRpids, rpidClaimHex: nil,
+        participantCommitmentHex: capture.participantCommitment.map { hexString($0) }, legacyPeerCount: nil
+      ))
+    let eligible = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
+      .prepareMutualSensingObservation(evidence: evidence) as?
+      ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible)
+    let digest = Array(SHA256.hash(data: Data(kotlinBytes: eligible.prepared.signatureStructure.toByteArray())))
+    let compact = hexData(signed.signedObservationHex).suffix(64)
+    XCTAssertEqual(signed.eventCode, humanCode)
+    XCTAssertTrue((0...1).contains { recoveryId in
+      BarnardCoreSigning.recoverPublicKey(
+        recoveryId: recoveryId, r: Array(compact.prefix(32)), s: Array(compact.suffix(32)), messageHash32: digest
+      ) == Array(publicKey)
+    })
+
+    let record = try XCTUnwrap(coordinator.stopSensing())
+    XCTAssertEqual(record.eventCode, humanCode)
+    XCTAssertTrue(record.eventIdHashHex == hexString(EventIdHash.compute(eventCode: humanCode)))
+    XCTAssertTrue(record.eventSigningPublicKeyHex == hexString(publicKey))
+    XCTAssertTrue(BarnardCoreSigning.verifySelfProof(
+      eventIdHash: Array(hexData(record.eventIdHashHex)), eventSigningPublicKey: Array(publicKey),
+      eninStart: record.eninStart, eninEnd: record.eninEnd, ownerPublicKey: Array(hexData(record.ownerPublicKeyHex)),
+      signature: BarnardCoreRecoverableSignature(
+        r: Array(hexData(record.signatureRHex)), s: Array(hexData(record.signatureSHex)), v: record.signatureV
+      )
+    ))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertEqual(reports.reports.count, 2)
+    XCTAssertTrue(store.exclusions.isEmpty)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(keychain.readCount, reads)
+  }
+
   func testParentAcknowledgementReconcilesExclusionsAfterInterruptedDismissal() throws {
     try assertInterruptedAcknowledgementIsReconciled(parentAcknowledged: true)
   }
