@@ -3189,6 +3189,11 @@ final class SensingCoordinator: ObservableObject {
   }
 
   func dismissEventSigningKeyFailure() {
+    if eventSigningKeyFailure == .discardFailed, let pending = pendingSigningKeyChangeEvents.first {
+      // Closing the update error leaves the original notice unacknowledged.
+      eventSigningKeyFailure = pending.reason.failure
+      return
+    }
     do {
       if let eventCode = pendingSigningKeyChangeEvents.first?.eventCode {
         try proofStore?.acknowledgeSigningKeyChanges(forEventCodes: [eventCode])
@@ -3200,7 +3205,8 @@ final class SensingCoordinator: ObservableObject {
       }
       eventSigningKeyFailure = pendingSigningKeyChangeEvents.first?.reason.failure ?? signingKeyAvailabilityFailure
     } catch {
-      recordEventSigningKeyFailure(.discardFailed)
+      // Keep the pending notice, but present the failed acknowledgement first.
+      eventSigningKeyFailure = .discardFailed
     }
   }
 
