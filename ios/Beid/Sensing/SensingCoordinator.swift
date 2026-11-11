@@ -1733,7 +1733,8 @@ final class SensingCoordinator: ObservableObject {
   private func handle(_ event: BarnardEvent) {
     switch event {
     case .state(let state):
-      handleTransportState(isScanning: state.isScanning, isAdvertising: state.isAdvertising)
+      isScanning = state.isScanning
+      isAdvertising = state.isAdvertising
     case .detection(let detection):
       handleDetection(
         enin: detection.enin,
@@ -3069,13 +3070,6 @@ final class SensingCoordinator: ObservableObject {
     recordingSurfaceReady = false
   }
 
-  /// BarnardState has no public initializer, so accept its transport fields
-  /// separately to let delayed state delivery exercise the same projection.
-  func handleTransportState(isScanning: Bool, isAdvertising: Bool) {
-    self.isScanning = isScanning
-    self.isAdvertising = isAdvertising
-  }
-
   private func prepareDeviceSecret(prepareEngine: Bool = true) -> Bool {
     do {
       if let cryptography = sensingCryptography as? BarnardSensingCryptography {
@@ -3132,9 +3126,7 @@ final class SensingCoordinator: ObservableObject {
       startSensing()
       return
     }
-    // Ownership changes with the transport calls; the published scanning
-    // state may still describe the scan that a failed key read just stopped.
-    guard !discoveryOnlyScanOwned, !isAdvertising else { return }
+    guard !discoveryOnlyScanOwned, !isScanning, !isAdvertising else { return }
     guard prepareDeviceSecret() else { return }
     discoveryOnlyScanOwned = true
     engine.startDiscoveryScan()
