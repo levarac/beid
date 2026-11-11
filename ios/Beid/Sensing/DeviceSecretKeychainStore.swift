@@ -81,8 +81,8 @@ final class DeviceSecretKeychainStore {
 }
 
 /// A checked, immutable SDK input: its optional-only API cannot turn a later
-/// Keychain failure into a request to regenerate. Resolve again for each
-/// signing operation, before constructing the SDK identity.
+/// Keychain failure into a request to regenerate. Resolve before each session
+/// and retain the value for its radio and signing operations.
 struct ResolvedDeviceSecretStorage: BarnardCoreKeyStorage, Equatable {
   fileprivate let secret: [UInt8]
 

@@ -471,18 +471,28 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       return
     }
     guard resolvingCaptures.insert(capture.id).inserted else { return }
+    let signingCryptography: any SensingCryptography
+    do {
+      signingCryptography = try eventSigningCryptography.signingSnapshot()
+    } catch {
+      resolvingCaptures.remove(capture.id)
+      recordSigningKeyFailure(.unavailable)
+      Self.log.error("Deferred canonical submission while the device signing key is unavailable")
+      return
+    }
     definitionProvider.resolve(eventIdHex: eventIdHex) { [weak self] verified in
       Task { @MainActor [weak self] in
         guard let self, !self.retryController.isStopped else { return }
         self.resolvingCaptures.remove(capture.id)
-        self.prepareAndQueueWindow(capture: capture, verified: verified)
+        self.prepareAndQueueWindow(capture: capture, verified: verified, signingCryptography: signingCryptography)
       }
     }
   }
 
   private func prepareAndQueueWindow(
     capture: ReportSubmissionCapture,
-    verified: VerifiedSubmissionDefinition?
+    verified: VerifiedSubmissionDefinition?,
+    signingCryptography: any SensingCryptography
   ) {
     guard let verified,
           let eventId = verified.configuration.eventId,
@@ -504,7 +514,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     ).hexString
     let observerHex: String
     do {
-      observerHex = try eventSigningCryptography.eventSigningPublicKey(eventCode: capture.eventCode).hexString
+      observerHex = try signingCryptography.eventSigningPublicKey(eventCode: capture.eventCode).hexString
     } catch {
       recordSigningKeyFailure(.unavailable)
       Self.log.error("Deferred canonical submission while the device signing key is unavailable")
@@ -544,7 +554,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     )
     let signature: SensingRecoverableSignature
     do {
-      signature = try eventSigningCryptography.signWindowReport(eventCode: capture.eventCode, bytes: signatureInput)
+      signature = try signingCryptography.signWindowReport(eventCode: capture.eventCode, bytes: signatureInput)
     } catch {
       recordSigningKeyFailure(.unavailable)
       Self.log.error("Deferred canonical submission while the device signing key is unavailable")

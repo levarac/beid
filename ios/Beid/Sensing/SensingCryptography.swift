@@ -32,6 +32,8 @@ struct SensingRecoverableSignature: Equatable {
 /// Callers retain every lifecycle, payload, validation, and persistence
 /// decision; implementations only forward one operation and map its result.
 protocol SensingCryptography: AnyObject {
+  /// Retains one resolved signing input across an asynchronous operation.
+  func signingSnapshot() throws -> any SensingCryptography
   func eventSigningPublicKey(eventCode: String) throws -> Data
   func ownerPublicKey() throws -> Data
 
@@ -53,11 +55,16 @@ protocol SensingCryptography: AnyObject {
   ) throws -> SensingRecoverableSignature?
 }
 
+extension SensingCryptography {
+  func signingSnapshot() throws -> any SensingCryptography { self }
+}
+
 /// Production adapter for the two Barnard-backed key owners used by sensing.
-/// Each method makes exactly one provider call and copies its result without
-/// adding sensing decisions or re-checking Barnard semantics.
+/// A session retains its resolved device secret; owner-key operations keep
+/// their existing provider boundary.
 final class BarnardSensingCryptography: SensingCryptography {
   private let deviceSecretStore: DeviceSecretKeychainStore
+  private var sessionStorage: ResolvedDeviceSecretStorage?
   /// Not `private`: `SensingCoordinator` downcasts to this concrete type to
   /// read `ownerKeyProvider.quarantinedSeedKey` (gh#156 Signal A,
   /// `docs/specs/owner-key-seed-read-failure.md` §8) — a beid-only signal
@@ -74,8 +81,26 @@ final class BarnardSensingCryptography: SensingCryptography {
     self.deviceSecretStore = deviceSecretStore
   }
 
+  /// Called before a new session starts. A failed resolution cannot reuse a
+  /// previous session's secret to admit the new one.
+  func prepareSession() throws -> ResolvedDeviceSecretStorage {
+    sessionStorage = nil
+    let storage = try deviceSecretStore.resolve()
+    sessionStorage = storage
+    return storage
+  }
+
+  func signingSnapshot() throws -> any SensingCryptography {
+    let snapshot = BarnardSensingCryptography(
+      ownerKeyProvider: ownerKeyProvider,
+      deviceSecretStore: deviceSecretStore
+    )
+    snapshot.sessionStorage = try sessionStorage ?? deviceSecretStore.resolve()
+    return snapshot
+  }
+
   private func identity() throws -> BarnardIdentity {
-    BarnardIdentity(keyStorage: try deviceSecretStore.resolve())
+    BarnardIdentity(keyStorage: try sessionStorage ?? deviceSecretStore.resolve())
   }
 
   func eventSigningPublicKey(eventCode: String) throws -> Data {

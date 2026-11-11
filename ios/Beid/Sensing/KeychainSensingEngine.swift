@@ -20,7 +20,10 @@ final class KeychainSensingEngine: EventJoinControlling, ParticipantRelayControl
   }
 
   func prepare() throws {
-    let resolved = try store.resolve()
+    prepare(storage: try store.resolve())
+  }
+
+  func prepare(storage resolved: ResolvedDeviceSecretStorage) {
     guard storage != resolved else { return }
     engine?.stopAutomaticOperation()
     let engine = BarnardEngine(keyStorage: resolved)

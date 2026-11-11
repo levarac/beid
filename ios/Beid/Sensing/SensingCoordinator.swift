@@ -245,8 +245,8 @@ final class SensingCoordinator: ObservableObject {
   /// Cleared only by explicit user acknowledgement.
   @Published private(set) var ownerKeyRestorationNotice: OwnerKeyRestorationNotice?
   @Published private(set) var ownerKeyOperationFailure: OwnerKeyOperationFailure?
-  /// Set while the event signing key cannot be used; nothing is signed or
-  /// joined meanwhile. See `EventSigningKeyFailure`.
+  /// Reports a failed device-key resolution before starting or recovering
+  /// signing work. An active session keeps its already resolved secret.
   @Published private(set) var eventSigningKeyFailure: EventSigningKeyFailure?
   /// Wallet connect+binding lifecycle for the event currently being
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
@@ -3068,10 +3068,18 @@ final class SensingCoordinator: ObservableObject {
     recordingSurfaceReady = false
   }
 
-  private func prepareDeviceSecret() -> Bool {
+  private func prepareDeviceSecret(prepareEngine: Bool = true) -> Bool {
     do {
-      try keychainEngine?.prepare()
+      if let cryptography = sensingCryptography as? BarnardSensingCryptography {
+        let storage = try cryptography.prepareSession()
+        if prepareEngine { keychainEngine?.prepare(storage: storage) }
+      } else if prepareEngine {
+        try keychainEngine?.prepare()
+      }
       eventSigningKeyFailure = nil
+      // Complete any existing launch checkpoint with the resolved secret
+      // before a new session can replace that checkpoint.
+      reconcileSelfProofCheckpointIfNeeded()
       return true
     } catch {
       eventSigningKeyFailure = .unavailable
@@ -4944,6 +4952,7 @@ final class SensingCoordinator: ObservableObject {
     stopRoute: ScanFlowContent.Route?
   ) {
     demoTask?.cancel()
+    guard prepareDeviceSecret(prepareEngine: false) else { return }
     let session = EventSession(
       id: scenario.event.id,
       name: scenario.event.name,
