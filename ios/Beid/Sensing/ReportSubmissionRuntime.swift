@@ -467,6 +467,10 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       }
       return
     }
+    guard store.hasReadableExclusions else {
+      recordSigningKeyFailure(.discardFailed)
+      return
+    }
     // The exclusion is the terminal decision, including a crash between its
     // write and removal of the raw input. Such an input must never sign.
     if store.exclusions.contains(where: { $0.id == capture.id && $0.reasonCode == "signing-key-changed" }) {

@@ -257,6 +257,8 @@ final class ReportSubmissionStore: ObservableObject {
   private var pendingCaptureLoadError: Error?
   private var exclusionLoadError: Error?
 
+  var hasReadableExclusions: Bool { exclusionLoadError == nil }
+
   enum LabRecordProjectionError: Error, Equatable {
     case unreadable
   }
