@@ -2806,7 +2806,8 @@ final class SensingCoordinator: ObservableObject {
   func applyJoinGateDecision(_ decision: JoinGateDecision) {
     switch decision {
     case .admit(let context):
-      guard prepareDeviceSecret() else { return }
+      // The attempt prepared the engine and signer before requesting
+      // permissions. Keep that resolved storage across both join waits.
       joinRefusal = nil
       pendingEventName = context.eventName
       emitJoinStageDiagnostic(
