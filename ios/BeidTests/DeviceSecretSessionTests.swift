@@ -253,6 +253,36 @@ final class DeviceSecretSessionTests: XCTestCase {
     })
   }
 
+  func testCheckpointAcknowledgementAlsoSuppressesLaterWindowNoticesForTheEvent() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: DelayedDeviceSecretDefinitionProvider(), store: store
+    ))
+    defer { runtime.stop() }
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), reportSubmissionRuntime: runtime
+    )
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    coordinator.dismissEventSigningKeyFailure()
+
+    _ = try seedCapture(in: store, publicKey: publicKey)
+    runtime.submitPending()
+
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNil(runtime.eventSigningKeyFailure)
+    XCTAssertTrue(store.pendingCaptures.isEmpty)
+    XCTAssertTrue(ReportSubmissionStore(fileURL: fileURL).exclusions.allSatisfy {
+      $0.signingKeyChangeNoticeAcknowledged == true
+    })
+  }
+
   func testPendingCaptureReadFailurePreservesInputsWithoutSigning() throws {
     let directory = try makeDirectory()
     let fileURL = directory.appendingPathComponent("submissions.json")
