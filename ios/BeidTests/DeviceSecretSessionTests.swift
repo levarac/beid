@@ -13,6 +13,72 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testManualJoinKeepsResolvedSecretAcrossPermissionWait() async throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+    let eventIdHex = String(repeating: "a", count: 64)
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .resolves(FakeEventJoinRegistry.admittingResolution(eventIdHex: eventIdHex))
+    let coordinator = makeCoordinator(
+      directory: try makeDirectory(), cryptography: cryptography,
+      eventJoinControl: engine, eventJoinRegistry: registry
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "SESSION", eventIdHex: eventIdHex)
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertEqual(keychain.readCount, 1)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: eventIdHex)
+
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
+    engine.grantHeldPermissionRequest()
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertEqual(engine.joinedCodes, [eventIdHex])
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+    XCTAssertEqual(keychain.readCount, 1)
+    XCTAssertTrue(try cryptography.eventSigningPublicKey(eventCode: eventIdHex) == publicKey)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+    _ = coordinator.stopSensing()
+  }
+
+  func testManualJoinKeepsResolvedSecretAcrossRegistryWait() async throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let cryptography = makeCryptography(keychain)
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .granted
+    let eventIdHex = String(repeating: "a", count: 64)
+    let registry = FakeEventJoinRegistry()
+    registry.answer = .holds
+    let coordinator = makeCoordinator(
+      directory: try makeDirectory(), cryptography: cryptography,
+      eventJoinControl: engine, eventJoinRegistry: registry
+    )
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "SESSION", eventIdHex: eventIdHex)
+    try await Task.sleep(nanoseconds: 20_000_000)
+    XCTAssertTrue(registry.isHoldingRead)
+    XCTAssertFalse(engine.didJoin)
+    XCTAssertEqual(keychain.readCount, 1)
+    let publicKey = try cryptography.eventSigningPublicKey(eventCode: eventIdHex)
+
+    keychain.readResults = Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
+    registry.answerHeldRead(with: FakeEventJoinRegistry.admittingResolution(eventIdHex: eventIdHex))
+    try await Task.sleep(nanoseconds: 20_000_000)
+
+    XCTAssertEqual(engine.joinedCodes, [eventIdHex])
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 0)
+    XCTAssertEqual(keychain.readCount, 1)
+    XCTAssertTrue(try cryptography.eventSigningPublicKey(eventCode: eventIdHex) == publicKey)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+    _ = coordinator.stopSensing()
+  }
+
   func testNearbyDiscoveryRestartsBeforeStoppedStateIsDelivered() throws {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let engine = DeferredDiscoveryStateJoinControl()
@@ -354,6 +420,7 @@ final class DeviceSecretSessionTests: XCTestCase {
   private func makeCoordinator(
     directory: URL, cryptography: BarnardSensingCryptography, reports: WindowReportStore? = nil,
     eventJoinControl: (any EventJoinControlling)? = SessionJoinControl(),
+    eventJoinRegistry: (any EventJoinRegistry)? = nil,
     deviceSecretStore: DeviceSecretKeychainStore = .shared
   ) -> SensingCoordinator {
     SensingCoordinator(
@@ -363,7 +430,8 @@ final class DeviceSecretSessionTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
-      sensingCryptography: cryptography, eventJoinControl: eventJoinControl, joinDiagnosticLog: { _ in },
+      sensingCryptography: cryptography, eventJoinControl: eventJoinControl,
+      eventJoinRegistry: eventJoinRegistry, joinDiagnosticLog: { _ in },
       deviceSecretStore: deviceSecretStore
     )
   }
