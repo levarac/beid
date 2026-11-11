@@ -1741,10 +1741,9 @@ final class SensingCoordinator: ObservableObject {
     guard !selfProofCheckpointStore.isPersistenceSuspended else { return }
     // A terminal parent is not a completed discard while its input remains.
     let retainedCheckpointProofId = selfProofCheckpointStore.checkpoint?.proofId
-    let unacknowledgedEvents = Set((proofStore?.proofs ?? []).filter {
-      $0.selfProofDiscardedForKeyChange && !$0.signingKeyChangeNoticeAcknowledged
-        && $0.id != retainedCheckpointProofId
-    }.map { $0.eventCode ?? $0.id.uuidString })
+    let unacknowledgedEvents = (proofStore?.unacknowledgedSigningDiscardEvents(
+      excludingProofId: retainedCheckpointProofId
+    ) ?? [])
       .subtracting(reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? [])
     for eventCode in unacknowledgedEvents.sorted() {
       recordSigningKeyChange(
@@ -5051,8 +5050,13 @@ final class SensingCoordinator: ObservableObject {
         }
         do {
           // Without a parent this input cannot produce a collected record.
+          try proofStore.discardOrphanedSelfProof(
+            checkpoint, acknowledgedEventCodes: reportSubmissionRuntime?.acknowledgedSigningKeyChangeEventCodes ?? []
+          )
           try selfProofCheckpointStore.clearDurably()
-          recordSigningKeyChange(forEventCode: checkpoint.eventCode, reason: .unverifiable)
+          if !proofStore.isSigningKeyChangeAcknowledged(forEventCode: checkpoint.eventCode) {
+            recordSigningKeyChange(forEventCode: checkpoint.eventCode, reason: .unverifiable)
+          }
         } catch {
           recordEventSigningKeyFailure(.discardFailed)
         }
