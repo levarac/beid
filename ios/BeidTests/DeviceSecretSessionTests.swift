@@ -23,7 +23,7 @@ final class DeviceSecretSessionTests: XCTestCase {
 
     let record = try XCTUnwrap(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json"))
       .record(forProofId: proofId))
-    XCTAssertTrue(record.eventSigningPublicKeyHex == publicKey.hexString)
+    XCTAssertTrue(record.eventSigningPublicKeyHex == hexString(publicKey))
     XCTAssertTrue(BarnardCoreSigning.verifySelfProof(
       eventIdHash: Array(hexData(record.eventIdHashHex)),
       eventSigningPublicKey: Array(hexData(record.eventSigningPublicKeyHex)),
@@ -152,8 +152,8 @@ final class DeviceSecretSessionTests: XCTestCase {
     let record = try XCTUnwrap(store.records.first)
     let evidence = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
       .createMutualSensingWindowEvidence(
-        idHex: capture.id.hexString, eventIdHex: capture.eventIdHex!,
-        eventDefinitionDigestHex: String(repeating: "22", count: 32), observerHex: publicKey.hexString,
+        idHex: capture.id.uuidString.replacingOccurrences(of: "-", with: "").lowercased(), eventIdHex: capture.eventIdHex!,
+        eventDefinitionDigestHex: String(repeating: "22", count: 32), observerHex: hexString(publicKey),
         finalizedAt: capture.finalizedAt, reporterRpidHex: capture.reporterRpid, enin: Int64(capture.enin),
         observedRpidHexes: capture.peerRpids, rpidClaimHex: nil,
         participantCommitmentHex: nil, legacyPeerCount: nil
@@ -161,7 +161,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let eligible = try XCTUnwrap(ExportedKotlinPackages.org.levarac.parallax.observation
       .prepareMutualSensingObservation(evidence: evidence) as?
       ExportedKotlinPackages.org.levarac.parallax.observation.ObservationPreparationResult.Eligible)
-    let digest = Array(SHA256.hash(data: Data(bytesFromKotlinByteArray: eligible.prepared.signatureStructure.toByteArray())))
+    let digest = Array(SHA256.hash(data: Data(kotlinBytes: eligible.prepared.signatureStructure.toByteArray())))
     let compact = hexData(record.signedObservationHex).suffix(64)
     XCTAssertTrue((0...1).contains { recoveryId in
       BarnardCoreSigning.recoverPublicKey(
@@ -691,6 +691,10 @@ final class DeviceSecretSessionTests: XCTestCase {
     return try XCTUnwrap(Bundle(url: url))
   }
 
+  private func hexString(_ data: Data) -> String {
+    data.map { String(format: "%02x", $0) }.joined()
+  }
+
   private func hexData(_ value: String) -> Data {
     var bytes: [UInt8] = []
     var index = value.startIndex
@@ -700,6 +704,12 @@ final class DeviceSecretSessionTests: XCTestCase {
       index = next
     }
     return Data(bytes)
+  }
+}
+
+private extension Data {
+  init(kotlinBytes bytes: ExportedKotlinPackages.kotlin.ByteArray) {
+    self.init((0..<Int(bytes.size)).map { UInt8(bitPattern: bytes[Int32($0)]) })
   }
 }
 
