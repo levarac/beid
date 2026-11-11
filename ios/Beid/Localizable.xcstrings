@@ -1761,13 +1761,13 @@
         }
       }
     },
-    "Not submittable (count-only record)": {
-      "comment": "Sub-state row under \"Participation record\": windows recorded with only a device count and no reporter RPID can never be submitted to a report server. This row makes that exclusion explicit instead of silently dropping those windows (levarac/dispatch#3).",
+    "Not submittable": {
+      "comment": "Count of windows excluded from submission, including count-only windows and windows discarded after a signing key change.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not submittable (count-only record)"
+            "value": "Not submittable"
           }
         }
       }
