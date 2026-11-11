@@ -1380,7 +1380,8 @@ final class SensingCoordinator: ObservableObject {
       nearbyRegistryClient: nearbyRegistryClient,
       eventJoinControl: eventJoinControl,
       joinDiagnosticLog: joinDiagnosticLog,
-      proofStore: proofStore
+      proofStore: proofStore,
+      deferCheckpointRecovery: true
     )
     // Only this initializer chain is actually loading — see
     // `isLedgerLoading`'s doc comment for why the default is `false`.
@@ -1469,6 +1470,7 @@ final class SensingCoordinator: ObservableObject {
       if let loadFailure {
         self.ledgerHealth = .degraded(reason: loadFailure, since: Date())
       }
+      self.rebuildSelfProofDiscardNotices()
       self.reconcileSelfProofCheckpointIfNeeded()
       self.logOwnerKeyRegenerationSignalsIfNeeded()
       self.isLedgerLoading = false
@@ -1639,7 +1641,8 @@ final class SensingCoordinator: ObservableObject {
     participantRelayControl: (any ParticipantRelayControlling)? = nil,
     relayCadenceNanoseconds: UInt64 = SensingCoordinator.relayDecisionBoundaryNanoseconds,
     deviceSecretStore: DeviceSecretKeychainStore = .shared,
-    proofStore: ProofStore? = nil
+    proofStore: ProofStore? = nil,
+    deferCheckpointRecovery: Bool = false
   ) {
     var recoveredRuntime = unsentWindowLedgerRuntime
     var ledgerFailure = initialLedgerFailure
@@ -1728,6 +1731,14 @@ final class SensingCoordinator: ObservableObject {
     self.reportSubmissionRuntime?.onSigningKeyChange = { [weak self] eventCode, reason in
       self?.recordSigningKeyChange(forEventCode: eventCode, reason: reason)
     }
+    if !deferCheckpointRecovery {
+      rebuildSelfProofDiscardNotices()
+      reconcileSelfProofCheckpointIfNeeded()
+    }
+  }
+
+  private func rebuildSelfProofDiscardNotices() {
+    guard !selfProofCheckpointStore.isPersistenceSuspended else { return }
     // A terminal parent is not a completed discard while its input remains.
     let retainedCheckpointProofId = selfProofCheckpointStore.checkpoint?.proofId
     let unacknowledgedEvents = Set((proofStore?.proofs ?? []).filter {
@@ -1740,7 +1751,6 @@ final class SensingCoordinator: ObservableObject {
         forEventCode: eventCode, reason: proofStore?.signingDiscardReason(forEventCode: eventCode) ?? .unverifiable
       )
     }
-    reconcileSelfProofCheckpointIfNeeded()
   }
 
   isolated deinit {
