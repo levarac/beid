@@ -13,6 +13,37 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testOrphanCheckpointIsDiscardedOnceWithoutBlockingLaterJoins() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    try FileManager.default.removeItem(at: directory.appendingPathComponent("proofs.json"))
+    let reads = keychain.readCount
+    let engine = RecordingEventJoinControl()
+    engine.permissionOutcome = .answersLate
+
+    let coordinator = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), eventJoinControl: engine
+    )
+
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    coordinator.useDemoEventMode = false
+    coordinator.startSensing(eventCode: "NEXT")
+    XCTAssertTrue(engine.isHoldingPermissionRequest)
+    XCTAssertNil(coordinator.joinRefusal)
+    XCTAssertEqual(coordinator.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    coordinator.dismissEventSigningKeyFailure()
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertNil(relaunched.eventSigningKeyFailure)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
   func testManualJoinUsesTheHumanCodeForWindowAndSelfProofSigning() async throws {
     let directory = try makeDirectory()
     let humanCode = "SESSION"
