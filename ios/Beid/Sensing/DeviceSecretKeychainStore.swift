@@ -94,17 +94,28 @@ struct ResolvedDeviceSecretStorage: BarnardCoreKeyStorage, Equatable {
   func setBytes(_ bytes: [UInt8], forKey key: String) {}
 }
 
+enum EventSigningDiscardReason: String, Codable {
+  case keyChanged
+  case unverifiable
+
+  var failure: EventSigningKeyFailure {
+    self == .keyChanged ? .changed : .unverifiable
+  }
+}
+
 /// The UI reports availability without exposing storage details.
 enum EventSigningKeyFailure: String, Identifiable {
   case unavailable
   case changed
+  case unverifiable
   case discardFailed
 
   var id: String { rawValue }
+  var isDiscardNotice: Bool { self == .changed || self == .unverifiable }
 
   var title: String {
     switch self {
-    case .changed:
+    case .changed, .unverifiable:
       return String(localized: "eventSigningKeyFailure.changed.title", defaultValue: "Earlier record discarded")
     case .discardFailed:
       return String(
@@ -125,7 +136,13 @@ enum EventSigningKeyFailure: String, Identifiable {
     case .changed:
       return String(
         localized: "eventSigningKeyFailure.changed",
-        defaultValue: "A record from an earlier session could not be saved and was discarded."
+        defaultValue:
+          "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+      )
+    case .unverifiable:
+      return String(
+        localized: "eventSigningKeyFailure.unverifiable",
+        defaultValue: "A record from an earlier session could not be checked and was discarded."
       )
     case .discardFailed:
       return String(

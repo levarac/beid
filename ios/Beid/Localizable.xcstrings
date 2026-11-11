@@ -1994,7 +1994,17 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A record from an earlier session could not be saved and was discarded."
+            "value": "A record from an earlier session could not be saved because this device's signing key changed. It was discarded."
+          }
+        }
+      }
+    },
+    "eventSigningKeyFailure.unverifiable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A record from an earlier session could not be checked and was discarded."
           }
         }
       }

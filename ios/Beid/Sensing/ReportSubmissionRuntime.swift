@@ -277,7 +277,7 @@ final class ReportSubmissionRetryController {
 @MainActor
 protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
   var onEventSigningKeyFailure: ((EventSigningKeyFailure) -> Void)? { get set }
-  var onSigningKeyChange: ((String) -> Void)? { get set }
+  var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? { get set }
   var isSigningKeyChangeAcknowledged: ((String) -> Bool)? { get set }
   var acknowledgedSigningKeyChangeEventCodes: Set<String> { get }
   func acknowledgeSigningKeyChanges() throws
@@ -310,7 +310,7 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 }
 
 extension WindowReportSubmissionRuntimeProtocol {
-  var onSigningKeyChange: ((String) -> Void)? {
+  var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? {
     get { nil }
     set {}
   }
@@ -353,11 +353,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       if let eventSigningKeyFailure { onEventSigningKeyFailure?(eventSigningKeyFailure) }
     }
   }
-  var onSigningKeyChange: ((String) -> Void)? {
+  var onSigningKeyChange: ((String, EventSigningDiscardReason) -> Void)? {
     didSet {
       for eventCode in store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).sorted()
       where isSigningKeyChangeAcknowledged?(eventCode) != true {
-        onSigningKeyChange?(eventCode)
+        onSigningKeyChange?(eventCode, store.signingDiscardReason(forEventCode: eventCode))
       }
     }
   }
@@ -369,12 +369,12 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
 
   func acknowledgeSigningKeyChanges() throws {
     try store.acknowledgeSigningKeyChanges()
-    if eventSigningKeyFailure == .changed { eventSigningKeyFailure = nil }
+    if eventSigningKeyFailure?.isDiscardNotice == true { eventSigningKeyFailure = nil }
   }
 
   func acknowledgeSigningKeyChanges(forEventCode eventCode: String) throws {
     try store.acknowledgeSigningKeyChanges(forEventCodes: [eventCode])
-    if eventSigningKeyFailure == .changed,
+    if eventSigningKeyFailure?.isDiscardNotice == true,
        store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).isEmpty {
       eventSigningKeyFailure = nil
     }
@@ -384,8 +384,9 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     guard !store.acknowledgedSigningKeyChangeEventCodes.contains(eventCode),
           isSigningKeyChangeAcknowledged?(eventCode) != true,
           notifiedSigningKeyChangeEvents.insert(eventCode).inserted else { return }
-    onSigningKeyChange?(eventCode)
-    recordSigningKeyFailure(.changed)
+    let reason = store.signingDiscardReason(forEventCode: eventCode)
+    onSigningKeyChange?(eventCode, reason)
+    recordSigningKeyFailure(reason.failure)
   }
 
   private func recordSigningKeyFailure(_ failure: EventSigningKeyFailure) {
@@ -432,8 +433,9 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     self.definitionProvider = definitionProvider
     self.store = store
     self.notifiedSigningKeyChangeEvents = store.signingKeyChangeEventCodes
-    if !store.signingKeyChangeEventCodes.subtracting(store.acknowledgedSigningKeyChangeEventCodes).isEmpty {
-      self.eventSigningKeyFailure = .changed
+    if let eventCode = store.signingKeyChangeEventCodes
+      .subtracting(store.acknowledgedSigningKeyChangeEventCodes).sorted().first {
+      self.eventSigningKeyFailure = store.signingDiscardReason(forEventCode: eventCode).failure
     }
     self.client = client
     self.retryController = ReportSubmissionRetryController(scheduler: retryScheduler, now: now, jitter: retryJitter)
@@ -543,7 +545,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     }
     // The exclusion is the terminal decision, including a crash between its
     // write and removal of the raw input. Such an input must never sign.
-    if store.exclusions.contains(where: { $0.id == capture.id && $0.reasonCode == "signing-key-changed" }) {
+    if store.exclusions.contains(where: { $0.id == capture.id && $0.signingDiscardReason != nil }) {
       removeExcludedCapture(capture)
       return
     }
@@ -556,9 +558,9 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       signingCryptography = try snapshot.signingSnapshot(
         eventCode: capture.eventCode, matching: capture.eventSigningPublicKey
       )
-    } catch EventSigningKeyContinuityError.changed {
+    } catch let error as EventSigningKeyContinuityError {
       resolvingCaptures.remove(capture.id)
-      discardCapture(capture)
+      discardCapture(capture, reason: error.discardReason)
       return
     } catch {
       resolvingCaptures.remove(capture.id)
@@ -582,12 +584,12 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     }
   }
 
-  private func discardCapture(_ capture: ReportSubmissionCapture) {
+  private func discardCapture(_ capture: ReportSubmissionCapture, reason: EventSigningDiscardReason) {
     do {
       try store.addExclusion(ReportSubmissionExclusion(
         id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
         enin: capture.enin, peerCount: capture.peerRpids.count,
-        reasonCode: "signing-key-changed", createdAt: Date(),
+        reasonCode: reason == .keyChanged ? "signing-key-changed" : "signing-key-unverifiable", createdAt: Date(),
         signingKeyChangeNoticeAcknowledged: isSigningKeyChangeAcknowledged?(capture.eventCode) == true
       ))
       try store.removePendingCapture(id: capture.id)

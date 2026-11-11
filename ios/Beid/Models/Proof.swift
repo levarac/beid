@@ -36,6 +36,7 @@ struct Proof: Identifiable, Codable, Hashable {
   /// rows that have no data source at all yet — never a false zero.
   let eventCode: String?
   var selfProofDiscardedForKeyChange: Bool
+  var selfProofDiscardReason: EventSigningDiscardReason?
   var signingKeyChangeNoticeAcknowledged: Bool
 
   init(
@@ -48,6 +49,7 @@ struct Proof: Identifiable, Codable, Hashable {
     signatureState: ProofSignatureState = .notRequested,
     eventCode: String? = nil,
     selfProofDiscardedForKeyChange: Bool = false,
+    selfProofDiscardReason: EventSigningDiscardReason? = nil,
     signingKeyChangeNoticeAcknowledged: Bool = false
   ) {
     self.id = id
@@ -59,6 +61,7 @@ struct Proof: Identifiable, Codable, Hashable {
     self.signatureState = signatureState
     self.eventCode = eventCode
     self.selfProofDiscardedForKeyChange = selfProofDiscardedForKeyChange
+    self.selfProofDiscardReason = selfProofDiscardReason
     self.signingKeyChangeNoticeAcknowledged = signingKeyChangeNoticeAcknowledged
   }
 
@@ -80,6 +83,7 @@ struct Proof: Identifiable, Codable, Hashable {
   private enum CodingKeys: String, CodingKey {
     case id, eventName, date, method, peersVerified, gradientSeed, signatureState, eventCode
     case selfProofDiscardedForKeyChange, signingKeyChangeNoticeAcknowledged
+    case selfProofDiscardReason
   }
 
   /// Custom `init(from:)` so proofs persisted before `signatureState` or
@@ -97,6 +101,7 @@ struct Proof: Identifiable, Codable, Hashable {
     signatureState = try container.decodeIfPresent(ProofSignatureState.self, forKey: .signatureState) ?? .notRequested
     eventCode = try container.decodeIfPresent(String.self, forKey: .eventCode)
     selfProofDiscardedForKeyChange = try container.decodeIfPresent(Bool.self, forKey: .selfProofDiscardedForKeyChange) ?? false
+    selfProofDiscardReason = try container.decodeIfPresent(EventSigningDiscardReason.self, forKey: .selfProofDiscardReason)
     signingKeyChangeNoticeAcknowledged = try container.decodeIfPresent(Bool.self, forKey: .signingKeyChangeNoticeAcknowledged) ?? false
   }
 
@@ -111,6 +116,7 @@ struct Proof: Identifiable, Codable, Hashable {
     try container.encode(signatureState, forKey: .signatureState)
     try container.encodeIfPresent(eventCode, forKey: .eventCode)
     try container.encode(selfProofDiscardedForKeyChange, forKey: .selfProofDiscardedForKeyChange)
+    try container.encodeIfPresent(selfProofDiscardReason, forKey: .selfProofDiscardReason)
     try container.encode(signingKeyChangeNoticeAcknowledged, forKey: .signingKeyChangeNoticeAcknowledged)
   }
 }

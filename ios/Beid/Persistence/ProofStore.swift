@@ -67,13 +67,16 @@ final class ProofStore: ObservableObject {
   }
 
   /// Persists the terminal decision before its signing input can be removed.
-  func discardSelfProofForKeyChange(for id: UUID, acknowledgedEventCodes: Set<String> = []) throws {
+  func discardSelfProofForKeyChange(
+    for id: UUID, reason: EventSigningDiscardReason = .keyChanged, acknowledgedEventCodes: Set<String> = []
+  ) throws {
     guard let index = proofs.firstIndex(where: { $0.id == id }) else {
       throw CocoaError(.fileReadNoSuchFile)
     }
     guard !proofs[index].selfProofDiscardedForKeyChange else { return }
     var updated = proofs
     updated[index].selfProofDiscardedForKeyChange = true
+    updated[index].selfProofDiscardReason = reason
     let eventCode = updated[index].eventCode
     updated[index].signingKeyChangeNoticeAcknowledged = eventCode.map {
       acknowledgedEventCodes.contains($0) || isSigningKeyChangeAcknowledged(forEventCode: $0)
@@ -104,6 +107,13 @@ final class ProofStore: ObservableObject {
     Set(proofs.filter {
       $0.selfProofDiscardedForKeyChange && !$0.signingKeyChangeNoticeAcknowledged
     }.map { $0.eventCode ?? $0.id.uuidString })
+  }
+
+  func signingDiscardReason(forEventCode eventCode: String) -> EventSigningDiscardReason {
+    let discarded = proofs.filter {
+      $0.selfProofDiscardedForKeyChange && ($0.eventCode ?? $0.id.uuidString) == eventCode
+    }
+    return discarded.allSatisfy { $0.selfProofDiscardReason == .keyChanged } ? .keyChanged : .unverifiable
   }
 
   private func persistDurably(_ updated: [Proof]) throws {

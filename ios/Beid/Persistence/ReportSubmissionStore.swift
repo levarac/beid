@@ -27,6 +27,14 @@ struct ReportSubmissionExclusion: Identifiable, Codable, Equatable {
   let createdAt: Date
   var signingKeyChangeNoticeAcknowledged: Bool? = nil
 
+  var signingDiscardReason: EventSigningDiscardReason? {
+    switch reasonCode {
+    case "signing-key-changed": return .keyChanged
+    case "signing-key-unverifiable": return .unverifiable
+    default: return nil
+    }
+  }
+
   func hasSameWindowInputs(as other: ReportSubmissionExclusion) -> Bool {
     id == other.id &&
       eventCode == other.eventCode &&
@@ -364,7 +372,7 @@ final class ReportSubmissionStore: ObservableObject {
       return existing
     }
     var exclusion = exclusion
-    if exclusion.reasonCode == "signing-key-changed",
+    if exclusion.signingDiscardReason != nil,
        acknowledgedSigningKeyChangeEventCodes.contains(exclusion.eventCode) {
       exclusion.signingKeyChangeNoticeAcknowledged = true
     }
@@ -377,20 +385,28 @@ final class ReportSubmissionStore: ObservableObject {
   var signingKeyChangeEventCodes: Set<String> {
     let pendingIds = Set(pendingCaptures.map(\.id))
     return Set(exclusions.filter {
-      $0.reasonCode == "signing-key-changed" && !pendingIds.contains($0.id)
+      $0.signingDiscardReason != nil && !pendingIds.contains($0.id)
     }.map(\.eventCode))
   }
 
   var acknowledgedSigningKeyChangeEventCodes: Set<String> {
     Set(exclusions.filter {
-      $0.reasonCode == "signing-key-changed" && $0.signingKeyChangeNoticeAcknowledged == true
+      $0.signingDiscardReason != nil && $0.signingKeyChangeNoticeAcknowledged == true
     }.map(\.eventCode))
+  }
+
+  func signingDiscardReason(forEventCode eventCode: String) -> EventSigningDiscardReason {
+    let pendingIds = Set(pendingCaptures.map(\.id))
+    let discarded = exclusions.filter {
+      $0.eventCode == eventCode && $0.signingDiscardReason != nil && !pendingIds.contains($0.id)
+    }
+    return discarded.allSatisfy { $0.signingDiscardReason == .keyChanged } ? .keyChanged : .unverifiable
   }
 
   func acknowledgeSigningKeyChanges(forEventCodes eventCodes: Set<String>? = nil) throws {
     try ensureWritable()
     var updated = exclusions
-    for index in updated.indices where updated[index].reasonCode == "signing-key-changed" {
+    for index in updated.indices where updated[index].signingDiscardReason != nil {
       if eventCodes?.contains(updated[index].eventCode) ?? true {
         updated[index].signingKeyChangeNoticeAcknowledged = true
       }

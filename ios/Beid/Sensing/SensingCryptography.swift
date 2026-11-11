@@ -59,6 +59,11 @@ protocol SensingCryptography: AnyObject {
 
 enum EventSigningKeyContinuityError: Error {
   case changed
+  case unverifiable
+
+  var discardReason: EventSigningDiscardReason {
+    self == .changed ? .keyChanged : .unverifiable
+  }
 }
 
 extension SensingCryptography {
@@ -69,7 +74,8 @@ extension SensingCryptography {
   func signingSnapshot(eventCode: String, matching publicKey: Data?) throws -> any SensingCryptography {
     let snapshot = try signingSnapshot()
     let currentPublicKey = try snapshot.eventSigningPublicKey(eventCode: eventCode)
-    guard let publicKey, currentPublicKey == publicKey else {
+    guard let publicKey else { throw EventSigningKeyContinuityError.unverifiable }
+    guard currentPublicKey == publicKey else {
       throw EventSigningKeyContinuityError.changed
     }
     return snapshot
