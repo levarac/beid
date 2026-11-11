@@ -41,7 +41,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let directory = try makeDirectory()
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
-    _ = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
     keychain.storedData = Data(repeating: 0x42, count: 32)
 
     let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
@@ -51,9 +51,52 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertNotNil(coordinator.eventSigningKeyFailure)
     XCTAssertNotEqual(coordinator.eventSigningKeyFailure, .unavailable)
     XCTAssertTrue(coordinator.eventSigningKeyFailure?.message.contains("signing key changed") == true)
-    coordinator.dismissEventSigningKeyFailure()
+    let parent = try XCTUnwrap(ProofStore(fileURL: directory.appendingPathComponent("proofs.json")).proof(withId: proofId))
+    XCTAssertTrue(parent.selfProofDiscardedForKeyChange)
+    XCTAssertFalse(parent.signingKeyChangeNoticeAcknowledged)
+    let interrupted = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertEqual(interrupted.eventSigningKeyFailure, .changed)
+    interrupted.dismissEventSigningKeyFailure()
     let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
     XCTAssertNil(relaunched.eventSigningKeyFailure)
+  }
+
+  func testChangedCheckpointRetainsInputWhenParentDecisionCannotBeSaved() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let fileURL = directory.appendingPathComponent("proofs.json")
+    let parents = ProofStore(fileURL: fileURL)
+    try FileManager.default.removeItem(at: fileURL)
+    try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false)
+    keychain.storedData = Data(repeating: 0x42, count: 32)
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain), proofStore: parents)
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertEqual(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint?.proofId, proofId)
+    XCTAssertFalse(try XCTUnwrap(parents.proof(withId: proofId)).selfProofDiscardedForKeyChange)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testDurableParentDiscardPreventsSigningAfterInterruptedCheckpointRemoval() throws {
+    let directory = try makeDirectory()
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let publicKey = try makeCryptography(keychain).eventSigningPublicKey(eventCode: "PREVIOUS")
+    let proofId = try seedCheckpoint(in: directory, publicKey: publicKey)
+    let parents = ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+    try parents.discardSelfProofForKeyChange(for: proofId)
+    let reads = keychain.readCount
+
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .changed)
+    XCTAssertEqual(keychain.readCount, reads)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json")).checkpoint)
+    XCTAssertTrue(try XCTUnwrap(ProofStore(fileURL: directory.appendingPathComponent("proofs.json"))
+      .proof(withId: proofId)).selfProofDiscardedForKeyChange)
   }
 
   func testRelaunchCheckpointReadFailurePreservesInputsWithoutSigning() throws {
