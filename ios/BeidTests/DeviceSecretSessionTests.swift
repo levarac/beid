@@ -13,6 +13,43 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testNearbyDiscoveryRestartsBeforeStoppedStateIsDelivered() throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let engine = DeferredDiscoveryStateJoinControl()
+    let coordinator = makeCoordinator(
+      directory: try makeDirectory(), cryptography: makeCryptography(keychain), eventJoinControl: engine
+    )
+    engine.onTransportState = { [weak coordinator] scanning in
+      coordinator?.handleTransportState(isScanning: scanning, isAdvertising: false)
+    }
+    coordinator.useDemoEventMode = false
+    coordinator.startNearbyEventDiscovery()
+    engine.deliverNextState()
+    XCTAssertTrue(coordinator.isScanning)
+
+    keychain.readResults = [.failure(errSecInteractionNotAllowed)]
+    coordinator.joinNearbyEvent(eventCodeHashHex: String(repeating: "ab", count: 16))
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(engine.stopAutomaticOperationCallCount, 1)
+    XCTAssertTrue(coordinator.isScanning, "the stopped state has not been delivered yet")
+
+    keychain.readResults = []
+    coordinator.startNearbyEventDiscovery()
+    coordinator.startNearbyEventDiscovery()
+    engine.deliverNextState()
+    engine.deliverNextState()
+
+    XCTAssertTrue(engine.isScanning)
+    XCTAssertTrue(coordinator.isScanning)
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 2, "one initial scan and one recovery scan")
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertEqual(keychain.readCount, 3)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+    coordinator.startNearbyEventDiscovery()
+    XCTAssertEqual(engine.startDiscoveryScanCallCount, 2, "state delivery must not start another scan")
+    coordinator.stopNearbyEventDiscovery()
+  }
+
   func testNearbyDiscoveryRestartsAfterAJoinCannotReadTheDeviceSecret() throws {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let engine = RecordingEventJoinControl()
@@ -377,6 +414,38 @@ private final class SessionJoinControl: EventJoinControlling {
   func joinAndStart(_ context: ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext) {}
   func leaveJoinedEvent() {}
   func stopAutomaticOperation() {}
+  func currentJoinedEventCode() -> String? { nil }
+}
+
+private final class DeferredDiscoveryStateJoinControl: EventJoinControlling {
+  var onEvent: ((Barnard.BarnardEvent) -> Void)?
+  var onTransportState: (@MainActor (Bool) -> Void)?
+  private var states: [Bool] = []
+  private(set) var isScanning = false
+  private(set) var startDiscoveryScanCallCount = 0
+  private(set) var stopAutomaticOperationCallCount = 0
+
+  func requestJoinPermissions(_ completion: @escaping (Bool, Bool) -> Void) {}
+  func startDiscoveryScan() {
+    startDiscoveryScanCallCount += 1
+    isScanning = true
+    states.append(true)
+  }
+  func stopDiscoveryScan() {
+    isScanning = false
+    states.append(false)
+  }
+  func stopAutomaticOperation() {
+    stopAutomaticOperationCallCount += 1
+    stopDiscoveryScan()
+  }
+  @MainActor
+  func deliverNextState() {
+    guard !states.isEmpty else { return }
+    onTransportState?(states.removeFirst())
+  }
+  func joinAndStart(_ context: ExportedKotlinPackages.org.levarac.parallax.discovery.RegistryVerifiedJoinContext) {}
+  func leaveJoinedEvent() {}
   func currentJoinedEventCode() -> String? { nil }
 }
 

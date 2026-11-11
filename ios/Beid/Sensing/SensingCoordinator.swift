@@ -1733,8 +1733,7 @@ final class SensingCoordinator: ObservableObject {
   private func handle(_ event: BarnardEvent) {
     switch event {
     case .state(let state):
-      isScanning = state.isScanning
-      isAdvertising = state.isAdvertising
+      handleTransportState(isScanning: state.isScanning, isAdvertising: state.isAdvertising)
     case .detection(let detection):
       handleDetection(
         enin: detection.enin,
@@ -3067,6 +3066,13 @@ final class SensingCoordinator: ObservableObject {
     pendingBindingMessage = nil
     bindingState = .none
     recordingSurfaceReady = false
+  }
+
+  /// BarnardState has no public initializer, so accept its transport fields
+  /// separately to let delayed state delivery exercise the same projection.
+  func handleTransportState(isScanning: Bool, isAdvertising: Bool) {
+    self.isScanning = isScanning
+    self.isAdvertising = isAdvertising
   }
 
   private func prepareDeviceSecret(prepareEngine: Bool = true) -> Bool {
