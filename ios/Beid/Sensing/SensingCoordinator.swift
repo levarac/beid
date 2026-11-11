@@ -1154,6 +1154,7 @@ final class SensingCoordinator: ObservableObject {
   /// anchor "fixed at event time"). Carried on every window report signed
   /// during this session.
   private var activeCommit: Data?
+  private var activeEventSigningPublicKey: Data?
   private var activeProofId: UUID?
   /// The in-flight binding attempt's fixed message, reused across the
   /// wallet `personal_sign` message and the later owner-key wallet-ack so
@@ -2809,6 +2810,11 @@ final class SensingCoordinator: ObservableObject {
     case .admit(let context):
       // The attempt prepared the engine and signer before requesting
       // permissions. Keep that resolved storage across both join waits.
+      guard let publicKey = resolvedEventSigningPublicKey(eventCode: context.joinCode) else {
+        refuseJoin(.eventSigningKeyUnavailable, "The device signing key is unavailable.", reasonKey: "device_key_unavailable")
+        return
+      }
+      activeEventSigningPublicKey = publicKey
       joinRefusal = nil
       pendingEventName = context.eventName
       emitJoinStageDiagnostic(
@@ -3064,6 +3070,7 @@ final class SensingCoordinator: ObservableObject {
     joinRefusal = nil
     joinRefusalReasonKey = nil
     activeCommit = nil
+    activeEventSigningPublicKey = nil
     activeProofId = nil
     pendingBindingMessage = nil
     bindingState = .none
@@ -3082,6 +3089,12 @@ final class SensingCoordinator: ObservableObject {
       // Complete any existing launch checkpoint with the resolved secret
       // before a new session can replace that checkpoint.
       reconcileSelfProofCheckpointIfNeeded()
+      guard selfProofCheckpointStore.checkpoint == nil else {
+        discoveryOnlyScanOwned = false
+        engine.stopAutomaticOperation()
+        refuseJoin(.eventSigningKeyUnavailable, "The earlier record could not be completed.", reasonKey: "device_key_unavailable")
+        return false
+      }
       return true
     } catch {
       eventSigningKeyFailure = .unavailable
@@ -3952,8 +3965,10 @@ final class SensingCoordinator: ObservableObject {
   /// drives the same transition through the same shared reducer via
   /// `applyPhaseDecision`).
   private func beginEventFoundSessionState(_ session: EventSession) {
+    let capturedPublicKey = activeEventSigningPublicKey
     resetSessionState()
-    guard let eventSigningKey = resolvedEventSigningPublicKey(eventCode: session.id) else { return }
+    guard let eventSigningKey = capturedPublicKey ?? resolvedEventSigningPublicKey(eventCode: session.id) else { return }
+    activeEventSigningPublicKey = eventSigningKey
     guard let ownerKey = resolvedOwnerPublicKey() else { return }
     let salt = Data(randomSource.randomBytes(count: 16))
     activeCommit = EventCommitment.compute(eventSigningKey: eventSigningKey, ownerKey: ownerKey, salt: salt)
@@ -4515,7 +4530,8 @@ final class SensingCoordinator: ObservableObject {
       enin: enin,
       peerRpids: closingPeerRpids,
       reporterRpid: closingReporterRpid,
-      participantCommitment: commit
+      participantCommitment: commit,
+      eventSigningPublicKey: activeEventSigningPublicKey
     )
 
     let observationReference: String
@@ -4653,14 +4669,16 @@ final class SensingCoordinator: ObservableObject {
     proofId: UUID,
     eventCode: String,
     eninStart: UInt64,
-    eninEnd: UInt64
-  ) -> SelfProofRecord? {
+    eninEnd: UInt64,
+    capturedPublicKey: Data?
+  ) throws -> SelfProofRecord? {
     let eventIdHash = EventIdHash.compute(eventCode: eventCode)
-    guard let eventSigningPublicKey = resolvedEventSigningPublicKey(eventCode: eventCode) else { return nil }
+    let cryptography = try sensingCryptography.signingSnapshot(eventCode: eventCode, matching: capturedPublicKey)
+    guard let eventSigningPublicKey = capturedPublicKey else { return nil }
     guard let ownerPublicKey = resolvedOwnerPublicKey() else { return nil }
     let signature: SensingRecoverableSignature?
     do {
-      signature = try sensingCryptography.signSelfProof(
+      signature = try cryptography.signSelfProof(
         eventIdHash: eventIdHash,
         eventSigningPublicKey: eventSigningPublicKey,
         eninStart: eninStart,
@@ -4722,20 +4740,47 @@ final class SensingCoordinator: ObservableObject {
       return nil
     }
 
-    guard
-      let record = makeSelfProofRecord(
+    do {
+      guard let record = try makeSelfProofRecord(
         proofId: proofId,
         eventCode: eventCode,
         eninStart: UInt64(start),
-        eninEnd: UInt64(end)
-      )
-    else {
+        eninEnd: UInt64(end),
+        capturedPublicKey: activeEventSigningPublicKey
+      ) else { return nil }
+      return persistSelfProofRecord(record)
+    } catch EventSigningKeyContinuityError.changed {
+      discardSelfProofCheckpoint(proofId: proofId)
+    } catch {
+      eventSigningKeyFailure = .unavailable
+    }
+    return nil
+  }
+
+  private func persistSelfProofRecord(_ record: SelfProofRecord) -> SelfProofRecord? {
+    do {
+      if selfProofStore.record(forProofId: record.proofId) == nil {
+        try selfProofStore.addDurably(record)
+      }
+      if selfProofCheckpointStore.checkpoint?.proofId == record.proofId {
+        try selfProofCheckpointStore.clearDurably()
+      }
+      return record
+    } catch {
+      eventSigningKeyFailure = .discardFailed
       return nil
     }
+  }
 
-    selfProofStore.add(record)
-    selfProofCheckpointStore.clear()
-    return record
+  private func discardSelfProofCheckpoint(proofId: UUID) {
+    do {
+      if selfProofCheckpointStore.checkpoint?.proofId == proofId {
+        try selfProofCheckpointStore.clearDurably()
+      }
+      eventSigningKeyFailure = .changed
+    } catch {
+      eventSigningKeyFailure = .discardFailed
+    }
   }
 
   // MARK: - Session aggregate snapshot (beid#166 Phase 2)
@@ -4851,7 +4896,8 @@ final class SensingCoordinator: ObservableObject {
         proofId: proofId,
         eventCode: eventCode,
         eninStart: UInt64(start),
-        eninEnd: UInt64(end)
+        eninEnd: UInt64(end),
+        eventSigningPublicKey: activeEventSigningPublicKey
       )
     )
   }
@@ -4872,23 +4918,28 @@ final class SensingCoordinator: ObservableObject {
   private func reconcileSelfProofCheckpointIfNeeded() {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
     guard selfProofStore.record(forProofId: checkpoint.proofId) == nil else {
-      selfProofCheckpointStore.clear()
+      do {
+        try selfProofCheckpointStore.clearDurably()
+      } catch {
+        eventSigningKeyFailure = .discardFailed
+      }
       return
     }
 
-    guard
-      let record = makeSelfProofRecord(
+    do {
+      guard let record = try makeSelfProofRecord(
         proofId: checkpoint.proofId,
         eventCode: checkpoint.eventCode,
         eninStart: checkpoint.eninStart,
-        eninEnd: checkpoint.eninEnd
-      )
-    else {
-      return
+        eninEnd: checkpoint.eninEnd,
+        capturedPublicKey: checkpoint.eventSigningPublicKey
+      ) else { return }
+      _ = persistSelfProofRecord(record)
+    } catch EventSigningKeyContinuityError.changed {
+      discardSelfProofCheckpoint(proofId: checkpoint.proofId)
+    } catch {
+      eventSigningKeyFailure = .unavailable
     }
-
-    selfProofStore.add(record)
-    selfProofCheckpointStore.clear()
   }
 
   // MARK: - Demo sequence

@@ -97,6 +97,8 @@ struct ResolvedDeviceSecretStorage: BarnardCoreKeyStorage, Equatable {
 /// The UI reports availability without exposing storage details.
 enum EventSigningKeyFailure: String, Identifiable {
   case unavailable
+  case changed
+  case discardFailed
 
   var id: String { rawValue }
 
@@ -105,9 +107,16 @@ enum EventSigningKeyFailure: String, Identifiable {
   }
 
   var message: String {
-    String(
-      localized: "eventSigningKeyFailure.unavailable",
-      defaultValue: "The device signing key is unavailable. Unlock your device and try again."
-    )
+    switch self {
+    case .unavailable:
+      return String(
+        localized: "eventSigningKeyFailure.unavailable",
+        defaultValue: "The device signing key is unavailable. Unlock your device and try again."
+      )
+    case .changed:
+      return "A record from an earlier session could not be saved because this device's signing key changed."
+    case .discardFailed:
+      return "A record from an earlier session could not be saved or removed. Recording is unavailable."
+    }
   }
 }

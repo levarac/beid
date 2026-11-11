@@ -318,7 +318,8 @@ final class ReportSubmissionOperatorIntegrationTests: XCTestCase {
     runtime.captureAndQueueWindow(
       id: UUID(), eventCode: "device-wide-outage", eventIdHex: eventIdHex, enin: 13,
       peerRpids: ["01" + String(repeating: "bb", count: 16)],
-      reporterRpid: "01" + String(repeating: "aa", count: 16), participantCommitment: nil
+      reporterRpid: "01" + String(repeating: "aa", count: 16), participantCommitment: nil,
+      eventSigningPublicKey: TestSensingCryptography().eventSigningPublicKey(eventCode: "device-wide-outage")
     )
     runtime.submitPending()
     XCTAssertEqual(runtime.activeSubmissionCountForTesting, 1, "next capture may probe the oldest record once")

@@ -277,7 +277,8 @@ private final class RelayedWindowSubmissionSpy: WindowReportSubmissionRuntimePro
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   ) {
     queuedWindows.append(QueuedWindow(id: id, eventIdHex: eventIdHex))
   }

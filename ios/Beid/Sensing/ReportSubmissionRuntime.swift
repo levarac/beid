@@ -284,7 +284,8 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   )
 
   func submitPending()
@@ -402,7 +403,8 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data? = nil
   ) {
     guard !retryController.isStopped else { return }
     // A missing reporter RPID means this window has only legacy/count-style
@@ -443,6 +445,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       peerRpids: peerRpids.sorted(),
       reporterRpid: reporterRpid,
       participantCommitment: participantCommitment,
+      eventSigningPublicKey: eventSigningPublicKey,
       finalizedAt: Date().timeIntervalSince1970
     )
     do {
@@ -464,20 +467,33 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       }
       return
     }
-    guard let eventIdHex = capture.eventIdHex,
-          eventIdHex.normalizedCanonicalEventIdHex != nil
-    else {
-      Self.log.error("Deferred canonical submission without a canonical Event ID")
+    // The exclusion is the terminal decision, including a crash between its
+    // write and removal of the raw input. Such an input must never sign.
+    if store.exclusions.contains(where: { $0.id == capture.id && $0.reasonCode == "signing-key-changed" }) {
+      removeExcludedCapture(capture)
       return
     }
     guard resolvingCaptures.insert(capture.id).inserted else { return }
     let signingCryptography: any SensingCryptography
     do {
-      signingCryptography = try eventSigningCryptography.signingSnapshot()
+      signingCryptography = try eventSigningCryptography.signingSnapshot(
+        eventCode: capture.eventCode, matching: capture.eventSigningPublicKey
+      )
+    } catch EventSigningKeyContinuityError.changed {
+      resolvingCaptures.remove(capture.id)
+      discardCapture(capture)
+      return
     } catch {
       resolvingCaptures.remove(capture.id)
       recordSigningKeyFailure(.unavailable)
       Self.log.error("Deferred canonical submission while the device signing key is unavailable")
+      return
+    }
+    guard let eventIdHex = capture.eventIdHex,
+          eventIdHex.normalizedCanonicalEventIdHex != nil
+    else {
+      resolvingCaptures.remove(capture.id)
+      Self.log.error("Deferred canonical submission without a canonical Event ID")
       return
     }
     definitionProvider.resolve(eventIdHex: eventIdHex) { [weak self] verified in
@@ -486,6 +502,30 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
         self.resolvingCaptures.remove(capture.id)
         self.prepareAndQueueWindow(capture: capture, verified: verified, signingCryptography: signingCryptography)
       }
+    }
+  }
+
+  private func discardCapture(_ capture: ReportSubmissionCapture) {
+    do {
+      try store.addExclusion(ReportSubmissionExclusion(
+        id: capture.id, eventCode: capture.eventCode, eventIdHex: capture.eventIdHex,
+        enin: capture.enin, peerCount: capture.peerRpids.count,
+        reasonCode: "signing-key-changed", createdAt: Date()
+      ))
+      try store.removePendingCapture(id: capture.id)
+      recordSigningKeyFailure(.changed)
+    } catch {
+      recordSigningKeyFailure(.discardFailed)
+      Self.log.error("Unable to remove an unsigned window after its signing key changed")
+    }
+  }
+
+  private func removeExcludedCapture(_ capture: ReportSubmissionCapture) {
+    do {
+      try store.removePendingCapture(id: capture.id)
+    } catch {
+      recordSigningKeyFailure(.discardFailed)
+      Self.log.error("Unable to remove an excluded unsigned window")
     }
   }
 

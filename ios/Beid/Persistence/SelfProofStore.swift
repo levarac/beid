@@ -41,6 +41,15 @@ final class SelfProofStore: ObservableObject {
     save()
   }
 
+  /// Confirms the replacement is durable before a checkpoint can be removed.
+  func addDurably(_ record: SelfProofRecord) throws {
+    if let persistenceSuspensionReason { throw persistenceSuspensionReason }
+    let updated = records + [record]
+    let data = try RecordSchemaEnvelope.encodeRecords(updated)
+    try data.write(to: fileURL, options: .atomic)
+    records = updated
+  }
+
   /// A `Proof` gets at most one self-proof (mirrors `BindingRecord`'s own
   /// `proofId` linkage), so the first match is the only match. Used by
   /// checkpoint reconciliation to tell whether a graceful session end

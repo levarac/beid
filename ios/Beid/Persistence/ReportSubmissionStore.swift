@@ -59,6 +59,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
   let peerRpids: [String]
   let reporterRpid: String
   let participantCommitment: Data?
+  let eventSigningPublicKey: Data?
   let finalizedAt: TimeInterval
   let createdAt: Date
 
@@ -70,6 +71,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
     peerRpids: [String],
     reporterRpid: String,
     participantCommitment: Data?,
+    eventSigningPublicKey: Data? = nil,
     finalizedAt: TimeInterval = Date().timeIntervalSince1970,
     createdAt: Date = Date()
   ) {
@@ -80,6 +82,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
     self.peerRpids = Array(Set(peerRpids)).sorted()
     self.reporterRpid = reporterRpid
     self.participantCommitment = participantCommitment
+    self.eventSigningPublicKey = eventSigningPublicKey
     self.finalizedAt = finalizedAt
     self.createdAt = createdAt
   }
@@ -92,6 +95,7 @@ struct ReportSubmissionCapture: Identifiable, Codable, Equatable {
       peerRpids == other.peerRpids &&
       reporterRpid == other.reporterRpid &&
       participantCommitment == other.participantCommitment &&
+      eventSigningPublicKey == other.eventSigningPublicKey &&
       finalizedAt == other.finalizedAt
   }
 }

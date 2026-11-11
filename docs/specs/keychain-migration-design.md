@@ -168,6 +168,27 @@ its own snapshot before looking up the event definition. Each venue start
 also resolves fresh storage. A read, creation or validation failure refuses
 the start with a device-key error; it never requests SDK regeneration.
 
+### 2.4 Delayed iOS signing and device changes
+
+The event-signing public key is captured from the resolved join secret and
+stored in the existing self-proof checkpoint and canonical window capture.
+Before either input is signed after a relaunch, the signer derives the event
+public key and compares it with the captured value through one immutable
+signing snapshot. A matching key preserves the existing signature path.
+A changed or missing captured key drops the unsigned input and presents a
+short recording notice. A Keychain read failure preserves the input and
+presents the device-key error; it is never treated as a changed key.
+
+The canonical window's existing exclusion record stores the terminal reason
+before its unsigned capture is removed. An interrupted removal cannot cause
+that capture to sign later. A self-proof checkpoint is removed only after
+the replacement signed record is durably saved, or after a final key-change
+decision. A checkpoint that cannot be completed or removed blocks a new
+recording from replacing it. No additional retry store is introduced.
+Already-signed reports and Observations retain their exact bytes and need no
+key access for delivery. These changes are confined to iOS native persistence
+and Keychain session recovery; Android's Keystore paths are unchanged.
+
 ## 3. Design for the migration itself (owner-key seed only, per §2)
 
 Scoped to the part beid can actually build: moving the owner-key seed's

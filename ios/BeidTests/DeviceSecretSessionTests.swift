@@ -505,6 +505,8 @@ final class DeviceSecretSessionTests: XCTestCase {
     guard case .recording = coordinator.phase else { return XCTFail("recording must have started") }
     coordinator.handleDetection(enin: 2, rpid: "peer-next",
                                 detectedDisplayId: DetectionFixture.displayId(device: 0))
+    XCTAssertTrue(SelfProofCheckpointStore(fileURL: directory.appendingPathComponent("checkpoint.json"))
+      .checkpoint?.eventSigningPublicKey == publicKey)
     coordinator.checkpointOpenWindowForBackgrounding()
     coordinator.handleDetection(enin: 3, rpid: "peer-last",
                                 detectedDisplayId: DetectionFixture.displayId(device: 0))
@@ -537,8 +539,10 @@ final class DeviceSecretSessionTests: XCTestCase {
     let directory = try makeDirectory()
     let proofId = UUID()
     let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let publicKey = try makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32)))
+      .eventSigningPublicKey(eventCode: "PREVIOUS")
     SelfProofCheckpointStore(fileURL: checkpointURL).save(SelfProofCheckpoint(
-      proofId: proofId, eventCode: "PREVIOUS", eninStart: 1, eninEnd: 2
+      proofId: proofId, eventCode: "PREVIOUS", eninStart: 1, eninEnd: 2, eventSigningPublicKey: publicKey
     ))
     let keychain = InMemoryDeviceSecretKeychain(
       storedData: Data(repeating: 0x31, count: 32),
@@ -592,8 +596,10 @@ final class DeviceSecretSessionTests: XCTestCase {
       id: UUID(), eventCode: "SESSION", eventIdHex: String(repeating: "11", count: 32),
       enin: 1, peerRpids: ["01" + String(repeating: "aa", count: 16)],
       reporterRpid: "01" + String(repeating: "bb", count: 16),
-      participantCommitment: Data(repeating: 0x55, count: 32)
+      participantCommitment: Data(repeating: 0x55, count: 32), eventSigningPublicKey: publicKey
     )
+    XCTAssertTrue(ReportSubmissionStore(fileURL: directory.appendingPathComponent("submissions.json"))
+      .pendingCaptures.first?.eventSigningPublicKey == publicKey)
     let completion = try XCTUnwrap(provider.completion)
     keychain.storedData = Data(repeating: 0x42, count: 32)
     _ = try cryptography.prepareSession()
@@ -619,6 +625,8 @@ final class DeviceSecretSessionTests: XCTestCase {
       readResults: Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
     )
     let provider = DelayedDeviceSecretDefinitionProvider()
+    let publicKey = try makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32)))
+      .eventSigningPublicKey(eventCode: "PREVIOUS")
     let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
       bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
       definitionProvider: provider, store: store
@@ -628,7 +636,8 @@ final class DeviceSecretSessionTests: XCTestCase {
     runtime.captureAndQueueWindow(
       id: UUID(), eventCode: "PREVIOUS", eventIdHex: String(repeating: "11", count: 32),
       enin: 1, peerRpids: ["01" + String(repeating: "aa", count: 16)],
-      reporterRpid: "01" + String(repeating: "bb", count: 16), participantCommitment: nil
+      reporterRpid: "01" + String(repeating: "bb", count: 16), participantCommitment: nil,
+      eventSigningPublicKey: publicKey
     )
 
     XCTAssertEqual(runtime.eventSigningKeyFailure, .unavailable)

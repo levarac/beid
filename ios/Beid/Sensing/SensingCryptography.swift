@@ -55,8 +55,22 @@ protocol SensingCryptography: AnyObject {
   ) throws -> SensingRecoverableSignature?
 }
 
+enum EventSigningKeyContinuityError: Error {
+  case changed
+}
+
 extension SensingCryptography {
   func signingSnapshot() throws -> any SensingCryptography { self }
+
+  /// Compares and signs through one immutable device-secret resolution.
+  func signingSnapshot(eventCode: String, matching publicKey: Data?) throws -> any SensingCryptography {
+    let snapshot = try signingSnapshot()
+    let currentPublicKey = try snapshot.eventSigningPublicKey(eventCode: eventCode)
+    guard let publicKey, currentPublicKey == publicKey else {
+      throw EventSigningKeyContinuityError.changed
+    }
+    return snapshot
+  }
 }
 
 /// Production adapter for the two Barnard-backed key owners used by sensing.
