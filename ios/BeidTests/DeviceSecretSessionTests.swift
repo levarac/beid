@@ -13,6 +13,68 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testOrphanDiscardDecisionSurvivesRemovalAndRelaunchUntilAcknowledged() throws {
+    let directory = try makeDirectory()
+    _ = try seedCheckpoint(in: directory, publicKey: nil)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    try FileManager.default.removeItem(at: parentURL)
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    var removalAttempted = false
+    let checkpoints = SelfProofCheckpointStore(fileURL: checkpointURL, removeFile: { _ in
+      removalAttempted = true
+      let decisions = ProofStore(fileURL: parentURL)
+      XCTAssertEqual(decisions.unacknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+      XCTAssertTrue(decisions.proofs.isEmpty)
+      throw CocoaError(.fileWriteNoPermission)
+    })
+    let interrupted = makeCoordinator(
+      directory: directory, cryptography: makeCryptography(keychain), checkpointStore: checkpoints
+    )
+    XCTAssertTrue(removalAttempted)
+    XCTAssertEqual(interrupted.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(interrupted.eventSigningKeyNoticeEventCode)
+    XCTAssertNotNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+
+    let removed = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertEqual(removed.eventSigningKeyFailure, .unverifiable)
+    let decisions = ProofStore(fileURL: parentURL)
+    XCTAssertTrue(decisions.proofs.isEmpty)
+    decisions.add(Proof(eventName: "Another event", date: Date(), peersVerified: 1, eventCode: "OTHER"))
+
+    let relaunched = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    XCTAssertEqual(relaunched.eventSigningKeyNoticeEventCode, "PREVIOUS")
+    XCTAssertEqual(relaunched.eventSigningKeyFailure, .unverifiable)
+    relaunched.dismissEventSigningKeyFailure()
+
+    XCTAssertEqual(ProofStore(fileURL: parentURL).acknowledgedSigningKeyChangeEventCodes, ["PREVIOUS"])
+    XCTAssertNil(makeCoordinator(directory: directory, cryptography: makeCryptography(keychain)).eventSigningKeyFailure)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
+  func testOrphanCheckpointRemainsWhenDiscardDecisionCannotBeSaved() throws {
+    let directory = try makeDirectory()
+    _ = try seedCheckpoint(in: directory, publicKey: nil)
+    let parentURL = directory.appendingPathComponent("proofs.json")
+    try FileManager.default.removeItem(at: parentURL)
+    let parents = ProofStore(fileURL: parentURL)
+    try FileManager.default.createDirectory(at: parentURL, withIntermediateDirectories: false)
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    let original = try Data(contentsOf: checkpointURL)
+    let coordinator = makeCoordinator(
+      directory: directory,
+      cryptography: makeCryptography(InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))),
+      proofStore: parents
+    )
+
+    XCTAssertTrue(try Data(contentsOf: checkpointURL) == original)
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .discardFailed)
+    XCTAssertNil(coordinator.eventSigningKeyNoticeEventCode)
+    XCTAssertTrue(parents.unacknowledgedSigningKeyChangeEventCodes.isEmpty)
+    XCTAssertTrue(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).records.isEmpty)
+  }
+
   func testAsyncInitializationWaitsForRealCheckpointBeforeRebuildingDiscardNotice() async throws {
     let directory = try makeDirectory()
     let proofId = try seedCheckpoint(in: directory, publicKey: nil)
