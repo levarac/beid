@@ -248,6 +248,9 @@ final class SensingCoordinator: ObservableObject {
   /// Reports a failed device-key resolution before starting or recovering
   /// signing work. An active session keeps its already resolved secret.
   @Published private(set) var eventSigningKeyFailure: EventSigningKeyFailure?
+  private var signingKeyChangeNoticePending = false
+  private var signingKeyAvailabilityFailure: EventSigningKeyFailure?
+
   /// Wallet connect+binding lifecycle for the event currently being
   /// recorded — see `EventBindingState`. Sub-slice 2a only sets this to
   /// `.pendingConnect`; the interstitial that drives the rest is 2b.
@@ -1709,9 +1712,9 @@ final class SensingCoordinator: ObservableObject {
       Task { @MainActor in self.handle(event) }
     }
     self.reportSubmissionRuntime?.onEventSigningKeyFailure = { [weak self] failure in
-      self?.eventSigningKeyFailure = failure
+      self?.recordEventSigningKeyFailure(failure)
     }
-    if proofStore?.hasUnacknowledgedSigningKeyChange == true { eventSigningKeyFailure = .changed }
+    if proofStore?.hasUnacknowledgedSigningKeyChange == true { recordEventSigningKeyFailure(.changed) }
     reconcileSelfProofCheckpointIfNeeded()
   }
 
@@ -3095,7 +3098,8 @@ final class SensingCoordinator: ObservableObject {
       } else if prepareEngine {
         try keychainEngine?.prepare()
       }
-      eventSigningKeyFailure = nil
+      signingKeyAvailabilityFailure = nil
+      eventSigningKeyFailure = signingKeyChangeNoticePending ? .changed : nil
       // Complete any existing launch checkpoint with the resolved secret
       // before a new session can replace that checkpoint.
       reconcileSelfProofCheckpointIfNeeded()
@@ -3107,7 +3111,7 @@ final class SensingCoordinator: ObservableObject {
       }
       return true
     } catch {
-      eventSigningKeyFailure = .unavailable
+      recordEventSigningKeyFailure(.unavailable)
       discoveryOnlyScanOwned = false
       engine.stopAutomaticOperation()
       refuseJoin(
@@ -3123,17 +3127,31 @@ final class SensingCoordinator: ObservableObject {
     do {
       return try sensingCryptography.eventSigningPublicKey(eventCode: eventCode)
     } catch {
-      eventSigningKeyFailure = .unavailable
+      recordEventSigningKeyFailure(.unavailable)
       return nil
     }
   }
 
+  private func recordEventSigningKeyFailure(_ failure: EventSigningKeyFailure) {
+    if failure == .changed {
+      signingKeyChangeNoticePending = true
+    } else {
+      signingKeyAvailabilityFailure = failure
+    }
+    eventSigningKeyFailure = signingKeyChangeNoticePending ? .changed : signingKeyAvailabilityFailure
+  }
+
   func dismissEventSigningKeyFailure() {
     do {
-      try proofStore?.acknowledgeSigningKeyChanges()
-      eventSigningKeyFailure = nil
+      if signingKeyChangeNoticePending {
+        try proofStore?.acknowledgeSigningKeyChanges()
+        signingKeyChangeNoticePending = false
+      } else {
+        signingKeyAvailabilityFailure = nil
+      }
+      eventSigningKeyFailure = signingKeyAvailabilityFailure
     } catch {
-      eventSigningKeyFailure = .discardFailed
+      recordEventSigningKeyFailure(.discardFailed)
     }
   }
 
@@ -4566,7 +4584,7 @@ final class SensingCoordinator: ObservableObject {
       do {
         signature = try sensingCryptography.signWindowReport(eventCode: eventCode, bytes: payload)
       } catch {
-        eventSigningKeyFailure = .unavailable
+        recordEventSigningKeyFailure(.unavailable)
         return
       }
       let report = WindowReport(
@@ -4771,7 +4789,7 @@ final class SensingCoordinator: ObservableObject {
     } catch EventSigningKeyContinuityError.changed {
       discardSelfProofCheckpoint(proofId: proofId)
     } catch {
-      eventSigningKeyFailure = .unavailable
+      recordEventSigningKeyFailure(.unavailable)
     }
     return nil
   }
@@ -4786,7 +4804,7 @@ final class SensingCoordinator: ObservableObject {
       }
       return record
     } catch {
-      eventSigningKeyFailure = .discardFailed
+      recordEventSigningKeyFailure(.discardFailed)
       return nil
     }
   }
@@ -4798,9 +4816,9 @@ final class SensingCoordinator: ObservableObject {
       if selfProofCheckpointStore.checkpoint?.proofId == proofId {
         try selfProofCheckpointStore.clearDurably()
       }
-      if proofStore.hasUnacknowledgedSigningKeyChange { eventSigningKeyFailure = .changed }
+      if proofStore.hasUnacknowledgedSigningKeyChange { recordEventSigningKeyFailure(.changed) }
     } catch {
-      eventSigningKeyFailure = .discardFailed
+      recordEventSigningKeyFailure(.discardFailed)
     }
   }
 
@@ -4940,7 +4958,7 @@ final class SensingCoordinator: ObservableObject {
     guard let checkpoint = selfProofCheckpointStore.checkpoint else { return }
     if let proofStore {
       guard let parent = proofStore.proof(withId: checkpoint.proofId) else {
-        eventSigningKeyFailure = .discardFailed
+        recordEventSigningKeyFailure(.discardFailed)
         return
       }
       if parent.selfProofDiscardedForKeyChange {
@@ -4952,7 +4970,7 @@ final class SensingCoordinator: ObservableObject {
       do {
         try selfProofCheckpointStore.clearDurably()
       } catch {
-        eventSigningKeyFailure = .discardFailed
+        recordEventSigningKeyFailure(.discardFailed)
       }
       return
     }
@@ -4969,7 +4987,7 @@ final class SensingCoordinator: ObservableObject {
     } catch EventSigningKeyContinuityError.changed {
       discardSelfProofCheckpoint(proofId: checkpoint.proofId)
     } catch {
-      eventSigningKeyFailure = .unavailable
+      recordEventSigningKeyFailure(.unavailable)
     }
   }
 
