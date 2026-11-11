@@ -51,6 +51,7 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
     for source in [
       "BarnardEngine()",
       "BarnardEngine(configuration: makeConfiguration())",
+      "Barnard.BarnardEngine . init(configuration: makeConfiguration())",
       "BarnardIdentity.init(randomSource: makeRandom())",
       "BarnardEngine(configuration: makeOptions(keyStorage: storage))",
       "BarnardEngine(configuration: \"keyStorage: storage\")",
@@ -64,6 +65,7 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
     for source in [
       "BarnardEngine(keyStorage: try store.resolve())",
       "BarnardEngine(configuration: makeConfiguration(), keyStorage: storage)",
+      "BarnardEngine(configuration: { makeOptions(a: 1, b: 2) }, keyStorage: try store.resolve())",
       "BarnardIdentity.init(keyStorage: makeStorage(options: [1, 2]))",
       "// BarnardEngine()",
       "/* BarnardIdentity() */",
@@ -81,16 +83,46 @@ final class DeviceSecretConstructionGuardTests: XCTestCase {
 
   private func exerciseSignedContainerStart(deviceSecretStore: DeviceSecretKeychainStore) throws {
     let signedContainer = BarnardVenueSignedContainerBroadcasting(deviceSecretStore: deviceSecretStore)
-    signedContainer.clearAndStop()
+    defer { signedContainer.clearAndStop() }
+    try signedContainer.installAndStart(VenueServingContractFixture.load().permit())
   }
 
   private func defaultStorageConstructions(in source: String) throws -> [String] {
-    let pattern = try NSRegularExpression(pattern: #"\bBarnard(Identity|Engine)(\.init)?\s*\(\s*\)"#)
-    let code = source.components(separatedBy: "\n")
-      .map { $0.components(separatedBy: "//").first ?? "" }.joined(separator: "\n")
-    return pattern.matches(in: code, range: NSRange(code.startIndex..., in: code)).compactMap {
-      Range($0.range, in: code).map { String(code[$0]) }
+    // Remove literals and comments before checking argument labels, so neither
+    // an example nor a nested call can masquerade as injected storage.
+    let nonCode = try NSRegularExpression(pattern: #"(?s)//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*""#)
+    let code = nonCode.stringByReplacingMatches(
+      in: source, range: NSRange(source.startIndex..., in: source), withTemplate: " "
+    )
+    let constructors = try NSRegularExpression(
+      pattern: #"\bBarnard(?:Identity|Engine)\s*(?:\.\s*init\s*)?\("#
+    )
+    let storageLabel = try NSRegularExpression(pattern: #"^\s*keyStorage\s*:"#)
+    var offenders: [String] = []
+    for match in constructors.matches(in: code, range: NSRange(code.startIndex..., in: code)) {
+      guard let range = Range(match.range, in: code) else { continue }
+      var depth = 0
+      var start = range.upperBound
+      var injected = false
+      var closed = false
+      for index in code.indices where index >= start {
+        let character = code[index]
+        if depth == 0, character == "," || character == ")" {
+          let argument = String(code[start..<index])
+          if storageLabel.firstMatch(in: argument, range: NSRange(argument.startIndex..., in: argument)) != nil {
+            injected = true
+          }
+          start = code.index(after: index)
+          if character == ")" { closed = true; break }
+        } else if character == "(" || character == "[" || character == "{" {
+          depth += 1
+        } else if character == ")" || character == "]" || character == "}" {
+          depth -= 1
+        }
+      }
+      if !closed || !injected { offenders.append(String(code[range])) }
     }
+    return offenders
   }
 
   func testStartupDeletesTheLegacyValue() throws {
