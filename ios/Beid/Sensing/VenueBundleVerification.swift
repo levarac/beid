@@ -58,6 +58,7 @@ enum VenueRadioState: String, CaseIterable, Hashable {
 }
 
 enum VenueRadioFailure: String, CaseIterable, Hashable, Error {
+  case deviceKeyUnavailable
   case containerInstallRejected
   case bluetoothUnavailable
   case advertiseFailed

@@ -139,6 +139,8 @@ struct VenueDeviceOrganizerView: View {
 
   private func message(for error: VenueDeviceValidationError) -> LocalizedStringKey {
     switch error {
+    case .deviceKeyUnavailable:
+      return LocalizedStringKey(EventSigningKeyFailure.unavailable.message)
     case .noJoinedEvent:
       return "Join an event first, then come back to set up this device."
     case .missingLabel:

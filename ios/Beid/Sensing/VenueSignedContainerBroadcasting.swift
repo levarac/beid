@@ -88,10 +88,8 @@ final class BarnardVenueSignedContainerBroadcasting: VenueSignedContainerBroadca
   private var engine: BarnardEngine?
   private let deviceSecretStore: DeviceSecretKeychainStore
 
-  init(engine: BarnardEngine? = nil, deviceSecretStore: DeviceSecretKeychainStore = .shared) {
-    self.engine = engine
+  init(deviceSecretStore: DeviceSecretKeychainStore = .shared) {
     self.deviceSecretStore = deviceSecretStore
-    connectEvents()
   }
 
   private func connectEvents() {
@@ -127,11 +125,13 @@ final class BarnardVenueSignedContainerBroadcasting: VenueSignedContainerBroadca
   /// leave the PREVIOUS event's signed bytes live on the air, which is the
   /// one outcome this screen must never produce.
   func installAndStart(_ permit: VenueServePermit) throws {
-    if engine == nil {
-      engine = BarnardEngine(keyStorage: try deviceSecretStore.resolve())
-      connectEvents()
-    }
-    guard let engine else { return }
+    // A previous engine holds a snapshot of its secret. Retire it even when
+    // a fresh read fails, so no later start can reuse stale key material.
+    clearAndStop()
+    let storage = try deviceSecretStore.resolve()
+    let engine = BarnardEngine(keyStorage: storage)
+    self.engine = engine
+    connectEvents()
     // Clear BEFORE replacing.
     try? engine.configureOwnEventInfoEnvelopeV2(container: nil)
     do {
@@ -147,5 +147,8 @@ final class BarnardVenueSignedContainerBroadcasting: VenueSignedContainerBroadca
   func clearAndStop() {
     try? engine?.configureOwnEventInfoEnvelopeV2(container: nil)
     engine?.stopAdvertise()
+    engine?.onEvent = nil
+    engine?.dispose()
+    engine = nil
   }
 }

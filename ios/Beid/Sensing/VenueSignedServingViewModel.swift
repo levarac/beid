@@ -708,7 +708,8 @@ final class VenueSignedServingViewModel: ObservableObject {
       // bytes until the consumer clears them, and the production adapter's
       // own clear does not discharge this obligation.
       clearRadio()
-      let failure = (error as? VenueRadioFailure) ?? .containerInstallRejected
+      let failure: VenueRadioFailure = error is DeviceSecretError
+        ? .deviceKeyUnavailable : ((error as? VenueRadioFailure) ?? .containerInstallRejected)
       // Report the effect failure as itself, never as a verification verdict.
       radio = VenueRadioUpdate(state: .failed, failure: failure)!
       status = .radioRefused(failure)
