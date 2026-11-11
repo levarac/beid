@@ -13,6 +13,24 @@ import XCTest
 
 @MainActor
 final class DeviceSecretSessionTests: XCTestCase {
+  func testParticipantEngineAndSignerShareOneResolutionBeforePermissions() throws {
+    let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
+    let store = DeviceSecretKeychainStore(keychain: keychain)
+    let cryptography = BarnardSensingCryptography(deviceSecretStore: store)
+    let coordinator = makeCoordinator(
+      directory: try makeDirectory(), cryptography: cryptography,
+      eventJoinControl: nil, deviceSecretStore: store
+    )
+    coordinator.useDemoEventMode = false
+
+    coordinator.startSensing(eventCode: "SESSION")
+    _ = try cryptography.eventSigningPublicKey(eventCode: "SESSION")
+
+    XCTAssertEqual(keychain.readCount, 1)
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    _ = coordinator.stopSensing()
+  }
+
   func testResolvedSessionSignsWithoutFurtherKeychainReads() throws {
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
     let cryptography = makeCryptography(keychain)
@@ -114,6 +132,33 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
   }
 
+  func testUnavailableLaunchCheckpointIsPreservedUntilAStartCanResolveTheSecret() throws {
+    let directory = try makeDirectory()
+    let proofId = UUID()
+    let checkpointURL = directory.appendingPathComponent("checkpoint.json")
+    SelfProofCheckpointStore(fileURL: checkpointURL).save(SelfProofCheckpoint(
+      proofId: proofId, eventCode: "PREVIOUS", eninStart: 1, eninEnd: 2
+    ))
+    let keychain = InMemoryDeviceSecretKeychain(
+      storedData: Data(repeating: 0x31, count: 32),
+      readResults: [.failure(errSecInteractionNotAllowed), .failure(errSecInteractionNotAllowed)]
+    )
+    let coordinator = makeCoordinator(directory: directory, cryptography: makeCryptography(keychain))
+    coordinator.useDemoEventMode = false
+    XCTAssertEqual(coordinator.eventSigningKeyFailure, .unavailable)
+
+    coordinator.startSensing(eventCode: "NEXT")
+    XCTAssertEqual(coordinator.phase, .idle)
+    XCTAssertEqual(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint?.proofId, proofId)
+
+    coordinator.startSensing(eventCode: "NEXT")
+
+    XCTAssertNil(coordinator.eventSigningKeyFailure)
+    XCTAssertNil(SelfProofCheckpointStore(fileURL: checkpointURL).checkpoint)
+    XCTAssertNotNil(SelfProofStore(fileURL: directory.appendingPathComponent("self-proofs.json")).record(forProofId: proofId))
+    _ = coordinator.stopSensing()
+  }
+
   func testDelayedCanonicalCaptureUsesTheSecretResolvedBeforeDefinitionLookup() async throws {
     let directory = try makeDirectory()
     let keychain = InMemoryDeviceSecretKeychain(storedData: Data(repeating: 0x31, count: 32))
@@ -125,7 +170,7 @@ final class DeviceSecretSessionTests: XCTestCase {
     let server = try StubOperatorServer(
       eventId: Data(repeating: 0x11, count: 32),
       signingPrivateKey: [UInt8](repeating: 0, count: 31) + [2],
-      signingPublicKey: try XCTUnwrap(Data(hexEncoded: receiptKeyHex))
+      signingPublicKey: hexData(receiptKeyHex)
     )
     defer { server.stop() }
     let endpoint = try await server.start()
@@ -164,6 +209,34 @@ final class DeviceSecretSessionTests: XCTestCase {
     XCTAssertTrue(store.pendingCaptures.isEmpty)
   }
 
+  func testCanonicalCaptureWithoutAResolvedSecretRemainsDurableWhenTheKeyIsUnavailable() throws {
+    let directory = try makeDirectory()
+    let fileURL = directory.appendingPathComponent("submissions.json")
+    let store = ReportSubmissionStore(fileURL: fileURL)
+    let keychain = InMemoryDeviceSecretKeychain(
+      storedData: Data(repeating: 0x31, count: 32),
+      readResults: Array(repeating: .failure(errSecInteractionNotAllowed), count: 8)
+    )
+    let provider = DelayedDeviceSecretDefinitionProvider()
+    let runtime = try XCTUnwrap(ReportSubmissionRuntime.makeIfEnabled(
+      bundle: try enabledBundle(in: directory), eventSigningCryptography: makeCryptography(keychain),
+      definitionProvider: provider, store: store
+    ))
+    defer { runtime.stop() }
+
+    runtime.captureAndQueueWindow(
+      id: UUID(), eventCode: "PREVIOUS", eventIdHex: String(repeating: "11", count: 32),
+      enin: 1, peerRpids: ["01" + String(repeating: "aa", count: 16)],
+      reporterRpid: "01" + String(repeating: "bb", count: 16), participantCommitment: nil
+    )
+
+    XCTAssertEqual(runtime.eventSigningKeyFailure, .unavailable)
+    XCTAssertEqual(ReportSubmissionStore(fileURL: fileURL).pendingCaptures.count, 1)
+    XCTAssertTrue(store.records.isEmpty)
+    XCTAssertNil(provider.completion)
+    XCTAssertEqual(keychain.addCount + keychain.writeCount, 0)
+  }
+
   private func makeCryptography(_ keychain: InMemoryDeviceSecretKeychain) -> BarnardSensingCryptography {
     BarnardSensingCryptography(
       ownerKeyProvider: OwnerKeyProvider(keyStorage: SessionOwnerKeyStorage()),
@@ -172,7 +245,9 @@ final class DeviceSecretSessionTests: XCTestCase {
   }
 
   private func makeCoordinator(
-    directory: URL, cryptography: BarnardSensingCryptography, reports: WindowReportStore? = nil
+    directory: URL, cryptography: BarnardSensingCryptography, reports: WindowReportStore? = nil,
+    eventJoinControl: (any EventJoinControlling)? = SessionJoinControl(),
+    deviceSecretStore: DeviceSecretKeychainStore = .shared
   ) -> SensingCoordinator {
     SensingCoordinator(
       windowReportStore: reports ?? WindowReportStore(fileURL: directory.appendingPathComponent("reports.json")),
@@ -181,7 +256,8 @@ final class DeviceSecretSessionTests: XCTestCase {
       bindingRecordStore: BindingRecordStore(fileURL: directory.appendingPathComponent("bindings.json")),
       sessionAggregateSnapshotStore: SessionAggregateSnapshotStore(fileURL: directory.appendingPathComponent("aggregate.json")),
       unsentWindowLedgerFileURL: directory.appendingPathComponent("ledger.snapshot"),
-      sensingCryptography: cryptography, eventJoinControl: SessionJoinControl(), joinDiagnosticLog: { _ in }
+      sensingCryptography: cryptography, eventJoinControl: eventJoinControl, joinDiagnosticLog: { _ in },
+      deviceSecretStore: deviceSecretStore
     )
   }
 
@@ -201,6 +277,17 @@ final class DeviceSecretSessionTests: XCTestCase {
     ], format: .xml, options: 0)
     try data.write(to: url.appendingPathComponent("Info.plist"))
     return try XCTUnwrap(Bundle(url: url))
+  }
+
+  private func hexData(_ value: String) -> Data {
+    var bytes: [UInt8] = []
+    var index = value.startIndex
+    while index < value.endIndex {
+      let next = value.index(index, offsetBy: 2)
+      bytes.append(UInt8(value[index..<next], radix: 16)!)
+      index = next
+    }
+    return Data(bytes)
   }
 }
 
