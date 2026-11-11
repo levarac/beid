@@ -18,4 +18,13 @@ struct SelfProofCheckpoint: Codable, Equatable {
   let eventCode: String
   let eninStart: UInt64
   let eninEnd: UInt64
+  let eventSigningPublicKey: Data?
+
+  init(proofId: UUID, eventCode: String, eninStart: UInt64, eninEnd: UInt64, eventSigningPublicKey: Data? = nil) {
+    self.proofId = proofId
+    self.eventCode = eventCode
+    self.eninStart = eninStart
+    self.eninEnd = eninEnd
+    self.eventSigningPublicKey = eventSigningPublicKey
+  }
 }

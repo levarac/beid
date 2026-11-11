@@ -20,12 +20,15 @@ struct ProofDetailPresentation {
     hasBinding: Bool,
     deviceCount: Int?,
     windowCount: Int?,
-    sessionCount: Int
+    sessionCount: Int,
+    selfProofDiscardedForKeyChange: Bool = false
   ) {
     self.method = method == "Bluetooth Sensing"
       ? String(localized: "proofDetail.method.bluetooth", defaultValue: "Bluetooth sensing")
       : method
-    status = hasSelfProof
+    status = selfProofDiscardedForKeyChange
+      ? String(localized: "proofDetail.status.incomplete", defaultValue: "Recording incomplete")
+      : hasSelfProof
       ? String(localized: "Sealed")
       : String(
         localized: "proofDetail.status.recorded",
@@ -107,7 +110,9 @@ struct ItemDetailView: View {
       hasBinding: sensing.bindingRecord(forProofId: proof.id) != nil,
       deviceCount: aggregate.map { Int($0.deviceCount) },
       windowCount: aggregate.map { Int($0.windowCount) },
-      sessionCount: groupSessions.count
+      sessionCount: groupSessions.count,
+      selfProofDiscardedForKeyChange: coordinator.proofStore.proof(withId: proof.id)?.selfProofDiscardedForKeyChange
+        ?? proof.selfProofDiscardedForKeyChange
     )
   }
 

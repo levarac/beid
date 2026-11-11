@@ -34,7 +34,8 @@ private final class ReportSubmissionRuntimeSpy: WindowReportSubmissionRuntimePro
     enin: Int,
     peerRpids: Set<String>,
     reporterRpid: String?,
-    participantCommitment: Data?
+    participantCommitment: Data?,
+    eventSigningPublicKey: Data?
   ) {
     captures.append(
       Capture(

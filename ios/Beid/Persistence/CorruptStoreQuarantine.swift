@@ -17,11 +17,12 @@ import Foundation
 /// fail-closed `init` and expose recovery as an opt-in production factory,
 /// because a consumer there must be able to tell "empty" from "unreadable"
 /// (`WindowReportStore.persistedReportsForLedgerRecovery`). The proof
-/// stores have no such consumer and must never wedge the app, so they
-/// quarantine inside `load()` — the only placement under which the
+/// stores quarantine inside `load()` — the only placement under which the
 /// guarantee holds for every construction site, including
 /// `SensingCoordinator`'s `BindingRecordStore()` property initializer
 /// (beid#135).
+/// `ProofStore` also exposes read success so checkpoint recovery can retain
+/// its input until a later join reads the parent file successfully.
 enum CorruptStoreQuarantine {
   /// What a store may do after a load failure on a file that exists.
   enum Outcome {

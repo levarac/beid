@@ -18,7 +18,8 @@ private final class ColdLaunchSubmissionRuntimeSpy: WindowReportSubmissionRuntim
     enin _: Int,
     peerRpids _: Set<String>,
     reporterRpid _: String?,
-    participantCommitment _: Data?
+    participantCommitment _: Data?,
+    eventSigningPublicKey: Data?
   ) {}
 
   func submitPending() {
