@@ -12,7 +12,7 @@ final class EventMembershipUITests: XCTestCase {
     continueAfterFailure = false
   }
 
-  func testJoinEventRowDisablesImmediatelyAfterJoining() {
+  func testAccountSheetJoinDismissesCodeEntryAndShowsSensing() {
     app.launchArguments = ["-beid-ui-test"]
     app.launch()
 
