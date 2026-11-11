@@ -13,6 +13,22 @@ import XCTest
 final class DeviceSecretUnavailableTests: XCTestCase {
   private let canonicalEventIdHex = "0x\(String(repeating: "a", count: 64))"
 
+  func testDiscardFailureCopyDescribesTheEarlierRecordWithoutRestrictingRecording() {
+    XCTAssertEqual(EventSigningKeyFailure.discardFailed.title, "Earlier record could not be removed")
+    XCTAssertEqual(
+      EventSigningKeyFailure.discardFailed.message,
+      "A record from an earlier session could not be saved or removed."
+    )
+    for (key, value) in [
+      ("eventSigningKeyFailure.discardFailed.title", EventSigningKeyFailure.discardFailed.title),
+      ("eventSigningKeyFailure.discardFailed", EventSigningKeyFailure.discardFailed.message)
+    ] {
+      let localized = Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+      XCTAssertNotEqual(localized, key)
+      XCTAssertEqual(value, localized)
+    }
+  }
+
   func testSigningKeyDiscardCopyUsesCatalogEntries() {
     XCTAssertEqual(EventSigningKeyFailure.changed.title, "Earlier record discarded")
     for (failure, key) in [
