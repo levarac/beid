@@ -1999,12 +1999,22 @@
         }
       }
     },
+    "eventSigningKeyFailure.discardFailed.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier record could not be removed"
+          }
+        }
+      }
+    },
     "eventSigningKeyFailure.discardFailed": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A record from an earlier session could not be saved or removed. Recording is unavailable."
+            "value": "A record from an earlier session could not be saved or removed."
           }
         }
       }
