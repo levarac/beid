@@ -3003,6 +3003,7 @@ final class SensingCoordinator: ObservableObject {
     stopParticipantRelay()
     clearNearbyEventDiscovery()
     if stopEngine {
+      discoveryOnlyScanOwned = false
       engine.stopAutomaticOperation()
     }
     resetSessionState()
@@ -3083,6 +3084,7 @@ final class SensingCoordinator: ObservableObject {
       return true
     } catch {
       eventSigningKeyFailure = .unavailable
+      discoveryOnlyScanOwned = false
       engine.stopAutomaticOperation()
       refuseJoin(.eventSigningKeyUnavailable, "The device signing key is unavailable.", reasonKey: nil)
       return false
