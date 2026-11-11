@@ -295,6 +295,7 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
 
   func submitPending()
   func submitPendingOnNaturalTrigger()
+  func endSigningSession()
   func stop()
 
   func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError>
@@ -330,6 +331,7 @@ extension WindowReportSubmissionRuntimeProtocol {
   }
 
   func submitPendingOnNaturalTrigger() { submitPending() }
+  func endSigningSession() {}
 
   func stop() {}
 
@@ -400,6 +402,12 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
   private let allowInsecureLoopbackForTests: Bool
   private var inFlight = Set<UUID>()
   private var resolvingCaptures = Set<UUID>()
+  /// Membership only; durable inputs remain in the existing capture store.
+  private var activeSessionCaptureIds = Set<UUID>()
+
+  func endSigningSession() {
+    activeSessionCaptureIds.removeAll()
+  }
 
   #if DEBUG
   /// Test-only crash boundary: returning false leaves the durable record in
@@ -514,6 +522,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       Self.log.error("Unable to persist raw close-window capture: \(String(describing: error), privacy: .public)")
       return
     }
+    activeSessionCaptureIds.insert(capture.id)
     processPendingCapture(capture)
     submitPendingOnNaturalTrigger()
   }
@@ -540,7 +549,10 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
     guard resolvingCaptures.insert(capture.id).inserted else { return }
     let signingCryptography: any SensingCryptography
     do {
-      signingCryptography = try eventSigningCryptography.signingSnapshot(
+      let snapshot = try activeSessionCaptureIds.contains(capture.id)
+        ? eventSigningCryptography.signingSnapshot()
+        : eventSigningCryptography.recoverySigningSnapshot()
+      signingCryptography = try snapshot.signingSnapshot(
         eventCode: capture.eventCode, matching: capture.eventSigningPublicKey
       )
     } catch EventSigningKeyContinuityError.changed {

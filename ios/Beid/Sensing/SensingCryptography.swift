@@ -34,6 +34,8 @@ struct SensingRecoverableSignature: Equatable {
 protocol SensingCryptography: AnyObject {
   /// Retains one resolved signing input across an asynchronous operation.
   func signingSnapshot() throws -> any SensingCryptography
+  /// Resolves the current device secret for input from an earlier session.
+  func recoverySigningSnapshot() throws -> any SensingCryptography
   func eventSigningPublicKey(eventCode: String) throws -> Data
   func ownerPublicKey() throws -> Data
 
@@ -61,6 +63,7 @@ enum EventSigningKeyContinuityError: Error {
 
 extension SensingCryptography {
   func signingSnapshot() throws -> any SensingCryptography { self }
+  func recoverySigningSnapshot() throws -> any SensingCryptography { try signingSnapshot() }
 
   /// Compares and signs through one immutable device-secret resolution.
   func signingSnapshot(eventCode: String, matching publicKey: Data?) throws -> any SensingCryptography {
@@ -110,6 +113,15 @@ final class BarnardSensingCryptography: SensingCryptography {
       deviceSecretStore: deviceSecretStore
     )
     snapshot.sessionStorage = try sessionStorage ?? deviceSecretStore.resolve()
+    return snapshot
+  }
+
+  func recoverySigningSnapshot() throws -> any SensingCryptography {
+    let snapshot = BarnardSensingCryptography(
+      ownerKeyProvider: ownerKeyProvider,
+      deviceSecretStore: deviceSecretStore
+    )
+    snapshot.sessionStorage = try deviceSecretStore.resolve()
     return snapshot
   }
 

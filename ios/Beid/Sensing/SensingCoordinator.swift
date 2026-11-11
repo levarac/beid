@@ -3042,6 +3042,7 @@ final class SensingCoordinator: ObservableObject {
   }
 
   private func resetSessionState() {
+    reportSubmissionRuntime?.endSigningSession()
     invalidateEventIdentityVerification()
     aggregationRuntime = AggregationRuntime()
     sigilPresenceSession = BeidSharedKit.sigil.createSigilPresenceSession()
@@ -4716,10 +4717,12 @@ final class SensingCoordinator: ObservableObject {
     eventCode: String,
     eninStart: UInt64,
     eninEnd: UInt64,
-    capturedPublicKey: Data?
+    capturedPublicKey: Data?,
+    signingCryptography: (any SensingCryptography)? = nil
   ) throws -> SelfProofRecord? {
     let eventIdHash = EventIdHash.compute(eventCode: eventCode)
-    let cryptography = try sensingCryptography.signingSnapshot(eventCode: eventCode, matching: capturedPublicKey)
+    let cryptography = try (signingCryptography ?? sensingCryptography)
+      .signingSnapshot(eventCode: eventCode, matching: capturedPublicKey)
     guard let eventSigningPublicKey = capturedPublicKey else { return nil }
     guard let ownerPublicKey = resolvedOwnerPublicKey() else { return nil }
     let signature: SensingRecoverableSignature?
@@ -4998,7 +5001,8 @@ final class SensingCoordinator: ObservableObject {
         eventCode: checkpoint.eventCode,
         eninStart: checkpoint.eninStart,
         eninEnd: checkpoint.eninEnd,
-        capturedPublicKey: checkpoint.eventSigningPublicKey
+        capturedPublicKey: checkpoint.eventSigningPublicKey,
+        signingCryptography: try sensingCryptography.recoverySigningSnapshot()
       ) else { return }
       _ = persistSelfProofRecord(record)
     } catch EventSigningKeyContinuityError.changed {
