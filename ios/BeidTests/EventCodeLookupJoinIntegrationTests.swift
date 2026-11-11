@@ -279,6 +279,52 @@ final class EventCodeLookupJoinIntegrationTests: XCTestCase {
     XCTAssertNil(coordinator.sensingCoordinator.joinedCanonicalEventIdHex)
   }
 
+  func testDismissingAccountSheetWhileSuspendedCancelsPastEventRejoin() async {
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    let coordinator = AppCoordinator(sensingCoordinator: sensing, registryClient: nil)
+    let relay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
+    coordinator.accountSheetPresented = true
+
+    async let rejoin: Void = coordinator.rejoinPastEventResolvingCanonicalId(code: "abandoned")
+    await relay.waitUntilSuspended()
+    coordinator.accountSheetPresented = false
+    await relay.resume(returning: "0x" + String(repeating: "aa", count: 32))
+    await rejoin
+
+    XCTAssertNil(sensing.joinedEventCode)
+    XCTAssertNil(sensing.joinedCanonicalEventIdHex)
+    XCTAssertEqual(sensing.phase, .idle)
+    XCTAssertFalse(coordinator.scanPresented)
+  }
+
+  func testPastEventRejoinCompletesWhenAccountSheetStaysOpen() async {
+    let sensing = makeIsolatedSensingCoordinator(for: self, eventJoinControl: RecordingEventJoinControl())
+    sensing.useDemoEventMode = false
+    let coordinator = AppCoordinator(sensingCoordinator: sensing, registryClient: nil)
+    let relay = ContinuationRelay()
+    coordinator.resolveCanonicalEventIdHexOverride = { _ in
+      .init(eventIdHex: await relay.suspend(), errorCode: nil)
+    }
+    coordinator.accountSheetPresented = true
+    let eventIdHex = "0x" + String(repeating: "aa", count: 32)
+
+    async let rejoin: Void = coordinator.rejoinPastEventResolvingCanonicalId(code: "kept")
+    await relay.waitUntilSuspended()
+    await relay.resume(returning: eventIdHex)
+    await rejoin
+
+    XCTAssertEqual(sensing.joinedEventCode, "kept")
+    XCTAssertEqual(sensing.joinedCanonicalEventIdHex, eventIdHex)
+    XCTAssertEqual(sensing.phase, .sensing)
+    XCTAssertTrue(coordinator.scanPresented)
+    XCTAssertFalse(coordinator.accountSheetPresented)
+    _ = sensing.stopSensing()
+  }
+
   /// PR #716 review (Codex, P2): Home's 04b sheet presents through
   /// `$coordinator.homeEventCodeSheetPresented`, so swipe-to-dismiss writes
   /// `false` to that property and runs no other code. This test performs

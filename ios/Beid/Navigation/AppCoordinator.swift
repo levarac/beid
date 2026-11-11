@@ -62,7 +62,13 @@ final class AppCoordinator: ObservableObject {
   /// signing/reporting store, and is set only by the UI-test launch gate.
   private(set) var proofDetailScreenshotPresentation: ProofDetailPresentation?
   #endif
-  @Published var accountSheetPresented = false
+  @Published var accountSheetPresented = false {
+    didSet {
+      if oldValue, !accountSheetPresented {
+        cancelPendingJoinAttempt()
+      }
+    }
+  }
   @Published var walletConnectSheetPresented = false
   @Published var eventCodeEntrySheetPresented = false
   /// Home's 04b code sheet. Closing it cancels a pending lookup, whatever
