@@ -5021,9 +5021,8 @@ final class SensingCoordinator: ObservableObject {
     )
   }
 
-  /// Runs once, at the end of `init` — i.e. once per cold launch, on both
-  /// `AppCoordinator`'s production `SensingCoordinator` and any test-
-  /// constructed instance. If a checkpoint survived from a session that
+  /// Runs after checkpoint storage loads and before a new session starts.
+  /// If a checkpoint survived from a session that
   /// never reached a graceful end (§7.1 Option B: a device kill after
   /// binding completed but before `stopSensing()`/`reset()` ran), signs and
   /// persists the missing `SelfProofRecord` from the checkpoint's
