@@ -125,7 +125,7 @@ enum EventSigningKeyFailure: String, Identifiable {
     case .changed:
       return String(
         localized: "eventSigningKeyFailure.changed",
-        defaultValue: "A record from an earlier session could not be saved because this device's signing key changed."
+        defaultValue: "A record from an earlier session could not be saved and was discarded."
       )
     case .discardFailed:
       return String(

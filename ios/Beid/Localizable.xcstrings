@@ -1994,7 +1994,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A record from an earlier session could not be saved because this device's signing key changed."
+            "value": "A record from an earlier session could not be saved and was discarded."
           }
         }
       }
@@ -2020,7 +2020,7 @@
       }
     },
     "proofDetail.status.incomplete": {
-      "comment": "Status for a recording whose unsigned session record was discarded after the device signing key changed.",
+      "comment": "Status for a recording whose unsigned session record could not be saved and was discarded.",
       "localizations": {
         "en": {
           "stringUnit": {

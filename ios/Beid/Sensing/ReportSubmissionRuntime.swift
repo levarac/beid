@@ -594,7 +594,7 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
       notifySigningKeyChange(forEventCode: capture.eventCode)
     } catch {
       recordSigningKeyFailure(.discardFailed)
-      Self.log.error("Unable to remove an unsigned window after its signing key changed")
+      Self.log.error("Unable to remove an unsigned window that could not be saved")
     }
   }
 
