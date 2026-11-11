@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import Barnard
+import BarnardCore
 import BeidSharedKit
 
 /// Defers SDK construction until the device secret has been resolved. Both
